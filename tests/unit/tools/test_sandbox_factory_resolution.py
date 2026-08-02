@@ -228,3 +228,42 @@ class TestCredentialInjection:
         mock_init.assert_called_once_with(
             credentials={"api_key": "service-api-key", "template": None},
         )
+
+
+class TestAllowedProvidersEnforcement:
+    """``SANDBOX_ALLOWED_PROVIDERS`` gates which registered providers may resolve."""
+
+    def test_allows_everything_when_allowlist_unset(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", [], raising=False)
+        from tools.sandbox.factory import resolve_provider
+        from tools.sandbox.daytona_provider import DaytonaProvider
+
+        service = _make_sandbox_service("daytona")
+        agent = _make_agent(sandbox_service=service)
+
+        provider = resolve_provider(agent)
+
+        assert isinstance(provider, DaytonaProvider)
+
+    def test_allows_provider_present_in_allowlist(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", ["opensandbox", "daytona"], raising=False)
+        from tools.sandbox.factory import resolve_provider
+        from tools.sandbox.daytona_provider import DaytonaProvider
+
+        service = _make_sandbox_service("daytona")
+        agent = _make_agent(sandbox_service=service)
+
+        provider = resolve_provider(agent)
+
+        assert isinstance(provider, DaytonaProvider)
+
+    def test_rejects_registered_provider_excluded_from_allowlist(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", ["opensandbox"], raising=False)
+        from tools.sandbox.factory import resolve_provider, SandboxProviderUnavailableError
+
+        service = _make_sandbox_service("daytona")
+        agent = _make_agent(sandbox_service=service)
+
+        with pytest.raises(SandboxProviderUnavailableError) as exc_info:
+            resolve_provider(agent)
+        assert "daytona" in str(exc_info.value)

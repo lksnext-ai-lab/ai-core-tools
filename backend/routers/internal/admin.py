@@ -1133,8 +1133,14 @@ async def create_system_sandbox_service(
     from models.sandbox_service import SandboxService
     from repositories.sandbox_service_repository import SandboxServiceRepository
     from services.sandbox_service_service import SandboxServiceService
+    from tools.sandbox.factory import SandboxProviderUnavailableError
     from tools.sandbox_service_utils import build_extra_config
     from datetime import datetime
+
+    try:
+        SandboxServiceService._validate_provider_allowed(body.provider)
+    except SandboxProviderUnavailableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     svc = SandboxService()
     svc.app_id = None
@@ -1166,12 +1172,18 @@ async def update_system_sandbox_service(
     """Update a platform-level Sandbox Service (OMNIADMIN only, available in all deployment modes)."""
     from repositories.sandbox_service_repository import SandboxServiceRepository
     from services.sandbox_service_service import SandboxServiceService
+    from tools.sandbox.factory import SandboxProviderUnavailableError
     from utils.secret_utils import is_masked_key
     from tools.sandbox_service_utils import build_extra_config
 
     svc = SandboxServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail=SYSTEM_SANDBOX_SERVICE_NOT_FOUND)
+
+    try:
+        SandboxServiceService._validate_provider_allowed(body.provider)
+    except SandboxProviderUnavailableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     svc.name = body.name
     svc.provider = body.provider

@@ -14,9 +14,14 @@ The resolved provider name must match a registered provider; if it does not,
 ``SandboxProviderUnavailableError`` is raised instead of silently falling
 back to a default.
 
-The ``SANDBOX_ALLOWED_PROVIDERS`` env var (comma-separated) is checked in
-IT-2 to gate which providers app owners may select.  It is parsed here
-already so the variable name is consistent across iterations.
+The ``SANDBOX_ALLOWED_PROVIDERS`` env var (comma-separated, parsed by
+``config.py``) is enforced in ``_provider_class_for`` — a provider that is
+registered but not in this allowlist raises ``SandboxProviderUnavailableError``
+just like an unregistered one. An empty/unset allowlist means "no
+restriction" (preserves prior behavior for deployments that have not
+configured it). ``SandboxServiceService`` performs the same check at
+config-save time so the UI gets immediate feedback rather than only failing
+on first use.
 """
 
 from __future__ import annotations
@@ -126,6 +131,21 @@ def _resolve_sandbox_service(agent: "Agent | None") -> "SandboxService | None":
     return None
 
 
+def _allowed_providers() -> list[str] | None:
+    """Return the configured ``SANDBOX_ALLOWED_PROVIDERS`` allowlist, if any.
+
+    Reads ``config.SANDBOX_ALLOWED_PROVIDERS`` (imported lazily to match the
+    lazy-import convention used elsewhere in this module). An empty/unset
+    list means "no restriction" — every registered provider stays usable,
+    preserving existing behavior for deployments that have not opted into
+    this restriction.
+    """
+    import config as settings  # noqa: PLC0415
+
+    allowed = getattr(settings, "SANDBOX_ALLOWED_PROVIDERS", None)
+    return allowed or None
+
+
 def _provider_class_for(provider_name: str) -> type[SandboxProvider]:
     """Return the registered provider class for *provider_name* or raise."""
     provider_class = _PROVIDER_REGISTRY.get(provider_name)
@@ -135,11 +155,28 @@ def _provider_class_for(provider_name: str) -> type[SandboxProvider]:
             f"Sandbox provider '{provider_name}' is not available. "
             f"Registered providers: {available}."
         )
+
+    allowed = _allowed_providers()
+    if allowed is not None and provider_name not in {p.strip().lower() for p in allowed}:
+        raise SandboxProviderUnavailableError(
+            f"Sandbox provider '{provider_name}' is not allowed in this deployment. "
+            f"Allowed providers: {', '.join(sorted(allowed))}."
+        )
     return provider_class
 
 
-def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
-    """Return an instantiated ``SandboxProvider`` for *agent*.
+def resolve_provider_and_service_id(
+    agent: "Agent | None" = None,
+) -> tuple[SandboxProvider, int | None]:
+    """Return an instantiated ``SandboxProvider`` for *agent*, plus the
+    resolved ``SandboxService.service_id`` that produced it (``None`` when
+    falling back to the system-wide env-var default, i.e. no DB-backed
+    ``SandboxService`` row is involved).
+
+    The id is needed by callers that persist sandbox session state (see
+    ``SandboxSessionService``) so cleanup/reaper paths can later rebuild a
+    provider with the *same* tenant credentials rather than falling back to
+    zero-credential env defaults.
 
     Resolution order:
     1. ``agent.sandbox_service``            — agent-level override
@@ -150,12 +187,13 @@ def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
         agent: The agent requesting a sandbox.  May be ``None`` in tests.
 
     Returns:
-        A ready-to-use ``SandboxProvider`` instance.
+        A ``(provider, sandbox_service_id)`` tuple.
 
     Raises:
         SandboxProviderUnavailableError: If the resolved provider name is not
             registered (unknown name, or the package/dependency required by
-            that provider is not installed).
+            that provider is not installed), or is registered but excluded
+            by ``SANDBOX_ALLOWED_PROVIDERS``.
     """
     service = _resolve_sandbox_service(agent)
 
@@ -163,16 +201,32 @@ def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
         provider_name = (service.provider or "").strip().lower()
         provider_class = _provider_class_for(provider_name)
         credentials = _credentials_from_service(service)
+        service_id = getattr(service, "service_id", None)
         logger.debug(
             "Resolved sandbox provider: %s (agent=%s, sandbox_service_id=%s)",
             provider_class.PROVIDER_NAME,
             agent,
-            getattr(service, "service_id", None),
+            service_id,
         )
-        return provider_class(credentials=credentials)
+        return provider_class(credentials=credentials), service_id
 
     system_default = os.getenv(_DEFAULT_PROVIDER_ENV, "opensandbox").lower()
     provider_class = _provider_class_for(system_default)
 
     logger.debug("Resolved sandbox provider: %s (agent=%s)", provider_class.PROVIDER_NAME, agent)
-    return provider_class()
+    return provider_class(), None
+
+
+def resolve_provider(agent: "Agent | None" = None) -> SandboxProvider:
+    """Return an instantiated ``SandboxProvider`` for *agent*.
+
+    Thin wrapper over :func:`resolve_provider_and_service_id` for callers
+    that don't need the resolved ``SandboxService.service_id`` (most tool
+    call sites — see ``tools/agentTools.py``).
+
+    Raises:
+        SandboxProviderUnavailableError: see
+            :func:`resolve_provider_and_service_id`.
+    """
+    provider, _service_id = resolve_provider_and_service_id(agent)
+    return provider

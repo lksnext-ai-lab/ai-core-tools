@@ -14,8 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from services.sandbox_service_service import SandboxServiceService
+from services.sandbox_service_service import SandboxServiceService, _endpoint_is_disallowed
 from schemas.sandbox_service_schemas import CreateUpdateSandboxServiceSchema
+from repositories.sandbox_service_repository import SandboxServiceRepository
+from tools.sandbox.factory import SandboxProviderUnavailableError
 from utils.secret_utils import mask_api_key
 
 
@@ -435,6 +437,9 @@ class TestConnectionWithConfig:
         mock_provider_instance.destroy_sandbox.assert_called_once_with("handle-1")
 
     def test_provider_error_is_reported_and_sandbox_not_destroyed_if_never_created(self):
+        """The raw exception text must NOT reach the caller — connection-refused
+        vs TLS-error vs HTTP-status detail is itself a network-reconnaissance
+        oracle for a tenant-level role. It's logged server-side instead."""
         mock_provider_instance = MagicMock()
         mock_provider_instance.create_sandbox.side_effect = RuntimeError("boom")
         mock_provider_class = MagicMock(return_value=mock_provider_instance)
@@ -448,7 +453,7 @@ class TestConnectionWithConfig:
             )
 
         assert result["status"] == "error"
-        assert "boom" in result["message"]
+        assert "boom" not in result["message"]
         mock_provider_instance.destroy_sandbox.assert_not_called()
 
 
@@ -466,3 +471,201 @@ class TestTestConnection:
             result = SandboxServiceService.test_connection(MagicMock(), 10, 999)
         assert result["status"] == "error"
         assert "not found" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# _endpoint_is_disallowed — SSRF guard for test_connection_with_config
+# ---------------------------------------------------------------------------
+
+
+class TestEndpointIsDisallowed:
+    def test_rejects_loopback(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed("127.0.0.1:8080") is True
+        assert _endpoint_is_disallowed("http://localhost:8080") is True
+
+    def test_rejects_rfc1918_private_ranges(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed("10.0.0.5:5432") is True
+        assert _endpoint_is_disallowed("172.16.0.5:8080") is True
+        assert _endpoint_is_disallowed("192.168.1.10:8080") is True
+
+    def test_rejects_link_local_metadata_endpoint(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed("169.254.169.254") is True
+
+    def test_accepts_normal_public_endpoint(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed("https://8.8.8.8:8080") is False
+        assert _endpoint_is_disallowed("api.daytona.example.com") is False
+
+    def test_none_or_empty_endpoint_is_allowed(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed(None) is False
+        assert _endpoint_is_disallowed("") is False
+
+    def test_unresolvable_hostname_is_allowed_through(self, monkeypatch):
+        """A DNS failure isn't itself an SSRF signal — let the provider call fail naturally."""
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        import socket as socket_module
+
+        with patch.object(socket_module, "getaddrinfo", side_effect=socket_module.gaierror("nope")):
+            assert _endpoint_is_disallowed("this-does-not-resolve.invalid") is False
+
+    def test_hostname_resolving_to_private_ip_is_rejected(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        import socket as socket_module
+
+        fake_result = [(socket_module.AF_INET, None, None, "", ("10.1.2.3", 8080))]
+        with patch.object(socket_module, "getaddrinfo", return_value=fake_result):
+            assert _endpoint_is_disallowed("internal.example.corp:8080") is True
+
+    def test_rejects_cgnat_range(self, monkeypatch):
+        """100.64.0.0/10 (RFC 6598) is used by some cloud metadata services
+        (e.g. Alibaba Cloud's 100.100.100.200) and is NOT covered by
+        ipaddress.is_private — must be checked explicitly."""
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed("100.100.100.200:80") is True
+        assert _endpoint_is_disallowed("100.64.0.1") is True
+
+    def test_rejects_multicast_and_unspecified(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        assert _endpoint_is_disallowed("224.0.0.1") is True
+        assert _endpoint_is_disallowed("0.0.0.0") is True
+
+    def test_allow_private_env_var_disables_the_check(self, monkeypatch):
+        """Operator opt-out for self-hosted deployments (e.g. opensandbox:8080 on a Docker network)."""
+        monkeypatch.setenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", "true")
+        assert _endpoint_is_disallowed("127.0.0.1:8080") is False
+        assert _endpoint_is_disallowed("10.0.0.5:5432") is False
+
+    def test_test_connection_with_config_rejects_disallowed_endpoint(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        mock_provider_class = MagicMock()
+        with patch(
+            "tools.sandbox.factory._PROVIDER_REGISTRY",
+            {"opensandbox": mock_provider_class},
+        ):
+            result = SandboxServiceService.test_connection_with_config(
+                {"provider": "opensandbox", "api_key": "sk-real", "endpoint": "169.254.169.254"}
+            )
+
+        assert result["status"] == "error"
+        assert result["message"] == "Invalid or disallowed endpoint"
+        mock_provider_class.assert_not_called()
+
+    def test_test_connection_with_config_accepts_normal_endpoint(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        mock_provider_instance = MagicMock()
+        mock_provider_instance.create_sandbox.return_value = "handle-1"
+        mock_provider_instance.run_code.return_value = "2"
+        mock_provider_class = MagicMock(return_value=mock_provider_instance)
+
+        with patch(
+            "tools.sandbox.factory._PROVIDER_REGISTRY",
+            {"opensandbox": mock_provider_class},
+        ):
+            result = SandboxServiceService.test_connection_with_config(
+                {"provider": "opensandbox", "api_key": "sk-real", "endpoint": "8.8.8.8:8080"}
+            )
+
+        assert result["status"] == "success"
+        mock_provider_instance.destroy_sandbox.assert_called_once_with("handle-1")
+
+
+# ---------------------------------------------------------------------------
+# test_connection_with_config — bounded timeout for the blocking provider probe
+# ---------------------------------------------------------------------------
+
+
+class TestConnectionWithConfigTimeout:
+    def test_timed_out_probe_returns_clean_error(self, monkeypatch):
+        import time
+
+        monkeypatch.setenv("SANDBOX_TEST_CONNECTION_TIMEOUT_S", "0")
+
+        mock_provider_instance = MagicMock()
+        mock_provider_instance.create_sandbox.side_effect = lambda *a, **k: time.sleep(0.3) or "handle-1"
+        mock_provider_class = MagicMock(return_value=mock_provider_instance)
+
+        with patch(
+            "tools.sandbox.factory._PROVIDER_REGISTRY",
+            {"opensandbox": mock_provider_class},
+        ):
+            result = SandboxServiceService.test_connection_with_config(
+                {"provider": "opensandbox", "api_key": "sk-real"}
+            )
+
+        assert result["status"] == "error"
+        assert "timed out" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# SANDBOX_ALLOWED_PROVIDERS enforcement — create_or_update_sandbox_service
+# ---------------------------------------------------------------------------
+
+
+class TestValidateProviderAllowed:
+    def test_allows_everything_when_allowlist_unset(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", [], raising=False)
+        SandboxServiceService._validate_provider_allowed("daytona")  # must not raise
+
+    def test_allows_provider_present_in_allowlist(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", ["opensandbox"], raising=False)
+        SandboxServiceService._validate_provider_allowed("opensandbox")  # must not raise
+
+    def test_rejects_provider_absent_from_allowlist(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", ["opensandbox"], raising=False)
+        with pytest.raises(SandboxProviderUnavailableError):
+            SandboxServiceService._validate_provider_allowed("daytona")
+
+    def test_create_or_update_rejects_disallowed_provider(self, monkeypatch):
+        monkeypatch.setattr("config.SANDBOX_ALLOWED_PROVIDERS", ["opensandbox"], raising=False)
+        schema = CreateUpdateSandboxServiceSchema(
+            name="My Sandbox",
+            provider="daytona",
+            api_key="sk-new-real-key",
+            base_url="https://daytona.example",
+        )
+        with pytest.raises(SandboxProviderUnavailableError):
+            SandboxServiceService.create_or_update_sandbox_service(MagicMock(), 10, 0, schema)
+
+
+class TestCreateOrUpdateSandboxServiceEndpointValidation:
+    """The SSRF guard must also apply at save-time, not just to the optional
+    'Test Connection' diagnostic probe — an endpoint that's never tested
+    would otherwise reach real sandbox creation on every subsequent agent
+    turn with a loopback/link-local/private target."""
+
+    def test_rejects_disallowed_endpoint_on_save(self, monkeypatch):
+        monkeypatch.delenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", raising=False)
+        schema = CreateUpdateSandboxServiceSchema(
+            name="My Sandbox",
+            provider="opensandbox",
+            api_key="",
+            base_url="169.254.169.254:80",
+        )
+        with pytest.raises(ValueError, match="disallowed endpoint"):
+            SandboxServiceService.create_or_update_sandbox_service(MagicMock(), 10, 0, schema)
+
+    def test_accepts_normal_endpoint_when_allow_private_set(self, monkeypatch):
+        """Self-hosted deployments pointing at their own internal OpenSandbox
+        server (e.g. opensandbox:8080) must still be able to save that config."""
+        monkeypatch.setenv("SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE", "true")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        schema = CreateUpdateSandboxServiceSchema(
+            name="My Sandbox",
+            provider="opensandbox",
+            api_key="",
+            base_url="opensandbox:8080",
+        )
+        with patch.object(
+            SandboxServiceRepository, "create", side_effect=lambda db, svc: svc
+        ), patch.object(
+            SandboxServiceService,
+            "get_sandbox_service_detail",
+            return_value="ok",
+        ):
+            result = SandboxServiceService.create_or_update_sandbox_service(db, 10, 0, schema)
+        assert result == "ok"

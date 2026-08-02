@@ -19,6 +19,7 @@ from schemas.sandbox_service_schemas import (
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
+from tools.sandbox.factory import SandboxProviderUnavailableError
 
 # Import logger
 from utils.logger import get_logger
@@ -49,9 +50,10 @@ async def list_sandbox_services(
     try:
         return SandboxServiceService.get_sandbox_services_by_app_id(db, app_id)
     except Exception as e:
+        logger.error("Error retrieving sandbox services (app_id: %s): %s", app_id, type(e).__name__, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving sandbox services: {str(e)}"
+            detail="Error retrieving sandbox services"
         )
 
 
@@ -75,10 +77,6 @@ async def test_sandbox_service_connection_with_config(
     When ``service_id`` is supplied and ``api_key`` is empty/masked, the
     persisted key for that service is used. This lets the UI run a test
     without forcing the user to re-type the secret on every check.
-
-    NOTE: this currently exercises whichever credentials the *process env*
-    is configured with, not literally the submitted form values — see
-    ``SandboxServiceService.test_connection_with_config``.
     """
     from utils.secret_utils import is_masked_key
     from core.export_constants import PLACEHOLDER_API_KEY
@@ -122,10 +120,15 @@ async def test_sandbox_service_connection_with_config(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error testing sandbox service connection (provider: {config.provider}): {str(e)}")
+        logger.error(
+            "Error testing sandbox service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error testing sandbox service connection: {str(e)}"
+            detail="Error testing sandbox service connection"
         )
 
 
@@ -184,9 +187,12 @@ async def get_sandbox_service(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(
+            "Error retrieving sandbox service (service_id: %s): %s", service_id, type(e).__name__, exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving sandbox service: {str(e)}"
+            detail="Error retrieving sandbox service"
         )
 
 
@@ -216,10 +222,20 @@ async def create_or_update_sandbox_service(
         return result
     except HTTPException:
         raise
+    except SandboxProviderUnavailableError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
+        logger.error(
+            "Error creating/updating sandbox service (service_id: %s): %s",
+            service_id,
+            type(e).__name__,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating/updating sandbox service: {str(e)}"
+            detail="Error creating/updating sandbox service"
         )
 
 
@@ -248,9 +264,12 @@ async def copy_sandbox_service(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(
+            "Error copying sandbox service (service_id: %s): %s", service_id, type(e).__name__, exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error copying sandbox service: {str(e)}"
+            detail="Error copying sandbox service"
         )
 
 
@@ -280,9 +299,12 @@ async def delete_sandbox_service(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(
+            "Error deleting sandbox service (service_id: %s): %s", service_id, type(e).__name__, exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting sandbox service: {str(e)}"
+            detail="Error deleting sandbox service"
         )
 
 
@@ -302,9 +324,15 @@ async def test_sandbox_service_connection(
     try:
         return SandboxServiceService.test_connection(db, app_id, service_id)
     except Exception as e:
+        logger.error(
+            "Error testing sandbox service connection (service_id: %s): %s",
+            service_id,
+            type(e).__name__,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error testing sandbox service connection: {str(e)}"
+            detail="Error testing sandbox service connection"
         )
 
 

@@ -1,3 +1,10 @@
+import ipaddress
+import os
+import socket
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from urllib.parse import urlsplit
+
 from sqlalchemy.orm import Session
 from models.sandbox_service import SandboxService, SandboxProviderEnum
 from repositories.sandbox_service_repository import SandboxServiceRepository
@@ -10,10 +17,112 @@ from core.export_constants import PLACEHOLDER_API_KEY
 from utils.secret_utils import mask_api_key, is_masked_key
 from tools.sandbox_service_utils import build_extra_config, parse_extra_config
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# test_connection_with_config: SSRF guard + bounded-timeout probe settings
+# ---------------------------------------------------------------------------
+
+# When set to "true", disables the private/loopback/link-local endpoint check
+# below. Off (strict) by default: a tenant app ADMINISTRATOR can reach this
+# code path with an arbitrary endpoint, so — absent a reliable way to
+# distinguish "the platform operator's own pre-configured default" from "a
+# value a tenant just typed into this form" at this layer — the safe default
+# blocks both. Self-hosted deployments whose OpenSandbox server genuinely
+# lives on an internal/private address (e.g. the ``opensandbox:8080`` Docker
+# service name from docker/.env.example) must opt in explicitly. This only
+# gates the diagnostic "Test Connection" probe; actual sandbox usage via
+# ``tools.sandbox.factory.resolve_provider`` is unaffected.
+_ALLOW_PRIVATE_TEST_TARGETS_ENV = "SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE"
+
+# Bounded timeout (seconds) for the create/run/destroy probe below, so a
+# single bad/unreachable target can't stall the caller indefinitely.
+_TEST_CONNECTION_TIMEOUT_ENV = "SANDBOX_TEST_CONNECTION_TIMEOUT_S"
+_DEFAULT_TEST_CONNECTION_TIMEOUT_S = 20
+
+
+def _allow_private_test_targets() -> bool:
+    return os.getenv(_ALLOW_PRIVATE_TEST_TARGETS_ENV, "false").strip().lower() == "true"
+
+
+def _test_connection_timeout_s() -> int:
+    try:
+        return int(os.getenv(_TEST_CONNECTION_TIMEOUT_ENV, str(_DEFAULT_TEST_CONNECTION_TIMEOUT_S)))
+    except (TypeError, ValueError):
+        return _DEFAULT_TEST_CONNECTION_TIMEOUT_S
+
+
+# RFC 6598 shared/CGNAT address space (100.64.0.0/10) — used by some cloud
+# providers' metadata services (e.g. Alibaba Cloud's 100.100.100.200) and by
+# carrier-grade NAT. Not covered by ipaddress.is_private/is_reserved in
+# Python's stdlib, so it must be checked explicitly.
+_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+
+
+def _is_blocked_ip(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
+    return (
+        ip.is_loopback
+        or ip.is_link_local
+        or ip.is_private
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+        or (ip.version == 4 and ip in _CGNAT_NETWORK)
+    )
+
+
+def _extract_hostname(endpoint: str) -> Optional[str]:
+    """Best-effort hostname extraction from a ``host:port`` or full URL string."""
+    endpoint = (endpoint or "").strip()
+    if not endpoint:
+        return None
+    # urlsplit needs a "//" prefix to parse a bare "host:port" into netloc
+    # instead of mistaking "host" for a URL scheme.
+    candidate = endpoint if "//" in endpoint else f"//{endpoint}"
+    try:
+        return urlsplit(candidate).hostname
+    except ValueError:
+        return None
+
+
+def _endpoint_is_disallowed(endpoint: Optional[str]) -> bool:
+    """Return True if *endpoint* resolves to a loopback/link-local/private address.
+
+    Uses ``ipaddress``'s own range checks (``is_loopback``/``is_link_local``/
+    ``is_private``) rather than hand-rolled CIDR comparisons. Unresolvable
+    hostnames are allowed through here — a DNS failure isn't itself an SSRF
+    signal, and the provider call will fail naturally afterwards.
+    """
+    if not endpoint or _allow_private_test_targets():
+        return False
+
+    hostname = _extract_hostname(endpoint)
+    if not hostname:
+        return False
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+        return _is_blocked_ip(ip)
+    except ValueError:
+        pass  # Not a literal IP — resolve it below.
+
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except (socket.gaierror, socket.timeout, UnicodeError):
+        return False
+
+    for info in infos:
+        raw_ip = info[4][0]
+        try:
+            ip = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            continue
+        if _is_blocked_ip(ip):
+            return True
+    return False
 
 
 class SandboxServiceService:
@@ -100,10 +209,52 @@ class SandboxServiceService:
         )
 
     @staticmethod
+    def _validate_provider_allowed(provider_name: str) -> None:
+        """Raise if *provider_name* is registered but excluded by ``SANDBOX_ALLOWED_PROVIDERS``.
+
+        Mirrors the allowlist ``tools.sandbox.factory`` enforces at
+        resolution time, so a disallowed provider is rejected here at
+        config-save time (immediate UI feedback) rather than only
+        surfacing on first agent use. An empty/unset allowlist means "no
+        restriction" — preserves existing behavior for deployments that
+        have not configured it.
+
+        Raises:
+            SandboxProviderUnavailableError: If *provider_name* is not in a
+                configured, non-empty allowlist.
+        """
+        import config as settings  # noqa: PLC0415
+        from tools.sandbox.factory import SandboxProviderUnavailableError  # noqa: PLC0415
+
+        allowed = getattr(settings, "SANDBOX_ALLOWED_PROVIDERS", None)
+        if not allowed:
+            return
+        normalized = (provider_name or "").strip().lower()
+        if normalized not in {p.strip().lower() for p in allowed}:
+            raise SandboxProviderUnavailableError(
+                f"Sandbox provider '{provider_name}' is not allowed in this deployment. "
+                f"Allowed providers: {', '.join(sorted(allowed))}."
+            )
+
+    @staticmethod
     def create_or_update_sandbox_service(
         db: Session, app_id: int, service_id: int, service_data: CreateUpdateSandboxServiceSchema
     ) -> SandboxServiceDetailSchema:
         """Create a new sandbox service or update an existing one"""
+        SandboxServiceService._validate_provider_allowed(service_data.provider)
+        if _endpoint_is_disallowed(service_data.base_url):
+            # Same SSRF guard as test_connection_with_config, applied at
+            # save-time: an endpoint that's never tested (the "Test
+            # Connection" button is optional) would otherwise reach real
+            # sandbox creation with a loopback/link-local/private target on
+            # every subsequent agent turn, not just a one-off diagnostic probe.
+            logger.warning(
+                "Rejected sandbox service save with a disallowed endpoint (provider=%s, app_id=%s)",
+                service_data.provider,
+                app_id,
+            )
+            raise ValueError("Invalid or disallowed endpoint")
+
         if service_id == 0:
             service = SandboxService()
             service.app_id = app_id
@@ -230,18 +381,32 @@ class SandboxServiceService:
             }
 
         try:
-            from tools.sandbox.factory import _PROVIDER_REGISTRY  # noqa: PLC0415
+            # _provider_class_for enforces SANDBOX_ALLOWED_PROVIDERS as well as
+            # registry membership — use it here too (not a raw _PROVIDER_REGISTRY
+            # lookup) so a deployment-restricted provider can't be probed via
+            # this diagnostic endpoint even though it's rejected everywhere else.
+            from tools.sandbox.factory import (  # noqa: PLC0415
+                _provider_class_for,
+                SandboxProviderUnavailableError,
+            )
+
+            provider_class = _provider_class_for(provider_name)
+        except SandboxProviderUnavailableError as exc:
+            return {"status": "error", "message": str(exc)}
         except Exception as exc:
             logger.error("Error importing sandbox provider factory: %s", exc)
             return {"status": "error", "message": "Sandbox provider factory unavailable"}
 
-        provider_class = _PROVIDER_REGISTRY.get(provider_name)
-        if provider_class is None:
-            available = ", ".join(sorted(_PROVIDER_REGISTRY.keys())) or "<none registered>"
-            return {
-                "status": "error",
-                "message": f"Sandbox provider '{provider_name}' is not available. Registered: {available}.",
-            }
+        endpoint = config.get("endpoint") or None
+        if _endpoint_is_disallowed(endpoint):
+            # Deliberately generic: don't tell the caller *why* it was
+            # rejected (loopback vs RFC1918 vs unresolvable) — that
+            # distinction is itself an oracle for network reconnaissance.
+            logger.warning(
+                "Rejected sandbox test-connection to a disallowed endpoint (provider=%s)",
+                provider_name,
+            )
+            return {"status": "error", "message": "Invalid or disallowed endpoint"}
 
         provider = None
         handle = None
@@ -250,7 +415,6 @@ class SandboxServiceService:
             from tools.sandbox_service_utils import parse_extra_config  # noqa: PLC0415
 
             extra = parse_extra_config(provider_name, config.get("extra_config"))
-            endpoint = config.get("endpoint") or None
             if provider_name == "opensandbox":
                 credentials = {"domain": endpoint, "api_key": api_key, "image": extra.get("image")}
             elif provider_name == "daytona":
@@ -261,19 +425,50 @@ class SandboxServiceService:
                 credentials = {}
 
             provider = provider_class(credentials=credentials)
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                handle = provider.create_sandbox(tmp_dir)
-                result = provider.run_code(handle, "1+1", language="python", timeout=10)
+
+            def _probe():
+                # Runs on a worker thread so a hung/unreachable target
+                # can't block the caller's event loop; bounded below by
+                # future.result(timeout=...).
+                nonlocal handle
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    handle = provider.create_sandbox(tmp_dir)
+                    return provider.run_code(handle, "1+1", language="python", timeout=10)
+
+            timeout_s = _test_connection_timeout_s()
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sandbox_test_connection")
+            try:
+                future = executor.submit(_probe)
+                try:
+                    result = future.result(timeout=timeout_s)
+                except FutureTimeoutError:
+                    future.cancel()
+                    logger.error(
+                        "Sandbox test-connection timed out after %ss (provider=%s)",
+                        timeout_s,
+                        provider_name,
+                    )
+                    return {
+                        "status": "error",
+                        "message": f"Connection test timed out after {timeout_s}s.",
+                    }
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
+
             return {
                 "status": "success",
                 "message": "Successfully connected to sandbox provider.",
                 "response": str(result),
             }
         except Exception as e:
-            logger.error(f"Error testing sandbox service connection: {str(e)}")
+            # Deliberately generic, matching the endpoint-rejection message
+            # above: connection-refused vs TLS-error vs HTTP-status text is
+            # itself a network-reconnaissance oracle when this probe is
+            # reachable by a tenant-level (non-platform-trusted) role.
+            logger.error(f"Error testing sandbox service connection: {str(e)}", exc_info=True)
             return {
                 "status": "error",
-                "message": str(e),
+                "message": "Could not connect to the sandbox provider. Check the endpoint and credentials.",
             }
         finally:
             if provider is not None and handle is not None:
