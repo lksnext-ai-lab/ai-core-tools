@@ -2,6 +2,7 @@ interface FieldDefinition {
   name: string;
   type: string;
   description: string;
+  optional?: boolean;
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;
@@ -113,6 +114,9 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                   Description
+                </th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  Optional
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
                   Actions
@@ -229,6 +233,17 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
                       rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       placeholder="Describe this field..."
+                    />
+                  </td>
+                  
+                  <td className="px-6 py-4 align-top text-center">
+                    <input
+                      type="checkbox"
+                      id={`optional_${index}`}
+                      checked={field.optional ?? false}
+                      onChange={(e) => updateField(index, { optional: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                      title="Mark field as optional"
                     />
                   </td>
                   

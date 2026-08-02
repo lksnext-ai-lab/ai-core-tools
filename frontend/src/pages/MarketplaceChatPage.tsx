@@ -47,8 +47,9 @@ export default function MarketplaceChatPage() {
   const numericId = Number(conversationId);
 
   const [agentId, setAgentId] = useState<number | null>(null);
-  const [agentName, setAgentName] = useState('Agent');
+  const [agentName, _setAgentName] = useState('Agent');
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
+  const [starters, setStarters] = useState<{ id: number; prompt: string }[]>([]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -100,6 +101,16 @@ export default function MarketplaceChatPage() {
     userScrolledUpRef.current = false;
     setShowScrollToBottom(false);
   }, []);
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.min(
+      textareaRef.current.scrollHeight,
+      160
+    )}px`;
+  }, [inputMessage]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -169,6 +180,7 @@ export default function MarketplaceChatPage() {
     const loadHistory = async () => {
       setLoadingHistory(true);
       setHistoryError(null);
+      setMessages([]);
       try {
         const data = await apiService.getMarketplaceConversationHistory(numericId);
         if (!isMounted) return;
@@ -176,15 +188,14 @@ export default function MarketplaceChatPage() {
         setConversationTitle(data.title);
 
         try {
-          const convData = await apiService.getMarketplaceConversations(100, 0);
-          if (!isMounted) return;
-          const match = convData.conversations.find((c) => c.conversation_id === numericId);
-          if (match) {
-            setAgentName(match.agent_display_name);
+          const starters = await apiService.getAgentConversationStarters(data.agent_id);
+          if (starters && starters.length > 0) {
+            setStarters(starters.map((s) => ({ id: s.id, prompt: s.prompt })));
           }
         } catch {
           // Non-critical
         }
+
 
         if (data.messages && data.messages.length > 0) {
           const loaded: ChatMessage[] = data.messages.map(
@@ -237,11 +248,13 @@ export default function MarketplaceChatPage() {
     }
   }, [numericId]);
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputMessage(e.target.value);
-    const el = e.target;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  const handleStarterClick = useCallback((prompt: string) => {
+    setInputMessage(prompt);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+      textareaRef.current.focus();
+    }
   }, []);
 
   const handleSendMessage = useCallback(async () => {
@@ -491,26 +504,56 @@ export default function MarketplaceChatPage() {
         </div>
 
         {/* Messages */}
-        <div
-          ref={messagesContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-3
-                     bg-gradient-to-b from-gray-50/50 to-white/30
-                     dark:from-gray-900/50 dark:to-gray-800/30
-                     scroll-smooth"
-        >
-          {messages.length === 0 && !showStreaming && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-              <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                <MessageCircle className="w-6 h-6 text-indigo-500" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                  Start chatting with {agentName}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Type a message below to begin
-                </p>
-              </div>
+         <div
+           ref={messagesContainerRef}
+           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-6 space-y-6
+                      bg-gradient-to-b from-gray-50/50 to-white/30
+                      dark:from-gray-900/50 dark:to-gray-800/30
+                      scroll-smooth"
+         >
+           {messages.length === 0 && !showStreaming && (
+             <div className="flex flex-col items-center justify-center h-full py-12 text-center animate-fade-in">
+               <div className="w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 shadow-inner">
+                 <MessageCircle
+                   className="w-8 h-8 text-indigo-500"
+                   aria-hidden="true"
+                 />
+               </div>
+ 
+               <div className="space-y-2">
+                 <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+                   Start chatting with {agentName}
+                 </p>
+                 <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">
+                   Ask a question or choose a suggestion below to get started
+                 </p>
+               </div>
+
+               {starters.length > 0 && (
+                 <div className="mt-8 flex flex-wrap justify-center gap-3 px-4 max-w-2xl mx-auto">
+                   {starters.map((starter) => (
+                     <button
+                       key={starter.id}
+                       onClick={() => handleStarterClick(starter.prompt)}
+                       className="
+                         max-w-xs
+                         px-4 py-2.5
+                         bg-white dark:bg-gray-800
+                         border border-indigo-200 dark:border-indigo-800/40
+                         rounded-xl
+                         text-sm text-indigo-600 dark:text-indigo-400
+                         hover:bg-indigo-50 dark:hover:bg-indigo-900/30
+                         hover:border-indigo-400 dark:hover:border-indigo-600
+                         hover:scale-105 active:scale-95
+                         transition-all duration-200 shadow-sm hover:shadow-md
+                         whitespace-pre-wrap break-words
+                       "
+                     >
+                       {starter.prompt}
+                     </button>
+                   ))}
+                 </div>
+               )}
             </div>
           )}
 
@@ -627,83 +670,84 @@ export default function MarketplaceChatPage() {
             </div>
           )}
 
-          <div className="pg-glass rounded-xl px-3 py-2.5 flex items-end gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-              id="marketplace-file-upload"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isStreaming || isQuotaExceeded}
-              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
-                         hover:text-indigo-600 dark:hover:text-indigo-400
-                         hover:bg-indigo-50 dark:hover:bg-indigo-900/20
-                         disabled:opacity-40 disabled:cursor-not-allowed
-                         transition-all duration-150"
-              title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
-              aria-label="Attach file"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
-
-            <textarea
-              ref={textareaRef}
-              value={inputMessage}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={`Message ${agentName}…`}
-              disabled={isStreaming || isQuotaExceeded}
-              rows={1}
-              className="flex-1 bg-transparent border-none outline-none resize-none
-                         text-sm text-gray-800 dark:text-gray-100
-                         placeholder:text-gray-400 dark:placeholder:text-gray-500
-                         disabled:opacity-50
-                         max-h-40 input-login"
-              style={{ minHeight: '1.5rem' }}
-            />
-
-            {isStreaming ? (
-              <button
-                type="button"
-                onClick={abortStream}
-                className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
-                           hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
-                           active:scale-95 shrink-0"
-                aria-label="Stop generating"
-                title="Stop generating"
-              >
-                <Square className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSendMessage}
-                disabled={!canSend}
-                className="pg-btn-send shrink-0 !p-2"
-                aria-label="Send message"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
+           <div className="pg-glass rounded-2xl px-4 py-3 flex items-end gap-3 shadow-sm border border-white/20 dark:border-gray-700/30">
+             <input
+               ref={fileInputRef}
+               type="file"
+               multiple
+               onChange={handleFileSelect}
+               className="hidden"
+               id="marketplace-file-upload"
+             />
+             <button
+               type="button"
+               onClick={() => fileInputRef.current?.click()}
+               disabled={isStreaming || isQuotaExceeded}
+               className="p-2 rounded-xl text-gray-400 dark:text-gray-500
+                          hover:text-indigo-600 dark:hover:text-indigo-400
+                          hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                          disabled:opacity-40 disabled:cursor-not-allowed
+                          transition-all duration-150"
+               title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
+               aria-label="Attach file"
+             >
+               <Paperclip className="w-5 h-5" />
+             </button>
+ 
+             <textarea
+               ref={textareaRef}
+               value={inputMessage}
+               onChange={(e) => setInputMessage(e.target.value)}
+               onKeyDown={handleKeyDown}
+               placeholder={`Message ${agentName}…`}
+               disabled={isStreaming || isQuotaExceeded}
+               rows={1}
+               className="flex-1 bg-transparent border-none outline-none resize-none
+                          text-sm text-gray-800 dark:text-gray-100
+                          placeholder:text-gray-400 dark:placeholder:text-gray-500
+                          disabled:opacity-50
+                          focus:outline-none focus:ring-0
+                          max-h-40 input-login"
+               style={{ minHeight: '1.5rem' }}
+             />
+ 
+             {isStreaming ? (
+               <button
+                 type="button"
+                 onClick={abortStream}
+                 className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
+                            hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
+                            active:scale-95 shrink-0"
+                 aria-label="Stop generating"
+                 title="Stop generating"
+               >
+                 <Square className="w-4 h-4" />
+               </button>
+             ) : (
+               <button
+                 type="button"
+                 onClick={handleSendMessage}
+                 disabled={!canSend}
+                 className="pg-btn-send shrink-0 !p-2 rounded-xl"
+                 aria-label="Send message"
+               >
+                 <svg
+                   className="w-4 h-4"
+                   fill="none"
+                   stroke="currentColor"
+                   viewBox="0 0 24 24"
+                   aria-hidden="true"
+                 >
+                   <path
+                     strokeLinecap="round"
+                     strokeLinejoin="round"
+                     strokeWidth={2}
+                     d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                   />
+                 </svg>
+               </button>
+             )}
+           </div>
 
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">
             Press Enter to send, Shift+Enter for new line

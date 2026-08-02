@@ -19,6 +19,7 @@ class OutputParserFieldSchema(BaseModel):
     name: str
     type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'dict', 'parser'
     description: str
+    optional: bool = False  # If True, the field is optional (may be absent in LLM output)
     parser_id: Optional[int] = None  # For type='parser'
     list_item_type: Optional[str] = None  # For type='list'
     list_item_parser_id: Optional[int] = None  # For list of parsers

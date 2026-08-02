@@ -415,3 +415,21 @@ class TestBootstrapOmniadminsIdempotency:
         assert count == 1, (
             f"Idempotency violated: expected exactly 1 user, found {count}"
         )
+
+    @pytest.mark.asyncio
+    async def test_promotes_pre_existing_user_to_admin_platform_role(self, db, monkeypatch):
+        """A user created (e.g. via OIDC) before their email was added to
+        AICT_OMNIADMINS must be promoted to platform_role='admin' the next
+        time bootstrap runs — not left at the 'viewer' default forever."""
+        email = "already_existed@mattin-test.com"
+        user = _make_oidc_user(db, email)
+        assert user.platform_role == "viewer"
+
+        monkeypatch.setenv("AICT_OMNIADMINS", email)
+
+        from services.auth.omniadmin_bootstrap import _provision_single_omniadmin
+
+        await _provision_single_omniadmin(db, email)
+
+        db.refresh(user)
+        assert user.platform_role == "admin"

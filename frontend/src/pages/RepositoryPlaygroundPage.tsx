@@ -20,11 +20,7 @@ interface Repository {
 
 interface SearchResult {
   page_content: string;
-  metadata: {
-    source: string;
-    page?: number;
-    [key: string]: any;
-  };
+  metadata: Record<string, unknown>;
   score?: number;
 }
 
@@ -197,7 +193,9 @@ const RepositoryPlaygroundPage: React.FC = () => {
           
           <div className="space-y-4">
             {results.map((result, index) => {
-              const uniqueKey = `${result.metadata.source}-${result.metadata.page ?? 'no-page'}-${result.page_content.substring(0, 30).replaceAll(/\s+/g, '-').replaceAll(/[^a-zA-Z0-9-]/g, '')}`;
+              const source = result.metadata.source as string | undefined;
+              const page = result.metadata.page as number | undefined;
+              const uniqueKey = `${source}-${page ?? 'no-page'}-${result.page_content.substring(0, 30).replaceAll(/\s+/g, '-').replaceAll(/[^a-zA-Z0-9-]/g, '')}`;
               return (
               <div key={uniqueKey} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-2">

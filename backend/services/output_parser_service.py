@@ -73,6 +73,7 @@ class OutputParserService:
                     name=field_data.get('name', ''),
                     type=field_data.get('type', 'str'),
                     description=field_data.get('description', ''),
+                    optional=field_data.get('optional', False),
                     parser_id=field_data.get('parser_id'),
                     list_item_type=field_data.get('list_item_type'),
                     list_item_parser_id=field_data.get('list_item_parser_id')
@@ -117,7 +118,8 @@ class OutputParserService:
             field_dict = {
                 'name': field_data.name,
                 'type': field_data.type,
-                'description': field_data.description
+                'description': field_data.description,
+                'optional': field_data.optional,
             }
             
             if field_data.type == 'parser' and field_data.parser_id:

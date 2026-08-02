@@ -12,7 +12,7 @@ interface Agent {
   agent_id: number;
   name: string;
   description?: string;
-  status: string;
+  status?: string;
   type: string;
   has_memory?: boolean;
   system_prompt?: string;
@@ -37,6 +37,7 @@ interface Agent {
       name: string;
       type: string;
       description: string;
+      optional?: boolean;
     }>;
   };
 }

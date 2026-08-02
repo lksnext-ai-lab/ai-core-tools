@@ -44,3 +44,15 @@ class ConversationWithHistoryResponse(ConversationResponse):
     """Schema for conversation with message history"""
     messages: list[dict] = []  # List of {role: str, content: str}
 
+class MarketplaceConversationResponse(BaseModel):
+    conversation_id: int
+    agent_id: int
+    user_id: Optional[int]
+    title: Optional[str]
+    session_id: str
+    created_at: datetime
+    updated_at: datetime
+    last_message: Optional[str]
+    message_count: int
+
+    model_config = ConfigDict(from_attributes=True)

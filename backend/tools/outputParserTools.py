@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Type, Dict, Any, List, get_origin, get_args
+from typing import Type, Dict, Any, List, Optional, get_origin, get_args
 from sqlalchemy.orm import Session
 from utils.schema_utils import sanitize_identifier
 from db.database import SessionLocal
@@ -29,21 +29,25 @@ def process_type(field_type):
         
     return field_type
 
-def build_fields_dict(field_names: list[str], field_types: list[type], field_descriptions: list[str]) -> Dict[str, tuple[type, str]]:
+def build_fields_dict(field_names: list[str], field_types: list[type], field_descriptions: list[str], field_optionals: list[bool] = None) -> Dict[str, tuple[type, str]]:
     """
     Construye un diccionario de campos a partir de listas paralelas.
     
     :param field_names: Lista con los nombres de los campos
     :param field_types: Lista con los tipos de datos de los campos
     :param field_descriptions: Lista con las descripciones de los campos
+    :param field_optionals: Lista indicando si cada campo es opcional (default: all False)
     :return: Diccionario con la estructura requerida para crear el modelo
     """
     if not (len(field_names) == len(field_types) == len(field_descriptions)):
         raise ValueError("Todas las listas deben tener la misma longitud")
     
+    if field_optionals is None:
+        field_optionals = [False] * len(field_names)
+
     fields_dict = {
-        field_name: (process_type(field_type), field_desc)
-        for field_name, field_type, field_desc in zip(field_names, field_types, field_descriptions)
+        field_name: (Optional[process_type(field_type)] if is_optional else process_type(field_type), field_desc)
+        for field_name, field_type, field_desc, is_optional in zip(field_names, field_types, field_descriptions, field_optionals)
     }
     print("fields_dict", fields_dict)
     return fields_dict
@@ -51,7 +55,8 @@ def build_fields_dict(field_names: list[str], field_types: list[type], field_des
 def create_dynamic_pydantic_model(model_name: str,
     field_names: list[str],
     field_types: list[type],
-    field_descriptions: list[str]
+    field_descriptions: list[str],
+    field_optionals: list[bool] = None
 ) -> Type[BaseModel]:
     """
     Crea un modelo Pydantic dinámicamente.
@@ -60,12 +65,24 @@ def create_dynamic_pydantic_model(model_name: str,
     :param field_names: Lista con los nombres de los campos
     :param field_types: Lista con los tipos de datos de los campos
     :param field_descriptions: Lista con las descripciones de los campos
+    :param field_optionals: Lista indicando si cada campo es opcional (default: all False)
     :return: Una nueva clase que hereda de BaseModel con los campos especificados
     """
-    fields = build_fields_dict(field_names, field_types, field_descriptions)
+    if field_optionals is None:
+        field_optionals = [False] * len(field_names)
+
+    fields = build_fields_dict(field_names, field_types, field_descriptions, field_optionals)
     model_fields = {
-        field_name: (field_type, Field(description=field_desc))
-        for field_name, (field_type, field_desc) in fields.items()
+        field_name: (
+            field_type,
+            Field(
+                default=None,
+                description=f"{field_desc} (optional — may be omitted or null)",
+            )
+            if is_optional
+            else Field(description=field_desc),
+        )
+        for (field_name, (field_type, field_desc)), is_optional in zip(fields.items(), field_optionals)
     }
     print("model_fields", model_fields)
     return type(model_name, (BaseModel,), {
@@ -115,6 +132,7 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
     field_names = []
     field_types = []
     field_descriptions = []
+    field_optionals = []
     
     for field in schema_data:
         field_names.append(field['name'])
@@ -135,7 +153,8 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
                 )
             field_types.append(tipo)
             field_descriptions.append(field['description'])
-            logging.info(f"Campo procesado: nombre='{field['name']}', tipo='{tipo}', descripción='{field['description']}'")
+            field_optionals.append(bool(field.get('optional', False)))
+            logging.info(f"Campo procesado: nombre='{field['name']}', tipo='{tipo}', descripción='{field['description']}', opcional={field.get('optional', False)}")
         except Exception as e:
             logging.error(f"Error procesando campo {field['name']}: {str(e)}")
             raise
@@ -144,7 +163,8 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
         model_name,
         field_names,
         field_types,
-        field_descriptions
+        field_descriptions,
+        field_optionals
     )
     logging.info(f"Modelo Pydantic creado: {model_name}")
     

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from models.user import User, PlatformRole
 from models.api_key import APIKey
 from models.app import App
@@ -54,7 +55,14 @@ class UserService:
 
     @staticmethod
     def get_or_create_user(db: Session, email: str, name: str = None) -> Tuple[User, bool]:
-        """Get existing user or create one. Returns (user, created)."""
+        """Get existing user or create one. Returns (user, created).
+
+        Race-safe against concurrent first-login requests (e.g. parallel OIDC-protected
+        calls firing on initial login): if two calls both miss the SELECT and race to
+        INSERT, the `uq_user_email` unique constraint rejects the loser's INSERT with an
+        IntegrityError. That loser rolls back and re-fetches the winner's row instead of
+        propagating the error, so callers never see a spurious 500 or duplicate user.
+        """
         user_repo = UserRepository(db)
 
         user = user_repo.get_by_email(email)
@@ -63,8 +71,15 @@ class UserService:
             user = user_repo.update(user, name)
             return user, False
 
-        new_user = user_repo.create(email, name)
-        return new_user, True
+        try:
+            new_user = user_repo.create(email, name)
+            return new_user, True
+        except IntegrityError:
+            db.rollback()
+            user = user_repo.get_by_email(email)
+            if user:
+                return user_repo.update(user, name), False
+            raise
 
     @staticmethod
     def get_user_by_id(db: Session, user_id: int) -> User:
@@ -86,9 +101,13 @@ class UserService:
 
     @staticmethod
     def get_all_users(db: Session, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
-        """Get all users with pagination. Returns (users_list, total_count)."""
+        """Get all users with pagination. Returns (users_list, total_count).
+
+        Omniadmins are included (marked via the is_omniadmin flag on each dict)
+        so admins can see them as protected accounts, not hidden entirely.
+        """
         user_repo = UserRepository(db)
-        users, total = user_repo.get_all_paginated(page, per_page, exclude_emails=get_omniadmins())
+        users, total = user_repo.get_all_paginated(page, per_page)
 
         users_list = [UserService._user_to_dict(user) for user in users]
 
@@ -102,13 +121,30 @@ class UserService:
 
     @staticmethod
     def search_users(db: Session, query: str, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
-        """Search users by name or email. Returns (users_list, total_count)."""
+        """Search users by name or email. Returns (users_list, total_count).
+
+        Omniadmins are included (marked via the is_omniadmin flag on each dict),
+        consistent with get_all_users, so they show up as protected accounts
+        rather than being hidden.
+        """
         user_repo = UserRepository(db)
-        users, total = user_repo.search_users(query, page, per_page, exclude_emails=get_omniadmins())
+        users, total = user_repo.search_users(query, page, per_page)
 
         users_list = [UserService._user_to_dict(user) for user in users]
 
         return users_list, total
+
+    @staticmethod
+    def get_omniadmin_accounts(db: Session) -> List[Dict]:
+        """Get platform users configured as omniadmins (only those with an existing User row).
+
+        Used to surface protected accounts in the collaboration invite UI without
+        requiring the caller to know/search their email first.
+        """
+        user_repo = UserRepository(db)
+        users = user_repo.get_by_emails(get_omniadmins())
+
+        return [UserService._user_to_dict(user) for user in users]
 
     @staticmethod
     def delete_user(

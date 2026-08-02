@@ -8,13 +8,11 @@ from db.database import get_db
 from models.app import App
 from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
 from routers.internal.auth_utils import get_current_user_oauth
-from utils.config import is_omniadmin
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 class AppRole(str, Enum):
-    OMNIADMIN = "omniadmin"
     OWNER = "owner"
     ADMINISTRATOR = "administrator"
     EDITOR = "editor"
@@ -30,7 +28,6 @@ ROLE_HIERARCHY = [
     AppRole.EDITOR,
     AppRole.ADMINISTRATOR,
     AppRole.OWNER,
-    AppRole.OMNIADMIN
 ]
 
 def get_role_level(role: AppRole) -> int:
@@ -40,30 +37,28 @@ def resolve_user_app_role(
     db: Session,
     app_id: int,
     user_id: Optional[int] = None,
-    email: Optional[str] = None
 ) -> Optional[AppRole]:
     """
-    Resolve the effective role of a user for a specific app.
+    Resolve the effective role of a user for a specific app, based solely on
+    ownership/collaboration — omniadmins get no app-level bypass here; their
+    elevated privileges are platform-level only (see require_admin / is_omniadmin
+    usages in routers/internal/admin.py).
     Returns None if the app does not exist.
     """
-    # 1. Check Omniadmin
-    if email and is_omniadmin(email):
-        return AppRole.OMNIADMIN
-
     # If not authenticated (no user_id), return GUEST
     if not user_id:
         return AppRole.GUEST
 
-    # 2. Check App existence
+    # 1. Check App existence
     app = db.query(App).filter(App.app_id == app_id).first()
     if not app:
         return None
 
-    # 3. Check Ownership
+    # 2. Check Ownership
     if app.owner_id == user_id:
         return AppRole.OWNER
 
-    # 4. Check Collaboration
+    # 3. Check Collaboration
     collaboration = db.query(AppCollaborator).filter(
         AppCollaborator.app_id == app_id,
         AppCollaborator.user_id == user_id,
@@ -83,19 +78,17 @@ def resolve_user_app_role(
                 return AppRole.EDITOR
             elif collaboration.role == CollaborationRole.OWNER:
                 return AppRole.OWNER
-            
+
             logger.warning(f"Unknown collaboration role: {collaboration.role}")
             return AppRole.USER
 
-    # 5. Authenticated but no affiliation
+    # 4. Authenticated but no affiliation
     return AppRole.USER
 
 def has_min_role(user_role: AppRole, required_role: AppRole) -> bool:
     return get_role_level(user_role) >= get_role_level(required_role)
 
 def has_any_role(user_role: AppRole, allowed_roles: Set[AppRole]) -> bool:
-    if user_role == AppRole.OMNIADMIN:
-        return True
     return user_role in allowed_roles
 
 class RoleChecker:
@@ -110,9 +103,8 @@ class RoleChecker:
         db: Session = Depends(get_db)
     ):
         user_id = int(auth_context.identity.id) if auth_context.identity.id else None
-        email = auth_context.identity.email
 
-        role = resolve_user_app_role(db, app_id, user_id, email)
+        role = resolve_user_app_role(db, app_id, user_id)
 
         if role is None:
              raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found")

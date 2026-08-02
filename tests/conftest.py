@@ -47,6 +47,17 @@ os.environ.setdefault("AICT_LOGIN", "LOCAL")
 os.environ.setdefault("AICT_OMNIADMINS", "admin@test.com")
 os.environ.setdefault("AICT_MODE", "SELF-HOSTED")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
+# The `client` fixture reruns the full app lifespan (incl. omniadmin_bootstrap) on every
+# test. bootstrap_omniadmins provisions AICT_OMNIADMINS via its own real, auto-committing
+# SessionLocal() -- a separate connection from the `db` fixture's rolled-back outer
+# transaction. Several tests' `admin_headers` fixtures monkeypatch AICT_OMNIADMINS to
+# fake_user's email (already flushed-but-uncommitted in the `db` session); bootstrap's
+# separate session then tries to INSERT that same email and blocks waiting for the `db`
+# session's transaction to finish -- which can't happen until the test body runs, which
+# can't start until `client` setup (running bootstrap) finishes. Disabling the default
+# here avoids that deadlock; tests that exercise bootstrap_omniadmins directly already
+# monkeypatch this flag to "true" themselves (see test_local_auth_provisioning.py).
+os.environ.setdefault("AUTH_BOOTSTRAP_OMNIADMINS", "false")
 
 # ---------------------------------------------------------------------------
 # Helpers

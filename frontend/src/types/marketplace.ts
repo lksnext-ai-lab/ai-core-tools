@@ -76,6 +76,7 @@ export interface MarketplaceProfile {
   cover_image_url: string | null;
   published_at: string | null;
   updated_at: string | null;
+  conversation_starters: { id: number; prompt: string; order: number }[];
 }
 
 /** Request body for creating/updating a marketplace profile */
@@ -87,6 +88,7 @@ export interface MarketplaceProfileUpdate {
   tags?: string[] | null;
   icon_url?: string | null;
   cover_image_url?: string | null;
+  conversation_starters?: string[];
 }
 
 /** Marketplace conversation item */

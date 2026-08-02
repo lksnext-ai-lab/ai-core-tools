@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from models.agent import Agent, MarketplaceVisibility
 from models.agent_marketplace_profile import AgentMarketplaceProfile
+from models.conversation_starter import ConversationStarter
 from models.agent_marketplace_rating import AgentMarketplaceRating
 from models.conversation import Conversation, ConversationSource
 from models.app_collaborator import AppCollaborator, CollaborationStatus
@@ -312,16 +313,47 @@ class MarketplaceService:
         if profile:
             # Update only provided (non-None) fields
             update_data = profile_data.model_dump(exclude_unset=True)
+            
+            # Handle conversation starters separately (1:N relationship)
+            if 'conversation_starters' in update_data:
+                starters_list = update_data.pop('conversation_starters')
+                if starters_list is not None:
+                    # Use a simple replacement strategy for starters: 
+                    # delete existing and recreate to maintain order and simplicity
+                    db.query(ConversationStarter).filter(
+                        ConversationStarter.profile_id == profile.id
+                    ).delete()
+                    
+                    for idx, prompt in enumerate(starters_list):
+                        starter = ConversationStarter(
+                            profile_id=profile.id,
+                            prompt=prompt,
+                            order=idx
+                        )
+                        db.add(starter)
+
             for key, value in update_data.items():
                 setattr(profile, key, value)
         else:
             # Create new profile
+            profile_data_dict = profile_data.model_dump(exclude_unset=True)
+            starters_list = profile_data_dict.pop('conversation_starters', None)
+            
             profile = AgentMarketplaceProfile(
                 agent_id=agent_id,
-                **profile_data.model_dump(exclude_unset=True),
+                **profile_data_dict,
             )
             db.add(profile)
             db.flush()  # populate profile.id before setting published_at
+            
+            if starters_list is not None:
+                for idx, prompt in enumerate(starters_list):
+                    starter = ConversationStarter(
+                        profile_id=profile.id,
+                        prompt=prompt,
+                        order=idx
+                    )
+                    db.add(starter)
 
         # Back-fill published_at if the agent is already published but the
         # timestamp was never set (e.g. visibility was changed before the
@@ -365,8 +397,24 @@ class MarketplaceService:
 
         return MarketplaceProfileSchema.model_validate(profile)
 
-    # ------------------------------------------------------------------
-    # 6. Marketplace conversations (consumer list)
+    @staticmethod
+    def get_agent_conversation_starters(
+        db: Session,
+        agent_id: int,
+    ) -> List[ConversationStarter]:
+        """
+        Retrieve the conversation starters for a specific agent.
+        """
+        profile = (
+            db.query(AgentMarketplaceProfile)
+            .filter(AgentMarketplaceProfile.agent_id == agent_id)
+            .first()
+        )
+        if not profile:
+            return []
+        
+        return profile.conversation_starters
+    
     # ------------------------------------------------------------------
 
     @staticmethod
