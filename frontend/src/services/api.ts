@@ -81,6 +81,7 @@ export interface App {
   max_file_size_mb?: number;
   agent_cors_origins?: string;
   enable_openai_api?: boolean;
+  default_sandbox_service_id?: number | null;
   agent_count: number;
   repository_count: number;
   domain_count: number;
@@ -114,6 +115,7 @@ export interface Agent {
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -149,6 +151,7 @@ export interface Agent {
     fields: Array<{ name: string; type: string; description: string; optional?: boolean }>;
   };
   output_parsers: Array<{ parser_id: number; name: string }>;
+  sandbox_services: Array<{ service_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
