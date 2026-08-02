@@ -144,3 +144,41 @@ async def test_create_agent_adds_sandbox_builtins_when_bash_available(tmp_path):
     assert "Read" in tool_names
     assert "Bash" in tool_names
     assert "KillShell" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_create_agent_degrades_gracefully_when_sandbox_provider_unavailable(tmp_path):
+    """A misconfigured/unregistered sandbox provider must not crash the whole
+    turn — the agent should still be built, just without code-interpreter tools."""
+    from tools.agentTools import create_agent
+    from tools.sandbox.factory import SandboxProviderUnavailableError
+
+    agent = _make_agent()
+    created_agent = MagicMock()
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=MagicMock()),
+        patch("tools.agentTools.get_output_parser", return_value=None),
+        patch("tools.agentTools.create_langchain_agent", return_value=created_agent) as create_langchain_agent,
+        patch("tools.agentTools.MCPClientManager.get_client", new=AsyncMock(return_value=None)),
+        patch(
+            "tools.agentTools.resolve_provider",
+            side_effect=SandboxProviderUnavailableError("provider not registered"),
+        ),
+    ):
+        result = await create_agent(
+            agent,
+            working_dir=str(tmp_path),
+            sandbox_handle=None,
+            sandbox_provider=None,
+        )
+
+    assert result is not None
+    tool_names = {
+        getattr(tool, "name", None)
+        for tool in create_langchain_agent.call_args.kwargs["tools"]
+    }
+    assert "python_repl" not in tool_names
+    assert "bash_repl" not in tool_names
+    assert "Bash" not in tool_names
+    assert "Read" not in tool_names

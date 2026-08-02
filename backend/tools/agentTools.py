@@ -34,6 +34,7 @@ from tools.sandbox import (
     create_sandbox_repl_tools,
     resolve_provider,
 )
+from tools.sandbox.factory import SandboxProviderUnavailableError
 
 logger = get_logger(__name__)
 
@@ -261,8 +262,15 @@ async def create_agent(
     ci_provider_for_prompt = None
     ci_languages: list[str] = []
     if agent.enable_code_interpreter and working_dir:
-        ci_provider_for_prompt = sandbox_provider or resolve_provider(agent)
-        ci_languages = ci_provider_for_prompt.get_supported_languages()
+        try:
+            ci_provider_for_prompt = sandbox_provider or resolve_provider(agent)
+            ci_languages = ci_provider_for_prompt.get_supported_languages()
+        except SandboxProviderUnavailableError as exc:
+            logger.warning(
+                "Code interpreter unavailable for agent %s: %s", agent.agent_id, exc
+            )
+            ci_provider_for_prompt = None
+            ci_languages = []
 
     # Build system prompt with optional skills section and format instructions
     # In LangChain v1, system_prompt is a static string passed to create_agent
@@ -290,9 +298,8 @@ async def create_agent(
             + "</workspace>"
         )
 
-    if agent.enable_code_interpreter and working_dir:
-        _ci_provider = sandbox_provider or ci_provider_for_prompt or resolve_provider(agent)
-        _ci_languages = ci_languages or _ci_provider.get_supported_languages()
+    if agent.enable_code_interpreter and working_dir and ci_provider_for_prompt is not None:
+        _ci_languages = ci_languages
         _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
         system_prompt_content = (
             system_prompt_content
@@ -303,8 +310,11 @@ async def create_agent(
                 "When bash is available, you also have sandbox builtin tools: "
                 "`SandboxInfo`, `PWD`, `Read`, `Write`, `Edit`, `LS`, `Glob`, `Grep`, `Stat`, `Bash`, "
                 "`BashOutput`, and `KillShell`. These operate exclusively inside the Linux sandbox. "
-                "Use `SandboxInfo` for workspace rules and limits; use `PWD` when you need "
-                "the sandbox workspace root. Use absolute sandbox paths with file editing tools.\n"
+                "`Read`/`Write`/`Edit` require an absolute path, and the absolute workspace root "
+                "differs by provider — never guess a prefix like `/workspace`. Before your first "
+                "call to any of `Read`/`Write`/`Edit`, call `PWD` (or `SandboxInfo`, which also "
+                "reports it) once to learn the sandbox's actual working directory, then build every "
+                "absolute path from that.\n"
                 if "bash" in _ci_languages else ""
             )
             + "Read uploaded files from input/<filename>.\n"
@@ -391,38 +401,52 @@ async def create_agent(
     if agent.enable_code_interpreter and working_dir:
         os.makedirs(working_dir, exist_ok=True)
         if sandbox_provider is None:
-            sandbox_provider = resolve_provider(agent)
-        if sandbox_handle is None:
+            try:
+                sandbox_provider = ci_provider_for_prompt or resolve_provider(agent)
+            except SandboxProviderUnavailableError as exc:
+                logger.warning(
+                    "Skipping code interpreter tools for agent %s: %s",
+                    agent.agent_id,
+                    exc,
+                )
+                sandbox_provider = None
+        if sandbox_provider is not None and sandbox_handle is None:
             logger.warning(
                 "Code interpreter tool requested without prepared sandbox handle; "
                 "creating fallback sandbox during tool assembly for agent %s",
                 agent.agent_id,
             )
             sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
-        if sandbox_session_service is None and sandbox_session_key is not None:
-            try:
-                from services.sandbox_session_service import sandbox_session_service as _sss
-                sandbox_session_service = _sss
-            except Exception:
-                sandbox_session_service = None
-        repl_tools = create_sandbox_repl_tools(
-            sandbox_handle,
-            sandbox_provider,
-            session_key=sandbox_session_key,
-            session_service=sandbox_session_service,
-        )
-        tools.extend(repl_tools)
-        builtin_tools = create_sandbox_builtin_tools(sandbox_handle, sandbox_provider)
-        tools.extend(builtin_tools)
-        logger.info(
-            "Sandbox tools added for agent %s (repl=%s, builtins=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
-            agent.agent_id,
-            [t.name for t in repl_tools],
-            [t.name for t in builtin_tools],
-            working_dir,
-            _sandbox_id_for_log(sandbox_handle),
-            sandbox_handle.provider_name,
-        )
+        if sandbox_provider is not None and sandbox_handle is not None:
+            if sandbox_session_service is None and sandbox_session_key is not None:
+                try:
+                    from services.sandbox_session_service import sandbox_session_service as _sss
+                    sandbox_session_service = _sss
+                except Exception:
+                    sandbox_session_service = None
+            repl_tools = create_sandbox_repl_tools(
+                sandbox_handle,
+                sandbox_provider,
+                session_key=sandbox_session_key,
+                session_service=sandbox_session_service,
+            )
+            tools.extend(repl_tools)
+            builtin_tools = create_sandbox_builtin_tools(
+                sandbox_handle,
+                sandbox_provider,
+                session_key=sandbox_session_key,
+                session_service=sandbox_session_service,
+            )
+            tools.extend(builtin_tools)
+            logger.info(
+                "Sandbox tools added for agent %s (repl=%s, builtins=%s, working_dir=%s, sandbox_id=%s, provider=%s)",
+                agent.agent_id,
+                [t.name for t in repl_tools],
+                [t.name for t in builtin_tools],
+                working_dir,
+                _sandbox_id_for_log(sandbox_handle),
+                sandbox_handle.provider_name,
+            )
 
     mcp_client = None
     try:
@@ -796,10 +820,18 @@ class IACTTool(BaseTool):
             if retriever_tool is not None:
                 tools.append(retriever_tool)
 
-        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None:
-            if sandbox_provider is None:
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None and sandbox_provider is None:
+            try:
                 sandbox_provider = resolve_provider(agent)
                 instance.sandbox_provider = sandbox_provider
+            except SandboxProviderUnavailableError as exc:
+                logger.warning(
+                    "Skipping code interpreter tools for sub-agent %s: %s",
+                    agent.agent_id,
+                    exc,
+                )
+
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None and sandbox_provider is not None:
             repl_tools = create_sandbox_repl_tools(
                 sandbox_handle,
                 sandbox_provider,
@@ -860,9 +892,8 @@ class IACTTool(BaseTool):
                 + "</workspace>"
             )
 
-        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None:
-            _ci_provider = sandbox_provider or resolve_provider(agent)
-            _ci_languages = _ci_provider.get_supported_languages()
+        if agent.enable_code_interpreter and working_dir and sandbox_handle is not None and sandbox_provider is not None:
+            _ci_languages = sandbox_provider.get_supported_languages()
             _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
             tool_system_prompt = (
                 tool_system_prompt

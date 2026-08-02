@@ -154,6 +154,13 @@ def create_sandbox_repl_tool(
     Returns:
         A LangChain tool whose name is ``{language}_repl``.
     """
+    # Lazy import (services -> tools would otherwise risk a circular import
+    # through this package's __init__.py) — matches the existing lazy-import
+    # convention used elsewhere for this exact cross-package dependency
+    # (e.g. sandbox_session_service.py's own `from tools.sandbox.factory
+    # import _PROVIDER_REGISTRY`).
+    from services.sandbox_session_service import SandboxCapacityError
+
     meta = _get_language_meta(language)
     tool_name: str = meta["tool_name"]
     display: str = meta["display"]
@@ -266,6 +273,16 @@ def create_sandbox_repl_tool(
                 return (
                     "[Error] Sandbox session expired and was reset. "
                     "Please retry the code execution."
+                )
+            except SandboxCapacityError:
+                # Raised by lazy handle materialization (get_or_create) when
+                # the process-wide concurrent-sandbox cap is reached. Must
+                # not propagate uncaught — that would surface as a raw 500
+                # instead of a clean, retryable tool error (see
+                # builtin_tools.py's equivalent catch-all for the same class
+                # of error on the other sandbox tool family).
+                return (
+                    "[Error] Sandbox capacity reached, please retry shortly."
                 )
             finally:
                 if lease_acquired and session_service is not None and session_key is not None:

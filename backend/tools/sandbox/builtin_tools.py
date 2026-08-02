@@ -13,13 +13,31 @@ import json
 import re
 import shlex
 import uuid
-from typing import Literal
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import config as settings
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, Field
+from utils.logger import get_logger
 
 from .provider import SandboxExpiredError, SandboxHandle, SandboxProvider
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class _SandboxHandleRef:
+    """Mutable holder for a ``SandboxHandle``.
+
+    All builtin tools created by a single ``create_sandbox_builtin_tools`` call
+    share one instance of this holder (captured by closure). When a sandbox
+    session expires mid-turn, ``_run_bash_with_recovery`` can swap in a freshly
+    recreated handle here and every tool immediately sees the new handle on its
+    next call — without each tool closure needing to hold its own reference.
+    """
+
+    handle: SandboxHandle
 
 
 _BG_SHELLS_KEY = "_mattin_builtin_background_shells"
@@ -194,9 +212,104 @@ def _run_bash(
         return f"[Error] Sandbox command failed: {exc}"
 
 
+_SANDBOX_EXPIRED_MESSAGE = (
+    "[Error] Sandbox session expired and was reset. Please retry the code execution."
+)
+
+
+def _recreate_stale_handle(
+    handle_ref: _SandboxHandleRef,
+    provider: SandboxProvider,
+    *,
+    session_key: str | None,
+    session_service: Any | None,
+) -> bool:
+    """Evict the stale cached session and swap in a freshly created handle.
+
+    Mirrors ``tool_factory.py``'s ``_recreate_stale_handle`` so builtin tools and
+    REPL tools recover from an expired sandbox the same way.
+    """
+    if session_service is None or session_key is None:
+        return False
+    try:
+        session_service.evict(session_key)
+        handle_ref.handle = session_service.get_or_create(
+            session_key,
+            provider,
+            handle_ref.handle.working_dir,
+        )
+        logger.info(
+            "Recovered sandbox session %s with new sandbox_id=%s",
+            session_key,
+            handle_ref.handle.sandbox_id,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Failed to recreate sandbox session %s after expiry: %s",
+            session_key,
+            exc,
+            exc_info=True,
+        )
+        return False
+
+
+def _run_bash_with_recovery(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    command: str,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+    timeout: int | None = None,
+    max_output_chars: int | None = None,
+) -> str:
+    """Run *command* via ``_run_bash``, recovering once from a stale sandbox.
+
+    On ``SandboxExpiredError`` this attempts to evict the cached session and
+    obtain a fresh handle (updating *handle_ref* in place) and retries the
+    command exactly once. If recovery isn't possible (no session service/key)
+    or the retried attempt also raises ``SandboxExpiredError``, a clean
+    user-facing error string is returned instead of letting the exception
+    propagate and crash the agent turn.
+    """
+    for attempt in range(2):
+        try:
+            return _run_bash(
+                provider,
+                handle_ref.handle,
+                command,
+                timeout=timeout,
+                max_output_chars=max_output_chars,
+            )
+        except SandboxExpiredError:
+            if attempt == 0 and _recreate_stale_handle(
+                handle_ref,
+                provider,
+                session_key=session_key,
+                session_service=session_service,
+            ):
+                continue
+            return _SANDBOX_EXPIRED_MESSAGE
+    return _SANDBOX_EXPIRED_MESSAGE
+
+
 def _abs_path_error(path: str) -> str | None:
     if not path or not path.startswith("/"):
-        return "[Error] Path must be absolute inside the sandbox."
+        # Actionable, not just a rejection: the absolute workspace root
+        # differs per provider (e.g. OpenSandbox mounts at `/workspace`,
+        # Daytona's default workspace lives under the sandbox user's home
+        # directory instead) and nothing else tells the model this before
+        # its first file-tool call. Without a next step here, models were
+        # observed guessing several wrong absolute prefixes in a row before
+        # giving up (or looping indefinitely) instead of just asking the
+        # sandbox directly.
+        return (
+            "[Error] Path must be absolute inside the sandbox. "
+            "Call PWD (or SandboxInfo) first to get the sandbox's actual "
+            "working directory, then build the absolute path from that — "
+            "do not guess a prefix like /workspace."
+        )
     return None
 
 
@@ -218,18 +331,33 @@ def _python_payload(script: str) -> str:
     )
 
 
-def _path_exists(provider: SandboxProvider, handle: SandboxHandle, file_path: str) -> bool:
-    result = _run_bash(
+def _path_exists(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    file_path: str,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+) -> bool:
+    result = _run_bash_with_recovery(
         provider,
-        handle,
+        handle_ref,
         f"if [ -e {_sh(file_path)} ]; then echo __mattin_exists__; fi",
+        session_key=session_key,
+        session_service=session_service,
         timeout=5,
         max_output_chars=1000,
     )
     return "__mattin_exists__" in result
 
 
-def _sandbox_info_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _sandbox_info_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def SandboxInfo() -> str:
         """Sandbox-only operation: summarize actionable sandbox workspace rules, tools, and limits."""
         languages = ", ".join(provider.get_supported_languages())
@@ -276,7 +404,15 @@ def _sandbox_info_tool(provider: SandboxProvider, handle: SandboxHandle):
             f"printf 'BashOutput\\tmax=%s_chars action=redirect_large_output_to_file\\n' {quoted_bash_output}; "
             f"printf 'tool_output\\tmax=%s_chars action=write_large_results_to_files\\n' {quoted_tool_output}"
         )
-        return _run_bash(provider, handle, command, timeout=5, max_output_chars=4000)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+            timeout=5,
+            max_output_chars=4000,
+        )
 
     return StructuredTool.from_function(
         func=SandboxInfo,
@@ -286,10 +422,24 @@ def _sandbox_info_tool(provider: SandboxProvider, handle: SandboxHandle):
     )
 
 
-def _pwd_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _pwd_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def PWD() -> str:
         """Sandbox-only operation: print the current working directory inside the sandbox."""
-        return _run_bash(provider, handle, "pwd", timeout=5, max_output_chars=1000)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            "pwd",
+            session_key=session_key,
+            session_service=session_service,
+            timeout=5,
+            max_output_chars=1000,
+        )
 
     return StructuredTool.from_function(
         func=PWD,
@@ -299,7 +449,14 @@ def _pwd_tool(provider: SandboxProvider, handle: SandboxHandle):
     )
 
 
-def _read_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set[str]):
+def _read_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    read_files: set[str],
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Read(file_path: str, offset: int | None = None, limit: int | None = None) -> str:
         """Sandbox-only operation: read file contents from the sandbox filesystem with line numbers."""
         if err := _abs_path_error(file_path):
@@ -316,7 +473,14 @@ def _read_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set
             f"if (length(line)>{_MAX_READ_LINE_CHARS}) line=substr(line,1,{_MAX_READ_LINE_CHARS})\"...\"; "
             "printf \"%6d\\t%s\\n\", NR, line }' \"$p\""
         )
-        output = _run_bash(provider, handle, script, max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS)
+        output = _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            script,
+            session_key=session_key,
+            session_service=session_service,
+            max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS,
+        )
         if "[Error]" not in output:
             read_files.add(file_path)
         return output
@@ -329,12 +493,25 @@ def _read_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set
     )
 
 
-def _write_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set[str]):
+def _write_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    read_files: set[str],
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Write(file_path: str, content: str) -> str:
         """Sandbox-only operation: create or completely overwrite a file in the sandbox filesystem."""
         if err := _abs_path_error(file_path):
             return err
-        if file_path not in read_files and _path_exists(provider, handle, file_path):
+        if file_path not in read_files and _path_exists(
+            provider,
+            handle_ref,
+            file_path,
+            session_key=session_key,
+            session_service=session_service,
+        ):
             return (
                 "[Error] Existing files must be read with Read before Write can "
                 "overwrite them."
@@ -346,7 +523,13 @@ def _write_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: se
             f"mkdir -p \"$(dirname \"$p\")\" && printf %s {shlex.quote(encoded)} | base64 -d > \"$p\" && "
             "printf 'Wrote %s bytes to %s\\n' \"$(wc -c < \"$p\")\" \"$p\""
         )
-        return _run_bash(provider, handle, script)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            script,
+            session_key=session_key,
+            session_service=session_service,
+        )
 
     return StructuredTool.from_function(
         func=Write,
@@ -357,7 +540,14 @@ def _write_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: se
     )
 
 
-def _edit_tool(provider: SandboxProvider, handle: SandboxHandle, read_files: set[str]):
+def _edit_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    read_files: set[str],
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Edit(
         file_path: str,
         old_string: str,
@@ -417,7 +607,13 @@ print(f"Replaced {count if replace_all else 1} occurrence(s) in {path}.")
             f"export MATTIN_EDIT_PAYLOAD={shlex.quote(json.dumps(payload))}; "
             + _python_payload(script)
         )
-        return _run_bash(provider, handle, command)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+        )
 
     return StructuredTool.from_function(
         func=Edit,
@@ -427,7 +623,13 @@ print(f"Replaced {count if replace_all else 1} occurrence(s) in {path}.")
     )
 
 
-def _glob_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _glob_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Glob(pattern: str, path: str | None = None) -> str:
         """Sandbox-only operation: find files by glob pattern in the sandbox, sorted by modification time newest first."""
         root = path or "."
@@ -453,7 +655,13 @@ print("\n".join(matches))
             f"export MATTIN_GLOB_PATTERN={shlex.quote(pattern)}; "
             + _python_payload(script)
         )
-        return _run_bash(provider, handle, command)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+        )
 
     return StructuredTool.from_function(
         func=Glob,
@@ -463,7 +671,13 @@ print("\n".join(matches))
     )
 
 
-def _ls_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _ls_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def LS(path: str | None = None, show_hidden: bool = False, limit: int | None = None) -> str:
         """Sandbox-only operation: list sandbox directory entries in a compact token-efficient format."""
         capped_limit = max(1, min(1000, int(limit or 200)))
@@ -556,7 +770,15 @@ if total > limit:
             f"export MATTIN_LS_PAYLOAD={shlex.quote(json.dumps(payload))}; "
             + _python_payload(script)
         )
-        return _run_bash(provider, handle, command, timeout=10, max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+            timeout=10,
+            max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS,
+        )
 
     return StructuredTool.from_function(
         func=LS,
@@ -566,7 +788,13 @@ if total > limit:
     )
 
 
-def _grep_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _grep_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Grep(
         pattern: str,
         path: str | None = None,
@@ -622,7 +850,14 @@ def _grep_tool(provider: SandboxProvider, handle: SandboxHandle):
         command = f"if command -v rg >/dev/null 2>&1; then {rg_cmd}; else {fallback}; fi"
         if head_limit is not None:
             command = f"{command} | head -n {shlex.quote(str(max(1, int(head_limit))))}"
-        return _run_bash(provider, handle, command, max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+            max_output_chars=settings.SANDBOX_MAX_OUTPUT_CHARS,
+        )
 
     return StructuredTool.from_function(
         func=Grep,
@@ -706,7 +941,13 @@ for path in iter_files(target):
     )
 
 
-def _stat_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _stat_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Stat(path: str) -> str:
         """Sandbox-only operation: return compact metadata for a sandbox file or directory."""
         script = r"""
@@ -759,7 +1000,15 @@ elif stat.S_ISDIR(mode):
             f"export MATTIN_STAT_PAYLOAD={shlex.quote(json.dumps(payload))}; "
             + _python_payload(script)
         )
-        return _run_bash(provider, handle, command, timeout=10, max_output_chars=4000)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+            timeout=10,
+            max_output_chars=4000,
+        )
 
     return StructuredTool.from_function(
         func=Stat,
@@ -769,7 +1018,13 @@ elif stat.S_ISDIR(mode):
     )
 
 
-def _bash_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _bash_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def Bash(
         command: str,
         description: str | None = None,
@@ -779,10 +1034,12 @@ def _bash_tool(provider: SandboxProvider, handle: SandboxHandle):
         """Sandbox-only operation: execute a bash command inside the sandbox."""
         timeout_s = _timeout_ms_to_seconds(timeout)
         if not run_in_background:
-            return _run_bash(
+            return _run_bash_with_recovery(
                 provider,
-                handle,
+                handle_ref,
                 command,
+                session_key=session_key,
+                session_service=session_service,
                 timeout=timeout_s,
                 max_output_chars=_BASH_OUTPUT_LIMIT,
             )
@@ -805,8 +1062,16 @@ def _bash_tool(provider: SandboxProvider, handle: SandboxHandle):
             f"printf '%s' \"$!\" > {quoted_pid_file}; "
             f"printf 'Started background shell %s (pid %s)\\n' {quoted_bash_id} \"$(cat {quoted_pid_file})\""
         )
-        result = _run_bash(provider, handle, wrapped, timeout=5, max_output_chars=2000)
-        handle.metadata.setdefault(_BG_SHELLS_KEY, {})[bash_id] = {
+        result = _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            wrapped,
+            session_key=session_key,
+            session_service=session_service,
+            timeout=5,
+            max_output_chars=2000,
+        )
+        handle_ref.handle.metadata.setdefault(_BG_SHELLS_KEY, {})[bash_id] = {
             "command": command,
             "output_file": out_file,
             "pid_file": pid_file,
@@ -829,10 +1094,16 @@ def _timeout_ms_to_seconds(timeout_ms: int | None) -> int:
     return max(1, min(_BASH_MAX_TIMEOUT_S, int(timeout_ms) // 1000 or 1))
 
 
-def _bash_output_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _bash_output_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def BashOutput(bash_id: str, filter: str | None = None) -> str:
         """Sandbox-only operation: retrieve new output from a background bash shell running in the sandbox."""
-        shells = handle.metadata.get(_BG_SHELLS_KEY, {})
+        shells = handle_ref.handle.metadata.get(_BG_SHELLS_KEY, {})
         info = shells.get(bash_id) if isinstance(shells, dict) else None
         if not info:
             return f"[Error] Unknown background shell: {bash_id}"
@@ -857,7 +1128,15 @@ def _bash_output_tool(provider: SandboxProvider, handle: SandboxHandle):
             "elif [ -f \"$statusf\" ]; then exit_code=$(cat \"$statusf\"); fi; "
             "printf '\\n[MATTIN_BASH_STATUS size=%s state=%s exit=%s]\\n' \"$size\" \"$state\" \"$exit_code\""
         )
-        result = _run_bash(provider, handle, command, timeout=5, max_output_chars=_BASH_OUTPUT_LIMIT)
+        result = _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+            timeout=5,
+            max_output_chars=_BASH_OUTPUT_LIMIT,
+        )
         marker = "\n[MATTIN_BASH_STATUS "
         if marker in result:
             body, status = result.rsplit(marker, 1)
@@ -875,10 +1154,16 @@ def _bash_output_tool(provider: SandboxProvider, handle: SandboxHandle):
     )
 
 
-def _kill_shell_tool(provider: SandboxProvider, handle: SandboxHandle):
+def _kill_shell_tool(
+    provider: SandboxProvider,
+    handle_ref: _SandboxHandleRef,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
+):
     def KillShell(shell_id: str) -> str:
         """Sandbox-only operation: kill a running background bash shell in the sandbox."""
-        shells = handle.metadata.get(_BG_SHELLS_KEY, {})
+        shells = handle_ref.handle.metadata.get(_BG_SHELLS_KEY, {})
         info = shells.get(shell_id) if isinstance(shells, dict) else None
         if not info:
             return f"[Error] Unknown background shell: {shell_id}"
@@ -891,7 +1176,15 @@ def _kill_shell_tool(provider: SandboxProvider, handle: SandboxHandle):
             "pkill -TERM -P \"$pid\" 2>/dev/null || true; "
             "echo \"Killed background shell $pid\"; else echo 'Shell is not running'; fi"
         )
-        return _run_bash(provider, handle, command, timeout=5, max_output_chars=2000)
+        return _run_bash_with_recovery(
+            provider,
+            handle_ref,
+            command,
+            session_key=session_key,
+            session_service=session_service,
+            timeout=5,
+            max_output_chars=2000,
+        )
 
     return StructuredTool.from_function(
         func=KillShell,
@@ -904,22 +1197,44 @@ def _kill_shell_tool(provider: SandboxProvider, handle: SandboxHandle):
 def create_sandbox_builtin_tools(
     handle: SandboxHandle,
     provider: SandboxProvider,
+    *,
+    session_key: str | None = None,
+    session_service: Any | None = None,
 ) -> list:
-    """Return Claude-style builtin tools for a Linux sandbox."""
+    """Return Claude-style builtin tools for a Linux sandbox.
+
+    Args:
+        handle:          Active sandbox handle.
+        provider:        Resolved ``SandboxProvider`` instance.
+        session_key:     Optional session key; used to evict the stale cache entry
+                         and obtain a fresh handle on
+                         :class:`~tools.sandbox.provider.SandboxExpiredError`.
+        session_service: Optional :class:`~services.sandbox_session_service.SandboxSessionService`
+                         instance used to recover from an expired sandbox mid-turn.
+
+    All tools returned here share a single mutable handle reference so that a
+    sandbox recovered after expiry (by any one tool call) is immediately visible
+    to every other tool for the remainder of the turn.
+    """
     if not _supports_bash(provider):
         return []
     read_files: set[str] = set()
+    handle_ref = _SandboxHandleRef(handle)
+    kwargs: dict[str, Any] = {
+        "session_key": session_key,
+        "session_service": session_service,
+    }
     return [
-        _sandbox_info_tool(provider, handle),
-        _pwd_tool(provider, handle),
-        _read_tool(provider, handle, read_files),
-        _write_tool(provider, handle, read_files),
-        _edit_tool(provider, handle, read_files),
-        _ls_tool(provider, handle),
-        _glob_tool(provider, handle),
-        _grep_tool(provider, handle),
-        _stat_tool(provider, handle),
-        _bash_tool(provider, handle),
-        _bash_output_tool(provider, handle),
-        _kill_shell_tool(provider, handle),
+        _sandbox_info_tool(provider, handle_ref, **kwargs),
+        _pwd_tool(provider, handle_ref, **kwargs),
+        _read_tool(provider, handle_ref, read_files, **kwargs),
+        _write_tool(provider, handle_ref, read_files, **kwargs),
+        _edit_tool(provider, handle_ref, read_files, **kwargs),
+        _ls_tool(provider, handle_ref, **kwargs),
+        _glob_tool(provider, handle_ref, **kwargs),
+        _grep_tool(provider, handle_ref, **kwargs),
+        _stat_tool(provider, handle_ref, **kwargs),
+        _bash_tool(provider, handle_ref, **kwargs),
+        _bash_output_tool(provider, handle_ref, **kwargs),
+        _kill_shell_tool(provider, handle_ref, **kwargs),
     ]
