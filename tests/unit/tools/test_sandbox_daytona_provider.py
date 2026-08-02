@@ -172,6 +172,24 @@ class TestDaytonaRunCode:
         sandbox.code_interpreter.run_code.assert_called_once()
         assert result == "hello"
 
+    def test_python_chdirs_into_workspace_root_before_user_code(self, provider_and_sandbox, tmp_path):
+        """Daytona's stateful Python interpreter has no `cwd` param and its own
+        default cwd is the sandbox user's home directory — one level ABOVE
+        the workspace root that _run_bash/write_file/read_file/list_files all
+        use. Without an explicit chdir, a relative path like output/foo.csv
+        (the convention every agent is instructed to use) lands outside the
+        workspace root and is never seen by list_files()/read_file() again —
+        confirmed live against a real Daytona sandbox."""
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.code_interpreter.run_code.return_value = SimpleNamespace(result="ok", exit_code=0)
+
+        provider.run_code(handle, "print('hello')", language="python")
+
+        sent_code = sandbox.code_interpreter.run_code.call_args.args[0]
+        assert "chdir('workspace')" in sent_code
+        assert sent_code.rstrip().endswith("print('hello')")
+
     def test_python_extends_auto_stop_for_execution_then_resets_to_idle(
         self, provider_and_sandbox, monkeypatch, tmp_path
     ):

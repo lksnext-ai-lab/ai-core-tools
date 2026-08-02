@@ -535,6 +535,27 @@ class DaytonaProvider(SandboxProvider):
                 except Exception:
                     pass
 
+            # Daytona's stateful Python interpreter (interpreter.run_code)
+            # has no `cwd` parameter — unlike _run_bash/write_file/read_file/
+            # list_files below, which all explicitly operate against
+            # _workspace_root(). Confirmed live: the interpreter's own
+            # default cwd is the sandbox user's home directory (e.g.
+            # /home/daytona), one level ABOVE the workspace root
+            # (/home/daytona/workspace). Without this chdir, code writing to
+            # a relative path like "output/foo.csv" (the convention every
+            # agent is instructed to use) lands outside the workspace root
+            # entirely and is never seen by list_files()/read_file() —
+            # the file exists but is never synced back to the user.
+            # Idempotent and cheap to repeat every call rather than relying
+            # on interpreter state (e.g. a fresh context via `context=`).
+            workspace = _workspace_root()
+            code = (
+                f"import os as __mattin_os\n"
+                f"__mattin_os.makedirs({workspace!r}, exist_ok=True)\n"
+                f"__mattin_os.chdir({workspace!r})\n"
+                f"del __mattin_os\n"
+            ) + code
+
             return _call_with_fallbacks(
                 interpreter.run_code,
                 code,

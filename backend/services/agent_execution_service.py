@@ -44,6 +44,15 @@ _REMOTE_WORKSPACE_PREFIXES = (
     "workspace/",
     "/home/user/workspace/",
     "home/user/workspace/",
+    # Daytona's default sandbox user is `daytona`, with DAYTONA_WORKSPACE
+    # (default "workspace") resolved relative to that user's home directory
+    # — confirmed via a live sandbox: `pwd` -> /home/daytona/workspace.
+    # Without this prefix, output files written by a Daytona-backed agent
+    # are never recognized as "inside output/" (list_files() returns the
+    # full unstripped absolute path), so they're silently never synced/
+    # pulled or turned into a real download link for the user.
+    "/home/daytona/workspace/",
+    "home/daytona/workspace/",
 )
 
 
@@ -60,6 +69,7 @@ class _LazySandboxHandle:
         db: Session | None = None,
         processed_files: list[dict] | None = None,
         tmp_base: str | None = None,
+        sandbox_service_id: int | None = None,
     ) -> None:
         self.session_key = session_key
         self.working_dir = working_dir
@@ -75,6 +85,12 @@ class _LazySandboxHandle:
         self._remote_pre_existing_files: set = set()
         self._remote_inputs_prepared = False
         self._lock = threading.RLock()
+        # The resolved SandboxService.service_id this handle's provider was
+        # built from (None when falling back to the system env-var default).
+        # Persisted alongside sandbox state so cleanup/reaper paths can later
+        # rebuild a provider with the same tenant credentials instead of
+        # falling back to zero-credential env defaults.
+        self.sandbox_service_id = sandbox_service_id
 
     @property
     def sandbox_id_if_created(self) -> str | None:
@@ -105,6 +121,7 @@ class _LazySandboxHandle:
                     self.working_dir,
                     conversation=self._conversation,
                     db=self._db,
+                    sandbox_service_id=self.sandbox_service_id,
                 )
                 if self._provider.requires_file_sync:
                     self._prepare_remote_workspace(_sss)
@@ -118,6 +135,7 @@ class _LazySandboxHandle:
             conversation=self._conversation,
             db=self._db,
             expected_seconds=30,
+            sandbox_service_id=self.sandbox_service_id,
         ):
             _ensure_remote_workspace_layout(self._provider, self._handle)
             try:
@@ -195,6 +213,7 @@ class _LazySandboxProvider:
                 conversation=self._lazy_handle._conversation,
                 db=self._lazy_handle._db,
                 expected_seconds=30,
+                sandbox_service_id=self._lazy_handle.sandbox_service_id,
             )
         except Exception:
             return nullcontext()
@@ -443,23 +462,44 @@ class AgentExecutionService:
                     "file_path": file_ref.file_path,
                 })
 
-        # 6. Get / create conversation for memory-enabled agents
+        # 6. Validate ownership of any client-supplied conversation, then
+        #    get / create the conversation for memory-enabled agents.
+        #
+        # Ownership must be validated regardless of agent.has_memory: a few
+        # steps below, conversation_id feeds into effective_conv_id, which is
+        # the sole key used for both the sandbox session
+        # (SandboxSessionService.session_key) and the local working directory
+        # — neither of which is otherwise scoped by app_id/user_id. If a
+        # client-supplied conversation_id were allowed to flow through
+        # unchecked for memory-less agents (including shared/marketplace
+        # agents), an attacker could iterate sequential conversation_id
+        # values and attach to another tenant's sandbox/working directory
+        # without ever owning that conversation. Conversations can be
+        # created for any agent — including memory-less ones — via the
+        # dedicated `POST /{agent_id}/conversations` endpoint (see
+        # routers/public/v1/chat.py::create_conversation), so this ownership
+        # check is meaningful in both cases.
         session = None
         conversation = None
+        if conversation_id:
+            from services.conversation_service import ConversationService
+
+            conversation = ConversationService.get_conversation(
+                db=db,
+                conversation_id=conversation_id,
+                user_context=user_context,
+                agent_id=agent_id,
+            )
+            if not conversation:
+                raise HTTPException(
+                    status_code=404, detail="Conversation not found or access denied"
+                )
+
         if agent.has_memory:
             from services.conversation_service import ConversationService
 
-            if conversation_id:
-                conversation = ConversationService.get_conversation(
-                    db=db,
-                    conversation_id=conversation_id,
-                    user_context=user_context,
-                    agent_id=agent_id,
-                )
-                if not conversation:
-                    raise HTTPException(
-                        status_code=404, detail="Conversation not found or access denied"
-                    )
+            if conversation is not None:
+                # Already validated above — just derive the session.
                 session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
                 session = await self.session_service.get_user_session(
                     agent_id=agent_id,
@@ -550,25 +590,42 @@ class AgentExecutionService:
         pre_existing_remote_files: set = set()
 
         if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
-            from tools.sandbox.factory import resolve_provider
+            from tools.sandbox.factory import (
+                resolve_provider_and_service_id,
+                SandboxProviderUnavailableError,
+            )
             from services.sandbox_session_service import SandboxSessionService
 
-            sandbox_session_key = SandboxSessionService.session_key(agent_id, effective_conv_id)
-            resolved_sandbox_provider = resolve_provider(fresh_agent)
+            try:
+                resolved_sandbox_provider, resolved_sandbox_service_id = (
+                    resolve_provider_and_service_id(fresh_agent)
+                )
+            except SandboxProviderUnavailableError as exc:
+                # A misconfigured/unavailable sandbox provider must not hard-fail
+                # the whole chat turn — degrade gracefully by leaving the sandbox
+                # fields unset. Callers (e.g. tools/agentTools.py) already treat
+                # a None sandbox_handle/sandbox_provider as "code interpreter
+                # unusable this turn" and continue with the rest of the chain.
+                logger.warning("Sandbox provider unavailable for agent %s: %s", agent_id, exc)
+                resolved_sandbox_provider = None
+                resolved_sandbox_service_id = None
 
-            sandbox_handle = _LazySandboxHandle(
-                session_key=sandbox_session_key,
-                provider=resolved_sandbox_provider,
-                working_dir=working_dir,
-                conversation=conversation,
-                db=db,
-                processed_files=processed_files,
-                tmp_base=tmp_base,
-            )
-            sandbox_provider = _LazySandboxProvider(
-                resolved_sandbox_provider,
-                sandbox_handle,
-            )
+            if resolved_sandbox_provider is not None:
+                sandbox_session_key = SandboxSessionService.session_key(agent_id, effective_conv_id)
+                sandbox_handle = _LazySandboxHandle(
+                    session_key=sandbox_session_key,
+                    provider=resolved_sandbox_provider,
+                    working_dir=working_dir,
+                    conversation=conversation,
+                    db=db,
+                    processed_files=processed_files,
+                    tmp_base=tmp_base,
+                    sandbox_service_id=resolved_sandbox_service_id,
+                )
+                sandbox_provider = _LazySandboxProvider(
+                    resolved_sandbox_provider,
+                    sandbox_handle,
+                )
 
         return AgentExecutionContext(
             agent_id=agent_id,
@@ -627,6 +684,7 @@ class AgentExecutionService:
                     conversation=ctx.conversation,
                     db=db,
                     expected_seconds=self._sandbox_turn_expected_seconds(),
+                    sandbox_service_id=getattr(ctx.sandbox_handle, "sandbox_service_id", None),
                 )
             )
         except Exception as exc:
@@ -659,6 +717,7 @@ class AgentExecutionService:
                 ctx.sandbox_session_key,
                 conversation=ctx.conversation,
                 db=db,
+                sandbox_service_id=getattr(ctx.sandbox_handle, "sandbox_service_id", None),
             )
         except Exception as exc:
             logger.debug(
@@ -731,6 +790,9 @@ class AgentExecutionService:
                     conversation=ctx.conversation,
                     db=db,
                     expected_seconds=30,
+                    sandbox_service_id=getattr(
+                        ctx.sandbox_handle, "sandbox_service_id", None
+                    ),
                 ):
                     remote_files = ctx.sandbox_provider.list_files(sandbox_handle)
                     for remote_path in remote_files:
@@ -987,21 +1049,32 @@ class AgentExecutionService:
                 from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
                 # conversation_id may only be defined when has_memory is True
                 _reset_conv_id = user_context.get("conversation_id") if user_context else None
+
+                # Validate ownership BEFORE destroying anything: a client-supplied
+                # conversation_id must not let one user tear down another user's
+                # live sandbox session just by guessing/iterating the id.
+                _conv = None
+                if _reset_conv_id and db:
+                    from services.conversation_service import ConversationService
+                    _conv = ConversationService.get_conversation(
+                        db, _reset_conv_id, user_context, agent_id=agent_id
+                    )
+                    if not _conv:
+                        raise HTTPException(
+                            status_code=404,
+                            detail="Conversation not found or access denied",
+                        )
+
                 _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
                 sandbox_session_service.destroy(_sandbox_key)
                 logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
                 # Clear DB sandbox state
-                if _reset_conv_id and db:
+                if _conv is not None:
                     try:
-                        from services.conversation_service import ConversationService
-                        _conv = ConversationService.get_conversation(
-                            db, _reset_conv_id, user_context
-                        )
-                        if _conv:
-                            _conv.sandbox_session_id = None
-                            _conv.sandbox_state = None
-                            db.add(_conv)
-                            db.commit()
+                        _conv.sandbox_session_id = None
+                        _conv.sandbox_state = None
+                        db.add(_conv)
+                        db.commit()
                     except Exception as _exc:
                         logger.warning("Could not clear sandbox DB state on reset: %s", _exc)
 
@@ -1026,7 +1099,9 @@ class AgentExecutionService:
             
             logger.info(f"Conversation reset for agent {agent_id} - cleared {len(attached_files)} files")
             return True
-            
+
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error resetting agent conversation: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")

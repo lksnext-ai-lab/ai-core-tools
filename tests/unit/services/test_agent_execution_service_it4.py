@@ -171,7 +171,7 @@ class TestPrepareTurnSandboxHandleCreation:
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
-            patch("tools.sandbox.factory.resolve_provider", return_value=mock_provider),
+            patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
@@ -192,6 +192,56 @@ class TestPrepareTurnSandboxHandleCreation:
 
             ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
         mock_sss.get_or_create.assert_called_once()
+
+    def test_resolved_sandbox_service_id_reaches_session_service(self, tmp_path, monkeypatch):
+        """The SandboxService.service_id resolved for this agent must flow all
+        the way through to SandboxSessionService.get_or_create() — this is
+        what lets the cleanup/reaper paths later rebuild a provider with the
+        *same* tenant credentials instead of falling back to zero-credential
+        env defaults. A prior version of this wiring resolved the id via
+        `resolve_provider()` (which discards it) instead of
+        `resolve_provider_and_service_id()`, so the id was silently always
+        None in production despite the session-service plumbing existing.
+        """
+        agent = _make_agent(enable_code_interpreter=True)
+        svc = _make_service(agent)
+
+        mock_handle = _make_subprocess_handle(str(tmp_path))
+        mock_provider = MagicMock()
+        mock_provider.create_sandbox.return_value = mock_handle
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        mock_provider.get_supported_languages.return_value = []
+        mock_provider.run_code.return_value = "OK"
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = mock_handle
+
+        with (
+            patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
+            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
+            patch(
+                "tools.sandbox.factory.resolve_provider_and_service_id",
+                return_value=(mock_provider, 42),
+            ),
+            patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
+        ):
+            import asyncio
+            ctx = asyncio.get_event_loop().run_until_complete(
+                svc._prepare_turn(
+                    agent_id=7,
+                    message="run code",
+                    file_references=[],
+                    db=MagicMock(),
+                    user_context={"user_id": "u1", "app_id": "1"},
+                )
+            )
+
+            assert ctx.sandbox_handle.sandbox_service_id == 42
+
+            ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
+
+        _, kwargs = mock_sss.get_or_create.call_args
+        assert kwargs.get("sandbox_service_id") == 42
 
     def test_no_sandbox_when_code_interpreter_disabled(self, tmp_path, monkeypatch):
         agent = _make_agent(enable_code_interpreter=False)
@@ -216,6 +266,44 @@ class TestPrepareTurnSandboxHandleCreation:
             )
 
         assert ctx.sandbox_handle is None
+        mock_sss.get_or_create.assert_not_called()
+
+    def test_prepare_turn_survives_unavailable_sandbox_provider(self, tmp_path):
+        """`_prepare_turn` must not crash the whole turn when `resolve_provider`
+        raises `SandboxProviderUnavailableError` (e.g. a misconfigured
+        `SANDBOX_DEFAULT_PROVIDER`). It should degrade gracefully: the context
+        is still returned, with the sandbox fields left unset.
+        """
+        from tools.sandbox.factory import SandboxProviderUnavailableError
+
+        agent = _make_agent(enable_code_interpreter=True)
+        svc = _make_service(agent)
+
+        mock_sss = MagicMock()
+
+        with (
+            patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
+            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
+            patch(
+                "tools.sandbox.factory.resolve_provider_and_service_id",
+                side_effect=SandboxProviderUnavailableError("provider 'bogus' not registered"),
+            ),
+            patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
+        ):
+            import asyncio
+            ctx = asyncio.get_event_loop().run_until_complete(
+                svc._prepare_turn(
+                    agent_id=7,
+                    message="run code",
+                    file_references=[],
+                    db=MagicMock(),
+                    user_context={"user_id": "u1", "app_id": "1"},
+                )
+            )
+
+        assert ctx.sandbox_handle is None
+        assert ctx.sandbox_provider is None
+        assert ctx.sandbox_session_key is None
         mock_sss.get_or_create.assert_not_called()
 
 
@@ -258,7 +346,7 @@ class TestPrepareTurnFilePush:
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
-            patch("tools.sandbox.factory.resolve_provider", return_value=mock_provider),
+            patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
@@ -311,7 +399,7 @@ class TestPrepareTurnFilePush:
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
-            patch("tools.sandbox.factory.resolve_provider", return_value=fake_provider),
+            patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(fake_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
@@ -356,7 +444,7 @@ class TestPrepareTurnFilePush:
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
-            patch("tools.sandbox.factory.resolve_provider", return_value=mock_provider),
+            patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
@@ -431,6 +519,26 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.read_file.assert_called_once_with(
             ctx.sandbox_handle, "output/report.docx"
         )
+
+    def test_pulls_new_remote_file_with_daytona_workspace_prefix(self, tmp_path):
+        """Daytona's default sandbox user is `daytona`, so its absolute
+        workspace root is /home/daytona/workspace — NOT /workspace or
+        /home/user/workspace (confirmed against a live sandbox). Without
+        this prefix recognized, a file the agent wrote to output/ is never
+        detected as an output file, never pulled, and the model is left
+        with no real download link to give the user."""
+        ctx = _base_ctx(str(tmp_path), provider_name="daytona")
+        ctx.sandbox_provider.list_files.return_value = [
+            "/home/daytona/workspace/output/animal_names.csv"
+        ]
+        ctx.sandbox_provider.read_file.return_value = b"CSV_BYTES"
+        ctx.pre_existing_remote_files = set()
+
+        _run_finalize(ctx, tmp_path)
+
+        dest = tmp_path / "output" / "animal_names.csv"
+        assert dest.exists()
+        assert dest.read_bytes() == b"CSV_BYTES"
 
     def test_skips_pre_existing_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
@@ -569,7 +677,7 @@ class TestRequiresFileSyncTruePath:
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
             patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
-            patch("tools.sandbox.factory.resolve_provider", return_value=fake_provider),
+            patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(fake_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
