@@ -245,7 +245,7 @@ class AgentService:
                 )
 
         update_method = self._update_normal_agent
-        update_method(agent, agent_data)
+        update_method(db, agent, agent_data)
 
         # Threshold search needs a threshold value, else it degrades to plain similarity at
         # retrieval. Checked on the merged state (the schema can't see the stored value on a
@@ -271,7 +271,7 @@ class AgentService:
 
 
     
-    def _update_normal_agent(self, agent: Agent, data: dict):
+    def _update_normal_agent(self, db: Session, agent: Agent, data: dict):
         """Update agent fields"""
         agent.name = data['name']
         agent.description = data.get('description', '')  # Ensure it's not None
@@ -279,7 +279,23 @@ class AgentService:
         agent.prompt_template = data.get('prompt_template')
         agent.status = data.get('status')
         agent.service_id = data.get('service_id') or None
-        agent.sandbox_service_id = data.get('sandbox_service_id') or None
+
+        # Validate sandbox_service_id belongs to the target app (or is system-scoped)
+        # before assigning it. Without this check, any caller could point an agent at
+        # a SandboxService owned by a different App, silently running code execution
+        # against that other App's provider credentials/endpoint/quota.
+        sandbox_service_id = data.get('sandbox_service_id') or None
+        if sandbox_service_id:
+            from repositories.sandbox_service_repository import SandboxServiceRepository
+            sandbox_service = SandboxServiceRepository.get_by_id(db, sandbox_service_id)
+            if sandbox_service is None or (
+                sandbox_service.app_id is not None and sandbox_service.app_id != data['app_id']
+            ):
+                raise ValueError(
+                    f"sandbox_service_id {sandbox_service_id} does not exist or does not "
+                    "belong to this app"
+                )
+        agent.sandbox_service_id = sandbox_service_id
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
