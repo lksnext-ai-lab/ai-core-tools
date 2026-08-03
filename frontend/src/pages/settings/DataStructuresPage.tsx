@@ -378,7 +378,7 @@ function DataStructuresPage() {
           loading={loading}
         />
 
-        {!loading && dataStructures.length === 0 && (
+        {!loading && dataStructures.length === 0 && canEdit && (
           <div className="text-center py-6">
             <button 
               onClick={handleCreateStructure}

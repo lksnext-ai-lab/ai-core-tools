@@ -353,7 +353,7 @@ function APIKeysPage() {
           loading={loading}
         />
 
-        {!loading && apiKeys.length === 0 && (
+        {!loading && apiKeys.length === 0 && canEdit && (
           <div className="text-center py-6">
             <p className="text-gray-600 mb-6">
               Create your first API key to allow external applications to access your agents.
