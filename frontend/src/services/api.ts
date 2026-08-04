@@ -1827,6 +1827,7 @@ class ApiService {
     message: string,
     options: {
       files?: File[];
+      fileReferences?: string[];
       searchParams?: unknown;
       conversationId?: number | null;
       onEvent: (event: StreamEvent) => void;
@@ -1844,6 +1845,9 @@ class ApiService {
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));
+    }
+    if (options.fileReferences && options.fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(options.fileReferences));
     }
 
     const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;

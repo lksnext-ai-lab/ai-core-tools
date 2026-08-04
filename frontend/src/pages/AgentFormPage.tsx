@@ -633,7 +633,7 @@ function AgentFormPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre *
+                    Name *
                   </label>
                   <input
                     type="text"
@@ -642,7 +642,7 @@ function AgentFormPage() {
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     required
-                    placeholder="Nombre..."
+                    placeholder="Name..."
                   />
                 </div>
 
@@ -663,7 +663,7 @@ function AgentFormPage() {
 
                 <div className="md:col-span-2">
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Descripción
+                    Description
                   </label>
                   <input
                     type="text"
@@ -671,7 +671,7 @@ function AgentFormPage() {
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    placeholder="Descripción..."
+                    placeholder="Description..."
                   />
                 </div>
               </div>
