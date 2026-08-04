@@ -98,11 +98,12 @@ function MCPServerFormPage() {
 
     setError(null);
     setSaving(true);
+    const payload = { ...formData, rate_limit: formData.rate_limit || 0 };
     const result = await mutate(
       () =>
         isEditing && serverId
-          ? apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), formData)
-          : apiService.createMCPServer(Number.parseInt(appId), formData),
+          ? apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), payload)
+          : apiService.createMCPServer(Number.parseInt(appId), payload),
       {
         loading: isEditing ? MESSAGES.UPDATING('MCP server') : MESSAGES.CREATING('MCP server'),
         success: isEditing ? MESSAGES.UPDATED('MCP server') : MESSAGES.CREATED('MCP server'),
