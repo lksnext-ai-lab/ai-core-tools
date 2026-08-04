@@ -1,6 +1,7 @@
 import React from 'react';
 
 interface FormFieldProps {
+  counter?: string;
   label: string;
   id: string;
   type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel';
@@ -29,6 +30,7 @@ export function FormField({
   required = false,
   error,
   helpText,
+  counter,
   className = '',
   inputClassName = ''
 }: Readonly<FormFieldProps>) {
@@ -60,8 +62,14 @@ export function FormField({
         } ${inputClassName}`}
       />
       
-      {helpText && !error && (
-        <p className="mt-1 text-sm text-gray-500">{helpText}</p>
+      {!error && (helpText || counter) && (
+        <div className="flex justify-between mt-1 items-center">
+          <p className="mt-1 text-sm text-gray-500">{helpText}</p>
+
+          {counter && (
+            <span className="text-sm text-gray-500">{counter}</span>
+          )}
+        </div>
       )}
       
       {error && (

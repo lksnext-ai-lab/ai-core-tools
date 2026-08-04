@@ -106,10 +106,14 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
           placeholder="e.g., Code Review Guidelines"
           disabled={isSubmitting}
           required
+          maxLength={100}
         />
-        <p className="mt-1 text-xs text-gray-500">
-          A short, descriptive name for the skill
-        </p>
+        <div className="flex justify-between mt-1 items-center">
+          <p className="text-xs text-gray-500">
+            A short, descriptive name for the skill
+          </p>
+          <span className="text-sm text-gray-500">{formData.name.length}/100</span>
+        </div>
       </div>
 
       {/* Description Field */}
@@ -127,10 +131,14 @@ function SkillForm({ skill, onSubmit, onCancel }: Readonly<SkillFormProps>) {
           placeholder="e.g., Best practices for reviewing code quality"
           disabled={isSubmitting}
           required
+          maxLength={1000}
         />
-        <p className="mt-1 text-xs text-gray-500">
-          The agent sees this description to decide when the skill is relevant
-        </p>
+        <div className="flex justify-between mt-1 items-center">
+          <p className="text-xs text-gray-500">
+            The agent sees this description to decide when the skill is relevant
+          </p>
+          <span className="text-sm text-gray-500">{formData.description.length}/1000</span>
+        </div>
       </div>
 
       {/* Content Field */}

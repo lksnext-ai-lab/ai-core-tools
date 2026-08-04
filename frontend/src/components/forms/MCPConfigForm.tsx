@@ -148,7 +148,10 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           placeholder="e.g., Playwright MCP, Filesystem Server"
           required
+          maxLength={100}
         />
+
+        <span className="text-sm text-gray-500">{formData.name.length}/100</span>
       </div>
 
       {/* Description */}
@@ -164,7 +167,10 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
           rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           placeholder="Optional description of this MCP configuration"
+          maxLength={1000}
         />
+
+        <span className="text-sm text-gray-500">{formData.description.length}/1000</span>
       </div>
 
       {/* Config JSON */}

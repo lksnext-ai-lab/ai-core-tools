@@ -184,7 +184,7 @@ function APIKeysPage() {
 
     if (isUpdate) {
       try {
-        await loadAPIKeys();
+        await forceReloadAPIKeys();
       } catch (err) {
         console.error('Refetch after update failed:', err);
       }
@@ -229,7 +229,7 @@ function APIKeysPage() {
   if (error) {
     return (
       <div className="p-6">
-        <Alert type="error" message={error} onDismiss={() => loadAPIKeys()} />
+        <Alert type="error" message={error} onDismiss={() => forceReloadAPIKeys()} />
       </div>
     );
   }

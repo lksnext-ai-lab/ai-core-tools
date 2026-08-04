@@ -73,11 +73,12 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
         id="name"
         type="text"
         value={formData.name}
-        onChange={(e) => updateField('name', e.target.value)}
+        onChange={(e) => updateField('name', e.target.value.slice(0, 255))}
         placeholder="e.g., Production API, Mobile App Key"
         disabled={isSubmitting}
         required
         helpText="Choose a descriptive name to help identify this key's purpose"
+        counter={`${formData.name.length}/255`}
       />
 
       {/* Active Status */}
