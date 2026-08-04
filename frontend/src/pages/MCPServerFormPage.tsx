@@ -7,7 +7,7 @@ import type { MCPServer, ToolAgent } from '../core/types';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
-  if (type === 'number') return Number.parseInt(value) || 0;
+  if (type === 'number') return value === '' ? '' : Number.parseInt(value) || 0;
   return value;
 }
 
