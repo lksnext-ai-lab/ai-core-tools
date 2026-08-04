@@ -160,10 +160,14 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
             placeholder="e.g., User, Product, Address"
             required
+            maxLength={255}
           />
-          <p className="mt-2 text-sm text-gray-500">
-            Use PascalCase for structure names (e.g., UserProfile, ProductInfo)
-          </p>
+          <div className="flex justify-between mt-1 items-center">
+            <p className="mt-2 text-sm text-gray-500">
+              Use PascalCase for structure names (e.g., UserProfile, ProductInfo)
+            </p>
+            <span className="text-sm text-gray-500">{formData.name.length}/255</span>
+          </div>
         </div>
 
         {/* Description */}

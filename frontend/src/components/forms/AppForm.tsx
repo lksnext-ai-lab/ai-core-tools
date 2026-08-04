@@ -61,10 +61,11 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
         id="app-name"
         type="text"
         value={formData.name}
-        onChange={(e) => updateField('name', e.target.value)}
+        onChange={(e) => updateField('name', e.target.value.slice(0, 255))}
         placeholder="Enter app name"
         disabled={isSubmitting}
         required
+        counter={`${formData.name.length}/255`}
       />
 
       {/* Error Message */}

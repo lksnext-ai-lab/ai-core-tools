@@ -643,7 +643,10 @@ function AgentFormPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     required
                     placeholder="Nombre..."
+                    maxLength={255}
                   />
+
+                  <span className="text-sm text-gray-500 float-right">{formData.name.length}/255</span>
                 </div>
 
                 <div>
@@ -1519,6 +1522,7 @@ function AgentFormPage() {
                       placeholder="Defaults to agent name if empty"
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     />
+                    <span className="text-sm text-gray-500">{marketplaceProfile.display_name?.length ?? 0}/255</span>
                   </div>
                   <div>
                     <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
@@ -1530,9 +1534,7 @@ function AgentFormPage() {
                       rows={2}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     />
-                    <div className="text-xs text-gray-500 mt-1">
-                      {marketplaceProfile.short_description?.length ?? 0}/200 characters
-                    </div>
+                    <span className="text-sm text-gray-500">{marketplaceProfile.short_description?.length ?? 0}/200</span>
                   </div>
                   <div>
                     <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-gray-700 mb-2">Long Description</label>
@@ -1578,7 +1580,9 @@ function AgentFormPage() {
                       onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
                       placeholder="https://..."
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                      maxLength={500}
                     />
+                    <span className="text-sm text-gray-500">{marketplaceProfile.icon_url?.length ?? 0}/500</span>
                     {marketplaceProfile.icon_url && (
                       <img
                         src={marketplaceProfile.icon_url}
@@ -1597,7 +1601,9 @@ function AgentFormPage() {
                       onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
                       placeholder="https://..."
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                      maxLength={500}
                     />
+                    <span className="text-sm text-gray-500">{marketplaceProfile.cover_image_url?.length ?? 0}/500</span>
                     {marketplaceProfile.cover_image_url && (
                       <img
                         src={marketplaceProfile.cover_image_url}
@@ -1628,7 +1634,9 @@ function AgentFormPage() {
                              }}
                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all"
                              placeholder="Enter a starter prompt..."
+                             maxLength={500}
                            />
+                           <span className="text-sm text-gray-500">{starter.length}/500</span>
                            <button
                              type="button"
                              onClick={() => {

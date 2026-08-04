@@ -205,9 +205,10 @@ function CompactServiceEditor({
             id="name"
             label="Name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setName(e.target.value.slice(0, 100))}
             required
             helpText="The label shown in agent dropdowns and lists."
+            counter={`${name.length}/100`}
           />
 
           {descriptor?.apiKey !== 'none' && (

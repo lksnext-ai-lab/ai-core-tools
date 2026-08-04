@@ -22,6 +22,16 @@ interface SandboxServiceOption {
   readonly is_system?: boolean;
 }
 
+function resolveInputValue(
+  type: string,
+  value: string,
+  checked: boolean
+): string | number | boolean {
+  if (type === 'checkbox') return checked;
+  if (type === 'number') return value === '' ? '' : Number.parseInt(value) || 0;
+  return value;
+}
+
 function AppSettingsPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
@@ -30,8 +40,8 @@ function AppSettingsPage() {
   const [formData, setFormData] = useState({
     name: '',
     langsmith_api_key: '',
-    agent_rate_limit: 0,
-    max_file_size_mb: 0,
+    agent_rate_limit: 0 as number | '',
+    max_file_size_mb: 0 as number | '',
     agent_cors_origins: '',
     enable_openai_api: false,
     default_sandbox_service_id: null as number | null,  // null = inherit system default
@@ -139,8 +149,8 @@ function AppSettingsPage() {
       await apiService.updateApp(Number.parseInt(appId), {
         name: formData.name,
         langsmith_api_key: langsmithKeyChanged ? formData.langsmith_api_key : originalLangsmithKey,
-        agent_rate_limit: formData.agent_rate_limit,
-        max_file_size_mb: formData.max_file_size_mb,
+        agent_rate_limit: formData.agent_rate_limit || 0,
+        max_file_size_mb: formData.max_file_size_mb || 0,
         agent_cors_origins: formData.agent_cors_origins,
         enable_openai_api: formData.enable_openai_api,
         default_sandbox_service_id: formData.default_sandbox_service_id,
@@ -156,20 +166,17 @@ function AppSettingsPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = (e.target.name === 'agent_rate_limit' || e.target.name === 'max_file_size_mb')
-      ? Number.parseInt(e.target.value) || 0
-      : e.target.type === 'checkbox'
-      ? e.target.checked
-      : e.target.value;
+    const { name, value, type } = e.target;
+    const checked = e.target.checked;
 
-    if (e.target.name === 'langsmith_api_key') {
+    if (name === 'langsmith_api_key') {
       setLangsmithKeyChanged(true);
       setLangsmithTestResult(null);
     }
 
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: newValue
+      [name]: resolveInputValue(type, value, checked),
     }));
   };
 

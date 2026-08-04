@@ -7,7 +7,7 @@ import type { MCPServer, ToolAgent } from '../core/types';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
-  if (type === 'number') return Number.parseInt(value) || 0;
+  if (type === 'number') return value === '' ? '' : Number.parseInt(value) || 0;
   return value;
 }
 
@@ -98,11 +98,12 @@ function MCPServerFormPage() {
 
     setError(null);
     setSaving(true);
+    const payload = { ...formData, rate_limit: formData.rate_limit || 0 };
     const result = await mutate(
       () =>
         isEditing && serverId
-          ? apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), formData)
-          : apiService.createMCPServer(Number.parseInt(appId), formData),
+          ? apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), payload)
+          : apiService.createMCPServer(Number.parseInt(appId), payload),
       {
         loading: isEditing ? MESSAGES.UPDATING('MCP server') : MESSAGES.CREATING('MCP server'),
         success: isEditing ? MESSAGES.UPDATED('MCP server') : MESSAGES.CREATED('MCP server'),

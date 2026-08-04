@@ -184,7 +184,7 @@ function APIKeysPage() {
 
     if (isUpdate) {
       try {
-        await loadAPIKeys();
+        await forceReloadAPIKeys();
       } catch (err) {
         console.error('Refetch after update failed:', err);
       }
@@ -229,7 +229,7 @@ function APIKeysPage() {
   if (error) {
     return (
       <div className="p-6">
-        <Alert type="error" message={error} onDismiss={() => loadAPIKeys()} />
+        <Alert type="error" message={error} onDismiss={() => forceReloadAPIKeys()} />
       </div>
     );
   }
@@ -353,7 +353,7 @@ function APIKeysPage() {
           loading={loading}
         />
 
-        {!loading && apiKeys.length === 0 && (
+        {!loading && apiKeys.length === 0 && canEdit && (
           <div className="text-center py-6">
             <p className="text-gray-600 mb-6">
               Create your first API key to allow external applications to access your agents.
