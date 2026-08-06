@@ -11,6 +11,8 @@ interface FieldDefinition {
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;
+  enum_id?: number;
+  list_item_enum_id?: number;
   _key?: string;
 }
 
@@ -27,6 +29,7 @@ interface DataStructure {
   fields: FieldDefinition[];
   created_at: string;
   available_parsers: Array<{value: number, name: string}>;
+  available_enums: Array<{value: number, name: string}>;
 }
 
 interface DataStructureFormProps {
@@ -97,9 +100,16 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       if (field.type === 'parser' && !field.parser_id) {
         return `Field '${field.name}' with parser type must have a parser selected`;
       }
+      if (field.type === 'enum' && !field.enum_id) {
+        return `Field '${field.name}' with enum type must have an enum selected`;
+      }
       
       if (field.type === 'list' && field.list_item_type === 'parser' && !field.list_item_parser_id) {
         return `Field '${field.name}' with list of parsers must have a parser selected`;
+      }
+
+      if (field.type === 'list' && field.list_item_type === 'enum' && !field.list_item_enum_id) {
+        return `Field '${field.name}' with list of enums must have an enum selected`;
       }
     }
 
@@ -135,6 +145,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
   };
 
   const availableParsers = dataStructure?.available_parsers || [];
+  const availableEnums = dataStructure?.available_enums || [];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
@@ -189,6 +200,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
           fields={formData.fields}
           onChange={handleFieldsChange}
           availableParsers={availableParsers}
+          availableEnums={availableEnums}
           maxFields={20}
         />
       </div>

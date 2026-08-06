@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2, Lightbulb, FileText } from 'lucide-react';
+import { BarChart2, ListChecks, Upload, ArrowDownToLine, Pencil, Trash2, Lightbulb, FileText } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
+import EnumForm, { type EnumFormData } from '../../components/forms/EnumForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
@@ -23,6 +24,7 @@ interface DataStructure {
   description: string;
   field_count: number;
   created_at: string;
+  is_enum?: boolean;
 }
 
 function DataStructuresPage() {
@@ -33,10 +35,13 @@ function DataStructuresPage() {
   const confirm = useConfirm();
   const mutate = useApiMutation();
   const [dataStructures, setDataStructures] = useState<DataStructure[]>([]);
+  const [enums, setEnums] = useState<DataStructure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStructure, setEditingStructure] = useState<any>(null);
+  const [editingEnum, setEditingEnum] = useState<any>(null);
+  const [isEnumModalOpen, setIsEnumModalOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingParserId, setExportingParserId] = useState<number | null>(null);
 
@@ -50,8 +55,10 @@ function DataStructuresPage() {
     
     // Check if we have cached data first
     const cachedData = settingsCache.getDataStructures(appId);
-    if (cachedData) {
+    const cachedEnums = settingsCache.getEnums(appId);
+    if (cachedData && cachedEnums) {
       setDataStructures(cachedData);
+      setEnums(cachedEnums);
       setLoading(false);
       return;
     }
@@ -61,9 +68,12 @@ function DataStructuresPage() {
       setLoading(true);
       setError(null);
       const response = await apiService.getOutputParsers(Number.parseInt(appId));
+      const enumResponse = await apiService.getEnums(Number.parseInt(appId));
       setDataStructures(response);
+      setEnums(enumResponse);
       // Cache the response
       settingsCache.setDataStructures(appId, response);
+      settingsCache.setEnums(appId, enumResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data structures');
       console.error('Error loading data structures:', err);
@@ -79,9 +89,12 @@ function DataStructuresPage() {
       setLoading(true);
       setError(null);
       const response = await apiService.getOutputParsers(Number.parseInt(appId));
+      const enumResponse = await apiService.getEnums(Number.parseInt(appId));
       setDataStructures(response);
+      setEnums(enumResponse);
       // Cache the response
       settingsCache.setDataStructures(appId, response);
+      settingsCache.setEnums(appId, enumResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data structures');
       console.error('Error loading data structures:', err);
@@ -143,6 +156,47 @@ function DataStructuresPage() {
     }
   }
 
+  async function handleCreateEnum() {
+    if (!appId) return;
+    try {
+      const blankEnum = await apiService.getEnum(Number.parseInt(appId), 0);
+      setEditingEnum({ ...blankEnum, is_enum: true });
+      setIsEnumModalOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load enum options');
+    }
+  }
+
+  async function handleEditEnum(enumId: number) {
+    if (!appId) return;
+    try {
+      setEditingEnum(await apiService.getEnum(Number.parseInt(appId), enumId));
+      setIsEnumModalOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load enum details');
+    }
+  }
+
+  async function handleDeleteEnum(enumDefinition: DataStructure) {
+    if (!appId) return;
+    const ok = await confirm({
+      title: MESSAGES.CONFIRM_DELETE_TITLE('enum'),
+      message: `Are you sure you want to delete "${enumDefinition.name}"? This action cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    const result = await mutate(() => apiService.deleteEnum(Number.parseInt(appId), enumDefinition.parser_id), {
+      loading: MESSAGES.DELETING('enum'),
+      success: MESSAGES.DELETED('enum'),
+      error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('enum')),
+    });
+    if (result === undefined) return;
+    const newEnums = enums.filter((item) => item.parser_id !== enumDefinition.parser_id);
+    setEnums(newEnums);
+    settingsCache.setEnums(appId, newEnums);
+  }
+
   async function handleSaveStructure(data: any) {
     if (!appId) return;
 
@@ -171,9 +225,33 @@ function DataStructuresPage() {
     setEditingStructure(null);
   }
 
+  async function handleSaveEnum(data: EnumFormData) {
+    if (!appId) return;
+    const isUpdate = Boolean(editingEnum && editingEnum.parser_id !== 0);
+    const result = await mutate(
+      () => isUpdate
+        ? apiService.updateEnum(Number.parseInt(appId), editingEnum.parser_id, data)
+        : apiService.createEnum(Number.parseInt(appId), data),
+      {
+        loading: isUpdate ? MESSAGES.UPDATING('enum') : MESSAGES.CREATING('enum'),
+        success: isUpdate ? MESSAGES.UPDATED('enum') : MESSAGES.CREATED('enum'),
+        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('enum')),
+      },
+    );
+    if (result === undefined) return;
+    await forceReloadDataStructures();
+    setIsEnumModalOpen(false);
+    setEditingEnum(null);
+  }
+
   function handleCloseModal() {
     setIsModalOpen(false);
     setEditingStructure(null);
+  }
+
+  function handleCloseEnumModal() {
+    setIsEnumModalOpen(false);
+    setEditingEnum(null);
   }
 
   async function handleExport(parserId: number) {
@@ -283,6 +361,12 @@ function DataStructuresPage() {
                 <span className="mr-2">+</span>
                 {' '}Create Data Structure
               </button>
+              <button
+                onClick={() => void handleCreateEnum()}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+              >
+                <ListChecks className="w-4 h-4 mr-2" />Create Enum
+              </button>
             </div>
           )}
         </div>
@@ -389,6 +473,35 @@ function DataStructuresPage() {
           </div>
         )}
 
+        <div className="mt-10 mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">Enums</h2>
+          <p className="text-gray-600">Define reusable allowed values for data structure fields</p>
+        </div>
+        <Table
+          data={enums}
+          keyExtractor={(enumDefinition) => enumDefinition.parser_id.toString()}
+          columns={[
+            {
+              header: 'Name',
+              render: (enumDefinition) => (
+                <div className="flex items-center">
+                  <ListChecks className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
+                  {canEdit ? <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600" onClick={() => void handleEditEnum(enumDefinition.parser_id)}>{enumDefinition.name}</button> : <span>{enumDefinition.name}</span>}
+                </div>
+              ),
+            },
+            { header: 'Description', render: (enumDefinition) => <div className="text-sm text-gray-900 max-w-xs truncate">{enumDefinition.description || 'No description'}</div> },
+            { header: 'Values', render: (enumDefinition) => <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{enumDefinition.field_count} value{enumDefinition.field_count === 1 ? '' : 's'}</span> },
+            { header: 'Actions', render: (enumDefinition) => canEdit ? <ActionDropdown actions={[{ label: 'Edit', onClick: () => { void handleEditEnum(enumDefinition.parser_id); }, icon: <Pencil className="w-4 h-4" />, variant: 'primary' }, { label: 'Delete', onClick: () => { void handleDeleteEnum(enumDefinition); }, icon: <Trash2 className="w-4 h-4" />, variant: 'danger' }]} size="sm" /> : <span className="text-gray-400 text-sm">View only</span> },
+          ]}
+          emptyIcon={<ListChecks className="w-10 h-10 text-gray-300" />}
+          emptyMessage="No Enums"
+          emptySubMessage="Create an enum to constrain a data structure field to known values."
+          loading={loading}
+        />
+
+        {!loading && enums.length === 0 && canEdit && <div className="text-center py-6"><button onClick={() => void handleCreateEnum()} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Create First Enum</button></div>}
+
         {/* Info Boxes */}
         <div className="mt-6 space-y-4">
           {/* Main Info */}
@@ -448,6 +561,10 @@ function DataStructuresPage() {
             onSubmit={handleSaveStructure}
             onCancel={handleCloseModal}
           />
+        </Modal>
+
+        <Modal isOpen={isEnumModalOpen} onClose={handleCloseEnumModal} title={editingEnum?.parser_id ? 'Edit Enum' : 'Create New Enum'} size="xlarge">
+          <EnumForm enumDefinition={editingEnum} onSubmit={handleSaveEnum} onCancel={handleCloseEnumModal} />
         </Modal>
 
         {/* Import Modal */}
