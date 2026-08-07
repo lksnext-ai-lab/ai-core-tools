@@ -103,17 +103,6 @@ def create_llm_from_service(
         override_execution_profile: optional per-request execution profile override.
         override_temperature: optional per-request temperature override.
     """
-    provider_builders = {
-        ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temperature),
-        ProviderEnum.Anthropic.value: lambda: _build_anthropic_llm(ai_service, temperature),
-        ProviderEnum.MistralAI.value: lambda: _build_mistral_llm(ai_service, temperature, is_vision),
-        ProviderEnum.Custom.value: lambda: _build_custom_llm(ai_service, temperature),
-        ProviderEnum.Azure.value: lambda: _build_azure_llm(ai_service, temperature),
-        ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temperature),
-        ProviderEnum.GoogleCloud.value: lambda: _build_google_cloud_llm(ai_service, temperature),
-        ProviderEnum.OpenRouter.value: lambda: _build_openrouter_llm(ai_service, temperature),
-        ProviderEnum.Bedrock.value: lambda: _build_bedrock_llm(ai_service, temperature),
-    }
     # Determine which temperature to use: per-request override > agent value
     effective_temperature = temperature
     if override_temperature is not None:
@@ -153,6 +142,7 @@ def create_llm_from_service(
         ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temp, runtime_config),
         ProviderEnum.GoogleCloud.value: lambda: _build_google_cloud_llm(ai_service, temp, runtime_config),
         ProviderEnum.OpenRouter.value: lambda: _build_openrouter_llm(ai_service, temp, runtime_config),
+        ProviderEnum.Bedrock.value: lambda: _build_bedrock_llm(ai_service, temp, runtime_config),
     }
 
     builder = provider_builders.get(provider)
@@ -217,8 +207,6 @@ def _build_openai_llm(ai_service, temperature, runtime_config):
 
     # Add runtime reasoning kwargs
     kwargs.update(build_runtime_kwargs(runtime_config))
-
-    logger.info("OpenAI LLM kwargs: %s", kwargs)
 
     return ChatOpenAI(**kwargs)
 
@@ -357,7 +345,7 @@ def _build_azure_llm(ai_service, temperature, runtime_config):
     return AzureAIChatCompletionsModel(**kwargs)
 
 
-def _build_bedrock_llm(ai_service, temperature):
+def _build_bedrock_llm(ai_service, temperature, runtime_config):
     from langchain_aws import ChatBedrockConverse
 
     from tools.aws_bedrock_utils import resolve_bedrock_credentials
@@ -372,6 +360,8 @@ def _build_bedrock_llm(ai_service, temperature):
     endpoint_raw = (ai_service.endpoint or "").strip()
     if endpoint_raw:
         bedrock_kwargs["endpoint_url"] = endpoint_raw
+
+    bedrock_kwargs.update(build_runtime_kwargs(runtime_config))
 
     return ChatBedrockConverse(**bedrock_kwargs)
 
@@ -429,8 +419,6 @@ def _build_google_llm(ai_service, temperature, runtime_config):
             google_kwargs["client_options"] = client_options
 
     google_kwargs.update(build_runtime_kwargs(runtime_config))
-
-    logger.info("Google LLM kwargs: %s", google_kwargs)
 
     return ChatGoogleGenerativeAI(**google_kwargs)
 

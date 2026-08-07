@@ -713,8 +713,15 @@ def _register_builtin_model_overrides() -> None:
     register_model_override(
         ModelCapability(
             provider=PROVIDER_OPENAI,
-            regex_pattern=r"^gpt-4",
-            supports_reasoning=False,
+            regex_pattern=r"^gpt-4\.1",
+            supports_reasoning=True,
+            profile_values={
+                ExecutionProfile.FAST: "medium",
+                ExecutionProfile.BALANCED: "medium",
+                ExecutionProfile.DEEP: "medium",
+                ExecutionProfile.MAX: "medium",
+            },
+            force_temperature=1.0,
         )
     )
 

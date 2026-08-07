@@ -437,7 +437,7 @@ async def get_execution_profiles(
 ):
     """
     Get execution profiles configuration.
-    
+
     Returns the four execution profiles (FAST, BALANCED, DEEP, MAX) and
     indicates which providers support reasoning with their mapping.
     """

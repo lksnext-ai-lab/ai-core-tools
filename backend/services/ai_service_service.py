@@ -55,7 +55,10 @@ class AIServiceService:
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",  # description stores model name
             supports_video=service.supports_video or False,
-            execution_profile=int(getattr(service, 'execution_profile', 1) or 1),
+            execution_profile=int(
+                1 if getattr(service, 'execution_profile', None) is None
+                else service.execution_profile
+            ),
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
@@ -119,7 +122,10 @@ class AIServiceService:
             api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",  # Use endpoint as base_url
             supports_video=service.supports_video or False,
-            execution_profile=int(getattr(service, 'execution_profile', 1) or 1),
+            execution_profile=int(
+                1 if getattr(service, 'execution_profile', None) is None
+                else service.execution_profile
+            ),
             created_at=service.create_date,
             available_providers=providers,
             execution_profiles=[
@@ -374,9 +380,9 @@ class AIServiceService:
             "api_key": service.api_key,
             "endpoint": service.endpoint
         }
-        
+
         return AIServiceService.test_connection_with_config(config)
-    
+
     @staticmethod
     def delete_by_app_id(app_id: int):
         """Delete all AI services for a specific app"""
@@ -385,12 +391,12 @@ class AIServiceService:
         try:
             AIServiceRepository.delete_by_app_id(session, app_id)
         finally:
-            session.close() 
+            session.close()
 
     @staticmethod
     def get_execution_profiles(provider: str = None) -> "schemas.ai_service_schemas.ExecutionProfilesResponseSchema":
         """Get execution profiles configuration.
-        
+
         Returns the four standard profiles and indicates which providers support
         reasoning with which parameters.
         """

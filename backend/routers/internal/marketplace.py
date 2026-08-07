@@ -583,9 +583,18 @@ def _parse_execution_profile(value: Optional[str]) -> Optional[int]:
     if value.strip().lower() == 'inherit':
         return None
     try:
-        return int(value)
-    except ValueError:
-        return None
+        profile = int(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="override_execution_profile must be an integer from 0 to 3 or 'inherit'.",
+        ) from exc
+    if profile not in range(4):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="override_execution_profile must be an integer from 0 to 3 or 'inherit'.",
+        )
+    return profile
 
 
 def _prepare_marketplace_chat(

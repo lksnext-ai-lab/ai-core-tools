@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -7,7 +7,7 @@ class ExecutionProfileSchema(BaseModel):
     """Schema for execution profile choices available to the user."""
     profile_name: str
     level: int
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -18,7 +18,7 @@ class AIServiceListItemSchema(BaseModel):
     provider: Optional[str] = None
     model_name: str
     supports_video: bool = False
-    execution_profile: int = 1
+    execution_profile: int = Field(1, ge=0, le=3)
     created_at: Optional[datetime]
     needs_api_key: bool = False
     is_system: bool = False
@@ -35,7 +35,7 @@ class AIServiceDetailSchema(BaseModel):
     api_key: str
     base_url: str
     supports_video: bool = False
-    execution_profile: int = 1
+    execution_profile: int = Field(1, ge=0, le=3)
     created_at: Optional[datetime] = None
     available_providers: List[Dict[str, Any]] = []
     execution_profiles: List[ExecutionProfileSchema] = []
@@ -59,7 +59,7 @@ class CreateUpdateAIServiceSchema(BaseModel):
     # via ``api_key``; the access key id and region travel here.
     aws_access_key_id: Optional[str] = None
     aws_region: Optional[str] = None
-    execution_profile: Optional[int] = 1
+    execution_profile: Optional[int] = Field(1, ge=0, le=3)
 
     @field_validator("api_key", "base_url", "aws_access_key_id", "aws_region", mode="before")
     @classmethod
