@@ -130,75 +130,6 @@ class AgentStreamingService:
                 },
             )
 
-            # ----------------------------------------------------------------
-            # 3. Build agent chain
-            # ----------------------------------------------------------------
-            agent_chain, mcp_client = await create_agent(
-                ctx.fresh_agent,
-                ctx.search_params,
-                ctx.session_id_for_cache,
-                ctx.user_context,
-                ctx.working_dir,
-                override_execution_profile=ctx.override_execution_profile,
-                override_temperature=ctx.override_temperature,
-            )
-
-            config = prepare_agent_config(ctx.fresh_agent)
-
-            if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
-                config["configurable"]["thread_id"] = (
-                    f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
-                )
-                logger.info(
-                    "Using session-aware thread_id: %s",
-                    config["configurable"]["thread_id"],
-                )
-            else:
-                config["configurable"]["thread_id"] = (
-                    f"thread_{ctx.fresh_agent.agent_id}"
-                )
-
-            config["configurable"]["question"] = ctx.enhanced_message
-
-            # ----------------------------------------------------------------
-            # 4. Build the HumanMessage payload (handles multimodal images)
-            # ----------------------------------------------------------------
-            message_payload = build_human_message(
-                ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
-            )
-
-            # ----------------------------------------------------------------
-            # 5. Attach LangSmith tracer + metadata when configured
-            # ----------------------------------------------------------------
-            ls_settings = resolve_langsmith_settings(ctx.fresh_agent.app)
-            if ls_settings:
-                tracer, overrides = build_tracing_config(
-                    ls_settings,
-                    agent=ctx.fresh_agent,
-                    user_context=ctx.user_context,
-                    conversation_id=ctx.effective_conv_id,
-                    session_id=ctx.session_id_for_cache,
-                )
-                apply_tracing_to_config(config, tracer, overrides)
-                logger.info(
-                    "LangSmith tracing ENABLED — project='%s' source='%s'",
-                    ls_settings.project_name,
-                    ls_settings.source,
-                )
-
-            # ----------------------------------------------------------------
-            # 6. Streaming loop — the only part that stays in this service
-            # ----------------------------------------------------------------
-            # Return the sync connection to the pool for the duration of the
-            # stream: astream uses the async checkpointer, not this session, so
-            # holding it across LLM I/O would exhaust the pool. ctx objects expire
-            # but stay attached, so _finalize_turn reloads them on demand.
-            if effective_db is not None:
-                effective_db.commit()
-
-            accumulated_content = ""
-            structured_response = None
-
             for attempt in range(2):
                 mcp_client = None
                 # ------------------------------------------------------------
@@ -213,6 +144,8 @@ class AgentStreamingService:
                     sandbox_handle=ctx.sandbox_handle,
                     sandbox_provider=ctx.sandbox_provider,
                     sandbox_session_key=ctx.sandbox_session_key,
+                    override_execution_profile=ctx.override_execution_profile,
+                    override_temperature=ctx.override_temperature,
                 )
                 agent_chain, mcp_client = create_agent_result[:2]
 
