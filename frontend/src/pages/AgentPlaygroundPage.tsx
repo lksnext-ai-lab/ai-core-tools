@@ -273,6 +273,7 @@ function AgentPlaygroundPage() {
                     onMessageSent={handleMessageSent}
                     metadataFields={agent.silo?.metadata_definition?.fields}
                     vectorDbType={agent.silo?.vector_db_type}
+                    defaultExecutionProfile={agent.execution_profile ?? null}
                   />
                 )}
               </>

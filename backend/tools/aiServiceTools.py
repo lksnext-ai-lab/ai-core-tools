@@ -14,9 +14,14 @@ from urllib.parse import urlparse
 
 from models.ai_service import ProviderEnum
 from tools.outputParserTools import get_parser_model_by_id
-from typing import List
+from typing import List, Any, Optional
 from langchain_core.documents import Document
 from tools.embeddingTools import get_embeddings_model
+from tools.execution_profiles import (
+    ExecutionProfile,
+    RuntimeConfigBuilder,
+    build_runtime_kwargs,
+)
 from utils.logger import get_logger
 
 load_dotenv()
@@ -46,30 +51,99 @@ def get_output_parser(agent):
 # Legacy functions removed - now using create_agent from agentTools.py
 # This provides full tool support, MCP integration, and LangSmith tracing
 
-def create_llm_from_service(ai_service, temperature=0, is_vision=False):
+def _resolve_execution_profile(ai_service, agent, is_vision=False, override_profile=None) -> "ExecutionProfile":
+    """Resolve the execution profile for an LLM build.
+
+    Resolution order:
+      1. Per-request override (if provided)
+      2. Agent-level override (if set)
+      3. AI service default
+      4. Provider default
     """
-    Create an LLM instance from an AIService model
+    if override_profile is not None:
+        try:
+            return ExecutionProfile(int(override_profile))
+        except ValueError:
+            pass
+
+    agent_profile = getattr(agent, 'execution_profile', None) if agent is not None else None
+    if agent_profile is not None:
+        try:
+            return ExecutionProfile(agent_profile)
+        except ValueError:
+            pass
+
+    service_profile = getattr(ai_service, 'execution_profile', 1)
+    if service_profile is not None:
+        try:
+            return ExecutionProfile(int(service_profile))
+        except ValueError:
+            pass
+
+    return ExecutionProfile.BALANCED
+
+
+def create_llm_from_service(
+    ai_service,
+    temperature=0,
+    is_vision=False,
+    agent: Optional[Any] = None,
+    override_execution_profile: Optional[int] = None,
+    override_temperature: Optional[float] = None,
+) -> Any:
+    """
+    Create an LLM instance from an AIService model, threaded with
+    execution-profile parameters.
+
     Args:
-        ai_service: AIService model instance
-        temperature: float
-        is_vision: boolean
+        ai_service: AIService model instance.
+        temperature: float.
+        is_vision: boolean (used for Mistral vision path).
+        agent: optional Agent that may override the service profile.
+        override_execution_profile: optional per-request execution profile override.
+        override_temperature: optional per-request temperature override.
     """
-    provider_builders = {
-        ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temperature),
-        ProviderEnum.Anthropic.value: lambda: _build_anthropic_llm(ai_service, temperature),
-        ProviderEnum.MistralAI.value: lambda: _build_mistral_llm(ai_service, temperature, is_vision),
-        ProviderEnum.Custom.value: lambda: _build_custom_llm(ai_service, temperature),
-        ProviderEnum.Azure.value: lambda: _build_azure_llm(ai_service, temperature),
-        ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temperature),
-        ProviderEnum.GoogleCloud.value: lambda: _build_google_cloud_llm(ai_service, temperature),
-        ProviderEnum.OpenRouter.value: lambda: _build_openrouter_llm(ai_service, temperature),
-        ProviderEnum.Bedrock.value: lambda: _build_bedrock_llm(ai_service, temperature),
-    }
+    # Determine which temperature to use: per-request override > agent value
+    effective_temperature = temperature
+    if override_temperature is not None:
+        effective_temperature = override_temperature
+
+    execution_profile = _resolve_execution_profile(ai_service, agent, is_vision, override_profile=override_execution_profile)
 
     # Handle case where provider might be an Enum object instead of string
     provider = ai_service.provider
     if hasattr(provider, 'value'):
         provider = provider.value
+
+    model_id = ai_service.description or ""
+
+    # Build runtime config from provider + model + profile
+    runtime_config = RuntimeConfigBuilder.build(
+        provider=provider,
+        model_id=model_id,
+        execution_profile=execution_profile,
+    )
+
+    # Determine temperature — may be disabled by the runtime config
+    temp = effective_temperature if not runtime_config.disable_temperature else None
+
+    # If the model requires a specific temperature value (e.g. 1.0) regardless
+    # of what the agent or user configured, override here.
+    if runtime_config.force_temperature is not None:
+        temp = runtime_config.force_temperature
+
+    # Dispatch to provider-specific builder with runtime kwargs
+    provider_builders = {
+        ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temp, runtime_config),
+        ProviderEnum.Anthropic.value: lambda: _build_anthropic_llm(ai_service, temp, runtime_config),
+        ProviderEnum.MistralAI.value: lambda: _build_mistral_llm(ai_service, temp, is_vision, runtime_config),
+        ProviderEnum.Custom.value: lambda: _build_custom_llm(ai_service, temp, runtime_config),
+        ProviderEnum.Azure.value: lambda: _build_azure_llm(ai_service, temp, runtime_config),
+        ProviderEnum.Google.value: lambda: _build_google_llm(ai_service, temp, runtime_config),
+        ProviderEnum.GoogleCloud.value: lambda: _build_google_cloud_llm(ai_service, temp, runtime_config),
+        ProviderEnum.OpenRouter.value: lambda: _build_openrouter_llm(ai_service, temp, runtime_config),
+        ProviderEnum.Bedrock.value: lambda: _build_bedrock_llm(ai_service, temp, runtime_config),
+    }
 
     builder = provider_builders.get(provider)
     if builder is None:
@@ -77,12 +151,14 @@ def create_llm_from_service(ai_service, temperature=0, is_vision=False):
 
     return builder()
 
-def get_llm(agent, is_vision=False):
+
+def get_llm(agent, is_vision=False, override_temperature: Optional[float] = None, override_execution_profile: Optional[int] = None):
     """
     Función base para obtener cualquier modelo LLM
     Args:
         agent: Agent object with model configuration
         is_vision: Boolean que indica si es un modelo de visión
+        override_temperature: optional per-request temperature override
     """
     if is_vision:
         ai_service = agent.vision_service_rel
@@ -94,9 +170,13 @@ def get_llm(agent, is_vision=False):
     
     # Get temperature from agent, default to DEFAULT_AGENT_TEMPERATURE if not set
     from models.agent import DEFAULT_AGENT_TEMPERATURE
-    temperature = getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE)
+    temperature = override_temperature if override_temperature is not None else getattr(agent, 'temperature', DEFAULT_AGENT_TEMPERATURE)
 
-    return create_llm_from_service(ai_service, temperature, is_vision)
+    return create_llm_from_service(
+        ai_service, temperature, is_vision, agent=agent,
+        override_temperature=override_temperature,
+        override_execution_profile=override_execution_profile,
+    )
 
 class MistralWrapper:
     def __init__(self, client, model_name):
@@ -105,28 +185,37 @@ class MistralWrapper:
 
 class VoidRetriever(BaseRetriever):
     
-    def _get_relevant_documents(self, query: str) -> List[Document]:
+    def _get_relevant_documents(self, query: str) -> "List[Document]":
         return []
 
-    async def _aget_relevant_documents(self, query: str) -> List[Document]:
+    async def _aget_relevant_documents(self, query: str) -> "List[Document]":
         return []
 
 
-def _build_openai_llm(ai_service, temperature):
+def _build_openai_llm(ai_service, temperature, runtime_config):
     base_url = ai_service.endpoint if ai_service.endpoint else None
-    return ChatOpenAI(
-        model=ai_service.description,
-        temperature=temperature,
-        api_key=ai_service.api_key,
-        base_url=base_url,
-    )
+
+    kwargs = {
+        "model": ai_service.description,
+        "api_key": ai_service.api_key,
+        "base_url": base_url,
+    }
+
+    # Temperature (may be skipped by runtime config)
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    # Add runtime reasoning kwargs
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return ChatOpenAI(**kwargs)
 
 
 # OpenRouter session-level defaults — configurable later via env vars.
 _OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 
 
-def _build_openrouter_llm(ai_service, temperature):
+def _build_openrouter_llm(ai_service, temperature, runtime_config):
     """Build a ChatOpenAI instance pointed at OpenRouter's API.
 
     OpenRouter speaks the OpenAI chat completions protocol, so we reuse
@@ -143,35 +232,54 @@ def _build_openrouter_llm(ai_service, temperature):
         "X-Title": "MattinAI",
     }
 
-    return ChatOpenAI(
-        model=ai_service.description,
-        temperature=temperature,
-        api_key=ai_service.api_key,
-        base_url=base_url,
-        default_headers=default_headers,
-    )
+    kwargs = {
+        "model": ai_service.description,
+        "api_key": ai_service.api_key,
+        "base_url": base_url,
+        "default_headers": default_headers,
+    }
+
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return ChatOpenAI(**kwargs)
 
 
-def _build_anthropic_llm(ai_service, temperature):
-    return ChatAnthropic(
-        model=ai_service.description,
-        temperature=temperature,
-        api_key=ai_service.api_key,
-    )
+def _build_anthropic_llm(ai_service, temperature, runtime_config):
+    kwargs = {
+        "model": ai_service.description,
+        "api_key": ai_service.api_key,
+    }
+
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return ChatAnthropic(**kwargs)
 
 
-def _build_mistral_llm(ai_service, temperature, is_vision):
+def _build_mistral_llm(ai_service, temperature, is_vision, runtime_config):
     if is_vision:
         mistral_client = Mistral(api_key=ai_service.api_key)
         return MistralWrapper(client=mistral_client, model_name=ai_service.description)
-    return ChatMistralAI(
-        model=ai_service.description,
-        temperature=temperature,
-        api_key=ai_service.api_key,
-    )
+
+    kwargs = {
+        "model": ai_service.description,
+        "api_key": ai_service.api_key,
+    }
+
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return ChatMistralAI(**kwargs)
 
 
-def build_ollama_auth_headers(api_key: str | None, endpoint: str | None) -> dict[str, str]:
+def build_ollama_auth_headers(api_key: Optional[str], endpoint: Optional[str]) -> dict:
     """Build auth headers for an Ollama-protocol endpoint.
 
     Self-hosted Ollama instances are commonly placed behind a reverse
@@ -187,7 +295,7 @@ def build_ollama_auth_headers(api_key: str | None, endpoint: str | None) -> dict
     adapter in :mod:`tools.ai.provider_model_clients` so the two paths
     cannot drift out of sync.
     """
-    headers: dict[str, str] = {}
+    headers = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     if endpoint:
@@ -199,33 +307,45 @@ def build_ollama_auth_headers(api_key: str | None, endpoint: str | None) -> dict
     return headers
 
 
-def _build_custom_llm(ai_service, temperature):
+def _build_custom_llm(ai_service, temperature, runtime_config):
     client_kwargs = {"verify": False}
     headers = build_ollama_auth_headers(ai_service.api_key, ai_service.endpoint)
     if headers:
         client_kwargs["headers"] = headers
 
-    service = ChatOllama(
-        model=ai_service.description,
-        temperature=temperature,
-        base_url=ai_service.endpoint,
-        client_kwargs=client_kwargs,
-    )
-    logger.info(f"Service: {service}")
-    return service
+    kwargs = {
+        "model": ai_service.description,
+        "client_kwargs": client_kwargs,
+    }
+
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    if ai_service.endpoint:
+        kwargs["base_url"] = ai_service.endpoint
+
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return ChatOllama(**kwargs)
 
 
-def _build_azure_llm(ai_service, temperature):
-    return AzureAIChatCompletionsModel(
-        model=ai_service.description,
-        temperature=temperature,
-        credential=ai_service.api_key,
-        endpoint=ai_service.endpoint,
-        api_version=ai_service.api_version,
-    )
+def _build_azure_llm(ai_service, temperature, runtime_config):
+    kwargs = {
+        "model": ai_service.description,
+        "credential": ai_service.api_key,
+        "endpoint": ai_service.endpoint,
+        "api_version": ai_service.api_version,
+    }
+
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return AzureAIChatCompletionsModel(**kwargs)
 
 
-def _build_bedrock_llm(ai_service, temperature):
+def _build_bedrock_llm(ai_service, temperature, runtime_config):
     from langchain_aws import ChatBedrockConverse
 
     from tools.aws_bedrock_utils import resolve_bedrock_credentials
@@ -240,6 +360,8 @@ def _build_bedrock_llm(ai_service, temperature):
     endpoint_raw = (ai_service.endpoint or "").strip()
     if endpoint_raw:
         bedrock_kwargs["endpoint_url"] = endpoint_raw
+
+    bedrock_kwargs.update(build_runtime_kwargs(runtime_config))
 
     return ChatBedrockConverse(**bedrock_kwargs)
 
@@ -279,12 +401,14 @@ def _resolve_google_client_options(endpoint_raw, service_name):
     return {"api_endpoint": f"https://{host}"}
 
 
-def _build_google_llm(ai_service, temperature):
+def _build_google_llm(ai_service, temperature, runtime_config):
     google_kwargs = {
         "model": ai_service.description,
-        "temperature": temperature,
         "api_key": ai_service.api_key,
     }
+
+    if temperature is not None:
+        google_kwargs["temperature"] = temperature
 
     endpoint_raw = (ai_service.endpoint or "").strip()
     if endpoint_raw:
@@ -294,10 +418,14 @@ def _build_google_llm(ai_service, temperature):
         if client_options:
             google_kwargs["client_options"] = client_options
 
+    google_kwargs.update(build_runtime_kwargs(runtime_config))
+
     return ChatGoogleGenerativeAI(**google_kwargs)
 
-def _build_google_cloud_llm(ai_service, temperature):
-    import json, os
+
+def _build_google_cloud_llm(ai_service, temperature, runtime_config):
+    import json
+    import os
     from google.oauth2 import service_account
 
     project_id = (ai_service.endpoint or "").strip()
@@ -317,11 +445,17 @@ def _build_google_cloud_llm(ai_service, temperature):
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )
 
-    return ChatGoogleGenerativeAI(
-        model=ai_service.description,
-        temperature=temperature,
-        credentials=credentials,
-        project=project_id,
-        location=location,
-        vertexai=True,
-    )
+    kwargs = {
+        "model": ai_service.description,
+        "credentials": credentials,
+        "project": project_id,
+        "location": location,
+        "vertexai": True,
+    }
+
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    kwargs.update(build_runtime_kwargs(runtime_config))
+
+    return ChatGoogleGenerativeAI(**kwargs)

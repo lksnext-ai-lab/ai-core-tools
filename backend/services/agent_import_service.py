@@ -755,6 +755,7 @@ class AgentImportService:
                     export_data.agent.memory_summarize_threshold
                 )
                 existing_agent.temperature = export_data.agent.temperature
+                existing_agent.execution_profile = export_data.agent.execution_profile
                 
                 # Update OCR-specific fields if present
                 if hasattr(existing_agent, 'vision_system_prompt'):
@@ -841,6 +842,7 @@ class AgentImportService:
                     export_data.agent.memory_summarize_threshold
                 ),
                 temperature=export_data.agent.temperature,
+                execution_profile=export_data.agent.execution_profile,
                 vision_service_id=vision_service_id,
                 vision_system_prompt=export_data.agent.vision_system_prompt,
                 text_system_prompt=export_data.agent.text_system_prompt,
@@ -865,6 +867,7 @@ class AgentImportService:
                     export_data.agent.memory_summarize_threshold
                 ),
                 temperature=export_data.agent.temperature,
+                execution_profile=export_data.agent.execution_profile,
                 create_date=datetime.now(),
                 request_count=0,
                 is_tool=False,

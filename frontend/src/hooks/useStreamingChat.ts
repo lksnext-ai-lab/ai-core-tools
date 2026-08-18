@@ -46,6 +46,7 @@ export interface StreamFnOptions {
   readonly files?: File[];
   readonly searchParams?: any;
   readonly conversationId?: number | null;
+  readonly executionProfile?: number | null;
   readonly onEvent: (event: StreamEvent) => void;
   readonly signal?: AbortSignal;
 }
@@ -56,6 +57,7 @@ interface SendOptions {
   readonly files?: File[];
   readonly conversationId?: number | null;
   readonly searchParams?: any;
+  readonly executionProfile?: number | null;
 }
 
 interface UseStreamingChatReturn {
@@ -219,6 +221,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
           files: options?.files,
           searchParams: options?.searchParams,
           conversationId: options?.conversationId,
+          executionProfile: options?.executionProfile,
           signal: abortController.signal,
           onEvent: (event: StreamEvent) => {
             switch (event.type) {

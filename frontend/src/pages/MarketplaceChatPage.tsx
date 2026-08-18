@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square } from 'lucide-react';
+import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
@@ -60,6 +60,18 @@ export default function MarketplaceChatPage() {
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
+  const EXECUTION_PROFILES = [
+    { value: 0, label: 'FAST', description: 'Low latency, minimal reasoning' },
+    { value: 1, label: 'BALANCED', description: 'Standard reasoning performance' },
+    { value: 2, label: 'DEEP', description: 'Extended reasoning and analysis' },
+    { value: 3, label: 'MAX', description: 'Maximum reasoning and analysis' },
+  ] as const;
+
+  type ProfileResolvable = (typeof EXECUTION_PROFILES)[number]['value'] | 'inherit';
+
+  const [selectedExecutionProfile, setSelectedExecutionProfile] = useState<ProfileResolvable>('inherit');
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,11 +86,38 @@ export default function MarketplaceChatPage() {
     !quotaInfo.is_exempt &&
     quotaInfo.call_count >= quotaInfo.quota;
 
+  const resolveProfileValue = (value: ProfileResolvable): number | null => {
+    if (value === 'inherit') return null;
+    return value;
+  };
+
+  const resolveProfileLabel = (value: ProfileResolvable): string =>
+    value === 'inherit' ? 'Default' : EXECUTION_PROFILES.find((p) => p.value === value)?.label || 'Default';
+
+  const resolveProfileDescription = (value: ProfileResolvable): string =>
+    value === 'inherit' ? 'Using agent default profile' : EXECUTION_PROFILES.find((p) => p.value === value)?.description || '';
+
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    if (isProfileMenuOpen) {
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }
+    return undefined;
+  }, [isProfileMenuOpen]);
+
   const marketplaceStream = useCallback(
     (message: string, opts: StreamFnOptions) =>
       apiService.chatMarketplaceStream(numericId, message, {
         files: opts.files,
         fileReferences: persistentFiles.length > 0 ? persistentFiles.map((f) => f.file_id) : undefined,
+        executionProfile: opts.executionProfile,
         onEvent: opts.onEvent,
         signal: opts.signal,
       }),
@@ -282,6 +321,7 @@ export default function MarketplaceChatPage() {
       setHoldStreamingContent(true);
       const result = await sendMessage(trimmed, {
         conversationId: numericId,
+        executionProfile: resolveProfileValue(selectedExecutionProfile),
       });
 
       const rawResponse = result.response || '';
@@ -670,84 +710,156 @@ export default function MarketplaceChatPage() {
             </div>
           )}
 
-           <div className="pg-glass rounded-2xl px-4 py-3 flex items-end gap-3 shadow-sm border border-white/20 dark:border-gray-700/30">
-             <input
-               ref={fileInputRef}
-               type="file"
-               multiple
-               onChange={handleFileSelect}
-               className="hidden"
-               id="marketplace-file-upload"
-             />
-             <button
-               type="button"
-               onClick={() => fileInputRef.current?.click()}
-               disabled={isStreaming || isQuotaExceeded}
-               className="p-2 rounded-xl text-gray-400 dark:text-gray-500
-                          hover:text-indigo-600 dark:hover:text-indigo-400
-                          hover:bg-indigo-50 dark:hover:bg-indigo-900/20
-                          disabled:opacity-40 disabled:cursor-not-allowed
-                          transition-all duration-150"
-               title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
-               aria-label="Attach file"
-             >
-               <Paperclip className="w-5 h-5" />
-             </button>
- 
-             <textarea
-               ref={textareaRef}
-               value={inputMessage}
-               onChange={(e) => setInputMessage(e.target.value)}
-               onKeyDown={handleKeyDown}
-               placeholder={`Message ${agentName}…`}
-               disabled={isStreaming || isQuotaExceeded}
-               rows={1}
-               className="flex-1 bg-transparent border-none outline-none resize-none
-                          text-sm text-gray-800 dark:text-gray-100
-                          placeholder:text-gray-400 dark:placeholder:text-gray-500
-                          disabled:opacity-50
-                          focus:outline-none focus:ring-0
-                          max-h-40 input-login"
-               style={{ minHeight: '1.5rem' }}
-             />
- 
-             {isStreaming ? (
-               <button
-                 type="button"
-                 onClick={abortStream}
-                 className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
-                            hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
-                            active:scale-95 shrink-0"
-                 aria-label="Stop generating"
-                 title="Stop generating"
-               >
-                 <Square className="w-4 h-4" />
-               </button>
-             ) : (
-               <button
-                 type="button"
-                 onClick={handleSendMessage}
-                 disabled={!canSend}
-                 className="pg-btn-send shrink-0 !p-2 rounded-xl"
-                 aria-label="Send message"
-               >
-                 <svg
-                   className="w-4 h-4"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24"
-                   aria-hidden="true"
-                 >
-                   <path
-                     strokeLinecap="round"
-                     strokeLinejoin="round"
-                     strokeWidth={2}
-                     d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                   />
-                 </svg>
-               </button>
-             )}
-           </div>
+          <div className="pg-glass rounded-2xl px-4 py-3 flex items-end gap-3 shadow-sm border border-white/20 dark:border-gray-700/30">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              id="marketplace-file-upload"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isStreaming || isQuotaExceeded}
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
+                         hover:text-indigo-600 dark:hover:text-indigo-400
+                         hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                         disabled:opacity-40 disabled:cursor-not-allowed
+                         transition-all duration-150"
+              title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
+              aria-label="Attach file"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+
+            <div
+              ref={profileMenuRef}
+              className="relative flex-shrink-0"
+            >
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen((o) => !o)}
+                disabled={isStreaming || isQuotaExceeded}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium
+                           transition-all duration-150 border
+                           text-gray-500 dark:text-gray-400
+                           hover:text-indigo-600 dark:hover:text-indigo-400
+                           hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                           disabled:opacity-40 disabled:cursor-not-allowed
+                           ${isProfileMenuOpen
+                             ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700/50'
+                             : 'border-transparent hover:border-indigo-200 dark:hover:border-indigo-800/40'
+                           }`}
+                title={resolveProfileDescription(selectedExecutionProfile)}
+              >
+                {selectedExecutionProfile !== 'inherit' && (
+                  <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                )}
+                <span>{resolveProfileLabel(selectedExecutionProfile)}</span>
+              </button>
+
+              {isProfileMenuOpen && (
+                <div
+                  className="absolute bottom-full left-0 mb-1 w-52 rounded-xl overflow-hidden
+                             bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm
+                             border border-gray-200 dark:border-gray-700/50
+                             shadow-lg z-30 p-1"
+                  role="listbox"
+                >
+                  {(['inherit', 0, 1, 2, 3] as const).map((v) => {
+                    const isSelected = v === selectedExecutionProfile;
+                    const label = v === 'inherit' ? 'Default'
+                      : EXECUTION_PROFILES.find((p) => p.value === v)?.label || '';
+                    const desc = v === 'inherit' ? 'Using agent default profile'
+                      : EXECUTION_PROFILES.find((p) => p.value === v)?.description || '';
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => {
+                          setSelectedExecutionProfile(v);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-sm font-medium
+                                   transition-colors flex items-center justify-between
+                                   ${isSelected
+                                     ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                                   }
+                                   ${isStreaming || isQuotaExceeded ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={desc}
+                      >
+                        {label}
+                        {isSelected && (
+                          <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`Message ${agentName}…`}
+              disabled={isStreaming || isQuotaExceeded}
+              rows={1}
+              className="flex-1 bg-transparent border-none outline-none resize-none
+                         text-sm text-gray-800 dark:text-gray-100
+                         placeholder:text-gray-400 dark:placeholder:text-gray-500
+                         disabled:opacity-50
+                         max-h-40 input-login"
+              style={{ minHeight: '1.5rem' }}
+            />
+
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={abortStream}
+                className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
+                           hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
+                           active:scale-95 shrink-0"
+                aria-label="Stop generating"
+                title="Stop generating"
+              >
+                <Square className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={!canSend}
+                className="pg-btn-send shrink-0 !p-2"
+                aria-label="Send message"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
 
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">
             Press Enter to send, Shift+Enter for new line

@@ -5,6 +5,7 @@ from schemas.ai_service_schemas import (
     AIServiceListItemSchema,
     AIServiceDetailSchema,
     CreateUpdateAIServiceSchema,
+    ExecutionProfileSchema,
 )
 from core.export_constants import PLACEHOLDER_API_KEY
 from utils.secret_utils import mask_api_key, is_masked_key
@@ -12,12 +13,32 @@ from tools.aws_bedrock_utils import build_extra_config, parse_extra_config
 from datetime import datetime
 from typing import List
 from tools.aiServiceTools import create_llm_from_service
+from tools.execution_profiles import ExecutionProfile
 from utils.logger import get_logger
 import asyncio
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from langchain_core.runnables import RunnableConfig
 
 logger = get_logger(__name__)
+
+
+def _execution_profiles_for_provider(provider: str) -> List[ExecutionProfileSchema]:
+    """Return the four execution profile options for a provider."""
+    profiles = []
+    for ep in ExecutionProfile:
+        profiles.append(ExecutionProfileSchema(
+            profile_name=ep.name,
+            level=ep.value,
+        ))
+    return profiles
+
+
+def _get_default_execution_profile(provider: str) -> ExecutionProfile:
+    """Get the default execution profile for a provider."""
+    from tools.execution_profiles import get_provider_capability
+    cap = get_provider_capability(provider)
+    return cap.default_profile if cap else ExecutionProfile.BALANCED
+
 
 class AIServiceService:
 
@@ -34,6 +55,10 @@ class AIServiceService:
             provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
             model_name=service.description or "",  # description stores model name
             supports_video=service.supports_video or False,
+            execution_profile=int(
+                1 if getattr(service, 'execution_profile', None) is None
+                else service.execution_profile
+            ),
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
@@ -65,9 +90,14 @@ class AIServiceService:
                 api_key="",
                 base_url="",
                 supports_video=False,
+                execution_profile=1,
                 created_at=None,
                 # Form data
-                available_providers=providers
+                available_providers=providers,
+                execution_profiles=[
+                    ExecutionProfileSchema(profile_name=ep.name, level=ep.value)
+                    for ep in ExecutionProfile
+                ],
             )
         
         # Existing AI service
@@ -92,8 +122,16 @@ class AIServiceService:
             api_key=mask_api_key(service.api_key),
             base_url=service.endpoint or "",  # Use endpoint as base_url
             supports_video=service.supports_video or False,
+            execution_profile=int(
+                1 if getattr(service, 'execution_profile', None) is None
+                else service.execution_profile
+            ),
             created_at=service.create_date,
             available_providers=providers,
+            execution_profiles=[
+                ExecutionProfileSchema(profile_name=ep.name, level=ep.value)
+                for ep in ExecutionProfile
+            ],
             needs_api_key=needs_api_key,
             aws_access_key_id=extra_cfg.get("aws_access_key_id"),
             aws_region=extra_cfg.get("aws_region"),
@@ -135,6 +173,19 @@ class AIServiceService:
             service_data.aws_access_key_id,
             service_data.aws_region,
         )
+        # Handle execution profile
+        if service_data.execution_profile is not None:
+            try:
+                service.execution_profile = int(service_data.execution_profile)
+            except (ValueError, TypeError):
+                service.execution_profile = 1
+        elif service_id == 0 and service.provider:
+            # Set default for new services based on provider
+            provider_name = service.provider
+            if hasattr(provider_name, 'value'):
+                provider_name = provider_name.value
+            default_profile = _get_default_execution_profile(provider_name)
+            service.execution_profile = default_profile.value
         
         # Create or update the service
         if service_id == 0:
@@ -171,6 +222,7 @@ class AIServiceService:
             endpoint=service.endpoint,
             supports_video=service.supports_video or False,
             extra_config=service.extra_config,
+            execution_profile=getattr(service, 'execution_profile', 1),
             create_date=datetime.now()
         )
         
@@ -204,6 +256,7 @@ class AIServiceService:
                     self.api_version = data.get('api_version')
                     self.extra_config = data.get('extra_config')
             
+
             service = MockAIService(config)
             
             # Guard: placeholder, missing, or masked API key
@@ -327,8 +380,9 @@ class AIServiceService:
             "api_key": service.api_key,
             "endpoint": service.endpoint
         }
-        
+
         return AIServiceService.test_connection_with_config(config)
+
     @staticmethod
     def delete_by_app_id(app_id: int):
         """Delete all AI services for a specific app"""
@@ -337,4 +391,41 @@ class AIServiceService:
         try:
             AIServiceRepository.delete_by_app_id(session, app_id)
         finally:
-            session.close() 
+            session.close()
+
+    @staticmethod
+    def get_execution_profiles(provider: str = None) -> "schemas.ai_service_schemas.ExecutionProfilesResponseSchema":
+        """Get execution profiles configuration.
+
+        Returns the four standard profiles and indicates which providers support
+        reasoning with which parameters.
+        """
+        from tools.execution_profiles import get_provider_capability
+        from schemas.ai_service_schemas import ExecutionProfilesResponseSchema
+
+        available_providers = []
+        for p in ProviderEnum:
+            provider_name = p.value if hasattr(p, 'value') else p
+            cap = get_provider_capability(provider_name)
+            if provider is None or provider_name == provider:
+                available_providers.append({
+                    "provider": provider_name,
+                    "supports_reasoning": cap.supported,
+                    "reasoning_kwarg": cap.reasoning_kwarg,
+                    "default_profile": cap.default_profile.name if cap.supported else None,
+                })
+
+        profiles = [
+            ExecutionProfileSchema(profile_name=ep.name, level=ep.value)
+            for ep in ExecutionProfile
+        ]
+        default = ExecutionProfileSchema(
+            profile_name=ExecutionProfile.BALANCED.name,
+            level=ExecutionProfile.BALANCED.value,
+        )
+
+        return ExecutionProfilesResponseSchema(
+            profiles=profiles,
+            default_profile=default,
+            available_providers=available_providers,
+        )

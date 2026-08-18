@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, SmallInteger
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -98,6 +98,9 @@ class Agent(Base):
                         nullable=True)
     temperature = Column(Float, default=DEFAULT_AGENT_TEMPERATURE, nullable=False)
     is_frozen = Column(Boolean, default=False, nullable=False)
+
+    # Execution profile override (null = inherit from AIService; 0-3 = FAST/BALANCED/DEEP/MAX).
+    execution_profile = Column(SmallInteger, nullable=True)
 
     marketplace_visibility = Column(
         Enum(MarketplaceVisibility),

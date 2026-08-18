@@ -53,6 +53,8 @@ class AgentStreamingService:
         user_context: dict | None = None,
         conversation_id: int | None = None,
         db: Session | None = None,
+        override_execution_profile: int | None = None,
+        override_temperature: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream an agent chat turn as SSE events.
 
@@ -107,6 +109,8 @@ class AgentStreamingService:
                 user_context=user_context,
                 conversation_id=conversation_id,
                 db=effective_db,
+                override_execution_profile=override_execution_profile,
+                override_temperature=override_temperature,
             )
             sandbox_turn_active = self.execution_service._begin_sandbox_turn(
                 ctx,
@@ -126,9 +130,6 @@ class AgentStreamingService:
                 },
             )
 
-            accumulated_content = ""
-            structured_response = None
-
             for attempt in range(2):
                 mcp_client = None
                 # ------------------------------------------------------------
@@ -143,6 +144,8 @@ class AgentStreamingService:
                     sandbox_handle=ctx.sandbox_handle,
                     sandbox_provider=ctx.sandbox_provider,
                     sandbox_session_key=ctx.sandbox_session_key,
+                    override_execution_profile=ctx.override_execution_profile,
+                    override_temperature=ctx.override_temperature,
                 )
                 agent_chain, mcp_client = create_agent_result[:2]
 

@@ -387,6 +387,7 @@ async def create_or_update_agent(
         'silo_id': agent_data.silo_id,
         'output_parser_id': agent_data.output_parser_id,
         'temperature': agent_data.temperature,
+        'execution_profile': agent_data.execution_profile,
         # OCR-specific fields
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
@@ -641,6 +642,8 @@ async def chat_with_agent(
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
+    override_execution_profile: Annotated[Optional[int], Form()] = None,
+    override_temperature: Annotated[Optional[float], Form()] = None,
 ):
     """
     Internal API: Chat with agent for playground (OAuth authentication)
@@ -652,6 +655,8 @@ async def chat_with_agent(
         file_references: Optional JSON array of file_ids to include. If not provided, all files are included.
         search_params: Optional search parameters
         conversation_id: Optional conversation ID to continue existing conversation
+        override_execution_profile: Execution profile override (0=FAST, 1=BALANCED, 2=DEEP, 3=MAX). None = inherit from agent/service.
+        override_temperature: Temperature override (0.0-2.0). None = inherit from model config.
     """
     fms = FileManagementService()
     all_file_references: list = []
@@ -697,6 +702,8 @@ async def chat_with_agent(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            override_execution_profile=override_execution_profile,
+            override_temperature=override_temperature,
         )
 
         # Increment marketplace usage counter (if marketplace agent and not exempt)
@@ -733,6 +740,8 @@ async def chat_with_agent_stream(
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
     conversation_id: Annotated[Optional[int], Form()] = None,
+    override_execution_profile: Annotated[Optional[int], Form()] = None,
+    override_temperature: Annotated[Optional[float], Form()] = None,
 ):
     """
     Internal API: Chat with agent using Server-Sent Events streaming (OAuth authentication)
@@ -778,6 +787,8 @@ async def chat_with_agent_stream(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            override_execution_profile=override_execution_profile,
+            override_temperature=override_temperature,
         )
 
         # Wrap so ephemeral uploads are cleaned when the consumer is done

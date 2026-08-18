@@ -1783,7 +1783,7 @@ class ApiService {
     });
   }
 
-  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null): Promise<{ response: string | Record<string, unknown>; conversation_id?: number }> {
+  async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null, executionProfile?: number | null): Promise<{ response: string | Record<string, unknown>; conversation_id?: number }> {
     const formData = new FormData();
     formData.append('message', message);
     
@@ -1795,6 +1795,10 @@ class ApiService {
       formData.append('conversation_id', conversationId.toString());
     }
     
+    if (executionProfile != null) {
+      formData.append('override_execution_profile', executionProfile.toString());
+    }
+
     if (files && files.length > 0) {
       files.forEach((file) => {
         formData.append(`files`, file);
@@ -1829,6 +1833,7 @@ class ApiService {
       files?: File[];
       searchParams?: unknown;
       conversationId?: number | null;
+      executionProfile?: number | null;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     }
@@ -1841,6 +1846,9 @@ class ApiService {
     }
     if (options.conversationId) {
       formData.append('conversation_id', options.conversationId.toString());
+    }
+    if (options.executionProfile !== undefined && options.executionProfile !== null) {
+      formData.append('override_execution_profile', options.executionProfile.toString());
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));
@@ -2271,6 +2279,7 @@ class ApiService {
     options: {
       files?: File[];
       fileReferences?: string[];
+      executionProfile?: number | null;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     },
@@ -2280,6 +2289,9 @@ class ApiService {
 
     if (options.fileReferences && options.fileReferences.length > 0) {
       formData.append('file_references', JSON.stringify(options.fileReferences));
+    }
+    if (options.executionProfile !== undefined && options.executionProfile !== null) {
+      formData.append('override_execution_profile', options.executionProfile.toString());
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));

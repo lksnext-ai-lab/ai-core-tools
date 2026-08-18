@@ -360,6 +360,8 @@ class AgentExecutionService:
         user_context: Dict = None,
         conversation_id: int = None,
         db: Session = None,
+        override_execution_profile: Optional[int] = None,
+        override_temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Execute agent chat with persistent file references.
 
@@ -377,6 +379,8 @@ class AgentExecutionService:
                 user_context=user_context,
                 conversation_id=conversation_id,
                 db=db,
+                override_execution_profile=override_execution_profile,
+                override_temperature=override_temperature,
             )
             sandbox_turn_active = self._begin_sandbox_turn(ctx, db=db)
 
@@ -419,6 +423,8 @@ class AgentExecutionService:
         user_context: Dict = None,
         conversation_id: int = None,
         db: Session = None,
+        override_execution_profile: int = None,
+        override_temperature: float = None,
     ) -> AgentExecutionContext:
         """Run all setup steps for one agent chat turn.
 
@@ -646,6 +652,8 @@ class AgentExecutionService:
             processed_files=processed_files,
             search_params=search_params,
             user_context=user_context,
+            override_execution_profile=override_execution_profile,
+            override_temperature=override_temperature,
         )
 
     def _sandbox_turn_expected_seconds(self) -> int:

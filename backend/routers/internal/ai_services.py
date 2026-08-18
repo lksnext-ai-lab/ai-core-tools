@@ -19,7 +19,12 @@ from services.provider_models_service import (
 )
 
 # Import schemas and auth
-from schemas.ai_service_schemas import AIServiceListItemSchema, AIServiceDetailSchema, CreateUpdateAIServiceSchema
+from schemas.ai_service_schemas import (
+    AIServiceListItemSchema,
+    AIServiceDetailSchema,
+    CreateUpdateAIServiceSchema,
+    ExecutionProfilesResponseSchema,
+)
 from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import AIServiceExportFileSchema
 from schemas.provider_models_schemas import (
@@ -415,3 +420,31 @@ async def export_ai_service(
     except Exception as e:
         logger.error(f"Export error: {str(e)}", exc_info=True)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Export failed")
+
+
+# ==================== EXECUTION PROFILES ENDPOINTS ====================
+
+
+@ai_services_router.get(
+    "/execution-profiles",
+    summary="Get execution profiles configuration",
+    tags=["AI Services"],
+    response_model=ExecutionProfilesResponseSchema,
+)
+async def get_execution_profiles(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """
+    Get execution profiles configuration.
+
+    Returns the four execution profiles (FAST, BALANCED, DEEP, MAX) and
+    indicates which providers support reasoning with their mapping.
+    """
+    try:
+        return AIServiceService.get_execution_profiles()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving execution profiles: {str(e)}"
+        )
