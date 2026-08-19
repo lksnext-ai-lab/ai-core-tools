@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
-import { useStreamingChat } from '../../hooks/useStreamingChat';
+import { StreamingChatError, useStreamingChat } from '../../hooks/useStreamingChat';
+import { formatDuration } from '../../utils/duration';
 import MessageContent from './MessageContent';
 import StreamingMessage from './StreamingMessage';
 import SearchFilters from './SearchFilters';
@@ -15,6 +17,7 @@ interface Message {
   content: string;
   timestamp: Date;
   files?: string[];
+  elapsedMs?: number;
 }
 
 /** Shape returned by the API for each history message. */
@@ -89,7 +92,7 @@ function ChatInterface({
     [appId, agentId],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream, toolExecutionHistory, clearToolHistory } =
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream, toolExecutionHistory, clearToolHistory } =
     useStreamingChat(playgroundStream);
 
   // Hold streaming content visible briefly after isStreaming flips to false,
@@ -280,6 +283,7 @@ function ChatInterface({
         type: 'agent',
         content: responseContent,
         timestamp: new Date(),
+        elapsedMs: result.elapsedMs,
       };
       // Commit the message and release the streaming hold in the same batch
       setMessages((prev) => [...prev, agentMsg]);
@@ -299,6 +303,7 @@ function ChatInterface({
         type: 'error',
         content: error instanceof Error ? error.message : 'An error occurred',
         timestamp: new Date(),
+        elapsedMs: error instanceof StreamingChatError ? error.elapsedMs : responseElapsedMs,
       };
       setMessages((prev) => [...prev, errorMsg]);
     }
@@ -674,6 +679,12 @@ function ChatInterface({
                                 minute: '2-digit',
                               })}
                             </span>
+                            {message.elapsedMs !== undefined && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                                <Timer className="h-3 w-3" aria-hidden="true" />
+                                {formatDuration(message.elapsedMs)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -701,6 +712,12 @@ function ChatInterface({
                               minute: '2-digit',
                             })}
                           </span>
+                          {message.elapsedMs !== undefined && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                              <Timer className="h-3 w-3" aria-hidden="true" />
+                              {formatDuration(message.elapsedMs)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -714,6 +731,7 @@ function ChatInterface({
                   <StreamingMessage
                     content={streamingContent}
                     isStreaming={isStreaming}
+                    elapsedMs={responseElapsedMs}
                     activeTools={activeTools}
                     thinkingMessage={thinkingMessage}
                   />

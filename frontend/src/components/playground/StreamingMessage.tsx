@@ -1,5 +1,7 @@
 import React from 'react';
+import { Timer } from 'lucide-react';
 import type { ActiveTool } from '../../types/streaming';
+import { formatDuration } from '../../utils/duration';
 import ActiveToolBar from './ActiveToolBar';
 import MessageContent from './MessageContent';
 
@@ -8,6 +10,8 @@ interface StreamingMessageProps {
   content: string;
   /** Whether tokens are still arriving */
   isStreaming: boolean;
+  /** Client-side wall-clock time since the current response started */
+  elapsedMs?: number;
   /** Active tools (shown as status pills) — rendered ABOVE the message */
   activeTools?: ActiveTool[];
   /** Human-readable thinking status */
@@ -17,6 +21,7 @@ interface StreamingMessageProps {
 const StreamingMessage: React.FC<StreamingMessageProps> = ({
   content,
   isStreaming,
+  elapsedMs,
   activeTools = [],
   thinkingMessage,
 }) => {
@@ -50,6 +55,16 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
                 </span>
               </div>
             )}
+          </div>
+        )}
+
+        {isStreaming && elapsedMs !== undefined && (
+          <div
+            className="mt-1 ml-1 flex items-center gap-1.5 text-xs tabular-nums text-gray-400 dark:text-gray-500"
+            aria-live="polite"
+          >
+            <Timer className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Generating for {formatDuration(elapsedMs)}</span>
           </div>
         )}
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square } from 'lucide-react';
+import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
@@ -9,7 +9,8 @@ import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
 import type { PanelFile } from '../components/playground/AttachedFilesPanel';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
-import { useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
+import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
+import { formatDuration } from '../utils/duration';
 import { errorMessage } from '../constants/messages';
 
 interface ChatMessage {
@@ -17,6 +18,7 @@ interface ChatMessage {
   readonly type: 'user' | 'agent' | 'error';
   readonly content: string;
   readonly timestamp: Date;
+  readonly elapsedMs?: number;
 }
 
 interface RawAttachedFile {
@@ -85,7 +87,7 @@ export default function MarketplaceChatPage() {
     [numericId, persistentFiles],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream } =
     useStreamingChat(marketplaceStream);
 
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
@@ -299,6 +301,7 @@ export default function MarketplaceChatPage() {
           type: 'agent',
           content: responseContent,
           timestamp: new Date(),
+          elapsedMs: result.elapsedMs,
         },
       ]);
       setHoldStreamingContent(false);
@@ -322,6 +325,7 @@ export default function MarketplaceChatPage() {
           type: 'error',
           content,
           timestamp: new Date(),
+          elapsedMs: err instanceof StreamingChatError ? err.elapsedMs : responseElapsedMs,
         },
       ]);
       void fetchQuotaInfo();
@@ -610,6 +614,12 @@ export default function MarketplaceChatPage() {
                         minute: '2-digit',
                       })}
                     </span>
+                    {message.elapsedMs !== undefined && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                        <Timer className="h-3 w-3" aria-hidden="true" />
+                        {formatDuration(message.elapsedMs)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -620,6 +630,7 @@ export default function MarketplaceChatPage() {
             <StreamingMessage
               content={streamingContent}
               isStreaming={isStreaming}
+              elapsedMs={responseElapsedMs}
               activeTools={activeTools}
               thinkingMessage={thinkingMessage}
             />

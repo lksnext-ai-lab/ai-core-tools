@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronRight, ChevronLeft, ChevronDown, Terminal, Trash2, Wrench } from 'lucide-react';
 import type { ToolExecutionRecord } from '../../hooks/useStreamingChat';
+import { formatDuration } from '../../utils/duration';
 
 function isCodeTool(toolName: string): boolean {
   return toolName === 'code_interpreter' || toolName.endsWith('_repl');
-}
-
-function formatDuration(startedAt: number, endedAt?: number): string {
-  const ms = (endedAt ?? Date.now()) - startedAt;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 /** Try to pretty-print a JSON string; return raw string if it's not valid JSON. */
@@ -166,7 +161,9 @@ function ToolEntryRow({
           </span>
         ) : (
           <span className="text-[10px] text-neutral-400 shrink-0 tabular-nums">
-            {formatDuration(record.startedAt, record.endedAt)}
+            {formatDuration((record.endedAt ?? Date.now()) - record.startedAt, {
+              showMillisecondsBelowSecond: true,
+            })}
           </span>
         )}
         {canExpand && (
