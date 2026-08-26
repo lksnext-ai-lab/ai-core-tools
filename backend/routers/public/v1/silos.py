@@ -257,15 +257,17 @@ async def search_silo(
 
     try:
         result = SiloService.search_silo_documents_router(
-            silo_id,
-            request.query,
-            request.filter_metadata,
-            request.limit,
-            request.search_type,
-            request.score_threshold,
-            request.fetch_k,
-            request.lambda_mult,
-            db,
+            silo_id=silo_id,
+            query=request.query,
+            filter_metadata=request.filter_metadata,
+            limit=request.limit,
+            search_type=request.search_type,
+            score_threshold=request.score_threshold,
+            fetch_k=request.fetch_k,
+            lambda_mult=request.lambda_mult,
+            min_content_length=request.min_content_length,
+            max_content_length=request.max_content_length,
+            db=db,
         )
 
         if result is None:
@@ -520,6 +522,12 @@ async def find_docs_in_collection(
             query=query,
             filter_metadata=request.filter_metadata,
             limit=request.limit,
+            search_type=request.search_type,
+            score_threshold=request.score_threshold,
+            fetch_k=request.fetch_k,
+            lambda_mult=request.lambda_mult,
+            min_content_length=request.min_content_length,
+            max_content_length=request.max_content_length,
             db=db,
         )
 
