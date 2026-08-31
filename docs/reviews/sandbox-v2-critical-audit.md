@@ -12,7 +12,12 @@ donde fue posible, contrastado con evidencia en `logs/app.log` / `logs/app_error
 del entorno de pruebas.
 
 **Rama de este documento:** `fix/sandbox-critical-followups` (creada desde `develop`).
-Este documento es solo análisis — ningún fix incluido aún.
+
+**Estado: implementado y verificado en vivo.** Los tres críticos están arreglados,
+con tests unitarios y, además, reproducción manual real contra el stack desplegado
+(no solo tests con mocks) — ver "Verificación en vivo" al final de cada hallazgo.
+Los altos/medios se dejan documentados para una pasada posterior (ver "Alcance de
+esta rama").
 
 ---
 
@@ -55,6 +60,17 @@ fallback — solo quedan comentarios que documentan que existió y fue retirado
 un caso límite. Cualquier despliegue nuevo que siga `CLAUDE.md` al pie de la letra
 lo dispara en el primer chat con un agente code-interpreter.
 
+**Fix:** los tools del REPL (`tool_factory.py`) y el fallback de creación de sandbox
+en `agentTools.py:419` ahora capturan cualquier fallo inesperado de conexión y
+devuelven un error limpio en línea (`"[Error] Code execution sandbox is currently
+unavailable..."`) en vez de dejar que la excepción se propague sin control.
+`CLAUDE.md` documenta ahora explícitamente que hace falta
+`docker compose --profile opensandbox up -d --build`.
+
+**Verificación en vivo:** con `mattin-opensandbox` parado (`docker stop
+mattin-opensandbox`), un chat con un agente code-interpreter devuelve 200 con
+*"It seems that the code execution environment is currently unavailable"* — no 500.
+
 ---
 
 ### CRÍTICO-2 — Sandbox compartido entre usuarios distintos (`anon_{agent_id}`)
@@ -83,6 +99,16 @@ creating sandbox for anon_24                              ← la sesión de sand
 mismo contenedor y el mismo workspace remoto — los ficheros que sube el usuario A
 los puede ver/leer el usuario B. Es una fuga de aislamiento multi-tenant real, no
 solo un bug funcional.
+
+**Fix:** `agent_execution_service.py` ahora deriva `identity_session_id` (de
+`user_id`/`app_id`) igual que ya hacía el `working_dir` local, y lo pasa como
+`session_id` a `SandboxSessionService.session_key()`.
+
+**Verificación en vivo:** un agente `has_memory=false` con code interpreter,
+consultado por dos usuarios reales sin `conversation_id` — logs muestran
+`SandboxSessionService: creating sandbox for thread_2_user_1_app_1` y
+`...thread_2_user_2_app_1` (nunca `anon_2`). Un fichero creado por el usuario 1
+(`/tmp/marker.txt`) es invisible para el usuario 2 (`NO_MARKER_FOUND`).
 
 ---
 
@@ -120,6 +146,67 @@ historial de esa sesión.
 **Por qué es crítico:** de los tres, es el de mayor radio de impacto — afecta a
 *cualquier* agente con memoria, tenga o no sandbox habilitado, y ya se ha disparado
 repetidamente en un entorno real, no en un escenario construido para el test.
+
+**Fix (v1, en tests con mocks):** en vez de `adelete_thread`, un nuevo
+`CheckpointerCacheService.get_rollback_checkpoint_id()` busca el checkpoint anterior
+al roto y el reintento se hace pasando `checkpoint_id` en el config — LangGraph
+crea una rama nueva a partir de ahí, sin borrar nada. Si no hay checkpoint anterior
+al que volver, se devuelve un error limpio ("Please resend it") en vez de reintentar.
+El bug de duplicación en streaming resultó ser inexistente en el código actual
+(`accumulated_content` sí se resetea dentro del loop de reintento) — descartado tras
+inspección directa.
+
+**Dos bugs adicionales encontrados al verificar el fix en vivo** (reproduciendo el
+crash real: `docker kill mattin-backend` a mitad de una tool call, no un mock):
+
+1. **Detección demasiado estrecha.** `is_missing_tool_output_error()` solo
+   reconocía `"No tool output found for function call"`. El error real que devuelve
+   OpenAI (gpt-4o-mini, chat completions) para este escenario es distinto:
+   *"An assistant message with 'tool_calls' must be followed by tool messages
+   responding to each 'tool_call_id'. The following tool_call_ids did not have
+   response messages: ..."* — el mecanismo de recuperación nunca se disparaba.
+   Arreglado ampliando la lista de substrings reconocidos.
+2. **El rollback de un solo checkpoint no basta.** Tras arreglar la detección, el
+   reintento seguía fallando: el checkpoint "anterior" elegido tenía su *último*
+   mensaje limpio (un `HumanMessage` nuevo), pero un `AIMessage` con `tool_calls`
+   sin resolver seguía **en medio de la lista**, de un intento de recuperación previo
+   que había añadido un mensaje encima del estado roto en vez de arreglarlo. OpenAI
+   valida la lista completa, no solo el último mensaje. Arreglado: `get_rollback_checkpoint_id`
+   ahora recorre el historial hacia atrás e inspecciona la lista completa de mensajes
+   de cada checkpoint candidato, no solo el último, hasta encontrar uno realmente
+   limpio.
+
+**Verificación en vivo (repetida 3 veces hasta confirmar):** conversación real,
+tool call `sleep 20` en curso, `docker kill mattin-backend` a mitad de ejecución,
+reinicio, mensaje de seguimiento en la misma conversación → 200 limpio,
+`GET /internal/conversations/{id}/history` muestra el historial completo intacto
+(el mensaje original + el intento fallido + la recuperación), nada borrado.
+
+---
+
+## 🟠 Alto — encontrado y arreglado durante la verificación en vivo (no formaba parte del alcance original)
+
+### OpenSandbox: un contexto de ejecución que hace timeout queda "zombie" y se reparte a la siguiente llamada
+
+No es uno de los tres críticos — se encontró haciendo pruebas de estrés manuales
+sobre CRÍTICO-1 y se arregló en la misma rama porque bloqueaba directamente esa
+verificación.
+
+`opensandbox_provider.py`'s `run_code`: cada contexto de ejecución pooled tiene un
+`threading.Lock` que actúa de flag de ocupado. Si la ejecución hace timeout, el hilo
+que la ejecuta (`interpreter.codes.run(...)`, bloqueante) se abandona — no se puede
+matar un thread de Python — y `interpreter.codes.interrupt(exec_id)` es
+best-effort sin verificar si funcionó. El `finally` liberaba el lock igualmente,
+así que la siguiente llamada podía recibir el **mismo contexto**, aún ocupado por la
+ejecución zombie, y obtener su salida obsoleta en vez de un resultado nuevo.
+
+**Reproducido en vivo:** una tool call con timeout dejó el mismo `output_len=59`
+repitiéndose en 12+ llamadas sucesivas, hasta que el modelo agotó el límite de
+recursión de LangGraph (50 pasos) y el turno falló con 500.
+
+**Fix:** nuevo `_retire_context_entry()` — tras un timeout, el contexto se retira
+permanentemente del pool (nunca se libera para reuso) y se intenta crear uno de
+reemplazo para no reducir la capacidad del pool.
 
 ---
 
@@ -165,8 +252,21 @@ repetidamente en un entorno real, no en un escenario construido para el test.
 
 ## Alcance de esta rama
 
-Esta rama (`fix/sandbox-critical-followups`) aborda **solo los tres críticos**
-(CRÍTICO-1, 2, 3). Los altos/medios quedan documentados arriba para una pasada
-posterior — mezclar los nueve en una sola rama haría el diff difícil de revisar y
-retrasaría el fix de los críticos, que son los que tienen impacto de seguridad/pérdida
-de datos en producción ahora mismo.
+Esta rama (`fix/sandbox-critical-followups`) aborda los **tres críticos**
+(CRÍTICO-1, 2, 3) más el bug de OpenSandbox encontrado al verificarlos en vivo
+(context pool zombie tras timeout). Los altos/medios restantes quedan documentados
+arriba para una pasada posterior — mezclarlos todos en una sola rama haría el diff
+difícil de revisar y retrasaría el fix de los críticos, que son los que tienen
+impacto de seguridad/pérdida de datos en producción ahora mismo.
+
+## Cobertura de tests
+
+16 tests nuevos/actualizados: `test_agent_cache_service.py` (9, nuevo —
+detección de error + recorrido de rollback), `test_agent_execution_service.py` (+2),
+`test_agent_execution_service_it4.py` (+1), `test_agent_streaming_service.py` (+2),
+`test_sandbox_opensandbox_provider.py` (+2), `test_sandbox_tool_factory.py` (+1
+regresión + docstring ampliado). Suite completa: 1667 passed, 65 skipped.
+Además de los tests unitarios, los tres críticos y el fix de OpenSandbox se
+verificaron en vivo contra el stack desplegado (`docker compose --profile
+opensandbox up -d --build`), no solo con mocks — ver "Verificación en vivo" en
+cada hallazgo.
