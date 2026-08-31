@@ -284,6 +284,27 @@ def create_sandbox_repl_tool(
                 return (
                     "[Error] Sandbox capacity reached, please retry shortly."
                 )
+            except Exception as exc:
+                # Any other failure materializing/using the sandbox (e.g. the
+                # provider is registered but unreachable — DNS/connection
+                # errors when the backing service isn't actually running)
+                # must not propagate uncaught either: unlike the specific
+                # cases above, this has no dedicated exception type, so it
+                # would otherwise crash the whole agent turn with a raw 500
+                # instead of a normal, LLM-visible tool error. Mirrors
+                # builtin_tools.py's `_run_bash` catch-all for the same
+                # class of failure on the other sandbox tool family.
+                logger.error(
+                    "Sandbox tool '%s' failed unexpectedly (session=%s): %s",
+                    tool_name,
+                    session_key,
+                    exc,
+                    exc_info=True,
+                )
+                return (
+                    "[Error] Code execution sandbox is currently unavailable. "
+                    "Please try again later."
+                )
             finally:
                 if lease_acquired and session_service is not None and session_key is not None:
                     try:

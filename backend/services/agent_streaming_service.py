@@ -128,6 +128,7 @@ class AgentStreamingService:
 
             accumulated_content = ""
             structured_response = None
+            rollback_checkpoint_id = None
 
             for attempt in range(2):
                 mcp_client = None
@@ -162,6 +163,8 @@ class AgentStreamingService:
                     )
 
                 config["configurable"]["question"] = ctx.enhanced_message
+                if rollback_checkpoint_id is not None:
+                    config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
 
                 # ------------------------------------------------------------
                 # 4. Build the HumanMessage payload (handles multimodal images)
@@ -232,15 +235,35 @@ class AgentStreamingService:
                         and ctx.session_id_for_cache
                         and is_missing_tool_output_error(stream_exc)
                     ):
-                        logger.warning(
-                            "Detected incomplete tool-call checkpoint for agent %s "
-                            "session %s; deleting checkpoint and retrying turn once",
+                        # Recover by forking from the last known-good checkpoint
+                        # instead of deleting the whole thread — see the mirrored
+                        # fix in AgentExecutionService's non-streaming path for
+                        # the full rationale (adelete_thread wipes the user's
+                        # entire visible history, not just the broken step).
+                        rollback_checkpoint_id = await CheckpointerCacheService.get_rollback_checkpoint_id(
                             ctx.fresh_agent.agent_id,
                             ctx.session_id_for_cache,
                         )
-                        await CheckpointerCacheService.invalidate_checkpointer_async(
+                        if rollback_checkpoint_id is None:
+                            logger.warning(
+                                "Incomplete tool-call checkpoint for agent %s session %s "
+                                "has no earlier checkpoint to roll back to; failing the "
+                                "turn instead of retrying",
+                                ctx.fresh_agent.agent_id,
+                                ctx.session_id_for_cache,
+                            )
+                            yield format_sse_event(
+                                "error",
+                                {"message": "Your last message could not be completed. Please resend it."},
+                            )
+                            return
+                        logger.warning(
+                            "Detected incomplete tool-call checkpoint for agent %s "
+                            "session %s; retrying turn from prior checkpoint %s "
+                            "(no history deleted)",
                             ctx.fresh_agent.agent_id,
                             ctx.session_id_for_cache,
+                            rollback_checkpoint_id,
                         )
                         continue
                     raise
@@ -287,7 +310,7 @@ class AgentStreamingService:
             yield format_sse_event("error", {"message": "Connection error, please retry."})
         except Exception as exc:
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
-            yield format_sse_event("error", {"message": str(exc)})
+            yield format_sse_event("error", {"message": "Agent execution failed"})
 
         finally:
             if ctx is not None and sandbox_turn_active:

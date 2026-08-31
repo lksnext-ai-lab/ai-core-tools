@@ -367,6 +367,93 @@ class TestErrorHandling:
         assert "Agent execution failed" in exc_info.value.detail
 
 
+class TestCheckpointRetryRecovery:
+    """_execute_agent_async recovers from a stale/incomplete tool-call
+    checkpoint by forking from the prior checkpoint instead of deleting the
+    whole thread (adelete_thread wipes the user's visible history, not just
+    the broken step)."""
+
+    @pytest.mark.asyncio
+    async def test_retries_from_prior_checkpoint_without_deleting_thread(self):
+        from types import SimpleNamespace
+
+        agent = make_agent(has_memory=True)
+        agent.app = None  # resolve_langsmith_settings short-circuits on no app
+        svc, _ = make_service(agent=agent)
+
+        # Unlike the streaming path, the non-streaming retry reuses the same
+        # already-built agent_chain — it only calls create_agent once and
+        # retries ainvoke() on that chain with a rolled-back checkpoint_id.
+        chain = MagicMock()
+        chain.ainvoke = AsyncMock(
+            side_effect=[
+                RuntimeError(
+                    "Error code: 400 - No tool output found for function call call_stale"
+                ),
+                {"messages": [SimpleNamespace(content="done")]},
+            ]
+        )
+        create_agent = AsyncMock(return_value=(chain, None))
+
+        with (
+            patch("tools.agentTools.create_agent", create_agent),
+            patch("tools.agentTools.prepare_agent_config", return_value={"configurable": {}}),
+            patch("tools.agentTools.build_human_message", return_value=SimpleNamespace(content="hi")),
+            patch(
+                "services.agent_cache_service.CheckpointerCacheService.get_rollback_checkpoint_id",
+                new=AsyncMock(return_value="01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+            ) as get_rollback_checkpoint_id,
+        ):
+            result = await svc._execute_agent_async(
+                agent,
+                "hi",
+                session_id_for_cache="297",
+            )
+
+        assert result == "done"
+        assert create_agent.await_count == 1
+        assert chain.ainvoke.await_count == 2
+        get_rollback_checkpoint_id.assert_awaited_once_with(agent.agent_id, "297")
+        assert chain.ainvoke.call_args.kwargs["config"]["configurable"]["checkpoint_id"] == (
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        )
+
+    @pytest.mark.asyncio
+    async def test_fails_cleanly_when_no_checkpoint_to_roll_back_to(self):
+        from types import SimpleNamespace
+
+        agent = make_agent(has_memory=True)
+        agent.app = None  # resolve_langsmith_settings short-circuits on no app
+        svc, _ = make_service(agent=agent)
+
+        first_chain = MagicMock()
+        first_chain.ainvoke = AsyncMock(
+            side_effect=RuntimeError(
+                "Error code: 400 - No tool output found for function call call_stale"
+            )
+        )
+        create_agent = AsyncMock(return_value=(first_chain, None))
+
+        with (
+            patch("tools.agentTools.create_agent", create_agent),
+            patch("tools.agentTools.prepare_agent_config", return_value={"configurable": {}}),
+            patch("tools.agentTools.build_human_message", return_value=SimpleNamespace(content="hi")),
+            patch(
+                "services.agent_cache_service.CheckpointerCacheService.get_rollback_checkpoint_id",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await svc._execute_agent_async(
+                    agent,
+                    "hi",
+                    session_id_for_cache="297",
+                )
+
+        assert exc_info.value.status_code == 502
+        assert len(create_agent.call_args_list) == 1
+
+
 # ---------------------------------------------------------------------------
 # File snapshotting — only newly created files are registered
 # ---------------------------------------------------------------------------
