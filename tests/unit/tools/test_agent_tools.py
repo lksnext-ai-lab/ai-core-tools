@@ -6,10 +6,12 @@ Focus: the async factory ``IACTTool.create`` must load the sub-agent's MCP tools
 All external dependencies are mocked — no LLM, MCP server or database is touched.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from models.agent import Agent
 from tools import agentTools
@@ -178,6 +180,69 @@ async def test_iact_tool_create_uses_sub_agent_rag_config():
 
     # The retriever tool is wired into the sub-agent's toolset.
     assert sentinel_tool in mock_create.call_args.kwargs["tools"]
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_exposes_clean_single_arg_schema():
+    """The agent-as-tool advertises exactly one typed ``query`` parameter.
+
+    Regression: ``_run(self, query, *args, **kwargs)`` with no ``args_schema``
+    made LangChain derive the schema from the signature, which added an ``args``
+    parameter of type ``array`` with untyped ``items`` plus a free-form
+    ``kwargs`` object. Providers reject that schema under the strict validation
+    they apply when the calling agent also uses structured output, so an
+    orchestrator that both routes to sub-agents and returns a structured object
+    failed on every call.
+    """
+    agent = _make_agent("Schema Sub-Agent")
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+    ):
+        tool = await agentTools.IACTTool.create(agent)
+
+    # ``args`` are the JSON-schema properties advertised for the tool call.
+    args = tool.args
+    assert set(args.keys()) == {"query"}, f"unexpected tool params: {args}"
+    assert args["query"]["type"] == "string"
+
+    # And the provider-facing payload — the schema that was actually rejected.
+    parameters = convert_to_openai_tool(tool)["function"]["parameters"]
+    assert set(parameters["properties"]) == {"query"}, f"unexpected tool params: {parameters}"
+    assert parameters["required"] == ["query"]
+    assert all(
+        "type" in prop_schema for prop_schema in parameters["properties"].values()
+    ), f"untyped parameter in tool schema: {parameters}"
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_invoke_passes_query_to_sub_agent():
+    """Pinning ``args_schema`` keeps the ordinary call path working.
+
+    Guards the signature change that dropped ``*args`` from ``_run``/``_arun``:
+    a tool call still reaches the sub-agent with the query as its message.
+    """
+    agent = _make_agent("Callable Sub-Agent")
+
+    react_agent = MagicMock()
+    react_agent.ainvoke = AsyncMock(
+        return_value={"messages": [SimpleNamespace(content="sub-agent answer")]}
+    )
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=react_agent),
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+    ):
+        tool = await agentTools.IACTTool.create(agent)
+
+    answer = await tool.ainvoke({"query": "which grants are open?"})
+
+    assert answer == "sub-agent answer"
+    sent_messages = react_agent.ainvoke.await_args.args[0]["messages"]
+    assert [msg.content for msg in sent_messages] == ["which grants are open?"]
 
 
 @pytest.mark.asyncio
