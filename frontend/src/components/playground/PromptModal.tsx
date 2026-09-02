@@ -83,6 +83,8 @@ function PromptModal({
 
       // Clear success message after 3 seconds (longer since we're doing more)
       setTimeout(() => setSuccess(null), 3000);
+      setError(null);
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update prompt');
       console.error('Error updating prompt:', err);

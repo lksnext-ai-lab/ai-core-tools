@@ -264,6 +264,7 @@ function ChatInterface({
 
       const result = await sendMessage(messageText, {
         conversationId: currentConversationId,
+        fileReferences: persistentFiles.map((file) => file.file_id),
         searchParams,
       });
 
@@ -395,15 +396,32 @@ function ChatInterface({
   };
 
   const handleRemovePersistentFile = async (fileId: string) => {
+    let removedFile: RawAttachedFile | undefined;
+    let removedIndex = -1;
+
+    // Optimistic update so attachment chips disappear immediately.
+    setPersistentFiles((prev) => {
+      removedIndex = prev.findIndex((file) => file.file_id === fileId);
+      if (removedIndex === -1) return prev;
+      removedFile = prev[removedIndex];
+      return prev.filter((file) => file.file_id !== fileId);
+    });
+
     try {
       await apiService.removeAttachedFile(appId, agentId, fileId, currentConversationId);
-      const response = await apiService.listAttachedFiles(
-        appId,
-        agentId,
-        currentConversationId
-      );
-      setPersistentFiles(response.files || []);
+      await refreshFileList(currentConversationId);
     } catch (error) {
+      // Restore previous state if delete fails.
+      if (removedFile) {
+        const fileToRestore = removedFile;
+        setPersistentFiles((prev) => {
+          if (prev.some((file) => file.file_id === fileId)) return prev;
+          const next = [...prev];
+          const insertAt = removedIndex >= 0 ? Math.min(removedIndex, next.length) : next.length;
+          next.splice(insertAt, 0, fileToRestore);
+          return next;
+        });
+      }
       console.error(`Error removing file ${fileId}:`, error);
     }
   };

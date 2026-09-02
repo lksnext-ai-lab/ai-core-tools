@@ -910,37 +910,56 @@ class FileManagementService:
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
         try:
-            session_dir = os.path.join(self._persistent_dir, session_key)
-            metadata_file = os.path.join(session_dir, f"{file_id}.json")
-            content_file = os.path.join(session_dir, f"{file_id}.content")
+            session_dirs = [
+                os.path.join(self._persistent_dir, session_key),
+                os.path.join(self._ephemeral_dir, session_key)
+            ]
 
-            # Read metadata BEFORE deleting it to locate the original file
-            # (original files stored in conversations/ dir have a relative file_path)
-            if os.path.exists(metadata_file):
+            # Read metadata from either directory before deleting it so we can
+            # remove the original file path as well (conversation-scoped or co-located).
+            metadata = None
+            for session_dir in session_dirs:
+                metadata_file = os.path.join(session_dir, f"{file_id}.json")
+                if not os.path.exists(metadata_file):
+                    continue
                 try:
                     with open(metadata_file, 'r') as f:
                         metadata = json.load(f)
-                    file_path = metadata.get('file_path')
-                    if file_path:
-                        abs_path = os.path.join(self._tmp_base_folder, file_path)
-                        if os.path.exists(abs_path):
-                            os.remove(abs_path)
-                            logger.info(f"Removed original file {abs_path}")
+                    break
                 except Exception as e:
                     logger.error(f"Error reading metadata to locate original file: {e}")
-                os.remove(metadata_file)
 
-            if os.path.exists(content_file):
-                os.remove(content_file)
+            if metadata:
+                file_path = metadata.get('file_path')
+                if file_path:
+                    abs_path = os.path.join(self._tmp_base_folder, file_path)
+                    if os.path.exists(abs_path):
+                        os.remove(abs_path)
+                        logger.info(f"Removed original file {abs_path}")
 
-            # Fallback: also remove any file with the file_id prefix inside session_dir
-            if os.path.exists(session_dir):
-                for filename in os.listdir(session_dir):
-                    if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
-                        original_file = os.path.join(session_dir, filename)
-                        if os.path.exists(original_file):
-                            os.remove(original_file)
-                            logger.info(f"Removed original file {filename}")
+            for session_dir in session_dirs:
+                metadata_file = os.path.join(session_dir, f"{file_id}.json")
+                content_file = os.path.join(session_dir, f"{file_id}.content")
+
+                if os.path.exists(metadata_file):
+                    os.remove(metadata_file)
+
+                if os.path.exists(content_file):
+                    os.remove(content_file)
+
+                # Fallback: also remove any file with the file_id prefix inside each
+                # session directory (legacy layout).
+                if os.path.exists(session_dir):
+                    for filename in os.listdir(session_dir):
+                        if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
+                            original_file = os.path.join(session_dir, filename)
+                            if os.path.exists(original_file):
+                                os.remove(original_file)
+                                logger.info(f"Removed original file {filename}")
+
+                    # Keep temp storage tidy when the session directory becomes empty.
+                    if not os.listdir(session_dir):
+                        os.rmdir(session_dir)
 
             logger.info(f"Removed file {file_id} from disk")
 
