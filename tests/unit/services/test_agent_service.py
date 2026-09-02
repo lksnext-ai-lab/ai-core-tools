@@ -275,7 +275,8 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_associations', return_value={
             'tool_ids': [],
             'mcp_ids': [],
-            'skill_ids': []
+            'skill_ids': [],
+            'middleware_ids': []
         })
         mocker.patch.object(service, '_get_silo_info', return_value=None)
         mocker.patch.object(service, '_get_output_parser_info', return_value=None)
@@ -318,7 +319,8 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_associations', return_value={
             'tool_ids': [],
             'mcp_ids': [],
-            'skill_ids': []
+            'skill_ids': [],
+            'middleware_ids': []
         })
         mocker.patch.object(service, '_get_silo_info', return_value=None)
         mocker.patch.object(service, '_get_output_parser_info', return_value=None)

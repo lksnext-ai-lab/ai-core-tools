@@ -51,6 +51,9 @@ SSE_ERROR: str = "error"
 #: The stream has completed.
 SSE_DONE: str = "done"
 
+#: A HumanInTheLoop interrupt is waiting for approval.
+SSE_HITL_INTERRUPT: str = "hitl_interrupt"
+
 # ---------------------------------------------------------------------------
 # Thinking-message i18n map
 # ---------------------------------------------------------------------------
@@ -137,7 +140,7 @@ def get_thinking_message(tool_name: str, is_agent_tool: bool = False) -> str:
 # `SummarizationMiddleware`) from the agent's user-facing tokens. We must
 # suppress these chunks; otherwise the summary text leaks into the chat
 # stream every time the conversation crosses the summarization threshold.
-_INTERNAL_LC_SOURCES: frozenset[str] = frozenset({"summarization"})
+_INTERNAL_LC_SOURCES: frozenset[str] = frozenset({"summarization", "pii"})
 
 
 def _get_lc_source(metadata: Any) -> str | None:
@@ -348,6 +351,10 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
                         "Could not extract ToolMessage info for tool_end event",
                         exc_info=True,
                     )
+
+    # --- __interrupt__: HumanInTheLoop middleware paused execution ---
+    # Not handled here; the actual interrupt with proper action_requests is
+    # detected and emitted in agent_streaming_service.py after checking graph state.
 
     return events if events else None
 

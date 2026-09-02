@@ -4,6 +4,7 @@ from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
+from models.middleware import AgentMiddleware
 
 
 class MarketplaceVisibility(enum.Enum):
@@ -137,6 +138,12 @@ class Agent(Base):
     skill_associations = relationship('AgentSkill',
                                      primaryjoin=(agent_id == AgentSkill.agent_id),
                                      back_populates='agent')
+
+    # Middleware relationship
+    middleware_associations = relationship('AgentMiddleware',
+                                          primaryjoin=(agent_id == AgentMiddleware.agent_id),
+                                          back_populates='agent',
+                                          order_by=AgentMiddleware.order)
 
     # Marketplace profile (1:1)
     marketplace_profile = relationship(

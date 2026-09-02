@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
+from models.middleware import AgentMiddleware
 from models.ocr_agent import OCRAgent
 from models.ai_service import AIService
 from models.sandbox_service import SandboxService
@@ -14,6 +15,7 @@ from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
 from repositories.skill_repository import SkillRepository
+from repositories.middleware_repository import MiddlewareRepository
 
 
 class AgentRepository:
@@ -334,6 +336,10 @@ class AgentRepository:
         skills = AgentRepository.get_skills_by_app_id(db, app_id)
         skills_list = [{"skill_id": s.skill_id, "name": s.name, "description": s.description} for s in skills]
 
+        # Get middlewares
+        middlewares = MiddlewareRepository.get_all_by_app_id(db, app_id)
+        middlewares_list = [{"middleware_id": m.middleware_id, "name": m.name, "description": m.description, "middleware_type": m.middleware_type.value if m.middleware_type else "monitoring", "mcp_config_ids": [a.config_id for a in m.mcp_associations], "tool_agent_ids": (m.config or {}).get('tool_agent_ids', []) if m.config else []} for m in middlewares]
+
         return {
             'ai_services': ai_services_list,
             'sandbox_services': sandbox_services_list,
@@ -341,14 +347,15 @@ class AgentRepository:
             'output_parsers': output_parsers_list,
             'tools': tools_list,
             'mcp_configs': mcp_configs_list,
-            'skills': skills_list
+            'skills': skills_list,
+            'middlewares': middlewares_list
         }
     
     @staticmethod
     def get_agent_associations_dict(db: Session, agent_id: int) -> Dict[str, List]:
         """Get agent's current associations as a dictionary"""
         if agent_id == 0:
-            return {'tool_ids': [], 'mcp_ids': [], 'skill_ids': []}
+            return {'tool_ids': [], 'mcp_ids': [], 'skill_ids': [], 'middleware_ids': []}
 
         # Get tool associations
         tool_assocs = AgentRepository.get_agent_tool_associations(db, agent_id)
@@ -362,4 +369,8 @@ class AgentRepository:
         skill_assocs = AgentRepository.get_agent_skill_associations(db, agent_id)
         agent_skill_ids = [assoc.skill_id for assoc in skill_assocs]
 
-        return {'tool_ids': agent_tool_ids, 'mcp_ids': agent_mcp_ids, 'skill_ids': agent_skill_ids}
+        # Get middleware associations
+        middleware_assocs = db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()
+        agent_middleware_ids = [assoc.middleware_id for assoc in middleware_assocs]
+
+        return {'tool_ids': agent_tool_ids, 'mcp_ids': agent_mcp_ids, 'skill_ids': agent_skill_ids, 'middleware_ids': agent_middleware_ids}

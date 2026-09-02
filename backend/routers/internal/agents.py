@@ -415,6 +415,7 @@ async def create_or_update_agent(
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
     agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+    agent_service.update_agent_middlewares(db, created_agent_id, agent_data.middleware_ids)
 
     # Return updated agent (reuse the GET logic)
     return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
@@ -807,6 +808,74 @@ async def chat_with_agent_stream(
         raise
     except Exception as e:
         logger.error(f"Error in streaming chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
+
+
+@agents_router.post(
+    "/{agent_id}/chat/resume",
+    summary="Resume HITL-interrupted agent chat",
+    tags=["Agents"],
+    responses={500: {"description": "Internal server error"}},
+)
+async def resume_agent_chat(
+    app_id: int,
+    agent_id: int,
+    request: Request,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    decisions: Annotated[str, Form()],
+    conversation_id: Annotated[Optional[int], Form()] = None,
+):
+    """Resume an agent chat that was paused by Human-in-the-Loop middleware.
+
+    Accepts a JSON-encoded list of decisions (approve / edit / reject) and
+    resumes the LangGraph execution from the saved checkpoint.
+    """
+    try:
+        _get_agent_or_404(db, agent_id, app_id)
+
+        import json
+        parsed_decisions = json.loads(decisions)
+        if not isinstance(parsed_decisions, list):
+            raise HTTPException(status_code=400, detail="decisions must be a JSON array")
+
+        jwt_token = _extract_jwt_token(request)
+        user_context = {
+            "user_id": int(auth_context.identity.id),
+            "email": auth_context.identity.email,
+            "oauth": True,
+            "app_id": app_id,
+            "token": jwt_token,
+        }
+
+        streaming_service = AgentStreamingService(db)
+        generator = streaming_service.stream_resume_agent_chat(
+            agent_id=agent_id,
+            decisions=parsed_decisions,
+            user_context=user_context,
+            conversation_id=conversation_id,
+            db=db,
+        )
+
+        logger.info(
+            "Resuming HITL chat for agent %s by user %s with %d decisions",
+            agent_id, auth_context.identity.id, len(parsed_decisions),
+        )
+        return StreamingResponse(
+            generator,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in resume chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
 
 

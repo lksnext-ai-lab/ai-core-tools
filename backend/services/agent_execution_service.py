@@ -1552,7 +1552,7 @@ class AgentExecutionService:
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
         """
-        from tools.agentTools import create_agent, prepare_agent_config, build_human_message
+        from tools.agentTools import create_agent, prepare_agent_config, build_human_message, compute_thread_id
         from tools.langsmith_config import (
             apply_tracing_to_config,
             build_tracing_config,
@@ -1577,11 +1577,9 @@ class AgentExecutionService:
             config = prepare_agent_config(fresh_agent)
 
             # Add session-specific configuration if memory is enabled
+            config["configurable"]["thread_id"] = compute_thread_id(fresh_agent, session_id_for_cache)
             if fresh_agent.has_memory and session_id_for_cache:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session_id_for_cache}"
                 logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
-            else:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
 
             # Add the question to config
             config["configurable"]["question"] = message

@@ -2,6 +2,11 @@ from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
 from langchain.agents.middleware import SummarizationMiddleware
 from utils.schema_utils import sanitize_identifier, ensure_json_schema_types
+from langchain.agents.middleware.model_call_limit import ModelCallLimitMiddleware
+from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
+from langchain.agents.middleware.pii import PIIMiddleware
+from tools.middleware.llm_pii import LLMPIIMiddleware
+from langchain.agents.middleware import HumanInTheLoopMiddleware, AgentMiddleware
 from models.agent import Agent
 from models.silo import Silo
 from langchain.tools import BaseTool, tool
@@ -18,8 +23,8 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from services.agent_cache_service import CheckpointerCacheService
 from langchain_core.documents import Document
 from langchain_core.tools import StructuredTool
-import json
 import asyncio
+import json
 import os
 import base64
 import mimetypes
@@ -38,6 +43,18 @@ from tools.sandbox.factory import SandboxProviderUnavailableError
 
 logger = get_logger(__name__)
 
+MCP_TOOLS_TIMEOUT = 10  # seconds to wait for MCP servers to respond
+
+
+def _extract_mcp_root_causes(exc: BaseException) -> str:
+    """Extract concise root-cause messages from (possibly nested) ExceptionGroups."""
+    causes: list[str] = []
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
+            causes.append(_extract_mcp_root_causes(sub))
+    else:
+        causes.append(f"{type(exc).__name__}: {exc}")
+    return "; ".join(causes)
 
 _AUTH_QUERY_PARAMS = {
     "access_token",
@@ -208,6 +225,31 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
+
+def _build_summarization_llm_from_service(agent, ai_service_id: int):
+    """Build a summarization LLM from a specific AIService ID.
+
+    Looks up the AIService by ID within the agent's app and instantiates the
+    appropriate LangChain chat model via :func:`tools.aiServiceTools.create_llm_from_service`.
+    Supports all configured providers (OpenAI, Anthropic, MistralAI, Azure, Google, Custom).
+    """
+    from tools.aiServiceTools import create_llm_from_service
+
+    if hasattr(agent, 'app') and agent.app and hasattr(agent.app, 'ai_services'):
+        for svc in agent.app.ai_services:
+            if svc.service_id == ai_service_id:
+                try:
+                    llm = create_llm_from_service(svc, temperature=0)
+                    logger.info(f"Summarization using AIService id={ai_service_id} ({svc.name})")
+                    return llm
+                except Exception as e:
+                    logger.warning(f"Failed to build summarization LLM from service {ai_service_id}: {e}")
+                    return None
+
+    logger.warning(f"AIService id={ai_service_id} not found in agent's app — using agent LLM")
+    return None
+
+
 async def create_agent(
     agent: Agent,
     search_params=None,
@@ -332,16 +374,76 @@ async def create_agent(
         )
 
     middleware = []
+
+    # If a summarization middleware entity is attached, let it override
+    # memory-based defaults even when has_memory=True.
+    summarization_assoc_config = None
+    if hasattr(agent, 'middleware_associations') and agent.middleware_associations:
+        for assoc in agent.middleware_associations:
+            if assoc.middleware and assoc.middleware.middleware_type.value == 'summarization':
+                summarization_assoc_config = assoc.middleware.config or {}
+                break
+
     if agent.has_memory:
         max_tokens = agent.memory_max_tokens or 4000
         max_messages = agent.memory_max_messages or 20
         from models.agent import DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
         trim_tokens = agent.memory_summarize_threshold or DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
-        summarization = SummarizationMiddleware(
-            model=llm,
-            trigger=("tokens", max_tokens),
-            keep=("messages", max_messages),
-            trim_tokens_to_summarize=trim_tokens,
+        summarization_llm = llm
+
+        if summarization_assoc_config is not None:
+            max_tokens = summarization_assoc_config.get('trigger_tokens', max_tokens)
+            max_messages = summarization_assoc_config.get('keep_messages', max_messages)
+            # Use 4000 as fallback, not agent.memory_summarize_threshold, to avoid inheriting unrelated agent settings
+            trim_tokens = summarization_assoc_config.get('trim_tokens', 4000)
+
+            summarization_model_value = summarization_assoc_config.get('summarization_model', 'agent_llm')
+            if summarization_model_value and summarization_model_value != 'agent_llm':
+                try:
+                    service_id = int(summarization_model_value.split(':', 1)[1])
+                    summarization_llm = _build_summarization_llm_from_service(agent, service_id) or llm
+                except (ValueError, IndexError):
+                    logger.warning(f"Invalid ai_service format '{summarization_model_value}' — using agent LLM")
+
+        _trigger_tokens = max_tokens
+        _keep_messages = max_messages
+        _trim_tokens = trim_tokens
+        _s_llm = summarization_llm
+        _agent_id = agent.agent_id
+        _model_name = (
+            getattr(_s_llm, "model_name", None)
+            or getattr(_s_llm, "model", None)
+            or type(_s_llm).__name__
+        )
+
+        class _DiagnosticSummarizationMiddleware(SummarizationMiddleware):
+            """Wraps SummarizationMiddleware to add diagnostic logging."""
+            async def abefore_model(self, state, runtime):
+                msgs = state.get("messages", [])
+                approx = self.token_counter(msgs)
+                logger.info(
+                    f"[Summarization] abefore_model: agent={_agent_id}, model={_model_name}, "
+                    f"messages={len(msgs)}, approx_tokens={approx}, trigger={self.trigger}"
+                )
+                result = await super().abefore_model(state, runtime)
+                if result is not None:
+                    new_count = len(result.get("messages", []))
+                    logger.info(
+                        f"[Summarization] TRIGGERED for agent {_agent_id} (model={_model_name}): "
+                        f"reduced to {new_count} messages (summary generated)"
+                    )
+                else:
+                    logger.info(
+                        f"[Summarization] NOT triggered for agent {_agent_id} "
+                        f"(approx_tokens={approx} < trigger={self.trigger})"
+                    )
+                return result
+
+        summarization = _DiagnosticSummarizationMiddleware(
+            model=_s_llm,
+            trigger=("tokens", _trigger_tokens),
+            keep=("messages", _keep_messages),
+            trim_tokens_to_summarize=_trim_tokens,
         )
         middleware.append(summarization)
         logger.info(
@@ -349,6 +451,167 @@ async def create_agent(
             f"trigger=('tokens', {max_tokens}), keep=('messages', {max_messages}), "
             f"trim_tokens_to_summarize={trim_tokens}"
         )
+
+    if hasattr(agent, 'middleware_associations') and agent.middleware_associations:
+        for assoc in agent.middleware_associations:
+            if not assoc.middleware:
+                continue
+            mw_type = assoc.middleware.middleware_type.value
+            mw_config = assoc.middleware.config or {}
+            if mw_type == 'monitoring':
+                from tools.middleware.monitoring import MonitoringMiddleware
+                # Must match the checkpointer's thread_id so a HITL pause/resume
+                # (which rebuilds this chain from scratch) can find its
+                # pre-interrupt accumulated totals again.
+                thread_id = compute_thread_id(agent, session_id)
+                middleware.append(MonitoringMiddleware(agent_id=agent.agent_id, config=mw_config, thread_id=thread_id))
+            elif mw_type == 'summarization':
+                # Only add if not already added via has_memory (avoid duplicates)
+                if not agent.has_memory:
+                    summarization_model_value = mw_config.get('summarization_model', 'agent_llm')
+                    summarization_llm = llm
+                    if summarization_model_value and summarization_model_value != 'agent_llm':
+                        try:
+                            service_id = int(summarization_model_value.split(':', 1)[1])
+                            summarization_llm = _build_summarization_llm_from_service(agent, service_id) or llm
+                        except (ValueError, IndexError):
+                            logger.warning(f"Invalid ai_service format '{summarization_model_value}' — using agent LLM")
+                    else:
+                        logger.info(f"Summarization using agent's own LLM")
+                    trigger_tokens = mw_config.get('trigger_tokens', 4000)
+                    keep_messages = mw_config.get('keep_messages', 20)
+                    trim_tokens = mw_config.get('trim_tokens', 4000)
+                    summarization_mw = SummarizationMiddleware(
+                        model=summarization_llm,
+                        trigger=("tokens", trigger_tokens),
+                        keep=("messages", keep_messages),
+                        trim_tokens_to_summarize=trim_tokens,
+                    )
+                    middleware.append(summarization_mw)
+                    logger.info(
+                        f"SummarizationMiddleware added via middleware entity for agent {agent.agent_id}: "
+                        f"trigger=('tokens', {trigger_tokens}), keep=('messages', {keep_messages}), "
+                        f"trim_tokens_to_summarize={trim_tokens}"
+                    )
+            elif mw_type == 'model_call_limit':
+                max_calls = mw_config.get('max_calls', 50)
+                _mcl_agent_id = agent.agent_id
+                _mcl_limit = max_calls
+
+                class _DiagnosticModelCallLimitMiddleware(ModelCallLimitMiddleware):
+                    """Wraps ModelCallLimitMiddleware to log when the limit triggers."""
+                    async def abefore_model(self, state, runtime):
+                        result = await super().abefore_model(state, runtime)
+                        if result is not None:
+                            logger.info(
+                                f"[ModelCallLimit] TRIGGERED for agent {_mcl_agent_id}: "
+                                f"run_limit={_mcl_limit} reached, jumping to end"
+                            )
+                        return result
+
+                middleware.append(_DiagnosticModelCallLimitMiddleware(run_limit=max_calls))
+                logger.info(f"ModelCallLimitMiddleware enabled for agent {agent.agent_id} (limit={max_calls})")
+            elif mw_type == 'tool_call_limit':
+                max_calls = mw_config.get('max_calls', 100)
+                _tcl_agent_id = agent.agent_id
+                _tcl_limit = max_calls
+
+                class _DiagnosticToolCallLimitMiddleware(ToolCallLimitMiddleware):
+                    """Wraps ToolCallLimitMiddleware to log when the limit triggers."""
+                    async def aafter_model(self, state, runtime):
+                        result = await super().aafter_model(state, runtime)
+                        if result is not None:
+                            from langchain_core.messages import ToolMessage
+                            blocked = [
+                                m for m in result.get("messages", [])
+                                if isinstance(m, ToolMessage) and m.status == "error"
+                            ]
+                            if blocked:
+                                blocked_names = [m.name for m in blocked]
+                                logger.info(
+                                    f"[ToolCallLimit] TRIGGERED for agent {_tcl_agent_id}: "
+                                    f"run_limit={_tcl_limit} reached, blocked calls={blocked_names}"
+                                )
+                        return result
+
+                middleware.append(_DiagnosticToolCallLimitMiddleware(run_limit=max_calls))
+                logger.info(f"ToolCallLimitMiddleware enabled for agent {agent.agent_id} (limit={max_calls})")
+            elif mw_type == 'pii':
+                pii_types = mw_config.get('pii_types', ['email', 'credit_card', 'ip', 'mac_address', 'url'])
+                strategy = mw_config.get('strategy', 'redact')
+                apply_to_input = mw_config.get('apply_to_input', True)
+                apply_to_output = mw_config.get('apply_to_output', True)
+                apply_to_tool_results = mw_config.get('apply_to_tool_results', True)
+                # PIIMiddleware accepts a single pii_type — create one instance per type
+                for pii_type in pii_types:
+                    middleware.append(PIIMiddleware(
+                        pii_type=pii_type,
+                        strategy=strategy,
+                        apply_to_input=apply_to_input,
+                        apply_to_output=apply_to_output,
+                        apply_to_tool_results=apply_to_tool_results,
+                    ))
+                # Add a logging middleware after PII to show redacted content
+                class _PIILogMiddleware(AgentMiddleware):
+                    def before_model(self, state, runtime):
+                        msgs = state.get("messages", [])
+                        for msg in reversed(msgs):
+                            if isinstance(msg, HumanMessage):
+                                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                                logger.info(f"[PII] Message after redaction: {content[:300]}")
+                                break
+                        return None
+                middleware.append(_PIILogMiddleware())
+                logger.info(f"PIIMiddleware enabled for agent {agent.agent_id} (types={pii_types}, strategy={strategy})")
+
+                llm_detector_cfg = mw_config.get('llm_detector') or {}
+                if llm_detector_cfg.get('enabled'):
+                    ai_service_value = llm_detector_cfg.get('ai_service', 'agent_llm')
+                    detector_llm = llm
+                    if ai_service_value and ai_service_value != 'agent_llm':
+                        try:
+                            service_id = int(ai_service_value.split(':', 1)[1])
+                            detector_llm = _build_summarization_llm_from_service(agent, service_id) or llm
+                        except (ValueError, IndexError):
+                            logger.warning(
+                                f"Invalid ai_service format '{ai_service_value}' for LLM PII detector "
+                                f"— using agent LLM"
+                            )
+
+                    llm_entities = list(pii_types) + list(llm_detector_cfg.get('extra_entities') or [])
+
+                    middleware.append(LLMPIIMiddleware(
+                        llm=detector_llm,
+                        entities=llm_entities,
+                        strategy=strategy,
+                        apply_to_input=apply_to_input,
+                        apply_to_output=apply_to_output,
+                        apply_to_tool_results=apply_to_tool_results,
+                    ))
+                    logger.info(
+                        f"LLMPIIMiddleware enabled for agent {agent.agent_id} "
+                        f"(ai_service={ai_service_value}, entities={llm_entities})"
+                    )
+            elif mw_type == 'human_in_the_loop':
+                interrupt_on = mw_config.get('interrupt_on', {})
+                if interrupt_on:
+                    description_prefix = mw_config.get('description_prefix', 'Tool execution requires approval')
+                    middleware.append(HumanInTheLoopMiddleware(
+                        interrupt_on=interrupt_on,
+                        description_prefix=description_prefix,
+                    ))
+                    logger.info(f"HumanInTheLoopMiddleware enabled for agent {agent.agent_id} (tools={list(interrupt_on.keys())})")
+                else:
+                    logger.warning(f"HumanInTheLoopMiddleware skipped for agent {agent.agent_id}: 'interrupt_on' config is empty")
+            
+            elif mw_type == 'guardrails':
+                from tools.middleware.guardrails import GuardrailsMiddleware
+                mw_instance = GuardrailsMiddleware(config=mw_config)
+                middleware.append(mw_instance)
+                logger.info(f"GuardrailsMiddleware enabled for agent {agent.agent_id}")
+
+            else:
+                logger.warning(f"Unknown middleware type '{mw_type}' for agent {agent.agent_id} — skipped")
 
     tools = []
 
@@ -452,17 +715,28 @@ async def create_agent(
     try:
         logger.info("Starting MCP tools loading...")
         mcp_client = await MCPClientManager().get_client(agent, user_context)
-        if (mcp_client):
-            mcp_tools = await mcp_client.get_tools()
+        if mcp_client:
+            mcp_tools = await asyncio.wait_for(
+                mcp_client.get_tools(), timeout=MCP_TOOLS_TIMEOUT
+            )
             logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
             for tool in mcp_tools:
                 if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
                     ensure_json_schema_types(tool.args_schema)
-            if (mcp_tools):
+            if mcp_tools:
                 tools.extend(mcp_tools)
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"MCP tools loading timed out after {MCP_TOOLS_TIMEOUT}s — "
+            "agent will continue without MCP tools"
+        )
+        mcp_client = None
     except Exception as e:
-        logger.error(f"Error loading MCP tools: {e}", exc_info=True)
-        # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
+        root_cause = _extract_mcp_root_causes(e) if isinstance(e, BaseExceptionGroup) else str(e)
+        logger.warning(
+            f"MCP tools unavailable (agent will continue without them): {root_cause}"
+        )
+        logger.debug("Full MCP tools loading error:", exc_info=True)
         mcp_client = None
 
     # Add skill loader tool if agent has skills
@@ -553,11 +827,19 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     )
 
 
+def compute_thread_id(agent, session_id=None) -> str:
+    """Checkpointer thread_id for this agent/session — the single formula every
+    caller (config, MonitoringMiddleware) must agree on to stay correlated."""
+    if getattr(agent, "has_memory", False) and session_id:
+        return f"thread_{agent.agent_id}_{session_id}"
+    return f"thread_{agent.agent_id}"
+
+
 def prepare_agent_config(agent):
     """Helper function to prepare agent configuration."""
     config = {
         "configurable": {
-            "thread_id": f"thread_{agent.agent_id}"
+            "thread_id": compute_thread_id(agent)
         },
         "recursion_limit": AICT_AGENT_RECURSION_LIMIT,
     }
@@ -620,7 +902,7 @@ def build_human_message(
     """
     from utils.config import get_app_config
 
-    formatted_message = agent.prompt_template.format(question=message)
+    formatted_message = agent.prompt_template.format(question=message) if agent.prompt_template else message
 
     if not image_files:
         return HumanMessage(content=formatted_message)
@@ -855,18 +1137,28 @@ class IACTTool(BaseTool):
             logger.info(f"Starting MCP tools loading for sub-agent {agent.agent_id}...")
             instance.mcp_client = await MCPClientManager().get_client(agent, user_context)
             if instance.mcp_client:
-                mcp_tools = await instance.mcp_client.get_tools()
+                mcp_tools = await asyncio.wait_for(
+                    instance.mcp_client.get_tools(), timeout=MCP_TOOLS_TIMEOUT
+                )
                 logger.info(
                     f"MCP tools loaded successfully for sub-agent {agent.agent_id}: "
                     f"{len(mcp_tools)} tools"
                 )
                 if mcp_tools:
                     tools.extend(mcp_tools)
-        except Exception as e:
-            logger.error(
-                f"Error loading MCP tools for sub-agent {agent.agent_id}: {e}",
-                exc_info=True,
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"MCP tools loading timed out for sub-agent {agent.agent_id} "
+                f"after {MCP_TOOLS_TIMEOUT}s — sub-agent will continue without MCP tools"
             )
+            instance.mcp_client = None
+        except Exception as e:
+            root_cause = _extract_mcp_root_causes(e) if isinstance(e, BaseExceptionGroup) else str(e)
+            logger.warning(
+                f"MCP tools unavailable for sub-agent {agent.agent_id} "
+                f"(will continue without them): {root_cause}"
+            )
+            logger.debug("Full MCP tools loading error for sub-agent:", exc_info=True)
             instance.mcp_client = None
 
         # Build system prompt with optional skills section (LangChain v1 pattern)

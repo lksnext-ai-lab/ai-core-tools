@@ -97,7 +97,6 @@ class RuntimeSearchParamsSchema(BaseModel):
             raise ValueError("must be between 0 and 1")
         return v
 
-
 # ==================== AGENT SCHEMAS ====================
 
 class AgentListItemSchema(BaseModel):
@@ -140,6 +139,7 @@ class AgentDetailSchema(BaseModel):
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
     skill_ids: List[int] = []
+    middleware_ids: List[int] = []
     created_at: Optional[datetime] = None
     request_count: int
     # OCR-specific fields
@@ -158,6 +158,7 @@ class AgentDetailSchema(BaseModel):
     tools: List[Dict[str, Any]]
     mcp_configs: List[Dict[str, Any]]
     skills: List[Dict[str, Any]]
+    middlewares: List[Dict[str, Any]] = []
     marketplace_visibility: Optional[str] = None
     marketplace_profile: Optional[Dict[str, Any]] = None
     is_frozen: bool = False
@@ -193,6 +194,7 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
+    middleware_ids: Optional[List[int]] = []
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None

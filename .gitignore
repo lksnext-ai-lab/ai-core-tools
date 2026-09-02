@@ -58,6 +58,14 @@ nginx/
 develop/
 reports/
 
+docker/docker-compose.override.yml
+
+# Spec-kit
+.github/agents/speckit.*
+prompts/
+specs/
+.specify/
+
 # Claude Code agent system: ship the agents/commands/skills/hooks,
 # but keep per-run artifacts and personal settings out of git.
 .claude/specs/

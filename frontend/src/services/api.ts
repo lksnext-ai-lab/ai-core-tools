@@ -858,7 +858,7 @@ class ApiService {
       method: 'POST',
     });
   }
-  
+
   async deleteAIService(appId: number, serviceId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/ai-services/${serviceId}`, {
       method: 'DELETE',
@@ -1198,6 +1198,34 @@ class ApiService {
     });
   }
 
+  async getMiddlewares(appId: number) {
+    return this.request(`/internal/apps/${appId}/middlewares/`);
+  }
+
+  async getMiddleware(appId: number, middlewareId: number) {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`);
+  }
+
+  async createMiddleware(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/middlewares/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMiddleware(appId: number, middlewareId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMiddleware(appId: number, middlewareId: number) {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async getMCPServers(appId: number): Promise<MCPServerListItem[]> {
     return this.request(`/internal/apps/${appId}/mcp-servers/`);
   }
@@ -1462,7 +1490,7 @@ class ApiService {
     if (newFolderId !== undefined) {
       formData.append('new_folder_id', newFolderId.toString());
     }
-    
+
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/media/${mediaId}/move`, {
       method: 'POST',
       body: formData,
@@ -1475,6 +1503,7 @@ class ApiService {
     })
   }
 
+  // ==================== SILOS API ====================
   async getSilos(appId: number): Promise<Silo[]> {
     return this.request(`/internal/apps/${appId}/silos/`);
   }
@@ -1746,7 +1775,7 @@ class ApiService {
     if (newFolderId !== undefined) {
       formData.append('new_folder_id', newFolderId.toString());
     }
-    
+
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}/resources/${resourceId}/move`, {
       method: 'POST',
       body: formData,
@@ -1786,15 +1815,15 @@ class ApiService {
   async chatWithAgent(appId: number, agentId: number, message: string, files?: File[], searchParams?: any, conversationId?: number | null): Promise<{ response: string | Record<string, unknown>; conversation_id?: number }> {
     const formData = new FormData();
     formData.append('message', message);
-    
+
     if (searchParams) {
       formData.append('search_params', JSON.stringify(searchParams));
     }
-    
+
     if (conversationId) {
       formData.append('conversation_id', conversationId.toString());
     }
-    
+
     if (files && files.length > 0) {
       files.forEach((file) => {
         formData.append(`files`, file);
@@ -1879,6 +1908,59 @@ class ApiService {
         const lines = buffer.split('\n\n');
         buffer = lines.pop() || '';
 
+        this.parseSSELines(lines, options.onEvent);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  async resumeAgentChat(
+    appId: number,
+    agentId: number,
+    decisions: Array<{ type: string; edited_action?: { name: string; args: Record<string, unknown> }; message?: string }>,
+    options: {
+      conversationId?: number | null;
+      onEvent: (event: StreamEvent) => void;
+      signal?: AbortSignal;
+    }
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('decisions', JSON.stringify(decisions));
+
+    if (options.conversationId) {
+      formData.append('conversation_id', options.conversationId.toString());
+    }
+
+    const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/resume`;
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ReadableStream not supported');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
         this.parseSSELines(lines, options.onEvent);
       }
     } finally {
@@ -2413,7 +2495,7 @@ class ApiService {
   ): Promise<FullAppImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const params = new URLSearchParams();
     params.append('conflict_mode', conflictMode);
 

@@ -114,6 +114,12 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      path: '/apps/:appId/middlewares',
+      name: 'Middlewares',
+      icon: <Layers size={16} />,
+      section: 'appNavigation'
+    },
+    {
       path: '/apps/:appId/settings',
       name: 'App Settings',
       icon: <Settings size={16} />,

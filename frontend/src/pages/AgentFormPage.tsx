@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Layers, Plus } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
+import { toast } from 'sonner';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
@@ -58,6 +59,7 @@ interface Agent {
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
+  middlewares: Array<{ middleware_id: number; name: string; description?: string; middleware_type: string; mcp_config_ids?: number[]; tool_agent_ids?: number[] }>;
 }
 
 interface AgentFormData {
@@ -81,6 +83,7 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  middleware_ids: number[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -219,6 +222,7 @@ function AgentFormPage() {
     tool_ids: [],
     mcp_config_ids: [],
     skill_ids: [],
+    middleware_ids: [],
     rag_k: 10,
     rag_search_type: 'similarity',
     rag_score_threshold: null,
@@ -308,6 +312,7 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        middleware_ids: response.middleware_ids || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -374,21 +379,71 @@ function AgentFormPage() {
   };
 
   const handleToolToggle = (toolId: number) => {
-    setFormData(prev => ({
-      ...prev,
-      tool_ids: prev.tool_ids.includes(toolId)
+    setFormData(prev => {
+      const nextToolIds = prev.tool_ids.includes(toolId)
         ? prev.tool_ids.filter(id => id !== toolId)
-        : [...prev.tool_ids, toolId]
-    }));
+        : [...prev.tool_ids, toolId];
+
+      // Auto-deselect HITL middlewares that become fully disconnected after removing this tool agent
+      const disabledMiddlewareIds = (agent?.middlewares ?? [])
+        .filter(mw => {
+          const mcpIds = mw.mcp_config_ids ?? [];
+          const toolAgentIds = mw.tool_agent_ids ?? [];
+          if (mcpIds.length === 0 && toolAgentIds.length === 0) return false;
+          const connectedMcps = mcpIds.filter(id => prev.mcp_config_ids.includes(id)).length;
+          const connectedToolAgents = toolAgentIds.filter(id => nextToolIds.includes(id)).length;
+          return connectedMcps + connectedToolAgents === 0;
+        })
+        .map(mw => mw.middleware_id);
+
+      const removedIds = prev.middleware_ids.filter(id => disabledMiddlewareIds.includes(id));
+      if (removedIds.length > 0) {
+        const removedNames = (agent?.middlewares ?? [])
+          .filter(mw => removedIds.includes(mw.middleware_id))
+          .map(mw => mw.name);
+        toast.warning(`Middleware${removedNames.length > 1 ? 's' : ''} "${removedNames.join('", "')}" removed — required tools no longer connected`);
+      }
+
+      return {
+        ...prev,
+        tool_ids: nextToolIds,
+        middleware_ids: prev.middleware_ids.filter(id => !disabledMiddlewareIds.includes(id)),
+      };
+    });
   };
 
   const handleMCPToggle = (configId: number) => {
-    setFormData(prev => ({
-      ...prev,
-      mcp_config_ids: prev.mcp_config_ids.includes(configId)
+    setFormData(prev => {
+      const nextMcpIds = prev.mcp_config_ids.includes(configId)
         ? prev.mcp_config_ids.filter(id => id !== configId)
-        : [...prev.mcp_config_ids, configId]
-    }));
+        : [...prev.mcp_config_ids, configId];
+
+      // Auto-deselect middlewares whose required MCPs are no longer connected (and have no tool agents connected either)
+      const disabledMiddlewareIds = (agent?.middlewares ?? [])
+        .filter(mw => {
+          const mcpIds = mw.mcp_config_ids ?? [];
+          const toolAgentIds = mw.tool_agent_ids ?? [];
+          if (mcpIds.length === 0 && toolAgentIds.length === 0) return false;
+          const connectedMcps = mcpIds.filter(id => nextMcpIds.includes(id)).length;
+          const connectedToolAgents = toolAgentIds.filter(id => prev.tool_ids.includes(id)).length;
+          return connectedMcps + connectedToolAgents === 0;
+        })
+        .map(mw => mw.middleware_id);
+
+      const removedIds = prev.middleware_ids.filter(id => disabledMiddlewareIds.includes(id));
+      if (removedIds.length > 0) {
+        const removedNames = (agent?.middlewares ?? [])
+          .filter(mw => removedIds.includes(mw.middleware_id))
+          .map(mw => mw.name);
+        toast.warning(`Middleware${removedNames.length > 1 ? 's' : ''} "${removedNames.join('", "')}" removed — required MCP no longer connected`);
+      }
+
+      return {
+        ...prev,
+        mcp_config_ids: nextMcpIds,
+        middleware_ids: prev.middleware_ids.filter(id => !disabledMiddlewareIds.includes(id)),
+      };
+    });
   };
 
   const handleSkillToggle = (skillId: number) => {
@@ -397,6 +452,28 @@ function AgentFormPage() {
       skill_ids: prev.skill_ids.includes(skillId)
         ? prev.skill_ids.filter(id => id !== skillId)
         : [...prev.skill_ids, skillId]
+    }));
+  };
+
+  const getMiddlewareStatus = (mw: { mcp_config_ids?: number[]; tool_agent_ids?: number[] }): 'available' | 'disabled' | 'partial' => {
+    const mcpIds = mw.mcp_config_ids ?? [];
+    const toolAgentIds = mw.tool_agent_ids ?? [];
+    if (mcpIds.length === 0 && toolAgentIds.length === 0) return 'available';
+    const connectedMcps = mcpIds.filter(id => formData.mcp_config_ids.includes(id)).length;
+    const connectedToolAgents = toolAgentIds.filter(id => formData.tool_ids.includes(id)).length;
+    const totalDeps = mcpIds.length + toolAgentIds.length;
+    const connectedDeps = connectedMcps + connectedToolAgents;
+    if (connectedDeps === 0) return 'disabled';
+    if (connectedDeps < totalDeps) return 'partial';
+    return 'available';
+  };
+
+  const handleMiddlewareToggle = (middlewareId: number) => {
+    setFormData(prev => ({
+      ...prev,
+      middleware_ids: prev.middleware_ids.includes(middlewareId)
+        ? prev.middleware_ids.filter(id => id !== middlewareId)
+        : [...prev.middleware_ids, middlewareId]
     }));
   };
 
@@ -518,6 +595,7 @@ function AgentFormPage() {
       tool_ids: formData.tool_ids,
       mcp_config_ids: formData.mcp_config_ids,
       skill_ids: formData.skill_ids,
+      middleware_ids: formData.middleware_ids,
       // OCR-specific fields
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
@@ -531,18 +609,16 @@ function AgentFormPage() {
       app_id: Number.parseInt(appId),
     };
 
-    const isNew = Number.parseInt(agentId) === 0;
-
     setError(null);
     setSaving(true);
     const result = await mutate(
       () =>
-        isNew
+        isNewAgent
           ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
           : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData),
       {
-        loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
-        success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
+        loading: isNewAgent ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
+        success: isNewAgent ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
         error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
       },
     );
@@ -629,7 +705,7 @@ function AgentFormPage() {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
@@ -687,7 +763,7 @@ function AgentFormPage() {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Prompts & Instructions</h3>
               </div>
-              
+
               <div className="space-y-6">
                 <div>
                   <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
@@ -743,7 +819,7 @@ function AgentFormPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-6">
                       <div>
                         <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
@@ -837,7 +913,7 @@ function AgentFormPage() {
                       </div>
                       <h3 className="text-xl font-semibold text-gray-900">Configuration</h3>
                     </div>
-                    
+
                     {/* No AI Services Warning */}
                     {agent?.ai_services.length === 0 && renderNoAIServicesWarning(false)}
 
@@ -1117,11 +1193,10 @@ function AgentFormPage() {
                               key={tool.id}
                               type="button"
                               onClick={toggle}
-                              className={`text-left p-3 rounded-xl border-2 transition-colors ${
-                                active
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                              }`}
+                              className={`text-left p-3 rounded-xl border-2 transition-colors ${active
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                                }`}
                             >
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-base">{tool.icon}</span>
@@ -1160,7 +1235,7 @@ function AgentFormPage() {
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
                   </div>
-                  
+
                   {/* No AI Services Warning */}
                   {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
 
@@ -1256,7 +1331,7 @@ function AgentFormPage() {
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">Available Tools</h3>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {agent.tools.map((tool) => (
                       <label
@@ -1279,7 +1354,7 @@ function AgentFormPage() {
                               {tool.name}
                             </span>
                           </div>
-                          <div 
+                          <div
                             className={`w-2 h-2 rounded-full ${
                             formData.tool_ids.includes(tool.agent_id)
                               ? 'bg-blue-500'
@@ -1290,7 +1365,7 @@ function AgentFormPage() {
                       </label>
                     ))}
                   </div>
-                  
+
                   {formData.tool_ids.length > 0 && (
                     <div className="mt-4 p-4 bg-blue-50 rounded-xl">
                       <p className="text-sm text-blue-800">
@@ -1313,7 +1388,7 @@ function AgentFormPage() {
                       Model Context Protocol
                     </div>
                   </div>
-                  
+
                   {agent.mcp_configs.length > 0 ? (
                     <>
                       <div className="mb-4 p-4 bg-purple-50 rounded-xl">
@@ -1322,13 +1397,13 @@ function AgentFormPage() {
                           <div>
                             <p className="text-sm text-purple-800 font-medium">What are MCP Servers?</p>
                             <p className="text-xs text-purple-700 mt-1">
-                              MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources. 
+                              MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources.
                               Select the servers this agent should have access to.
                             </p>
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agent.mcp_configs.map((mcp) => (
                           <label
@@ -1349,14 +1424,13 @@ function AgentFormPage() {
                                 />
                                 <span className="ml-3 text-sm font-medium text-gray-900">{mcp.name}</span>
                               </div>
-                              <div className={`w-2 h-2 rounded-full ${
-                                formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
-                              }`} />
+                              <div className={`w-2 h-2 rounded-full ${formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
+                                }`} />
                             </div>
                           </label>
                         ))}
                       </div>
-                      
+
                       {formData.mcp_config_ids.length > 0 && (
                         <div className="mt-4 p-4 bg-purple-50 rounded-xl">
                           <p className="text-sm text-purple-800">
@@ -1422,9 +1496,8 @@ function AgentFormPage() {
                                 />
                                 <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
                               </div>
-                              <div className={`w-2 h-2 rounded-full ${
-                                formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
-                              }`} />
+                              <div className={`w-2 h-2 rounded-full ${formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
+                                }`} />
                             </div>
                             {skill.description && (
                               <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
@@ -1463,6 +1536,132 @@ function AgentFormPage() {
                   )}
                 </div>
               )}
+
+              {/* Middlewares Card - Only for regular agents */}
+              {agent?.middlewares && formData.type !== 'ocr_agent' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+                        <Layers className="w-5 h-5 mr-3" />
+                        {' '}Middlewares
+                      </h3>
+                      <p className="text-gray-600 mt-1">Attach middlewares to monitor and extend agent execution</p>
+                    </div>
+                  </div>
+
+                  {agent.middlewares.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {agent.middlewares.map((mw) => {
+                          const status = getMiddlewareStatus(mw);
+                          const isSelected = formData.middleware_ids.includes(mw.middleware_id);
+                          const isDisabled = status === 'disabled';
+                          const isPartial = status === 'partial';
+                          const mcpIds = mw.mcp_config_ids ?? [];
+                          const toolAgentIds = mw.tool_agent_ids ?? [];
+
+                          // Resolve MCP names for display
+                          const allMcpNames = (agent.mcp_configs ?? [])
+                            .filter(c => mcpIds.includes(c.config_id))
+                            .map(c => c.name);
+                          const missingMcpNames = (agent.mcp_configs ?? [])
+                            .filter(c => mcpIds.includes(c.config_id) && !formData.mcp_config_ids.includes(c.config_id))
+                            .map(c => c.name);
+                          // Resolve tool agent names for display
+                          const allToolAgentNames = (agent.tools ?? [])
+                            .filter(t => toolAgentIds.includes(t.agent_id))
+                            .map(t => t.name);
+                          const missingToolAgentNames = (agent.tools ?? [])
+                            .filter(t => toolAgentIds.includes(t.agent_id) && !formData.tool_ids.includes(t.agent_id))
+                            .map(t => t.name);
+                          const missingAll = [...missingMcpNames, ...missingToolAgentNames];
+
+                          return (
+                            <button
+                              key={mw.middleware_id}
+                              type="button"
+                              className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full relative ${isDisabled
+                                  ? 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
+                                  : isSelected
+                                    ? 'border-indigo-500 bg-indigo-50 cursor-pointer'
+                                    : 'border-gray-200 bg-gray-50 hover:border-gray-300 cursor-pointer'
+                                }`}
+                              onClick={() => !isDisabled && handleMiddlewareToggle(mw.middleware_id)}
+                              disabled={isDisabled}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => !isDisabled && handleMiddlewareToggle(mw.middleware_id)}
+                                    disabled={isDisabled}
+                                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span className="ml-3 text-sm font-medium text-gray-900">{mw.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  {isPartial && (
+                                    <div className="relative group">
+                                      <AlertTriangle className="w-4 h-4 text-amber-500 cursor-help" />
+                                      <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10 w-56 p-2.5 text-xs bg-gray-900 text-white rounded-lg shadow-lg pointer-events-none">
+                                        <p className="font-medium mb-1">Partially connected</p>
+                                        <p className="text-gray-300">
+                                          Not active for: {missingAll.join(', ')}
+                                        </p>
+                                        <div className="absolute bottom-0 right-3 translate-y-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
+                                      </div>
+                                    </div>
+                                  )}
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                    {mw.middleware_type}
+                                  </span>
+                                </div>
+                              </div>
+                              {mw.description && (
+                                <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{mw.description.split('###')[0].trim()}</p>
+                              )}
+                              {isDisabled && (
+                                <p className="mt-2 ml-7 text-xs text-red-500 flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                                  Requires unselected {[...allMcpNames, ...allToolAgentNames].length > 1 ? 'resources' : 'resource'}: {[...allMcpNames, ...allToolAgentNames].join(', ')}
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {formData.middleware_ids.length > 0 && (
+                        <div className="mt-4 p-4 bg-indigo-50 rounded-xl">
+                          <p className="text-sm text-indigo-800">
+                            <span className="font-medium">{formData.middleware_ids.length}</span> middleware{formData.middleware_ids.length === 1 ? '' : 's'} selected.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Layers className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h4 className="text-lg font-medium text-gray-900 mb-2">No Middlewares Available</h4>
+                      <p className="text-gray-500 mb-4">
+                        You haven't created any middlewares yet. Create middlewares in the settings to add monitoring and other capabilities.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/apps/${appId}/middlewares`)}
+                        className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <Layers className="w-4 h-4 mr-2" />
+                        {' '}Manage Middlewares
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1483,182 +1682,182 @@ function AgentFormPage() {
                   <span>Save the agent first to configure marketplace publishing.</span>
                 </div>
               ) : (
-              <>
-              {/* Visibility Control */}
-              <div className="mb-6">
-                <label htmlFor="marketplace-visibility" className="block text-sm font-medium text-gray-700 mb-2">Marketplace Visibility</label>
-                <div className="flex items-center gap-4">
-                  <select
-                    id="marketplace-visibility"
-                    value={marketplaceVisibility}
-                    onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
-                    disabled={formData.is_tool}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  >
-                    <option value="unpublished">Unpublished (not listed)</option>
-                    <option value="private">Private (visible to app members only)</option>
-                    <option value="public">Public (visible to all users)</option>
-                  </select>
-                  {formData.is_tool && (
-                    <span className="text-xs text-gray-500 ml-2">Tool agents cannot be published to the marketplace</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Profile Metadata (expandable) */}
-              {showMarketplace && (
-                <div className="space-y-6">
-                  <div>
-                    <label htmlFor="marketplace-display-name" className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
-                    <input
-                      id="marketplace-display-name"
-                      type="text"
-                      value={marketplaceProfile.display_name ?? ''}
-                      onChange={(e) => handleMarketplaceProfileChange('display_name', e.target.value)}
-                      maxLength={255}
-                      placeholder="Defaults to agent name if empty"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
-                    <textarea
-                      id="marketplace-short-description"
-                      value={marketplaceProfile.short_description ?? ''}
-                      onChange={(e) => handleMarketplaceProfileChange('short_description', e.target.value)}
-                      maxLength={200}
-                      rows={2}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    />
-                    <div className="text-xs text-gray-500 mt-1">
-                      {marketplaceProfile.short_description?.length ?? 0}/200 characters
+                <>
+                  {/* Visibility Control */}
+                  <div className="mb-6">
+                    <label htmlFor="marketplace-visibility" className="block text-sm font-medium text-gray-700 mb-2">Marketplace Visibility</label>
+                    <div className="flex items-center gap-4">
+                      <select
+                        id="marketplace-visibility"
+                        value={marketplaceVisibility}
+                        onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
+                        disabled={formData.is_tool}
+                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                      >
+                        <option value="unpublished">Unpublished (not listed)</option>
+                        <option value="private">Private (visible to app members only)</option>
+                        <option value="public">Public (visible to all users)</option>
+                      </select>
+                      {formData.is_tool && (
+                        <span className="text-xs text-gray-500 ml-2">Tool agents cannot be published to the marketplace</span>
+                      )}
                     </div>
                   </div>
-                  <div>
-                    <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-gray-700 mb-2">Long Description</label>
-                    <textarea
-                      id="marketplace-long-description"
-                      value={marketplaceProfile.long_description ?? ''}
-                      onChange={(e) => handleMarketplaceProfileChange('long_description', e.target.value)}
-                      rows={4}
-                      placeholder="Supports Markdown"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="marketplace-category" className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                    <select
-                      id="marketplace-category"
-                      value={marketplaceProfile.category ?? ''}
-                      onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    >
-                      <option value="">-- Select a category --</option>
-                      {MARKETPLACE_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                    <TagInput
-                      id="marketplace-tags"
-                      tags={marketplaceProfile.tags ?? []}
-                      onChange={(tags) => handleMarketplaceProfileChange('tags', tags)}
-                      maxTags={5}
-                      placeholder="Add up to 5 tags"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="marketplace-icon-url" className="block text-sm font-medium text-gray-700 mb-2">Icon URL</label>
-                    <input
-                      id="marketplace-icon-url"
-                      type="text"
-                      value={marketplaceProfile.icon_url ?? ''}
-                      onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
-                      placeholder="https://..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    />
-                    {marketplaceProfile.icon_url && (
-                      <img
-                        src={marketplaceProfile.icon_url}
-                        alt="Icon preview"
-                        className="mt-2 w-10 h-10 rounded"
-                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <label htmlFor="marketplace-cover-image-url" className="block text-sm font-medium text-gray-700 mb-2">Cover Image URL</label>
-                    <input
-                      id="marketplace-cover-image-url"
-                      type="text"
-                      value={marketplaceProfile.cover_image_url ?? ''}
-                      onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
-                      placeholder="https://..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    />
-                    {marketplaceProfile.cover_image_url && (
-                      <img
-                        src={marketplaceProfile.cover_image_url}
-                        alt="Cover preview"
-                        className="mt-2 w-32 h-16 rounded object-cover"
-                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                      />
-                    )}
-                  </div>
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-3">Conversation Starters</label>
-                     <p className="text-xs text-gray-500 mb-4">
-                       Suggested opening messages for users. These only appear at the start of a new conversation.
-                     </p>
-                     <div className="space-y-3">
-                       {marketplaceProfile.conversation_starters?.map((starter, idx) => (
-                         <div key={idx} className="flex items-center gap-2">
-                           <input
-                             ref={(el) => {
-                               starterRefs.current[idx] = el;
-                             }}
-                             type="text"
-                             value={starter}
-                             onChange={(e) => {
-                               const newStarters = [...(marketplaceProfile.conversation_starters || [])];
-                               newStarters[idx] = e.target.value;
-                               handleMarketplaceProfileChange('conversation_starters', newStarters);
-                             }}
-                             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all"
-                             placeholder="Enter a starter prompt..."
-                           />
-                           <button
-                             type="button"
-                             onClick={() => {
-                               const newStarters = marketplaceProfile.conversation_starters?.filter((_, i) => i !== idx) || [];
-                               handleMarketplaceProfileChange('conversation_starters', newStarters);
-                             }}
-                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                           >
-                             <span className="text-xs font-bold">✕</span>
-                           </button>
-                         </div>
-                       ))}
-                       <button
-                         type="button"
-                         onClick={() => {
-                           const newStarters = [...(marketplaceProfile.conversation_starters || []), ''];
-                           handleMarketplaceProfileChange('conversation_starters', newStarters);
-                           requestAnimationFrame(() => {
-                             starterRefs.current[newStarters.length - 1]?.focus();
-                           });
-                         }}
-                         className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                       >
-                         <Plus className="w-4 h-4 mr-1" /> Add Starter
-                       </button>
-                     </div>
-                   </div>
-                </div>
-              )}
-              </>
+
+                  {/* Profile Metadata (expandable) */}
+                  {showMarketplace && (
+                    <div className="space-y-6">
+                      <div>
+                        <label htmlFor="marketplace-display-name" className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
+                        <input
+                          id="marketplace-display-name"
+                          type="text"
+                          value={marketplaceProfile.display_name ?? ''}
+                          onChange={(e) => handleMarketplaceProfileChange('display_name', e.target.value)}
+                          maxLength={255}
+                          placeholder="Defaults to agent name if empty"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
+                        <textarea
+                          id="marketplace-short-description"
+                          value={marketplaceProfile.short_description ?? ''}
+                          onChange={(e) => handleMarketplaceProfileChange('short_description', e.target.value)}
+                          maxLength={200}
+                          rows={2}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                        <div className="text-xs text-gray-500 mt-1">
+                          {marketplaceProfile.short_description?.length ?? 0}/200 characters
+                        </div>
+                      </div>
+                      <div>
+                        <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-gray-700 mb-2">Long Description</label>
+                        <textarea
+                          id="marketplace-long-description"
+                          value={marketplaceProfile.long_description ?? ''}
+                          onChange={(e) => handleMarketplaceProfileChange('long_description', e.target.value)}
+                          rows={4}
+                          placeholder="Supports Markdown"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="marketplace-category" className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                        <select
+                          id="marketplace-category"
+                          value={marketplaceProfile.category ?? ''}
+                          onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        >
+                          <option value="">-- Select a category --</option>
+                          {MARKETPLACE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="marketplace-tags" className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                        <TagInput
+                          id="marketplace-tags"
+                          tags={marketplaceProfile.tags ?? []}
+                          onChange={(tags) => handleMarketplaceProfileChange('tags', tags)}
+                          maxTags={5}
+                          placeholder="Add up to 5 tags"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="marketplace-icon-url" className="block text-sm font-medium text-gray-700 mb-2">Icon URL</label>
+                        <input
+                          id="marketplace-icon-url"
+                          type="text"
+                          value={marketplaceProfile.icon_url ?? ''}
+                          onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
+                          placeholder="https://..."
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                        {marketplaceProfile.icon_url && (
+                          <img
+                            src={marketplaceProfile.icon_url}
+                            alt="Icon preview"
+                            className="mt-2 w-10 h-10 rounded"
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor="marketplace-cover-image-url" className="block text-sm font-medium text-gray-700 mb-2">Cover Image URL</label>
+                        <input
+                          id="marketplace-cover-image-url"
+                          type="text"
+                          value={marketplaceProfile.cover_image_url ?? ''}
+                          onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
+                          placeholder="https://..."
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                        {marketplaceProfile.cover_image_url && (
+                          <img
+                            src={marketplaceProfile.cover_image_url}
+                            alt="Cover preview"
+                            className="mt-2 w-32 h-16 rounded object-cover"
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">Conversation Starters</label>
+                        <p className="text-xs text-gray-500 mb-4">
+                          Suggested opening messages for users. These only appear at the start of a new conversation.
+                        </p>
+                        <div className="space-y-3">
+                          {marketplaceProfile.conversation_starters?.map((starter, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <input
+                                ref={(el) => {
+                                  starterRefs.current[idx] = el;
+                                }}
+                                type="text"
+                                value={starter}
+                                onChange={(e) => {
+                                  const newStarters = [...(marketplaceProfile.conversation_starters || [])];
+                                  newStarters[idx] = e.target.value;
+                                  handleMarketplaceProfileChange('conversation_starters', newStarters);
+                                }}
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all"
+                                placeholder="Enter a starter prompt..."
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newStarters = marketplaceProfile.conversation_starters?.filter((_, i) => i !== idx) || [];
+                                  handleMarketplaceProfileChange('conversation_starters', newStarters);
+                                }}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <span className="text-xs font-bold">✕</span>
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newStarters = [...(marketplaceProfile.conversation_starters || []), ''];
+                              handleMarketplaceProfileChange('conversation_starters', newStarters);
+                              requestAnimationFrame(() => {
+                                starterRefs.current[newStarters.length - 1]?.focus();
+                              });
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Plus className="w-4 h-4 mr-1" /> Add Starter
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

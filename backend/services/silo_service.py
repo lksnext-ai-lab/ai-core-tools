@@ -371,8 +371,8 @@ class SiloService:
                 collection_name,
                 silo.embedding_service,
                 merged_search_kwargs,
+                use_async=True,  # Use async psycopg engine for LangGraph compatibility
                 search_type=retriever_search_type,
-                use_async=True  # Use async psycopg engine for LangGraph compatibility
             )
         except Exception as e:
             logger.error(f"Failed to create retriever for silo {silo_id}: {str(e)}", exc_info=True)
