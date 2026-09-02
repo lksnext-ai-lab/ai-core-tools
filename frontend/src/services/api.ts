@@ -314,6 +314,9 @@ export interface DataStructureField {
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;
+  enum_id?: number;
+  list_item_enum_id?: number;
+  optional?: boolean;
 }
 
 export interface DataStructure {
@@ -324,6 +327,8 @@ export interface DataStructure {
   fields?: DataStructureField[];
   created_at: string;
   available_parsers?: Array<{ value: number; name: string }>;
+  available_enums?: Array<{ value: number; name: string }>;
+  is_enum?: boolean;
 }
 
 export interface Collaborator {
@@ -1279,12 +1284,27 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/output-parsers/`);
   }
 
+  async getEnums(appId: number): Promise<(DataStructure & { field_count: number; is_enum: true })[]> {
+    return this.request(`/internal/apps/${appId}/output-parsers/enums/`);
+  }
+
   async getOutputParser(appId: number, parserId: number): Promise<DataStructure> {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`);
   }
 
+  async getEnum(appId: number, enumId: number): Promise<DataStructure> {
+    return this.request(`/internal/apps/${appId}/output-parsers/enums/${enumId}`);
+  }
+
   async createOutputParser(appId: number, data: any): Promise<DataStructure> {
     return this.request(`/internal/apps/${appId}/output-parsers/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createEnum(appId: number, data: any): Promise<DataStructure> {
+    return this.request(`/internal/apps/${appId}/output-parsers/enums/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1297,8 +1317,21 @@ class ApiService {
     });
   }
 
+  async updateEnum(appId: number, enumId: number, data: any): Promise<DataStructure> {
+    return this.request(`/internal/apps/${appId}/output-parsers/enums/${enumId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteOutputParser(appId: number, parserId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/output-parsers/${parserId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteEnum(appId: number, enumId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/output-parsers/${enumId}`, {
       method: 'DELETE',
     });
   }

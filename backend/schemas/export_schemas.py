@@ -66,6 +66,8 @@ class ExportOutputParserFieldSchema(BaseModel):
     parser_name: Optional[str] = None  # For type='parser' (name-based reference)
     list_item_type: Optional[str] = None  # For type='list'
     list_item_parser_name: Optional[str] = None  # For list of parsers (name-based reference)
+    enum_name: Optional[str] = None
+    list_item_enum_name: Optional[str] = None
 
 
 class ExportOutputParserSchema(BaseModel):
@@ -74,6 +76,7 @@ class ExportOutputParserSchema(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     fields: List[ExportOutputParserFieldSchema] = []
+    is_enum: bool = False
 
 
 # ==================== MCP CONFIG ====================

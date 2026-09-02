@@ -83,6 +83,10 @@ class OutputParserExportService(BaseExportService):
                         parser_name=parser_name,
                         list_item_type=field_data.get("list_item_type"),
                         list_item_parser_name=list_item_parser_name,
+                        enum_name=(self.output_parser_repo.get_by_id(self.session, field_data["enum_id"]).name
+                                   if field_data.get("enum_id") else None),
+                        list_item_enum_name=(self.output_parser_repo.get_by_id(self.session, field_data["list_item_enum_id"]).name
+                                             if field_data.get("list_item_enum_id") else None),
                     )
                 )
 
@@ -91,6 +95,7 @@ class OutputParserExportService(BaseExportService):
             name=parser.name,
             description=parser.description,
             fields=export_fields,
+            is_enum=parser.is_enum,
         )
 
         # Create export file

@@ -45,6 +45,7 @@ interface DataStructure {
   description: string;
   field_count: number;
   created_at: string;
+  is_enum?: boolean;
 }
 
 interface Collaborator {
@@ -68,6 +69,7 @@ interface SettingsCacheState {
   mcpConfigs: { [appId: string]: MCPConfig[] };
   skills: { [appId: string]: Skill[] };
   dataStructures: { [appId: string]: DataStructure[] };
+  enums: { [appId: string]: DataStructure[] };
   collaborators: { [appId: string]: Collaborator[] };
 }
 
@@ -107,6 +109,11 @@ interface SettingsCacheContextType {
   getDataStructures: (appId: string) => DataStructure[] | null;
   setDataStructures: (appId: string, structures: DataStructure[]) => void;
   invalidateDataStructures: (appId: string) => void;
+
+  // Enums
+  getEnums: (appId: string) => DataStructure[] | null;
+  setEnums: (appId: string, enums: DataStructure[]) => void;
+  invalidateEnums: (appId: string) => void;
   
   // Collaborators
   getCollaborators: (appId: string) => Collaborator[] | null;
@@ -140,6 +147,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     mcpConfigs: {},
     skills: {},
     dataStructures: {},
+    enums: {},
     collaborators: {},
   });
 
@@ -249,6 +257,21 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     });
   }, []);
 
+  const setEnums = useCallback((appId: string, enums: DataStructure[]) => {
+    setCache(prev => ({
+      ...prev,
+      enums: { ...prev.enums, [appId]: enums }
+    }));
+  }, []);
+
+  const invalidateEnums = useCallback((appId: string) => {
+    setCache(prev => {
+      const newEnums = { ...prev.enums };
+      delete newEnums[appId];
+      return { ...prev, enums: newEnums };
+    });
+  }, []);
+
   const setCollaborators = useCallback((appId: string, collaborators: Collaborator[]) => {
     setCache(prev => ({
       ...prev,
@@ -273,6 +296,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       const newMCPConfigs = { ...prev.mcpConfigs };
       const newSkills = { ...prev.skills };
       const newDataStructures = { ...prev.dataStructures };
+      const newEnums = { ...prev.enums };
       const newCollaborators = { ...prev.collaborators };
 
       delete newAIServices[appId];
@@ -282,6 +306,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       delete newMCPConfigs[appId];
       delete newSkills[appId];
       delete newDataStructures[appId];
+      delete newEnums[appId];
       delete newCollaborators[appId];
 
       return {
@@ -292,6 +317,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
         mcpConfigs: newMCPConfigs,
         skills: newSkills,
         dataStructures: newDataStructures,
+        enums: newEnums,
         collaborators: newCollaborators,
       };
     });
@@ -307,6 +333,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     getMCPConfigs: (appId: string) => cache.mcpConfigs[appId] || null,
     getSkills: (appId: string) => cache.skills[appId] || null,
     getDataStructures: (appId: string) => cache.dataStructures[appId] || null,
+    getEnums: (appId: string) => cache.enums[appId] || null,
     getCollaborators: (appId: string) => cache.collaborators[appId] || null,
     // Stable setter/invalidator references from useCallback
     setAIServices,
@@ -323,6 +350,8 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     invalidateSkills,
     setDataStructures,
     invalidateDataStructures,
+    setEnums,
+    invalidateEnums,
     setCollaborators,
     invalidateCollaborators,
     clearAppCache,
@@ -335,6 +364,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     setMCPConfigs, invalidateMCPConfigs,
     setSkills, invalidateSkills,
     setDataStructures, invalidateDataStructures,
+    setEnums, invalidateEnums,
     setCollaborators, invalidateCollaborators,
     clearAppCache,
   ]);
