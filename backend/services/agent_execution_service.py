@@ -1325,7 +1325,7 @@ class AgentExecutionService:
             # Check if PDF has text
             has_text = check_pdf_has_text(pdf_path)
             
-            if has_text:
+            if has_text and False:
                 # Extract text directly
                 text_content = extract_text_from_pdf(pdf_path)
                 logger.info(f"Extracted text from PDF: {len(text_content)} characters")
