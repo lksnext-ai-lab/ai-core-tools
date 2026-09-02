@@ -193,6 +193,49 @@ class TestPrepareTurnSandboxHandleCreation:
             ctx.sandbox_provider.run_code(ctx.sandbox_handle, "print('hi')", language="python")
         mock_sss.get_or_create.assert_called_once()
 
+    def test_anon_sessions_are_scoped_per_caller_identity(self, tmp_path, monkeypatch):
+        """Without a conversation_id (has_memory=False agents, public embeds,
+        marketplace), the sandbox session key must be scoped by caller
+        identity (user_id/app_id) — not collapse every caller for a given
+        agent onto the same shared "anon_{agent_id}" session, which let
+        unrelated users share one remote sandbox container/workspace."""
+        agent = _make_agent(enable_code_interpreter=True)
+        svc = _make_service(agent)
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        mock_provider.get_supported_languages.return_value = []
+
+        with (
+            patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
+            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
+            patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
+            patch("services.sandbox_session_service.sandbox_session_service", MagicMock()),
+        ):
+            import asyncio
+            ctx_user_a = asyncio.get_event_loop().run_until_complete(
+                svc._prepare_turn(
+                    agent_id=7,
+                    message="run code",
+                    file_references=[],
+                    db=MagicMock(),
+                    user_context={"user_id": "user-a", "app_id": "1"},
+                )
+            )
+            ctx_user_b = asyncio.get_event_loop().run_until_complete(
+                svc._prepare_turn(
+                    agent_id=7,
+                    message="run code",
+                    file_references=[],
+                    db=MagicMock(),
+                    user_context={"user_id": "user-b", "app_id": "1"},
+                )
+            )
+
+        assert ctx_user_a.sandbox_session_key != "anon_7"
+        assert ctx_user_b.sandbox_session_key != "anon_7"
+        assert ctx_user_a.sandbox_session_key != ctx_user_b.sandbox_session_key
+
     def test_resolved_sandbox_service_id_reaches_session_service(self, tmp_path, monkeypatch):
         """The SandboxService.service_id resolved for this agent must flow all
         the way through to SandboxSessionService.get_or_create() — this is

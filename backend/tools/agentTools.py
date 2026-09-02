@@ -416,7 +416,20 @@ async def create_agent(
                 "creating fallback sandbox during tool assembly for agent %s",
                 agent.agent_id,
             )
-            sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
+            try:
+                sandbox_handle = sandbox_provider.create_sandbox(working_dir=working_dir)
+            except Exception as exc:
+                # A provider that resolves fine but is actually unreachable
+                # (e.g. registered but the backing service isn't running)
+                # must not crash tool assembly — degrade the same way an
+                # unavailable provider does just above.
+                logger.warning(
+                    "Fallback sandbox creation failed for agent %s: %s",
+                    agent.agent_id,
+                    exc,
+                )
+                sandbox_provider = None
+                sandbox_handle = None
         if sandbox_provider is not None and sandbox_handle is not None:
             if sandbox_session_service is None and sandbox_session_key is not None:
                 try:
