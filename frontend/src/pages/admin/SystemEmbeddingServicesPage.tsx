@@ -229,7 +229,15 @@ const SystemEmbeddingServicesPage: React.FC = () => {
             ) : (
               services.map((svc) => (
                 <tr key={svc.service_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{svc.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      onClick={() => void handleOpenEdit(svc)}
+                    >
+                      {svc.name}
+                    </button>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {svc.provider}
                   </td>
