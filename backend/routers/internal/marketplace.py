@@ -362,6 +362,7 @@ async def upload_marketplace_file(
             agent_id=agent.agent_id,
             user_context=user_context,
             conversation_id=conversation_id,
+            has_memory=bool(agent.has_memory),
         )
         return {
             "success": True,
