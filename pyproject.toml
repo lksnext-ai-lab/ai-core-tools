@@ -170,6 +170,11 @@ pydub = ">=0.25.1"
 ffmpeg-python = "^0.2.0"
 pymupdf = "^1.27.2.3"
 langchain-aws = ">=1.0.0,<2.0.0"
+opensandbox = "0.1.7"
+opensandbox-code-interpreter = "0.1.2"
+daytona = "0.173.0"
+e2b-code-interpreter = "2.5.0"
+e2b = "2.7.0"
 
 [tool.poetry.scripts]
 dev = "uvicorn backend.main:app --reload --port 8000"

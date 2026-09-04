@@ -34,6 +34,7 @@ from .ai_services import ai_services_router
 from .api_keys import api_keys_router
 from .domains import domains_router
 from .embedding_services import embedding_services_router
+from .sandbox_services import sandbox_services_router
 from .mcp_configs import mcp_configs_router
 from .ocr import ocr_router
 from .output_parsers import output_parsers_router
@@ -54,6 +55,7 @@ DEFAULT_MAX_FILE_SIZE_MB = 0
 APP_NOT_FOUND_MSG = "App not found"
 
 # Static routes must be declared before the /{app_id} dynamic routes.
+
 
 @apps_router.post(
     "/preview-import",
@@ -487,6 +489,7 @@ apps_router.include_router(ai_services_router, prefix="/{app_id}/ai-services", t
 apps_router.include_router(api_keys_router, prefix="/{app_id}/api-keys", tags=["API Keys"])
 apps_router.include_router(domains_router, prefix="/{app_id}/domains", tags=["Domains"])
 apps_router.include_router(embedding_services_router, prefix="/{app_id}/embedding-services", tags=["Embedding Services"])
+apps_router.include_router(sandbox_services_router, prefix="/{app_id}/sandbox-services", tags=["Sandbox Services"])
 apps_router.include_router(mcp_configs_router, prefix="/{app_id}/mcp-configs", tags=["MCP Configs"])
 apps_router.include_router(ocr_router, prefix="/{app_id}/ocr", tags=["OCR"])
 apps_router.include_router(output_parsers_router, prefix="/{app_id}/output-parsers", tags=["Output Parsers"])
@@ -661,6 +664,7 @@ async def get_app(
         agent_cors_origins=app.agent_cors_origins,
         enable_openai_api=app.enable_openai_api,
         onboarding_dismissed=app.onboarding_dismissed or False,
+        default_sandbox_service_id=app.default_sandbox_service_id,
         **counts
     )
 
@@ -728,7 +732,8 @@ async def create_app(
         owner_name=owner_name,
         agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
-        agent_cors_origins=app.agent_cors_origins
+        agent_cors_origins=app.agent_cors_origins,
+        default_sandbox_service_id=app.default_sandbox_service_id,
     )
 
 
@@ -764,6 +769,23 @@ async def update_app(
 
     langsmith_key_rotated = (langsmith_key or "") != (app.langsmith_api_key or "")
 
+    # Validate default_sandbox_service_id references an existing sandbox service that is
+    # either system-scoped or belongs to this app (None = inherit system default is always valid).
+    if app_data.default_sandbox_service_id is not None:
+        from repositories.sandbox_service_repository import SandboxServiceRepository
+
+        sandbox_service = SandboxServiceRepository.get_by_id(db, app_data.default_sandbox_service_id)
+        if sandbox_service is None or (
+            sandbox_service.app_id is not None and sandbox_service.app_id != app_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"default_sandbox_service_id '{app_data.default_sandbox_service_id}' does not "
+                    "reference a valid sandbox service for this app."
+                ),
+            )
+
     update_dict = {
         'app_id': app_id,
         'name': app_data.name,
@@ -771,7 +793,8 @@ async def update_app(
         'agent_rate_limit': app_data.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         'max_file_size_mb': app_data.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         'agent_cors_origins': app_data.agent_cors_origins,
-        'enable_openai_api': app_data.enable_openai_api
+        'enable_openai_api': app_data.enable_openai_api,
+        'default_sandbox_service_id': app_data.default_sandbox_service_id,
     }
 
     updated_app = app_service.create_or_update_app(update_dict)
@@ -796,7 +819,8 @@ async def update_app(
         agent_rate_limit=updated_app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
         max_file_size_mb=updated_app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=updated_app.agent_cors_origins,
-        enable_openai_api=updated_app.enable_openai_api
+        enable_openai_api=updated_app.enable_openai_api,
+        default_sandbox_service_id=updated_app.default_sandbox_service_id,
     )
 
 

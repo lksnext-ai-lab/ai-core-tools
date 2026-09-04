@@ -58,6 +58,7 @@ class AppDetailSchema(BaseModel):
     collaborator_count: int = 0
     onboarding_dismissed: bool = False
     is_frozen: bool = False
+    default_sandbox_service_id: Optional[int] = None  # None = inherit system default
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -88,6 +89,7 @@ class UpdateAppSchema(BaseModel):
     max_file_size_mb: Optional[int] = 0
     agent_cors_origins: Optional[str] = None
     enable_openai_api: bool = False
+    default_sandbox_service_id: Optional[int] = None  # None = inherit system default
 
     @field_validator("langsmith_api_key", mode="before")
     @classmethod
@@ -117,6 +119,8 @@ class LangSmithTestResponseSchema(BaseModel):
     project_name: Optional[str] = None
     source: Optional[Literal["app", "env", "request"]] = None
 
+
+# ==================== COLLABORATION SCHEMAS ====================
 
 class CollaboratorListItemSchema(BaseModel):
     id: int

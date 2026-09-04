@@ -127,3 +127,109 @@ class TestMapStreamEventDispatcher:
         )
 
         assert map_stream_event("messages", chunk) is None
+from backend.tools.streaming_utils import SSE_CODE_OUTPUT, SSE_TOOL_START, map_stream_event
+
+
+def test_code_output_custom_event_preserves_stream():
+    events = map_stream_event(
+        "custom",
+        {"type": "code_output", "stream": "stderr", "line": "warn\n"},
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {"line": "warn\n", "stream": "stderr"},
+        }
+    ]
+
+
+def test_code_output_custom_event_defaults_unknown_stream_to_stdout():
+    events = map_stream_event(
+        "custom",
+        {"type": "code_output", "stream": "invalid", "line": "hello\n"},
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {"line": "hello\n", "stream": "stdout"},
+        }
+    ]
+
+
+def test_code_output_custom_event_preserves_tool_name():
+    events = map_stream_event(
+        "custom",
+        {
+            "type": "code_output",
+            "tool_name": "python_repl",
+            "stream": "stdout",
+            "line": "hello\n",
+        },
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {
+                "tool_name": "python_repl",
+                "line": "hello\n",
+                "stream": "stdout",
+            },
+        }
+    ]
+
+
+def test_custom_tool_event_is_forwarded():
+    events = map_stream_event(
+        "custom",
+        {
+            "type": "tool_start",
+            "data": {
+                "tool_name": "python_repl",
+                "tool_call_id": "subagent:call-1",
+                "subagent_name": "Research Agent",
+            },
+        },
+    )
+
+    assert events == [
+        {
+            "type": SSE_TOOL_START,
+            "data": {
+                "tool_name": "python_repl",
+                "tool_call_id": "subagent:call-1",
+                "subagent_name": "Research Agent",
+            },
+        }
+    ]
+
+
+def test_code_output_custom_event_preserves_subagent_context():
+    events = map_stream_event(
+        "custom",
+        {
+            "type": "code_output",
+            "tool_name": "python_repl",
+            "parent_tool_name": "Research_Agent",
+            "subagent_name": "Research Agent",
+            "subagent_id": 42,
+            "stream": "stdout",
+            "line": "hello\n",
+        },
+    )
+
+    assert events == [
+        {
+            "type": SSE_CODE_OUTPUT,
+            "data": {
+                "tool_name": "python_repl",
+                "parent_tool_name": "Research_Agent",
+                "subagent_name": "Research Agent",
+                "subagent_id": 42,
+                "line": "hello\n",
+                "stream": "stdout",
+            },
+        }
+    ]

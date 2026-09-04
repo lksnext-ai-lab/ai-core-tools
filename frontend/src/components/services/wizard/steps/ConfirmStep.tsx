@@ -72,15 +72,17 @@ function ConfirmStep({
           </span>
         </Row>
 
-        <Row label="Model">
-          <div>
-            <p className="text-sm font-medium text-gray-900">{modelLabel}</p>
-            {modelId && modelId !== modelLabel && (
-              <p className="text-xs font-mono text-gray-500 mt-0.5">{modelId}</p>
-            )}
-            {model && <ModelCapabilityChips model={model} />}
-          </div>
-        </Row>
+        {kind !== 'sandbox' && (
+          <Row label="Model">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{modelLabel}</p>
+              {modelId && modelId !== modelLabel && (
+                <p className="text-xs font-mono text-gray-500 mt-0.5">{modelId}</p>
+              )}
+              {model && <ModelCapabilityChips model={model} />}
+            </div>
+          </Row>
+        )}
 
         {credentials.base_url && (
           <Row label={provider === 'GoogleCloud' ? 'Project ID' : 'Endpoint'}>
@@ -95,6 +97,24 @@ function ConfirmStep({
             <span className="text-sm text-gray-700 font-mono">
               {credentials.api_version}
             </span>
+          </Row>
+        )}
+
+        {credentials.image && (
+          <Row label="Container image">
+            <span className="text-sm text-gray-700 font-mono break-all">{credentials.image}</span>
+          </Row>
+        )}
+
+        {credentials.target && (
+          <Row label="Target">
+            <span className="text-sm text-gray-700 font-mono">{credentials.target}</span>
+          </Row>
+        )}
+
+        {credentials.template && (
+          <Row label="Template">
+            <span className="text-sm text-gray-700 font-mono">{credentials.template}</span>
           </Row>
         )}
 

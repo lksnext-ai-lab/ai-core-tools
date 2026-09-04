@@ -133,6 +133,7 @@ class AgentDetailSchema(BaseModel):
     memory_max_tokens: Optional[int] = 4000
     memory_summarize_threshold: int = DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
     service_id: Optional[int] = None
+    sandbox_service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: float = DEFAULT_AGENT_TEMPERATURE
@@ -151,6 +152,7 @@ class AgentDetailSchema(BaseModel):
     output_parser: Optional[Dict[str, Any]] = None
     # Form data for editing
     ai_services: List[Dict[str, Any]]
+    sandbox_services: List[Dict[str, Any]]
     silos: List[Dict[str, Any]]
     output_parsers: List[Dict[str, Any]]
     tools: List[Dict[str, Any]]
@@ -184,6 +186,7 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin):
     memory_max_tokens: Optional[int] = 4000
     memory_summarize_threshold: Optional[int] = DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
     service_id: Optional[int] = None
+    sandbox_service_id: Optional[int] = None
     silo_id: Optional[int] = None
     output_parser_id: Optional[int] = None
     temperature: Optional[float] = DEFAULT_AGENT_TEMPERATURE

@@ -24,6 +24,10 @@ from tools.streaming_utils import (
     SSE_TOKEN,
 )
 from services.agent_execution_service import AgentExecutionService
+from services.agent_cache_service import (
+    CheckpointerCacheService,
+    is_missing_tool_output_error,
+)
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,6 +92,8 @@ class AgentStreamingService:
         """
         effective_db = db or self.db
         mcp_client = None
+        ctx = None
+        sandbox_turn_active = False
 
         try:
             # ----------------------------------------------------------------
@@ -100,6 +106,10 @@ class AgentStreamingService:
                 search_params=search_params,
                 user_context=user_context,
                 conversation_id=conversation_id,
+                db=effective_db,
+            )
+            sandbox_turn_active = self.execution_service._begin_sandbox_turn(
+                ctx,
                 db=effective_db,
             )
 
@@ -116,94 +126,148 @@ class AgentStreamingService:
                 },
             )
 
-            # ----------------------------------------------------------------
-            # 3. Build agent chain
-            # ----------------------------------------------------------------
-            agent_chain, mcp_client = await create_agent(
-                ctx.fresh_agent,
-                ctx.search_params,
-                ctx.session_id_for_cache,
-                ctx.user_context,
-                ctx.working_dir,
-            )
-
-            config = prepare_agent_config(ctx.fresh_agent)
-
-            if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
-                config["configurable"]["thread_id"] = (
-                    f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
-                )
-                logger.info(
-                    "Using session-aware thread_id: %s",
-                    config["configurable"]["thread_id"],
-                )
-            else:
-                config["configurable"]["thread_id"] = (
-                    f"thread_{ctx.fresh_agent.agent_id}"
-                )
-
-            config["configurable"]["question"] = ctx.enhanced_message
-
-            # ----------------------------------------------------------------
-            # 4. Build the HumanMessage payload (handles multimodal images)
-            # ----------------------------------------------------------------
-            message_payload = build_human_message(
-                ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
-            )
-
-            # ----------------------------------------------------------------
-            # 5. Attach LangSmith tracer + metadata when configured
-            # ----------------------------------------------------------------
-            ls_settings = resolve_langsmith_settings(ctx.fresh_agent.app)
-            if ls_settings:
-                tracer, overrides = build_tracing_config(
-                    ls_settings,
-                    agent=ctx.fresh_agent,
-                    user_context=ctx.user_context,
-                    conversation_id=ctx.effective_conv_id,
-                    session_id=ctx.session_id_for_cache,
-                )
-                apply_tracing_to_config(config, tracer, overrides)
-                logger.info(
-                    "LangSmith tracing ENABLED — project='%s' source='%s'",
-                    ls_settings.project_name,
-                    ls_settings.source,
-                )
-
-            # ----------------------------------------------------------------
-            # 6. Streaming loop — the only part that stays in this service
-            # ----------------------------------------------------------------
-            # Return the sync connection to the pool for the duration of the
-            # stream: astream uses the async checkpointer, not this session, so
-            # holding it across LLM I/O would exhaust the pool. ctx objects expire
-            # but stay attached, so _finalize_turn reloads them on demand.
-            if effective_db is not None:
-                effective_db.commit()
-
             accumulated_content = ""
             structured_response = None
+            rollback_checkpoint_id = None
 
-            async for mode, chunk in agent_chain.astream(
-                {"messages": [message_payload]},
-                config=config,
-                stream_mode=["messages", "updates"],
-            ):
+            for attempt in range(2):
+                mcp_client = None
+                # ------------------------------------------------------------
+                # 3. Build agent chain
+                # ------------------------------------------------------------
+                create_agent_result = await create_agent(
+                    ctx.fresh_agent,
+                    ctx.search_params,
+                    ctx.session_id_for_cache,
+                    ctx.user_context,
+                    ctx.working_dir,
+                    sandbox_handle=ctx.sandbox_handle,
+                    sandbox_provider=ctx.sandbox_provider,
+                    sandbox_session_key=ctx.sandbox_session_key,
+                    attached_files=ctx.processed_files,
+                )
+                agent_chain, mcp_client = create_agent_result[:2]
 
-                if mode == "updates":
-                    if (
-                        isinstance(chunk, dict)
-                        and "model" in chunk
-                        and isinstance(chunk["model"], dict)
-                        and "structured_response" in chunk["model"]
+                config = prepare_agent_config(ctx.fresh_agent)
+
+                if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
+                    config["configurable"]["thread_id"] = (
+                        f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
+                    )
+                    logger.info(
+                        "Using session-aware thread_id: %s",
+                        config["configurable"]["thread_id"],
+                    )
+                else:
+                    config["configurable"]["thread_id"] = (
+                        f"thread_{ctx.fresh_agent.agent_id}"
+                    )
+
+                config["configurable"]["question"] = ctx.enhanced_message
+                if rollback_checkpoint_id is not None:
+                    config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
+
+                # ------------------------------------------------------------
+                # 4. Build the HumanMessage payload (handles multimodal images)
+                # ------------------------------------------------------------
+                message_payload = build_human_message(
+                    ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
+                )
+
+                # ------------------------------------------------------------
+                # 5. Attach LangSmith tracer + metadata when configured
+                # ------------------------------------------------------------
+                ls_settings = resolve_langsmith_settings(getattr(ctx.fresh_agent, "app", None))
+                if ls_settings:
+                    tracer, overrides = build_tracing_config(
+                        ls_settings,
+                        agent=ctx.fresh_agent,
+                        user_context=ctx.user_context,
+                        conversation_id=ctx.effective_conv_id,
+                        session_id=ctx.session_id_for_cache,
+                    )
+                    apply_tracing_to_config(config, tracer, overrides)
+                    logger.info(
+                        "LangSmith tracing ENABLED — project='%s' source='%s'",
+                        ls_settings.project_name,
+                        ls_settings.source,
+                    )
+
+                # ------------------------------------------------------------
+                # 6. Streaming loop — the only part that stays in this service
+                # ------------------------------------------------------------
+                # Return the sync connection to the pool for the duration of the
+                # stream: astream uses the async checkpointer, not this session, so
+                # holding it across LLM I/O would exhaust the pool. ctx objects expire
+                # but stay attached, so _finalize_turn reloads them on demand.
+                if effective_db is not None:
+                    effective_db.commit()
+
+                accumulated_content = ""
+                structured_response = None
+
+                try:
+                    async for mode, chunk in agent_chain.astream(
+                        {"messages": [message_payload]},
+                        config=config,
+                        stream_mode=["messages", "updates", "custom"],
                     ):
-                        structured_response = chunk["model"]["structured_response"]
 
-                events = map_stream_event(mode, chunk)
-                if events:
-                    for event in events:
-                        if event["type"] == SSE_TOKEN:
-                            accumulated_content += event["data"].get("content", "")
-                        yield format_sse_event(event["type"], event["data"])
+                        if mode == "updates":
+                            if (
+                                isinstance(chunk, dict)
+                                and "model" in chunk
+                                and isinstance(chunk["model"], dict)
+                                and "structured_response" in chunk["model"]
+                            ):
+                                structured_response = chunk["model"]["structured_response"]
+
+                        events = map_stream_event(mode, chunk)
+                        if events:
+                            for event in events:
+                                if event["type"] == SSE_TOKEN:
+                                    accumulated_content += event["data"].get("content", "")
+                                yield format_sse_event(event["type"], event["data"])
+                    break
+                except Exception as stream_exc:
+                    if (
+                        attempt == 0
+                        and ctx.fresh_agent.has_memory
+                        and ctx.session_id_for_cache
+                        and is_missing_tool_output_error(stream_exc)
+                    ):
+                        # Recover by forking from the last known-good checkpoint
+                        # instead of deleting the whole thread — see the mirrored
+                        # fix in AgentExecutionService's non-streaming path for
+                        # the full rationale (adelete_thread wipes the user's
+                        # entire visible history, not just the broken step).
+                        rollback_checkpoint_id = await CheckpointerCacheService.get_rollback_checkpoint_id(
+                            ctx.fresh_agent.agent_id,
+                            ctx.session_id_for_cache,
+                        )
+                        if rollback_checkpoint_id is None:
+                            logger.warning(
+                                "Incomplete tool-call checkpoint for agent %s session %s "
+                                "has no earlier checkpoint to roll back to; failing the "
+                                "turn instead of retrying",
+                                ctx.fresh_agent.agent_id,
+                                ctx.session_id_for_cache,
+                            )
+                            yield format_sse_event(
+                                "error",
+                                {"message": "Your last message could not be completed. Please resend it."},
+                            )
+                            return
+                        logger.warning(
+                            "Detected incomplete tool-call checkpoint for agent %s "
+                            "session %s; retrying turn from prior checkpoint %s "
+                            "(no history deleted)",
+                            ctx.fresh_agent.agent_id,
+                            ctx.session_id_for_cache,
+                            rollback_checkpoint_id,
+                        )
+                        continue
+                    raise
 
             # ----------------------------------------------------------------
             # 7. Post-processing phase — delegates to AgentExecutionService
@@ -247,9 +311,11 @@ class AgentStreamingService:
             yield format_sse_event("error", {"message": "Connection error, please retry."})
         except Exception as exc:
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
-            yield format_sse_event("error", {"message": str(exc)})
+            yield format_sse_event("error", {"message": "Agent execution failed"})
 
         finally:
+            if ctx is not None and sandbox_turn_active:
+                self.execution_service._end_sandbox_turn(ctx, db=effective_db)
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
 

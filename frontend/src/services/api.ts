@@ -81,6 +81,7 @@ export interface App {
   max_file_size_mb?: number;
   agent_cors_origins?: string;
   enable_openai_api?: boolean;
+  default_sandbox_service_id?: number | null;
   agent_count: number;
   repository_count: number;
   domain_count: number;
@@ -114,6 +115,7 @@ export interface Agent {
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -149,6 +151,7 @@ export interface Agent {
     fields: Array<{ name: string; type: string; description: string; optional?: boolean }>;
   };
   output_parsers: Array<{ parser_id: number; name: string }>;
+  sandbox_services: Array<{ service_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
@@ -636,7 +639,7 @@ class ApiService {
     });
   }
 
-  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean }): Promise<App> {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean; default_sandbox_service_id?: number | null }): Promise<App> {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -1028,6 +1031,54 @@ class ApiService {
     }
 
     return response.json();
+  }
+
+  async getSandboxServices(appId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/`);
+  }
+
+  async getSandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`);
+  }
+
+  async createSandboxService(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSandboxService(appId: number, serviceId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async copySandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}/copy`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteSandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testSandboxServiceConnection(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async testSandboxServiceConnectionWithConfig(appId: number, data: any, serviceId?: number) {
+    const qs = serviceId != null ? `?service_id=${serviceId}` : '';
+    return this.request(`/internal/apps/${appId}/sandbox-services/test-connection${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   async getMCPConfigs(appId: number): Promise<MCPConfig[]> {
@@ -2696,6 +2747,42 @@ class ApiService {
   async testSystemEmbeddingServiceConnectionWithConfig(data: any, serviceId?: number): Promise<TestConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/admin/system-embedding-services/test-connection${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemSandboxServices() {
+    return this.request('/internal/admin/system-sandbox-services');
+  }
+
+  async getSystemSandboxService(serviceId: number) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`);
+  }
+
+  async createSystemSandboxService(data: any) {
+    return this.request('/internal/admin/system-sandbox-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemSandboxService(serviceId: number, data: any) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemSandboxService(serviceId: number) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testSystemSandboxServiceConnectionWithConfig(data: any, serviceId?: number) {
+    const qs = serviceId != null ? `?service_id=${serviceId}` : '';
+    return this.request(`/internal/admin/system-sandbox-services/test-connection${qs}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

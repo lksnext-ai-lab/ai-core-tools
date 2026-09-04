@@ -17,6 +17,7 @@ class StreamEventSchema(BaseModel):
         "tool_start",
         "tool_end",
         "thinking",
+        "code_output",
         "metadata",
         "error",
         "done",
@@ -31,11 +32,28 @@ class TokenEventData(BaseModel):
 class ToolStartEventData(BaseModel):
     tool_name: str
     tool_input: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    parent_tool_name: Optional[str] = None
+    subagent_name: Optional[str] = None
+    subagent_id: Optional[int] = None
 
 
 class ToolEndEventData(BaseModel):
     tool_name: str
     tool_output: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    parent_tool_name: Optional[str] = None
+    subagent_name: Optional[str] = None
+    subagent_id: Optional[int] = None
+
+
+class CodeOutputEventData(BaseModel):
+    line: str
+    stream: Literal["stdout", "stderr"] = "stdout"
+    tool_name: Optional[str] = None
+    parent_tool_name: Optional[str] = None
+    subagent_name: Optional[str] = None
+    subagent_id: Optional[int] = None
 
 
 class ThinkingEventData(BaseModel):

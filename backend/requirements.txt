@@ -104,6 +104,10 @@ numpy==2.3.2
 ollama==0.5.2
 openai==1.99.1
 opentelemetry-api==1.36.0
+opensandbox==0.1.7
+opensandbox-code-interpreter==0.1.2
+daytona==0.173.0
+e2b-code-interpreter==2.5.0
 orjson==3.11.1
 ormsgpack==1.10.0
 os-service-types==1.8.0

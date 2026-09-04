@@ -7,6 +7,7 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import ToolHistoryPanel from './ToolHistoryPanel';
 
 interface Message {
   id: string;
@@ -90,7 +91,7 @@ function ChatInterface({
     [appId, agentId],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream, toolExecutionHistory, clearToolHistory } =
     useStreamingChat(playgroundStream);
 
   // Hold streaming content visible briefly after isStreaming flips to false,
@@ -326,6 +327,7 @@ function ChatInterface({
       setPersistentFiles([]);
       setFilterMetadata(undefined);
       setFiltersKey((prev) => prev + 1);
+      clearToolHistory();
     } catch (error) {
       console.error('Error resetting conversation:', error);
     }
@@ -337,8 +339,8 @@ function ChatInterface({
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    const existingNames = new Set(persistentFiles.map((f) => f.filename));
-    const newFiles = fileArray.filter((f) => !existingNames.has(f.name));
+    const existingNames = new Set(persistentFiles.map((file) => file.filename));
+    const newFiles = fileArray.filter((file) => !existingNames.has(file.name));
     if (newFiles.length === 0) return;
 
     setIsLoadingFiles(true);
@@ -383,12 +385,12 @@ function ChatInterface({
     event.target.value = '';
   };
 
-  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const imageFiles = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-      f.type.startsWith('image/')
+  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+      file.type.startsWith('image/')
     );
     if (imageFiles.length === 0) return;
-    e.preventDefault();
+    event.preventDefault();
     await uploadFiles(imageFiles);
   };
 
@@ -464,7 +466,7 @@ function ChatInterface({
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Metadata Filters Section */}
       {metadataFields && metadataFields.length > 0 && (
         <div className="pg-glass rounded-xl overflow-hidden">
@@ -528,9 +530,9 @@ function ChatInterface({
       )}
 
       {/* Chat Interface + File Panel */}
-      <div className="flex gap-4 items-start h-full">
+      <div className="flex gap-4 items-start">
         {/* Chat card */}
-        <div className="flex-1 pg-glass rounded-l-none rounded-r-xl border-l-0 flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
+        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
           {/* Reset button — subtle, top-right corner */}
           <div className="flex justify-end px-4 pt-3 pb-1">
             <button
@@ -828,7 +830,7 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={`Message ${agentName}…`}
+                placeholder={`Message ${agentName}...`}
                 disabled={isStreaming}
                 className="flex-1 py-2 bg-transparent border-none outline-none resize-none
                            text-sm text-gray-800 dark:text-gray-100
@@ -899,6 +901,12 @@ function ChatInterface({
           isLoading={isLoadingFiles}
           onRemoveFile={handleRemovePersistentFile}
           onDownloadFile={handleDownloadFile}
+        />
+
+        {/* Tool Execution History Panel */}
+        <ToolHistoryPanel
+          history={toolExecutionHistory}
+          onClear={clearToolHistory}
         />
       </div>
     </div>

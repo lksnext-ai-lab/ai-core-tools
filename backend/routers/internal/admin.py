@@ -37,6 +37,7 @@ router = APIRouter(tags=["admin"])
 USER_NOT_FOUND = "User not found"
 SYSTEM_AI_SERVICE_NOT_FOUND = "System AI service not found"
 SYSTEM_EMBEDDING_SERVICE_NOT_FOUND = "System embedding service not found"
+SYSTEM_SANDBOX_SERVICE_NOT_FOUND = "System sandbox service not found"
 
 
 async def require_admin(
@@ -591,6 +592,11 @@ from schemas.embedding_service_schemas import (
     CreateUpdateEmbeddingServiceSchema,
     SystemEmbeddingServiceImpactSchema,
 )
+from schemas.sandbox_service_schemas import (
+    SandboxServiceListItemSchema,
+    SandboxServiceDetailSchema,
+    CreateUpdateSandboxServiceSchema,
+)
 from typing import List
 
 
@@ -1061,6 +1067,206 @@ async def test_system_ai_service_connection_with_config(
     except Exception as e:
         logger.error(
             "Error testing system AI service connection (provider: %s): %s",
+            config.provider,
+            type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Test failed")
+
+
+@router.get("/system-sandbox-services", response_model=List[SandboxServiceDetailSchema])
+async def list_system_sandbox_services(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all platform-level Sandbox Services (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.sandbox_service_repository import SandboxServiceRepository
+    from services.sandbox_service_service import SandboxServiceService
+    from utils.secret_utils import mask_api_key
+    services = SandboxServiceRepository.get_system_services(db)
+    return [
+        SandboxServiceDetailSchema(
+            service_id=svc.service_id,
+            name=svc.name,
+            provider=svc.provider,
+            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
+            base_url=svc.endpoint or "",
+            created_at=svc.create_date,
+            **SandboxServiceService._extra_config_fields(svc.provider, svc.extra_config),
+        )
+        for svc in services
+    ]
+
+
+@router.get("/system-sandbox-services/{service_id}", response_model=SandboxServiceDetailSchema)
+async def get_system_sandbox_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get a single platform-level Sandbox Service by ID (OMNIADMIN only)."""
+    from repositories.sandbox_service_repository import SandboxServiceRepository
+    from services.sandbox_service_service import SandboxServiceService
+    from utils.secret_utils import mask_api_key
+
+    svc = SandboxServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail=SYSTEM_SANDBOX_SERVICE_NOT_FOUND)
+    return SandboxServiceDetailSchema(
+        service_id=svc.service_id,
+        name=svc.name,
+        provider=svc.provider,
+        api_key=mask_api_key(svc.api_key) if svc.api_key else "",
+        base_url=svc.endpoint or "",
+        created_at=svc.create_date,
+        **SandboxServiceService._extra_config_fields(svc.provider, svc.extra_config),
+    )
+
+
+@router.post("/system-sandbox-services", response_model=SandboxServiceListItemSchema, status_code=201)
+async def create_system_sandbox_service(
+    body: CreateUpdateSandboxServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create a new platform-level Sandbox Service (OMNIADMIN only, available in all deployment modes)."""
+    from models.sandbox_service import SandboxService
+    from repositories.sandbox_service_repository import SandboxServiceRepository
+    from services.sandbox_service_service import SandboxServiceService
+    from tools.sandbox.factory import SandboxProviderUnavailableError
+    from tools.sandbox_service_utils import build_extra_config
+    from datetime import datetime
+
+    try:
+        SandboxServiceService._validate_provider_allowed(body.provider)
+    except SandboxProviderUnavailableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    svc = SandboxService()
+    svc.app_id = None
+    svc.name = body.name
+    svc.provider = body.provider
+    svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc.extra_config = build_extra_config(
+        body.provider,
+        image=body.opensandbox_image,
+        target=body.daytona_target,
+        workspace=body.daytona_workspace or body.e2b_workspace,
+        cpu=body.daytona_cpu,
+        memory_gb=body.daytona_memory_gb,
+        template=body.e2b_template,
+    )
+    svc.create_date = datetime.now()
+    svc = SandboxServiceRepository.create(db, svc)
+    return SandboxServiceService._to_list_item(svc, is_system=True)
+
+
+@router.put("/system-sandbox-services/{service_id}", response_model=SandboxServiceListItemSchema)
+async def update_system_sandbox_service(
+    service_id: int,
+    body: CreateUpdateSandboxServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a platform-level Sandbox Service (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.sandbox_service_repository import SandboxServiceRepository
+    from services.sandbox_service_service import SandboxServiceService
+    from tools.sandbox.factory import SandboxProviderUnavailableError
+    from utils.secret_utils import is_masked_key
+    from tools.sandbox_service_utils import build_extra_config
+
+    svc = SandboxServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail=SYSTEM_SANDBOX_SERVICE_NOT_FOUND)
+
+    try:
+        SandboxServiceService._validate_provider_allowed(body.provider)
+    except SandboxProviderUnavailableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    svc.name = body.name
+    svc.provider = body.provider
+    if not is_masked_key(body.api_key):
+        svc.api_key = body.api_key
+    svc.endpoint = body.base_url or ""
+    svc.extra_config = build_extra_config(
+        body.provider,
+        image=body.opensandbox_image,
+        target=body.daytona_target,
+        workspace=body.daytona_workspace or body.e2b_workspace,
+        cpu=body.daytona_cpu,
+        memory_gb=body.daytona_memory_gb,
+        template=body.e2b_template,
+    )
+    svc = SandboxServiceRepository.update(db, svc)
+    return SandboxServiceService._to_list_item(svc, is_system=True)
+
+
+@router.delete("/system-sandbox-services/{service_id}", status_code=204)
+async def delete_system_sandbox_service(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a platform-level Sandbox Service (OMNIADMIN only, available in all deployment modes)."""
+    from repositories.sandbox_service_repository import SandboxServiceRepository
+
+    svc = SandboxServiceRepository.get_by_id(db, service_id)
+    if not svc or svc.app_id is not None:
+        raise HTTPException(status_code=404, detail=SYSTEM_SANDBOX_SERVICE_NOT_FOUND)
+    SandboxServiceRepository.delete(db, svc)
+
+
+@router.post("/system-sandbox-services/test-connection")
+async def test_system_sandbox_service_connection_with_config(
+    config: CreateUpdateSandboxServiceSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    service_id: Optional[int] = Query(None, description="Edit-mode: recover stored API key when the request sends a masked placeholder"),
+):
+    """Test a system Sandbox Service connection (OMNIADMIN). Falls back to the stored key when api_key is empty or masked."""
+    from services.sandbox_service_service import SandboxServiceService
+    from repositories.sandbox_service_repository import SandboxServiceRepository
+    from utils.secret_utils import is_masked_key
+    from core.export_constants import PLACEHOLDER_API_KEY
+    from tools.sandbox_service_utils import build_extra_config
+
+    try:
+        api_key = config.api_key or ""
+        if service_id is not None and (
+            not api_key
+            or api_key == PLACEHOLDER_API_KEY
+            or is_masked_key(api_key)
+        ):
+            stored = SandboxServiceRepository.get_by_id(db, service_id)
+            # Only use stored key for system services (app_id IS NULL) — never leak an app-scoped key.
+            if stored and stored.app_id is None and stored.api_key:
+                api_key = stored.api_key
+
+        service_config = {
+            "provider": config.provider,
+            "api_key": api_key,
+            "endpoint": config.base_url,
+            "extra_config": build_extra_config(
+                config.provider,
+                image=config.opensandbox_image,
+                target=config.daytona_target,
+                workspace=config.daytona_workspace or config.e2b_workspace,
+                cpu=config.daytona_cpu,
+                memory_gb=config.daytona_memory_gb,
+                template=config.e2b_template,
+            ),
+        }
+        result = SandboxServiceService.test_connection_with_config(service_config)
+        if isinstance(result, dict) and len(str(result.get("response", ""))) > 500:
+            result["response"] = str(result["response"])[:500] + "... (truncated)"
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Error testing system sandbox service connection (provider: %s): %s",
             config.provider,
             type(e).__name__,
             exc_info=True,

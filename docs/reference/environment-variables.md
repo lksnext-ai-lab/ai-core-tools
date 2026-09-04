@@ -248,6 +248,33 @@ SMTP_PORT=587
 
 See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 
+### Sandbox Providers
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SANDBOX_DEFAULT_PROVIDER` | No | `opensandbox` | Default code interpreter sandbox provider: `opensandbox`, `daytona`, or `e2b` |
+| `SANDBOX_ALLOWED_PROVIDERS` | No | `opensandbox,daytona,e2b` | Comma-separated provider names apps may select |
+| `OPENSANDBOX_DOMAIN` | OpenSandbox | `localhost:8080` | OpenSandbox server host and port |
+| `OPENSANDBOX_API_KEY` | No | — | OpenSandbox server API key |
+| `OPENSANDBOX_CODE_INTERPRETER_IMAGE` | No | `opensandbox/code-interpreter:v1.0.2` | OpenSandbox code interpreter image |
+| `DAYTONA_API_KEY` | Daytona | — | Daytona API key |
+| `DAYTONA_API_URL` | No | SDK default | Daytona API URL |
+| `DAYTONA_TARGET` | No | org default | Daytona target/region |
+| `DAYTONA_IMAGE` | No | — | Optional Daytona image for sandbox creation |
+| `DAYTONA_SNAPSHOT` | No | — | Optional Daytona snapshot for sandbox creation |
+| `DAYTONA_WORKSPACE` | No | `workspace` | Workspace root inside Daytona sandboxes |
+| `DAYTONA_SUPPORTED_LANGUAGES` | No | `python,bash` | Languages exposed through the Daytona provider |
+| `DAYTONA_AUTO_STOP_INTERVAL` | No | `2` | Daytona auto-stop interval in minutes. Defaults to the global idle timeout rounded up to minutes |
+| `E2B_API_KEY` | E2B | — | E2B API key |
+| `E2B_TEMPLATE` | No | SDK default | Optional E2B sandbox template name or ID |
+| `E2B_WORKSPACE` | No | `/home/user/workspace` | Workspace root inside E2B sandboxes |
+| `E2B_SUPPORTED_LANGUAGES` | No | `python,javascript,bash` | Languages exposed through the E2B provider |
+| `E2B_ALLOW_INTERNET_ACCESS` | No | `true` | Whether E2B sandboxes may access the internet |
+| `SANDBOX_DEFAULT_TIMEOUT_S` | No | `30` | Per-execution timeout in seconds |
+| `SANDBOX_SESSION_TTL_H` | No | `2` | Max sandbox lifetime in hours for providers that enforce TTL |
+| `SANDBOX_IDLE_TIMEOUT_S` | No | `120` | Max idle time before cached sandboxes are stopped/destroyed |
+| `SANDBOX_REAPER_INTERVAL_S` | No | `30` | How often the backend checks for idle sandboxes |
+
 ### CORS Configuration
 
 | Variable | Required | Default | Description |

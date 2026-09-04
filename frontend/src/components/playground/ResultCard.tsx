@@ -251,7 +251,7 @@ export default function ResultCard({
           >
             <FileJson className="w-3.5 h-3.5" />
           </button>
-          {onReindex && result.metadata?.resource_id && (
+          {onReindex && result.metadata?.resource_id !== undefined && (
             <button
               onClick={(e) => { e.stopPropagation(); onReindex(String(result.metadata.resource_id as string | number)); }}
               className="text-xs px-2 py-1 text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors"

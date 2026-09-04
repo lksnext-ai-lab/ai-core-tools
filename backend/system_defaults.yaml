@@ -16,6 +16,24 @@ settings:
     category: "platform"
     description: "Agent ID for the platform-wide chatbot widget. -1 = disabled."
 
+  sandbox_default_provider:
+    value: "opensandbox"
+    type: "string"
+    category: "sandbox"
+    description: "Default sandbox provider when an app has no explicit override. Options: opensandbox, daytona, e2b."
+
+  sandbox_allowed_providers:
+    value: "opensandbox,daytona,e2b"
+    type: "string"
+    category: "sandbox"
+    description: "Comma-separated list of sandbox providers that apps may select. Restricts app-level overrides to this set."
+
+  sandbox_idle_timeout_s:
+    value: "120"
+    type: "integer"
+    category: "sandbox"
+    description: "Maximum idle time in seconds before cached sandboxes are stopped or destroyed."
+
 # Tier configuration defaults - used when no DB override exists
 # -1 means unlimited
 tier_config:

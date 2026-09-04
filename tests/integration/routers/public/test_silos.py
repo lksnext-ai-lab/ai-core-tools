@@ -303,6 +303,43 @@ class TestSearchSilo:
         )
         assert resp.status_code == 404
 
+    @patch("routers.public.v1.silos.SiloService.find_docs_in_collection")
+    def test_search_forwards_real_db_session_and_score_threshold(
+        self, mock_find, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        """Regression test for issue #217: the public /search route previously
+        called search_silo_documents_router with the wrong number of
+        positional args, which bound its `db` session to `min_content_length`
+        instead — leaving the real `db` param `None` and crashing with
+        'NoneType' object has no attribute 'query'. Only mocking the deepest
+        service call here (not search_silo_documents_router itself) exercises
+        the real argument binding end to end.
+        """
+        mock_doc = MagicMock()
+        mock_doc.page_content = "Test content"
+        mock_doc.metadata = {"source": "test", "_score": 0.87}
+
+        mock_find.return_value = [mock_doc]
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "search"),
+            json={
+                "query": "test query",
+                "search_type": "similarity_score_threshold",
+                "score_threshold": 0.5,
+            },
+            headers=api_headers(fake_api_key.key),
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_results"] == 1
+        assert data["results"][0]["score"] == 0.87
+
+        _, kwargs = mock_find.call_args
+        assert kwargs["search_type"] == "similarity_score_threshold"
+        assert kwargs["score_threshold"] == 0.5
+
 
 # ---------------------------------------------------------------------------
 # Document operations
@@ -373,6 +410,30 @@ class TestDocOperations:
         assert resp.status_code == 200
         assert len(resp.json()["docs"]) == 1
         assert resp.json()["docs"][0]["page_content"] == "Found content"
+
+    @patch("routers.public.v1.silos.SiloService.find_docs_in_collection")
+    def test_find_docs_forwards_search_type_and_score_threshold(
+        self, mock_find, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        """Regression test for issue #217: docs/find accepted search_type and
+        score_threshold in the request body but never passed them through to
+        the service call, so filtering was silently ignored."""
+        mock_find.return_value = []
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/find"),
+            json={
+                "query": "test search",
+                "search_type": "similarity_score_threshold",
+                "score_threshold": 0.9,
+            },
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+
+        _, kwargs = mock_find.call_args
+        assert kwargs["search_type"] == "similarity_score_threshold"
+        assert kwargs["score_threshold"] == 0.9
 
     @patch("routers.public.v1.silos.SiloService.delete_docs_in_collection")
     def test_delete_docs(

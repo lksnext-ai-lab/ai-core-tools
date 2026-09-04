@@ -19,9 +19,13 @@ interface AttachedFilesPanelProps {
 }
 
 function getStatusClassName(status?: string): string {
-  if (status === 'ready') return 'bg-green-100 text-green-700';
+  if (status === 'ready' || status === 'uploaded') return 'bg-green-100 text-green-700';
   if (status === 'error') return 'bg-red-100 text-red-700';
   return 'bg-yellow-100 text-yellow-700';
+}
+
+function getDisplayStatus(status?: string): string | undefined {
+  return status === 'uploaded' ? 'ready' : status;
 }
 
 function getExtractableLabel(fileType?: string, hasExtractableContent?: boolean): string {
@@ -49,9 +53,9 @@ export default function AttachedFilesPanel({
   title = 'Attached Files',
 }: Readonly<AttachedFilesPanelProps>) {
   return (
-    <div className="w-64 shrink-0 bg-white shadow rounded-lg flex flex-col">
+    <div className="w-64 shrink-0 bg-white shadow rounded-lg flex flex-col h-full max-h-full min-h-0">
       {/* Header */}
-      <div className="p-3 border-b">
+      <div className="p-3 border-b shrink-0">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <Paperclip className="w-4 h-4" />
           <span>{title}</span>
@@ -64,7 +68,7 @@ export default function AttachedFilesPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 overscroll-contain">
         {isLoading && (
           <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-500">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
@@ -110,10 +114,9 @@ export default function AttachedFilesPanel({
                       getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {file.processing_status === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
-                    {file.processing_status === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
-                    {file.processing_status === 'uploaded' && <><Loader2 className="w-3 h-3 animate-spin" /> Uploaded</>}
-                    {file.processing_status === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
+                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
+                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
+                    {getDisplayStatus(file.processing_status) === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
                   </span>
                 )}
               </div>

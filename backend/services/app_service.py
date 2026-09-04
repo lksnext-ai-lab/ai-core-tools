@@ -67,6 +67,7 @@ class AppService:
         from .ai_service_service import AIServiceService
         from .silo_service import SiloService
         from .embedding_service_service import EmbeddingServiceService
+        from .sandbox_service_service import SandboxServiceService
         from .api_key_service import APIKeyService
         from .mcp_config_service import MCPConfigService
         from .resource_service import ResourceService
@@ -90,6 +91,7 @@ class AppService:
             ai_service_service = AIServiceService()
             silo_service = SiloService()
             embedding_service_service = EmbeddingServiceService()
+            sandbox_service_service = SandboxServiceService()
             api_key_service = APIKeyService()
             mcp_config_service = MCPConfigService()
             resource_service = ResourceService()
@@ -183,6 +185,12 @@ class AppService:
                 logger.info(f"Deleting embedding service {service.service_id}: {service.name}")
                 embedding_service_service.delete_embedding_service(self.db, app_id, service.service_id)
             
+            # 13b. Delete sandbox services
+            sandbox_services = self.app_repo.get_sandbox_services_by_app_id(app_id)
+            for service in sandbox_services:
+                logger.info(f"Deleting sandbox service {service.service_id}: {service.name}")
+                sandbox_service_service.delete_sandbox_service(self.db, app_id, service.service_id)
+
             # 14. Delete collaborations
             collaborations = self.collaboration_repo.get_collaborations_by_app(app_id)
             for collab in collaborations:

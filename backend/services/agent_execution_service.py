@@ -2,6 +2,10 @@ import os
 import asyncio
 import ast
 import json
+import posixpath
+import shutil
+import threading
+from contextlib import nullcontext
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
@@ -32,6 +36,280 @@ logger = get_logger(__name__)
 
 _IMAGE_FILE_TYPES = {"image"}
 _AGENT_NOT_FOUND = "Agent not found"
+_WORKSPACE_INPUT_DIR = "input"
+_WORKSPACE_WORK_DIR = "work"
+_WORKSPACE_OUTPUT_DIR = "output"
+_REMOTE_WORKSPACE_PREFIXES = (
+    "/workspace/",
+    "workspace/",
+    "/home/user/workspace/",
+    "home/user/workspace/",
+    # Daytona's default sandbox user is `daytona`, with DAYTONA_WORKSPACE
+    # (default "workspace") resolved relative to that user's home directory
+    # — confirmed via a live sandbox: `pwd` -> /home/daytona/workspace.
+    # Without this prefix, output files written by a Daytona-backed agent
+    # are never recognized as "inside output/" (list_files() returns the
+    # full unstripped absolute path), so they're silently never synced/
+    # pulled or turned into a real download link for the user.
+    "/home/daytona/workspace/",
+    "home/daytona/workspace/",
+)
+
+
+class _LazySandboxHandle:
+    """Proxy that creates the conversation sandbox on first runtime use."""
+
+    def __init__(
+        self,
+        *,
+        session_key: str,
+        provider: Any,
+        working_dir: str,
+        conversation: Any = None,
+        db: Session | None = None,
+        processed_files: list[dict] | None = None,
+        tmp_base: str | None = None,
+        sandbox_service_id: int | None = None,
+    ) -> None:
+        self.session_key = session_key
+        self.working_dir = working_dir
+        self.provider_name = getattr(provider, "PROVIDER_NAME", None) or getattr(
+            provider, "provider_name", "unknown"
+        )
+        self._provider = provider
+        self._conversation = conversation
+        self._db = db
+        self._processed_files = processed_files or []
+        self._tmp_base = tmp_base or ""
+        self._handle = None
+        self._remote_pre_existing_files: set = set()
+        self._remote_inputs_prepared = False
+        self._lock = threading.RLock()
+        # The resolved SandboxService.service_id this handle's provider was
+        # built from (None when falling back to the system env-var default).
+        # Persisted alongside sandbox state so cleanup/reaper paths can later
+        # rebuild a provider with the same tenant credentials instead of
+        # falling back to zero-credential env defaults.
+        self.sandbox_service_id = sandbox_service_id
+
+    @property
+    def sandbox_id_if_created(self) -> str | None:
+        return getattr(self._handle, "sandbox_id", None)
+
+    @property
+    def sandbox_id(self) -> str:
+        return self.get().sandbox_id
+
+    @property
+    def pre_existing_remote_files(self) -> set:
+        return set(self._remote_pre_existing_files)
+
+    def is_materialized(self) -> bool:
+        return self._handle is not None
+
+    def get_if_created(self) -> Any | None:
+        return self._handle
+
+    def get(self) -> Any:
+        with self._lock:
+            if self._handle is None:
+                from services.sandbox_session_service import sandbox_session_service as _sss
+
+                self._handle = _sss.get_or_create(
+                    self.session_key,
+                    self._provider,
+                    self.working_dir,
+                    conversation=self._conversation,
+                    db=self._db,
+                    sandbox_service_id=self.sandbox_service_id,
+                )
+                if self._provider.requires_file_sync:
+                    self._prepare_remote_workspace(_sss)
+            return self._handle
+
+    def _prepare_remote_workspace(self, sandbox_session_service: Any) -> None:
+        if self._remote_inputs_prepared or self._handle is None:
+            return
+        with sandbox_session_service.use(
+            self.session_key,
+            conversation=self._conversation,
+            db=self._db,
+            expected_seconds=30,
+            sandbox_service_id=self.sandbox_service_id,
+        ):
+            _ensure_remote_workspace_layout(self._provider, self._handle)
+            try:
+                self._remote_pre_existing_files = {
+                    _remote_workspace_relative(path)
+                    for path in self._provider.list_files(self._handle)
+                    if _is_remote_output_file(path)
+                }
+            except Exception as snap_exc:
+                logger.warning(
+                    "IT4: could not snapshot remote files before turn (%s): %s",
+                    self.session_key,
+                    snap_exc,
+                )
+
+            for pf in self._processed_files:
+                filename = _safe_workspace_filename(pf.get("filename", ""))
+                file_path = pf.get("file_path")
+                if not filename:
+                    continue
+                try:
+                    abs_file_path = file_path or ""
+                    if abs_file_path and not os.path.isabs(abs_file_path):
+                        abs_file_path = os.path.join(self._tmp_base, abs_file_path)
+                    if abs_file_path and os.path.isfile(abs_file_path):
+                        with open(abs_file_path, "rb") as fh:
+                            raw = fh.read()
+                    else:
+                        content = pf.get("content", "")
+                        raw = (
+                            content.encode("utf-8")
+                            if isinstance(content, str)
+                            else bytes(content)
+                        )
+                    remote_input_path = f"{_WORKSPACE_INPUT_DIR}/{filename}"
+                    self._provider.write_file(self._handle, remote_input_path, raw)
+                    logger.debug("IT4: pushed '%s' into sandbox %s", filename, self.session_key)
+                except Exception as push_exc:
+                    logger.warning(
+                        "IT4: failed to push file '%s' into sandbox %s: %s",
+                        filename,
+                        self.session_key,
+                        push_exc,
+                    )
+        self._remote_inputs_prepared = True
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.get(), name)
+
+
+class _LazySandboxProvider:
+    """Provider proxy that materializes the matching lazy handle on use."""
+
+    def __init__(self, provider: Any, lazy_handle: _LazySandboxHandle) -> None:
+        self._provider = provider
+        self._lazy_handle = lazy_handle
+        self.PROVIDER_NAME = getattr(provider, "PROVIDER_NAME", lazy_handle.provider_name)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._provider, name)
+
+    def _resolve(self, handle: Any) -> Any:
+        if isinstance(handle, _LazySandboxHandle):
+            return handle.get()
+        return handle
+
+    def _lease(self):
+        if not self._lazy_handle.session_key:
+            return nullcontext()
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            return _sss.use(
+                self._lazy_handle.session_key,
+                conversation=self._lazy_handle._conversation,
+                db=self._lazy_handle._db,
+                expected_seconds=30,
+                sandbox_service_id=self._lazy_handle.sandbox_service_id,
+            )
+        except Exception:
+            return nullcontext()
+
+    def get_supported_languages(self) -> list[str]:
+        return self._provider.get_supported_languages()
+
+    def run_code(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.run_code(resolved, *args, **kwargs)
+
+    def list_files(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.list_files(resolved, *args, **kwargs)
+
+    def read_file(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.read_file(resolved, *args, **kwargs)
+
+    def write_file(self, handle: Any, *args, **kwargs) -> Any:
+        resolved = self._resolve(handle)
+        with self._lease():
+            return self._provider.write_file(resolved, *args, **kwargs)
+
+
+def _safe_workspace_filename(filename: str) -> str:
+    """Return a filename safe for one workspace directory level."""
+    return os.path.basename((filename or "").replace("\\", "/")).replace("/", "_")
+
+
+def _workspace_layout_paths(working_dir: str) -> dict[str, str]:
+    return {
+        "input": os.path.join(working_dir, _WORKSPACE_INPUT_DIR),
+        "work": os.path.join(working_dir, _WORKSPACE_WORK_DIR),
+        "output": os.path.join(working_dir, _WORKSPACE_OUTPUT_DIR),
+    }
+
+
+def _ensure_local_workspace_layout(working_dir: str) -> dict[str, str]:
+    paths = _workspace_layout_paths(working_dir)
+    os.makedirs(working_dir, exist_ok=True)
+    for path in paths.values():
+        os.makedirs(path, exist_ok=True)
+    return paths
+
+
+def _remote_workspace_relative(path: str) -> str:
+    """Normalize provider list_files output to a workspace-relative path."""
+    normalized = posixpath.normpath(str(path or "").replace("\\", "/"))
+    for prefix in _REMOTE_WORKSPACE_PREFIXES:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+            break
+    return normalized.lstrip("/")
+
+
+def _is_remote_output_file(path: str) -> bool:
+    rel = _remote_workspace_relative(path)
+    if rel in ("", ".", _WORKSPACE_OUTPUT_DIR):
+        return False
+    if not rel.startswith(f"{_WORKSPACE_OUTPUT_DIR}/"):
+        return False
+    parts = rel.split("/")
+    return all(part and not part.startswith(".") and part not in ("..",) for part in parts)
+
+
+def _ensure_remote_workspace_layout(provider: Any, handle: Any) -> None:
+    """Best-effort creation of input/work/output inside the sandbox workspace."""
+    try:
+        languages = set(provider.get_supported_languages())
+    except Exception:
+        languages = set()
+    try:
+        if "bash" in languages:
+            provider.run_code(
+                handle,
+                f"mkdir -p {_WORKSPACE_INPUT_DIR} {_WORKSPACE_WORK_DIR} {_WORKSPACE_OUTPUT_DIR}",
+                language="bash",
+                timeout=10,
+            )
+        elif "python" in languages:
+            provider.run_code(
+                handle,
+                (
+                    "import os\n"
+                    f"for p in {[_WORKSPACE_INPUT_DIR, _WORKSPACE_WORK_DIR, _WORKSPACE_OUTPUT_DIR]!r}:\n"
+                    "    os.makedirs(p, exist_ok=True)\n"
+                ),
+                language="python",
+                timeout=10,
+            )
+    except Exception as exc:
+        logger.debug("Could not create remote workspace layout: %s", exc, exc_info=True)
 
 
 def _inject_file_markers(text: str, files: list) -> str:
@@ -88,6 +366,8 @@ class AgentExecutionService:
         Returns:
             Dict containing agent response and metadata.
         """
+        ctx = None
+        sandbox_turn_active = False
         try:
             ctx = await self._prepare_turn(
                 agent_id=agent_id,
@@ -98,6 +378,7 @@ class AgentExecutionService:
                 conversation_id=conversation_id,
                 db=db,
             )
+            sandbox_turn_active = self._begin_sandbox_turn(ctx, db=db)
 
             # Release the sync connection to the pool during the LLM call; the
             # agent chain uses the async checkpointer, not this session. ctx
@@ -112,7 +393,11 @@ class AgentExecutionService:
                 ctx.session_id_for_cache,
                 ctx.user_context,
                 ctx.image_files,
+                processed_files=ctx.processed_files,
                 working_dir=ctx.working_dir,
+                sandbox_handle=ctx.sandbox_handle,
+                sandbox_provider=ctx.sandbox_provider,
+                sandbox_session_key=ctx.sandbox_session_key,
             )
 
             return await self._finalize_turn(ctx, response, db)
@@ -122,6 +407,9 @@ class AgentExecutionService:
         except Exception as e:
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+        finally:
+            if ctx is not None and sandbox_turn_active:
+                self._end_sandbox_turn(ctx, db=db)
 
     async def _prepare_turn(
         self,
@@ -175,23 +463,44 @@ class AgentExecutionService:
                     "file_path": file_ref.file_path,
                 })
 
-        # 6. Get / create conversation for memory-enabled agents
+        # 6. Validate ownership of any client-supplied conversation, then
+        #    get / create the conversation for memory-enabled agents.
+        #
+        # Ownership must be validated regardless of agent.has_memory: a few
+        # steps below, conversation_id feeds into effective_conv_id, which is
+        # the sole key used for both the sandbox session
+        # (SandboxSessionService.session_key) and the local working directory
+        # — neither of which is otherwise scoped by app_id/user_id. If a
+        # client-supplied conversation_id were allowed to flow through
+        # unchecked for memory-less agents (including shared/marketplace
+        # agents), an attacker could iterate sequential conversation_id
+        # values and attach to another tenant's sandbox/working directory
+        # without ever owning that conversation. Conversations can be
+        # created for any agent — including memory-less ones — via the
+        # dedicated `POST /{agent_id}/conversations` endpoint (see
+        # routers/public/v1/chat.py::create_conversation), so this ownership
+        # check is meaningful in both cases.
         session = None
         conversation = None
+        if conversation_id:
+            from services.conversation_service import ConversationService
+
+            conversation = ConversationService.get_conversation(
+                db=db,
+                conversation_id=conversation_id,
+                user_context=user_context,
+                agent_id=agent_id,
+            )
+            if not conversation:
+                raise HTTPException(
+                    status_code=404, detail="Conversation not found or access denied"
+                )
+
         if agent.has_memory:
             from services.conversation_service import ConversationService
 
-            if conversation_id:
-                conversation = ConversationService.get_conversation(
-                    db=db,
-                    conversation_id=conversation_id,
-                    user_context=user_context,
-                    agent_id=agent_id,
-                )
-                if not conversation:
-                    raise HTTPException(
-                        status_code=404, detail="Conversation not found or access denied"
-                    )
+            if conversation is not None:
+                # Already validated above — just derive the session.
                 session_suffix = conversation.session_id.replace(f"conv_{agent_id}_", "")
                 session = await self.session_service.get_user_session(
                     agent_id=agent_id,
@@ -233,18 +542,102 @@ class AgentExecutionService:
         # 9. Resolve working directory
         app_config = get_app_config()
         tmp_base = app_config['TMP_BASE_FOLDER']
+        # Caller identity used to scope both the local workspace and (below,
+        # step 11) the remote sandbox session when there's no conversation_id
+        # to key on (has_memory=False agents, public embeds, marketplace).
+        # Without this, every such caller for a given agent collapsed onto
+        # the same "anon_{agent_id}" sandbox session and shared one remote
+        # container/workspace across unrelated users.
+        user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
+        app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
+        identity_session_id = f"user_{user_id}_app_{app_id_ctx}"
         if effective_conv_id:
             working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
         else:
-            user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
-            app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
-            session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
+            session_key = f"agent_{agent_id}_{identity_session_id}"
             working_dir = os.path.join(tmp_base, "persistent", session_key)
 
-        # 10. Snapshot working dir so finalize can exclude pre-existing files
+        workspace_paths = _ensure_local_workspace_layout(working_dir)
+        output_dir = workspace_paths["output"]
+
+        # 10. Snapshot published-output dir so finalize can exclude pre-existing files
         pre_existing_files: set = set()
-        if working_dir and os.path.isdir(working_dir):
-            pre_existing_files = set(os.listdir(working_dir))
+        if os.path.isdir(output_dir):
+            pre_existing_files = set(os.listdir(output_dir))
+
+        # Copy attached files into the explicit input area for local
+        # (non-file-sync) runs. Remote providers receive the same
+        # input/<filename> paths below.
+        for pf in processed_files:
+            _filename = _safe_workspace_filename(pf.get("filename", ""))
+            _file_path = pf.get("file_path")
+            if not _filename or not _file_path:
+                continue
+            _abs_file_path = _file_path
+            if not os.path.isabs(_abs_file_path):
+                _abs_file_path = os.path.join(tmp_base, _file_path)
+            if not os.path.isfile(_abs_file_path):
+                continue
+            try:
+                shutil.copy2(_abs_file_path, os.path.join(workspace_paths["input"], _filename))
+            except Exception as _copy_exc:
+                logger.warning(
+                    "Could not copy attached file '%s' into workspace input: %s",
+                    _filename,
+                    _copy_exc,
+                )
+
+        # 11. Lazy sandbox session (IT-4)
+        # Derives a stable session key and binds a lazy handle/provider pair.
+        # The actual sandbox is created only when code execution first needs it.
+        # Remote workspace setup and input-file push happen at that same
+        # first-use boundary.
+        sandbox_handle = None
+        sandbox_provider = None
+        sandbox_session_key = None
+        pre_existing_remote_files: set = set()
+
+        if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
+            from tools.sandbox.factory import (
+                resolve_provider_and_service_id,
+                SandboxProviderUnavailableError,
+            )
+            from services.sandbox_session_service import SandboxSessionService
+
+            try:
+                resolved_sandbox_provider, resolved_sandbox_service_id = (
+                    resolve_provider_and_service_id(fresh_agent)
+                )
+            except SandboxProviderUnavailableError as exc:
+                # A misconfigured/unavailable sandbox provider must not hard-fail
+                # the whole chat turn — degrade gracefully by leaving the sandbox
+                # fields unset. Callers (e.g. tools/agentTools.py) already treat
+                # a None sandbox_handle/sandbox_provider as "code interpreter
+                # unusable this turn" and continue with the rest of the chain.
+                logger.warning("Sandbox provider unavailable for agent %s: %s", agent_id, exc)
+                resolved_sandbox_provider = None
+                resolved_sandbox_service_id = None
+
+            if resolved_sandbox_provider is not None:
+                sandbox_session_key = SandboxSessionService.session_key(
+                    agent_id,
+                    effective_conv_id,
+                    session_id=None if effective_conv_id else identity_session_id,
+                )
+                sandbox_handle = _LazySandboxHandle(
+                    session_key=sandbox_session_key,
+                    provider=resolved_sandbox_provider,
+                    working_dir=working_dir,
+                    conversation=conversation,
+                    db=db,
+                    processed_files=processed_files,
+                    tmp_base=tmp_base,
+                    sandbox_service_id=resolved_sandbox_service_id,
+                )
+                sandbox_provider = _LazySandboxProvider(
+                    resolved_sandbox_provider,
+                    sandbox_handle,
+                )
 
         return AgentExecutionContext(
             agent_id=agent_id,
@@ -258,10 +651,93 @@ class AgentExecutionService:
             session_id_for_cache=session_id_for_cache,
             working_dir=working_dir,
             pre_existing_files=pre_existing_files,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            sandbox_session_key=sandbox_session_key,
+            pre_existing_remote_files=pre_existing_remote_files,
             processed_files=processed_files,
             search_params=search_params,
             user_context=user_context,
         )
+
+    def _sandbox_turn_expected_seconds(self) -> int:
+        """Return the expected active-turn lease window for sandbox DB state."""
+        try:
+            import config as settings
+
+            return max(1, int(getattr(settings, "SANDBOX_DEFAULT_TIMEOUT_S", 30)))
+        except Exception:
+            return 30
+
+    def _begin_sandbox_turn(
+        self,
+        ctx: AgentExecutionContext,
+        *,
+        db: Session | None = None,
+    ) -> bool:
+        """Mark the sandbox as active for the whole model turn.
+
+        Individual REPL calls still acquire nested leases, but this outer lease
+        protects the sandbox while the model is thinking between tool calls.
+        """
+        if ctx.sandbox_handle is None or not ctx.sandbox_session_key:
+            return False
+        if (
+            isinstance(ctx.sandbox_handle, _LazySandboxHandle)
+            and not ctx.sandbox_handle.is_materialized()
+        ):
+            return False
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            return bool(
+                _sss.begin_use(
+                    ctx.sandbox_session_key,
+                    conversation=ctx.conversation,
+                    db=db,
+                    expected_seconds=self._sandbox_turn_expected_seconds(),
+                    sandbox_service_id=getattr(ctx.sandbox_handle, "sandbox_service_id", None),
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not mark sandbox turn active (key=%s): %s",
+                ctx.sandbox_session_key,
+                exc,
+                exc_info=True,
+            )
+            return False
+
+    def _end_sandbox_turn(
+        self,
+        ctx: AgentExecutionContext,
+        *,
+        db: Session | None = None,
+    ) -> None:
+        """Clear the active-turn sandbox lease and refresh idle activity."""
+        if ctx.sandbox_handle is None or not ctx.sandbox_session_key:
+            return
+        if (
+            isinstance(ctx.sandbox_handle, _LazySandboxHandle)
+            and not ctx.sandbox_handle.is_materialized()
+        ):
+            return
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            _sss.end_use(
+                ctx.sandbox_session_key,
+                conversation=ctx.conversation,
+                db=db,
+                sandbox_service_id=getattr(ctx.sandbox_handle, "sandbox_service_id", None),
+            )
+        except Exception as exc:
+            logger.debug(
+                "Could not clear sandbox turn activity (key=%s): %s",
+                ctx.sandbox_session_key,
+                exc,
+                exc_info=True,
+            )
 
     async def _finalize_turn(
         self,
@@ -295,11 +771,72 @@ class AgentExecutionService:
         response = raw_response
         files_data: List[Dict[str, Any]] = []
 
+        # 0 (IT-4). Pull new files from remote sandbox into working_dir BEFORE sync.
+        # Providers with requires_file_sync=False write directly to working_dir,
+        # so no pull is needed there.
+        output_dir = (
+            _ensure_local_workspace_layout(ctx.working_dir)["output"]
+            if ctx.working_dir
+            else None
+        )
+        sandbox_handle = ctx.sandbox_handle
+        if isinstance(sandbox_handle, _LazySandboxHandle):
+            if sandbox_handle.is_materialized():
+                ctx.pre_existing_remote_files = sandbox_handle.pre_existing_remote_files
+                sandbox_handle = sandbox_handle.get_if_created()
+            else:
+                sandbox_handle = None
+
+        if (
+            sandbox_handle is not None
+            and ctx.sandbox_provider is not None
+            and ctx.working_dir
+            and output_dir
+            and ctx.sandbox_provider.requires_file_sync
+        ):
+            try:
+                from services.sandbox_session_service import sandbox_session_service as _sss
+
+                with _sss.use(
+                    ctx.sandbox_session_key,
+                    conversation=ctx.conversation,
+                    db=db,
+                    expected_seconds=30,
+                    sandbox_service_id=getattr(
+                        ctx.sandbox_handle, "sandbox_service_id", None
+                    ),
+                ):
+                    remote_files = ctx.sandbox_provider.list_files(sandbox_handle)
+                    for remote_path in remote_files:
+                        if not _is_remote_output_file(remote_path):
+                            continue
+                        remote_rel = _remote_workspace_relative(remote_path)
+                        if remote_rel in ctx.pre_existing_remote_files:
+                            continue
+                        # Derive a safe local filename (last component, no hidden/traversal names)
+                        basename = posixpath.basename(remote_rel)
+                        if not basename or basename.startswith("."):
+                            logger.warning("IT4: skipping unsafe remote path '%s'", remote_path)
+                            continue
+                        try:
+                            file_bytes = ctx.sandbox_provider.read_file(sandbox_handle, remote_rel)
+                            dest = os.path.join(output_dir, basename)
+                            os.makedirs(output_dir, exist_ok=True)
+                            with open(dest, "wb") as _fh:
+                                _fh.write(file_bytes)
+                            logger.debug("IT4: pulled '%s' → %s", remote_path, dest)
+                        except Exception as _pull_exc:
+                            logger.warning(
+                                "IT4: failed to pull remote file '%s': %s", remote_path, _pull_exc
+                            )
+            except Exception as _list_exc:
+                logger.warning("IT4: could not list remote files for pull: %s", _list_exc)
+
         # 1 + 2. Sync output files and inject markers
-        if ctx.working_dir:
+        if output_dir:
             file_service = FileManagementService()
             new_files = await file_service.sync_output_files(
-                working_dir=ctx.working_dir,
+                working_dir=output_dir,
                 agent_id=ctx.agent_id,
                 user_context=ctx.user_context,
                 conversation_id=(
@@ -518,7 +1055,41 @@ class AgentExecutionService:
                 # Reset the session object (clears messages and memory)
                 # This should be done after invalidating checkpointer to ensure we have the session ID
                 await self.session_service.reset_user_session(agent_id, user_context)
-            
+
+            # Destroy any active sandbox for this conversation session (IT-1)
+            if agent.enable_code_interpreter:
+                from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
+                # conversation_id may only be defined when has_memory is True
+                _reset_conv_id = user_context.get("conversation_id") if user_context else None
+
+                # Validate ownership BEFORE destroying anything: a client-supplied
+                # conversation_id must not let one user tear down another user's
+                # live sandbox session just by guessing/iterating the id.
+                _conv = None
+                if _reset_conv_id and db:
+                    from services.conversation_service import ConversationService
+                    _conv = ConversationService.get_conversation(
+                        db, _reset_conv_id, user_context, agent_id=agent_id
+                    )
+                    if not _conv:
+                        raise HTTPException(
+                            status_code=404,
+                            detail="Conversation not found or access denied",
+                        )
+
+                _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
+                sandbox_session_service.destroy(_sandbox_key)
+                logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
+                # Clear DB sandbox state
+                if _conv is not None:
+                    try:
+                        _conv.sandbox_session_id = None
+                        _conv.sandbox_state = None
+                        db.add(_conv)
+                        db.commit()
+                    except Exception as _exc:
+                        logger.warning("Could not clear sandbox DB state on reset: %s", _exc)
+
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService
             file_service = FileManagementService()
@@ -540,7 +1111,9 @@ class AgentExecutionService:
             
             logger.info(f"Conversation reset for agent {agent_id} - cleared {len(attached_files)} files")
             return True
-            
+
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error resetting agent conversation: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
@@ -752,7 +1325,7 @@ class AgentExecutionService:
             # Check if PDF has text
             has_text = check_pdf_has_text(pdf_path)
             
-            if has_text:
+            if has_text and False:
                 # Extract text directly
                 text_content = extract_text_from_pdf(pdf_path)
                 logger.info(f"Extracted text from PDF: {len(text_content)} characters")
@@ -899,7 +1472,13 @@ class AgentExecutionService:
                 if file_data.get('type') == 'image':
                     image_files.append(file_data)
                 else:
-                    text_files_msg += f"\n\n--- File: {file_data['filename']} (Path: {file_data['file_path']}) ---\n{file_data['content']}\n--- End of {file_data['filename']} ---"
+                    safe_name = _safe_workspace_filename(file_data["filename"])
+                    text_files_msg += (
+                        f"\n\n--- File: {file_data['filename']} "
+                        f"(Sandbox path: input/{safe_name}) ---\n"
+                        f"{file_data['content']}\n"
+                        f"--- End of {file_data['filename']} ---"
+                    )
 
             if text_files_msg:
                 enhanced_message += "\n\nFiles base folder is: " + tmp_base_folder
@@ -912,10 +1491,10 @@ class AgentExecutionService:
         import base64
         import time
         try:
-            os.makedirs(working_dir, exist_ok=True)
+            output_dir = _ensure_local_workspace_layout(working_dir)["output"]
             safe_id = block_id[:48] if block_id else str(int(time.time()))
             filename = f"generated_image_{safe_id}.png"
-            dest = os.path.join(working_dir, filename)
+            dest = os.path.join(output_dir, filename)
             with open(dest, "wb") as f:
                 f.write(base64.b64decode(b64_data))
             logger.info("Saved generated image to %s", dest)
@@ -975,7 +1554,11 @@ class AgentExecutionService:
         session_id_for_cache: str = None,
         user_context: Dict = None,
         image_files: List[Dict] = None,
-        working_dir: Optional[str] = None
+        working_dir: Optional[str] = None,
+        sandbox_handle: Any = None,
+        sandbox_provider: Any = None,
+        sandbox_session_key: Optional[str] = None,
+        processed_files: List[Dict] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
@@ -993,7 +1576,15 @@ class AgentExecutionService:
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, mcp_client = await create_agent(
-                fresh_agent, search_params, session_id_for_cache, user_context, working_dir
+                fresh_agent,
+                search_params,
+                session_id_for_cache,
+                user_context,
+                working_dir,
+                sandbox_handle=sandbox_handle,
+                sandbox_provider=sandbox_provider,
+                sandbox_session_key=sandbox_session_key,
+                attached_files=processed_files,
             )
 
             # Prepare configuration
@@ -1029,7 +1620,62 @@ class AgentExecutionService:
                     ls_settings.source,
                 )
 
-            result = await agent_chain.ainvoke({"messages": [message_payload]}, config=config)
+            try:
+                result = await agent_chain.ainvoke(
+                    {"messages": [message_payload]},
+                    config=config,
+                )
+            except Exception as invoke_exc:
+                from services.agent_cache_service import (
+                    CheckpointerCacheService,
+                    is_missing_tool_output_error,
+                )
+
+                if (
+                    fresh_agent.has_memory
+                    and session_id_for_cache
+                    and is_missing_tool_output_error(invoke_exc)
+                ):
+                    # Recover by forking from the last known-good checkpoint
+                    # instead of deleting the whole thread: adelete_thread
+                    # wipes the user's entire visible conversation history
+                    # (get_conversation_history reads the same checkpointer),
+                    # not just the broken step. Checkpoints are immutable and
+                    # ordered, so retrying with an earlier checkpoint_id set
+                    # simply forks history forward from there — nothing is
+                    # deleted.
+                    rollback_checkpoint_id = await CheckpointerCacheService.get_rollback_checkpoint_id(
+                        fresh_agent.agent_id,
+                        session_id_for_cache,
+                    )
+                    if rollback_checkpoint_id is None:
+                        logger.warning(
+                            "Incomplete tool-call checkpoint for agent %s session %s "
+                            "has no earlier checkpoint to roll back to; failing the "
+                            "turn instead of retrying",
+                            fresh_agent.agent_id,
+                            session_id_for_cache,
+                        )
+                        raise HTTPException(
+                            status_code=502,
+                            detail="Your last message could not be completed. Please resend it.",
+                        ) from invoke_exc
+
+                    logger.warning(
+                        "Detected incomplete tool-call checkpoint for agent %s "
+                        "session %s; retrying turn from prior checkpoint %s "
+                        "(no history deleted)",
+                        fresh_agent.agent_id,
+                        session_id_for_cache,
+                        rollback_checkpoint_id,
+                    )
+                    config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
+                    result = await agent_chain.ainvoke(
+                        {"messages": [message_payload]},
+                        config=config,
+                    )
+                else:
+                    raise
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

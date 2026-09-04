@@ -65,6 +65,9 @@ class Agent(Base):
     service_id = Column(Integer,
                         ForeignKey('AIService.service_id', ondelete='SET NULL'),
                         nullable=True)
+    sandbox_service_id = Column(Integer,
+                        ForeignKey('SandboxService.service_id', ondelete='SET NULL'),
+                        nullable=True)
     silo_id = Column(Integer,
                         ForeignKey('Silo.silo_id'),
                         nullable=True)
@@ -104,6 +107,9 @@ class Agent(Base):
 
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
+
+    sandbox_service = relationship('SandboxService',
+                           foreign_keys=[sandbox_service_id])
 
     silo = relationship('Silo',
                            back_populates='agents',

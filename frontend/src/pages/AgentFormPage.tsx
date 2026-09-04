@@ -31,6 +31,7 @@ interface Agent {
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -51,6 +52,7 @@ interface Agent {
   rag_max_retrieval_calls?: number | null;
   rag_fixed_filters?: RagFixedFilter[];
   ai_services: Array<{ service_id: number; name: string }>;
+  sandbox_services: Array<{ service_id: number; name: string }>;
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
@@ -72,6 +74,7 @@ interface AgentFormData {
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -298,6 +301,7 @@ function AgentFormPage() {
         memory_max_tokens: response.memory_max_tokens || 4000,
         memory_summarize_threshold: response.memory_summarize_threshold || DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
         service_id: response.service_id || undefined,
+        sandbox_service_id: response.sandbox_service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
         temperature: response.temperature ?? DEFAULT_AGENT_TEMPERATURE,
@@ -507,6 +511,7 @@ function AgentFormPage() {
       memory_max_tokens: formData.memory_max_tokens,
       memory_summarize_threshold: formData.memory_summarize_threshold,
       service_id: formData.service_id,
+      sandbox_service_id: formData.enable_code_interpreter ? formData.sandbox_service_id : undefined,
       silo_id: formData.silo_id,
       output_parser_id: formData.output_parser_id,
       temperature: formData.temperature,
@@ -628,7 +633,7 @@ function AgentFormPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre *
+                    Name *
                   </label>
                   <input
                     type="text"
@@ -637,7 +642,7 @@ function AgentFormPage() {
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     required
-                    placeholder="Nombre..."
+                    placeholder="Name..."
                   />
                 </div>
 
@@ -658,7 +663,7 @@ function AgentFormPage() {
 
                 <div className="md:col-span-2">
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Descripción
+                    Description
                   </label>
                   <input
                     type="text"
@@ -666,7 +671,7 @@ function AgentFormPage() {
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    placeholder="Descripción..."
+                    placeholder="Description..."
                   />
                 </div>
               </div>
@@ -722,7 +727,7 @@ function AgentFormPage() {
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configura la estrategia de gestión de memoria del agente</p>
+                        <p className="text-sm text-gray-600 mt-1">Configure the agent's memory management strategy</p>
                       </div>
                     </div>
 
@@ -730,10 +735,10 @@ function AgentFormPage() {
                       <div className="flex items-start">
                         <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
                         <div>
-                          <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
+                          <p className="text-sm text-indigo-800 font-medium">Automatic Hybrid Strategy</p>
                           <p className="text-xs text-indigo-700 mt-1">
-                            El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, 
-                            recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.
+                            The agent automatically applies a hybrid strategy that removes tool messages, trims the history,
+                            and manages token limits to optimize performance and costs.
                           </p>
                         </div>
                       </div>
@@ -742,7 +747,7 @@ function AgentFormPage() {
                     <div className="space-y-6">
                       <div>
                         <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                          Máximo de Mensajes
+                          Maximum Messages
                         </label>
                         <input
                           type="number"
@@ -754,13 +759,13 @@ function AgentFormPage() {
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
+                          Maximum number of messages to keep in the conversation history (recommended: 20)
                         </p>
                       </div>
 
                       <div>
                         <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                          Límite de Tokens
+                          Token Limit
                         </label>
                         <input
                           type="number"
@@ -773,13 +778,13 @@ function AgentFormPage() {
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de tokens para el historial de conversación (recomendado: 4000)
+                          Maximum number of tokens for the conversation history (recommended: 4000)
                         </p>
                       </div>
 
                       <div>
                         <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                          Umbral de Resumen
+                          Summarization Threshold
                         </label>
                         <input
                           type="number"
@@ -791,16 +796,16 @@ function AgentFormPage() {
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
+                          Number of old messages at which summarization is considered (future implementation, recommended: 10)
                         </p>
                       </div>
                     </div>
 
                     <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600">Mensajes:</span>
+                          <span className="text-gray-600">Messages:</span>
                           <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
                         </div>
                         <div>
@@ -808,7 +813,7 @@ function AgentFormPage() {
                           <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Umbral:</span>
+                          <span className="text-gray-600">Threshold:</span>
                           <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
                         </div>
                       </div>
@@ -1034,6 +1039,30 @@ function AgentFormPage() {
                           <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
                         </div>
                       </div>
+
+                      {formData.enable_code_interpreter && (
+                        <div className="md:col-span-2">
+                          <label htmlFor="sandbox_service" className="block text-sm font-medium text-gray-700 mb-2">
+                            Sandbox Service
+                          </label>
+                          <select
+                            id="sandbox_service"
+                            value={formData.sandbox_service_id || ''}
+                            onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                          >
+                            <option value="">Use app/system default</option>
+                            {agent?.sandbox_services.map((service) => (
+                              <option key={service.service_id} value={service.service_id}>
+                                {service.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Provider-side Tools */}
@@ -1121,7 +1150,6 @@ function AgentFormPage() {
                   </div>
                 </>
               )}
-
               {/* Configuration for OCR agents */}
               {formData.type === 'ocr_agent' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -1131,7 +1159,43 @@ function AgentFormPage() {
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
                   </div>
-                  
+
+                  {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 mb-6">
+                    <div className="flex items-center mb-4">
+                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <Zap className="w-4 h-4 text-green-600" />
+                      </div>
+                      <h4 className="text-base font-semibold text-gray-900">Capabilities</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center p-3 bg-white rounded-lg border border-gray-200">
+                        <input
+                          id="is_tool_ocr"
+                          type="checkbox"
+                          checked={formData.is_tool}
+                          onChange={(e) => {
+                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                              setShowMcpWarning(true);
+                            } else {
+                              handleInputChange('is_tool', e.target.checked);
+                            }
+                          }}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="is_tool_ocr" className="text-sm font-medium text-gray-900">Tool Agent</label>
+                          <p className="text-xs text-gray-500">Can be used by other agents (including OCR tools)</p>
+                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                            <p className="text-xs text-purple-600 mt-1">
+                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* No AI Services Warning */}
                   {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
 

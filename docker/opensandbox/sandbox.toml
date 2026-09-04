@@ -1,0 +1,119 @@
+# Default OpenSandbox server configuration for Docker runtime.
+#
+# Based on the upstream example config:
+# https://github.com/alibaba/OpenSandbox/blob/main/server/opensandbox_server/examples/example.config.toml
+#
+# Compose-specific adjustments:
+# - host is 0.0.0.0 so the backend service can reach opensandbox:8080
+# - sqlite store path lives in the mounted opensandbox-data volume
+
+[server]
+host = "0.0.0.0"
+port = 8080
+max_sandbox_timeout_seconds = 86400
+# Optional: uncomment to enable API key authentication.
+# api_key = "your-secret-api-key"
+#
+# If api_key stays empty, startup requires explicit acknowledgment:
+# - Interactive TTY: type YES when prompted
+# - Non-interactive: set OPENSANDBOX_INSECURE_SERVER=YES
+#
+# SECURITY NOTE (defense-in-depth, not yet wired):
+# This file is baked into the image / bind-mounted read-only from a static
+# path (see docker/docker-compose.yaml opensandbox service), so it cannot
+# read OPENSANDBOX_API_KEY from the environment at container start without a
+# config-templating entrypoint (e.g. envsubst) in docker/opensandbox/Dockerfile
+# — that change is out of scope here and was deliberately not guessed at,
+# since it touches the container startup path and could not be verified
+# against the actual opensandbox-server binary in this environment. The
+# primary control against the threat this would mitigate (a sandboxed
+# process calling back into the OpenSandbox control-plane API) is the
+# network segmentation below: spawned sandbox containers only share
+# `sandbox-workloads` with the opensandbox server, and control-plane calls
+# would still only be able to spawn more sandboxes on that same isolated
+# network. Operators who want auth in depth should validate a config
+# templating approach for their OpenSandbox version and set a real api_key
+# above (reusing the OPENSANDBOX_API_KEY value already read by the backend
+# service in docker-compose.yaml as the client-side credential).
+
+[log]
+level = "DEBUG"
+
+[runtime]
+type = "docker"
+execd_image = "opensandbox/execd:v1.0.14"
+
+[storage]
+# Allowlist of host path prefixes permitted for bind mounts.
+# If empty, all host paths are allowed by OpenSandbox — dangerous, since a
+# malicious create-sandbox request (e.g. from LLM-run code calling back into
+# the control-plane API) could otherwise mount arbitrary host paths
+# (including "/") into a new sandbox container.
+# Nothing in this codebase's sandbox integration requests a host bind mount
+# for normal operation (checked backend/tools/sandbox/opensandbox_provider.py
+# and factory.py — no volumes/bind/host_path usage there), so this is set to
+# a harmless placeholder path that has no special meaning on the host or in
+# this Compose setup, purely so the allowlist is non-empty and any
+# unexpected/malicious bind-mount request is rejected by default.
+# If a real feature ever needs host bind mounts, replace this with the
+# actual trusted path(s) it requires.
+allowed_host_paths = ["/var/lib/opensandbox/scratch"]
+# Default storage size for auto-created Kubernetes PVCs when caller omits size.
+# Kept for schema compatibility even though this deployment uses Docker runtime.
+volume_default_size = "1Gi"
+
+[store]
+type = "sqlite"
+path = "/var/lib/opensandbox/opensandbox.db"
+
+[docker]
+# Sandboxes must share a Docker network with the OpenSandbox server when the
+# backend uses use_server_proxy=true.  With this Compose file the project name is
+# "docker", so the user-defined network is docker_<network-key>.
+#
+# SECURITY: this is intentionally NOT docker_mattin-network. Spawned sandbox
+# containers run LLM-generated code, so they must not share a network with
+# backend/postgres/qdrant/caddy/frontend (which all live on mattin-network).
+# Instead they get their own isolated network, sandbox-workloads, defined in
+# docker/docker-compose.yaml. The opensandbox server is dual-homed onto both
+# mattin-network (so backend can reach it) and sandbox-workloads (so its
+# server-proxy exec/file operations can still reach spawned sandboxes) — see
+# the opensandbox service comment in docker-compose.yaml. Sandboxes
+# themselves get no route to app/data services; the docker.sock mount is
+# only usable by the opensandbox server process, not by code running inside
+# a sandbox container.
+network_mode = "docker_sandbox-workloads"
+# Drop dangerous capabilities and block privilege escalation.
+drop_capabilities = [
+  "AUDIT_WRITE",
+  "MKNOD",
+  "NET_ADMIN",
+  "NET_RAW",
+  "SYS_ADMIN",
+  "SYS_MODULE",
+  "SYS_PTRACE",
+  "SYS_TIME",
+  "SYS_TTY_CONFIG",
+]
+no_new_privileges = true
+
+# Optional: set an AppArmor profile name, e.g. "docker-default", when AppArmor is enabled.
+apparmor_profile = ""
+
+# Seccomp profile: empty string uses Docker default; set an absolute path for a custom profile.
+seccomp_profile = ""
+
+# Limit process count to reduce host impact from fork bombs; set to null to disable.
+pids_limit = 4096
+
+[ingress]
+mode = "direct"
+
+[egress]
+image = "opensandbox/egress:v1.0.10"
+mode = "dns"
+
+# Experimental renew-on-access. Off by default.
+[renew_intent]
+enabled = false
+min_interval_seconds = 60

@@ -34,11 +34,33 @@ class App(Base):
     silos = relationship('Silo', back_populates='app', lazy=True)
     ai_services = relationship('AIService', back_populates='app', lazy=True)
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
+    sandbox_services = relationship('SandboxService',
+                        back_populates='app',
+                        foreign_keys='SandboxService.app_id',
+                        lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     sharepoint_sources = relationship('SharePointSource', back_populates='app', cascade='all, delete-orphan', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')
     is_frozen = Column(Boolean, default=False, nullable=False)
     enable_openai_api = Column(Boolean, default=False, nullable=False, server_default='false')
+
+    # Sandbox configuration.
+    # NULL means "inherit system default" (SANDBOX_DEFAULT_PROVIDER env var).
+    # use_alter=True breaks the App<->SandboxService table creation cycle
+    # (SandboxService.app_id -> App.app_id, App.default_sandbox_service_id ->
+    # SandboxService.service_id) so Base.metadata.create_all/drop_all (used by
+    # unit tests) can order DDL via a deferred ALTER TABLE, matching how the
+    # sandbox001 migration adds/drops this FK as a separate, named step.
+    default_sandbox_service_id = Column(Integer,
+                        ForeignKey(
+                            'SandboxService.service_id',
+                            ondelete='SET NULL',
+                            use_alter=True,
+                            name='App_default_sandbox_service_id_fkey',
+                        ),
+                        nullable=True)
+    default_sandbox_service = relationship('SandboxService',
+                        foreign_keys=[default_sandbox_service_id])
 
     def get_user_role(self, user_id):
         """Get the role of a user in this app"""

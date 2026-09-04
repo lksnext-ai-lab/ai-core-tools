@@ -83,6 +83,18 @@ docker compose down -v           # Parar y borrar volúmenes
 - Acceso: `http://localhost/` en local, `http://<ip-servidor>/` en cliente.
 - Swagger: `/docs/internal` y `/docs/public` desde el mismo origen.
 - Utilities aisladas (p. ej. Qdrant + web UI): `docker/utilities/`.
+- **Sandbox / Code Interpreter**: el servicio `opensandbox` (monta el socket de Docker,
+  así que está deshabilitado por defecto) NO arranca con el `docker compose up -d` de
+  arriba — está detrás de un profile, igual que `db_test`. Para habilitar el code
+  interpreter de los agentes:
+  ```bash
+  docker compose --profile opensandbox up -d --build
+  ```
+  `SANDBOX_DEFAULT_PROVIDER=opensandbox` viene activo por defecto en `.env.example`
+  aunque no se use este profile; sin el profile, cualquier agente con
+  `enable_code_interpreter=true` degrada el code interpreter para ese turno en vez de
+  fallar (no hace falta desactivar el provider por defecto si no vas a usar el
+  sandbox).
 
 ### Client Project Management
 

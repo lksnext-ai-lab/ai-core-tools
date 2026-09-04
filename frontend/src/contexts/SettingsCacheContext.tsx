@@ -29,6 +29,14 @@ interface EmbeddingService {
   needs_api_key?: boolean;
 }
 
+interface SandboxService {
+  service_id: number;
+  name: string;
+  provider: string;
+  created_at: string;
+  needs_api_key?: boolean;
+}
+
 import type { MCPConfig, Skill } from '../core/types';
 
 interface DataStructure {
@@ -56,6 +64,7 @@ interface SettingsCacheState {
   aiServices: { [appId: string]: AIService[] };
   apiKeys: { [appId: string]: APIKey[] };
   embeddingServices: { [appId: string]: EmbeddingService[] };
+  sandboxServices: { [appId: string]: SandboxService[] };
   mcpConfigs: { [appId: string]: MCPConfig[] };
   skills: { [appId: string]: Skill[] };
   dataStructures: { [appId: string]: DataStructure[] };
@@ -78,7 +87,12 @@ interface SettingsCacheContextType {
   getEmbeddingServices: (appId: string) => EmbeddingService[] | null;
   setEmbeddingServices: (appId: string, services: EmbeddingService[]) => void;
   invalidateEmbeddingServices: (appId: string) => void;
-  
+
+  // Sandbox Services
+  getSandboxServices: (appId: string) => SandboxService[] | null;
+  setSandboxServices: (appId: string, services: SandboxService[]) => void;
+  invalidateSandboxServices: (appId: string) => void;
+
   // MCP Configs
   getMCPConfigs: (appId: string) => MCPConfig[] | null;
   setMCPConfigs: (appId: string, configs: MCPConfig[]) => void;
@@ -122,6 +136,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     aiServices: {},
     apiKeys: {},
     embeddingServices: {},
+    sandboxServices: {},
     mcpConfigs: {},
     skills: {},
     dataStructures: {},
@@ -171,6 +186,21 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       const newEmbeddingServices = { ...prev.embeddingServices };
       delete newEmbeddingServices[appId];
       return { ...prev, embeddingServices: newEmbeddingServices };
+    });
+  }, []);
+
+  const setSandboxServices = useCallback((appId: string, services: SandboxService[]) => {
+    setCache(prev => ({
+      ...prev,
+      sandboxServices: { ...prev.sandboxServices, [appId]: services }
+    }));
+  }, []);
+
+  const invalidateSandboxServices = useCallback((appId: string) => {
+    setCache(prev => {
+      const newSandboxServices = { ...prev.sandboxServices };
+      delete newSandboxServices[appId];
+      return { ...prev, sandboxServices: newSandboxServices };
     });
   }, []);
 
@@ -239,6 +269,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       const newAIServices = { ...prev.aiServices };
       const newAPIKeys = { ...prev.apiKeys };
       const newEmbeddingServices = { ...prev.embeddingServices };
+      const newSandboxServices = { ...prev.sandboxServices };
       const newMCPConfigs = { ...prev.mcpConfigs };
       const newSkills = { ...prev.skills };
       const newDataStructures = { ...prev.dataStructures };
@@ -247,6 +278,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       delete newAIServices[appId];
       delete newAPIKeys[appId];
       delete newEmbeddingServices[appId];
+      delete newSandboxServices[appId];
       delete newMCPConfigs[appId];
       delete newSkills[appId];
       delete newDataStructures[appId];
@@ -256,6 +288,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
         aiServices: newAIServices,
         apiKeys: newAPIKeys,
         embeddingServices: newEmbeddingServices,
+        sandboxServices: newSandboxServices,
         mcpConfigs: newMCPConfigs,
         skills: newSkills,
         dataStructures: newDataStructures,
@@ -270,6 +303,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     getAIServices: (appId: string) => cache.aiServices[appId] || null,
     getAPIKeys: (appId: string) => cache.apiKeys[appId] || null,
     getEmbeddingServices: (appId: string) => cache.embeddingServices[appId] || null,
+    getSandboxServices: (appId: string) => cache.sandboxServices[appId] || null,
     getMCPConfigs: (appId: string) => cache.mcpConfigs[appId] || null,
     getSkills: (appId: string) => cache.skills[appId] || null,
     getDataStructures: (appId: string) => cache.dataStructures[appId] || null,
@@ -281,6 +315,8 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     invalidateAPIKeys,
     setEmbeddingServices,
     invalidateEmbeddingServices,
+    setSandboxServices,
+    invalidateSandboxServices,
     setMCPConfigs,
     invalidateMCPConfigs,
     setSkills,
@@ -295,6 +331,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     setAIServices, invalidateAIServices,
     setAPIKeys, invalidateAPIKeys,
     setEmbeddingServices, invalidateEmbeddingServices,
+    setSandboxServices, invalidateSandboxServices,
     setMCPConfigs, invalidateMCPConfigs,
     setSkills, invalidateSkills,
     setDataStructures, invalidateDataStructures,

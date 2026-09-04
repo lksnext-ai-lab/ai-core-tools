@@ -383,6 +383,7 @@ async def create_or_update_agent(
         'memory_max_tokens': agent_data.memory_max_tokens,
         'memory_summarize_threshold': agent_data.memory_summarize_threshold,
         'service_id': agent_data.service_id,
+        'sandbox_service_id': agent_data.sandbox_service_id,
         'silo_id': agent_data.silo_id,
         'output_parser_id': agent_data.output_parser_id,
         'temperature': agent_data.temperature,
