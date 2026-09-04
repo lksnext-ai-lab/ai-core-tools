@@ -9,6 +9,7 @@ import pytest
 def _make_agent():
     return SimpleNamespace(
         agent_id=7,
+        type="agent",
         ai_service=None,
         enable_code_interpreter=True,
         has_memory=False,
@@ -103,6 +104,7 @@ async def test_create_agent_passes_parent_sandbox_to_agent_tools(tmp_path):
         sandbox_provider=provider,
         sandbox_session_key="conv_7_42",
         sandbox_session_service=session_service,
+        attached_files=None,
     )
 
 

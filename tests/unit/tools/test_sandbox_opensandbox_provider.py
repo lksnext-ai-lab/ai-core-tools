@@ -232,6 +232,63 @@ class TestOpenSandboxProviderRunCode:
         assert "timed out" in result
         mock_interpreter.codes.interrupt.assert_called_once_with("exec-timeout-1")
 
+        # The timed-out context must be retired (removed from the pool), not
+        # released back for reuse — its background thread is abandoned, not
+        # confirmed dead, so handing it to the next caller risks that caller
+        # racing the zombie execution and getting its stale output instead of
+        # a fresh result (see docstring on _retire_context_entry).
+        from tools.sandbox.opensandbox_provider import _META_CONTEXT_POOLS
+
+        pool = handle.metadata[_META_CONTEXT_POOLS]["python"]
+        timed_out_context = handle.metadata["_interpreter"].codes.create_context.return_value
+        assert all(entry["context"] is not timed_out_context for entry in pool)
+
+    def test_timed_out_context_is_backfilled_with_a_fresh_one(self, provider_and_handle):
+        """After retiring a timed-out context, the pool should be backfilled
+        with a fresh replacement so capacity for that language isn't
+        permanently reduced by one timeout."""
+        provider, handle = provider_and_handle
+        mock_interpreter = handle.metadata["_interpreter"]
+
+        replacement_context = MagicMock()
+        replacement_context.id = "ctx-replacement"
+        mock_interpreter.codes.create_context.return_value = replacement_context
+
+        class FakeExecutionHandlersSync:
+            def __init__(self, on_init=None, on_stdout=None):
+                self.on_init = on_init
+                self.on_stdout = on_stdout
+
+        execd_sync_module = ModuleType("opensandbox.models.execd_sync")
+        execd_sync_module.ExecutionHandlersSync = FakeExecutionHandlersSync
+
+        def _slow_run(*args, **kwargs):
+            handlers = kwargs.get("handlers")
+            if handlers and handlers.on_init:
+                handlers.on_init(SimpleNamespace(id="exec-timeout-2"))
+            time.sleep(0.2)
+            return MagicMock()
+
+        mock_interpreter.codes.run.side_effect = _slow_run
+
+        with (
+            patch.dict(sys.modules, {"opensandbox.models.execd_sync": execd_sync_module}),
+            patch.object(
+                provider,
+                "_language_enum_for_context",
+                return_value="python-enum",
+            ),
+        ):
+            provider.run_code(handle, "while True: pass", timeout=0.01)
+
+        from tools.sandbox.opensandbox_provider import _META_CONTEXT_POOLS
+
+        pool = handle.metadata[_META_CONTEXT_POOLS]["python"]
+        assert len(pool) == 1
+        assert pool[0]["context"] is replacement_context
+        # The replacement must be immediately acquirable (unlocked).
+        assert pool[0]["lock"].acquire(blocking=False)
+
     def test_no_access_to_backend_env(self, provider_and_handle):
         """
         Isolation check: OpenSandboxProvider.run_code cannot access os.environ

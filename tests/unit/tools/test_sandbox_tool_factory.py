@@ -1,8 +1,9 @@
 """Regression tests for backend/tools/sandbox/tool_factory.py's REPL tool
 error handling — specifically that provider errors raised during lazy
-sandbox materialization (SandboxCapacityError, SandboxExpiredError) are
-translated into clean tool-error strings instead of propagating uncaught
-and crashing the whole agent turn.
+sandbox materialization (SandboxCapacityError, SandboxExpiredError, and any
+other unexpected failure such as a provider that resolves fine but is
+actually unreachable) are translated into clean tool-error strings instead
+of propagating uncaught and crashing the whole agent turn.
 """
 from __future__ import annotations
 
@@ -62,3 +63,24 @@ def test_repl_tool_recovers_from_expired_sandbox():
 
     assert result == "OK"
     session_service.evict.assert_called_once_with("conv_1_1")
+
+
+def test_repl_tool_returns_clean_error_on_unexpected_failure():
+    """A provider that resolves fine but is actually unreachable (e.g. the
+    backing sandbox service isn't running — DNS/connection errors with no
+    dedicated exception type) must degrade the same way as the known error
+    types above instead of crashing the whole agent turn with a raw 500."""
+    handle = _handle()
+    provider = MagicMock()
+    provider.get_supported_languages.return_value = ["python"]
+    provider.run_code.side_effect = OSError(
+        "[Errno -3] Temporary failure in name resolution"
+    )
+
+    tool = create_sandbox_repl_tool(handle, provider, "python")
+    result = tool.invoke({"code": "print(1)"})
+
+    assert "unavailable" in result.lower()
+    assert "error" in result.lower()
+    # The raw exception text must not leak into the LLM-visible tool result.
+    assert "name resolution" not in result

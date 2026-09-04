@@ -393,6 +393,7 @@ class AgentExecutionService:
                 ctx.session_id_for_cache,
                 ctx.user_context,
                 ctx.image_files,
+                processed_files=ctx.processed_files,
                 working_dir=ctx.working_dir,
                 sandbox_handle=ctx.sandbox_handle,
                 sandbox_provider=ctx.sandbox_provider,
@@ -541,12 +542,19 @@ class AgentExecutionService:
         # 9. Resolve working directory
         app_config = get_app_config()
         tmp_base = app_config['TMP_BASE_FOLDER']
+        # Caller identity used to scope both the local workspace and (below,
+        # step 11) the remote sandbox session when there's no conversation_id
+        # to key on (has_memory=False agents, public embeds, marketplace).
+        # Without this, every such caller for a given agent collapsed onto
+        # the same "anon_{agent_id}" sandbox session and shared one remote
+        # container/workspace across unrelated users.
+        user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
+        app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
+        identity_session_id = f"user_{user_id}_app_{app_id_ctx}"
         if effective_conv_id:
             working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
         else:
-            user_id = user_context.get('user_id', 'anonymous') if user_context else 'anonymous'
-            app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
-            session_key = f"agent_{agent_id}_user_{user_id}_app_{app_id_ctx}"
+            session_key = f"agent_{agent_id}_{identity_session_id}"
             working_dir = os.path.join(tmp_base, "persistent", session_key)
 
         workspace_paths = _ensure_local_workspace_layout(working_dir)
@@ -611,7 +619,11 @@ class AgentExecutionService:
                 resolved_sandbox_service_id = None
 
             if resolved_sandbox_provider is not None:
-                sandbox_session_key = SandboxSessionService.session_key(agent_id, effective_conv_id)
+                sandbox_session_key = SandboxSessionService.session_key(
+                    agent_id,
+                    effective_conv_id,
+                    session_id=None if effective_conv_id else identity_session_id,
+                )
                 sandbox_handle = _LazySandboxHandle(
                     session_key=sandbox_session_key,
                     provider=resolved_sandbox_provider,
@@ -1313,7 +1325,7 @@ class AgentExecutionService:
             # Check if PDF has text
             has_text = check_pdf_has_text(pdf_path)
             
-            if has_text:
+            if has_text and False:
                 # Extract text directly
                 text_content = extract_text_from_pdf(pdf_path)
                 logger.info(f"Extracted text from PDF: {len(text_content)} characters")
@@ -1546,6 +1558,7 @@ class AgentExecutionService:
         sandbox_handle: Any = None,
         sandbox_provider: Any = None,
         sandbox_session_key: Optional[str] = None,
+        processed_files: List[Dict] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
@@ -1571,6 +1584,7 @@ class AgentExecutionService:
                 sandbox_handle=sandbox_handle,
                 sandbox_provider=sandbox_provider,
                 sandbox_session_key=sandbox_session_key,
+                attached_files=processed_files,
             )
 
             # Prepare configuration
@@ -1622,16 +1636,40 @@ class AgentExecutionService:
                     and session_id_for_cache
                     and is_missing_tool_output_error(invoke_exc)
                 ):
+                    # Recover by forking from the last known-good checkpoint
+                    # instead of deleting the whole thread: adelete_thread
+                    # wipes the user's entire visible conversation history
+                    # (get_conversation_history reads the same checkpointer),
+                    # not just the broken step. Checkpoints are immutable and
+                    # ordered, so retrying with an earlier checkpoint_id set
+                    # simply forks history forward from there — nothing is
+                    # deleted.
+                    rollback_checkpoint_id = await CheckpointerCacheService.get_rollback_checkpoint_id(
+                        fresh_agent.agent_id,
+                        session_id_for_cache,
+                    )
+                    if rollback_checkpoint_id is None:
+                        logger.warning(
+                            "Incomplete tool-call checkpoint for agent %s session %s "
+                            "has no earlier checkpoint to roll back to; failing the "
+                            "turn instead of retrying",
+                            fresh_agent.agent_id,
+                            session_id_for_cache,
+                        )
+                        raise HTTPException(
+                            status_code=502,
+                            detail="Your last message could not be completed. Please resend it.",
+                        ) from invoke_exc
+
                     logger.warning(
                         "Detected incomplete tool-call checkpoint for agent %s "
-                        "session %s; deleting checkpoint and retrying turn once",
+                        "session %s; retrying turn from prior checkpoint %s "
+                        "(no history deleted)",
                         fresh_agent.agent_id,
                         session_id_for_cache,
+                        rollback_checkpoint_id,
                     )
-                    await CheckpointerCacheService.invalidate_checkpointer_async(
-                        fresh_agent.agent_id,
-                        session_id_for_cache,
-                    )
+                    config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
                     result = await agent_chain.ainvoke(
                         {"messages": [message_payload]},
                         config=config,

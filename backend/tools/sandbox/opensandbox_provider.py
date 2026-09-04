@@ -553,6 +553,62 @@ class OpenSandboxProvider(SandboxProvider):
         except RuntimeError:
             pass
 
+    def _retire_context_entry(
+        self,
+        handle: SandboxHandle,
+        language: str,
+        entry: dict[str, Any] | None,
+    ) -> None:
+        """Permanently discard a context entry instead of returning it to the pool.
+
+        Used after a client-side ``run_code`` timeout: the daemon thread that
+        was running the interpreter call is abandoned (Python threads can't be
+        forcibly killed), and the best-effort ``interpreter.codes.interrupt()``
+        call is never confirmed to have actually stopped it. If the entry were
+        released normally, the very next ``_acquire_context_entry`` call could
+        hand this same, possibly still-busy context to a new caller — who
+        would then race the abandoned execution and could receive its stale
+        output instead of a fresh result (observed as the model looping on
+        unchanging output until it hit the graph recursion limit).
+
+        Removing the entry from the pool means ``_acquire_context_entry`` can
+        never return it again; its lock is deliberately left held (not
+        released) as a harmless extra guard. A fresh replacement context is
+        created best-effort so pool capacity for *language* isn't permanently
+        reduced by one timeout.
+        """
+        if entry is None:
+            return
+        pools = self._ensure_context_pools(handle)
+        pool_lock = handle.metadata.setdefault(_META_CONTEXT_POOL_LOCK, threading.Lock())
+        with pool_lock:
+            pool = pools.get(language)
+            if pool is not None and entry in pool:
+                pool.remove(entry)
+            logger.warning(
+                "OpenSandboxProvider: retired execution context after timeout "
+                "instead of returning it to the pool — it may still be busy "
+                "on the remote side (sandbox=%s, language=%s, context_id=%s)",
+                handle.sandbox_id,
+                language,
+                getattr(entry.get("context"), "id", "<unknown>"),
+            )
+            if pool is None:
+                return
+            try:
+                replacement = self._create_context_pool_entry(handle, language)
+            except Exception as exc:
+                logger.warning(
+                    "OpenSandboxProvider: failed to backfill retired context "
+                    "for language '%s' (sandbox=%s): %s",
+                    language,
+                    handle.sandbox_id,
+                    exc,
+                )
+                return
+            if replacement is not None:
+                pool.append(replacement)
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -886,6 +942,7 @@ class OpenSandboxProvider(SandboxProvider):
             except ImportError:
                 pass  # fall back to batch mode if SDK import fails
 
+        context_timed_out = False
         try:
             self._renew_sandbox_timeout(
                 sandbox,
@@ -914,6 +971,7 @@ class OpenSandboxProvider(SandboxProvider):
             thread.join(effective_timeout if effective_timeout > 0 else None)
 
             if thread.is_alive():
+                context_timed_out = True
                 exec_id = execution_id["value"]
                 if exec_id:
                     try:
@@ -958,7 +1016,10 @@ class OpenSandboxProvider(SandboxProvider):
             return f"[Error] Code execution failed: {exc}"[:effective_limit]
         finally:
             self._reset_idle_timeout(sandbox, suppress_errors=True)
-            self._release_context_entry(context_entry)
+            if context_timed_out:
+                self._retire_context_entry(handle, language, context_entry)
+            else:
+                self._release_context_entry(context_entry)
 
         # Collect output: use the ``text`` property which combines stdout +
         # result text, then append stderr/error if present.

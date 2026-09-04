@@ -1150,7 +1150,6 @@ function AgentFormPage() {
                   </div>
                 </>
               )}
-
               {/* Configuration for OCR agents */}
               {formData.type === 'ocr_agent' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -1160,7 +1159,43 @@ function AgentFormPage() {
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
                   </div>
-                  
+
+                  {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 mb-6">
+                    <div className="flex items-center mb-4">
+                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <Zap className="w-4 h-4 text-green-600" />
+                      </div>
+                      <h4 className="text-base font-semibold text-gray-900">Capabilities</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center p-3 bg-white rounded-lg border border-gray-200">
+                        <input
+                          id="is_tool_ocr"
+                          type="checkbox"
+                          checked={formData.is_tool}
+                          onChange={(e) => {
+                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                              setShowMcpWarning(true);
+                            } else {
+                              handleInputChange('is_tool', e.target.checked);
+                            }
+                          }}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="is_tool_ocr" className="text-sm font-medium text-gray-900">Tool Agent</label>
+                          <p className="text-xs text-gray-500">Can be used by other agents (including OCR tools)</p>
+                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                            <p className="text-xs text-purple-600 mt-1">
+                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* No AI Services Warning */}
                   {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
 

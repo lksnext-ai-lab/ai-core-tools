@@ -241,6 +241,12 @@ export default function MarketplaceChatPage() {
     };
   }, [numericId]);
 
+  useEffect(() => {
+    if (!isStreaming && textareaRef.current && !isQuotaExceeded) {
+      textareaRef.current.focus();
+    }
+  }, [isStreaming, isQuotaExceeded]);
+
   const refreshFileList = useCallback(async () => {
     try {
       const response = await apiService.listMarketplaceFiles(numericId);
@@ -681,7 +687,7 @@ export default function MarketplaceChatPage() {
             </div>
           )}
 
-           <div className="pg-glass rounded-2xl px-4 py-3 flex items-end gap-3 shadow-sm border border-white/20 dark:border-gray-700/30">
+           <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
              <input
                ref={fileInputRef}
                type="file"
@@ -713,7 +719,7 @@ export default function MarketplaceChatPage() {
                placeholder={`Message ${agentName}…`}
                disabled={isStreaming || isQuotaExceeded}
                rows={1}
-               className="flex-1 bg-transparent border-none outline-none resize-none
+               className="flex-1 py-2 bg-transparent border-none outline-none resize-none
                           text-sm text-gray-800 dark:text-gray-100
                           placeholder:text-gray-400 dark:placeholder:text-gray-500
                           disabled:opacity-50
