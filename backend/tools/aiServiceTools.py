@@ -119,6 +119,14 @@ def _build_openai_llm(ai_service, temperature):
         temperature=temperature,
         api_key=ai_service.api_key,
         base_url=base_url,
+        # Reasoning models reject function tools on /v1/chat/completions ("Function tools
+        # with reasoning_effort are not supported ... use /v1/responses or set
+        # reasoning_effort to 'none'"), and every agent here is built with tools. The
+        # Responses API keeps reasoning on (unlike reasoning_effort='none') and is what
+        # the provider-side server tools (web_search, image_generation, code_interpreter)
+        # already expect. Only for OpenAI itself: a custom endpoint is an OpenAI-compatible
+        # gateway, and those speak /v1/chat/completions but not necessarily /v1/responses.
+        use_responses_api=base_url is None,
     )
 
 
