@@ -175,6 +175,7 @@ opensandbox-code-interpreter = "0.1.2"
 daytona = "0.173.0"
 e2b-code-interpreter = "2.5.0"
 e2b = "2.7.0"
+dbos = ">=2.0.0,<3.0.0"
 
 [tool.poetry.scripts]
 dev = "uvicorn backend.main:app --reload --port 8000"

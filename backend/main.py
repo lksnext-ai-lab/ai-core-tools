@@ -70,6 +70,9 @@ async def lifespan(app: FastAPI):
     try:
         validate_secret_key()
 
+        from scheduling.periodic_agent_task import initialize_dbos
+        app.state.dbos_enabled = await initialize_dbos()
+
         if is_saas_mode():
             validate_saas_env()
             logger.info("SaaS mode: environment validation passed")
@@ -141,6 +144,9 @@ async def lifespan(app: FastAPI):
     yield
 
     try:
+        from scheduling.periodic_agent_task import shutdown_dbos
+        shutdown_dbos()
+
         crawl_tasks = getattr(app.state, 'crawl_tasks', None)
         if crawl_tasks:
             from services.crawl.worker import stop_crawl_workers
