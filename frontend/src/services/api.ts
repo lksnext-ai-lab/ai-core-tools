@@ -129,6 +129,14 @@ export interface Agent {
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
+  // Media processing configuration
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  media_embedding_service_id?: number | null;
+  media_forced_language?: string | null;
+  media_chunk_min_duration?: number | null;
+  media_chunk_max_duration?: number | null;
+  media_chunk_overlap?: number | null;
   // RAG retrieval config
   rag_k?: number;
   rag_search_type?: 'similarity' | 'mmr' | 'similarity_score_threshold';
@@ -2247,7 +2255,7 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`);
   }
 
-  async getConversationWithHistory(conversationId: number): Promise<{ messages: Array<{ role: string; content: string }> }> {
+  async getConversationWithHistory(conversationId: number): Promise<{ session_id?: string | null; messages: Array<{ role: string; content: string }> }> {
     return this.request(`/internal/conversations/${conversationId}/history`);
   }
 
