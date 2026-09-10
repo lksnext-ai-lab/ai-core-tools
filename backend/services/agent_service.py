@@ -10,6 +10,14 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _typed_attr(obj, name: str, expected_type, default=None):
+    """Read an optional ORM attribute without leaking dynamic mock values."""
+    value = getattr(obj, name, None)
+    if value is None:
+        return default
+    return value if isinstance(value, expected_type) else default
+
+
 def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
     """Serialize an AgentMarketplaceProfile to a dict for schema response."""
     if not profile:
@@ -90,6 +98,22 @@ class AgentService:
         # Get related information
         silo_info = self._get_silo_info(db, agent) if agent_id != 0 else None
         output_parser_info = self._get_output_parser_info(db, agent) if agent_id != 0 else None
+
+        media_transcription_service_id = _typed_attr(
+            agent, "transcription_service_id", int
+        )
+        media_video_ai_service_id = _typed_attr(agent, "video_ai_service_id", int)
+        media_embedding_service_id = _typed_attr(
+            agent, "media_embedding_service_id", int
+        )
+        media_forced_language = _typed_attr(agent, "media_forced_language", str)
+        media_chunk_min_duration = _typed_attr(
+            agent, "media_chunk_min_duration", int, 30
+        )
+        media_chunk_max_duration = _typed_attr(
+            agent, "media_chunk_max_duration", int, 120
+        )
+        media_chunk_overlap = _typed_attr(agent, "media_chunk_overlap", int, 5)
         
         return AgentDetailSchema(
             agent_id=agent.agent_id,
@@ -120,13 +144,13 @@ class AgentService:
             vision_system_prompt=getattr(agent, 'vision_system_prompt', None),
             text_system_prompt=getattr(agent, 'text_system_prompt', None),
             # Media processing configuration
-            transcription_service_id=getattr(agent, 'transcription_service_id', None),
-            video_ai_service_id=getattr(agent, 'video_ai_service_id', None),
-            media_embedding_service_id=getattr(agent, 'media_embedding_service_id', None),
-            media_forced_language=getattr(agent, 'media_forced_language', None),
-            media_chunk_min_duration=getattr(agent, 'media_chunk_min_duration', 30) or 30,
-            media_chunk_max_duration=getattr(agent, 'media_chunk_max_duration', 120) or 120,
-            media_chunk_overlap=getattr(agent, 'media_chunk_overlap', 5) if getattr(agent, 'media_chunk_overlap', 5) is not None else 5,
+            transcription_service_id=media_transcription_service_id,
+            video_ai_service_id=media_video_ai_service_id,
+            media_embedding_service_id=media_embedding_service_id,
+            media_forced_language=media_forced_language,
+            media_chunk_min_duration=media_chunk_min_duration,
+            media_chunk_max_duration=media_chunk_max_duration,
+            media_chunk_overlap=media_chunk_overlap,
             # Related information
             silo=silo_info,
             output_parser=output_parser_info,
