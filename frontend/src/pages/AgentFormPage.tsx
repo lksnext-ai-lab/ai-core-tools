@@ -52,13 +52,13 @@ interface Agent {
   rag_max_retrieval_calls?: number | null;
   rag_fixed_filters?: RagFixedFilter[];
   // Media processing configuration (playground media upload)
-  transcription_service_id?: number;
-  video_ai_service_id?: number;
-  media_embedding_service_id?: number;
-  media_forced_language?: string;
-  media_chunk_min_duration?: number;
-  media_chunk_max_duration?: number;
-  media_chunk_overlap?: number;
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  media_embedding_service_id?: number | null;
+  media_forced_language?: string | null;
+  media_chunk_min_duration?: number | null;
+  media_chunk_max_duration?: number | null;
+  media_chunk_overlap?: number | null;
   ai_services: Array<{ service_id: number; name: string; supports_video?: boolean }>;
   sandbox_services: Array<{ service_id: number; name: string }>;
   silos: Array<{ silo_id: number; name: string }>;

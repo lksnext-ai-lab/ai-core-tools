@@ -607,7 +607,18 @@ class OpenSandboxProvider(SandboxProvider):
                 )
                 return
             if replacement is not None:
-                pool.append(replacement)
+                retired_context = entry.get("context")
+                replacement_context = replacement.get("context")
+                if replacement_context is retired_context:
+                    logger.warning(
+                        "OpenSandboxProvider: replacement context is the same "
+                        "object as the retired context; leaving it out of the pool "
+                        "(sandbox=%s, language=%s)",
+                        handle.sandbox_id,
+                        language,
+                    )
+                else:
+                    pool.append(replacement)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -1191,4 +1202,3 @@ class OpenSandboxProvider(SandboxProvider):
             handle.sandbox_id,
         )
         return result
-
