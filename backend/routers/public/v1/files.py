@@ -100,7 +100,12 @@ async def attach_file(
         # so agent chat retrieves them via RAG. A temp silo is always created —
         # a conversation is created here to key it when the agent has no memory
         # and none was provided — so the public API never silently drops content.
-        if file_ref.file_type in VECTORIZABLE_FILE_TYPES and file_ref.content:
+        extracted_content = getattr(file_ref, "content", None)
+        if (
+            file_ref.file_type in VECTORIZABLE_FILE_TYPES
+            and isinstance(extracted_content, str)
+            and extracted_content
+        ):
             if not effective_conversation_id:
                 new_conversation = ConversationService.create_conversation(
                     db=db,
@@ -108,7 +113,12 @@ async def attach_file(
                     user_context=user_context,
                     title=None,
                 )
-                effective_conversation_id = str(new_conversation.conversation_id)
+                created_conversation_id = getattr(
+                    new_conversation, "conversation_id", None
+                )
+                if created_conversation_id is None:
+                    raise RuntimeError("Conversation creation returned no conversation ID")
+                effective_conversation_id = str(created_conversation_id)
                 user_context["conversation_id"] = effective_conversation_id
                 logger.info(
                     f"Auto-created conversation {effective_conversation_id} to scope "
@@ -126,7 +136,7 @@ async def attach_file(
                         file_id=file_ref.file_id,
                         filename=file_ref.filename,
                         file_path=file_ref.file_path,
-                        content=file_ref.content,
+                        content=extracted_content,
                         db=db,
                     )
                 except Exception as vec_err:

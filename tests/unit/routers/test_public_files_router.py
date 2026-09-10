@@ -41,6 +41,7 @@ def _mock_file_ref():
     ref.content_preview = "content..."
     ref.has_extractable_content = True
     ref.mime_type = "application/pdf"
+    ref.content = None
     return ref
 
 
