@@ -2,7 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: ["main", "develop", "feat/**", "fix/**"]
+    # Feature/fix branches are covered by pull_request runs. Keeping push
+    # builds for shared branches avoids running the same commit twice.
+    branches: ["main", "develop"]
   pull_request:
     branches: ["main", "develop"]
 
