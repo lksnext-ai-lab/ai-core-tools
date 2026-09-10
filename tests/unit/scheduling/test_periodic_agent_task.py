@@ -62,40 +62,6 @@ async def test_run_scheduled_task_reuses_continuous_conversation_and_records_fai
     create.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_run_periodic_agent_persists_serializable_output_on_success():
-    schedule = SimpleNamespace(id=12, agent_id=11, input_context={"message": "hello"})
-    db = _db_for(schedule)
-    with (
-        patch.object(module, "SessionLocal", return_value=db),
-        patch.object(module, "invoke_agent_step", new=AsyncMock(return_value={"answer": "ok"})) as invoke,
-    ):
-        result = await module._run_periodic_agent(datetime.now(timezone.utc), 12)
-
-    run = db.add.call_args.args[0]
-    assert result == {"answer": "ok"}
-    assert run.status == "succeeded"
-    assert run.output_summary == {"answer": "ok"}
-    invoke.assert_awaited_once_with(11, {"message": "hello"})
-
-
-@pytest.mark.asyncio
-async def test_run_periodic_agent_marks_run_failed_and_closes_db_on_error():
-    schedule = SimpleNamespace(id=12, agent_id=11, input_context={})
-    db = _db_for(schedule)
-    with (
-        patch.object(module, "SessionLocal", return_value=db),
-        patch.object(module, "invoke_agent_step", new=AsyncMock(side_effect=ValueError("bad input"))),
-    ):
-        with pytest.raises(ValueError, match="bad input"):
-            await module._run_periodic_agent(datetime.now(timezone.utc), 12)
-
-    run = db.add.call_args.args[0]
-    assert run.status == "failed"
-    assert run.error_summary == "bad input"
-    db.close.assert_called_once()
-
-
 def test_serializable_output_handles_json_and_non_json_results():
     assert module._serializable_output({"ok": True}) == {"ok": True}
     assert module._serializable_output({"bad": object()})["result"].startswith("{")

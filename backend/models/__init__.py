@@ -34,7 +34,6 @@ from .tier_config import TierConfig
 from .usage_record import UsageRecord
 from .user_credential import UserCredential
 from .refresh_token import RefreshToken
-from .agent_schedule import AgentSchedule, AgentRunSummary
 from .scheduled_task import ScheduledTask, ScheduledTaskRun
 
 __all__ = [
@@ -55,5 +54,5 @@ __all__ = [
     'UserCredential',
     'RefreshToken',
     'SandboxService',
-    'AgentSchedule', 'AgentRunSummary', 'ScheduledTask', 'ScheduledTaskRun',
+    'ScheduledTask', 'ScheduledTaskRun',
 ]

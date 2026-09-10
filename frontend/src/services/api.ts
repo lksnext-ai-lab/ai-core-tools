@@ -164,42 +164,6 @@ export interface Agent {
   skills: Array<{ skill_id: number; name: string; description?: string }>;
 }
 
-export interface AgentSchedule {
-  id: number;
-  agent_id: number;
-  app_id: number;
-  created_by: number;
-  orchestrator_schedule_name: string;
-  cron_expression: string;
-  timezone: string;
-  input_context?: Record<string, unknown> | null;
-  status: 'active' | 'paused' | string;
-  max_concurrent_runs: number;
-  created_at: string;
-  updated_at: string;
-  next_run_at?: string | null;
-}
-
-export interface AgentRunSummary {
-  id: number;
-  agent_schedule_id: number;
-  orchestrator_run_id: string;
-  scheduled_time: string;
-  started_at?: string | null;
-  finished_at?: string | null;
-  status: string;
-  attempt_count: number;
-  error_summary?: string | null;
-  output_summary?: Record<string, unknown> | null;
-}
-
-export interface AgentRunSummaryList {
-  items: AgentRunSummary[];
-  page: number;
-  per_page: number;
-  total: number;
-}
-
 export interface ScheduledTask {
   id: number;
   name: string;
@@ -821,10 +785,6 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
   }
 
-  async getAgentSchedules(appId: number, agentId: number): Promise<AgentSchedule[]> {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/schedules/`);
-  }
-
   async getScheduledTasks(appId: number, agentId?: number): Promise<ScheduledTask[]> {
     const query = agentId === undefined ? '' : `?agent_id=${agentId}`;
     return this.request(`/internal/scheduled-tasks?app_id=${appId}${query}`);
@@ -848,49 +808,6 @@ class ApiService {
 
   async runScheduledTaskNow(appId: number, taskId: number): Promise<ScheduledTaskTriggerResponse> {
     return this.request(`/internal/scheduled-tasks/${taskId}/run-now?app_id=${appId}`, { method: 'POST' });
-  }
-
-  async createAgentSchedule(
-    appId: number,
-    agentId: number,
-    data: Pick<AgentSchedule, 'cron_expression' | 'timezone' | 'max_concurrent_runs'> & {
-      input_context?: Record<string, unknown> | null;
-    },
-  ): Promise<AgentSchedule> {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/schedules/`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateAgentSchedule(
-    appId: number,
-    agentId: number,
-    scheduleId: number,
-    data: Partial<Pick<AgentSchedule, 'cron_expression' | 'timezone' | 'max_concurrent_runs' | 'status'>> & {
-      input_context?: Record<string, unknown> | null;
-    },
-  ): Promise<AgentSchedule> {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/schedules/${scheduleId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async deleteAgentSchedule(appId: number, agentId: number, scheduleId: number): Promise<void> {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/schedules/${scheduleId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getAgentScheduleRuns(
-    appId: number,
-    agentId: number,
-    scheduleId: number,
-    page = 1,
-    perPage = 20,
-  ): Promise<AgentRunSummaryList> {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/schedules/${scheduleId}/runs?page=${page}&per_page=${perPage}`);
   }
 
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string): Promise<Agent> {

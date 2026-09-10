@@ -37,15 +37,12 @@ from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
 from models.agent import MarketplaceVisibility
-from routers.internal.agent_schedules import schedules_router
 
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 agents_router = APIRouter()
-
-agents_router.include_router(schedules_router, prefix="/{agent_id}/schedules", tags=["Agent schedules"])
 
 AGENT_NOT_FOUND_ERROR = "Agent not found"
 INTERNAL_SERVER_ERROR = "Internal server error"
