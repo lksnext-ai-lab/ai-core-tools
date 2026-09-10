@@ -120,7 +120,11 @@ class AgentStreamingService:
                 "metadata",
                 {
                     "conversation_id": ctx.effective_conv_id,
-                    "session_id": ctx.conversation.session_id if ctx.conversation else None,
+                    "session_id": (
+                        getattr(ctx.conversation, "session_id", None)
+                        if getattr(ctx, "conversation", None)
+                        else None
+                    ),
                     "agent_id": agent_id,
                     "agent_name": ctx.agent.name,
                     "has_memory": ctx.agent.has_memory,
@@ -134,7 +138,11 @@ class AgentStreamingService:
             #     into create_agent() alongside the sandbox handles.
             # ----------------------------------------------------------------
             temp_silo_ids = None
-            session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
+            session_id_for_media = (
+                getattr(ctx.conversation, "session_id", None)
+                if getattr(ctx, "conversation", None)
+                else None
+            )
             if session_id_for_media and effective_db:
                 try:
                     from services.playground_media_service import PlaygroundMediaService
