@@ -1,4 +1,4 @@
-"""Add durable agent schedules and first-class scheduled tasks."""
+"""Add first-class scheduled tasks."""
 
 from alembic import op
 import sqlalchemy as sa
@@ -10,41 +10,6 @@ depends_on = None
 
 
 def upgrade():
-    op.create_table(
-        "agent_schedule",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("agent_id", sa.Integer(), nullable=False),
-        sa.Column("app_id", sa.Integer(), nullable=False),
-        sa.Column("created_by", sa.Integer(), nullable=False),
-        sa.Column("orchestrator_schedule_name", sa.String(length=255), nullable=False),
-        sa.Column("cron_expression", sa.String(length=120), nullable=False),
-        sa.Column("timezone", sa.String(length=64), nullable=False, server_default="UTC"),
-        sa.Column("input_context", sa.JSON(), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="active"),
-        sa.Column("max_concurrent_runs", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["agent_id"], ["Agent.agent_id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["app_id"], ["App.app_id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["created_by"], ["User.user_id"]),
-        sa.UniqueConstraint("orchestrator_schedule_name"),
-    )
-    op.create_table(
-        "agent_run_summary",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("agent_schedule_id", sa.Integer(), nullable=False),
-        sa.Column("orchestrator_run_id", sa.String(length=255), nullable=False),
-        sa.Column("scheduled_time", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True)),
-        sa.Column("finished_at", sa.DateTime(timezone=True)),
-        sa.Column("status", sa.String(length=20), nullable=False),
-        sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("error_summary", sa.Text()),
-        sa.Column("output_summary", sa.JSON()),
-        sa.ForeignKeyConstraint(["agent_schedule_id"], ["agent_schedule.id"], ondelete="CASCADE"),
-    )
-    op.create_index("ix_agent_run_summary_schedule", "agent_run_summary", ["agent_schedule_id", "scheduled_time"])
-
     op.create_table(
         "scheduled_task",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -85,6 +50,3 @@ def downgrade():
     op.drop_index("ix_scheduled_task_run_task", table_name="scheduled_task_run")
     op.drop_table("scheduled_task_run")
     op.drop_table("scheduled_task")
-    op.drop_index("ix_agent_run_summary_schedule", table_name="agent_run_summary")
-    op.drop_table("agent_run_summary")
-    op.drop_table("agent_schedule")

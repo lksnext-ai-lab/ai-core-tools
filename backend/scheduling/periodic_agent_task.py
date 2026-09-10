@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from db.database import SessionLocal
-from models.agent_schedule import AgentRunSummary, AgentSchedule
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from models.conversation import ConversationSource
 from services.conversation_service import ConversationService
@@ -43,10 +42,6 @@ if DBOS is not None:
         finally:
             db.close()
 
-    @DBOS.workflow()
-    async def periodic_agent_run(scheduled_time: datetime, schedule_id: int):
-        return await _run_periodic_agent(scheduled_time, schedule_id)
-
     @DBOS.workflow(max_recovery_attempts=3)
     async def periodic_task_run(scheduled_time: datetime, task_id: int):
         return await _run_scheduled_task(scheduled_time, task_id)
@@ -60,41 +55,8 @@ else:
     ):
         raise RuntimeError("DBOS is not installed")
 
-    async def periodic_agent_run(scheduled_time: datetime, schedule_id: int):
-        return await _run_periodic_agent(scheduled_time, schedule_id)
-
     async def periodic_task_run(scheduled_time: datetime, task_id: int):
         return await _run_scheduled_task(scheduled_time, task_id)
-
-
-async def _run_periodic_agent(scheduled_time: datetime, schedule_id: int):
-    db = SessionLocal()
-    run = None
-    try:
-        schedule = db.query(AgentSchedule).filter(AgentSchedule.id == schedule_id).one()
-        run_id = getattr(DBOS, "workflow_id", None) or f"schedule-{schedule_id}-{scheduled_time.isoformat()}"
-        run = AgentRunSummary(
-            agent_schedule_id=schedule.id, orchestrator_run_id=str(run_id),
-            scheduled_time=scheduled_time, started_at=datetime.now(timezone.utc),
-            status="running", attempt_count=1,
-        )
-        db.add(run)
-        db.commit()
-        result = await invoke_agent_step(schedule.agent_id, schedule.input_context)
-        run.status = "succeeded"
-        run.finished_at = datetime.now(timezone.utc)
-        run.output_summary = _serializable_output(result)
-        db.commit()
-        return result
-    except Exception as exc:
-        if run is not None:
-            run.status = "failed"
-            run.finished_at = datetime.now(timezone.utc)
-            run.error_summary = str(exc)[:4000]
-            db.commit()
-        raise
-    finally:
-        db.close()
 
 
 async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
@@ -142,24 +104,7 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
 
 
 class DBOSOrchestrator:
-    """Small synchronous adapter used by AgentSchedulerService."""
-
-    def apply_schedule(self, schedule: AgentSchedule) -> None:
-        DBOS.apply_schedules([{
-            "schedule_name": schedule.orchestrator_schedule_name,
-            "workflow_fn": periodic_agent_run,
-            "schedule": schedule.cron_expression,
-            "cron_timezone": schedule.timezone,
-            "context": schedule.id,
-            "queue_name": "periodic-agents",
-        }])
-        DBOS.resume_schedule(schedule.orchestrator_schedule_name)
-
-    def pause_schedule(self, schedule_name: str) -> None:
-        DBOS.pause_schedule(schedule_name)
-
-    def delete_schedule(self, schedule_name: str) -> None:
-        DBOS.delete_schedule(schedule_name)
+    """Small synchronous adapter used by ScheduledTaskService."""
 
     def apply_task(self, task: ScheduledTask) -> None:
         DBOS.apply_schedules([{
@@ -171,6 +116,12 @@ class DBOSOrchestrator:
             "queue_name": "periodic-agents",
         }])
         DBOS.resume_schedule(task.orchestrator_schedule_name)
+
+    def pause_schedule(self, schedule_name: str) -> None:
+        DBOS.pause_schedule(schedule_name)
+
+    def delete_schedule(self, schedule_name: str) -> None:
+        DBOS.delete_schedule(schedule_name)
 
     def run_task_now(self, task: ScheduledTask) -> str:
         """Queue one ad-hoc execution through the same durable workflow as the schedule."""
@@ -201,8 +152,6 @@ async def initialize_dbos() -> bool:
     db = SessionLocal()
     try:
         orchestrator = DBOSOrchestrator()
-        for schedule in db.query(AgentSchedule).filter(AgentSchedule.status == "active").all():
-            orchestrator.apply_schedule(schedule)
         for task in db.query(ScheduledTask).filter(ScheduledTask.status == "active").all():
             orchestrator.apply_task(task)
     finally:
