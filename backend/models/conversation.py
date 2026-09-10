@@ -10,6 +10,7 @@ class ConversationSource(enum.Enum):
     PLAYGROUND = "playground"
     MARKETPLACE = "marketplace"
     API = "api"
+    SCHEDULED_TASK = "scheduled_task"
 
 
 class Conversation(Base):
@@ -56,4 +57,3 @@ class Conversation(Base):
             "last_message": self.last_message,
             "message_count": self.message_count
         }
-

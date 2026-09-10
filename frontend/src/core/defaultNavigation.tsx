@@ -22,6 +22,7 @@ import {
   Sliders,
   Cpu,
   Box,
+  CalendarClock,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -66,6 +67,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/agents',
       name: 'Agents',
       icon: <Bot size={16} />,
+      section: 'appNavigation'
+    },
+    {
+      path: '/apps/:appId/scheduled-tasks',
+      name: 'Scheduled Tasks',
+      icon: <CalendarClock size={16} />,
       section: 'appNavigation'
     },
     {

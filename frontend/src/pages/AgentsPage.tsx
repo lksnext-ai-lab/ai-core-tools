@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2 } from 'lucide-react';
+import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -47,6 +47,7 @@ function AgentsPage() {
   const mutate = useApiMutation();
 
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [scheduledTaskCounts, setScheduledTaskCounts] = useState<Record<number, number>>({});
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +76,16 @@ function AgentsPage() {
       
       setAgents(agentsResponse);
       setApp(appResponse);
+      try {
+        const tasks = await apiService.getScheduledTasks(Number.parseInt(appId));
+        const counts = tasks.reduce<Record<number, number>>((result, task) => {
+          result[task.agent_id] = (result[task.agent_id] ?? 0) + 1;
+          return result;
+        }, {});
+        setScheduledTaskCounts(counts);
+      } catch {
+        // Keep the agent list usable when the scheduled-task API is unavailable.
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
       console.error('Error loading data:', err);
@@ -370,6 +381,24 @@ function AgentsPage() {
             )
           },
           {
+            header: 'Scheduling',
+            render: (agent) => {
+              const count = scheduledTaskCounts[agent.agent_id] ?? 0;
+              if (!count) return <span className="text-gray-400 text-sm">—</span>;
+              return (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/apps/${appId}/scheduled-tasks?agent_id=${agent.agent_id}`)}
+                  className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800"
+                  title="Abrir las tareas programadas que usan este agente"
+                >
+                  <CalendarClock className="w-3 h-3" />
+                  Usado por {count} tarea{count === 1 ? '' : 's'} programada{count === 1 ? '' : 's'}
+                </button>
+              );
+            }
+          },
+          {
             header: 'Usage',
             render: (agent) => (
               <div className="text-sm text-gray-900">
@@ -547,4 +576,4 @@ function AgentsPage() {
   );
 }
 
-export default AgentsPage; 
+export default AgentsPage;

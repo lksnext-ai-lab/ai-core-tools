@@ -21,6 +21,9 @@ import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
 import AgentsPage from '../pages/AgentsPage';
 import AgentFormPage from '../pages/AgentFormPage';
+import ScheduledTasksPage from '../pages/ScheduledTasksPage';
+import ScheduledTaskFormPage from '../pages/ScheduledTaskFormPage';
+import ScheduledTaskDetailPage from '../pages/ScheduledTaskDetailPage';
 import SilosPage from '../pages/SilosPage';
 import SiloFormPage from '../pages/SiloFormPage';
 import SiloPlaygroundPage from '../pages/SiloPlaygroundPage';
@@ -222,6 +225,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       <AgentFormPage />
                   </EditorLayoutRoute>
                 } />
+                <Route path="/apps/:appId/scheduled-tasks" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTasksPage /></EditorLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId/edit" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskDetailPage /></EditorLayoutRoute>} />
 
                 <Route path="/apps/:appId/agents/:agentId/playground" element={
                   <EditorLayoutRoute {...commonLayoutProps}>

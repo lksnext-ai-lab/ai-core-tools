@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
-import { apiService } from '../services/api';
+import { apiService, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD } from '../constants/agentConstants';
@@ -173,6 +173,12 @@ function getPageDescription(type: string, isNewAgent: boolean, agentName?: strin
   if (type === 'ocr_agent') return 'Configure OCR agent for document processing';
   if (isNewAgent) return 'Configure a new AI agent with advanced capabilities';
   return `Modify agent: ${agentName}`;
+}
+
+function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: number }) {
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
+  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-gray-900">Scheduled tasks using this agent</h3><p className="text-sm text-gray-500">Scheduling is managed independently from the agent.</p></div><button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button></div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-gray-500">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
 }
 
 function AgentFormPage() {
@@ -689,6 +695,7 @@ function AgentFormPage() {
             activeTab={activeTab}
             onChange={setActiveTab}
           />
+          {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
 
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (

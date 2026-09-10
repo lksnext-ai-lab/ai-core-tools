@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from datetime import datetime
 
-from models.conversation import Conversation
+from models.conversation import Conversation, ConversationSource
 from repositories.conversation_repository import ConversationRepository
 from models.agent import Agent
 from schemas.conversation_schemas import ConversationCreate, ConversationUpdate
@@ -66,7 +66,8 @@ class ConversationService:
         db: Session,
         agent_id: int,
         user_context: Dict,
-        title: Optional[str] = None
+        title: Optional[str] = None,
+        source: ConversationSource = ConversationSource.PLAYGROUND,
     ) -> Conversation:
         """
         Create a new conversation for a user and agent
@@ -110,6 +111,7 @@ class ConversationService:
             session_id=session_id,
             title=title,
             api_key_hash=api_key_hash,
+            source=source,
             message_count=0
         )
         
@@ -358,14 +360,23 @@ class ConversationService:
         if not conversation:
             return None
         
-        # Use the full session_id as-is (don't remove the conv_ prefix)
-        # The thread_id format is: thread_{agent_id}_{full_session_id}
-        
-        # Get history from PostgreSQL checkpointer
+        # Scheduled runs and interactive runs can arrive with either the
+        # canonical conversation session id or its UUID suffix, depending on
+        # which session-management path created the LangGraph checkpoint.
+        # Read the canonical key first and use the suffix as a compatibility
+        # fallback so an existing scheduled conversation is never shown empty.
         history = await CheckpointerCacheService.get_conversation_history_async(
             agent_id=conversation.agent_id,
             session_id=conversation.session_id
         )
+        if not history and conversation.session_id.startswith(f"conv_{conversation.agent_id}_"):
+            session_suffix = conversation.session_id.replace(
+                f"conv_{conversation.agent_id}_", "", 1
+            )
+            history = await CheckpointerCacheService.get_conversation_history_async(
+                agent_id=conversation.agent_id,
+                session_id=session_suffix,
+            )
         
         if not history:
             return []
@@ -549,4 +560,3 @@ class ConversationService:
             return True
         
         return False
-

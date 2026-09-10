@@ -52,6 +52,10 @@ services:
       DATABASE_USER: ${DATABASE_USER:-mattin}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env}
       DATABASE_NAME: ${DATABASE_NAME:-mattin_ai}
+      # DBOS uses the same Postgres instance; its tables live in the dbos schema.
+      # Override this with a dedicated logical database in production if desired.
+      DBOS_DATABASE_URL: ${DBOS_DATABASE_URL:-}
+      AICT_MIN_SCHEDULE_INTERVAL_SECONDS: ${AICT_MIN_SCHEDULE_INTERVAL_SECONDS:-60}
 
       AICT_LOGIN: ${AICT_LOGIN:-LOCAL}
       # Set AUTH_COOKIE_SECURE=false for local HTTP testing (no TLS); keep true

@@ -135,6 +135,13 @@ export interface Agent {
   rag_score_threshold?: number | null;
   rag_max_retrieval_calls?: number | null;
   rag_fixed_filters?: AgentRagFixedFilter[];
+  transcription_service_id?: number;
+  video_ai_service_id?: number;
+  media_embedding_service_id?: number;
+  media_forced_language?: string;
+  media_chunk_min_duration?: number;
+  media_chunk_max_duration?: number;
+  media_chunk_overlap?: number;
   ai_service?: { name: string; model_name: string; provider: string };
   ai_services: Array<{ service_id: number; name: string }>;
   silo?: {
@@ -155,6 +162,52 @@ export interface Agent {
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
+}
+
+export interface ScheduledTask {
+  id: number;
+  name: string;
+  agent_id: number;
+  app_id: number;
+  created_by: number;
+  orchestrator_schedule_name: string;
+  input: Record<string, unknown>;
+  cron_expression: string;
+  timezone: string;
+  conversation_mode: 'new_per_run' | 'continuous' | string;
+  persistent_conversation_id?: number | null;
+  status: 'active' | 'paused' | 'deleted' | string;
+  max_concurrent_runs: number;
+  created_at: string;
+  updated_at: string;
+  next_run_at?: string | null;
+}
+
+export interface ScheduledTaskRun {
+  id: number;
+  scheduled_task_id: number;
+  conversation_id?: number | null;
+  conversation_anchor_message_id?: number | null;
+  orchestrator_run_id: string;
+  scheduled_time: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  status: string;
+  attempt_count: number;
+  error_summary?: string | null;
+}
+
+export interface ScheduledTaskRunList {
+  items: ScheduledTaskRun[];
+  page: number;
+  per_page: number;
+  total: number;
+}
+
+export interface ScheduledTaskTriggerResponse {
+  task_id: number;
+  workflow_id: string;
+  status: string;
 }
 
 export interface AIService {
@@ -730,6 +783,31 @@ class ApiService {
 
   async getAgentMCPUsage(appId: number, agentId: number): Promise<AgentMCPUsage> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
+  }
+
+  async getScheduledTasks(appId: number, agentId?: number): Promise<ScheduledTask[]> {
+    const query = agentId === undefined ? '' : `?agent_id=${agentId}`;
+    return this.request(`/internal/scheduled-tasks?app_id=${appId}${query}`);
+  }
+
+  async createScheduledTask(appId: number, data: Omit<ScheduledTask, 'id' | 'app_id' | 'created_by' | 'orchestrator_schedule_name' | 'persistent_conversation_id' | 'status' | 'created_at' | 'updated_at'>): Promise<ScheduledTask> {
+    return this.request(`/internal/scheduled-tasks?app_id=${appId}`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateScheduledTask(appId: number, taskId: number, data: Partial<Pick<ScheduledTask, 'name' | 'input' | 'cron_expression' | 'timezone' | 'max_concurrent_runs' | 'status'>>): Promise<ScheduledTask> {
+    return this.request(`/internal/scheduled-tasks/${taskId}?app_id=${appId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  async deleteScheduledTask(appId: number, taskId: number): Promise<void> {
+    return this.request(`/internal/scheduled-tasks/${taskId}?app_id=${appId}`, { method: 'DELETE' });
+  }
+
+  async getScheduledTaskRuns(appId: number, taskId: number, page = 1, perPage = 20): Promise<ScheduledTaskRunList> {
+    return this.request(`/internal/scheduled-tasks/${taskId}/runs?app_id=${appId}&page=${page}&per_page=${perPage}`);
+  }
+
+  async runScheduledTaskNow(appId: number, taskId: number): Promise<ScheduledTaskTriggerResponse> {
+    return this.request(`/internal/scheduled-tasks/${taskId}/run-now?app_id=${appId}`, { method: 'POST' });
   }
 
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string): Promise<Agent> {
@@ -2247,7 +2325,7 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`);
   }
 
-  async getConversationWithHistory(conversationId: number): Promise<{ messages: Array<{ role: string; content: string }> }> {
+  async getConversationWithHistory(conversationId: number): Promise<{ session_id?: string; messages: Array<{ role: string; content: string }> }> {
     return this.request(`/internal/conversations/${conversationId}/history`);
   }
 

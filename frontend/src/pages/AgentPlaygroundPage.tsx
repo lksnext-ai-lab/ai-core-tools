@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Gamepad2, Link2, Pencil, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
@@ -45,14 +45,27 @@ interface Agent {
 function AgentPlaygroundPage() {
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('playground');
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
-  const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
+  const [currentConversationId, setCurrentConversationId] = useState<number | null>(() => {
+    const value = searchParams.get('conversation_id');
+    return value ? Number.parseInt(value, 10) : null;
+  });
   const [conversationKey, setConversationKey] = useState(0); // Key to force ChatInterface remount
   const [conversationReloadTrigger, setConversationReloadTrigger] = useState(0); // Trigger to reload conversation list
+
+  useEffect(() => {
+    const value = searchParams.get('conversation_id');
+    const conversationId = value ? Number.parseInt(value, 10) : null;
+    if (conversationId !== currentConversationId) {
+      setCurrentConversationId(conversationId);
+      setConversationKey(prev => prev + 1);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (appId && agentId) {

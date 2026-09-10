@@ -34,6 +34,7 @@ from .tier_config import TierConfig
 from .usage_record import UsageRecord
 from .user_credential import UserCredential
 from .refresh_token import RefreshToken
+from .scheduled_task import ScheduledTask, ScheduledTaskRun
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -53,4 +54,5 @@ __all__ = [
     'UserCredential',
     'RefreshToken',
     'SandboxService',
+    'ScheduledTask', 'ScheduledTaskRun',
 ]
