@@ -1123,30 +1123,19 @@ class AgentExecutionService:
                 # Validate ownership BEFORE destroying anything: a client-supplied
                 # conversation_id must not let one user tear down another user's
                 # live sandbox session just by guessing/iterating the id.
-                _conv = None
                 if _reset_conv_id and db:
-                    from services.conversation_service import ConversationService
-                    _conv = ConversationService.get_conversation(
-                        db, _reset_conv_id, user_context, agent_id=agent_id
-                    )
-                    if not _conv:
+                    if not conversation:
                         raise HTTPException(
                             status_code=404,
                             detail="Conversation not found or access denied",
                         )
-
-                _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
-                sandbox_session_service.destroy(_sandbox_key)
-                logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
-                # Clear DB sandbox state
-                if _conv is not None:
-                    try:
-                        _conv.sandbox_session_id = None
-                        _conv.sandbox_state = None
-                        db.add(_conv)
-                        db.commit()
-                    except Exception as _exc:
-                        logger.warning("Could not clear sandbox DB state on reset: %s", _exc)
+                # Conversation deletion owns sandbox teardown when the row has
+                # been resolved. Destroy directly only for session resets that
+                # do not have a database conversation to delete.
+                if not conversation:
+                    _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
+                    sandbox_session_service.destroy(_sandbox_key)
+                    logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
 
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService
