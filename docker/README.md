@@ -35,8 +35,10 @@ Frontend y backend viajan por el mismo origen → **sin CORS**, sin necesidad de
 Las imágenes publicadas viven en:
 - `ghcr.io/lksnext-ai-lab/mattinai-backend:${IMAGE_TAG}`
 - `ghcr.io/lksnext-ai-lab/mattinai-frontend:${IMAGE_TAG}`
+- `ghcr.io/lksnext-ai-lab/mattinai-opensandbox-server:${IMAGE_TAG}` (perfil `opensandbox`)
+- `ghcr.io/lksnext-ai-lab/mattinai-code-interpreter:${IMAGE_TAG}` (perfil `opensandbox`)
 
-El tag por defecto es `develop` (último build de la rama `develop`). En servidores de cliente se recomienda **pinear un SHA** (`IMAGE_TAG=sha-c1feaaf`) para evitar actualizaciones accidentales al hacer `docker compose pull`.
+El tag por defecto es `develop` (último build de la rama `develop`). En servidores de cliente se recomienda **pinear un SHA** (`IMAGE_TAG=sha-c1feaaf`) para evitar actualizaciones accidentales al hacer `docker compose pull`. Las dos imágenes de `opensandbox` se publican desde `.github/workflows/opensandbox-ci.yml`, un workflow separado del de backend/frontend porque cambian mucho menos a menudo (solo cuando toca `docker/opensandbox/**`).
 
 ## Uso
 
@@ -54,6 +56,14 @@ cp .env.example .env
 #   IMAGE_TAG=sha-<commit>   # o "develop" para el último
 docker compose pull backend frontend
 docker compose up -d
+```
+
+Si vas a usar el code interpreter de los agentes, añade el perfil `opensandbox`
+(también se resuelve por `pull`, sin necesitar el código fuente de `docker/opensandbox/`):
+
+```bash
+docker compose --profile opensandbox pull opensandbox mattin-code-interpreter
+docker compose --profile opensandbox up -d
 ```
 
 Accede a `http://<ip-del-servidor>/` (o `http://localhost/` en local).
@@ -312,7 +322,10 @@ registry):
   `network_mode`. El compose lo expone como `SANDBOX_NETWORK_NAME`, pero para
   levantar el perfil `opensandbox` en más de un stack a la vez cada uno necesita
   además su propia copia de `sandbox.toml`. Con un solo stack usándolo, nada
-  que hacer.
+  que hacer. Las imágenes `opensandbox-server` y `code-interpreter` siguen el
+  mismo `IMAGE_TAG` que backend/frontend (se publican en GHCR), así que la
+  misma trampa de arriba ("`IMAGE_TAG` propio por entorno no es opcional")
+  también les aplica.
 - **Puertos.** `up` aborta si el `HTTP_PORT` del entorno ya está ocupado por
   otro, en vez de dejar el stack a medio levantar. `new` elige puerto libre solo
   (8083+ para trabajo, 8090+ para clientes).

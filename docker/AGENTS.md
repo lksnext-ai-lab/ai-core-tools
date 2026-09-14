@@ -30,8 +30,8 @@ This constrains changes here:
 
 - Anything that must differ per environment goes through a variable in `envs/*.env`, never hardcoded in `docker-compose.yaml`.
 - New named volumes are automatically per-environment. New **bind mounts** are not — they are shared by every stack on the host, so gate them behind a variable with the bind path as default (see `BACKEND_DATA`).
-- Resources named outside the project namespace (the `sandbox-workloads` network, the `mattin-code-interpreter` image) are shared across stacks. Adding another means adding another collision.
-- `IMAGE_TAG` is what keeps a local `--build` from overwriting a published image. Do not default a work environment to `develop`.
+- Resources named outside the project namespace (the `sandbox-workloads` network) are shared across stacks. Adding another means adding another collision. `mattin-code-interpreter` and `mattin-opensandbox-server` are namespaced via `IMAGE_TAG` like backend/frontend (see below), not an outside-namespace collision on their own.
+- `IMAGE_TAG` is what keeps a local `--build` from overwriting a published image — this now applies to all four images published from this repo (backend, frontend, opensandbox-server, code-interpreter; see `.github/workflows/opensandbox-ci.yml`). Do not default a work environment to `develop`.
 
 ## Rules
 

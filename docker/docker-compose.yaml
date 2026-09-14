@@ -97,7 +97,10 @@ services:
       SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE: ${SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE:-false}
       OPENSANDBOX_DOMAIN: ${OPENSANDBOX_DOMAIN:-opensandbox:8080}
       OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
-      OPENSANDBOX_CODE_INTERPRETER_IMAGE: ${OPENSANDBOX_CODE_INTERPRETER_IMAGE:-mattin-code-interpreter:latest}
+      # Defaults to our published GHCR image at the same IMAGE_TAG as
+      # backend/frontend (see the opensandbox/mattin-code-interpreter services
+      # below) so `docker compose pull` is enough — no local build required.
+      OPENSANDBOX_CODE_INTERPRETER_IMAGE: ${OPENSANDBOX_CODE_INTERPRETER_IMAGE:-ghcr.io/lksnext-ai-lab/mattinai-code-interpreter:${IMAGE_TAG:-develop}}
       DAYTONA_API_KEY: ${DAYTONA_API_KEY:-}
       DAYTONA_API_URL: ${DAYTONA_API_URL:-}
       DAYTONA_TARGET: ${DAYTONA_TARGET:-}
@@ -165,6 +168,11 @@ services:
   # Runs on the internal Docker network only; no port is exposed to the host.
   # Enable by setting SANDBOX_DEFAULT_PROVIDER=opensandbox in .env.
   #
+  # Image is published to GHCR (see .github/workflows/opensandbox-ci.yml), same
+  # as backend/frontend: `docker compose --profile opensandbox pull && up -d`
+  # is enough in any environment, no need to build locally. `build:` below
+  # stays only as a local-dev override (`--build`).
+  #
   # Network topology (security-relevant — see sandbox.toml [docker] comment):
   # This service is dual-homed on purpose:
   #   - mattin-network: lets `backend` reach opensandbox:8080 to create/manage
@@ -181,7 +189,7 @@ services:
   # *server* do (not the sandbox itself).
   # ---------------------------------------------------------------------------
   opensandbox:
-    image: mattin-opensandbox-server:${OPENSANDBOX_SERVER_VERSION:-0.1.11}
+    image: ghcr.io/lksnext-ai-lab/mattinai-opensandbox-server:${IMAGE_TAG:-develop}
     build:
       context: ./opensandbox
       dockerfile: Dockerfile
@@ -211,11 +219,15 @@ services:
   # mattin-code-interpreter — custom sandbox container image builder.
   # Extends opensandbox/code-interpreter:v1.0.2 with a tail wrapper that
   # starts Jupyter before execd connects, fixing the opensandbox entrypoint
-  # override bug.  This service exits immediately after the image is built;
-  # the built image is used by the opensandbox server when spawning sandboxes.
+  # override bug. Published to GHCR (see .github/workflows/opensandbox-ci.yml)
+  # at the same IMAGE_TAG as the other services, so `docker compose pull` fetches
+  # it directly — this service's `build:` only matters when you `--build` for
+  # local dev. Either way it exits immediately after the image is available
+  # locally; the opensandbox server references it via OPENSANDBOX_CODE_INTERPRETER_IMAGE
+  # (backend env above) when spawning sandboxes.
   # ---------------------------------------------------------------------------
   mattin-code-interpreter:
-    image: mattin-code-interpreter:latest
+    image: ghcr.io/lksnext-ai-lab/mattinai-code-interpreter:${IMAGE_TAG:-develop}
     build:
       context: ./opensandbox/code-interpreter
       dockerfile: Dockerfile
