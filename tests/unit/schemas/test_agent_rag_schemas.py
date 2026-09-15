@@ -26,6 +26,10 @@ from pydantic import ValidationError
 
 _REQUIRED_CREATE_UPDATE = {
     "name": "test",
+    # CreateUpdateAgentSchema requires an embedding service for media/document
+    # processing (see backend/schemas/agent_schemas.py::_validate_media_config).
+    # Unrelated to the RAG fields under test here, but must be supplied.
+    "media_embedding_service_id": 1,
 }
 
 _REQUIRED_CREATE_PUBLIC = {

@@ -59,6 +59,21 @@ class TestAttachFile:
             files_module.FileReference, "format_file_size", return_value="1.0 KB"
         )
 
+        # file_ref is a vectorizable PDF with content, so attach_file auto-creates
+        # a conversation to scope the vectorized file even without memory enabled.
+        conv = MagicMock()
+        conv.conversation_id = 7
+        conv.session_id = "conv_1_test-session"
+        mocker.patch.object(
+            files_module.ConversationService, "create_conversation", return_value=conv
+        )
+        mocker.patch.object(
+            files_module.ConversationService, "get_conversation", return_value=conv
+        )
+        mocker.patch.object(
+            files_module.PlaygroundMediaService, "vectorize_uploaded_file", return_value=None
+        )
+
         upload_file = MagicMock()
         upload_file.filename = "test.pdf"
 

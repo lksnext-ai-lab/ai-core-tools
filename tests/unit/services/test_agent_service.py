@@ -56,6 +56,20 @@ def make_agent(
     agent.vision_service_id = None
     agent.vision_system_prompt = None
     agent.text_system_prompt = None
+    # Media processing configuration
+    agent.transcription_service_id = None
+    agent.video_ai_service_id = None
+    agent.media_embedding_service_id = None
+    agent.media_forced_language = None
+    agent.media_chunk_min_duration = 30
+    agent.media_chunk_max_duration = 120
+    agent.media_chunk_overlap = 5
+    agent.sandbox_service_id = None
+    agent.enable_code_interpreter = False
+    agent.server_tools = []
+    agent.memory_max_messages = 20
+    agent.memory_max_tokens = 4000
+    agent.memory_summarize_threshold = 10
     return agent
 
 
