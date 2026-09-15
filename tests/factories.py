@@ -46,6 +46,7 @@ class UserFactory(BaseFactory):
     email = factory.Sequence(lambda n: f"user{n}@mattin-test.com")
     name = factory.Faker("name")
     is_active = True
+    platform_role = "editor"
     create_date = factory.LazyFunction(datetime.now)
 
 

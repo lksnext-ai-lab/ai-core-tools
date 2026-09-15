@@ -52,6 +52,17 @@ class TestMapMessagesChunk:
 
         assert _map_messages_chunk(chunk) is None
 
+    def test_drops_llm_pii_detector_chunk(self):
+        # LLMPIIMiddleware tags its detector model.ainvoke() with
+        # config={"metadata": {"lc_source": "pii"}}; the raw structured-output
+        # JSON must never reach the SSE token stream shown to the user.
+        chunk = (
+            _ai_chunk('{"findings":[{"type":"last name","value":"Martinez"}]}'),
+            {"langgraph_node": "agent", "lc_source": "pii"},
+        )
+
+        assert _map_messages_chunk(chunk) is None
+
     def test_unknown_lc_source_is_not_dropped(self):
         # Only known internal sources are filtered; unknown values pass through
         # so that a future, unrelated `lc_source` does not silently break the stream.

@@ -203,6 +203,7 @@ def fake_user(db):
         email="testuser@mattin-test.com",
         name="Test User",
         is_active=True,
+        platform_role="editor",
     )
     db.add(user)
     db.flush()  # assigns user_id without committing the outer transaction

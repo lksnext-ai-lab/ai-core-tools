@@ -1135,18 +1135,22 @@ class AgentExecutionService:
                             detail="Conversation not found or access denied",
                         )
 
-                _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
-                sandbox_session_service.destroy(_sandbox_key)
-                logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
-                # Clear DB sandbox state
                 if _conv is not None:
-                    try:
-                        _conv.sandbox_session_id = None
-                        _conv.sandbox_state = None
-                        db.add(_conv)
-                        db.commit()
-                    except Exception as _exc:
-                        logger.warning("Could not clear sandbox DB state on reset: %s", _exc)
+                    # A persisted conversation was resolved: it will be fully torn
+                    # down (sandbox included) by ConversationService.delete_conversation
+                    # below. Destroying it here too would duplicate the call (and risk
+                    # using a mismatched key), so defer to that single teardown.
+                    logger.info(
+                        f"Sandbox teardown for conversation {_reset_conv_id} deferred to "
+                        "conversation deletion"
+                    )
+                else:
+                    # No persisted conversation to delete later (e.g. public API
+                    # session-based reset without a conversation_id) — destroy the
+                    # sandbox directly, it won't be handled elsewhere.
+                    _sandbox_key = SandboxSessionService.session_key(agent_id, _reset_conv_id)
+                    sandbox_session_service.destroy(_sandbox_key)
+                    logger.info(f"Sandbox destroyed on conversation reset for key {_sandbox_key}")
 
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService
@@ -1640,7 +1644,7 @@ class AgentExecutionService:
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
         """
-        from tools.agentTools import create_agent, prepare_agent_config, build_human_message
+        from tools.agentTools import create_agent, prepare_agent_config, build_human_message, compute_thread_id
         from tools.langsmith_config import (
             apply_tracing_to_config,
             build_tracing_config,
@@ -1667,11 +1671,9 @@ class AgentExecutionService:
             config = prepare_agent_config(fresh_agent)
 
             # Add session-specific configuration if memory is enabled
+            config["configurable"]["thread_id"] = compute_thread_id(fresh_agent, session_id_for_cache)
             if fresh_agent.has_memory and session_id_for_cache:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session_id_for_cache}"
                 logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
-            else:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
 
             # Add the question to config
             config["configurable"]["question"] = message

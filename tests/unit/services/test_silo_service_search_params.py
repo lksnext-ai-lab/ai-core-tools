@@ -154,3 +154,34 @@ def test_find_docs_returns_empty_when_collection_missing():
          patch("services.silo_service.SiloService.check_silo_collection_exists", return_value=False):
         results = SiloService.find_docs_in_collection(silo_id=1, query="x", db=db)
     assert results == []
+
+
+def test_search_silo_documents_router_forwards_all_search_params():
+    silo = _make_silo()
+    db = MagicMock()
+
+    with patch("services.silo_service.SiloService.get_silo", return_value=silo), \
+         patch("services.silo_service.SiloService.find_docs_in_collection", return_value=[]) as mock_find:
+        SiloService.search_silo_documents_router(
+            silo_id=1,
+            query="test",
+            filter_metadata={"a": "b"},
+            limit=5,
+            search_type="mmr",
+            score_threshold=0.6,
+            fetch_k=20,
+            lambda_mult=0.7,
+            min_content_length=10,
+            max_content_length=500,
+            db=db,
+        )
+
+    mock_find.assert_called_once()
+    _, call_kwargs = mock_find.call_args
+    assert call_kwargs["limit"] == 5
+    assert call_kwargs["search_type"] == "mmr"
+    assert call_kwargs["score_threshold"] == 0.6
+    assert call_kwargs["fetch_k"] == 20
+    assert call_kwargs["lambda_mult"] == 0.7
+    assert call_kwargs["min_content_length"] == 10
+    assert call_kwargs["max_content_length"] == 500
