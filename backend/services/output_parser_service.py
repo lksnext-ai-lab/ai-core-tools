@@ -13,14 +13,14 @@ from datetime import datetime
 
 class OutputParserService:
     def __init__(self):
-        self.field_types = ['str', 'int', 'float', 'bool', 'date', 'list']
+        self.field_types = ['str', 'int', 'float', 'bool', 'date', 'list', 'enum']
         self.repository = OutputParserRepository()
     
     def list_output_parsers(self, db: Session, app_id: int) -> List[OutputParserListItemSchema]:
         """
         List all output parsers (data structures) for a specific app.
         """
-        parsers = self.repository.get_by_app_id(db, app_id)
+        parsers = [p for p in self.repository.get_by_app_id(db, app_id) if not p.is_enum]
         
         result = []
         for parser in parsers:
@@ -30,22 +30,39 @@ class OutputParserService:
                 name=parser.name,
                 description=parser.description,
                 field_count=field_count,
-                created_at=parser.create_date
+                created_at=parser.create_date,
+                is_enum=False,
             ))
         
         return result
+
+    def list_enums(self, db: Session, app_id: int) -> List[OutputParserListItemSchema]:
+        enums = [p for p in self.repository.get_by_app_id(db, app_id) if p.is_enum]
+        return [OutputParserListItemSchema(
+            parser_id=enum.parser_id,
+            name=enum.name,
+            description=enum.description,
+            field_count=len(enum.fields) if enum.fields else 0,
+            created_at=enum.create_date,
+            is_enum=True,
+        ) for enum in enums]
     
-    def get_output_parser_detail(self, db: Session, app_id: int, parser_id: int) -> OutputParserDetailSchema:
+    def get_output_parser_detail(self, db: Session, app_id: int, parser_id: int, is_enum: bool = False) -> OutputParserDetailSchema:
         """
         Get detailed information about a specific output parser including its fields.
         """
         # Get available parsers for references (excluding current parser to prevent self-reference)
         exclude_parser_id = parser_id if parser_id != 0 else None
         available_parsers_list = self.repository.get_available_parsers_for_app(db, app_id, exclude_parser_id)
+        available_enums_list = self.repository.get_available_enums_for_app(db, app_id)
         
         available_parsers = [
             {"value": p.parser_id, "name": p.name}
             for p in available_parsers_list
+        ]
+        available_enums = [
+            {"value": enum.parser_id, "name": enum.name}
+            for enum in available_enums_list
         ]
         
         if parser_id == 0:
@@ -56,7 +73,9 @@ class OutputParserService:
                 description="",
                 fields=[],
                 created_at=None,
-                available_parsers=available_parsers
+                available_parsers=available_parsers,
+                available_enums=available_enums,
+                is_enum=is_enum,
             )
         
         # Existing output parser
@@ -76,7 +95,9 @@ class OutputParserService:
                     optional=field_data.get('optional', False),
                     parser_id=field_data.get('parser_id'),
                     list_item_type=field_data.get('list_item_type'),
-                    list_item_parser_id=field_data.get('list_item_parser_id')
+                    list_item_parser_id=field_data.get('list_item_parser_id'),
+                    enum_id=field_data.get('enum_id'),
+                    list_item_enum_id=field_data.get('list_item_enum_id'),
                 ))
         
         return OutputParserDetailSchema(
@@ -85,7 +106,9 @@ class OutputParserService:
             description=parser.description,
             fields=fields,
             created_at=parser.create_date,
-            available_parsers=available_parsers
+            available_parsers=available_parsers,
+            available_enums=available_enums,
+            is_enum=parser.is_enum,
         )
     
     def create_or_update_output_parser(self, db: Session, app_id: int, parser_id: int, 
@@ -108,6 +131,7 @@ class OutputParserService:
         # Update parser data
         parser.name = parser_data.name
         parser.description = parser_data.description
+        parser.is_enum = parser_data.is_enum
         
         # Convert fields to JSON format
         fields_json = []
@@ -124,11 +148,15 @@ class OutputParserService:
             
             if field_data.type == 'parser' and field_data.parser_id:
                 field_dict['parser_id'] = field_data.parser_id
+            elif field_data.type == 'enum' and field_data.enum_id:
+                field_dict['enum_id'] = field_data.enum_id
             elif field_data.type == 'list':
                 if field_data.list_item_type:
                     field_dict['list_item_type'] = field_data.list_item_type
                 if field_data.list_item_type == 'parser' and field_data.list_item_parser_id:
                     field_dict['list_item_parser_id'] = field_data.list_item_parser_id
+                if field_data.list_item_type == 'enum' and field_data.list_item_enum_id:
+                    field_dict['list_item_enum_id'] = field_data.list_item_enum_id
             
             fields_json.append(field_dict)
         

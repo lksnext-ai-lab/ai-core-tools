@@ -106,6 +106,14 @@ class OutputParserImportService:
                 )
                 if ref_parser:
                     field_dict["list_item_parser_id"] = ref_parser.parser_id
+            if field.enum_name:
+                ref_enum = self.get_by_name_and_app(field.enum_name, app_id)
+                if ref_enum and ref_enum.is_enum:
+                    field_dict["enum_id"] = ref_enum.parser_id
+            if field.list_item_enum_name:
+                ref_enum = self.get_by_name_and_app(field.list_item_enum_name, app_id)
+                if ref_enum and ref_enum.is_enum:
+                    field_dict["list_item_enum_id"] = ref_enum.parser_id
             fields_json.append(field_dict)
         return fields_json
 
@@ -164,6 +172,7 @@ class OutputParserImportService:
                 )
 
                 existing_parser.fields = fields_json
+                existing_parser.is_enum = export_data.output_parser.is_enum
 
                 self.session.add(existing_parser)
                 self.session.flush()
@@ -193,6 +202,7 @@ class OutputParserImportService:
             name=final_name,
             description=export_data.output_parser.description,
             fields=fields_json,
+            is_enum=export_data.output_parser.is_enum,
             create_date=datetime.now(),
         )
 

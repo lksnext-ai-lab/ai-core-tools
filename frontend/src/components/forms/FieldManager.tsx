@@ -6,6 +6,8 @@ interface FieldDefinition {
   parser_id?: number;
   list_item_type?: string;
   list_item_parser_id?: number;
+  enum_id?: number;
+  list_item_enum_id?: number;
   _key?: string;
 }
 
@@ -13,10 +15,11 @@ interface FieldManagerProps {
   fields: FieldDefinition[];
   onChange: (fields: FieldDefinition[]) => void;
   availableParsers: Array<{value: number, name: string}>;
+  availableEnums?: Array<{value: number, name: string}>;
   maxFields?: number;
 }
 
-function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Readonly<FieldManagerProps>) {
+function FieldManager({ fields, onChange, availableParsers, availableEnums = [], maxFields = 20 }: Readonly<FieldManagerProps>) {
   const fieldTypes = [
     { value: 'str', name: 'String' },
     { value: 'int', name: 'Integer' },
@@ -26,6 +29,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
     { value: 'dict', name: 'Dictionary (JSON Object)' },
     { value: 'list', name: 'List' },
     { value: 'parser', name: 'Parser Reference' }
+    ,{ value: 'enum', name: 'Enum' }
   ];
 
   const addField = () => {
@@ -56,9 +60,13 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
           if (updates.type !== 'parser') {
             updatedField.parser_id = undefined;
           }
+          if (updates.type !== 'enum') {
+            updatedField.enum_id = undefined;
+          }
           if (updates.type !== 'list') {
             updatedField.list_item_type = undefined;
             updatedField.list_item_parser_id = undefined;
+            updatedField.list_item_enum_id = undefined;
           }
         }
         
@@ -82,7 +90,8 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
     { value: 'bool', name: 'Boolean' },
     { value: 'date', name: 'Date' },
     { value: 'dict', name: 'Dictionary (JSON Object)' },
-    { value: 'parser', name: 'Parser Reference' }
+    { value: 'parser', name: 'Parser Reference' },
+    { value: 'enum', name: 'Enum' }
   ];
 
   return (
@@ -181,6 +190,16 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
                           </select>
                         </div>
                       )}
+
+                      {field.type === 'enum' && (
+                        <div>
+                          <label htmlFor={`enum_ref_${index}`} className="block text-xs font-medium text-gray-700 mb-1">Reference Enum:</label>
+                          <select id={`enum_ref_${index}`} value={field.enum_id || ''} onChange={(e) => updateField(index, { enum_id: Number.parseInt(e.target.value) || undefined })} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                            <option value="">Select enum...</option>
+                            {availableEnums.map((enumDefinition) => <option key={enumDefinition.value} value={enumDefinition.value}>{enumDefinition.name}</option>)}
+                          </select>
+                        </div>
+                      )}
                       
                       {/* List Type Selectors */}
                       {field.type === 'list' && (
@@ -218,6 +237,15 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
                                     {parser.name}
                                   </option>
                                 ))}
+                              </select>
+                            </div>
+                          )}
+                          {field.list_item_type === 'enum' && (
+                            <div>
+                              <label htmlFor={`list_item_enum_${index}`} className="block text-xs font-medium text-gray-700 mb-1">List Item Enum:</label>
+                              <select id={`list_item_enum_${index}`} value={field.list_item_enum_id || ''} onChange={(e) => updateField(index, { list_item_enum_id: Number.parseInt(e.target.value) || undefined })} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                                <option value="">Select enum...</option>
+                                {availableEnums.map((enumDefinition) => <option key={enumDefinition.value} value={enumDefinition.value}>{enumDefinition.name}</option>)}
                               </select>
                             </div>
                           )}

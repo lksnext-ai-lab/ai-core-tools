@@ -60,6 +60,17 @@ async def list_output_parsers(
         )
 
 
+@output_parsers_router.get("/enums/", summary="List enums", tags=["Output Parsers"], response_model=List[OutputParserListItemSchema])
+async def list_enums(
+    app_id: int,
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    service = OutputParserService()
+    return service.list_enums(db, app_id)
+
+
 # ==================== STATIC ROUTES (without {{parser_id}} parameter) ====================
 
 
@@ -152,6 +163,21 @@ async def get_output_parser(
         )
 
 
+@output_parsers_router.get("/enums/{parser_id}", summary="Get enum details", tags=["Output Parsers"], response_model=OutputParserDetailSchema)
+async def get_enum(
+    app_id: int,
+    parser_id: int,
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    service = OutputParserService()
+    result = service.get_output_parser_detail(db, app_id, parser_id, is_enum=True)
+    if result is None or not result.is_enum:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enum not found")
+    return result
+
+
 @output_parsers_router.post("/{parser_id}",
                             summary="Create or update output parser",
                             tags=["Output Parsers"],
@@ -168,6 +194,8 @@ async def create_or_update_output_parser(
     Create a new output parser or update an existing one.
     """
     try:
+        if parser_data.is_enum:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Use the enum endpoint for enum definitions")
         service = OutputParserService()
         parser = service.create_or_update_output_parser(db, app_id, parser_id, parser_data)
         
@@ -188,6 +216,27 @@ async def create_or_update_output_parser(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating/updating output parser: {str(e)}"
         )
+
+
+@output_parsers_router.post("/enums/{parser_id}", response_model=OutputParserDetailSchema)
+async def create_or_update_enum(
+    app_id: int,
+    parser_id: int,
+    parser_data: CreateUpdateOutputParserSchema,
+    current_user: Annotated[dict, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    parser_data.is_enum = True
+    service = OutputParserService()
+    if parser_id != 0:
+        existing = service.repository.get_by_id_and_app_id(db, parser_id, app_id)
+        if existing is None or not existing.is_enum:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enum not found")
+    parser = service.create_or_update_output_parser(db, app_id, parser_id, parser_data)
+    if parser is None or not parser.is_enum:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enum not found")
+    return service.get_output_parser_detail(db, app_id, parser.parser_id, is_enum=True)
 
 
 @output_parsers_router.delete("/{parser_id}",

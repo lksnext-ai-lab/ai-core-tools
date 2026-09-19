@@ -232,9 +232,9 @@ class AgentRepository:
     
     @staticmethod
     def get_output_parsers_by_app_id(db: Session, app_id: int) -> List[OutputParser]:
-        """Get all output parsers for a specific app"""
+        """Get data structures available for agent output configuration."""
         parser_repo = OutputParserRepository()
-        return parser_repo.get_by_app_id(db, app_id)
+        return parser_repo.get_available_parsers_for_app(db, app_id)
     
     @staticmethod
     def get_mcp_configs_by_app_id(db: Session, app_id: int) -> List[MCPConfig]:
