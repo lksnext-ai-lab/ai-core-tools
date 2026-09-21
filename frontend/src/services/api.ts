@@ -143,13 +143,6 @@ export interface Agent {
   rag_score_threshold?: number | null;
   rag_max_retrieval_calls?: number | null;
   rag_fixed_filters?: AgentRagFixedFilter[];
-  transcription_service_id?: number;
-  video_ai_service_id?: number;
-  media_embedding_service_id?: number;
-  media_forced_language?: string;
-  media_chunk_min_duration?: number;
-  media_chunk_max_duration?: number;
-  media_chunk_overlap?: number;
   ai_service?: { name: string; model_name: string; provider: string };
   ai_services: Array<{ service_id: number; name: string }>;
   silo?: {
