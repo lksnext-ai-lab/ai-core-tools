@@ -26,6 +26,13 @@ if DBOS is not None:
         user_id: int | None = None,
         app_id: int | None = None,
     ):
+        # Check at call time as well as import time. Tests and applications may
+        # unload/disable DBOS after this function has been defined, and the
+        # decorated implementation must not touch the application database in
+        # that state.
+        if DBOS is None:
+            raise RuntimeError("DBOS is not installed")
+
         from services.agent_execution_service import AgentExecutionService
 
         context = input_context or {}
