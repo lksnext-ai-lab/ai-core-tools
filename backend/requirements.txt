@@ -90,7 +90,7 @@ Mako==1.3.10
 MarkupSafe==3.0.2
 marshmallow==3.26.1
 mcp==1.12.4
-mistral==20.0.0
+mistral==21.0.0.0rc1
 mistral-lib==3.4.0
 mistralai==1.9.3
 msal==1.33.0
