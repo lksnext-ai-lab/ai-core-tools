@@ -7,7 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 from schemas.skill_schemas import CreateUpdateSkillSchema
-from services.skill_service import SkillService, logger as service_logger
+from services.skill_service import SkillService, logger as merge_logger
+from utils.skill_json import dump_json, load_json, logger as service_logger
 
 
 @pytest.fixture
@@ -20,18 +21,21 @@ def log_records():
             records.append(record)
 
     handler = _H(level=logging.DEBUG)
-    old_level = service_logger.level
-    service_logger.addHandler(handler)
-    service_logger.setLevel(logging.DEBUG)
+    loggers = [service_logger, merge_logger]
+    old_levels = [lg.level for lg in loggers]
+    for lg in loggers:
+        lg.addHandler(handler)
+        lg.setLevel(logging.DEBUG)
     yield records
-    service_logger.removeHandler(handler)
-    service_logger.setLevel(old_level)
+    for lg, level in zip(loggers, old_levels):
+        lg.removeHandler(handler)
+        lg.setLevel(level)
 
 
 class TestLoadJson:
     def test_malformed_returns_default_and_logs_without_value(self, log_records):
         secret = "SECRET-VALUE-{not json"
-        assert SkillService._load_json(secret, [], skill_id=7, column='allowed_tools') == []
+        assert load_json(secret, [], skill_id=7, column='allowed_tools') == []
         warnings = [r for r in log_records if r.levelno == logging.WARNING]
         assert len(warnings) == 1
         msg = warnings[0].getMessage()
@@ -39,19 +43,19 @@ class TestLoadJson:
         assert "7" in msg and "allowed_tools" in msg
 
     def test_valid_list_round_trip(self):
-        dumped = SkillService._dump_json(["a", "b"])
-        assert SkillService._load_json(dumped, []) == ["a", "b"]
+        dumped = dump_json(["a", "b"])
+        assert load_json(dumped, []) == ["a", "b"]
 
     def test_valid_dict_round_trip(self):
-        dumped = SkillService._dump_json({"k": {"n": 1}})
-        assert SkillService._load_json(dumped, {}) == {"k": {"n": 1}}
+        dumped = dump_json({"k": {"n": 1}})
+        assert load_json(dumped, {}) == {"k": {"n": 1}}
 
     @pytest.mark.parametrize("default", [[], {}])
     def test_none_returns_default(self, default):
-        assert SkillService._load_json(None, default) is default
+        assert load_json(None, default) is default
 
     def test_empty_string_returns_default(self):
-        assert SkillService._load_json('', {}) == {}
+        assert load_json('', {}) == {}
 
     @pytest.mark.parametrize("stored, default", [
         ('{"a": 1}', []),     # object where list expected
@@ -61,28 +65,28 @@ class TestLoadJson:
         ('null', []),
     ])
     def test_wrong_container_type_returns_default(self, stored, default, log_records):
-        assert SkillService._load_json(stored, default) == default
+        assert load_json(stored, default) == default
         assert any(r.levelno == logging.WARNING for r in log_records)
 
     def test_non_string_list_elements_filtered(self, log_records):
-        assert SkillService._load_json('["a", 1, null, {"x": 1}, "b"]', []) == ["a", "b"]
+        assert load_json('["a", 1, null, {"x": 1}, "b"]', []) == ["a", "b"]
         assert any(r.levelno == logging.WARNING for r in log_records)
 
     def test_non_string_list_log_does_not_contain_values(self, log_records):
-        SkillService._load_json('["a", "leaky-value", 5]', [], skill_id=1, column='c')
+        load_json('["a", "leaky-value", 5]', [], skill_id=1, column='c')
         assert all("leaky-value" not in r.getMessage() for r in log_records)
 
 
 class TestDumpJson:
     def test_none_stays_none(self):
-        assert SkillService._dump_json(None) is None
+        assert dump_json(None) is None
 
     def test_empty_containers_are_dumped(self):
-        assert SkillService._dump_json([]) == "[]"
-        assert SkillService._dump_json({}) == "{}"
+        assert dump_json([]) == "[]"
+        assert dump_json({}) == "{}"
 
     def test_non_ascii_not_escaped(self):
-        assert SkillService._dump_json({"k": "ñ"}) == '{"k": "ñ"}'
+        assert dump_json({"k": "ñ"}) == '{"k": "ñ"}'
 
 
 class TestMergeWhenToUse:
@@ -121,8 +125,9 @@ class TestMergeWhenToUse:
         assert "3" in warnings[0].getMessage()
         assert "not json" not in warnings[0].getMessage()
 
-    def test_unreadable_stored_frontmatter_with_blank_yields_empty_object(self):
-        skill = self._skill("{not json")
+    @pytest.mark.parametrize("stored", ["{not json", '["a"]', '"str"', "42", "null"])
+    def test_unreadable_stored_frontmatter_blank_when_to_use_resets_to_empty(self, stored):
+        skill = self._skill(stored)
         SkillService._merge_when_to_use(skill, "  ")
         assert json.loads(skill.frontmatter) == {}
 

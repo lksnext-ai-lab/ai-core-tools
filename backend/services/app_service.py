@@ -197,7 +197,27 @@ class AppService:
                 logger.info(f"Deleting collaboration {collab.id}")
                 self.collaboration_repo.delete_collaboration(collab)
             
-            # 15. Finally, delete the app
+            # 15. Finally, delete the app.
+            # FR-15/AC-12 hardening: re-check for any leftover app-private skills right before the
+            # delete. Skill creation/import is not blocked while this method runs (repository/silo
+            # deletion above can take seconds to minutes), so a skill created after step 2's
+            # enumeration but before this point would otherwise be missed by the loop above. With
+            # App.skills now passive_deletes='all' and Skill.app_id's FK left at its default NO
+            # ACTION, an actual leftover row would raise IntegrityError anyway (caught below and
+            # turned into a clean False) — this check just fails fast with a clear log line instead
+            # of relying on that DB-level safety net. Uses the app-private accessor (NOT the merged
+            # system+app listing) so system skills never factor into this check.
+            leftover_skills = self.app_repo.get_skills_by_app_id(app_id)
+            if leftover_skills:
+                leftover_ids = [s.skill_id for s in leftover_skills]
+                logger.error(
+                    f"Aborting deletion of app {app_id}: {len(leftover_skills)} skill(s) "
+                    f"{leftover_ids} still reference this app (race with concurrent skill "
+                    "creation/import). Retry the deletion."
+                )
+                self.db.rollback()
+                return False
+
             success = self.app_repo.delete(app)
             
             if success:

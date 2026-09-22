@@ -54,6 +54,14 @@ class SkillDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# utils/skill_frontmatter.py caps only the YAML frontmatter block (64 KiB); the markdown body has no cap of its
+# own there (import-service ``_check_lengths`` only bounds display_name/runtime/bootstrap/description). 2,000,000
+# chars (~2 MB as UTF-8 for mostly-ASCII markdown) is generous for a skill's instructions while staying an order
+# of magnitude below SKILL_IMPORT_MAX_FILE_BYTES (10 MB default), so a CRUD-created skill can never produce a
+# SKILL.md body larger than what the import path already accepts for an ordinary package file.
+MAX_SKILL_CONTENT_LENGTH = 2_000_000
+
+
 class CreateUpdateSkillSchema(BaseModel):
     """Schema for creating or updating a skill.
 
@@ -65,8 +73,8 @@ class CreateUpdateSkillSchema(BaseModel):
     is only written when non-null; a blank string removes it.
     """
     name: str
-    description: Optional[str] = ""
-    content: str  # Markdown instructions for the skill
+    description: Optional[str] = Field(default="", max_length=1024)
+    content: str = Field(..., max_length=MAX_SKILL_CONTENT_LENGTH)  # Markdown instructions for the skill
     display_name: Optional[str] = Field(default=None, max_length=200)
     when_to_use: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
@@ -74,3 +82,8 @@ class CreateUpdateSkillSchema(BaseModel):
     bootstrap_script_path: Optional[str] = Field(default=None, max_length=500)
     runtime_options: Optional[Dict[str, Any]] = None
     is_enabled: Optional[bool] = None
+
+
+class SkillEnabledUpdateSchema(BaseModel):
+    """Request body for the ``PATCH .../enabled`` toggle routes (app-scoped and system-scoped)."""
+    is_enabled: bool

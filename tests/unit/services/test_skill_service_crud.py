@@ -34,11 +34,20 @@ def data(**kw):
     return CreateUpdateSkillSchema(name="new", content="body", **kw)
 
 
+def _assign_id(db, s):
+    """Mimic SQLAlchemy assigning a PK on create; SkillDetailSchema requires a non-null skill_id."""
+    if s.skill_id is None:
+        s.skill_id = 999
+    return s
+
+
 @pytest.fixture
 def repo():
     with patch(REPO) as r:
         r.update.side_effect = lambda db, s: s
-        r.create.side_effect = lambda db, s: s
+        r.create.side_effect = _assign_id
+        r.get_by_name_and_app_id.return_value = None
+        r.get_system_skills.return_value = []
         yield r
 
 
@@ -51,7 +60,7 @@ class TestCreateOrUpdate:
     def test_omitted_fields_preserve_stored_values(self, repo):
         skill = stored_skill()
         result = update(repo, skill)
-        assert result is skill
+        assert result.skill_id == skill.skill_id
         assert (skill.name, skill.content) == ("new", "body")
         assert skill.display_name == "Old Label"
         assert skill.runtime == "python3.11"
@@ -113,6 +122,7 @@ class TestCreateOrUpdate:
 
     def test_unknown_skill_returns_none(self, repo):
         repo.get_by_id_and_app_id.return_value = None
+        repo.get_system_skill_by_id.return_value = None
         assert SkillService.create_or_update_skill(MagicMock(), 1, 99, data()) is None
         repo.update.assert_not_called()
 
@@ -128,7 +138,8 @@ class TestCreateOrUpdate:
         tier.check_resource_limit.assert_called_once()
         assert tier.check_resource_limit.call_args.args[1:] == (7, 'skills')
         repo.create.assert_called_once()
-        assert result.app_id == 7
+        created_skill = repo.create.call_args.args[1]
+        assert created_skill.app_id == 7
         assert result.display_name == "L"
         assert result.name == "new"
 
@@ -143,7 +154,7 @@ class TestCreateOrUpdate:
 class TestListSkills:
     def test_one_grouped_count_call(self, repo):
         skills = [stored_skill(skill_id=1), stored_skill(skill_id=2, is_enabled=None, source=None)]
-        repo.get_all_by_app_id.return_value = skills
+        repo.list_for_app.return_value = skills
         with patch(PKG) as pkg:
             pkg.count_by_skill_ids.return_value = {1: 3}
             items = SkillService.list_skills(MagicMock(), 1)
@@ -154,7 +165,7 @@ class TestListSkills:
         assert items[1].source == 'admin'
 
     def test_count_skipped_when_empty(self, repo):
-        repo.get_all_by_app_id.return_value = []
+        repo.list_for_app.return_value = []
         with patch(PKG) as pkg:
             assert SkillService.list_skills(MagicMock(), 1) == []
         pkg.count_by_skill_ids.assert_not_called()
@@ -170,6 +181,7 @@ class TestGetSkillDetail:
 
     def test_missing_returns_none(self, repo):
         repo.get_by_id_and_app_id.return_value = None
+        repo.get_system_skill_by_id.return_value = None
         assert SkillService.get_skill_detail(MagicMock(), 1, 5) is None
 
     def test_files_mapped_from_five_tuples_and_json_decoded(self, repo):
@@ -195,3 +207,62 @@ class TestGetSkillDetail:
             pkg.list_paths.return_value = []
             detail = SkillService.get_skill_detail(MagicMock(), 1, 5)
         assert detail.frontmatter == {} and detail.allowed_tools == []
+
+
+class TestSystemSkillIntegrityBackstop:
+    """The uq_skill_system_name index can still be lost to a race the advisory lock does not cover for
+    system skills (there is no per-system-scope advisory lock, only the DB constraint); the service must
+    still turn a lost race into a typed 409, never an unhandled IntegrityError."""
+
+    def test_create_integrity_error_maps_to_conflict_and_rolls_back(self):
+        from sqlalchemy.exc import IntegrityError
+        from services.skill_errors import SkillConflictError
+
+        with patch("services.skill_service.SkillRepository") as repo:
+            repo.get_system_skill_by_name.return_value = None
+            repo.create.side_effect = IntegrityError("stmt", {}, Exception("uq_skill_system_name"))
+            db = MagicMock()
+            with pytest.raises(SkillConflictError) as ei:
+                SkillService.create_or_update_system_skill(db, 0, CreateUpdateSkillSchema(name="dup", content="c"))
+            db.rollback.assert_called_once()
+            assert ei.value.status_code == 409
+
+    def test_rename_integrity_error_maps_to_conflict_and_rolls_back(self):
+        from sqlalchemy.exc import IntegrityError
+        from services.skill_errors import SkillConflictError
+
+        existing = stored_skill(app_id=None, name="old-sys")
+        with patch("services.skill_service.SkillRepository") as repo:
+            repo.get_system_skill_by_id.return_value = existing
+            repo.get_system_skill_by_name.return_value = None
+            repo.update.side_effect = IntegrityError("stmt", {}, Exception("uq_skill_system_name"))
+            db = MagicMock()
+            with pytest.raises(SkillConflictError):
+                SkillService.create_or_update_system_skill(db, existing.skill_id, CreateUpdateSkillSchema(name="new-sys", content="c"))
+            db.rollback.assert_called_once()
+
+
+class TestDeleteTranslatesRepositoryRuntimeError:
+    """SkillRepository.delete raises a plain RuntimeError (data layer, no HTTP-shaped decision);
+    SkillService must translate it to the typed SkillConflictError at the service boundary."""
+
+    def test_delete_skill_translates_runtime_error(self):
+        from services.skill_errors import SkillConflictError
+
+        with patch("services.skill_service.SkillRepository") as repo:
+            repo.delete_by_id_and_app_id.side_effect = RuntimeError("skill is in use; retry")
+            with pytest.raises(SkillConflictError) as ei:
+                SkillService.delete_skill(MagicMock(), 1, 5)
+        assert ei.value.status_code == 409 and "retry" in ei.value.detail
+
+    def test_delete_system_skill_translates_runtime_error(self):
+        from services.skill_errors import SkillConflictError
+
+        skill = stored_skill(app_id=None, source='admin', is_frozen=False)
+        with patch("services.skill_service.SkillRepository") as repo:
+            repo.get_system_skill_by_id.return_value = skill
+            repo.get_attachment_stats.return_value = (0, [])
+            repo.delete.side_effect = RuntimeError("skill is in use; retry")
+            with pytest.raises(SkillConflictError) as ei:
+                SkillService.delete_system_skill(MagicMock(), skill.skill_id)
+        assert ei.value.status_code == 409 and "retry" in ei.value.detail

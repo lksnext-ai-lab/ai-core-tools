@@ -1,7 +1,5 @@
 import hashlib
 import posixpath
-import re
-import unicodedata
 from typing import Dict, Iterable, List, Literal, Optional, Set, Tuple, Union
 
 from sqlalchemy import delete, func
@@ -10,12 +8,9 @@ from sqlalchemy.orm import Session, undefer
 from sqlalchemy.orm.util import identity_key
 
 from models.skill import Skill, SkillFile
+from utils.skill_paths import normalize_path as normalize_skill_path
 
-_MAX_PATH_LENGTH = 500
-_MAX_SEGMENT_BYTES = 255
 _MAX_MEDIA_TYPE_LENGTH = 120
-_WINDOWS_DRIVE_RE = re.compile(r'^[A-Za-z]:')
-_PERCENT_ENCODED_RE = re.compile(r'%[0-9A-Fa-f]{2}')
 
 _TEXT_MEDIA_TYPES = {'application/json', 'application/x-yaml', 'application/xml'}
 _TEXT_EXTENSIONS = {
@@ -29,55 +24,12 @@ class SkillPackageRepository:
 
     @staticmethod
     def normalize_path(path: str) -> str:
-        """Normalise a package-root-relative path to POSIX form.
-
-        The path is NFKC-normalised first so that compatibility characters (fullwidth dots and slashes,
-        one-dot leaders, ...) cannot smuggle traversal sequences past validation.
+        """Normalise a package-root-relative path to POSIX form (delegates to ``utils.skill_paths``).
 
         Raises:
-            ValueError: If the path is empty, absolute, has a Windows drive, contains a ``..`` segment,
-                starts with ``~``, contains control/format characters or a percent-encoded octet,
-                has a segment that is blank, ends with ``.``/space or exceeds 255 UTF-8 bytes,
-                is longer than 500 characters, or is the reserved root-level ``SKILL.md``.
+            ValueError: See ``utils.skill_paths.normalize_path``; a root-level ``SKILL.md`` is rejected.
         """
-        if not path or not path.strip():
-            raise ValueError("Skill file path must not be empty.")
-        normalized = unicodedata.normalize('NFKC', path).replace('\\', '/')
-        for ch in normalized:
-            if ord(ch) < 0x20 or ord(ch) == 0x7F or unicodedata.category(ch) == 'Cf':
-                raise ValueError("Skill file path must not contain control characters.")
-        if _PERCENT_ENCODED_RE.search(normalized):
-            raise ValueError("Skill file path must not contain percent-encoded characters.")
-        if normalized.startswith('/') or _WINDOWS_DRIVE_RE.match(normalized):
-            raise ValueError("Skill file path must be relative.")
-        if normalized.startswith('~'):
-            raise ValueError("Skill file path must not start with '~'.")
-
-        segments: List[str] = []
-        for raw in normalized.split('/'):
-            if raw in ('', '.'):
-                continue
-            if not raw.strip():
-                raise ValueError("Skill file path must not contain blank segments.")
-            if raw != raw.strip():
-                raise ValueError("Skill file path segments must not have leading or trailing whitespace.")
-            seg = raw
-            if seg == '..':
-                raise ValueError("Skill file path must not contain '..' segments.")
-            if seg.endswith('.') or seg.endswith(' '):
-                raise ValueError("Skill file path segments must not end with '.' or a space.")
-            if len(seg.encode('utf-8')) > _MAX_SEGMENT_BYTES:
-                raise ValueError(f"Skill file path segments must not exceed {_MAX_SEGMENT_BYTES} bytes.")
-            segments.append(seg)
-        if not segments:
-            raise ValueError("Skill file path must not be empty.")
-
-        result = '/'.join(segments)
-        if len(result) > _MAX_PATH_LENGTH:
-            raise ValueError(f"Skill file path exceeds {_MAX_PATH_LENGTH} characters.")
-        if len(segments) == 1 and result.lower() == 'skill.md':
-            raise ValueError("SKILL.md is reserved: it is stored in Skill.content, not as a package file.")
-        return result
+        return normalize_skill_path(path)
 
     @staticmethod
     def compute_checksum(data: bytes) -> str:

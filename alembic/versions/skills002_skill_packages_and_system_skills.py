@@ -33,6 +33,9 @@ def upgrade():
         unique=True, postgresql_where=sa.text('app_id IS NULL'),
     )
 
+    # 1c. Tenant lookups (list/detail/name checks) filter on app_id
+    op.create_index('ix_skill_app_id', 'Skill', ['app_id'])
+
     # 2. Widen description (metadata-only on PostgreSQL)
     op.alter_column(
         'Skill', 'description',
@@ -64,6 +67,7 @@ def downgrade():
     # WARNING: destructive. Drops every SkillFile row (package blobs are unrecoverable), resets
     # source/is_enabled/display_name etc. on re-upgrade, and truncates descriptions > 1000 chars.
     # Export skill packages before downgrading if any SkillFile rows exist.
+    op.drop_index('ix_skill_app_id', table_name='Skill')
     op.drop_index('uq_skill_system_name', table_name='Skill')
 
     op.drop_table('SkillFile')

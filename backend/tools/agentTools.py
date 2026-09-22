@@ -582,7 +582,6 @@ async def create_agent(
         skill_tool = create_skill_loader_tool(agent.skill_associations)
         if skill_tool:
             tools.append(skill_tool)
-            logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")
 
     if pydantic_model:
         # In LangChain v1, response_format accepts the pydantic model directly.

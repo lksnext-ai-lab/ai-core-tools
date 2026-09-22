@@ -10,6 +10,7 @@ class Skill(Base):
     __table_args__ = (
         Index('uq_skill_system_name', text('lower(name)'), unique=True,
               postgresql_where=text('app_id IS NULL')),
+        Index('ix_skill_app_id', 'app_id'),
     )
 
     skill_id = Column(Integer, primary_key=True)
