@@ -581,6 +581,35 @@ class E2BProvider(SandboxProvider):
 
         return _truncate(_execution_output(execution), effective_limit)
 
+    # ------------------------------------------------------------------
+    # Skill activation (FR-20, step_018)
+    # ------------------------------------------------------------------
+
+    def skills_root(self, handle: SandboxHandle) -> str:
+        """Override the ABC default (``/workspace/.skills``) to relocate skill
+        materialisation under this provider's own workspace convention
+        (``E2B_WORKSPACE``, default ``/home/user/workspace``).
+
+        Derived from the module-level ``_workspace_root()`` — the same helper
+        ``write_file``/``read_file``/``list_files`` already use — rather than
+        hard-coding a path here, so the two conventions can never drift apart.
+        Neither E2B's file API nor its command runner offers a bulk/directory
+        upload primitive beyond what the ABC's ``ensure_skill`` already does
+        with ``write_file``/``run_code``, so this is the only override needed;
+        ``ensure_skill`` itself falls through to ``SandboxProvider.ensure_skill``.
+
+        Note (MEDIUM, round-1 step_017/018 review): unlike OpenSandbox, this
+        provider does not explicitly ``mkdir -p`` the sibling
+        ``<skills_root>/.markers`` directory before ``_write_skill_marker``'s
+        ``write_file`` call — it relies on E2B's ``sandbox.files.write``
+        auto-creating parent directories (true today, but undocumented
+        upstream). If that ever stops holding, marker writes fail
+        best-effort (see ``_write_skill_marker``) and the idempotency
+        optimisation silently becomes a no-op rather than breaking
+        activation.
+        """
+        return f"{_workspace_root()}/.skills"
+
     def write_file(self, handle: SandboxHandle, filename: str, content: bytes) -> None:
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:

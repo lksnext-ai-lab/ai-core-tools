@@ -4,7 +4,7 @@ import mimetypes
 import threading
 import zipfile
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -360,3 +360,80 @@ class SkillPackageService:
             runtime=skill.runtime or None,
             runtime_options=load_json(skill.runtime_options, {}, skill.skill_id, 'runtime_options'),
         )
+
+
+# ==================== TOOL PROVIDER FACTORY (step_019, AD-7) ====================
+#
+# ``backend/tools/skill_tools.py`` must never import a service/repository/DB session
+# directly (tools/** stays DB-free). Callers building the ``load_skill`` /
+# ``read_skill_file`` tools (agent execution / agentTools.py) instead ask this module
+# for a small set of closures, and pass those in.
+#
+# Each closure opens (and closes) its own short-lived ``SessionLocal()`` per call rather
+# than closing over one ``Session`` passed in at construction time: the returned tools can
+# be invoked much later in the same conversation turn (across several LLM tool-call round
+# trips), well after any request-scoped session used to build the agent would have been
+# closed — the same reason ``get_retriever_tool``/``_build_temp_retrievers`` in
+# ``tools/agentTools.py`` never hold a ``Session`` open across a tool's lifetime either.
+SkillPathRow = Tuple[str, Optional[str], int, str, bool]
+
+
+def build_skill_tool_providers() -> Tuple[
+    Callable[[int], SkillPackagePayload],
+    Callable[[int], List[SkillPathRow]],
+    Callable[[int, str], Optional[Tuple[bool, Union[str, bytes]]]],
+]:
+    """Build the DB-bound callables ``tools/skill_tools.py`` needs, without it importing
+    ``SkillPackageService``/``SkillPackageRepository``/``db.database`` itself.
+
+    Returns ``(payload_provider, list_paths_provider, file_content_provider)``:
+      - ``payload_provider(skill_id) -> SkillPackagePayload``: same contract as
+        ``SkillPackageService.build_payload`` — caller must have already resolved+authorised
+        the skill (and confirmed it is enabled) before invoking the returned tool.
+      - ``list_paths_provider(skill_id) -> [(path, media_type, size_bytes, checksum, is_text), ...]``:
+        never loads file blobs (``SkillPackageRepository.list_paths``); used to validate a
+        requested path and to report available paths without pulling binary content.
+      - ``file_content_provider(skill_id, path) -> (is_text, content) | None``: loads exactly one
+        already-validated, already-normalised file's content (``path`` must be a value returned
+        by ``list_paths_provider`` for the *same* skill — this function does not re-validate or
+        re-scope it). Returns ``None`` if the row no longer exists (rare import/delete race).
+
+    All three are keyed by ``skill_id`` (a plain int), never a live ``Skill`` ORM instance
+    (H1, round-2 fix): a ``Skill`` loaded by a request-scoped caller session is neither
+    guaranteed-valid nor thread-safe by the time these closures actually run — LangChain's
+    tool executor can invoke them from a worker thread, well after that session could be
+    expired or closed, and a lazy attribute read on it there can corrupt the session or
+    raise ``DetachedInstanceError``/``InvalidRequestError`` uncaught. Each closure instead
+    opens its own fresh session and re-fetches the ``Skill``/``SkillFile`` rows it needs by
+    id — it never re-authorises the id (the caller already resolved+authorised the skill for
+    this agent before capturing its id into a snapshot; see ``tools.skill_tools.SkillSnapshot``).
+    """
+    from db.database import SessionLocal
+
+    def payload_provider(skill_id: int) -> SkillPackagePayload:
+        with SessionLocal() as db:
+            # get_by_id_unscoped's docstring restricts it to omniadmin-guarded routes —
+            # safe here too because no fresh authorisation decision is being made from
+            # this id: it was already resolved+authorised for this agent/app earlier in
+            # the same turn (resolve_agent_skills), before being captured into the
+            # SkillSnapshot the tool closure holds. This call only re-fetches the same
+            # already-authorised skill's current row in a fresh session (H1).
+            skill = SkillRepository.get_by_id_unscoped(db, skill_id)
+            if skill is None:
+                raise SkillValidationError(f"Skill {skill_id} no longer exists")
+            return SkillPackageService.build_payload(db, skill)
+
+    def list_paths_provider(skill_id: int) -> List[SkillPathRow]:
+        with SessionLocal() as db:
+            return SkillPackageRepository.list_paths(db, skill_id)
+
+    def file_content_provider(skill_id: int, path: str) -> Optional[Tuple[bool, Union[str, bytes]]]:
+        with SessionLocal() as db:
+            skill_file = SkillPackageRepository.get_file(db, skill_id, path)
+            if skill_file is None:
+                return None
+            if skill_file.content_text is not None:
+                return True, skill_file.content_text
+            return False, bytes(skill_file.content_bytes or b'')
+
+    return payload_provider, list_paths_provider, file_content_provider

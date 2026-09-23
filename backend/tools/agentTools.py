@@ -29,7 +29,13 @@ from utils.logger import get_logger
 from utils.config import get_app_config
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
-from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.skill_tools import (
+    create_skill_file_reader_tool,
+    create_skill_loader_tool,
+    generate_skills_system_prompt_section,
+    resolve_agent_skills,
+    snapshot_skills,
+)
 from tools.sandbox import (
     create_sandbox_builtin_tools,
     create_sandbox_repl_tools,
@@ -283,8 +289,20 @@ async def create_agent(
     # Inject current date to avoid need for a tool call
     current_date = datetime.now().strftime("%Y-%m-%d")
     system_prompt_content += f"\n\nToday's date is {current_date}."
+    # H2 (round-2 review fix): resolve_agent_skills is the single source of truth for
+    # "which skills does this agent use this turn" — call it exactly once here and
+    # reuse the (snapshotted) result for every consumer below (prompt section, the
+    # load_skill map, the read_skill_file map), instead of each one independently
+    # re-resolving. Independent re-resolves risk a skill visible in the prompt but
+    # missing from a tool's map (or vice versa) if resolution ever becomes
+    # non-deterministic (e.g. step_024's planned LLM-routed resolver). Snapshotted
+    # immediately (H1) so no tool closure built below ever holds a live Skill ORM
+    # instance across a thread/session boundary — mirrors ``_capture_silo_data``.
+    skill_snapshots: List[Any] = []
     if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+        resolved_skills = resolve_agent_skills(agent.skill_associations)
+        skill_snapshots = snapshot_skills(resolved_skills)
+        skills_section = generate_skills_system_prompt_section(skill_snapshots)
         if skills_section:
             system_prompt_content = system_prompt_content + "\n" + skills_section
 
@@ -577,11 +595,33 @@ async def create_agent(
         # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
         mcp_client = None
 
-    # Add skill loader tool if agent has skills
-    if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        skill_tool = create_skill_loader_tool(agent.skill_associations)
+    # Add skill loader / file reader tools if agent has skills. Providers are built lazily
+    # (only when there are skills to wire) via the service-layer factory so this module is
+    # the single site that bridges tools/skill_tools.py (DB-free) to the DB/sandbox layers —
+    # step_013's contract: no other call site iterates skill_associations directly. Reuse
+    # the single resolve+snapshot from above (H1/H2) — never re-resolve here.
+    if skill_snapshots:
+        from services.skill_package_service import build_skill_tool_providers
+
+        payload_provider, list_paths_provider, file_content_provider = build_skill_tool_providers()
+
+        skill_tool = create_skill_loader_tool(
+            skill_snapshots,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            payload_provider=payload_provider,
+        )
         if skill_tool:
             tools.append(skill_tool)
+
+        skill_file_reader_tool = create_skill_file_reader_tool(
+            skill_snapshots,
+            list_paths_provider=list_paths_provider,
+            file_content_provider=file_content_provider,
+            sandbox_handle=sandbox_handle,
+        )
+        if skill_file_reader_tool:
+            tools.append(skill_file_reader_tool)
 
     if pydantic_model:
         # In LangChain v1, response_format accepts the pydantic model directly.

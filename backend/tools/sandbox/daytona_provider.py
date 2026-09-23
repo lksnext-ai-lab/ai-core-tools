@@ -572,11 +572,31 @@ class DaytonaProvider(SandboxProvider):
         proc = _process(sandbox)
         if proc is None or not hasattr(proc, "exec"):
             raise RuntimeError("Daytona sandbox has no process.exec service")
-        command = f"bash -lc {shlex.quote(code)}"
+        # MEDIUM fix (round-1, step_017/018 review): _call_with_fallbacks
+        # silently drops ALL kwargs (including `cwd`) on a TypeError, falling
+        # back to `method(*args)` with no cwd at all — if that ever fires,
+        # every bash command run through here (including ensure_skill's
+        # rm -rf / tar extraction / bootstrap `cd`) would silently operate on
+        # the wrong directory. Making the `cd` explicit in the command text
+        # itself means a dropped `cwd` kwarg can no longer cause a location
+        # mismatch; the `cwd=` kwarg below is kept as a redundant belt (a
+        # harmless no-op `cd` twice) for SDK versions that do honour it.
+        # Round-2 MEDIUM fix (reliability-auditor): the closing `)` must be on
+        # its own line. When it shared a line with `code`'s own text (the
+        # `( {code} )` shape), a `code` whose *last* line was itself a `#`
+        # comment would swallow the closing paren into that comment,
+        # producing "bash: -c: line N: unexpected EOF while looking for
+        # matching `)'" for an otherwise-valid snippet. Every bash run_code
+        # call for every agent/user (not just ensure_skill's own commands)
+        # goes through this wrapper, so the newline is required regardless of
+        # what the caller passes.
+        workspace = _workspace_root()
+        wrapped = f"cd {shlex.quote(workspace)} && (\n{code}\n)"
+        command = f"bash -lc {shlex.quote(wrapped)}"
         return _call_with_fallbacks(
             proc.exec,
             command,
-            cwd=_workspace_root(),
+            cwd=workspace,
             timeout=timeout,
         )
 
@@ -652,6 +672,54 @@ class DaytonaProvider(SandboxProvider):
                 except Exception:
                     pass
         return _truncate(output, effective_limit)
+
+    # ------------------------------------------------------------------
+    # Skill activation (FR-20, step_018)
+    # ------------------------------------------------------------------
+
+    def skills_root(self, handle: SandboxHandle) -> str:
+        """Override the ABC default (``/workspace/.skills``) to relocate skill
+        materialisation under this provider's own workspace convention
+        (``DAYTONA_WORKSPACE``, e.g. ``/home/daytona/workspace`` on the
+        sandbox filesystem).
+
+        Deliberately returns a bare ``.skills`` — **not**
+        ``f"{_workspace_root()}/.skills"`` — because the two call sites that
+        interpolate this root into paths use two different bases:
+
+        - ``write_file``/``read_file`` route every path through
+          ``_workspace_path``, which prepends ``_workspace_root()`` itself
+          when it isn't already present — so either form would work there.
+        - ``ensure_skill``'s bash commands (``_run_verified_command``,
+          the bootstrap ``cd``) run via ``run_code(language="bash")`` ->
+          ``_run_bash``, which already sets ``cwd=_workspace_root()`` on the
+          remote shell. Prefixing the root with ``_workspace_root()`` again
+          here would make those commands address
+          ``<workspace>/<workspace>/.skills/...`` (double-nested — wrong)
+          instead of ``<workspace>/.skills/...``.
+
+        A bare ``.skills`` satisfies both: relative to the already-cwd'd
+        shell for bash commands, and relative-to-workspace (via
+        ``_workspace_path``'s own prefixing) for direct filesystem calls.
+
+        Neither Daytona's filesystem API nor its process runner offers a
+        bulk/directory upload primitive beyond what the ABC's
+        ``ensure_skill`` already does with ``write_file``/``run_code``, so
+        this is the only override needed; ``ensure_skill`` itself falls
+        through to ``SandboxProvider.ensure_skill``.
+
+        Note (MEDIUM, round-1 step_017/018 review): unlike OpenSandbox, this
+        provider does not explicitly create the sibling
+        ``<skills_root>/.markers`` directory before ``_write_skill_marker``'s
+        ``write_file`` call — it relies on ``fs.upload_file`` (see
+        ``write_file`` below, which already ``mkdir -p``'s the parent
+        directory via ``process.exec`` before uploading) to make the
+        directory exist. If that best-effort ``mkdir -p`` step is ever
+        skipped, marker writes fail best-effort (see ``_write_skill_marker``)
+        and the idempotency optimisation silently becomes a no-op rather
+        than breaking activation.
+        """
+        return ".skills"
 
     def write_file(self, handle: SandboxHandle, filename: str, content: bytes) -> None:
         sandbox = handle.metadata.get(_META_SANDBOX)

@@ -87,6 +87,12 @@ SANDBOX_CREATE_TIMEOUT_S = int(os.getenv('SANDBOX_CREATE_TIMEOUT_S', '60'))
 # Per-execution timeout (seconds).
 SANDBOX_DEFAULT_TIMEOUT_S = int(os.getenv('SANDBOX_DEFAULT_TIMEOUT_S', '30'))
 
+# Timeout for a skill's bootstrap script (seconds). Deliberately generous (and
+# distinct from SANDBOX_DEFAULT_TIMEOUT_S): bootstrap scripts are explicitly permitted to
+# assume network egress (e.g. `pip install`) to prepare a skill's runtime dependencies
+# (product decision, see skills-boosted plan Decision 12 — this is not an oversight).
+SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S = int(os.getenv('SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S', '120'))
+
 # Maximum sandbox session lifetime (hours).
 SANDBOX_SESSION_TTL_H = float(os.getenv('SANDBOX_SESSION_TTL_H', '2'))
 
