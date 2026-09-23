@@ -87,3 +87,11 @@ class CreateUpdateSkillSchema(BaseModel):
 class SkillEnabledUpdateSchema(BaseModel):
     """Request body for the ``PATCH .../enabled`` toggle routes (app-scoped and system-scoped)."""
     is_enabled: bool
+
+
+class SkillFileContentSchema(BaseModel):
+    """Response of the on-demand text-file preview routes. Never returned for a binary file."""
+    path: str
+    content: str
+    media_type: Optional[str] = None
+    truncated: bool = False

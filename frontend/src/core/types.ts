@@ -87,6 +87,26 @@ export interface Skill {
   description?: string;
   content?: string;
   created_at: string;
+  display_name?: string;
+  is_system?: boolean;
+  is_enabled?: boolean;
+  is_frozen?: boolean;
+  source?: 'yaml' | 'admin';
+  file_count?: number;
+  frontmatter?: Record<string, unknown>;
+  allowed_tools?: string[];
+  runtime?: string;
+  bootstrap_script_path?: string;
+  runtime_options?: Record<string, unknown>;
+  files?: SkillFileInfo[];
+}
+
+export interface SkillFileInfo {
+  path: string;
+  media_type?: string;
+  size_bytes: number;
+  checksum_sha256?: string;
+  is_text: boolean;
 }
 
 // MCP Server types - for exposing agents as MCP tools

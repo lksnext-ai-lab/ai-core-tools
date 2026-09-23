@@ -27,6 +27,7 @@ interface Agent {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  skill_router_enabled?: boolean;
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
@@ -65,7 +66,7 @@ interface Agent {
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
-  skills: Array<{ skill_id: number; name: string; description?: string }>;
+  skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean }>;
 }
 
 interface AgentFormData {
@@ -77,6 +78,7 @@ interface AgentFormData {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  skill_router_enabled: boolean;
   server_tools: string[];
   memory_max_messages: number;
   memory_max_tokens: number;
@@ -227,6 +229,7 @@ function AgentFormPage() {
     is_tool: false,
     has_memory: false,
     enable_code_interpreter: false,
+    skill_router_enabled: false,
     server_tools: [],
     memory_max_messages: 20,
     memory_max_tokens: 4000,
@@ -342,6 +345,7 @@ function AgentFormPage() {
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
         enable_code_interpreter: response.enable_code_interpreter || false,
+        skill_router_enabled: response.skill_router_enabled || false,
         server_tools: response.server_tools || [],
         memory_max_messages: response.memory_max_messages || 20,
         memory_max_tokens: response.memory_max_tokens || 4000,
@@ -568,6 +572,7 @@ function AgentFormPage() {
       is_tool: formData.is_tool,
       has_memory: formData.has_memory,
       enable_code_interpreter: formData.enable_code_interpreter,
+      skill_router_enabled: formData.skill_router_enabled,
       server_tools: formData.server_tools,
       memory_max_messages: formData.memory_max_messages,
       memory_max_tokens: formData.memory_max_tokens,
@@ -1102,11 +1107,27 @@ function AgentFormPage() {
                           type="checkbox"
                           checked={formData.enable_code_interpreter}
                           onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
+                          aria-describedby="enable_code_interpreter_help"
                           className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                         <div className="ml-3">
                           <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
-                          <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
+                          <p id="enable_code_interpreter_help" className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <input
+                          id="skill_router_enabled"
+                          type="checkbox"
+                          checked={formData.skill_router_enabled}
+                          onChange={(e) => handleInputChange('skill_router_enabled', e.target.checked)}
+                          aria-describedby="skill_router_enabled_help"
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="skill_router_enabled" className="text-sm font-medium text-gray-900">Skill Router</label>
+                          <p id="skill_router_enabled_help" className="text-xs text-gray-500">Let the model pre-select at most 2 skills per turn; off by default.</p>
                         </div>
                       </div>
 
@@ -1653,34 +1674,47 @@ function AgentFormPage() {
                   {agent.skills.length > 0 ? (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {agent.skills.map((skill) => (
-                          <label
-                            key={skill.skill_id}
-                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
-                              formData.skill_ids.includes(skill.skill_id)
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center">
-                                <input
-                                  type="checkbox"
-                                  checked={formData.skill_ids.includes(skill.skill_id)}
-                                  onChange={() => handleSkillToggle(skill.skill_id)}
-                                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
+                        {agent.skills.map((skill) => {
+                          const descriptionId = skill.description ? `skill-desc-${skill.skill_id}` : undefined;
+                          const disabledBadgeId = skill.is_enabled === false ? `skill-disabled-${skill.skill_id}` : undefined;
+                          const describedBy = [disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
+                          return (
+                            <label
+                              key={skill.skill_id}
+                              className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
+                                formData.skill_ids.includes(skill.skill_id)
+                                  ? 'border-purple-500 bg-purple-50'
+                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={formData.skill_ids.includes(skill.skill_id)}
+                                    onChange={() => handleSkillToggle(skill.skill_id)}
+                                    aria-label={skill.name}
+                                    aria-describedby={describedBy}
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                  />
+                                  <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
+                                </div>
+                                <div className={`w-2 h-2 rounded-full ${
+                                  formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
+                                }`} />
                               </div>
-                              <div className={`w-2 h-2 rounded-full ${
-                                formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
-                              }`} />
-                            </div>
-                            {skill.description && (
-                              <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
-                            )}
-                          </label>
-                        ))}
+                              {skill.is_enabled === false && (
+                                <p id={disabledBadgeId} className="mt-2 ml-7 inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
+                                  <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                                  Disabled — ignored at execution until re-enabled
+                                </p>
+                              )}
+                              {skill.description && (
+                                <p id={descriptionId} className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
+                              )}
+                            </label>
+                          );
+                        })}
                       </div>
 
                       {formData.skill_ids.length > 0 && (

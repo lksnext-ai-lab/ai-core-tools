@@ -22,11 +22,12 @@ from typing import Any, List, Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import config as settings
 from models.skill import Skill
 from repositories.skill_package_repository import SkillPackageRepository
 from repositories.skill_repository import SkillRepository, fold_name
 from schemas.skill_schemas import (
-    CreateUpdateSkillSchema, SkillDetailSchema, SkillFileInfoSchema, SkillListItemSchema
+    CreateUpdateSkillSchema, SkillDetailSchema, SkillFileContentSchema, SkillFileInfoSchema, SkillListItemSchema
 )
 from services.skill_errors import (  # noqa: F401 - re-exported for routers
     SkillBusyError, SkillConflictError, SkillForbiddenError, SkillImportError, SkillPersistenceError,
@@ -170,6 +171,85 @@ class SkillService:
         """Get a system skill in any enabled state (admin view). None if missing or app-scoped."""
         skill = SkillRepository.get_system_skill_by_id(db, skill_id)
         return SkillService.build_detail(db, skill) if skill else None
+
+    # ==================== FILE PREVIEW ====================
+
+    @staticmethod
+    def get_file_content_for_app(
+        db: Session, app_id: int, skill_id: int, raw_path: str
+    ) -> Optional[SkillFileContentSchema]:
+        """Read one text file of an own-app skill or an enabled system skill, on demand.
+
+        Mirrors the visibility rule of ``get_skill_detail``: an app's own skill first, then an
+        enabled system skill.
+
+        Returns:
+            None if the skill is not visible to this app, or if no file exists at ``raw_path``
+            for it (including a path that resolves inside a *different* skill's rows).
+
+        Raises:
+            SkillValidationError: ``raw_path`` fails ``utils.skill_paths.normalize_path``, or the
+                file exists but is binary (400 either way).
+        """
+        skill = SkillRepository.get_by_id_and_app_id(db, skill_id, app_id)
+        if not skill:
+            skill = SkillRepository.get_system_skill_by_id(db, skill_id, enabled_only=True)
+        if not skill:
+            return None
+        return SkillService._read_text_file(db, skill.skill_id, raw_path)
+
+    @staticmethod
+    def get_file_content_for_system_skill(
+        db: Session, skill_id: int, raw_path: str
+    ) -> Optional[SkillFileContentSchema]:
+        """Read one text file of a system skill in any enabled state (admin view).
+
+        Returns:
+            None if the skill is missing/app-scoped, or if no file exists at ``raw_path``.
+
+        Raises:
+            SkillValidationError: ``raw_path`` fails ``utils.skill_paths.normalize_path``, or the
+                file exists but is binary (400 either way).
+        """
+        skill = SkillRepository.get_system_skill_by_id(db, skill_id)
+        if not skill:
+            return None
+        return SkillService._read_text_file(db, skill.skill_id, raw_path)
+
+    @staticmethod
+    def _read_text_file(db: Session, skill_id: int, raw_path: str) -> Optional[SkillFileContentSchema]:
+        """Normalise ``raw_path``, load the file scoped to ``skill_id`` and return its text content.
+
+        ``skill_id`` here is trusted (already resolved/visibility-checked by the caller); the path
+        equality filter in ``SkillPackageRepository.get_file`` is what stops a path belonging to a
+        different skill from ever resolving.
+        """
+        try:
+            path = SkillPackageRepository.normalize_path(raw_path)
+        except ValueError as e:
+            raise SkillValidationError(str(e)) from None
+
+        skill_file = SkillPackageRepository.get_file(db, skill_id, path)
+        if skill_file is None:
+            return None
+        if skill_file.content_text is None:
+            # Defense in depth: the frontend only calls this for files it already knows are text
+            # (from the file tree's is_text flag), but the backend must never blindly serve binary
+            # bytes back as if they were text.
+            raise SkillValidationError("This file is binary and cannot be previewed as text.")
+
+        content = skill_file.content_text
+        truncated = False
+        if len(content) > settings.SANDBOX_MAX_OUTPUT_CHARS:
+            content = content[:settings.SANDBOX_MAX_OUTPUT_CHARS]
+            truncated = True
+
+        return SkillFileContentSchema(
+            path=skill_file.path,
+            content=content,
+            media_type=skill_file.media_type,
+            truncated=truncated,
+        )
 
     # ==================== WRITE ====================
 

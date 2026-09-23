@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 import config as settings
 # Import schemas and auth
 from schemas.skill_schemas import (
-    CreateUpdateSkillSchema, SkillDetailSchema, SkillEnabledUpdateSchema, SkillListItemSchema
+    CreateUpdateSkillSchema, SkillDetailSchema, SkillEnabledUpdateSchema, SkillFileContentSchema,
+    SkillListItemSchema
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -150,6 +151,31 @@ async def get_skill(
         if skill_detail is None and skill_id != 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SKILL_NOT_FOUND_ERROR)
         return skill_detail
+
+
+@skills_router.get("/{skill_id}/files/content",
+                   summary="Get the text content of one skill package file",
+                   tags=["Skills"],
+                   response_model=SkillFileContentSchema)
+async def get_skill_file_content(
+    app_id: int,
+    skill_id: int,
+    path: str,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+):
+    """Fetch the text content of one file of an own-app skill or an enabled system skill, on demand.
+
+    404 when the skill is not visible to this app, or when ``path`` does not resolve to a file of
+    THIS skill (including a path that only exists under a different skill). A binary file, or a
+    ``path`` that fails the shared path-safety validation, is rejected with 400.
+    """
+    with skill_error_boundary(f"Error reading skill file content for skill {skill_id} in app {app_id}"):
+        content = SkillService.get_file_content_for_app(db, app_id, skill_id, path)
+        if content is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill file not found")
+        return content
 
 
 @skills_router.post("/{skill_id}",

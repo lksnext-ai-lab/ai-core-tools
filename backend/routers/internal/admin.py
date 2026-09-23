@@ -603,6 +603,7 @@ from schemas.skill_schemas import (
     CreateUpdateSkillSchema,
     SkillDetailSchema,
     SkillEnabledUpdateSchema,
+    SkillFileContentSchema,
     SkillListItemSchema,
 )
 from routers.controls.skill_router_helpers import (
@@ -1066,6 +1067,26 @@ async def delete_system_skill(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
 
         logger.info("admin:delete_system_skill skill_id=%s by=%s", skill_id, auth_context.identity.email)
+
+
+@router.get("/system-skills/{skill_id}/files/content", response_model=SkillFileContentSchema)
+async def get_system_skill_file_content(
+    skill_id: int,
+    path: str,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Fetch the text content of one file of a system skill in any enabled state (platform admin).
+
+    404 when the skill is missing/app-scoped, or when ``path`` does not resolve to a file of THIS
+    skill. A binary file, or a ``path`` that fails the shared path-safety validation, is rejected
+    with 400.
+    """
+    with skill_error_boundary(f"Error reading system skill file content for skill {skill_id}"):
+        content = SkillService.get_file_content_for_system_skill(db, skill_id, path)
+        if content is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+        return content
 
 
 @router.post("/system-skills/import", response_model=SkillDetailSchema, status_code=status.HTTP_201_CREATED)
