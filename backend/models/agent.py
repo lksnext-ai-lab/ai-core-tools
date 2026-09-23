@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, text
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -77,6 +77,7 @@ class Agent(Base):
 
     has_memory = Column(Boolean)
     enable_code_interpreter = Column(Boolean, default=False, nullable=False, server_default='false')
+    skill_router_enabled = Column(Boolean, nullable=False, server_default=text('false'), default=False)
     server_tools = Column(JSON, default=list, nullable=False, server_default='[]')
 
     # RAG retrieval config (step_007 / FR-7); rag_search_type values validated in schemas (step_008).

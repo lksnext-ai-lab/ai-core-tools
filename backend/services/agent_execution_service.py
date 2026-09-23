@@ -2071,6 +2071,7 @@ class AgentExecutionService:
                 sandbox_session_key=sandbox_session_key,
                 attached_files=processed_files,
                 temp_silo_ids=temp_silo_ids,
+                user_message=message,
             )
 
             # Prepare configuration

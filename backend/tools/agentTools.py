@@ -13,6 +13,7 @@ from typing import Any, Optional, Dict, List, Tuple, Type
 from pydantic import BaseModel, Field
 import types as _types
 from services.silo_service import SiloService
+from services.skill_router_service import select_skills as _select_prompt_skills
 from db.database import SessionLocal
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from services.agent_cache_service import CheckpointerCacheService
@@ -34,6 +35,7 @@ from tools.skill_tools import (
     create_skill_loader_tool,
     generate_skills_system_prompt_section,
     resolve_agent_skills,
+    resolve_prompt_skills,
     snapshot_skills,
 )
 from tools.sandbox import (
@@ -227,6 +229,7 @@ async def create_agent(
     sandbox_session_service: Optional[Any] = None,
     attached_files: Optional[List[Dict]] = None,
     temp_silo_ids: Optional[List[int]] = None,
+    user_message: Optional[str] = None,
 ):
     """Create a new agent instance with cached checkpointer if memory is enabled.
 
@@ -242,6 +245,10 @@ async def create_agent(
         sandbox_session_service: Optional service used for sandbox active-use leasing
         attached_files: Optional list of attached files to pass to the agent chain
         temp_silo_ids: Optional list of temporary silo IDs (e.g. playground media) to include as extra retrievers
+        user_message: Optional current turn's user message. Only consumed when
+            ``agent.skill_router_enabled`` is True (step_024's opt-in skill router,
+            used to pre-select at most 2 skills to describe in the prompt) — otherwise
+            never read, so passing/omitting it has no effect on today's default path.
     """
     llm = get_llm(agent)
     if llm is None:
@@ -301,8 +308,25 @@ async def create_agent(
     skill_snapshots: List[Any] = []
     if hasattr(agent, 'skill_associations') and agent.skill_associations:
         resolved_skills = resolve_agent_skills(agent.skill_associations)
+        # `skill_snapshots` (the FULL resolved+enabled set) is what gets passed to
+        # create_skill_loader_tool/create_skill_file_reader_tool below — this must
+        # never be narrowed by the router, so the model can always explicitly
+        # `load_skill` something the router didn't proactively surface (step_020's
+        # self-heal path keeps working regardless of routing).
         skill_snapshots = snapshot_skills(resolved_skills)
-        skills_section = generate_skills_system_prompt_section(skill_snapshots)
+        # step_024: `resolve_prompt_skills` is the opt-in skill-router hook. It early-
+        # returns `resolved_skills` unchanged when the agent hasn't set
+        # `skill_router_enabled` (AC-22) — only then does it build a metadata catalog
+        # and call the router to narrow which skills' content is described below. It
+        # only ever affects prompt content, never the tool registration above.
+        prompt_skills = await resolve_prompt_skills(
+            resolved_skills, agent=agent, user_message=user_message, llm=llm,
+            selector=_select_prompt_skills,
+        )
+        prompt_skill_snapshots = (
+            skill_snapshots if prompt_skills is resolved_skills else snapshot_skills(prompt_skills)
+        )
+        skills_section = generate_skills_system_prompt_section(prompt_skill_snapshots)
         if skills_section:
             system_prompt_content = system_prompt_content + "\n" + skills_section
 

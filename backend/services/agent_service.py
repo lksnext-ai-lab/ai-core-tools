@@ -125,6 +125,7 @@ class AgentService:
             is_tool=agent.is_tool or False,
             has_memory=getattr(agent, 'has_memory', False) or False,
             enable_code_interpreter=getattr(agent, 'enable_code_interpreter', False) or False,
+            skill_router_enabled=getattr(agent, 'skill_router_enabled', False) or False,
             server_tools=getattr(agent, 'server_tools', None) or [],
             memory_max_messages=getattr(agent, 'memory_max_messages', 20) or 20,
             memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
@@ -339,6 +340,13 @@ class AgentService:
 
         enable_ci_value = data.get('enable_code_interpreter', False)
         agent.enable_code_interpreter = bool(enable_ci_value)
+
+        # Gated on presence (unlike the sibling enable_code_interpreter field above): the
+        # public API route builds its update dict via model_dump(exclude_unset=True), so
+        # a partial update that never touches this field must leave the existing value
+        # untouched instead of silently resetting it to False.
+        if 'skill_router_enabled' in data:
+            agent.skill_router_enabled = bool(data['skill_router_enabled'])
 
         agent.server_tools = data.get('server_tools') or []
 

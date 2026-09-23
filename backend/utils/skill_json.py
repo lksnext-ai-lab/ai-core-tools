@@ -35,3 +35,26 @@ def dump_json(value: Any) -> Optional[str]:
     if value is None:
         return None
     return json.dumps(value, ensure_ascii=False)
+
+
+def read_when_to_use(skill: Any) -> Optional[str]:
+    """Extract ``when_to_use`` from a skill's ``frontmatter`` JSON blob.
+
+    Single shared owner of this extraction (``Skill.frontmatter.get('when_to_use')`` +
+    the accompanying ``isinstance(..., str)`` guard) — reused by both
+    ``services/skill_package_service.py`` (SKILL.md export rendering) and
+    ``tools/skill_tools.py`` (the skill-router metadata catalog), which previously
+    duplicated this logic independently.
+
+    Args:
+        skill: Any object exposing ``frontmatter`` (JSON-encoded text, or ``None``) and
+            ``skill_id`` (used only for the malformed-JSON warning log). Duck-typed —
+            does not require a ``Skill`` ORM instance, so it stays importable from
+            DB/service-free modules like ``tools/skill_tools.py``.
+
+    Returns:
+        The non-empty string ``when_to_use`` value, or ``None``.
+    """
+    frontmatter = load_json(getattr(skill, 'frontmatter', None), {}, getattr(skill, 'skill_id', None), 'frontmatter')
+    when_to_use = frontmatter.get('when_to_use') if isinstance(frontmatter, dict) else None
+    return when_to_use if isinstance(when_to_use, str) and when_to_use else None
