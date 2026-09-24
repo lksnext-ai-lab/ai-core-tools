@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb,
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
-import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD } from '../constants/agentConstants';
+import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
@@ -222,7 +222,7 @@ function AgentFormPage() {
     name: '',
     description: '',
     system_prompt: '',
-    prompt_template: '{question}',
+    prompt_template: DEFAULT_PROMPT_TEMPLATE,
     type: 'agent',
     is_tool: false,
     has_memory: false,
@@ -337,7 +337,7 @@ function AgentFormPage() {
         name: response.name || '',
         description: response.description || '',
         system_prompt: response.system_prompt || '',
-        prompt_template: response.prompt_template || '',
+        prompt_template: response.prompt_template || DEFAULT_PROMPT_TEMPLATE,
         type: response.type || 'agent',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
@@ -537,6 +537,13 @@ function AgentFormPage() {
 
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
+
+    // The template is formatted with the user message; without {question} the message is lost.
+    if (!formData.prompt_template.includes(DEFAULT_PROMPT_TEMPLATE)) {
+      setActiveTab('prompts');
+      setError('The Prompt Template must include {question} before saving.');
+      return;
+    }
 
     // Mirror the backend invariant: a threshold strategy needs a threshold value.
     if (usesThreshold && formData.rag_score_threshold == null) {

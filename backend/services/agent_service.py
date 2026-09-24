@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
+from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
@@ -184,7 +184,7 @@ class AgentService:
         if agent_id == 0:
             # New agent
             return type('Agent', (), {
-                'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': '', 
+                'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': DEFAULT_PROMPT_TEMPLATE,
                 'type': 'agent', 'is_tool': False, 'create_date': None, 'request_count': 0,
                 'temperature': DEFAULT_AGENT_TEMPERATURE
             })()
@@ -303,12 +303,27 @@ class AgentService:
 
 
     
+    @staticmethod
+    def _resolve_prompt_template(new_value: Optional[str], current_value: Optional[str]) -> str:
+        """Never persist an empty prompt template: it would drop the user's message.
+
+        ``None`` (field not sent, e.g. a partial update) keeps the current template;
+        an empty/blank value falls back to the default.
+        """
+        if new_value is None:
+            new_value = current_value
+        if not new_value or not new_value.strip():
+            return DEFAULT_PROMPT_TEMPLATE
+        return new_value
+
     def _update_normal_agent(self, db: Session, agent: Agent, data: dict):
         """Update agent fields"""
         agent.name = data['name']
         agent.description = data.get('description', '')  # Ensure it's not None
         agent.system_prompt = data.get('system_prompt')
-        agent.prompt_template = data.get('prompt_template')
+        agent.prompt_template = self._resolve_prompt_template(
+            data.get('prompt_template'), agent.prompt_template
+        )
         agent.status = data.get('status')
         agent.service_id = data.get('service_id') or None
 
@@ -568,7 +583,7 @@ class AgentService:
         if prompt_type == 'system':
             agent.system_prompt = prompt
         elif prompt_type == 'template':
-            agent.prompt_template = prompt
+            agent.prompt_template = self._resolve_prompt_template(prompt, None)
         else:
             return False
         
