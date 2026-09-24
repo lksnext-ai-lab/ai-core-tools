@@ -40,6 +40,7 @@ import type {
   ToolAgent,
   AgentMCPUsage,
   AppSlugInfo,
+  ClaudePluginImportResult,
 } from '../core/types';
 import type {
   ImportResponse,
@@ -1216,6 +1217,29 @@ class ApiService {
 
     const response = await fetch(
       `${this.baseURL}/internal/apps/${appId}/skills/import`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importClaudePlugin(appId: number, file: File): Promise<ClaudePluginImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/import-claude-plugin`,
       {
         method: 'POST',
         credentials: 'include',

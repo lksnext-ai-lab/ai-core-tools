@@ -13,7 +13,7 @@ export function FormError({ error, className = '' }: FormErrorProps) {
   if (!error) return null;
 
   return (
-    <div role="alert" aria-live="assertive" className={`bg-red-50 border border-red-200 rounded-lg p-4 ${className}`}>
+    <div role="alert" aria-live="assertive" className={`bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4 ${className}`}>
       <div className="flex items-start">
         <div className="flex-shrink-0">
           <svg
@@ -31,7 +31,7 @@ export function FormError({ error, className = '' }: FormErrorProps) {
           </svg>
         </div>
         <div className="ml-3">
-          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
         </div>
       </div>
     </div>

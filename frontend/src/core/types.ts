@@ -109,6 +109,26 @@ export interface SkillFileInfo {
   is_text: boolean;
 }
 
+// Claude Code plugin import (step_035/036) — see backend/schemas/skill_schemas.py
+export type ClaudePluginSkillStatus = 'imported' | 'skipped' | 'failed';
+
+export interface ClaudePluginSkillResult {
+  name: string;
+  status: ClaudePluginSkillStatus;
+  reason?: string | null;
+  skill_id?: number | null;
+  bootstrap_script_path?: string | null;
+  runtime?: string | null;
+  has_bootstrap: boolean;
+}
+
+export interface ClaudePluginImportResult {
+  skills: ClaudePluginSkillResult[];
+  imported_count: number;
+  skipped_count: number;
+  failed_count: number;
+}
+
 // MCP Server types - for exposing agents as MCP tools
 export interface MCPServerAgent {
   agent_id: number;

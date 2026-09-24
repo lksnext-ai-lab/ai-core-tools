@@ -11,9 +11,11 @@ import {
   Loader2,
   ToggleLeft,
   ToggleRight,
+  PackagePlus,
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import SkillForm from '../../components/forms/SkillForm';
+import ClaudePluginImportModal from '../../components/forms/ClaudePluginImportModal';
 import { apiService } from '../../services/api';
 import ActionDropdown, { type ActionItem } from '../../components/ui/ActionDropdown';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
@@ -46,6 +48,7 @@ function SkillsPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [exportingSkillId, setExportingSkillId] = useState<number | null>(null);
   const [togglingSkillId, setTogglingSkillId] = useState<number | null>(null);
+  const [isPluginImportOpen, setIsPluginImportOpen] = useState(false);
 
   // Load skills from cache or API
   useEffect(() => {
@@ -218,6 +221,18 @@ function SkillsPage() {
     } finally {
       setImporting(false);
     }
+  }
+
+  function handleClaudePluginImportClick() {
+    setIsPluginImportOpen(true);
+  }
+
+  function handleClaudePluginImported() {
+    if (!appId) return;
+    // Reuses the same refetch mechanism as a regular import: invalidate the cached list so
+    // `loadSkills` falls through to the API instead of serving stale entries.
+    settingsCache.invalidateSkills(appId);
+    void loadSkills();
   }
 
   async function handleExport(skill: Skill) {
@@ -452,6 +467,14 @@ function SkillsPage() {
               {importing ? 'Importing…' : 'Import package'}
             </button>
             <button
+              type="button"
+              onClick={handleClaudePluginImportClick}
+              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
+            >
+              <PackagePlus className="w-4 h-4 mr-2" aria-hidden="true" />
+              Import Claude plugin
+            </button>
+            <button
               onClick={handleCreateSkill}
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
             >
@@ -553,6 +576,15 @@ function SkillsPage() {
           onCancel={handleCloseModal}
         />
       </Modal>
+
+      {appId && (
+        <ClaudePluginImportModal
+          appId={Number.parseInt(appId)}
+          isOpen={isPluginImportOpen}
+          onClose={() => setIsPluginImportOpen(false)}
+          onImported={handleClaudePluginImported}
+        />
+      )}
     </div>
   );
 }
