@@ -19,6 +19,10 @@ DEFAULT_AGENT_TEMPERATURE = 0.7
 # Default memory summarize threshold (number of messages)
 DEFAULT_MEMORY_SUMMARIZE_THRESHOLD = 20
 
+# Default prompt template: passes the user message through unchanged. An empty
+# template would format to an empty string and drop the user's message.
+DEFAULT_PROMPT_TEMPLATE = '{question}'
+
 
 class AgentSkill(Base):
     """Association table for Agent-Skill many-to-many relationship"""
@@ -57,7 +61,7 @@ class Agent(Base):
     description = Column(String(1000))
     create_date = Column(DateTime, default=datetime.now)
     system_prompt = Column(Text)
-    prompt_template = Column(Text)
+    prompt_template = Column(Text, default=DEFAULT_PROMPT_TEMPLATE)
     type = Column(String(45), nullable=False, default='agent')
     status = Column(String(45))
     request_count = Column(Integer, default=0)
