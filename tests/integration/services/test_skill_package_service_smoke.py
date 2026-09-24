@@ -118,6 +118,22 @@ class TestImportExport:
                 db, app_id=a1.app_id, data=make_zip({'SKILL.md': '---\nname: MY-skill\n---\nb'}))
         assert ei.value.status_code == 409 and counts(db) == before
 
+    def test_structural_validation_precedes_duplicate_name_check(self, db, two_apps):
+        """A structurally invalid package (over-length field / unresolvable bootstrap path) must
+        fail with SkillImportError/400 even when it ALSO collides with an existing skill name —
+        validation runs before the duplicate-name/quota DB checks, not after (regression guard:
+        an earlier refactor moved the pure-validation call inside the persistence seam, which
+        silently flipped this precedence to 409/403; see step_033's carry-over notes)."""
+        a1 = two_apps[0]
+        SkillPackageService.import_package(db, app_id=a1.app_id, data=good_zip())
+        before = counts(db)
+        malformed_same_name = make_zip({
+            'SKILL.md': '---\nname: MY-skill\nbootstrap_script_path: does-not-exist.py\n---\nb',
+        })
+        with pytest.raises(SkillImportError) as ei:
+            SkillPackageService.import_package(db, app_id=a1.app_id, data=malformed_same_name)
+        assert ei.value.status_code == 400 and counts(db) == before
+
     def test_files_failure_rolls_back_skill_row(self, db, two_apps, monkeypatch):
         before = counts(db)
         real = SkillPackageRepository.replace_files

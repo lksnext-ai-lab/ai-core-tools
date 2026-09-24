@@ -121,9 +121,11 @@ class SkillPackageService:
             parsed = parse_skill_md(skill_md_text)
         except SkillFrontmatterError as exc:
             raise SkillImportError(f"Invalid SKILL.md: {exc}") from None
-
-        SkillPackageService._check_lengths(parsed)
-        bootstrap = SkillPackageService._resolve_bootstrap(parsed.bootstrap_script_path, package.files)
+        # Validate BEFORE entering the transaction/lock below — a structurally invalid package
+        # (length limits, unresolvable bootstrap path) must fail fast with 400, not get relabelled
+        # as a 409/403 by whichever DB check happens to run first. Pure/idempotent, so
+        # create_skill_from_parsed's own call to the same validator below is free.
+        SkillPackageService.validate_parsed_package(parsed, package.files)
 
         # ---- Persistence: one transaction ----
         try:
@@ -141,41 +143,17 @@ class SkillPackageService:
                 from services.tier_enforcement_service import TierEnforcementService
                 TierEnforcementService.check_resource_limit(db, app_id, 'skills')
 
-            frontmatter: Dict[str, Any] = dict(parsed.extra)
-            if parsed.when_to_use:
-                frontmatter['when_to_use'] = parsed.when_to_use
-            if parsed.disable_model_invocation:
-                frontmatter['disable_model_invocation'] = True
-
-            skill = Skill()
-            skill.app_id = app_id
-            skill.name = parsed.name
-            skill.display_name = parsed.display_name
-            skill.description = parsed.description
-            skill.content = parsed.body
-            skill.frontmatter = dump_json(frontmatter) if frontmatter else None
-            skill.allowed_tools = dump_json(parsed.allowed_tools) if parsed.allowed_tools else None
-            skill.runtime = parsed.runtime
-            skill.bootstrap_script_path = bootstrap
-            skill.runtime_options = dump_json(parsed.runtime_options) if parsed.runtime_options else None
-            skill.source = source
-            skill.is_enabled = True
-            skill.create_date = datetime.now()
-
-            SkillRepository.persist(db, skill)
-            try:
-                SkillPackageRepository.replace_files(
-                    db,
-                    skill.skill_id,
-                    [(path, content, mimetypes.guess_type(path)[0]) for path, content in package.files.items()],
-                )
-            except ValueError as exc:
-                raise SkillImportError(f"Invalid package file: {exc}") from None
+            skill = SkillPackageService.create_skill_from_parsed(
+                db, app_id=app_id, parsed=parsed, files=package.files, source=source,
+            )
 
             db.commit()
             db.refresh(skill)
             return SkillService.build_detail(db, skill)
         except IntegrityError as exc:
+            # Safety net: create_skill_from_parsed already maps IntegrityError to a typed error, so this
+            # branch should be unreachable in practice — kept in case a future DB write is added here
+            # outside the shared seam.
             db.rollback()
             constraint = _constraint_name(exc)
             if constraint == _SYSTEM_NAME_CONSTRAINT:
@@ -187,6 +165,105 @@ class SkillPackageService:
         except Exception:
             db.rollback()
             raise
+
+    @staticmethod
+    def validate_parsed_package(parsed: Any, files: Dict[str, bytes]) -> Optional[str]:
+        """Pure (no DB access) validation of an already-parsed SKILL.md against its package files.
+
+        Returns the resolved ``bootstrap_script_path`` (or ``None``). Raises ``SkillImportError``
+        for a length-limit violation or an unresolvable bootstrap path.
+
+        Callers should run this BEFORE entering any transaction/advisory-lock/quota-check, so a
+        structurally invalid package fails fast with its own error rather than being pre-empted by
+        an unrelated DB-level check (e.g. a duplicate-name 409 or a quota 403) that happens to run
+        first. It is pure and idempotent, so ``create_skill_from_parsed`` calling it again internally
+        is free — do not skip the upfront call just because the seam also performs it.
+        """
+        SkillPackageService._check_lengths(parsed)
+        return SkillPackageService._resolve_bootstrap(parsed.bootstrap_script_path, files)
+
+    @staticmethod
+    def create_skill_from_parsed(
+        db: Session,
+        *,
+        app_id: Optional[int],
+        parsed: Any,
+        files: Dict[str, bytes],
+        source: str,
+    ) -> Skill:
+        """Build and persist (flush only, never commit/rollback) a ``Skill`` + its files from an
+        already-parsed SKILL.md.
+
+        Transaction-agnostic seam shared by ``_import_locked`` (app/admin imports, commit-based flow)
+        and ``system_skills_seeder._create_skill_from_package`` (create-if-missing, ``db.begin_nested()``
+        SAVEPOINT flow): this method only calls ``db.flush()`` (via ``SkillRepository.persist`` /
+        ``SkillPackageRepository.replace_files``) — it never commits or rolls back, so either caller's
+        own transaction-boundary handling stays correct.
+
+        The caller must already have performed any duplicate-name / quota / advisory-lock checks
+        appropriate to its own scope (app-scoped vs system) before calling this.
+
+        Args:
+            db: Session positioned inside the caller's own transaction (or SAVEPOINT).
+            app_id: Target app, or ``None`` for a system skill.
+            parsed: Already-parsed SKILL.md (``utils.skill_frontmatter.parse_skill_md`` result).
+            files: ``{normalised_path: content_bytes}`` — SKILL.md itself excluded (stored in
+                ``Skill.content``, not as a ``SkillFile``).
+            source: ``'admin'`` or ``'yaml'`` — validated against ``_VALID_SOURCES``.
+
+        Returns:
+            The persisted (flushed, not committed) ``Skill``.
+
+        Raises:
+            SkillImportError: Invalid frontmatter-derived values (length limits, unresolvable
+                bootstrap path, unsupported ``source``, or an invalid package file).
+            SkillConflictError: A DB-level unique-name collision (``uq_skill_system_name``).
+            SkillPersistenceError: Any other DB constraint failure at flush time.
+        """
+        if source not in _VALID_SOURCES:
+            raise SkillImportError(f"Unsupported skill source: {source!r}")
+
+        bootstrap = SkillPackageService.validate_parsed_package(parsed, files)
+
+        frontmatter: Dict[str, Any] = dict(parsed.extra)
+        if parsed.when_to_use:
+            frontmatter['when_to_use'] = parsed.when_to_use
+        if parsed.disable_model_invocation:
+            frontmatter['disable_model_invocation'] = True
+
+        skill = Skill()
+        skill.app_id = app_id
+        skill.name = parsed.name
+        skill.display_name = parsed.display_name
+        skill.description = parsed.description
+        skill.content = parsed.body
+        skill.frontmatter = dump_json(frontmatter) if frontmatter else None
+        skill.allowed_tools = dump_json(parsed.allowed_tools) if parsed.allowed_tools else None
+        skill.runtime = parsed.runtime
+        skill.bootstrap_script_path = bootstrap
+        skill.runtime_options = dump_json(parsed.runtime_options) if parsed.runtime_options else None
+        skill.source = source
+        skill.is_enabled = True
+        skill.create_date = datetime.now()
+
+        try:
+            SkillRepository.persist(db, skill)
+            SkillPackageRepository.replace_files(
+                db,
+                skill.skill_id,
+                [(path, content, mimetypes.guess_type(path)[0]) for path, content in files.items()],
+            )
+        except IntegrityError as exc:
+            constraint = _constraint_name(exc)
+            if constraint == _SYSTEM_NAME_CONSTRAINT:
+                raise SkillConflictError(
+                    f"A skill named {parsed.name!r} already exists in system"
+                ) from None
+            logger.error("Skill persistence failed on constraint %r", constraint)
+            raise SkillPersistenceError("Skill package could not be saved") from None
+        except ValueError as exc:
+            raise SkillImportError(f"Invalid package file: {exc}") from None
+        return skill
 
     @staticmethod
     def _check_lengths(parsed: Any) -> None:

@@ -81,6 +81,17 @@ async def lifespan(app: FastAPI):
             finally:
                 _db.close()
 
+        # Unconditional (not SaaS-only): system skills are seeded in every deployment mode.
+        from db.database import SessionLocal
+        from services.system_skills_seeder import seed_system_skills
+        _db = SessionLocal()
+        try:
+            seed_system_skills(_db)
+        except Exception:
+            logger.error("system_skills_seeder: failed to seed system skills at startup", exc_info=True)
+        finally:
+            _db.close()
+
         AuthConfig.load_config()
 
         if AuthConfig.LOGIN_MODE == "OIDC":
