@@ -637,3 +637,33 @@ class TestEdgeCases:
         
         # Verify the temperature was set to 0 on the returned agent
         assert result == 10
+
+
+# ---------------------------------------------------------------------------
+# prompt_template default (issue #235)
+# ---------------------------------------------------------------------------
+
+class TestPromptTemplateDefault:
+    """An empty prompt template drops the user's message, so it's never persisted."""
+
+    def test_new_agent_detail_defaults_to_question_template(self):
+        new_agent = AgentService()._get_agent_for_detail(MagicMock(), 0)
+
+        assert new_agent.prompt_template == '{question}'
+
+    @pytest.mark.parametrize('value', ['', '   ', None])
+    def test_empty_template_falls_back_to_default(self, value):
+        assert AgentService._resolve_prompt_template(value, None) == '{question}'
+
+    def test_missing_template_keeps_current_value(self):
+        assert AgentService._resolve_prompt_template(None, 'Q: {question}') == 'Q: {question}'
+
+    def test_explicit_template_is_kept(self):
+        assert AgentService._resolve_prompt_template('Answer: {question}', '{question}') == 'Answer: {question}'
+
+    def test_update_prompt_endpoint_never_stores_empty_template(self, mocker):
+        agent = make_agent(agent_id=5)
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=agent)
+
+        assert AgentService().update_agent_prompt(MagicMock(), 5, 'template', '') is True
+        assert agent.prompt_template == '{question}'
