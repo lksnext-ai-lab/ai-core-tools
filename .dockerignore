@@ -98,3 +98,33 @@ aritz/
 
 # Poetry cache (but keep poetry.lock and pyproject.toml)
 .poetry/
+
+# ----------------------------------------------------------------------------
+# ORDERING IS LOAD-BEARING BELOW THIS POINT.
+# .dockerignore uses last-match-wins: a pattern lower in this file overrides
+# an earlier one for the same path. The negation below MUST stay the very
+# last skill-related rule in this file — if you append a new broad exclude
+# pattern (e.g. "**/*.md" or "**/*.sh") anywhere after it, it will silently
+# re-exclude backend/system_skills/** with NO error signal (the seeder is
+# fail-soft: it logs and continues, and the healthcheck only probes `/`).
+# Do not move this block back up, and do not add new ignore rules below it
+# without re-verifying `docker compose build backend` still ships
+# backend/system_skills/**/SKILL.md (see OQ-7 in .claude/specs/skills-boosted/plan.md).
+# ----------------------------------------------------------------------------
+
+# Skill packages must ship in the image — the seeder reads SKILL.md at runtime (OQ-7).
+!backend/system_skills/**
+
+# Hardening: the patterns above (.env, *.log, __pycache__/, *.pyc, .git/) are
+# root-anchored (no "**/" prefix) so they only match at the build-context
+# root — a .env/.log/.pyc/.git dropped anywhere nested under backend/
+# (including under backend/system_skills/) would ship into the image without
+# these. Placed after the negation above (ordering matters, see comment) so
+# they still win over it for these specific secret/artifact patterns while
+# leaving the rest of backend/system_skills/** untouched.
+**/.env
+**/.env.*
+**/*.log
+**/__pycache__/
+**/*.pyc
+**/.git/

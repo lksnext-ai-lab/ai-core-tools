@@ -13,7 +13,7 @@ import logging
 from unittest.mock import MagicMock
 
 import services.system_skills_seeder as seeder_module
-from services.system_skills_seeder import _load_skill_entries, seed_system_skills
+from services.system_skills_seeder import _load_skill_entries, _resolve_package_dir, seed_system_skills
 
 _EXPECTED_SYSTEM_SKILL_NAMES = {"word", "pdf", "pptx", "data-analysis", "charts"}
 
@@ -28,6 +28,25 @@ def test_real_defaults_yaml_skills_key_parses_to_the_curated_packages():
     assert names == _EXPECTED_SYSTEM_SKILL_NAMES
     for entry in entries:
         assert entry["path"] == entry["name"], entry
+
+
+def test_real_defaults_yaml_curated_packages_have_a_nonempty_skill_md_on_disk():
+    """DevOps/OQ-7 regression: an accidental deletion, rename, or packaging regression of
+    ``backend/system_skills/<name>/SKILL.md`` for any of the five curated packages must fail this
+    (DB-free, Docker-free) test rather than only surface as a silent, fail-soft skip at runtime
+    (the seeder logs and continues on a missing package dir/SKILL.md instead of raising).
+
+    Uses the real `_load_skill_entries()` + `_resolve_package_dir()` — the same path-resolution
+    the seeder itself uses — so this stays in sync with any future path-safety changes there."""
+    entries = _load_skill_entries()
+    assert entries is not None
+    assert {entry["name"] for entry in entries} == _EXPECTED_SYSTEM_SKILL_NAMES
+
+    for entry in entries:
+        pkg_dir = _resolve_package_dir(entry["path"])
+        skill_md = pkg_dir / "SKILL.md"
+        assert skill_md.is_file(), f"missing SKILL.md for skill package {entry['name']!r}: {skill_md}"
+        assert skill_md.stat().st_size > 0, f"empty SKILL.md for skill package {entry['name']!r}: {skill_md}"
 
 
 def test_malformed_skills_entries_via_real_loader_are_failed_not_raised(monkeypatch, tmp_path, caplog):
