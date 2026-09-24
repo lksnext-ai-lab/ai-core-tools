@@ -42,7 +42,8 @@ _SET_PASSWORD_TOKEN_MAX_AGE_SECONDS: int = (
 )
 
 # Evaluated on every unknown-user attempt to keep timing uniform (anti-enumeration).
-_DUMMY_HASH: str = bcrypt.hashpw(b"__dummy_sentinel__", bcrypt.gensalt(rounds=12)).decode("utf-8")
+# Hashes random bytes generated at startup: there is no known input that matches it.
+_DUMMY_HASH: str = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 
