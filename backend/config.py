@@ -180,3 +180,13 @@ SKILL_IMPORT_MAX_ARCHIVE_BYTES = _env_int('SKILL_IMPORT_MAX_ARCHIVE_BYTES', 25 *
 # Maximum number of skill package operations (import OR export) processed concurrently per backend
 # process — both hold a whole skill's files in memory at once, so they share this bulkhead.
 SKILL_IMPORT_MAX_CONCURRENCY = _env_int('SKILL_IMPORT_MAX_CONCURRENCY', 2)
+# Maximum number of candidate skills (top-level skills/<name>/ directories) accepted from a single
+# Claude Code plugin archive import. Each candidate gets its own DB transaction + advisory lock
+# acquisition, so this is a hard brake independent of any per-app tier quota — self-managed
+# deployments have NO tier quota at all (TierEnforcementService.check_resource_limit early-returns),
+# so this is the only cap in that mode.
+SKILL_IMPORT_MAX_PLUGIN_SKILLS = _env_int('SKILL_IMPORT_MAX_PLUGIN_SKILLS', 25)
+# Per-app advisory lock timeout (seconds) applied while importing one Claude plugin candidate skill
+# (SkillRepository.lock_app_skills). Bounds how long the shared import/export bulkhead (io_slot,
+# process-wide) can be pinned by one contended import before the caller gives up on that candidate.
+SKILL_IMPORT_LOCK_TIMEOUT_SECONDS = _env_int('SKILL_IMPORT_LOCK_TIMEOUT_SECONDS', 5)

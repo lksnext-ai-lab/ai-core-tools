@@ -13,8 +13,8 @@ from utils.safe_zip import (
     REASON_ABSOLUTE_PATH, REASON_ARCHIVE_TOO_LARGE, REASON_DUPLICATE, REASON_ENCRYPTED, REASON_FILE_TOO_LARGE,
     REASON_INVALID_ARCHIVE, REASON_INVALID_PATH, REASON_NO_SKILL_MD, REASON_RATIO, REASON_SYMLINK,
     REASON_TOO_MANY_ENTRIES, REASON_TOO_MANY_FILES, REASON_TOTAL_TOO_LARGE, REASON_TRAVERSAL,
-    REASON_UNSUPPORTED_COMPRESSION, SafeZipError, SafeZipPackage, find_package_root, iter_safe_zip, read_safe_zip,
-    strip_package_root,
+    REASON_UNSUPPORTED_COMPRESSION, SafeZipError, SafeZipPackage, find_package_root, find_plugin_root,
+    iter_safe_zip, read_safe_zip, strip_package_root,
 )
 
 SKILL = b"---\nname: x\n---\nbody\n"
@@ -473,3 +473,36 @@ class TestFindAndStripRoot:
         with pytest.raises(SafeZipError) as exc:
             strip_package_root("evil\nname/a", "pkg")
         assert "\n" not in str(exc.value)
+
+
+class TestFindPluginRoot:
+    """Regression coverage for the three real-world Claude plugin archive shapes (step_035 review fix)."""
+
+    def test_bare_skills_dir_needs_no_stripping(self):
+        paths = ["skills/alpha/SKILL.md", "skills/alpha/refs/notes.md", "skills/beta/SKILL.md"]
+        assert find_plugin_root(paths) == ""
+
+    def test_wrapped_top_level_directory_is_stripped(self):
+        # zip -r plugin.zip my-plugin/  (or a GitHub "Download ZIP" of a plugin repo)
+        paths = [
+            "my-plugin/skills/alpha/SKILL.md",
+            "my-plugin/skills/alpha/refs/notes.md",
+            "my-plugin/.claude-plugin/plugin.json",
+        ]
+        assert find_plugin_root(paths) == "my-plugin"
+
+    def test_case_insensitive_skills_directory_needs_no_stripping(self):
+        paths = ["Skills/alpha/SKILL.md", "Skills/alpha/refs/notes.md"]
+        assert find_plugin_root(paths) == ""
+
+    def test_case_insensitive_wrapped_skills_directory_is_stripped(self):
+        paths = ["repo-main/Skills/alpha/SKILL.md"]
+        assert find_plugin_root(paths) == "repo-main"
+
+    def test_no_skills_directory_returns_empty_without_raising(self):
+        assert find_plugin_root(["agents/foo.md", "README.md"]) == ""
+        assert find_plugin_root([]) == ""
+
+    def test_multiple_top_level_segments_without_common_wrapper_returns_empty(self):
+        # No single common top-level dir wraps everything, so nothing can be safely stripped.
+        assert find_plugin_root(["a/skills/x/SKILL.md", "b/other/y"]) == ""

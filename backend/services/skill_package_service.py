@@ -100,11 +100,8 @@ class SkillPackageService:
         """
         if source not in _VALID_SOURCES:
             raise ValueError(f"Unsupported skill source: {source!r}")
-        SkillPackageService._acquire_io_slot()
-        try:
+        with SkillPackageService.io_slot():
             return SkillPackageService._import_locked(db, app_id, data, source)
-        finally:
-            _IMPORT_SEMAPHORE.release()
 
     @staticmethod
     def _import_locked(db: Session, app_id: Optional[int], data: bytes, source: str) -> SkillDetailSchema:
@@ -373,6 +370,21 @@ class SkillPackageService:
             raise SkillBusyError("Too many skill package operations in progress; retry shortly")
 
     @staticmethod
+    @contextlib.contextmanager
+    def io_slot():
+        """Public wrapper around the shared import/export bulkhead, for a caller outside this module that
+        performs its own multi-step operation needing the same slot held for its whole duration (e.g.
+        ``ClaudePluginImportService.import_plugin``, which can hold as much archive data in memory as, or
+        more than, a single skill package import). Equivalent to ``_acquire_io_slot()`` + release, just
+        reachable without touching the underscore-prefixed name from another service module.
+        """
+        SkillPackageService._acquire_io_slot()
+        try:
+            yield
+        finally:
+            _IMPORT_SEMAPHORE.release()
+
+    @staticmethod
     def export_for_app(db: Session, app_id: int, skill_id: int) -> Optional[Tuple[str, bytes]]:
         """Export an own-app skill or an ENABLED system skill (same visibility as get_skill_detail).
 
@@ -386,11 +398,8 @@ class SkillPackageService:
             skill = SkillRepository.get_system_skill_by_id(db, skill_id, enabled_only=True)
         if skill is None:
             return None
-        SkillPackageService._acquire_io_slot()
-        try:
+        with SkillPackageService.io_slot():
             return SkillPackageService.export_package(db, skill)
-        finally:
-            _IMPORT_SEMAPHORE.release()
 
     @staticmethod
     def export_system_skill(db: Session, skill_id: int) -> Optional[Tuple[str, bytes]]:
@@ -402,11 +411,8 @@ class SkillPackageService:
         skill = SkillRepository.get_system_skill_by_id(db, skill_id)
         if skill is None:
             return None
-        SkillPackageService._acquire_io_slot()
-        try:
+        with SkillPackageService.io_slot():
             return SkillPackageService.export_package(db, skill)
-        finally:
-            _IMPORT_SEMAPHORE.release()
 
     @staticmethod
     def _write_entry(zf: zipfile.ZipFile, path: str, content: bytes) -> None:

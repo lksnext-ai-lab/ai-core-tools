@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
 
@@ -95,3 +95,45 @@ class SkillFileContentSchema(BaseModel):
     content: str
     media_type: Optional[str] = None
     truncated: bool = False
+
+
+# ==================== CLAUDE CODE PLUGIN IMPORT (step_035) ====================
+
+# Single source of truth for the per-skill outcome vocabulary; imported by the service so the
+# dataclass and this schema never drift out of sync (mirrors the CreateUpdateSkillSchema `source`
+# Literal convention elsewhere in this file).
+ClaudePluginSkillStatus = Literal['imported', 'skipped', 'failed']
+
+
+class ClaudePluginSkillResultSchema(BaseModel):
+    """Outcome of importing one ``skills/<name>/SKILL.md`` candidate from a Claude plugin archive.
+
+    ``bootstrap_script_path``/``runtime``/``has_bootstrap`` surface whether the imported skill carries
+    executable content (this endpoint ingests untrusted third-party plugin bundles) so an admin
+    reviewing a bulk import result can see at a glance which entries need scrutiny before being
+    enabled via the existing ``PATCH .../enabled`` route.
+    """
+    name: str
+    status: ClaudePluginSkillStatus
+    reason: Optional[str] = None
+    skill_id: Optional[int] = None
+    bootstrap_script_path: Optional[str] = None
+    runtime: Optional[str] = None
+    has_bootstrap: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClaudePluginImportResultSchema(BaseModel):
+    """Response of ``POST .../import-claude-plugin``: one entry per candidate skill, plus a summary.
+
+    A 200 (not 201) is returned even when every entry failed/was skipped: the archive itself was
+    readable, so a partial (or even empty) success is the normal outcome for this endpoint, not an
+    error — the per-skill ``status``/``reason`` fields carry the actual result of each candidate.
+    """
+    skills: List[ClaudePluginSkillResultSchema] = Field(default_factory=list)
+    imported_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)

@@ -144,6 +144,34 @@ def strip_package_root(name: str, root: str) -> Optional[str]:
         raise SafeZipError(REASON_INVALID_PATH, entry=name) from exc
 
 
+def find_plugin_root(paths: List[str]) -> str:
+    """Locate the directory to strip before grouping a Claude Code plugin's ``skills/<name>/SKILL.md`` entries.
+
+    Must only be fed names yielded by ``iter_safe_zip(..., require_skill_md=False)`` (already normalised,
+    ``/``-separated). A Claude plugin bundle can hold several skills (unlike ``find_package_root``, which
+    assumes exactly one), so this mirrors its shape rules for that different case rather than reusing it:
+
+    - ``''`` when at least one entry already sits directly under a (case-insensitive) ``skills/`` directory
+      at the archive root — nothing to strip.
+    - the single common top-level segment ``T``, when every entry shares exactly one top-level segment and at
+      least one matches ``T/skills/<name>/SKILL.md`` (case-insensitive) under it — the common "GitHub download
+      ZIP" / ``zip -r plugin.zip my-plugin/`` wrapping-directory shape.
+    - ``''`` otherwise. Unlike ``find_package_root`` this never raises: a plugin archive with no recognisable
+      ``skills/`` directory at all is not this helper's failure to report — the caller (grouping zero
+      candidates) reports its own "no skills found" error.
+    """
+    lowered = [p.lower() for p in paths]
+    if any(p.startswith('skills/') for p in lowered):
+        return ''
+    tops = {p.split('/', 1)[0] for p in paths if '/' in p}
+    if len(tops) == 1:
+        top = next(iter(tops))
+        prefix = f'{top.lower()}/skills/'
+        if any(p.startswith(prefix) for p in lowered):
+            return top
+    return ''
+
+
 def _check_eocd(data: bytes, max_entries: int) -> None:
     """Reject archives whose declared entry count / directory size exceeds the bound (raw-bytes check).
 
@@ -193,13 +221,23 @@ def iter_safe_zip(
     max_file_bytes: Optional[int] = None,
     max_ratio: Optional[float] = None,
     max_archive_bytes: Optional[int] = None,
+    require_skill_md: bool = True,
 ) -> Iterator[Tuple[str, bytes]]:
     """Validate a zip archive eagerly, then return an iterator of ``(normalised_name, content)``.
 
-    All metadata checks (including the package-root check) run before this function returns, so a bad archive
-    raises here, before any decompression. Decompression limits are enforced while iterating. Limits default to
-    the ``SKILL_IMPORT_*`` settings. Directories and ``__MACOSX``/``.DS_Store``/``.git`` entries are skipped
-    silently. A root-level ``SKILL.md`` is yielded as ``'SKILL.md'``. Prefer ``read_safe_zip`` for imports.
+    All metadata checks (including, by default, the single-package-root check) run before this function
+    returns, so a bad archive raises here, before any decompression. Decompression limits are enforced while
+    iterating. Limits default to the ``SKILL_IMPORT_*`` settings. Directories and
+    ``__MACOSX``/``.DS_Store``/``.git`` entries are skipped silently. A root-level ``SKILL.md`` is yielded as
+    ``'SKILL.md'``. Prefer ``read_safe_zip`` for single-skill-package imports.
+
+    Args:
+        require_skill_md: When True (default), ``find_package_root`` is run and a package without exactly one
+            resolvable ``SKILL.md`` root is rejected (the contract every existing caller relies on). Set to
+            False for archives that intentionally hold more than one SKILL.md at different sub-paths (e.g. a
+            multi-skill Claude Code plugin bundle) — callers doing so are responsible for locating/grouping
+            each skill's own ``SKILL.md`` themselves; every other safety check (entry/size/ratio limits, path
+            traversal, symlinks, encryption, duplicates) still applies unchanged.
 
     Raises:
         SafeZipError: On any violation, with a distinct ``reason``.
@@ -222,7 +260,8 @@ def iter_safe_zip(
 
     try:
         entries = _check_entries(zf, max_entries, max_files, max_file_bytes, max_total_bytes)
-        find_package_root([name for _, name in entries])
+        if require_skill_md:
+            find_package_root([name for _, name in entries])
     except BaseException:
         zf.close()
         raise

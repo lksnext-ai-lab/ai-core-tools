@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 import config as settings
 # Import schemas and auth
 from schemas.skill_schemas import (
-    CreateUpdateSkillSchema, SkillDetailSchema, SkillEnabledUpdateSchema, SkillFileContentSchema,
-    SkillListItemSchema
+    ClaudePluginImportResultSchema, CreateUpdateSkillSchema, SkillDetailSchema, SkillEnabledUpdateSchema,
+    SkillFileContentSchema, SkillListItemSchema
 )
 from .auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -21,6 +21,7 @@ from routers.controls.skill_router_helpers import (
 
 # Import database and services
 from db.database import get_db
+from services.claude_plugin_import_service import ClaudePluginImportService
 from services.skill_errors import SkillServiceError
 from services.skill_package_service import SkillPackageService
 from services.skill_service import SkillService
@@ -89,6 +90,50 @@ async def import_skill(
             app_id, detail.skill_id, len(data), len(detail.files),
         )
         return detail
+
+
+@skills_router.post("/import-claude-plugin",
+                    summary="Import a Claude Code plugin's skills",
+                    tags=["Skills"],
+                    response_model=ClaudePluginImportResultSchema)
+async def import_claude_plugin(
+    app_id: int,
+    file: Annotated[UploadFile, File(...)],
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+):
+    """Import every ``skills/<name>/SKILL.md`` candidate of a Claude Code plugin ZIP into this app.
+
+    A plugin bundle can hold several skills; each is imported independently, so one bad or duplicate
+    skill never aborts the rest — see the per-entry ``status``/``reason`` in the response. Only an
+    unreadable archive or one that violates the shared safe-zip limits fails the whole request (400).
+    200 is returned even when some/all entries are skipped or failed, since the archive itself was
+    valid and a partial outcome is expected, not an error.
+    """
+    user_id = auth_context.identity.id
+    with skill_error_boundary(f"Error importing Claude plugin for app {app_id}"):
+        try:
+            with SkillPackageService.upload_admission_slot():
+                data = await read_upload_bounded(
+                    file, settings.SKILL_IMPORT_MAX_ARCHIVE_BYTES, log_context=f"app {app_id} (claude plugin)"
+                )
+                result = await run_in_threadpool(
+                    ClaudePluginImportService.import_plugin, db, app_id=app_id, data=data
+                )
+        except SkillServiceError as e:
+            logger.info(
+                "Claude plugin import rejected for app %s by user %s: %s (%s) %s",
+                app_id, user_id, e.__class__.__name__, e.status_code, e.detail,
+            )
+            raise
+        logger.info(
+            "Claude plugin import processed for app %s by user %s: bytes=%s candidates=%s "
+            "imported=%s skipped=%s failed=%s",
+            app_id, user_id, len(data), len(result.skills),
+            result.imported_count, result.skipped_count, result.failed_count,
+        )
+        return ClaudePluginImportResultSchema.model_validate(result)
 
 
 @skills_router.get("/{skill_id}/export",

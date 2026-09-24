@@ -37,11 +37,22 @@ class SkillRepository:
         return db.query(Skill).filter(Skill.app_id == app_id).all()
 
     @staticmethod
-    def lock_app_skills(db: Session, app_id: int) -> None:
+    def lock_app_skills(db: Session, app_id: int, *, timeout_seconds: Optional[int] = None) -> None:
         """Serialise skill creation/rename for one app with a transaction-scoped advisory lock.
 
         Must be called BEFORE the duplicate-name and quota checks; released automatically at commit/rollback.
+
+        Args:
+            timeout_seconds: When given, applies a lock_timeout scoped to just this transaction (via
+                PostgreSQL's ``set_config(..., is_local=true)`` — the SQLAlchemy-``func``-based
+                equivalent of ``SET LOCAL lock_timeout = '<n>s'``, so no raw SQL string is built here
+                and the setting can never leak past this transaction's commit/rollback) immediately
+                before taking the lock. Bounds how long a caller can be blocked waiting on a contended
+                per-app lock; callers that hit the timeout see a ``DBAPIError`` (PG SQLSTATE 55P03)
+                instead of hanging indefinitely.
         """
+        if timeout_seconds is not None:
+            db.execute(select(func.set_config('lock_timeout', f'{int(timeout_seconds)}s', True)))
         db.execute(select(func.pg_advisory_xact_lock(_SKILL_LOCK_NAMESPACE, app_id)))
 
     @staticmethod
