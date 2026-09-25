@@ -47,6 +47,7 @@ from tools.skill_tools import (
     resolve_prompt_skills,
     snapshot_skills,
 )
+from tests.unit.tools.test_skill_tools import _trusted_framing_text, _unwrap_available_skills
 
 
 # ---------------------------------------------------------------------------
@@ -109,19 +110,24 @@ class _CountingLLMDouble:
 # ---------------------------------------------------------------------------
 
 # Captured golden literal (NOT derived by calling the function first) — a real
-# byte-identical comparison, not a loose "contains" check.
-_EXPECTED_GOLDEN_PROMPT_SECTION = (
-    "\n<available_skills>\n"
-    "You have access to the following specialized skills that you can load on-demand using the `load_skill` tool:\n"
-    "\n"
-    "  - **Email Drafting**: Drafts professional emails\n"
+# content-identical comparison, not a loose "contains" check. Since review-round
+# Finding 1 (and its follow-up fix), the rendered section wraps ONLY the untrusted
+# bullet-list catalog with `wrap_untrusted` (a per-call random nonce in the delimiter
+# tag), so the section as a whole can no longer be byte-identical end to end —
+# `_unwrap_available_skills` (imported from test_skill_tools.py) extracts just that
+# wrapped catalog body (and asserts the overall framing is well-formed) so this golden
+# literal can still pin the bullet-list *content*. Order is alphabetical by folded name
+# (Data Analysis, Email Drafting, Web Research) — generate_skills_system_prompt_section
+# sorts deterministically before rendering, independent of input/association order.
+_EXPECTED_GOLDEN_CATALOG_BODY = (
     "  - **Data Analysis**: Analyzes spreadsheets and datasets\n"
-    "  - **Web Research**: Performs web research summaries\n"
-    "\n"
-    "When a user's request matches one of these skills, use the `load_skill` tool with the skill name to load "
-    "detailed instructions for that specific task. Only load a skill when it's relevant to the current task.\n"
-    "</available_skills>"
+    "  - **Email Drafting**: Drafts professional emails\n"
+    "  - **Web Research**: Performs web research summaries"
 )
+
+# The trusted, platform-authored framing that must stay OUTSIDE the wrapped block —
+# see `_trusted_framing_text` (test_skill_tools.py).
+_EXPECTED_GOLDEN_TRUSTED_INSTRUCTION = "use the `load_skill` tool with the skill name to load"
 
 
 class TestAC22GoldenStringRouterDisabled:
@@ -178,7 +184,10 @@ class TestAC22GoldenStringRouterDisabled:
         snapshots = snapshot_skills(prompt_skills)
         section = generate_skills_system_prompt_section(snapshots)
 
-        assert section == _EXPECTED_GOLDEN_PROMPT_SECTION
+        assert _unwrap_available_skills(section) == _EXPECTED_GOLDEN_CATALOG_BODY
+        assert _EXPECTED_GOLDEN_TRUSTED_INSTRUCTION in _trusted_framing_text(section)
+        # And that trusted instruction text is never inside the wrapped catalog body.
+        assert "load_skill" not in _unwrap_available_skills(section)
         assert selector.call_count == 0
 
     @pytest.mark.asyncio

@@ -129,6 +129,11 @@ class TestSystemSkillsAdminCrud:
         data = response.json()
         assert data["name"] == "imported-system-skill"
         assert data["is_system"] is True
+        # Security (review-round Finding 2): a system-skill import is platform-wide
+        # (app_id IS NULL) and immediately selectable in every tenant's skill picker —
+        # it must land disabled pending an explicit admin review-and-enable step, unlike
+        # the app-scoped single-file /import route (which stays enabled by default).
+        assert data["is_enabled"] is False
 
     def test_update_app_scoped_skill_via_admin_returns_404(self, admin_headers, client, db, fake_app):
         configure_factories(db)

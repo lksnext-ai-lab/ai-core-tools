@@ -42,6 +42,13 @@ function SkillsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<any>(null);
 
+  // The name-cell click-through (and the "View" affordance) must open every visible skill,
+  // regardless of role — but only skills the viewer can actually manage should render editable.
+  const editingSkillReadOnly = useMemo(
+    () => Boolean(editingSkill) && !(canEdit && !editingSkill?.is_system),
+    [editingSkill, canEdit],
+  );
+
   // Import/export/enable state
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -295,19 +302,14 @@ function SkillsPage() {
           return (
             <div className="flex items-center">
               <Target className="w-5 h-5 text-purple-400 mr-3 shrink-0" aria-hidden="true" />
-              {canManageSkill ? (
-                <button
-                  type="button"
-                  className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
-                  onClick={() => void handleEditSkill(skill.skill_id)}
-                >
-                  {skill.name}
-                </button>
-              ) : (
-                <span className="text-sm font-medium text-gray-900">
-                  {skill.name}
-                </span>
-              )}
+              <button
+                type="button"
+                className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                onClick={() => void handleEditSkill(skill.skill_id)}
+                aria-label={canManageSkill ? `Edit skill ${skill.name}` : `View skill ${skill.name}`}
+              >
+                {skill.name}
+              </button>
             </div>
           );
         }
@@ -567,11 +569,13 @@ function SkillsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingSkill ? 'Edit Skill' : 'Create New Skill'}
+        title={editingSkill ? (editingSkillReadOnly ? 'View Skill' : 'Edit Skill') : 'Create New Skill'}
         size="large"
       >
         <SkillForm
           skill={editingSkill}
+          readOnly={editingSkillReadOnly}
+          userRole={userRole}
           onSubmit={handleSaveSkill}
           onCancel={handleCloseModal}
         />

@@ -6,6 +6,7 @@ import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
@@ -66,7 +67,7 @@ interface Agent {
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
-  skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean }>;
+  skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean; is_system?: boolean }>;
 }
 
 interface AgentFormData {
@@ -1677,7 +1678,8 @@ function AgentFormPage() {
                         {agent.skills.map((skill) => {
                           const descriptionId = skill.description ? `skill-desc-${skill.skill_id}` : undefined;
                           const disabledBadgeId = skill.is_enabled === false ? `skill-disabled-${skill.skill_id}` : undefined;
-                          const describedBy = [disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
+                          const systemBadgeId = skill.is_system ? `skill-system-${skill.skill_id}` : undefined;
+                          const describedBy = [systemBadgeId, disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
                           return (
                             <label
                               key={skill.skill_id}
@@ -1703,6 +1705,11 @@ function AgentFormPage() {
                                   formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
                                 }`} />
                               </div>
+                              {skill.is_system && (
+                                <p id={systemBadgeId} className="mt-2 ml-7">
+                                  <Badge label="System" variant="secondary" />
+                                </p>
+                              )}
                               {skill.is_enabled === false && (
                                 <p id={disabledBadgeId} className="mt-2 ml-7 inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
                                   <AlertTriangle className="w-3 h-3" aria-hidden="true" />

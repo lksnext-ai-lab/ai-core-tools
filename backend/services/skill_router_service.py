@@ -27,6 +27,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, ValidationError
 
+import utils.prompt_safety as _shared_prompt_safety
 from utils.logger import get_logger
 from utils.prompt_safety import wrap_untrusted
 from utils.skill_names import fold_name
@@ -52,8 +53,13 @@ LLM_ROUTE_TIMEOUT_SECONDS = 3.5
 # imported system-skill package) with many/verbose skills must not be able to blow up
 # the cost/latency of every single turn, nor widen the amount of untrusted text
 # interpolated into the router prompt.
-MAX_CATALOG_ENTRIES = 50
-MAX_DESCRIPTION_CHARS = 250
+# `MAX_CATALOG_ENTRIES`/`MAX_DESCRIPTION_CHARS` live in `utils.prompt_safety` (promoted
+# from here) so `tools/skill_tools.py`'s system-prompt catalog shares the exact same
+# caps rather than re-declaring (and risking drifting from) its own numbers — re-exported
+# here under their original names so existing call sites/tests in this module are
+# unaffected.
+MAX_CATALOG_ENTRIES = _shared_prompt_safety.MAX_CATALOG_ENTRIES
+MAX_DESCRIPTION_CHARS = _shared_prompt_safety.MAX_DESCRIPTION_CHARS
 MAX_WHEN_TO_USE_CHARS = 250
 MAX_USER_MESSAGE_CHARS = 2000
 
@@ -420,10 +426,27 @@ def _coerce_text(value: Any) -> str:
 
 
 def _truncate(text: Optional[str], max_len: int) -> str:
+    """Sanitize, whitespace-collapse and truncate *text* before it is interpolated
+    into the router's LLM prompt or the keyword-fallback scoring text.
+
+    LOW-severity follow-up fix (review round 2): previously this only sliced the raw
+    string, so a description/when_to_use written BEFORE the write-side newline
+    rejection (utils.skill_frontmatter) landed could still contain embedded `\\n`/`\\r`
+    and forge extra "rows" in the `name | description | when_to_use` catalog text this
+    feeds into `_ROUTER_HUMAN_TEMPLATE`. Now shares the exact same
+    sanitize -> collapse -> truncate pipeline `tools.skill_tools.
+    generate_skills_system_prompt_section` uses, via the shared `utils.prompt_safety`
+    helpers, so both consumers of this metadata treat it identically.
+    """
     if not text:
         return ""
     safe_text = text if isinstance(text, str) else _coerce_text(text)
-    return safe_text[:max_len]
+    return _shared_prompt_safety.truncate_text(
+        _shared_prompt_safety.collapse_whitespace(
+            _shared_prompt_safety.sanitize_untrusted_text(safe_text)
+        ),
+        max_len,
+    )
 
 
 def _cap_catalog(catalog: Sequence[SkillMeta]) -> list[SkillMeta]:

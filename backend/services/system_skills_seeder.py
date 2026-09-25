@@ -418,4 +418,10 @@ def _create_skill_from_package(db: Session, name: str, pkg_dir: Path) -> None:
             f"{_SKILL_MD} name {parsed.name!r} does not match the configured skills: entry name {name!r}"
         )
 
-    SkillPackageService.create_skill_from_parsed(db, app_id=None, parsed=parsed, files=files, source="yaml")
+    # Security (review-round Finding 2): explicit opt-in to `is_enabled=True` — the shared seam now
+    # defaults to `False` ("land disabled pending review"). YAML-seeded curated packages are already
+    # reviewed/trusted at ship time (they're vendored into the image, not admin-uploaded at runtime),
+    # so staying enabled here is correct and intentional, not an oversight.
+    SkillPackageService.create_skill_from_parsed(
+        db, app_id=None, parsed=parsed, files=files, source="yaml", is_enabled=True,
+    )

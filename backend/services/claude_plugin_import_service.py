@@ -336,10 +336,14 @@ class ClaudePluginImportService:
 
             TierEnforcementService.check_resource_limit(db, app_id, "skills")
 
+            # is_enabled=False: admin reviews + explicitly enables each imported plugin skill. Passed
+            # explicitly (rather than relying on create_skill_from_parsed's now-matching False default,
+            # review-round Finding 2) so this stays correct and self-documenting even if that seam's
+            # default is ever revisited independently of this route's own deliberate security decision.
             skill = SkillPackageService.create_skill_from_parsed(
                 db, app_id=app_id, parsed=parsed, files=skill_files, source="admin",
+                is_enabled=False,
             )
-            skill.is_enabled = False  # admin reviews + explicitly enables each imported plugin skill
             db.flush()
             # Capture BEFORE commit — flush() already populated these; no db.refresh() needed (and no
             # DB round-trip must happen after commit that could turn an already-durable success into a

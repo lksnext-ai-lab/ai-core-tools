@@ -140,8 +140,16 @@ class SkillPackageService:
                 from services.tier_enforcement_service import TierEnforcementService
                 TierEnforcementService.check_resource_limit(db, app_id, 'skills')
 
+            # Security (review-round Finding 2): app-scoped imports (app_id is not None) land
+            # enabled — a single-file upload an admin has presumably just reviewed, blast radius
+            # limited to their own app (see docs/guides/skills.md's documented rationale for the
+            # single-skill /import path). The admin system-skill import (app_id is None) MUST land
+            # disabled — it is platform-wide and immediately selectable by every tenant's skill
+            # picker the moment this request returns 201, before the uploading platform admin has
+            # necessarily reviewed the file tree.
             skill = SkillPackageService.create_skill_from_parsed(
                 db, app_id=app_id, parsed=parsed, files=package.files, source=source,
+                is_enabled=app_id is not None,
             )
 
             db.commit()
@@ -187,15 +195,16 @@ class SkillPackageService:
         parsed: Any,
         files: Dict[str, bytes],
         source: str,
+        is_enabled: bool = False,
     ) -> Skill:
         """Build and persist (flush only, never commit/rollback) a ``Skill`` + its files from an
         already-parsed SKILL.md.
 
-        Transaction-agnostic seam shared by ``_import_locked`` (app/admin imports, commit-based flow)
-        and ``system_skills_seeder._create_skill_from_package`` (create-if-missing, ``db.begin_nested()``
-        SAVEPOINT flow): this method only calls ``db.flush()`` (via ``SkillRepository.persist`` /
-        ``SkillPackageRepository.replace_files``) — it never commits or rolls back, so either caller's
-        own transaction-boundary handling stays correct.
+        Transaction-agnostic seam shared by ``_import_locked`` (app/admin imports, commit-based flow),
+        ``system_skills_seeder._create_skill_from_package`` (create-if-missing, ``db.begin_nested()``
+        SAVEPOINT flow) and ``claude_plugin_import_service`` (per-candidate commit flow): this method
+        only calls ``db.flush()`` (via ``SkillRepository.persist`` / ``SkillPackageRepository.replace_files``)
+        — it never commits or rolls back, so either caller's own transaction-boundary handling stays correct.
 
         The caller must already have performed any duplicate-name / quota / advisory-lock checks
         appropriate to its own scope (app-scoped vs system) before calling this.
@@ -207,6 +216,16 @@ class SkillPackageService:
             files: ``{normalised_path: content_bytes}`` — SKILL.md itself excluded (stored in
                 ``Skill.content``, not as a ``SkillFile``).
             source: ``'admin'`` or ``'yaml'`` — validated against ``_VALID_SOURCES``.
+            is_enabled: Security (review-round Finding 2): defaults to ``False`` — "land disabled
+                pending review" is the safe default for this seam, since every caller here ingests an
+                untrusted zip package (with an executable bootstrap-script shape) from an import route.
+                Callers that have an independently-justified reason to land a row already enabled
+                (the YAML-seeded, ship-time-reviewed curated packages in ``system_skills_seeder``; the
+                single-file app-scoped ``/skills/import`` route, per its documented "an admin has
+                presumably reviewed the one SKILL.md they're uploading" rationale — see
+                ``docs/guides/skills.md``) must opt in explicitly. The admin system-skill import route
+                (platform-wide, ``app_id IS NULL``, immediately selectable by every tenant) must NOT
+                opt in — that is the one with real, demonstrated cross-tenant blast radius.
 
         Returns:
             The persisted (flushed, not committed) ``Skill``.
@@ -240,7 +259,7 @@ class SkillPackageService:
         skill.bootstrap_script_path = bootstrap
         skill.runtime_options = dump_json(parsed.runtime_options) if parsed.runtime_options else None
         skill.source = source
-        skill.is_enabled = True
+        skill.is_enabled = is_enabled
         skill.create_date = datetime.now()
 
         try:

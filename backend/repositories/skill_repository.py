@@ -151,7 +151,7 @@ class SkillRepository:
         Defaults to enabled_only=False so the seeder and collision checks see disabled skills.
         """
         query = db.query(Skill).filter(
-            func.lower(Skill.name) == name.strip().lower(),
+            _fold_col(Skill.name) == fold_name(name),
             Skill.app_id.is_(None)
         )
         if enabled_only:

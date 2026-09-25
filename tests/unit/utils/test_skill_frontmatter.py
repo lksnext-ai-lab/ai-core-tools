@@ -380,8 +380,13 @@ class TestFenceHandling:
         assert p.body == "body\n---\nmore"
 
     def test_indented_fence_inside_block_scalar_is_content(self):
-        p = parse_skill_md("---\nname: x\ndescription: |\n  line\n  ---\n  more\n---\nbody")
-        assert p.description == "line\n---\nmore\n"
+        # Uses an `extra` key (not `description`) because this test targets fence-scan
+        # robustness (an indented '---' inside a YAML block scalar must not be mistaken
+        # for the closing fence) — `extra` values are not subject to the declared
+        # single-line-field newline restriction added for description/when_to_use/etc
+        # (see TestLineBreakRejection below).
+        p = parse_skill_md("---\nname: x\nk: |\n  line\n  ---\n  more\n---\nbody")
+        assert p.extra["k"] == "line\n---\nmore\n"
         assert p.body == "body"
 
     def test_unclosed_fence(self):
@@ -533,7 +538,14 @@ class TestRoundTrip:
         "trailing\n\n", "unicode é 日本 😀", "﻿bom", "x" * 300, "long " * 500,
     ]
 
-    @pytest.mark.parametrize("s", HOSTILE, ids=lambda s: repr(s)[:30])
+    # Declared single-line fields (display_name/description/when_to_use/runtime/
+    # bootstrap_script_path) reject embedded `\n`/`\r` (see TestLineBreakRejection) —
+    # `extra`/`runtime_options` values and `body` do not carry that restriction, so this
+    # subset (no `\n`/`\r`) is what's exercised against the declared fields below, while
+    # the full HOSTILE list (including line breaks) still exercises extra/runtime_options/body.
+    HOSTILE_SINGLE_LINE = [s for s in HOSTILE if "\n" not in s and "\r" not in s]
+
+    @pytest.mark.parametrize("s", HOSTILE_SINGLE_LINE, ids=lambda s: repr(s)[:30])
     def test_hostile_strings_round_trip(self, s):
         r = render_skill_md(
             name="x", description=s, when_to_use=s, display_name=s, runtime=s, bootstrap_script_path=s,
@@ -548,9 +560,56 @@ class TestRoundTrip:
         assert render_from(p) == r
 
     @pytest.mark.parametrize("s", HOSTILE, ids=lambda s: repr(s)[:30])
+    def test_hostile_strings_as_extra_values_round_trip(self, s):
+        # `extra`/`runtime_options` values are not declared single-line fields, so the
+        # full HOSTILE list (including embedded line breaks) is exercised here —
+        # coverage for those two moved out of test_hostile_strings_round_trip above,
+        # which now only feeds line-break-free strings into the declared fields.
+        r = render_skill_md(
+            name="x", extra={"k": s, "nested": [s, {"d": s}]}, runtime_options={"o": s, "l": [s]}, body="body\n",
+        )
+        p = parse_skill_md(r)
+        assert p.extra == {"k": s, "nested": [s, {"d": s}]}
+        assert p.runtime_options == {"o": s, "l": [s]}
+        assert render_from(p) == r
+
+    @pytest.mark.parametrize("s", HOSTILE, ids=lambda s: repr(s)[:30])
     def test_hostile_strings_as_extra_keys(self, s):
         r = render_skill_md(name="x", extra={s: "v"})
         assert parse_skill_md(r).extra == {s: "v"}
+
+
+class TestLineBreakRejection:
+    """Security (review-round Finding 1, belt-and-braces write-side fix): the declared
+    single-line fields (`display_name`, `description`, `when_to_use`, `runtime`,
+    `bootstrap_script_path`) must reject embedded `\\n`/`\\r` at both parse time (an
+    imported/hand-authored SKILL.md) and render time (an admin-authored value from the
+    UI) — this is what makes the `</available_skills>`-breakout class of payload
+    impossible to ever get stored, and also closes the admin-review blind spot in the
+    single-line `truncate` table cells that render these fields.
+    """
+
+    FIELDS = ["display_name", "description", "when_to_use", "runtime", "bootstrap_script_path"]
+
+    # YAML double-quoted scalar escapes (`\n`/`\r` as literal backslash-n / backslash-r)
+    # so the frontmatter text itself stays syntactically valid single-line YAML while
+    # the *parsed* Python string still ends up containing a real line-break character —
+    # exactly the shape an imported/hand-authored SKILL.md attack would take.
+    YAML_ESCAPED_BAD = ['"a\\nb"', '"a\\rb"', '"a\\r\\nb"', '"\\n"', '"\\r"']
+
+    @pytest.mark.parametrize("field", FIELDS)
+    @pytest.mark.parametrize("bad", YAML_ESCAPED_BAD)
+    def test_parse_rejects_line_breaks(self, field, bad):
+        with pytest.raises(SkillFrontmatterError) as exc:
+            parse_skill_md(f"---\nname: x\n{field}: {bad}\n---\nbody")
+        assert exc.value.key == field
+
+    @pytest.mark.parametrize("field", FIELDS)
+    @pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\r\nb", "\n", "\r"])
+    def test_render_rejects_line_breaks(self, field, bad):
+        with pytest.raises(SkillFrontmatterError) as exc:
+            render_skill_md(name="x", **{field: bad})
+        assert exc.value.key == field
 
     @pytest.mark.parametrize("body", ["", "\n", "---\nnot fm\n---\n", "a b", "no trailing newline", "\r\n"])
     def test_body_round_trip(self, body):

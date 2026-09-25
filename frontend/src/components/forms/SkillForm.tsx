@@ -43,6 +43,14 @@ interface SkillFormProps {
    * actually edit system skills there.
    */
   readonly readOnly?: boolean;
+  /**
+   * The viewer's real role (e.g. `AppRole.VIEWER`, `AppRole.OWNER`), used solely to render an
+   * accurate `ReadOnlyBanner` when `isReadOnly` is true. Callers that open this form in read-only
+   * mode should pass their already-resolved role (see `SkillsPage.tsx`'s `useAppRole()`) so the
+   * banner doesn't misinform users who aren't actually viewers (e.g. an OWNER looking at a
+   * read-only system skill). Defaults to `'viewer'` when omitted.
+   */
+  readonly userRole?: string;
   readonly onSubmit: (data: SkillFormSubmitData) => Promise<void>;
   readonly onCancel: () => void;
 }
@@ -421,7 +429,7 @@ function FileTreeView({
 
 // ==================== Main form ====================
 
-function SkillForm({ skill, readOnly, onSubmit, onCancel }: Readonly<SkillFormProps>) {
+function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<SkillFormProps>) {
   const { appId } = useParams();
   const [formState, setFormState] = useState<SkillFormState>(() => stateFromSkill(skill));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -587,7 +595,7 @@ function SkillForm({ skill, readOnly, onSubmit, onCancel }: Readonly<SkillFormPr
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {isReadOnly && <ReadOnlyBanner userRole="viewer" minRole="platform administrators" />}
+      {isReadOnly && <ReadOnlyBanner userRole={userRole ?? 'viewer'} minRole="platform administrators" />}
 
       <FormError error={error} />
 

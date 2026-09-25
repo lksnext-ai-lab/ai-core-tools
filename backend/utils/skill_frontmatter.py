@@ -122,7 +122,7 @@ class _NoAliasSafeLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
-def _check_string(value: str, key: str) -> None:
+def _check_string(value: str, key: str, *, reject_line_breaks: bool = False) -> None:
     try:
         value.encode("utf-8")
     except UnicodeEncodeError:
@@ -131,6 +131,19 @@ def _check_string(value: str, key: str) -> None:
         raise SkillFrontmatterError(key, None, "contains a NUL character")
     if any(c in value for c in _LINE_BREAK_CHARS):
         raise SkillFrontmatterError(key, None, "contains an unsupported line separator (U+0085, U+2028, U+2029)")
+    if reject_line_breaks and ("\n" in value or "\r" in value):
+        # Security (review-round Finding 1, belt-and-braces write-side fix): these
+        # fields are rendered as single-line bullets both in
+        # `generate_skills_system_prompt_section` (an <available_skills> catalog
+        # entry) and in admin/app skill-management tables (`SkillsPage.tsx` /
+        # `SystemSkillsPage.tsx`, single-line `truncate` cells) — an embedded
+        # newline is invisible to an admin reviewing the skill before enabling it
+        # AND is the exact vector that lets a description break out of the
+        # <available_skills> delimiter block and forge trailing "instructions".
+        # Rejecting at write time (parse AND render, so both import and
+        # admin-authored paths are covered) closes both problems structurally,
+        # rather than relying on every downstream consumer remembering to sanitize.
+        raise SkillFrontmatterError(key, None, "must not contain line breaks (\\n or \\r)")
 
 
 def normalize_skill_name(value: Any, *, key: str = "name") -> str:
@@ -304,7 +317,7 @@ def parse_skill_md(raw: str) -> ParsedSkillMd:
         if val is not None:
             if not isinstance(val, str):
                 raise SkillFrontmatterError(fname, None, "must be a string")
-            _check_string(val, fname)
+            _check_string(val, fname, reject_line_breaks=True)
             setattr(result, fname, val)
     dmi = fields.get("disable_model_invocation")
     if dmi is not None:
@@ -355,7 +368,7 @@ def render_skill_md(
         if val is not None:
             if not isinstance(val, str):
                 raise SkillFrontmatterError(fname, None, "must be a string")
-            _check_string(val, fname)
+            _check_string(val, fname, reject_line_breaks=True)
     if not isinstance(disable_model_invocation, bool):
         raise SkillFrontmatterError("disable-model-invocation", None, "must be a boolean")
     if runtime_options is not None:

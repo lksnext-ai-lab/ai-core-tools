@@ -227,6 +227,21 @@ class TestSystemSkills:
     def test_system_by_id_ignores_app_skill(self, db, skill):
         assert SkillRepository.get_system_skill_by_id(db, skill.skill_id) is None
 
+    def test_by_name_uses_canonical_whitespace_folding_not_plain_lower(self, db):
+        """Review-round Finding 4: get_system_skill_by_name must use the same
+        whitespace-folding rule (utils.skill_names.fold_name / _fold_col) as every
+        other skill-name collision check, not a bare `func.lower(name)` — otherwise
+        "data analysis" and "data-analysis" would be treated as distinct names here
+        while `resolve_agent_skills`'s Python-side fold_name dedupe treats them as the
+        same, causing one to be silently dropped from an agent's prompt.
+        """
+        configure_factories(db)
+        s = SystemSkillFactory(name="data analysis")
+        # A differently-whitespaced variant that folds to the exact same canonical name
+        # must still be found by this collision check.
+        assert SkillRepository.get_system_skill_by_name(db, "data-analysis").skill_id == s.skill_id
+        assert SkillRepository.get_system_skill_by_name(db, "data   analysis").skill_id == s.skill_id
+
     def test_system_names_unique_case_insensitively(self, db):
         configure_factories(db)
         SystemSkillFactory(name="X")
