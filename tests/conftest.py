@@ -57,6 +57,17 @@ os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 # can't start until `client` setup (running bootstrap) finishes. Disabling the default
 # here avoids that deadlock; tests that exercise bootstrap_omniadmins directly already
 # monkeypatch this flag to "true" themselves (see test_local_auth_provisioning.py).
+#
+# GENERAL RULE: any future lifespan hook that performs its own DB write (own
+# SessionLocal(), separate from the `db` fixture's rolled-back transaction) needs the
+# same treatment: either an opt-out env var handled here, or a `monkeypatch` no-op in the
+# `client` fixture below (see `seed_system_skills` for the latter pattern). Otherwise it
+# both (a) leaks real, never-rolled-back rows into the shared test DB for the rest of the
+# whole pytest session, and (b) can deadlock outright if a `db`-fixture test ever flushes
+# (uncommitted) a row that collides with a unique constraint the lifespan write also
+# targets -- the lifespan's separate connection blocks on that index until the `db`
+# transaction completes, which can't happen until the test body (blocked on `client`
+# setup) runs.
 os.environ.setdefault("AUTH_BOOTSTRAP_OMNIADMINS", "false")
 
 # ---------------------------------------------------------------------------
@@ -168,7 +179,7 @@ def db(test_engine):
 
 
 @pytest.fixture(scope="function")
-def client(db):
+def client(db, monkeypatch):
     """
     FastAPI TestClient with the get_db dependency overridden to use the test session.
 
@@ -177,6 +188,22 @@ def client(db):
     """
     from main import app
     from db.database import get_db
+
+    # `TestClient(app)` runs the FULL real lifespan on every test that uses this fixture,
+    # including `backend/main.py`'s unconditional `seed_system_skills(...)` call. That
+    # seeder opens its own `SessionLocal()` -- a separate connection/transaction from this
+    # fixture's `db`, so its commit of the curated system skills is invisible to the `db`
+    # fixture's rollback-based cleanup and persists as REAL rows for the rest of the whole
+    # pytest session (leaking into unrelated tests' exact-count assertions), and can
+    # deadlock outright against an uncommitted same-named `db`-fixture row (see the
+    # `AUTH_BOOTSTRAP_OMNIADMINS` note above for the identical hazard class). No-op it here;
+    # `services/system_skills_seeder.py`'s own dedicated tests (`test_system_skills_seeder.py`,
+    # `test_curated_skill_packages_ac33.py`) call `seed_system_skills` directly (bound at
+    # module-import time in those test modules), so they are unaffected by this patch --
+    # only the lifespan's own late, function-local `from services.system_skills_seeder
+    # import seed_system_skills` re-read picks it up.
+    import services.system_skills_seeder as _seeder
+    monkeypatch.setattr(_seeder, "seed_system_skills", lambda _db: None)
 
     def override_get_db():
         yield db

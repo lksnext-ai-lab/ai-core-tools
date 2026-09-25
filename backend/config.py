@@ -1,3 +1,4 @@
+import math
 import os
 from dotenv import load_dotenv
 from typing import Optional
@@ -86,6 +87,12 @@ SANDBOX_CREATE_TIMEOUT_S = int(os.getenv('SANDBOX_CREATE_TIMEOUT_S', '60'))
 # Per-execution timeout (seconds).
 SANDBOX_DEFAULT_TIMEOUT_S = int(os.getenv('SANDBOX_DEFAULT_TIMEOUT_S', '30'))
 
+# Timeout for a skill's bootstrap script (seconds). Deliberately generous (and
+# distinct from SANDBOX_DEFAULT_TIMEOUT_S): bootstrap scripts are explicitly permitted to
+# assume network egress (e.g. `pip install`) to prepare a skill's runtime dependencies
+# (product decision, see skills-boosted plan Decision 12 — this is not an oversight).
+SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S = int(os.getenv('SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S', '120'))
+
 # Maximum sandbox session lifetime (hours).
 SANDBOX_SESSION_TTL_H = float(os.getenv('SANDBOX_SESSION_TTL_H', '2'))
 
@@ -124,3 +131,62 @@ E2B_WORKSPACE = os.getenv('E2B_WORKSPACE', '/home/user/workspace')
 
 # Minutes before a sandbox TTL is proactively renewed.
 SANDBOX_RENEW_MINUTES = int(os.getenv('SANDBOX_RENEW_MINUTES', '30'))
+
+# --- Skill package import limits (hardened zip reader, backend/utils/safe_zip.py) ---
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    """Read an integer env var, failing fast on unparsable or below-minimum values."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == '':
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        raise RuntimeError(f"Invalid {name}={raw!r}: expected an integer >= {minimum}") from None
+    if value < minimum:
+        raise RuntimeError(f"Invalid {name}={raw!r}: expected an integer >= {minimum}")
+    return value
+
+
+def _env_float(name: str, default: float, *, minimum: float, finite: bool = True, inclusive: bool = True) -> float:
+    """Read a float env var, failing fast on unparsable, non-finite or out-of-range values.
+
+    ``inclusive=False`` makes ``minimum`` an exclusive bound (value must be strictly greater).
+    """
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == '':
+        return default
+    bound = f">= {minimum}" if inclusive else f"> {minimum}"
+    try:
+        value = float(raw.strip())
+    except ValueError:
+        raise RuntimeError(f"Invalid {name}={raw!r}: expected a finite number {bound}") from None
+    if finite and not math.isfinite(value):
+        raise RuntimeError(f"Invalid {name}={raw!r}: expected a finite number {bound}")
+    if math.isnan(value) or value < minimum or (not inclusive and value == minimum):
+        raise RuntimeError(f"Invalid {name}={raw!r}: expected a finite number {bound}")
+    return value
+
+
+# Maximum number of file entries in an uploaded skill package.
+SKILL_IMPORT_MAX_FILES = _env_int('SKILL_IMPORT_MAX_FILES', 500)
+# Maximum cumulative uncompressed size of an uploaded skill package (bytes).
+SKILL_IMPORT_MAX_TOTAL_BYTES = _env_int('SKILL_IMPORT_MAX_TOTAL_BYTES', 50 * 1024 * 1024)
+# Maximum uncompressed size of a single file inside a skill package (bytes).
+SKILL_IMPORT_MAX_FILE_BYTES = _env_int('SKILL_IMPORT_MAX_FILE_BYTES', 10 * 1024 * 1024)
+# Maximum uncompressed/compressed ratio (zip bomb guard), measured against the uploaded archive size.
+SKILL_IMPORT_MAX_RATIO = _env_float('SKILL_IMPORT_MAX_RATIO', 100.0, minimum=1.0, inclusive=False)
+# Maximum size of the uploaded (compressed) archive itself (bytes).
+SKILL_IMPORT_MAX_ARCHIVE_BYTES = _env_int('SKILL_IMPORT_MAX_ARCHIVE_BYTES', 25 * 1024 * 1024)
+# Maximum number of skill package operations (import OR export) processed concurrently per backend
+# process — both hold a whole skill's files in memory at once, so they share this bulkhead.
+SKILL_IMPORT_MAX_CONCURRENCY = _env_int('SKILL_IMPORT_MAX_CONCURRENCY', 2)
+# Maximum number of candidate skills (top-level skills/<name>/ directories) accepted from a single
+# Claude Code plugin archive import. Each candidate gets its own DB transaction + advisory lock
+# acquisition, so this is a hard brake independent of any per-app tier quota — self-managed
+# deployments have NO tier quota at all (TierEnforcementService.check_resource_limit early-returns),
+# so this is the only cap in that mode.
+SKILL_IMPORT_MAX_PLUGIN_SKILLS = _env_int('SKILL_IMPORT_MAX_PLUGIN_SKILLS', 25)
+# Per-app advisory lock timeout (seconds) applied while importing one Claude plugin candidate skill
+# (SkillRepository.lock_app_skills). Bounds how long the shared import/export bulkhead (io_slot,
+# process-wide) can be pinned by one contended import before the caller gives up on that candidate.
+SKILL_IMPORT_LOCK_TIMEOUT_SECONDS = _env_int('SKILL_IMPORT_LOCK_TIMEOUT_SECONDS', 5)

@@ -59,13 +59,22 @@ class AppRepository:
         return app
     
     def delete(self, app: App) -> bool:
-        """Delete an app"""
+        """Delete an app.
+
+        FR-15/AC-12 hardening: `app_id` is captured up front, before attempting the delete, so the
+        except branch never touches a (possibly now-expired, post-failed-flush) ORM attribute on
+        `app` — doing so on a session left in a pending-rollback state after a failed flush (e.g. a
+        FK violation from a leftover Skill row still referencing this app; see models/app.py's
+        `skills` relationship) would itself raise `PendingRollbackError`, masking the real error and
+        skipping the `self.db.rollback()` below.
+        """
+        app_id = app.app_id
         try:
             self.db.delete(app)
             self.db.commit()
             return True
         except Exception as e:
-            logger.error(f"Error deleting app {app.app_id}: {e}")
+            logger.error(f"Error deleting app {app_id}: {e}")
             self.db.rollback()
             return False
     
@@ -148,7 +157,14 @@ class AppRepository:
         return self.db.query(DomainUrl).filter(DomainUrl.domain_id == domain_id).all()
 
     def get_skills_by_app_id(self, app_id: int):
-        """Get all skills for an app"""
+        """Get all skills for an app.
+
+        Used by AppService.delete_app() for cascade deletion. Must stay app-private
+        (`Skill.app_id == app_id`, excluding system skills where app_id IS NULL). NEVER switch this
+        to the merged accessor (SkillRepository.get_selectable_for_app / AgentRepository
+        .get_selectable_skills_for_app) — a merged list here would delete platform-owned system
+        skills as a side effect of deleting a single tenant's app.
+        """
         from models.skill import Skill
         return self.db.query(Skill).filter(Skill.app_id == app_id).all()
 

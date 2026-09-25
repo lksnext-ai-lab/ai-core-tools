@@ -6,6 +6,8 @@ authors = ["Aritz Galdos", "Mikel Lonbide"]
 readme = "README.md"
 license = "MPL-2.0"
 package-mode = false
+# If package-mode is ever enabled, non-.py skill package data MUST be declared:
+# include = [{ path = "backend/system_skills/**/*", format = ["sdist", "wheel"] }]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"

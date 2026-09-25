@@ -59,6 +59,7 @@ import SaasUserListPage from '../pages/admin/SaasUserListPage';
 import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
 import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage';
+import SystemSkillsPage from '../pages/admin/SystemSkillsPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
 import { CapabilitiesProvider } from '../contexts/CapabilitiesContext';
@@ -436,6 +437,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/system-sandbox-services" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemSandboxServicesPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-skills" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSkillsPage />
                   </AdminLayoutRoute>
                 } />
 

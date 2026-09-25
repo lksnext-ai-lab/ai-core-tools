@@ -754,3 +754,631 @@ class TestRequiresFileSyncTruePath:
         dest = Path(ctx.working_dir) / "output" / "report.docx"
         assert dest.exists()
         assert dest.read_bytes() == b"DOCX_BYTES"
+
+
+class TestLazySandboxHandleInvalidate:
+    """`_LazySandboxHandle.invalidate()` must actually reset the proxy so a
+    subsequent `get()` rebuilds a fresh sandbox, instead of leaving retries
+    from tools/skill_tools.py's SandboxExpiredError handler doomed to fail
+    forever against the same cached dead handle."""
+
+    def test_invalidate_clears_cached_handle_and_evicts_session(self, tmp_path):
+        from services.agent_execution_service import _LazySandboxHandle
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        mock_provider.requires_file_sync = False
+
+        lazy = _LazySandboxHandle(
+            session_key="sk-expired",
+            provider=mock_provider,
+            working_dir=str(tmp_path),
+        )
+
+        stale_handle = SandboxHandle(
+            sandbox_id="stale-001",
+            working_dir=str(tmp_path),
+            provider_name="opensandbox",
+            metadata={},
+        )
+        fresh_handle = SandboxHandle(
+            sandbox_id="fresh-002",
+            working_dir=str(tmp_path),
+            provider_name="opensandbox",
+            metadata={},
+        )
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.side_effect = [stale_handle, fresh_handle]
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            assert lazy.get() is stale_handle
+            assert lazy.is_materialized()
+
+            lazy.invalidate()
+
+            assert not lazy.is_materialized()
+            mock_sss.evict.assert_called_once_with("sk-expired")
+
+            # The next get() must rebuild rather than return the stale handle.
+            assert lazy.get() is fresh_handle
+
+    def test_invalidate_is_safe_when_evict_raises(self, tmp_path):
+        """An eviction failure must not crash the caller — degrade quietly so
+        the SandboxExpiredError handler can still fall back to its no-retry
+        message."""
+        from services.agent_execution_service import _LazySandboxHandle
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+
+        lazy = _LazySandboxHandle(
+            session_key="sk-expired",
+            provider=mock_provider,
+            working_dir=str(tmp_path),
+        )
+
+        mock_sss = MagicMock()
+        mock_sss.evict.side_effect = RuntimeError("boom")
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            lazy.invalidate()  # must not raise
+
+        assert not lazy.is_materialized()
+
+
+class TestLazySandboxProviderEnsureSkill:
+    """H2 fix (fix round 1): ``_LazySandboxProvider.ensure_skill`` is the
+    actual production delegate that populates ``_active_skill_registry`` on
+    the real ``tools/skill_tools.py`` call path (``handle.provider.ensure_skill(...)``,
+    where ``handle`` is a ``_LazySandboxProvider``) — every existing test
+    called either the raw ``SandboxProvider.ensure_skill`` ABC default or
+    ``_reactivate_previous_skills`` directly, so this delegate itself had
+    zero coverage: deleting it entirely would have left the whole suite
+    green. This builds a REAL ``_LazySandboxProvider`` wrapping a fake raw
+    provider and a real ``_LazySandboxHandle``, and calls
+    ``lazy_provider.ensure_skill(lazy_handle, payload)`` exactly like the
+    real call site does."""
+
+    def _make_lazy_and_provider(self, tmp_path, raw_provider, session_key="sk-h2"):
+        from services.agent_execution_service import _LazySandboxHandle, _LazySandboxProvider
+
+        lazy_handle = _LazySandboxHandle(
+            session_key=session_key,
+            provider=raw_provider,
+            working_dir=str(tmp_path),
+        )
+        lazy_provider = _LazySandboxProvider(raw_provider, lazy_handle)
+        return lazy_handle, lazy_provider
+
+    def test_delegate_resolves_handle_and_records_registry_from_payload_not_result(self, tmp_path):
+        """(a) the raw provider receives the RESOLVED SandboxHandle, never the lazy
+        proxy. (b) the registry is populated from the PAYLOAD's (name, skill_id) —
+        not from whatever the result object claims (defense-in-depth: the result
+        below deliberately lies with a different skill_id). (e) the session lease
+        uses the skill-bootstrap budget, not the ~30s default used elsewhere."""
+        from services.agent_execution_service import _skill_bootstrap_budget_seconds
+        from tools.sandbox.provider import SandboxHandle, SkillActivationResult, SkillPhaseResult
+
+        real_handle = SandboxHandle(
+            sandbox_id="real-001", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+        raw_provider = MagicMock()
+        raw_provider.PROVIDER_NAME = "opensandbox"
+        raw_provider.requires_file_sync = False
+        # Deliberately a DIFFERENT skill_id than the payload — proves the
+        # registry is derived from the payload, never trusted from the result.
+        raw_provider.ensure_skill.return_value = SkillActivationResult(
+            skill_name="alpha",
+            skill_id=999,
+            files_dir="/x/alpha",
+            phases=(SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),),
+            status="active",
+        )
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = real_handle
+
+        lazy_handle, lazy_provider = self._make_lazy_and_provider(tmp_path, raw_provider)
+        payload = SimpleNamespace(name="alpha", skill_id=1)
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            result = lazy_provider.ensure_skill(lazy_handle, payload)
+
+        assert result.status == "active"
+
+        raw_provider.ensure_skill.assert_called_once()
+        called_handle = raw_provider.ensure_skill.call_args.args[0]
+        assert called_handle is real_handle, "raw provider must receive the resolved SandboxHandle, not the lazy proxy"
+
+        assert dict(lazy_handle._snapshot_active_skills()) == {"alpha": 1}
+
+        mock_sss.use.assert_called_once()
+        assert mock_sss.use.call_args.kwargs["expected_seconds"] == _skill_bootstrap_budget_seconds()
+        assert _skill_bootstrap_budget_seconds() != 30
+
+    def test_stale_reactivation_failure_is_cleared_on_success(self, tmp_path):
+        """(c) a stale reactivation failure recorded for this exact skill name
+        must not survive a subsequent genuine success through this delegate."""
+        from tools.sandbox.provider import SandboxHandle, SkillActivationResult, SkillPhaseResult
+
+        real_handle = SandboxHandle(
+            sandbox_id="real-002", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+        raw_provider = MagicMock()
+        raw_provider.PROVIDER_NAME = "opensandbox"
+        raw_provider.requires_file_sync = False
+        raw_provider.ensure_skill.return_value = SkillActivationResult(
+            skill_name="alpha",
+            skill_id=1,
+            files_dir="/x/alpha",
+            phases=(SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),),
+            status="active",
+        )
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = real_handle
+
+        lazy_handle, lazy_provider = self._make_lazy_and_provider(tmp_path, raw_provider)
+        lazy_handle._record_reactivation_failure("alpha", "stale failure from an earlier recreation")
+        payload = SimpleNamespace(name="alpha", skill_id=1)
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            lazy_provider.ensure_skill(lazy_handle, payload)
+
+        assert "alpha" not in lazy_handle.skill_reactivation_errors
+
+    def test_failed_result_records_nothing_into_registry(self, tmp_path):
+        """(d) a status="failed" result must not populate the registry at all —
+        a name collision (OQ-4) or any other terminal failure is never treated
+        as "this session now has this skill active"."""
+        from tools.sandbox.provider import SandboxHandle, SkillActivationResult, SkillPhaseResult
+
+        real_handle = SandboxHandle(
+            sandbox_id="real-003", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+        raw_provider = MagicMock()
+        raw_provider.PROVIDER_NAME = "opensandbox"
+        raw_provider.requires_file_sync = False
+        raw_provider.ensure_skill.return_value = SkillActivationResult(
+            skill_name="alpha",
+            skill_id=1,
+            files_dir="/x/alpha",
+            phases=(SkillPhaseResult(phase="files", status="failed", detail="name collision", duration_ms=1),),
+            status="failed",
+        )
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = real_handle
+
+        lazy_handle, lazy_provider = self._make_lazy_and_provider(tmp_path, raw_provider)
+        payload = SimpleNamespace(name="alpha", skill_id=1)
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            result = lazy_provider.ensure_skill(lazy_handle, payload)
+
+        assert result.status == "failed"
+        assert lazy_handle._snapshot_active_skills() == []
+
+
+class TestReactivatePreviousSkills:
+    """step_020 fix round 3 (H1/H2) — regression tests pinning:
+
+    1. A status="failed" reactivation result forgets the skill from the
+       registry AND records the failure (F1 — never silently cleared).
+    2. A SandboxExpiredError raised mid-loop propagates (raise, not break) so
+       get()'s handler can fully invalidate the proxy instead of caching a
+       confirmed-dead handle.
+    3. After that SandboxExpiredError recovery, the NEXT get() call correctly
+       re-pushes input files — i.e. invalidate() (not a manual
+       `self._handle = None`) genuinely reset `_remote_inputs_prepared`.
+    """
+
+    def _make_lazy(self, tmp_path, provider, processed_files=None):
+        from services.agent_execution_service import _LazySandboxHandle
+
+        return _LazySandboxHandle(
+            session_key="sk-reactivate",
+            provider=provider,
+            working_dir=str(tmp_path),
+            processed_files=processed_files or [],
+        )
+
+    def test_failed_reactivation_forgets_skill_and_records_failure(self, tmp_path):
+        from services.agent_execution_service import _reactivate_previous_skills
+        from tools.sandbox.provider import SkillActivationResult, SkillPhaseResult
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+
+        failed_result = SkillActivationResult(
+            skill_name="alpha",
+            skill_id=1,
+            files_dir="/x",
+            phases=(
+                SkillPhaseResult(phase="files", status="failed", detail="name collision", duration_ms=1),
+            ),
+            status="failed",
+        )
+        raw_provider = MagicMock()
+        raw_provider.ensure_skill.return_value = failed_result
+
+        real_handle = MagicMock()
+
+        with patch("services.sandbox_session_service.sandbox_session_service", MagicMock()):
+            _reactivate_previous_skills(
+                lazy,
+                raw_provider,
+                lambda skill_id: SimpleNamespace(name="alpha", skill_id=skill_id),
+                real_handle,
+            )
+
+        assert lazy._snapshot_active_skills() == []
+        assert lazy.skill_reactivation_errors.get("alpha") == "files: name collision"
+
+    @pytest.mark.parametrize("bogus_status", [None, "bogus", "", 42])
+    def test_malformed_status_is_treated_conservatively_as_failure(self, tmp_path, bogus_status):
+        """LOW fix (fix round 1): an unrecognised/malformed ``status`` value
+        (not literally ``"failed"``, but not a recognised success value
+        either) must hit the SAME conservative "treat as failure" branch as
+        the literal ``"failed"`` case — never silently treated as success."""
+        from services.agent_execution_service import _reactivate_previous_skills
+        from tools.sandbox.provider import SkillActivationResult, SkillPhaseResult
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+
+        malformed_result = SkillActivationResult(
+            skill_name="alpha",
+            skill_id=1,
+            files_dir="/x",
+            phases=(SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),),
+            status=bogus_status,
+        )
+        raw_provider = MagicMock()
+        raw_provider.ensure_skill.return_value = malformed_result
+
+        real_handle = MagicMock()
+
+        with patch("services.sandbox_session_service.sandbox_session_service", MagicMock()):
+            _reactivate_previous_skills(
+                lazy,
+                raw_provider,
+                lambda skill_id: SimpleNamespace(name="alpha", skill_id=skill_id),
+                real_handle,
+            )
+
+        assert lazy._snapshot_active_skills() == []
+        assert "alpha" in lazy.skill_reactivation_errors
+        assert f"unexpected activation status: {bogus_status!r}" in lazy.skill_reactivation_errors["alpha"]
+
+    def test_degraded_result_clears_a_previously_recorded_reactivation_failure(self, tmp_path):
+        """LOW fix (fix round 1): a stale reactivation failure must be cleared
+        not just by a fresh "active" result, but by "degraded" too — degraded
+        is still a usable outcome (files land, bootstrap failed), not a
+        reason to keep surfacing an unrelated older failure."""
+        from services.agent_execution_service import _reactivate_previous_skills
+        from tools.sandbox.provider import SkillActivationResult, SkillPhaseResult
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+        lazy._record_reactivation_failure("alpha", "stale failure from an earlier recreation")
+
+        degraded_result = SkillActivationResult(
+            skill_name="alpha",
+            skill_id=1,
+            files_dir="/x",
+            phases=(
+                SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),
+                SkillPhaseResult(phase="bootstrap", status="failed", detail="pip install failed", duration_ms=1),
+            ),
+            status="degraded",
+        )
+        raw_provider = MagicMock()
+        raw_provider.ensure_skill.return_value = degraded_result
+
+        real_handle = MagicMock()
+
+        with patch("services.sandbox_session_service.sandbox_session_service", MagicMock()):
+            _reactivate_previous_skills(
+                lazy,
+                raw_provider,
+                lambda skill_id: SimpleNamespace(name="alpha", skill_id=skill_id),
+                real_handle,
+            )
+
+        assert "alpha" not in lazy.skill_reactivation_errors
+        assert dict(lazy._snapshot_active_skills()) == {"alpha": 1}
+
+    def test_sandbox_expired_mid_loop_propagates_instead_of_swallowed(self, tmp_path):
+        """H2: the previous round's `break` silently swallowed the exception,
+        defeating recovery. It must now `raise`."""
+        from services.agent_execution_service import _reactivate_previous_skills
+        from tools.sandbox.provider import SandboxExpiredError
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+
+        raw_provider = MagicMock()
+        raw_provider.ensure_skill.side_effect = SandboxExpiredError("sandbox gone")
+
+        real_handle = MagicMock()
+
+        with patch("services.sandbox_session_service.sandbox_session_service", MagicMock()):
+            with pytest.raises(SandboxExpiredError):
+                _reactivate_previous_skills(
+                    lazy,
+                    raw_provider,
+                    lambda skill_id: SimpleNamespace(name="alpha", skill_id=skill_id),
+                    real_handle,
+                )
+
+        # The specific per-skill failure must have been recorded before the raise.
+        assert lazy.skill_reactivation_errors.get("alpha") == "sandbox gone"
+
+    def test_get_invalidates_fully_when_skills_loader_raises_sandbox_expired(self, tmp_path):
+        """H1: get()'s SandboxExpiredError handler must call invalidate() (not a
+        manual `self._handle = None`), so _remote_inputs_prepared and
+        _remote_pre_existing_files are reset too, and the session is evicted."""
+        from services.agent_execution_service import _LazySandboxHandle
+        from tools.sandbox.provider import SandboxExpiredError, SandboxHandle
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        mock_provider.requires_file_sync = True
+        mock_provider.list_files.return_value = []
+
+        stale_handle = SandboxHandle(
+            sandbox_id="stale-001", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+
+        lazy = self._make_lazy(tmp_path, mock_provider)
+
+        def _raising_loader(real_handle):
+            raise SandboxExpiredError("sandbox gone mid re-activation")
+
+        lazy._skills_loader = _raising_loader
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = stale_handle
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            with pytest.raises(SandboxExpiredError):
+                lazy.get()
+
+        assert not lazy.is_materialized()
+        assert lazy._remote_inputs_prepared is False
+        assert lazy._remote_pre_existing_files == set()
+        mock_sss.evict.assert_called_once_with("sk-reactivate")
+
+    def test_next_get_after_expiry_recovery_re_pushes_input_files(self, tmp_path):
+        """After a SandboxExpiredError-triggered invalidate(), the following
+        get() call must recreate the remote workspace AND re-push input files
+        — i.e. _prepare_remote_workspace must not early-return because
+        _remote_inputs_prepared was left stale True."""
+        from services.agent_execution_service import _LazySandboxHandle
+        from tools.sandbox.provider import SandboxExpiredError, SandboxHandle
+
+        src = tmp_path / "notes.txt"
+        src.write_bytes(b"NOTES")
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        mock_provider.requires_file_sync = True
+        mock_provider.list_files.return_value = []
+
+        stale_handle = SandboxHandle(
+            sandbox_id="stale-001", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+        fresh_handle = SandboxHandle(
+            sandbox_id="fresh-002", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+
+        lazy = self._make_lazy(
+            tmp_path,
+            mock_provider,
+            processed_files=[{"filename": "notes.txt", "file_path": str(src)}],
+        )
+
+        call_count = {"n": 0}
+
+        def _loader(real_handle):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise SandboxExpiredError("sandbox gone mid re-activation")
+            # Second call (against the fresh handle) succeeds — nothing to replay.
+
+        lazy._skills_loader = _loader
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.side_effect = [stale_handle, fresh_handle]
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            with pytest.raises(SandboxExpiredError):
+                lazy.get()
+
+            assert lazy._remote_inputs_prepared is False
+
+            result = lazy.get()
+
+        assert result is fresh_handle
+        assert lazy._remote_inputs_prepared is True
+        # write_file is called once per get() attempt (workspace prep happens before
+        # the skills_loader call, so the first — doomed — attempt against the stale
+        # handle also pushes it); the key regression this pins is that the SECOND
+        # call, against the recreated fresh_handle, genuinely happens too — i.e.
+        # _remote_inputs_prepared was truly reset by invalidate(), not left stale
+        # True (which would have made this second push silently never happen).
+        mock_provider.write_file.assert_any_call(fresh_handle, "input/notes.txt", b"NOTES")
+        assert mock_provider.write_file.call_count == 2
+
+    def test_multiple_previously_active_skills_are_all_reactivated(self, tmp_path):
+        """AC-20 core assertion: every skill this session previously activated must be
+        re-activated against the fresh handle — not just the first, and not just one."""
+        from services.agent_execution_service import _reactivate_previous_skills
+        from tools.sandbox.provider import SkillActivationResult, SkillPhaseResult
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+        lazy._record_active_skill("beta", 2)
+        lazy._record_active_skill("gamma", 3)
+
+        def _ok_result(skill_id, name):
+            return SkillActivationResult(
+                skill_name=name,
+                skill_id=skill_id,
+                files_dir=f"/x/{name}",
+                phases=(SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),),
+                status="active",
+            )
+
+        raw_provider = MagicMock()
+        raw_provider.ensure_skill.side_effect = lambda handle, payload: _ok_result(
+            payload.skill_id, payload.name
+        )
+
+        real_handle = MagicMock()
+
+        with patch("services.sandbox_session_service.sandbox_session_service", MagicMock()):
+            _reactivate_previous_skills(
+                lazy,
+                raw_provider,
+                lambda skill_id: SimpleNamespace(name={1: "alpha", 2: "beta", 3: "gamma"}[skill_id], skill_id=skill_id),
+                real_handle,
+            )
+
+        # Every previously-active skill got its own ensure_skill call against the fresh handle.
+        assert raw_provider.ensure_skill.call_count == 3
+        reactivated_names = {
+            call_args.args[1].name for call_args in raw_provider.ensure_skill.call_args_list
+        }
+        assert reactivated_names == {"alpha", "beta", "gamma"}
+        # All three remain recorded active (none dropped, none recorded as a failure).
+        assert dict(lazy._snapshot_active_skills()) == {"alpha": 1, "beta": 2, "gamma": 3}
+        assert lazy.skill_reactivation_errors == {}
+
+    def test_budget_exhausted_skips_remaining_skills_without_attempting_them(self, tmp_path, monkeypatch):
+        """MEDIUM fix (fix round 1): the re-activation loop's wall-clock
+        deadline was completely untested. Shrink the budget to a tiny value
+        and make the FIRST skill's own ``ensure_skill`` call consume the
+        whole thing via a controlled delay — the remaining skills must be
+        recorded with a "not attempted, budget exceeded" detail (self-heals
+        on the next explicit ``load_skill``), never silently dropped from the
+        registry and never actually attempted against the sandbox."""
+        import time as _time
+
+        import services.agent_execution_service as aes
+        from services.agent_execution_service import _reactivate_previous_skills
+        from tools.sandbox.provider import SkillActivationResult, SkillPhaseResult
+
+        monkeypatch.setattr(aes, "_skill_bootstrap_budget_seconds", lambda: 0.05)
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+        lazy._record_active_skill("beta", 2)
+        lazy._record_active_skill("gamma", 3)
+
+        def _ensure_skill(handle, payload):
+            if payload.name == "alpha":
+                _time.sleep(0.15)  # burns past the 0.05s budget
+            return SkillActivationResult(
+                skill_name=payload.name,
+                skill_id=payload.skill_id,
+                files_dir=f"/x/{payload.name}",
+                phases=(SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),),
+                status="active",
+            )
+
+        raw_provider = MagicMock()
+        raw_provider.ensure_skill.side_effect = _ensure_skill
+        real_handle = MagicMock()
+
+        with patch("services.sandbox_session_service.sandbox_session_service", MagicMock()):
+            _reactivate_previous_skills(
+                lazy,
+                raw_provider,
+                lambda skill_id: SimpleNamespace(name={1: "alpha", 2: "beta", 3: "gamma"}[skill_id], skill_id=skill_id),
+                real_handle,
+            )
+
+        # Only alpha was actually attempted against the sandbox.
+        assert raw_provider.ensure_skill.call_count == 1
+        assert raw_provider.ensure_skill.call_args.args[1].name == "alpha"
+
+        # beta/gamma were never touched — not attempted, not forgotten from the
+        # registry (they self-heal on the next explicit load_skill call).
+        assert dict(lazy._snapshot_active_skills()) == {"alpha": 1, "beta": 2, "gamma": 3}
+        assert "alpha" not in lazy.skill_reactivation_errors
+        assert "budget exceeded" in lazy.skill_reactivation_errors.get("beta", "")
+        assert "budget exceeded" in lazy.skill_reactivation_errors.get("gamma", "")
+
+    def test_get_reactivates_every_previously_active_skill_before_returning(self, tmp_path):
+        """End-to-end (via _LazySandboxHandle.get(), the real call site step_020 wires
+        _reactivate_previous_skills into): after a sandbox recreation, every skill that
+        was active before must be reactivated against the FRESH handle before get()
+        hands it back to the caller — no tool call can observe a partially-recovered
+        sandbox."""
+        import functools
+
+        from services.agent_execution_service import _LazySandboxHandle, _reactivate_previous_skills
+        from tools.sandbox.provider import SandboxHandle, SkillActivationResult, SkillPhaseResult
+
+        mock_provider = MagicMock()
+        mock_provider.PROVIDER_NAME = "opensandbox"
+        mock_provider.requires_file_sync = True
+        mock_provider.list_files.return_value = []
+
+        fresh_handle = SandboxHandle(
+            sandbox_id="fresh-multi", working_dir=str(tmp_path), provider_name="opensandbox", metadata={},
+        )
+
+        lazy = self._make_lazy(tmp_path, mock_provider)
+        lazy._record_active_skill("alpha", 1)
+        lazy._record_active_skill("beta", 2)
+
+        payload_provider = lambda skill_id: SimpleNamespace(
+            name={1: "alpha", 2: "beta"}[skill_id], skill_id=skill_id
+        )
+
+        def _ok_result(handle, payload):
+            return SkillActivationResult(
+                skill_name=payload.name,
+                skill_id=payload.skill_id,
+                files_dir=f"/x/{payload.name}",
+                phases=(SkillPhaseResult(phase="files", status="ok", detail="materialised", duration_ms=1),),
+                status="active",
+            )
+
+        mock_provider.ensure_skill = MagicMock(side_effect=_ok_result)
+
+        lazy._skills_loader = functools.partial(
+            _reactivate_previous_skills, lazy, mock_provider, payload_provider
+        )
+
+        mock_sss = MagicMock()
+        mock_sss.get_or_create.return_value = fresh_handle
+
+        with patch("services.sandbox_session_service.sandbox_session_service", mock_sss):
+            result = lazy.get()
+
+        assert result is fresh_handle
+        # Both previously-active skills were reactivated against the SAME fresh handle
+        # get() is about to return — before it returns, per AC-20.
+        assert mock_provider.ensure_skill.call_count == 2
+        for call_args in mock_provider.ensure_skill.call_args_list:
+            assert call_args.args[0] is fresh_handle
+        reactivated_names = {c.args[1].name for c in mock_provider.ensure_skill.call_args_list}
+        assert reactivated_names == {"alpha", "beta"}
+        assert lazy.skill_reactivation_errors == {}

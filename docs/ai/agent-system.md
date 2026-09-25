@@ -17,7 +17,7 @@ The **Agent System** is the core execution engine of Mattin AI, powered by **Lan
 - **Tool support**: Built-in tools (date/time, file access, scraping, PDF, transcription) + custom tools
 - **Memory management**: Conversation history persisted via checkpointer with configurable limits
 - **File attachments**: Process uploaded files during agent execution
-- **Skills system**: Reusable skills (legacy, being phased out)
+- **Skills system**: Reusable, package-based skills — app-scoped or platform-wide system skills, with optional sandbox activation and an opt-in LLM router (see [Skills guide](../guides/skills.md))
 - **MCP integration**: Connect to Model Context Protocol servers — tools are loaded for both top-level agents and agents used as sub-tools by other agents
 
 ## Agent Configuration
@@ -60,7 +60,7 @@ class Agent(Base):
 - `ai_service`: LLM configuration (OpenAI, Anthropic, etc.)
 - `silo`: Default vector store for RAG
 - `output_parser`: Structured output schema
-- `skill_associations`: AgentSkill (many-to-many, legacy)
+- `skill_associations`: AgentSkill (many-to-many)
 - `mcp_associations`: AgentMCP (many-to-many)
 - `tool_associations`: AgentTool (self-referential, agents as tools)
 - `marketplace_profile`: `AgentMarketplaceProfile` (1:1, optional) — marketplace catalog metadata
@@ -252,39 +252,9 @@ class Conversation(Base):
 
 ## Skills
 
-**Note**: The skills system is legacy and being phased out in favor of MCP tools.
+Skills are reusable, Markdown-driven specializations (`SKILL.md` + optional bundled files) attached to agents (M:N via `AgentSkill`). A skill can be **app-scoped** (`Skill.app_id` set) or a **system skill** (`Skill.app_id IS NULL`, platform-managed, YAML-seeded at startup). `Agent.skill_router_enabled` optionally turns on an LLM pre-selection step (default off) that narrows which attached skills are surfaced on a given turn.
 
-Skills are reusable code modules that agents can load and execute:
-
-```python
-class Skill(Base):
-    __tablename__ = 'Skill'
-    skill_id = Column(Integer, primary_key=True)
-    app_id = Column(Integer, ForeignKey('App.app_id'))
-    name = Column(String(255))
-    description = Column(Text)
-    code = Column(Text)  # Python code
-```
-
-**Skill loader tool**:
-
-```python
-from tools.skill_tools import create_skill_loader_tool
-
-skill_loader = create_skill_loader_tool(agent, db)
-tools.append(skill_loader)
-```
-
-The agent can dynamically load and execute skills at runtime.
-
-**Skills system prompt section**:
-
-```python
-from tools.skill_tools import generate_skills_system_prompt_section
-
-skills_section = generate_skills_system_prompt_section(agent)
-system_prompt += "\n\n" + skills_section
-```
+See the [Skills guide](../guides/skills.md) for the full package format (frontmatter contract, `allowed_tools` metadata-only clarification), system skills, sandbox activation, and the opt-in router. `backend/tools/skill_tools.py` provides the `load_skill` / `read_skill_file` tools exposed to the agent at runtime; `backend/tools/skill_tools.py::resolve_agent_skills` is the single source of truth for which of an agent's attached skills are actually usable on a given turn (drops disabled skills, dedupes by normalised name).
 
 ## File Attachments
 

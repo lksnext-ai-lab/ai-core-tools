@@ -271,9 +271,25 @@ See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 | `E2B_SUPPORTED_LANGUAGES` | No | `python,javascript,bash` | Languages exposed through the E2B provider |
 | `E2B_ALLOW_INTERNET_ACCESS` | No | `true` | Whether E2B sandboxes may access the internet |
 | `SANDBOX_DEFAULT_TIMEOUT_S` | No | `30` | Per-execution timeout in seconds |
+| `SANDBOX_SKILL_BOOTSTRAP_TIMEOUT_S` | No | `120` | Timeout for a skill's bootstrap script inside the sandbox. Deliberately more generous than `SANDBOX_DEFAULT_TIMEOUT_S` — bootstrap scripts are allowed to assume network egress (e.g. `pip install`) to prepare a skill's runtime dependencies. |
 | `SANDBOX_SESSION_TTL_H` | No | `2` | Max sandbox lifetime in hours for providers that enforce TTL |
 | `SANDBOX_IDLE_TIMEOUT_S` | No | `120` | Max idle time before cached sandboxes are stopped/destroyed |
 | `SANDBOX_REAPER_INTERVAL_S` | No | `30` | How often the backend checks for idle sandboxes |
+
+### Skill Package Import
+
+Hardened limits applied by the in-memory zip reader (`backend/utils/safe_zip.py`) when a skill package (`.zip`) is imported — via the app-scoped `/skills/import` route, the admin `/system-skills/import` route, or a Claude Code plugin import. All are optional; an invalid value (non-numeric, NaN/infinite, below the documented minimum) makes the backend fail fast at startup rather than silently falling back to the default.
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `SKILL_IMPORT_MAX_FILES` | `500` | Maximum number of file entries in an uploaded skill package |
+| `SKILL_IMPORT_MAX_TOTAL_BYTES` | `52428800` (50 MiB) | Maximum cumulative **uncompressed** size of an uploaded skill package |
+| `SKILL_IMPORT_MAX_FILE_BYTES` | `10485760` (10 MiB) | Maximum **uncompressed** size of a single file inside a skill package |
+| `SKILL_IMPORT_MAX_RATIO` | `100` | Maximum uncompressed/compressed ratio (zip-bomb guard), measured against the uploaded archive size |
+| `SKILL_IMPORT_MAX_ARCHIVE_BYTES` | `26214400` (25 MiB) | Maximum size of the uploaded (compressed) archive itself |
+| `SKILL_IMPORT_MAX_CONCURRENCY` | `2` | Maximum number of skill package import/export operations processed concurrently per backend process (shared bulkhead — both hold a whole package in memory); exceeding it returns HTTP 429 |
+| `SKILL_IMPORT_MAX_PLUGIN_SKILLS` | `25` | Maximum number of candidate skills (top-level `skills/<name>/` directories) accepted from a single Claude Code plugin archive import |
+| `SKILL_IMPORT_LOCK_TIMEOUT_SECONDS` | `5` | Per-app advisory lock timeout applied while importing one candidate skill from a Claude Code plugin archive; bounds how long a contended import can hold the shared import/export bulkhead before that candidate is reported busy |
 
 ### CORS Configuration
 

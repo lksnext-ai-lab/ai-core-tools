@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import io
+import re
 import tarfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from schemas.skill_package_payload import SkillPackagePayload
 from tools.sandbox.provider import SandboxExpiredError
 
 
@@ -338,3 +340,71 @@ class TestE2BFileIO:
         ]
 
         assert provider.list_files(handle) == ["report.pdf"]
+
+
+def _verified_bash_side_effect(cmd: str, **_kwargs: object) -> SimpleNamespace:
+    """Emulate a successful sandbox-side bash run for ``_run_verified_command``
+    and the bootstrap script wrapper by echoing back whichever sentinel/rc
+    marker the real command embedded (step_018 test helper — no real shell)."""
+    ok_match = re.search(r"(__SKILL_CMD_OK_\w+__)", cmd)
+    if ok_match:
+        return SimpleNamespace(stdout=f"{ok_match.group(1)}\n", stderr="", exit_code=0)
+    rc_match = re.search(r'"(__SKILL_BOOTSTRAP_RC_\w+__)=\$rc"', cmd)
+    if rc_match:
+        return SimpleNamespace(stdout=f"{rc_match.group(1)}=0\n", stderr="", exit_code=0)
+    return SimpleNamespace(stdout="", stderr="", exit_code=0)
+
+
+class TestE2BSkillsRoot:
+    """step_018: ``skills_root`` override relocates skill materialisation
+    under E2B's own workspace convention instead of the ABC's ``/workspace``."""
+
+    def test_skills_root_defaults_under_e2b_workspace(self, provider_and_sandbox, tmp_path):
+        provider, _, _ = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+
+        assert provider.skills_root(handle) == "/home/user/workspace/.skills"
+
+    def test_skills_root_honours_e2b_workspace_env_override(
+        self, provider_and_sandbox, monkeypatch, tmp_path
+    ):
+        provider, _, _ = provider_and_sandbox
+        monkeypatch.setenv("E2B_WORKSPACE", "/custom/root")
+        handle = provider.create_sandbox(str(tmp_path))
+
+        assert provider.skills_root(handle) == "/custom/root/.skills"
+
+    def test_ensure_skill_materialises_under_skills_root_via_abc_default(
+        self, provider_and_sandbox, tmp_path
+    ):
+        """No provider-specific ``ensure_skill`` override exists — this exercises
+        ``SandboxProvider.ensure_skill`` (the ABC default) end to end against the
+        E2B ``write_file``/``read_file``/``run_code`` primitives, verifying files
+        land under the E2B-specific root rather than the ABC's ``/workspace``."""
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.files.read.side_effect = FileNotFoundError("no marker yet")
+        sandbox.commands.run.side_effect = _verified_bash_side_effect
+
+        payload = SkillPackagePayload(
+            skill_id=1,
+            name="myskill",
+            files=(("SKILL.md", b"# My Skill\n"),),
+        )
+
+        result = provider.ensure_skill(handle, payload)
+
+        assert result.status == "active"
+        assert result.files_dir == "/home/user/workspace/.skills/myskill"
+        write_paths = [call.args[0] for call in sandbox.files.write.call_args_list]
+        assert "/home/user/workspace/.skills/myskill.tar.gz" in write_paths
+        assert any(
+            path == "/home/user/workspace/.skills/.markers/myskill.json" for path in write_paths
+        )
+        # The extraction command must address the E2B-specific root, never the
+        # ABC's bare "/workspace/.skills" default.
+        extraction_calls = [
+            call.args[0] for call in sandbox.commands.run.call_args_list if "tar -xzf" in call.args[0]
+        ]
+        assert extraction_calls
+        assert all("/home/user/workspace/.skills/myskill" in cmd for cmd in extraction_calls)

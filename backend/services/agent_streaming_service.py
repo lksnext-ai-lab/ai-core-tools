@@ -174,6 +174,7 @@ class AgentStreamingService:
                     sandbox_session_key=ctx.sandbox_session_key,
                     attached_files=ctx.processed_files,
                     temp_silo_ids=temp_silo_ids or None,
+                    user_message=message,
                 )
                 agent_chain, mcp_client = create_agent_result[:2]
 
