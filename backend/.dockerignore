@@ -1,3 +1,11 @@
+# NOTE: this file is NOT consulted by the current backend image build. Compose
+# builds with `context: ..` (repo root) and `dockerfile: backend/Dockerfile`
+# (see docker/docker-compose.yaml and docker/Dockerfile.overlay), so only the
+# root /.dockerignore applies. This file is inert — do not rely on it to
+# reason about what does/doesn't ship in the backend image (e.g. its .env
+# rule below is NOT what keeps .env out of the real build); update the root
+# /.dockerignore instead.
+
 # Environment files - should not be included in Docker images
 .env
 .env.*

@@ -61,6 +61,7 @@ from __future__ import annotations
 import os
 import posixpath
 import queue
+import shlex
 import threading
 import time
 from contextvars import copy_context
@@ -72,10 +73,18 @@ from typing import TYPE_CHECKING, Any
 
 import config as settings
 from utils.logger import get_logger
-from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
+from .provider import (
+    SandboxProvider,
+    SandboxHandle,
+    SandboxExpiredError,
+    SkillPhaseResult,
+    skill_dir,
+    truncate_detail,
+)
+from .skill_archive import SkillPackageTooLargeError, safe_member_name
 
 if TYPE_CHECKING:
-    pass
+    from schemas.skill_package_payload import SkillPackagePayload
 
 logger = get_logger(__name__)
 
@@ -1202,3 +1211,212 @@ class OpenSandboxProvider(SandboxProvider):
             handle.sandbox_id,
         )
         return result
+
+    # ------------------------------------------------------------------
+    # Skill activation (FR-17..FR-20, AD-6) — step_017
+    # ------------------------------------------------------------------
+
+    def _materialise_skill_files(
+        self, handle: SandboxHandle, payload: "SkillPackagePayload", name: str, root: str
+    ) -> SkillPhaseResult:
+        """Phase 1 override: upload every skill file in a single native call.
+
+        OpenSandbox's ``FilesystemSync.write_files(entries)`` writes an
+        arbitrary batch of files in one round-trip, so — unlike the ABC
+        default — this provider never needs to build an in-memory tar.gz,
+        upload it via ``write_file``, and run a shell ``tar -xzf`` extraction
+        command to materialise a skill package. Falls back to the ABC's
+        per-file ``write_file`` writer (``_materialise_skill_files_per_file``,
+        inherited unchanged) if the bulk call itself fails for any reason
+        other than sandbox expiry, or if the SDK's filesystem models can't be
+        imported (older/mismatched SDK version).
+
+        This is the extension point documented on
+        ``SandboxProvider._materialise_skill_files`` (round-1 fix H4) —
+        ``ensure_skill`` itself is *not* overridden here: all locking,
+        idempotency, name-collision and bootstrap behaviour stays the ABC
+        default (``SandboxProvider.ensure_skill``), which calls this method
+        polymorphically. Reimplementing ``ensure_skill`` here would duplicate
+        logic that has already been through review (step_016) for no
+        benefit. Phase 2 (bootstrap) has no OpenSandbox-specific advantage —
+        it stays on the ABC's ``run_code``-based implementation.
+
+        Round-1 fixes folded in here (review board, step_017/018):
+
+        - H1: a 2xx/no-exception response from ``write_files`` is not itself
+          proof the files landed — the SDK call is a single POST whose only
+          check is ``raise_for_status()``, with no per-file confirmation. A
+          verified command now positively confirms the target directory
+          exists and contains at least as many files as were requested
+          before this returns ``status="ok"``; a verification failure falls
+          through to the per-file fallback like every other failure branch.
+        - H2: the bulk path built ``entries`` straight from
+          ``payload.files`` without ever going through ``build_tar_gz``
+          (where the ABC enforces ``SKILL_IMPORT_MAX_TOTAL_BYTES``), so an
+          oversized payload had no size check at all on this — the default —
+          provider, and buffered the whole uncompressed payload in memory
+          plus the HTTP request body. The cap is now checked explicitly
+          before building ``entries``; a payload that exceeds it is a
+          terminal failure (no per-file fallback — that would just
+          re-upload the same oversized payload one file at a time).
+        - H3: ``WriteEntry(...)`` construction only caught ``ValueError``,
+          so a ``TypeError`` (e.g. from an SDK signature mismatch) would
+          escape ``ensure_skill``'s "never raises except
+          ``SandboxExpiredError``" contract and fail the whole agent turn.
+          Broadened to catch any non-``SandboxExpiredError`` exception and
+          fall through to the per-file fallback, while keeping the
+          path-safety ``ValueError`` branch terminal.
+        - MEDIUM: the cleanup command only ``mkdir -p``'d the markers
+          directory, never the target directory itself — for a content-only
+          skill (no bundled files, ``payload.files`` empty), ``write_files([])``
+          is a no-op, so ``status="ok"`` was reported for a directory that
+          was never created. The cleanup command now recreates both.
+        """
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"OpenSandboxProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+
+        start = time.monotonic()
+        target_dir = skill_dir(root, name)
+        markers_dir = f"{root}/.markers"
+
+        # Same idempotent cleanup as the ABC default (verified via the shared
+        # sentinel helper so a failure here is reported, not silently
+        # ignored) — folded in with a `mkdir -p` for both the target
+        # directory itself (MEDIUM fix: a content-only skill with no bundled
+        # files never has anything else create it) and the sibling markers
+        # directory (LOW carry-over from step_016: nothing else guarantees
+        # it exists before `_write_skill_marker`'s `write_file` call).
+        clean_ok, clean_output = self._run_verified_command(
+            handle,
+            f"rm -rf {shlex.quote(target_dir)} && "
+            f"mkdir -p {shlex.quote(target_dir)} {shlex.quote(markers_dir)}",
+            language="bash",
+            timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+        )
+        if not clean_ok:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning(
+                "OpenSandboxProvider.ensure_skill: could not clean previous directory "
+                "for skill %r before materialisation: %s",
+                name, clean_output,
+            )
+            return SkillPhaseResult(
+                phase="files",
+                status="failed",
+                detail=truncate_detail(
+                    f"could not clean previous skill directory before materialisation: {clean_output}"
+                ),
+                duration_ms=duration_ms,
+            )
+
+        # H2: this bulk path never calls build_tar_gz (the ABC's own size-cap
+        # enforcement point), so nothing else re-checks
+        # SKILL_IMPORT_MAX_TOTAL_BYTES on this — the default — provider.
+        # Checked before building `entries` (and before importing/holding
+        # any per-file bytes twice) so an oversized payload never reaches
+        # the SDK call at all. Terminal like the ABC's own
+        # SkillPackageTooLargeError branch — never falls back to the
+        # per-file writer, which would just re-upload the same oversized
+        # payload one file at a time with no cap check.
+        total_bytes = sum(len(data) for _, data in payload.files)
+        if total_bytes > settings.SKILL_IMPORT_MAX_TOTAL_BYTES:
+            size_exc = SkillPackageTooLargeError(
+                f"skill_archive: payload total size {total_bytes} bytes exceeds cap of "
+                f"{settings.SKILL_IMPORT_MAX_TOTAL_BYTES} bytes"
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning("ensure_skill: rejecting skill %r — payload too large: %s", name, size_exc)
+            return SkillPhaseResult(
+                phase="files",
+                status="failed",
+                detail=truncate_detail(f"skill package too large: {size_exc}"),
+                duration_ms=duration_ms,
+            )
+
+        try:
+            from opensandbox.models.filesystem import WriteEntry  # type: ignore[import]
+        except ImportError:
+            return self._materialise_skill_files_per_file(handle, payload, name, root, start)
+
+        try:
+            entries = [
+                WriteEntry(path=f"{target_dir}/{safe_member_name(path)}", data=data)
+                for path, data in payload.files
+            ]
+        except SandboxExpiredError:
+            raise
+        except ValueError as path_exc:
+            # Same reasoning as the ABC's own build_tar_gz path-safety
+            # rejection: an unsafe path is a terminal failure, never a
+            # reason to fall back to the (equally-guarded) per-file writer.
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning("ensure_skill: rejecting skill %r — unsafe file path: %s", name, path_exc)
+            return SkillPhaseResult(
+                phase="files",
+                status="failed",
+                detail=truncate_detail(f"rejected unsafe file path in skill package: {path_exc}"),
+                duration_ms=duration_ms,
+            )
+        except Exception as construct_exc:
+            # H3: anything other than the path-safety ValueError (e.g. a
+            # TypeError from an SDK signature mismatch) must not escape
+            # ensure_skill's "never raises except SandboxExpiredError"
+            # contract — fall through to the per-file fallback instead.
+            logger.warning(
+                "OpenSandboxProvider.ensure_skill: WriteEntry construction failed for "
+                "skill %r, falling back to per-file writes: %s",
+                name, construct_exc,
+            )
+            return self._materialise_skill_files_per_file(handle, payload, name, root, start)
+
+        try:
+            self._reset_idle_timeout(sandbox)
+            try:
+                sandbox.files.write_files(entries)
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
+        except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during skill file upload: {exc}"
+                ) from exc
+            logger.warning(
+                "OpenSandboxProvider.ensure_skill: native bulk write_files failed for "
+                "skill %r, falling back to per-file writes: %s",
+                name, exc,
+            )
+            return self._materialise_skill_files_per_file(handle, payload, name, root, start)
+
+        # H1: write_files' only success signal is the absence of an
+        # exception (a single POST checked only via raise_for_status()) —
+        # no per-file confirmation. Positively verify the directory actually
+        # holds at least as many files as were requested before reporting
+        # "ok"; on verification failure, fall through to the per-file
+        # fallback exactly like every other failure branch above.
+        expected_count = len(payload.files)
+        verify_ok, verify_output = self._run_verified_command(
+            handle,
+            f"test -d {shlex.quote(target_dir)} && "
+            f'[ "$(find {shlex.quote(target_dir)} -type f | wc -l)" -ge {expected_count} ]',
+            language="bash",
+            timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+        )
+        if not verify_ok:
+            logger.warning(
+                "OpenSandboxProvider.ensure_skill: native bulk write_files reported no "
+                "error for skill %r but verification failed, falling back to per-file "
+                "writes: %s",
+                name, verify_output,
+            )
+            return self._materialise_skill_files_per_file(handle, payload, name, root, start)
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        return SkillPhaseResult(
+            phase="files",
+            status="ok",
+            detail=f"materialised {len(payload.files)} file(s) via native bulk write_files",
+            duration_ms=duration_ms,
+        )

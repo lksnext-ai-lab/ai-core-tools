@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from lks_idprovider import AuthContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -38,6 +39,7 @@ USER_NOT_FOUND = "User not found"
 SYSTEM_AI_SERVICE_NOT_FOUND = "System AI service not found"
 SYSTEM_EMBEDDING_SERVICE_NOT_FOUND = "System embedding service not found"
 SYSTEM_SANDBOX_SERVICE_NOT_FOUND = "System sandbox service not found"
+SYSTEM_SKILL_NOT_FOUND = "System skill not found"
 
 
 async def require_admin(
@@ -597,6 +599,21 @@ from schemas.sandbox_service_schemas import (
     SandboxServiceDetailSchema,
     CreateUpdateSandboxServiceSchema,
 )
+from schemas.skill_schemas import (
+    CreateUpdateSkillSchema,
+    SkillDetailSchema,
+    SkillEnabledUpdateSchema,
+    SkillFileContentSchema,
+    SkillListItemSchema,
+)
+from routers.controls.skill_router_helpers import (
+    read_upload_bounded,
+    skill_error_boundary,
+    zip_download_response,
+)
+from services.skill_errors import SkillServiceError
+from services.skill_package_service import SkillPackageService
+from services.skill_service import SkillService
 from typing import List
 
 
@@ -969,6 +986,178 @@ async def delete_system_embedding_service(
         {Silo.embedding_service_id: None}, synchronize_session='fetch'
     )
     EmbeddingServiceRepository.delete(db, svc)
+
+
+@router.get("/system-skills", response_model=List[SkillListItemSchema])
+async def list_system_skills(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List all system (platform) skills, including disabled ones (platform admin (AICT_OMNIADMINS or platform_role='admin'))."""
+    with skill_error_boundary("Error listing system skills"):
+        return SkillService.list_system_skills(db, enabled_only=False)
+
+
+@router.get("/system-skills/{skill_id}", response_model=SkillDetailSchema)
+async def get_system_skill(
+    skill_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get a system skill in any enabled state (platform admin (AICT_OMNIADMINS or platform_role='admin')). 404 when missing or app-scoped."""
+    with skill_error_boundary(f"Error retrieving system skill {skill_id}"):
+        detail = SkillService.get_system_skill_detail(db, skill_id)
+        if detail is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+        return detail
+
+
+@router.post("/system-skills", response_model=SkillDetailSchema, status_code=status.HTTP_201_CREATED)
+async def create_system_skill(
+    body: CreateUpdateSkillSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create a new system skill (platform admin (AICT_OMNIADMINS or platform_role='admin')). Never subject to the per-app skill quota."""
+    with skill_error_boundary(f"create_system_skill: unexpected error by={auth_context.identity.email}"):
+        detail = SkillService.create_or_update_system_skill(db, 0, body)
+        logger.info("admin:create_system_skill skill_id=%s by=%s", detail.skill_id, auth_context.identity.email)
+        return detail
+
+
+@router.put("/system-skills/{skill_id}", response_model=SkillDetailSchema)
+async def update_system_skill(
+    skill_id: int,
+    body: CreateUpdateSkillSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update a system skill (platform admin (AICT_OMNIADMINS or platform_role='admin')). ``source`` is immutable after creation."""
+    with skill_error_boundary(
+        f"update_system_skill: unexpected error skill_id={skill_id} by={auth_context.identity.email}"
+    ):
+        if skill_id == 0:
+            # Sentinel-0 create is POST-only; a PUT to id 0 can never resolve an existing skill.
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+
+        detail = SkillService.create_or_update_system_skill(db, skill_id, body)
+        if detail is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+
+        logger.info("admin:update_system_skill skill_id=%s by=%s", skill_id, auth_context.identity.email)
+        return detail
+
+
+@router.delete("/system-skills/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_system_skill(
+    skill_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a system skill (platform admin (AICT_OMNIADMINS or platform_role='admin')).
+
+    Refuses (409) skills seeded from system_defaults.yaml, frozen skills, and skills still attached
+    to at least one agent — disable it instead in those cases.
+    """
+    with skill_error_boundary(
+        f"delete_system_skill: unexpected error skill_id={skill_id} by={auth_context.identity.email}"
+    ):
+        deleted = SkillService.delete_system_skill(db, skill_id)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+
+        logger.info("admin:delete_system_skill skill_id=%s by=%s", skill_id, auth_context.identity.email)
+
+
+@router.get("/system-skills/{skill_id}/files/content", response_model=SkillFileContentSchema)
+async def get_system_skill_file_content(
+    skill_id: int,
+    path: str,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Fetch the text content of one file of a system skill in any enabled state (platform admin).
+
+    404 when the skill is missing/app-scoped, or when ``path`` does not resolve to a file of THIS
+    skill. A binary file, or a ``path`` that fails the shared path-safety validation, is rejected
+    with 400.
+    """
+    with skill_error_boundary(f"Error reading system skill file content for skill {skill_id}"):
+        content = SkillService.get_file_content_for_system_skill(db, skill_id, path)
+        if content is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+        return content
+
+
+@router.post("/system-skills/import", response_model=SkillDetailSchema, status_code=status.HTTP_201_CREATED)
+async def import_system_skill(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+):
+    """Import a system skill package (ZIP with SKILL.md). platform admin (AICT_OMNIADMINS or platform_role='admin'), never subject to a quota."""
+    import config as settings
+
+    with skill_error_boundary(f"import_system_skill: unexpected error by={auth_context.identity.email}"):
+        try:
+            with SkillPackageService.upload_admission_slot():
+                data = await read_upload_bounded(
+                    file, settings.SKILL_IMPORT_MAX_ARCHIVE_BYTES, log_context="system"
+                )
+                detail = await run_in_threadpool(
+                    SkillPackageService.import_package, db, app_id=None, data=data, source='admin',
+                )
+        except SkillServiceError as exc:
+            logger.info(
+                "admin:import_system_skill rejected by=%s: %s (%s) %s",
+                auth_context.identity.email, exc.__class__.__name__, exc.status_code, exc.detail,
+            )
+            raise
+        logger.info(
+            "admin:import_system_skill accepted skill_id=%s bytes=%s files=%s by=%s",
+            detail.skill_id, len(data), len(detail.files), auth_context.identity.email,
+        )
+        return detail
+
+
+@router.get("/system-skills/{skill_id}/export")
+async def export_system_skill(
+    skill_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Export a system skill as a ZIP package (platform admin (AICT_OMNIADMINS or platform_role='admin')). Works for any enabled state."""
+    with skill_error_boundary(
+        f"export_system_skill: unexpected error skill_id={skill_id} by={auth_context.identity.email}"
+    ):
+        result = await run_in_threadpool(SkillPackageService.export_system_skill, db, skill_id)
+        if result is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+
+        filename, data = result
+        return zip_download_response(filename, data)
+
+
+@router.patch("/system-skills/{skill_id}/enabled", response_model=SkillDetailSchema)
+async def set_system_skill_enabled(
+    skill_id: int,
+    body: SkillEnabledUpdateSchema,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Enable or disable a system skill (platform admin (AICT_OMNIADMINS or platform_role='admin'))."""
+    with skill_error_boundary(
+        f"set_system_skill_enabled: unexpected error skill_id={skill_id} by={auth_context.identity.email}"
+    ):
+        detail = SkillService.set_system_skill_enabled(db, skill_id, body.is_enabled)
+        if detail is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SYSTEM_SKILL_NOT_FOUND)
+
+        logger.info(
+            "admin:set_system_skill_enabled skill_id=%s is_enabled=%s by=%s",
+            skill_id, body.is_enabled, auth_context.identity.email,
+        )
+        return detail
 
 
 @router.post(

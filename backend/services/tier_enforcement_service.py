@@ -79,6 +79,11 @@ class TierEnforcementService:
             return
 
         # Count current resources
+        # NOTE (FR-15/AC-12): the "skills" entry MUST stay `Skill.app_id == app_id` (never
+        # `Skill.app_id.in_((app_id, None))`). System skills (app_id IS NULL) are platform-owned
+        # and are never counted against a tenant's per-app skill quota — see
+        # backend/services/skill_service.py module docstring for the full list of call sites that
+        # must stay app-private.
         model_map = {
             "agents": (Agent, Agent.app_id),
             "silos": (Silo, Silo.app_id),

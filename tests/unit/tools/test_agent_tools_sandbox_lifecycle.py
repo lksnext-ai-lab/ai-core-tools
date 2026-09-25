@@ -105,6 +105,7 @@ async def test_create_agent_passes_parent_sandbox_to_agent_tools(tmp_path):
         sandbox_session_key="conv_7_42",
         sandbox_session_service=session_service,
         attached_files=None,
+        user_message=None,
     )
 
 

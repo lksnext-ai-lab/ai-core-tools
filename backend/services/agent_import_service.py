@@ -745,6 +745,9 @@ class AgentImportService:
                 existing_agent.silo_id = silo_id
                 existing_agent.output_parser_id = parser_id
                 existing_agent.has_memory = export_data.agent.has_memory
+                existing_agent.skill_router_enabled = bool(
+                    export_data.agent.skill_router_enabled
+                )
                 existing_agent.memory_max_messages = (
                     export_data.agent.memory_max_messages
                 )
@@ -835,6 +838,7 @@ class AgentImportService:
                 silo_id=silo_id,
                 output_parser_id=parser_id,
                 has_memory=export_data.agent.has_memory,
+                skill_router_enabled=bool(export_data.agent.skill_router_enabled),
                 memory_max_messages=export_data.agent.memory_max_messages,
                 memory_max_tokens=export_data.agent.memory_max_tokens,
                 memory_summarize_threshold=(
@@ -859,6 +863,7 @@ class AgentImportService:
                 silo_id=silo_id,
                 output_parser_id=parser_id,
                 has_memory=export_data.agent.has_memory,
+                skill_router_enabled=bool(export_data.agent.skill_router_enabled),
                 memory_max_messages=export_data.agent.memory_max_messages,
                 memory_max_tokens=export_data.agent.memory_max_tokens,
                 memory_summarize_threshold=(

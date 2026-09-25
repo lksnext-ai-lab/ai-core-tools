@@ -125,6 +125,7 @@ class AgentService:
             is_tool=agent.is_tool or False,
             has_memory=getattr(agent, 'has_memory', False) or False,
             enable_code_interpreter=getattr(agent, 'enable_code_interpreter', False) or False,
+            skill_router_enabled=getattr(agent, 'skill_router_enabled', False) or False,
             server_tools=getattr(agent, 'server_tools', None) or [],
             memory_max_messages=getattr(agent, 'memory_max_messages', 20) or 20,
             memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
@@ -355,6 +356,13 @@ class AgentService:
         enable_ci_value = data.get('enable_code_interpreter', False)
         agent.enable_code_interpreter = bool(enable_ci_value)
 
+        # Gated on presence (unlike the sibling enable_code_interpreter field above): the
+        # public API route builds its update dict via model_dump(exclude_unset=True), so
+        # a partial update that never touches this field must leave the existing value
+        # untouched instead of silently resetting it to False.
+        if 'skill_router_enabled' in data:
+            agent.skill_router_enabled = bool(data['skill_router_enabled'])
+
         agent.server_tools = data.get('server_tools') or []
 
         # Memory management fields
@@ -496,7 +504,13 @@ class AgentService:
         db.commit()
 
     def update_agent_skills(self, db: Session, agent_id: int, skill_ids: list, form_data: dict = None):
-        """Update agent skill associations"""
+        """Update agent skill associations.
+
+        New attachments must be the app's own skills or enabled, non-colliding system skills (other apps' ids and
+        disabled system skills are silently dropped). Existing associations that the client resubmits are RETAINED
+        while the skill is still visible to the app, even if it has since been disabled, so disabling a system
+        skill never silently detaches it from agents.
+        """
         # Get the agent
         agent = AgentRepository.get_by_id(db, agent_id)
         if not agent:
@@ -508,15 +522,27 @@ class AgentService:
         elif not isinstance(skill_ids, list):
             skill_ids = []
 
+        # Agents without an app can never attach skills (system skills must not be treated as app skills)
+        if agent.app_id is None:
+            logger.warning("Agent %s has no app_id; skill associations were not updated", agent_id)
+            return
+
         # Get existing skill associations
         existing_skills = {assoc.skill_id: assoc for assoc in AgentRepository.get_agent_skill_associations(db, agent_id)}
 
         # Convert skill_ids to set of integers
         requested_skill_ids = {int(id) for id in skill_ids if id}
-        
-        # Validate that skills exist and belong to the same app as the agent
-        # This prevents cross-app associations and FK errors
-        valid_skill_ids = SkillRepository.get_valid_skill_ids_for_app(db, requested_skill_ids, agent.app_id)
+
+        # NEW attachments must belong to the agent's app or be enabled system skills; ids from other apps and
+        # disabled system skills are silently dropped.
+        new_ids = requested_skill_ids - set(existing_skills)
+        valid_skill_ids = SkillRepository.get_valid_skill_ids_for_app(db, new_ids, agent.app_id)
+        # Existing associations that are resubmitted are RETAINED while the skill is still visible to the app,
+        # even if it has been disabled since.
+        retained_ids = SkillRepository.get_visible_skill_ids_for_app(
+            db, requested_skill_ids & set(existing_skills), agent.app_id
+        )
+        valid_skill_ids = valid_skill_ids | retained_ids
 
         # Remove associations that are no longer needed
         for skill_id in existing_skills.keys():

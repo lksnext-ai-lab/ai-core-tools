@@ -34,6 +34,20 @@ settings:
     category: "sandbox"
     description: "Maximum idle time in seconds before cached sandboxes are stopped or destroyed."
 
+# System (platform) skill packages, seeded create-if-missing on startup by
+# backend/services/system_skills_seeder.py. `path` is relative to backend/system_skills/.
+skills:
+  - name: word
+    path: word
+  - name: pdf
+    path: pdf
+  - name: pptx
+    path: pptx
+  - name: data-analysis
+    path: data-analysis
+  - name: charts
+    path: charts
+
 # Tier configuration defaults - used when no DB override exists
 # -1 means unlimited
 tier_config:

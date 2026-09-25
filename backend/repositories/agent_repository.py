@@ -242,9 +242,13 @@ class AgentRepository:
         return MCPConfigRepository.get_all_by_app_id(db, app_id)
 
     @staticmethod
-    def get_skills_by_app_id(db: Session, app_id: int) -> List[Skill]:
-        """Get all skills for a specific app"""
-        return SkillRepository.get_all_by_app_id(db, app_id)
+    def get_selectable_skills_for_app(db: Session, app_id: int, agent_id: Optional[int] = None) -> List[Skill]:
+        """Skills selectable in an agent form: app skills plus enabled, non-colliding system skills.
+
+        Delegates to ``SkillRepository.get_selectable_for_app`` (the single visibility predicate). System skills
+        already attached to ``agent_id`` are kept even if disabled so the form can flag them.
+        """
+        return SkillRepository.get_selectable_for_app(db, app_id, agent_id)
 
     @staticmethod
     def get_silo_by_id(db: Session, silo_id: int) -> Optional[Silo]:
@@ -335,8 +339,17 @@ class AgentRepository:
         mcp_configs_list = [{"config_id": c.config_id, "name": c.name} for c in mcp_configs]
 
         # Get skills
-        skills = AgentRepository.get_skills_by_app_id(db, app_id)
-        skills_list = [{"skill_id": s.skill_id, "name": s.name, "description": s.description} for s in skills]
+        skills = AgentRepository.get_selectable_skills_for_app(db, app_id, agent_id=agent_id)
+        skills_list = [
+            {
+                "skill_id": s.skill_id,
+                "name": s.name,
+                "description": s.description,
+                "is_system": s.is_system,
+                "is_enabled": True if s.is_enabled is None else bool(s.is_enabled),
+            }
+            for s in skills
+        ]
 
         return {
             'ai_services': ai_services_list,

@@ -1,3 +1,9 @@
+# NOTE: this file is NOT consulted by the current frontend image build. Compose
+# builds with `context: ..` (repo root) and `dockerfile: frontend/Dockerfile`
+# (see docker/docker-compose.yaml), so only the root /.dockerignore applies.
+# This file is inert — update the root /.dockerignore instead if you need to
+# change what ships in the frontend image.
+
 node_modules
 npm-debug.log
 .git
