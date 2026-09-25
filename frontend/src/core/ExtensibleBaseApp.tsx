@@ -227,6 +227,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
                 <Route path="/apps/:appId/scheduled-tasks" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTasksPage /></EditorLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/new" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/:taskId/edit" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/:taskId" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskDetailPage /></EditorLayoutRoute>} />
 
