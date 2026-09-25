@@ -4,6 +4,7 @@ Uses real, independently-connected `SessionLocal()` sessions (never the savepoin
 fixture) because the seeder relies on genuine Postgres transaction-scoped advisory locks and real
 commit/rollback semantics, exactly like `tests/integration/test_advisory_lock_concurrency.py`.
 """
+import threading
 import uuid
 
 import pytest
@@ -265,6 +266,124 @@ def test_corrupted_package_is_isolated_and_lock_stays_held_for_rest_of_run(
     finally:
         check.close()
         _delete_system_skill(good_name)
+
+
+def test_manual_delete_of_skill_file_row_survives_reseed_ac30(tmp_path, unique_name, monkeypatch, test_engine):
+    """AC-30's second leg (per step_038's task note): the operator deletes one of the seeded
+    skill's ``SkillFile`` rows directly (e.g. cleaning up a resource they don't want) -- a re-run
+    of the seeder must never restore it, since create-if-missing only checks the skill NAME, not
+    its file set."""
+    pkg_dir = _write_package(
+        tmp_path, unique_name, extra_files={"resources/note.txt": "keep me or not"}
+    )
+    monkeypatch.setattr(seeder_module, "_PACKAGES_ROOT", tmp_path)
+    monkeypatch.setattr(
+        seeder_module, "_load_skill_entries", lambda: [{"name": unique_name, "path": unique_name}]
+    )
+
+    db1 = SessionLocal()
+    try:
+        seed_system_skills(db1)
+    finally:
+        db1.close()
+
+    db2 = SessionLocal()
+    try:
+        skill = (
+            db2.query(Skill).filter(Skill.app_id.is_(None), Skill.name == unique_name).first()
+        )
+        assert skill is not None
+        file_row = (
+            db2.query(SkillFile)
+            .filter(SkillFile.skill_id == skill.skill_id, SkillFile.path == "resources/note.txt")
+            .first()
+        )
+        assert file_row is not None, "seeder must have created the resource file row"
+        db2.delete(file_row)
+        db2.commit()
+    finally:
+        db2.close()
+
+    # Re-run the seeder: the skill name already exists, so it must be skipped entirely --
+    # the deleted SkillFile row must NOT be restored.
+    db3 = SessionLocal()
+    try:
+        seed_system_skills(db3)
+    finally:
+        db3.close()
+
+    check = SessionLocal()
+    try:
+        skill = (
+            check.query(Skill).filter(Skill.app_id.is_(None), Skill.name == unique_name).first()
+        )
+        assert skill is not None
+        remaining = (
+            check.query(SkillFile)
+            .filter(SkillFile.skill_id == skill.skill_id, SkillFile.path == "resources/note.txt")
+            .first()
+        )
+        assert remaining is None, "seeder must never restore a manually deleted SkillFile row"
+    finally:
+        check.close()
+
+
+def test_two_genuinely_concurrent_sessions_create_exactly_one_row_per_skill_ac32(
+    tmp_path, unique_name, monkeypatch, test_engine
+):
+    """AC-32: two real threads, each with its own independently-connected ``SessionLocal()``,
+    call ``seed_system_skills`` for the SAME package at (as close to) the same time as a barrier
+    can arrange. The transaction-scoped advisory lock (step_032) must serialise them so exactly
+    one Skill row (and one SkillFile row) exists afterward -- a shared session/transaction would
+    not exercise the lock at all, which is why this uses two threads with two real connections,
+    not two sequential calls on one session."""
+    _write_package(tmp_path, unique_name, extra_files={"scripts/run.py": "print('hi')\n"})
+    monkeypatch.setattr(seeder_module, "_PACKAGES_ROOT", tmp_path)
+    monkeypatch.setattr(
+        seeder_module, "_load_skill_entries", lambda: [{"name": unique_name, "path": unique_name}]
+    )
+
+    barrier = threading.Barrier(2)
+    errors = []
+
+    def _run():
+        try:
+            barrier.wait(timeout=5)
+            db = SessionLocal()
+            try:
+                seed_system_skills(db)
+            finally:
+                db.close()
+        except Exception as exc:  # pragma: no cover - surfaced via `errors` below
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_run)
+    t2 = threading.Thread(target=_run)
+    t1.start()
+    t2.start()
+    t1.join(timeout=30)
+    t2.join(timeout=30)
+
+    assert not errors, f"seed_system_skills raised in a worker thread: {errors}"
+    assert not t1.is_alive() and not t2.is_alive(), "a worker thread did not finish in time"
+
+    check = SessionLocal()
+    try:
+        skill_count = (
+            check.query(Skill).filter(Skill.app_id.is_(None), Skill.name == unique_name).count()
+        )
+        assert skill_count == 1, "concurrent seeding must create exactly one Skill row"
+        skill = (
+            check.query(Skill).filter(Skill.app_id.is_(None), Skill.name == unique_name).first()
+        )
+        file_count = (
+            check.query(SkillFile)
+            .filter(SkillFile.skill_id == skill.skill_id, SkillFile.path == "scripts/run.py")
+            .count()
+        )
+        assert file_count == 1, "concurrent seeding must create exactly one SkillFile row per file"
+    finally:
+        check.close()
 
 
 def test_lock_not_acquired_skips_entire_run(tmp_path, unique_name, monkeypatch, test_engine):
