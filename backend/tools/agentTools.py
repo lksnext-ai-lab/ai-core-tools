@@ -1138,7 +1138,7 @@ class IACTTool(BaseTool):
         )
         return instance
 
-    def _run(self, query: str, *args, **kwargs) -> str:
+    def _run(self, query: str, **kwargs) -> str:
         """Synchronous execution of the agent tool"""
         if self.react_agent is None:
             raise RuntimeError(
@@ -1229,7 +1229,7 @@ class IACTTool(BaseTool):
             except Exception:
                 pass
 
-    async def _arun(self, query: str, *args, **kwargs) -> str:
+    async def _arun(self, query: str, **kwargs) -> str:
         """Asynchronous execution of the agent tool"""
         if self.react_agent is None:
             raise RuntimeError(
