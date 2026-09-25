@@ -22,7 +22,7 @@ from db.database import get_db
 
 from services.file_management_service import FileManagementService, FileReference
 from services.conversation_service import ConversationService
-from services.playground_media_service import PlaygroundMediaService, VECTORIZABLE_FILE_TYPES
+from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from utils.security import generate_signature
 
 from utils.logger import get_logger
@@ -94,36 +94,21 @@ async def attach_file(
             agent_id=agent_id,
             user_context=user_context,
             conversation_id=effective_conversation_id,
+            has_memory=bool(agent.has_memory),
         )
 
-        # Vectorize documents (PDF/text) into the session's temp playground silo
-        # so agent chat retrieves them via RAG. A temp silo is always created —
-        # a conversation is created here to key it when the agent has no memory
-        # and none was provided — so the public API never silently drops content.
+        # Vectorize documents (PDF/text) into the conversation's temp silo so
+        # later chat turns retrieve them via RAG. Only memory-enabled agents
+        # keep a temp silo; memory-less agents get the full content in the
+        # prompt on every call instead.
         extracted_content = getattr(file_ref, "content", None)
         if (
-            file_ref.file_type in VECTORIZABLE_FILE_TYPES
+            agent.has_memory
+            and effective_conversation_id
+            and is_vectorizable_file(file_ref.file_type, file_ref.filename)
             and isinstance(extracted_content, str)
             and extracted_content
         ):
-            if not effective_conversation_id:
-                new_conversation = ConversationService.create_conversation(
-                    db=db,
-                    agent_id=agent_id,
-                    user_context=user_context,
-                    title=None,
-                )
-                created_conversation_id = getattr(
-                    new_conversation, "conversation_id", None
-                )
-                if created_conversation_id is None:
-                    raise RuntimeError("Conversation creation returned no conversation ID")
-                effective_conversation_id = str(created_conversation_id)
-                user_context["conversation_id"] = effective_conversation_id
-                logger.info(
-                    f"Auto-created conversation {effective_conversation_id} to scope "
-                    f"vectorized file for agent {agent_id}"
-                )
             conversation = ConversationService.get_conversation(
                 db, int(effective_conversation_id), user_context, agent_id
             )

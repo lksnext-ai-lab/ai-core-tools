@@ -6,6 +6,7 @@ Focus: the async factory ``IACTTool.create`` must load the sub-agent's MCP tools
 All external dependencies are mocked — no LLM, MCP server or database is touched.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -380,9 +381,12 @@ async def test_iact_ocr_tool_uses_attached_pdf_files():
             attached_files=attached_files,
         )
 
-        await tool._arun(query="extract")
+        result = await tool._arun(query="extract")
 
     mock_exec.assert_awaited_once()
+    # Regression: the already-unwrapped OCR content must reach the parent
+    # agent instead of being unwrapped a second time into null.
+    assert json.loads(result) == [{"file": "invoice.pdf", "content": {"amount": 100}}]
 
 
 @pytest.mark.asyncio

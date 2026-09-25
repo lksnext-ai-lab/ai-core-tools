@@ -30,6 +30,16 @@ TEMP_REPO_PREFIX = "_playground_"
 
 # File types that should be vectorized instead of injected into context
 VECTORIZABLE_FILE_TYPES = {"pdf", "text"}
+# "document" files whose text is extracted (the rest of the Office family is not)
+VECTORIZABLE_DOCUMENT_EXTENSIONS = {".docx"}
+
+
+def is_vectorizable_file(file_type: Optional[str], filename: Optional[str]) -> bool:
+    """Whether an attached file has extractable text that can be vectorized."""
+    if file_type in VECTORIZABLE_FILE_TYPES:
+        return True
+    ext = os.path.splitext(filename or "")[1].lower()
+    return file_type == "document" and ext in VECTORIZABLE_DOCUMENT_EXTENSIONS
 
 
 def _temp_repo_name(agent_id: int, session_id: str) -> str:

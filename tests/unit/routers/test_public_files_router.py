@@ -130,6 +130,30 @@ class TestAttachFile:
         files_module.ConversationService.create_conversation.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_memoryless_agent_does_not_create_temp_silo(self, mocker):
+        _patch_auth(mocker)
+        create_conv = mocker.patch.object(
+            files_module.ConversationService, "create_conversation"
+        )
+        vectorize = mocker.patch.object(
+            files_module.PlaygroundMediaService, "vectorize_uploaded_file"
+        )
+        file_svc = _mock_file_service(mocker)
+        file_ref = _mock_file_ref()
+        file_ref.content = "invoice text"
+        file_svc.upload_file = AsyncMock(return_value=file_ref)
+        mocker.patch.object(
+            files_module.FileReference, "format_file_size", return_value="1.0 KB"
+        )
+
+        await files_module.attach_file(
+            app_id=1, agent_id=1, file=MagicMock(filename="test.pdf"),
+            conversation_id=None, api_key="key", db=MagicMock(),
+        )
+        create_conv.assert_not_called()
+        vectorize.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_error_does_not_leak(self, mocker):
         _patch_auth(mocker)
         file_svc = _mock_file_service(mocker)

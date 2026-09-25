@@ -32,7 +32,7 @@ from schemas.marketplace_schemas import (
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from services.file_management_service import FileManagementService, FileReference
-from services.playground_media_service import PlaygroundMediaService, VECTORIZABLE_FILE_TYPES
+from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -972,7 +972,12 @@ async def upload_file_for_chat(
         # Ownership is validated (user + agent + app) so a caller cannot inject
         # document content into another user's / app's conversation silo (IDOR).
         vectorized = False
-        if conversation_id and file_ref.file_type in VECTORIZABLE_FILE_TYPES and file_ref.content:
+        if (
+            agent.has_memory
+            and conversation_id
+            and is_vectorizable_file(file_ref.file_type, file_ref.filename)
+            and file_ref.content
+        ):
             from services.conversation_service import ConversationService
             conversation = ConversationService.get_conversation(
                 db, conversation_id, user_context, agent_id

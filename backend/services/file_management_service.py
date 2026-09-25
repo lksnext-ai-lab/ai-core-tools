@@ -556,8 +556,13 @@ class FileManagementService:
                     content = f"Image file: {file.filename} (OCR processing not implemented)"
                     return content, temp_path, file_size
                 
+                elif file_type == "document" and file.filename.lower().endswith(".docx"):
+                    import docx2txt
+                    content = docx2txt.process(temp_path) or ""
+                    return content, temp_path, file_size
+
                 elif file_type == "document":
-                    # For documents, return basic info (in production, use document processing)
+                    # .doc / spreadsheets / presentations: no text extraction yet
                     content = f"Document file: {file.filename} (Document processing not implemented)"
                     return content, temp_path, file_size
                 
@@ -1083,6 +1088,9 @@ class FileManagementService:
                             conversation_id=conversation_id,
                             has_memory=has_memory,
                         )
+                        # Tells agent execution to send the full content this
+                        # turn — the file was never indexed by an attach step.
+                        file_ref.uploaded_this_turn = True
                         all_refs.append(file_ref)
                         uploaded_ids.add(file_ref.file_id)
                     except Exception as exc:

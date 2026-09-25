@@ -38,6 +38,10 @@ logger = get_logger(__name__)
 
 _IMAGE_FILE_TYPES = {"image"}
 _AGENT_NOT_FOUND = "Agent not found"
+_CONTENT_IN_RAG_NOTE = (
+    "[Content indexed in this conversation's knowledge base; "
+    "relevant passages are retrieved automatically.]"
+)
 _WORKSPACE_INPUT_DIR = "input"
 _WORKSPACE_WORK_DIR = "work"
 _WORKSPACE_OUTPUT_DIR = "output"
@@ -875,6 +879,9 @@ class AgentExecutionService:
                     "type": file_ref.file_type,
                     "file_id": file_ref.file_id,
                     "file_path": file_ref.file_path,
+                    "uploaded_this_turn": bool(
+                        getattr(file_ref, "uploaded_this_turn", False)
+                    ),
                 })
 
         # 6. Resolve the conversation for any client-supplied conversation_id,
@@ -945,16 +952,11 @@ class AgentExecutionService:
             raise HTTPException(status_code=404, detail="Agent not found in database")
 
         # 8. Build enhanced message + separate image files.
-        # Vectorizable files (pdf, text) are excluded from the message context —
-        # every upload path vectorizes them into the session's temp playground
-        # silo at upload time (a silo is always created), so they are retrieved
-        # via RAG instead of being pasted into the prompt.
-        from services.playground_media_service import VECTORIZABLE_FILE_TYPES
-        non_vectorized_files = [
-            f for f in processed_files
-            if f.get("type") not in VECTORIZABLE_FILE_TYPES
-        ]
-        enhanced_message, image_files = self._prepare_message_with_files(message, non_vectorized_files)
+        await self._index_turn_uploads(fresh_agent, conversation, processed_files, db)
+        message_files = self._select_message_files(
+            fresh_agent, conversation, processed_files, db
+        )
+        enhanced_message, image_files = self._prepare_message_with_files(message, message_files)
 
         session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
         effective_conv_id = conversation_id or (
@@ -1937,6 +1939,103 @@ class AgentExecutionService:
             logger.error(f"Error processing PDF with OCR: {str(e)}")
             raise
     
+    async def _index_turn_uploads(
+        self,
+        agent: Agent,
+        conversation: Any,
+        processed_files: List[Dict],
+        db: Optional[Session],
+    ) -> None:
+        """Vectorize documents uploaded with this request into the conversation's temp silo.
+
+        Public API calls upload and chat in one request, so nothing indexed the
+        file beforehand. Only memory-enabled agents keep a temp silo: later
+        turns retrieve the document via RAG once it falls out of the memory
+        window. Failures are logged — this turn still gets the full content.
+        """
+        if not agent.has_memory or db is None:
+            return
+        session_id = getattr(conversation, "session_id", None)
+        if not session_id:
+            return
+
+        from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
+
+        loop = asyncio.get_running_loop()
+        for file_data in processed_files:
+            if not (
+                file_data.get("uploaded_this_turn")
+                and is_vectorizable_file(file_data.get("type"), file_data.get("filename"))
+                and file_data.get("content")
+            ):
+                continue
+            try:
+                await loop.run_in_executor(
+                    self._executor,
+                    functools.partial(
+                        PlaygroundMediaService.vectorize_uploaded_file,
+                        app_id=agent.app_id,
+                        agent_id=agent.agent_id,
+                        session_id=session_id,
+                        file_id=file_data["file_id"],
+                        filename=file_data["filename"],
+                        file_path=file_data.get("file_path"),
+                        content=file_data["content"],
+                        db=db,
+                    ),
+                )
+            except Exception as e:
+                logger.warning(f"Vectorization of {file_data.get('filename')} failed: {e}")
+
+    def _select_message_files(
+        self,
+        agent: Agent,
+        conversation: Any,
+        processed_files: List[Dict],
+        db: Optional[Session],
+    ) -> List[Dict]:
+        """Decide which attached documents go into the prompt in full.
+
+        Files uploaded with this request, and every file for memory-less agents,
+        are sent in full: the agent needs the whole document now (e.g. to
+        extract every invoice line) and memory-less agents have no temp silo.
+        Documents attached in an earlier request to a memory-enabled agent are
+        already in the conversation's temp silo, so they are marked
+        ``content_in_rag`` and only announced. If the conversation has no temp
+        silo (e.g. the file was attached before the conversation existed),
+        they are sent in full as well.
+        """
+        from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
+
+        if not agent.has_memory:
+            return processed_files
+        rag_candidates = [
+            f for f in processed_files
+            if is_vectorizable_file(f.get("type"), f.get("filename"))
+            and not f.get("uploaded_this_turn")
+        ]
+        session_id = getattr(conversation, "session_id", None)
+        if not rag_candidates or not session_id or db is None:
+            return processed_files
+
+        try:
+            has_temp_silo = bool(
+                PlaygroundMediaService.get_temp_silo_ids_for_agent(
+                    agent.app_id, agent.agent_id, session_id, db
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Could not resolve temp silo for file context: {e}")
+            has_temp_silo = False
+        if not has_temp_silo:
+            return processed_files
+
+        rag_ids = {id(f) for f in rag_candidates}
+        return [
+            {**f, "content_in_rag": True} if id(f) in rag_ids else f
+            for f in processed_files
+        ]
+
     def _prepare_message_with_files(self, message: str, processed_files: List[Dict]) -> tuple:
         """
         Build enhanced message with file contents and separate image files.
@@ -1957,10 +2056,17 @@ class AgentExecutionService:
                     image_files.append(file_data)
                 else:
                     safe_name = _safe_workspace_filename(file_data["filename"])
+                    # Documents already indexed in the conversation's temp silo
+                    # are announced (name + path) but retrieved via RAG.
+                    content = (
+                        _CONTENT_IN_RAG_NOTE
+                        if file_data.get("content_in_rag")
+                        else file_data['content']
+                    )
                     text_files_msg += (
                         f"\n\n--- File: {file_data['filename']} "
                         f"(Sandbox path: input/{safe_name}) ---\n"
-                        f"{file_data['content']}\n"
+                        f"{content}\n"
                         f"--- End of {file_data['filename']} ---"
                     )
 

@@ -627,6 +627,130 @@ class TestConversationOwnershipValidation:
 
 
 # ---------------------------------------------------------------------------
+# Attached documents reach the prompt (regression: PDFs uploaded with a public
+# API /call were dropped from the message and never vectorized)
+# ---------------------------------------------------------------------------
+
+
+def _pdf_ref(file_id="f1", uploaded_this_turn=True, content="INVOICE LINE 1\nINVOICE LINE 2"):
+    ref = MagicMock()
+    ref.file_id = file_id
+    ref.filename = "factura.pdf"
+    ref.file_type = "pdf"
+    ref.content = content
+    ref.file_path = None
+    ref.uploaded_this_turn = uploaded_this_turn
+    return ref
+
+
+class TestAttachedDocumentsInPrompt:
+    async def _prepare(self, agent, tmp_path, file_refs, conversation=None, temp_silo_ids=()):
+        svc, _ = make_service(agent=agent)
+        svc._executor = None  # default loop executor
+        with (
+            patch(
+                "services.conversation_service.ConversationService.create_conversation",
+                return_value=conversation,
+            ),
+            patch(
+                "services.conversation_service.ConversationService.get_conversation",
+                return_value=conversation,
+            ),
+            patch(
+                "services.agent_execution_service.get_app_config",
+                return_value={"TMP_BASE_FOLDER": str(tmp_path)},
+            ),
+            patch(
+                "services.playground_media_service.PlaygroundMediaService.vectorize_uploaded_file",
+                return_value=True,
+            ) as mock_vectorize,
+            patch(
+                "services.playground_media_service.PlaygroundMediaService.get_temp_silo_ids_for_agent",
+                return_value=list(temp_silo_ids),
+            ),
+        ):
+            ctx = await svc._prepare_turn(
+                agent_id=1,
+                message="extrae la factura",
+                file_references=file_refs,
+                user_context={"user_id": 5, "app_id": 1},
+                conversation_id=conversation.conversation_id if conversation else None,
+                db=MagicMock(),
+            )
+        return ctx, mock_vectorize
+
+    @staticmethod
+    def _conversation():
+        conv = MagicMock()
+        conv.conversation_id = 7
+        conv.session_id = "conv_1_abc"
+        return conv
+
+    @pytest.mark.asyncio
+    async def test_memoryless_agent_gets_pdf_content_without_indexing(self, tmp_path):
+        agent = make_agent(has_memory=False)
+        ctx, mock_vectorize = await self._prepare(agent, tmp_path, [_pdf_ref()])
+
+        assert "INVOICE LINE 2" in ctx.enhanced_message
+        assert "Sandbox path: input/factura.pdf" in ctx.enhanced_message
+        mock_vectorize.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_memoryless_agent_gets_previously_attached_pdf_content(self, tmp_path):
+        agent = make_agent(has_memory=False)
+        ctx, _ = await self._prepare(agent, tmp_path, [_pdf_ref(uploaded_this_turn=False)])
+
+        assert "INVOICE LINE 2" in ctx.enhanced_message
+
+    @pytest.mark.asyncio
+    async def test_memory_agent_gets_new_pdf_content_and_indexes_it(self, tmp_path):
+        agent = make_agent(has_memory=True)
+        conv = self._conversation()
+        ctx, mock_vectorize = await self._prepare(agent, tmp_path, [_pdf_ref()], conversation=conv)
+
+        assert "INVOICE LINE 2" in ctx.enhanced_message
+        mock_vectorize.assert_called_once()
+        assert mock_vectorize.call_args.kwargs["session_id"] == "conv_1_abc"
+        assert mock_vectorize.call_args.kwargs["file_id"] == "f1"
+
+    @pytest.mark.asyncio
+    async def test_memory_agent_gets_new_docx_content_and_indexes_it(self, tmp_path):
+        agent = make_agent(has_memory=True)
+        docx_ref = _pdf_ref(content="Resumen trimestral")
+        docx_ref.filename = "informe.docx"
+        docx_ref.file_type = "document"
+        ctx, mock_vectorize = await self._prepare(
+            agent, tmp_path, [docx_ref], conversation=self._conversation()
+        )
+
+        assert "Resumen trimestral" in ctx.enhanced_message
+        mock_vectorize.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_memory_agent_retrieves_previously_indexed_pdf_via_rag(self, tmp_path):
+        agent = make_agent(has_memory=True)
+        conv = self._conversation()
+        ctx, mock_vectorize = await self._prepare(
+            agent, tmp_path, [_pdf_ref(uploaded_this_turn=False)],
+            conversation=conv, temp_silo_ids=[99],
+        )
+
+        assert "INVOICE LINE 2" not in ctx.enhanced_message
+        assert "Sandbox path: input/factura.pdf" in ctx.enhanced_message
+        mock_vectorize.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_memory_agent_without_temp_silo_falls_back_to_full_content(self, tmp_path):
+        agent = make_agent(has_memory=True)
+        conv = self._conversation()
+        ctx, _ = await self._prepare(
+            agent, tmp_path, [_pdf_ref(uploaded_this_turn=False)], conversation=conv,
+        )
+
+        assert "INVOICE LINE 2" in ctx.enhanced_message
+
+
+# ---------------------------------------------------------------------------
 # reset_agent_conversation — sandbox destroy must not precede ownership check
 # ---------------------------------------------------------------------------
 
