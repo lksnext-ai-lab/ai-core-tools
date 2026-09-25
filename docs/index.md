@@ -51,7 +51,7 @@
 - [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent
 - [Skills](guides/skills.md) — Skill packages (SKILL.md frontmatter contract), zip import/export, system skills, sandbox activation, the opt-in skill router, and Claude Code plugin import
 - [Git Workflow & Release Process](guides/git-workflow.md) — GitFlow branching model, release workflow, hotfix process, versioning convention, and commit rules
-- [SharePoint Sync](guides/sharepoint-sync.md) — Index SharePoint and OneDrive drives into silos via Microsoft Graph delta queries; Azure setup, sync behaviour, and EE plugin install/uninstall
+- [SharePoint Sync](guides/sharepoint-sync.md) — Index SharePoint and OneDrive drives into silos via Microsoft Graph delta queries; Azure setup and sync behaviour
 - [User Deletion and App Ownership Transfer](guides/user-deletion-and-app-transfer.md) — Safe user deletion (deletion taxonomy, cascade and transfer modes), admin-direct and voluntary app ownership transfer, migration `userdel001`, and operator runbook
 
 ### Copilot Agents & Tooling

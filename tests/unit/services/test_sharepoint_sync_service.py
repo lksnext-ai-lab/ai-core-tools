@@ -7,10 +7,9 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
-pytest.importorskip("mattin_sharepoint", reason="mattin-sharepoint plugin not installed")
 
-from mattin_sharepoint.graph_client import GraphAuthError, GraphDeltaExpiredError
-from mattin_sharepoint.schemas import SharePointSourceCreateRequest
+from services.sharepoint.graph_client import GraphAuthError, GraphDeltaExpiredError
+from schemas.sharepoint_schemas import SharePointSourceCreateRequest
 from models.enums.sharepoint_sync_status import SharePointSyncStatus
 from models.enums.sharepoint_file_status import SharePointFileStatus
 
@@ -57,9 +56,9 @@ def _make_file_item(item_id: str, name: str) -> dict:
 class TestSharePointSourceService:
     @pytest.mark.asyncio
     async def test_test_connection_happy_path(self):
-        from mattin_sharepoint.service import SharePointSourceService
+        from services.sharepoint.service import SharePointSourceService
 
-        with patch("mattin_sharepoint.service.GraphClient") as mock_gc:
+        with patch("services.sharepoint.service.GraphClient") as mock_gc:
             mock_gc.get_token = AsyncMock(return_value="tok")
             mock_gc.verify_drive_access = AsyncMock(return_value={"id": "drive-1"})
 
@@ -73,9 +72,9 @@ class TestSharePointSourceService:
 
     @pytest.mark.asyncio
     async def test_test_connection_auth_failure_raises_graph_auth_error(self):
-        from mattin_sharepoint.service import SharePointSourceService
+        from services.sharepoint.service import SharePointSourceService
 
-        with patch("mattin_sharepoint.service.GraphClient") as mock_gc:
+        with patch("services.sharepoint.service.GraphClient") as mock_gc:
             mock_gc.get_token = AsyncMock(side_effect=GraphAuthError("bad creds"))
 
             with pytest.raises(GraphAuthError):
@@ -85,9 +84,9 @@ class TestSharePointSourceService:
 
     @pytest.mark.asyncio
     async def test_test_connection_no_drive_skips_verify(self):
-        from mattin_sharepoint.service import SharePointSourceService
+        from services.sharepoint.service import SharePointSourceService
 
-        with patch("mattin_sharepoint.service.GraphClient") as mock_gc:
+        with patch("services.sharepoint.service.GraphClient") as mock_gc:
             mock_gc.get_token = AsyncMock(return_value="tok")
             mock_gc.verify_drive_access = AsyncMock()
 
@@ -113,11 +112,11 @@ class TestSharePointSyncService:
     ):
         """Return a context-manager stack of patches for the sync service dependencies."""
         patches = {
-            "db": patch("mattin_sharepoint.service.SessionLocal"),
-            "graph": patch("mattin_sharepoint.service.GraphClient"),
-            "src_repo": patch("mattin_sharepoint.service.SharePointSourceRepository"),
-            "file_repo": patch("mattin_sharepoint.service.SharePointFileRepository"),
-            "silo_svc": patch("mattin_sharepoint.service.SiloService", create=True),
+            "db": patch("services.sharepoint.service.SessionLocal"),
+            "graph": patch("services.sharepoint.service.GraphClient"),
+            "src_repo": patch("services.sharepoint.service.SharePointSourceRepository"),
+            "file_repo": patch("services.sharepoint.service.SharePointFileRepository"),
+            "silo_svc": patch("services.sharepoint.service.SiloService", create=True),
         }
         return patches
 
@@ -132,9 +131,9 @@ class TestSharePointSyncService:
 
         with (
             patch("db.database.SessionLocal") as mock_sl,
-            patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-            patch("mattin_sharepoint.service.SharePointSourceRepository") as mock_src_repo,
-            patch("mattin_sharepoint.service.SharePointFileRepository") as mock_file_repo,
+            patch("services.sharepoint.service.GraphClient") as mock_gc,
+            patch("services.sharepoint.service.SharePointSourceRepository") as mock_src_repo,
+            patch("services.sharepoint.service.SharePointFileRepository") as mock_file_repo,
             patch("services.silo_service.SiloService") as mock_silo_svc,
         ):
             # DB session
@@ -160,7 +159,7 @@ class TestSharePointSyncService:
             mock_file_repo.get_by_drive_item = MagicMock(return_value=None)
             mock_file_repo.upsert_by_drive_item = MagicMock()
 
-            from mattin_sharepoint.service import SharePointSyncService
+            from services.sharepoint.service import SharePointSyncService
             await SharePointSyncService.run_sync(source.id)
 
         # Both files should have been upserted
@@ -179,9 +178,9 @@ class TestSharePointSyncService:
 
         with (
             patch("db.database.SessionLocal") as mock_sl,
-            patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-            patch("mattin_sharepoint.service.SharePointSourceRepository") as mock_src_repo,
-            patch("mattin_sharepoint.service.SharePointFileRepository"),
+            patch("services.sharepoint.service.GraphClient") as mock_gc,
+            patch("services.sharepoint.service.SharePointSourceRepository") as mock_src_repo,
+            patch("services.sharepoint.service.SharePointFileRepository"),
             patch("services.silo_service.SiloService"),
         ):
             mock_db = MagicMock()
@@ -191,7 +190,7 @@ class TestSharePointSyncService:
             mock_gc.get_token = AsyncMock(return_value="tok")
             mock_gc.delta_query = AsyncMock(return_value=([], "new-delta"))
 
-            from mattin_sharepoint.service import SharePointSyncService
+            from services.sharepoint.service import SharePointSyncService
             await SharePointSyncService.run_sync(source.id)
 
         mock_gc.delta_query.assert_awaited_once_with("tok", source.drive_id, existing_token)
@@ -207,9 +206,9 @@ class TestSharePointSyncService:
 
         with (
             patch("db.database.SessionLocal") as mock_sl,
-            patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-            patch("mattin_sharepoint.service.SharePointSourceRepository") as mock_src_repo,
-            patch("mattin_sharepoint.service.SharePointFileRepository") as mock_file_repo,
+            patch("services.sharepoint.service.GraphClient") as mock_gc,
+            patch("services.sharepoint.service.SharePointSourceRepository") as mock_src_repo,
+            patch("services.sharepoint.service.SharePointFileRepository") as mock_file_repo,
             patch("services.silo_service.SiloService"),
         ):
             mock_sl.return_value = MagicMock()
@@ -220,7 +219,7 @@ class TestSharePointSyncService:
             mock_file_repo.get_by_drive_item = MagicMock(return_value=existing_file)
             mock_file_repo.delete_file = MagicMock()
 
-            from mattin_sharepoint.service import SharePointSyncService
+            from services.sharepoint.service import SharePointSyncService
             await SharePointSyncService.run_sync(source.id)
 
         mock_file_repo.delete_file.assert_called_once_with(existing_file.id, mock_sl.return_value)
@@ -233,9 +232,9 @@ class TestSharePointSyncService:
 
         with (
             patch("db.database.SessionLocal") as mock_sl,
-            patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-            patch("mattin_sharepoint.service.SharePointSourceRepository") as mock_src_repo,
-            patch("mattin_sharepoint.service.SharePointFileRepository") as mock_file_repo,
+            patch("services.sharepoint.service.GraphClient") as mock_gc,
+            patch("services.sharepoint.service.SharePointSourceRepository") as mock_src_repo,
+            patch("services.sharepoint.service.SharePointFileRepository") as mock_file_repo,
             patch("services.silo_service.SiloService"),
         ):
             mock_db = MagicMock()
@@ -247,7 +246,7 @@ class TestSharePointSyncService:
             mock_gc.download_file = AsyncMock(side_effect=Exception("network error"))
             mock_file_repo.upsert_by_drive_item = MagicMock()
 
-            from mattin_sharepoint.service import SharePointSyncService
+            from services.sharepoint.service import SharePointSyncService
             await SharePointSyncService.run_sync(source.id)
 
         # Last update should be PARTIAL
@@ -274,9 +273,9 @@ class TestSharePointSyncService:
 
         with (
             patch("db.database.SessionLocal") as mock_sl,
-            patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-            patch("mattin_sharepoint.service.SharePointSourceRepository") as mock_src_repo,
-            patch("mattin_sharepoint.service.SharePointFileRepository"),
+            patch("services.sharepoint.service.GraphClient") as mock_gc,
+            patch("services.sharepoint.service.SharePointSourceRepository") as mock_src_repo,
+            patch("services.sharepoint.service.SharePointFileRepository"),
             patch("services.silo_service.SiloService"),
         ):
             mock_sl.return_value = MagicMock()
@@ -285,7 +284,7 @@ class TestSharePointSyncService:
             mock_gc.get_token = AsyncMock(return_value="tok")
             mock_gc.delta_query = fake_delta_query
 
-            from mattin_sharepoint.service import SharePointSyncService
+            from services.sharepoint.service import SharePointSyncService
             await SharePointSyncService.run_sync(source.id)
 
         # delta_query must have been called twice: first with stored token, then with None
@@ -303,9 +302,9 @@ class TestSharePointSyncService:
 
         with (
             patch("db.database.SessionLocal") as mock_sl,
-            patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-            patch("mattin_sharepoint.service.SharePointSourceRepository") as mock_src_repo,
-            patch("mattin_sharepoint.service.SharePointFileRepository") as mock_file_repo,
+            patch("services.sharepoint.service.GraphClient") as mock_gc,
+            patch("services.sharepoint.service.SharePointSourceRepository") as mock_src_repo,
+            patch("services.sharepoint.service.SharePointFileRepository") as mock_file_repo,
             patch("services.silo_service.SiloService"),
         ):
             mock_sl.return_value = MagicMock()
@@ -317,7 +316,7 @@ class TestSharePointSyncService:
             mock_file_repo.get_files_with_extension_not_in = MagicMock(return_value=[stale_file])
             mock_file_repo.delete_file = MagicMock()
 
-            from mattin_sharepoint.service import SharePointSyncService
+            from services.sharepoint.service import SharePointSyncService
             await SharePointSyncService.run_sync(source.id)
 
         mock_file_repo.get_files_with_extension_not_in.assert_called_once_with(

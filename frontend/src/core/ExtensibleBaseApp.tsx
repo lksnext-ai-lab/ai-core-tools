@@ -62,7 +62,6 @@ import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage'
 import SystemSkillsPage from '../pages/admin/SystemSkillsPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
-import { CapabilitiesProvider } from '../contexts/CapabilitiesContext';
 import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
 import PlatformChatbotWidget from '../components/platform-chatbot/PlatformChatbotWidget';
 import MCPServersPage from '../pages/MCPServersPage';
@@ -75,7 +74,6 @@ import MarketplaceHomePage from '../pages/MarketplaceHomePage';
 import SharePointSourcesPage from '../pages/SharePointSourcesPage';
 import SharePointWizardPage from '../pages/SharePointWizardPage';
 import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
-import EnterpriseFeaturePage from '../pages/EnterpriseFeaturePage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -148,7 +146,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         <UserProvider>
           <SettingsCacheProvider>
             <DeploymentModeProvider>
-            <CapabilitiesProvider>
             <PlatformChatbotProvider>
             <Router>
               <ScrollToTop />
@@ -287,12 +284,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/domains/:domainId/detail" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <DomainDetailPage />
-                  </EditorLayoutRoute>
-                } />
-
-                <Route path="/apps/:appId/enterprise" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
-                      <EnterpriseFeaturePage />
                   </EditorLayoutRoute>
                 } />
 
@@ -493,7 +484,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
               </ConfirmProvider>
             </Router>
             </PlatformChatbotProvider>
-            </CapabilitiesProvider>
             </DeploymentModeProvider>
           </SettingsCacheProvider>
         </UserProvider>

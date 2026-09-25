@@ -1,6 +1,6 @@
 # SharePoint Sync
 
-> Part of [Mattin AI Documentation](../README.md) · Enterprise Edition module
+> Part of [Mattin AI Documentation](../README.md)
 
 SharePoint Sync lets you index content from Microsoft SharePoint and OneDrive drives directly into a Mattin AI silo, keeping it up to date via Microsoft Graph API **delta queries** (incremental sync — only changed files are re-processed after the first run).
 
@@ -16,7 +16,6 @@ SharePoint Sync lets you index content from Microsoft SharePoint and OneDrive dr
 - [Supported File Types](#supported-file-types)
 - [Chunk Metadata](#chunk-metadata)
 - [API Endpoints](#api-endpoints)
-- [Plugin Installation](#plugin-installation)
 - [Architecture](#architecture)
 
 ---
@@ -24,7 +23,6 @@ SharePoint Sync lets you index content from Microsoft SharePoint and OneDrive dr
 ## Prerequisites
 
 - A Microsoft Azure tenant with an **App Registration** (service principal) that has the `Files.Read.All` Microsoft Graph application permission (see below).
-- The `mattin-sharepoint` backend plugin installed (Enterprise Edition — see [Plugin Installation](#plugin-installation)).
 
 ---
 
@@ -158,114 +156,13 @@ All endpoints require session or OIDC authentication and are scoped to an app.
 | `GET` | `/internal/apps/{app_id}/sharepoint-sources` | List sources |
 | `POST` | `/internal/apps/{app_id}/sharepoint-sources` | Create source (validates credentials) |
 | `GET` | `/internal/apps/{app_id}/sharepoint-sources/{id}` | Get source detail with file list |
-| `PATCH` | `/internal/apps/{app_id}/sharepoint-sources/{id}` | Update source |
+| `PUT` | `/internal/apps/{app_id}/sharepoint-sources/{id}` | Update source |
 | `DELETE` | `/internal/apps/{app_id}/sharepoint-sources/{id}` | Delete source and its silo |
 | `POST` | `/internal/apps/{app_id}/sharepoint-sources/{id}/sync` | Trigger manual sync |
+| `GET` | `/internal/microsoft/sites` | Search SharePoint sites by keyword |
 | `GET` | `/internal/microsoft/resolve-site` | Resolve a SharePoint site by URL |
 | `GET` | `/internal/microsoft/drives` | List drives for a resolved site |
 | `POST` | `/internal/microsoft/test-connection` | Test Azure credentials |
-
----
-
-## Plugin Installation
-
-The SharePoint connector is an **Enterprise Edition** module. It ships as a separate Python package (`mattin-sharepoint`) that lives in the private `mattin-ai-plugins` repository, side-by-side with `ai-core-tools`:
-
-```
-LKS/IA-Core-Tools/
-├── ai-core-tools/        ← this repo
-└── mattin-ai-plugins/    ← private EE plugins repo (clone separately)
-```
-
-If you do not have access to `mattin-ai-plugins`, simply skip these steps — the backend runs fine without the plugin. The capabilities endpoint will omit `sharepoint` and the sidebar will show **SharePoint [EE]**.
-
----
-
-### First-time setup
-
-**Step 1 — Clone the plugins repo** (side-by-side, same parent directory):
-
-```bash
-git clone <mattin-ai-plugins-url> ../mattin-ai-plugins
-```
-
-**Step 2 — Install via Poetry:**
-
-```bash
-# From the ai-core-tools root
-poetry install --with sharepoint
-```
-
-**Step 3 — Switch to editable (in-place) install:**
-
-```bash
-poetry run pip install -e ../mattin-ai-plugins/
-```
-
-> `poetry install --with sharepoint` copies the plugin into `.venv/site-packages/`. Step 3 replaces that static copy with a direct link to the source tree. **Without step 3, code changes in `mattin-ai-plugins/` are invisible to the backend.**
-
-**Step 4 — Verify:**
-
-```bash
-# Should print the path inside mattin-ai-plugins/, not site-packages/
-poetry run python -c "import mattin_sharepoint; print(mattin_sharepoint.__file__)"
-# ✓ .../mattin-ai-plugins/mattin_sharepoint/__init__.py   ← editable (correct)
-# ✗ .../site-packages/mattin_sharepoint/__init__.py        ← static copy (redo step 3)
-
-# Capability visible in API
-curl http://localhost:8000/internal/capabilities
-# → {"sharepoint": true, ...}
-```
-
-In the frontend sidebar the entry shows as **SharePoint** (without a badge).
-
----
-
-### Development workflow
-
-Once the editable install is active:
-
-- **Editing plugin source** (`mattin-ai-plugins/mattin_sharepoint/*.py`) — changes take effect on the **next backend restart**. No reinstall needed.
-- **After `poetry install`** (e.g. pulling new dependencies) — Poetry re-copies the static version, overwriting the editable link. Re-run step 3:
-  ```bash
-  poetry run pip install -e ../mattin-ai-plugins/
-  ```
-- **After `git pull` in `mattin-ai-plugins/`** — no action needed; the editable install already points to the live source.
-
----
-
-### Uninstall
-
-```bash
-poetry remove mattin-sharepoint --group sharepoint
-```
-
-Restart the backend. The plugin is no longer loaded — the capabilities endpoint no longer includes `sharepoint`, and the sidebar entry changes to **SharePoint [EE]** which redirects users to the Enterprise Edition info page.
-
-### Reinstall after removal
-
-```bash
-poetry install --with sharepoint
-poetry run pip install -e ../mattin-ai-plugins/
-```
-
----
-
-### Client / production install
-
-For clients who have purchased the EE plugin, swap the dependency in `pyproject.toml` from the local path to the private Git URL before deploying:
-
-```toml
-[tool.poetry.group.sharepoint.dependencies]
-# mattin-sharepoint = {path = "../mattin-ai-plugins", develop = true}  # local dev
-mattin-sharepoint = {git = "https://github.com/lks/mattin-ai-plugins.git"}  # production
-```
-
-The client provides a read-only **deploy key** or **fine-grained PAT** scoped to `mattin-ai-plugins`. Once authentication is configured, the install is the same single command — no editable install step needed:
-
-```bash
-poetry install --with sharepoint
-```
 
 ---
 
@@ -274,34 +171,20 @@ poetry install --with sharepoint
 ### Backend
 
 ```
-mattin-ai-plugins/          # side-by-side with ai-core-tools (separate private repo)
-└── mattin_sharepoint/
-    ├── plugin.py          # Entry point: register(app, registry) — mounts router, starts worker
-    ├── graph_client.py    # Microsoft Graph API client (token, delta, download, site resolution)
-    ├── service.py         # SharePointSourceService (CRUD) + SharePointSyncService (delta sync loop)
-    ├── router.py          # FastAPI router mounted at /internal/apps/{app_id}/sharepoint-sources
-    ├── repository.py      # Data access for SharePointSource and SharePointFile
-    ├── schemas.py         # Pydantic request/response models
-    └── worker.py          # asyncio.Queue-based background sync worker
+backend/
+├── routers/internal/sharepoint.py      # Sources CRUD + sync trigger + Microsoft Graph helpers (/internal/...)
+├── schemas/sharepoint_schemas.py       # Pydantic request/response models
+├── services/sharepoint/
+│   ├── graph_client.py                 # Microsoft Graph API client (token, delta, download, site resolution)
+│   ├── service.py                      # SharePointSourceService (CRUD) + SharePointSyncService (delta sync loop)
+│   └── worker.py                       # asyncio.Queue-based background sync worker
+├── repositories/sharepoint_source_repository.py
+├── repositories/sharepoint_file_repository.py
+└── models/sharepoint_source.py, models/sharepoint_file.py
 ```
 
-**Plugin discovery** uses Python entry points (`importlib.metadata`). The `pyproject.toml` inside `mattin-ai-plugins/` declares:
-
-```toml
-[project.entry-points."mattin.plugins"]
-sharepoint = "mattin_sharepoint.plugin:register"
-```
-
-`backend/main.py` iterates `importlib.metadata.entry_points(group="mattin.plugins")` at startup and calls each `register(app, registry)` function — zero core changes needed to add a new plugin.
-
-**Database models** (`SharePointSource`, `SharePointFile`) live in the core `backend/models/` directory and are always migrated, regardless of whether the plugin is installed. This means the schema is stable across installs/uninstalls.
+The router is mounted inside the internal router, so it gets the same CSRF check and viewer write block as every other internal endpoint. The sync worker starts and stops with the other background workers in the `backend/main.py` lifespan.
 
 ### Frontend
 
-The SharePoint EE pattern is built into the base navigation system:
-
-- `NavigationItem.enterpriseFeature` — capability key to check against `GET /internal/capabilities`
-- When the capability is absent, the sidebar renders the item with an `[EE]` suffix and links to `/apps/:appId/enterprise?feature=<name>`
-- `EnterpriseFeaturePage` is a generic contact/upgrade page — reusable for any future EE module
-
-To add a new Enterprise Edition feature, set `enterpriseFeature: 'your-key'` on its navigation item in `defaultNavigation.tsx`. No other frontend changes are needed.
+`SharePointSourcesPage`, `SharePointWizardPage` and `SharePointSourceDetailPage` are regular app pages, reachable from the **SharePoint** entry in the app sidebar. API calls go through `frontend/src/services/sharepoint.ts`.

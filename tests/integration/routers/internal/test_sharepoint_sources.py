@@ -8,7 +8,6 @@ Endpoints under test:
   PUT    /internal/apps/{app_id}/sharepoint-sources/{source_id}
   DELETE /internal/apps/{app_id}/sharepoint-sources/{source_id}
   POST   /internal/apps/{app_id}/sharepoint-sources/{source_id}/sync
-  GET    /internal/capabilities
 
 All Microsoft Graph calls are mocked — no real credentials needed.
 """
@@ -18,7 +17,6 @@ import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 
-pytest.importorskip("mattin_sharepoint", reason="mattin-sharepoint plugin not installed")
 
 from models.sharepoint_source import SharePointSource
 from models.sharepoint_file import SharePointFile
@@ -114,8 +112,8 @@ def fake_sp_file(db, fake_sp_source):
 def mock_graph_client():
     """Patch GraphClient to avoid real Microsoft API calls."""
     with (
-        patch("mattin_sharepoint.service.GraphClient") as mock_gc,
-        patch("mattin_sharepoint.graph_client.GraphClient") as _mock_gc2,
+        patch("services.sharepoint.service.GraphClient") as mock_gc,
+        patch("services.sharepoint.graph_client.GraphClient") as _mock_gc2,
     ):
         mock_gc.get_token = AsyncMock(return_value="fake-token")
         mock_gc.verify_drive_access = AsyncMock(return_value={"id": "test-drive"})
@@ -264,8 +262,8 @@ class TestSharePointSourcesCRUD:
         self, client, fake_app, owner_headers, db
     ):
         """POST with credentials that fail test-connection returns 400."""
-        from mattin_sharepoint.graph_client import GraphAuthError
-        with patch("mattin_sharepoint.service.GraphClient") as mock_gc:
+        from services.sharepoint.graph_client import GraphAuthError
+        with patch("services.sharepoint.service.GraphClient") as mock_gc:
             mock_gc.get_token = AsyncMock(side_effect=GraphAuthError("invalid creds"))
             db.flush()
             payload = _make_create_payload(client_secret="bad-secret")
@@ -293,8 +291,8 @@ class TestSharePointSourcesCRUD:
         self, client, fake_app, fake_sp_source, owner_headers, db
     ):
         """PUT with invalid new credentials returns 400, source name unchanged."""
-        from mattin_sharepoint.graph_client import GraphAuthError
-        with patch("mattin_sharepoint.service.GraphClient") as mock_gc:
+        from services.sharepoint.graph_client import GraphAuthError
+        with patch("services.sharepoint.service.GraphClient") as mock_gc:
             mock_gc.get_token = AsyncMock(side_effect=GraphAuthError("bad creds"))
             db.flush()
             resp = client.put(
@@ -408,7 +406,7 @@ class TestSharePointSyncEndpoint:
         self, client, fake_app, fake_sp_source, owner_headers, db
     ):
         """POST /sync enqueues the job and returns 202."""
-        with patch("mattin_sharepoint.router.enqueue_sync", new_callable=AsyncMock):
+        with patch("routers.internal.sharepoint.enqueue_sync", new_callable=AsyncMock):
             db.flush()
             resp = client.post(
                 f"/internal/apps/{fake_app.app_id}/sharepoint-sources/{fake_sp_source.id}/sync",
@@ -442,49 +440,6 @@ class TestSharePointSyncEndpoint:
             headers=owner_headers,
         )
         assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# TestCapabilitiesEndpoint
-# ---------------------------------------------------------------------------
-
-class TestCapabilitiesEndpoint:
-    """Tests for /internal/capabilities."""
-
-    def test_capabilities_unauthenticated_returns_401(self, client, db):
-        """GET /internal/capabilities without auth returns 401."""
-        db.flush()
-        resp = client.get("/internal/capabilities")
-        assert resp.status_code == 401
-
-    def test_capabilities_authenticated_returns_dict(
-        self, client, fake_user, auth_headers, db
-    ):
-        """GET /internal/capabilities with auth returns a dict (may be empty or have sharepoint)."""
-        db.flush()
-        resp = client.get(
-            "/internal/capabilities",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), dict)
-
-    def test_capabilities_with_plugin_registered(
-        self, client, fake_user, auth_headers, db
-    ):
-        """After registering sharepoint in the plugin registry, capabilities includes it."""
-        from plugins.registry import plugin_registry
-        plugin_registry.register("sharepoint", {"enabled": True, "version": "test"})
-
-        db.flush()
-        resp = client.get(
-            "/internal/capabilities",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "sharepoint" in data
-        assert data["sharepoint"]["enabled"] is True
 
 
 # ---------------------------------------------------------------------------

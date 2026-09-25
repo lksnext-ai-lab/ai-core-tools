@@ -97,8 +97,7 @@ export const defaultNavigation: NavigationConfig = {
           path: '/apps/:appId/sharepoint',
           name: 'SharePoint',
           icon: <Cloud size={16} />,
-          section: 'appNavigation',
-          enterpriseFeature: 'sharepoint'
+          section: 'appNavigation'
         },
       ]
     },
