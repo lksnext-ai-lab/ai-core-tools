@@ -1513,13 +1513,11 @@ class IACTOCRTool(BaseTool):
                         user_context=self.user_context,
                     )
 
+                    # execute_agent_ocr(for_api=True) already unwraps the
+                    # OCR result to its "content" (the output-parser dict).
                     results.append({
                         "file": filename,
-                        "content": (
-                            ocr_result.get("content")
-                            if isinstance(ocr_result, dict)
-                            else ocr_result
-                        )
+                        "content": ocr_result,
                     })
 
                 except Exception as exc:

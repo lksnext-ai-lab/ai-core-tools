@@ -365,10 +365,16 @@ async def upload_marketplace_file(
             has_memory=bool(agent.has_memory),
         )
 
-        # Vectorize at upload time if file is vectorizable (pdf, text)
+        # Vectorize at upload time if file is vectorizable (pdf, text). Only
+        # memory-enabled agents keep a temp silo; memory-less agents get the
+        # full content in the prompt instead.
         vectorized = False
-        from services.playground_media_service import PlaygroundMediaService, VECTORIZABLE_FILE_TYPES
-        if file_ref.file_type in VECTORIZABLE_FILE_TYPES and file_ref.content:
+        from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
+        if (
+            agent.has_memory
+            and is_vectorizable_file(file_ref.file_type, file_ref.filename)
+            and file_ref.content
+        ):
             try:
                 vectorized = PlaygroundMediaService.vectorize_uploaded_file(
                     app_id=agent.app_id,
