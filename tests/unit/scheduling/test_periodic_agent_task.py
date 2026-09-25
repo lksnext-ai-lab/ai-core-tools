@@ -90,3 +90,17 @@ async def test_invoke_agent_step_is_explicitly_unavailable_without_dbos(monkeypa
     monkeypatch.setattr(module, "DBOS", None)
     with pytest.raises(RuntimeError, match="DBOS is not installed"):
         await module.invoke_agent_step(1, {})
+
+
+def test_system_database_url_prefers_dbos_database_url(monkeypatch):
+    monkeypatch.setenv("DBOS_DATABASE_URL", "postgresql://dbos@db/dbos")
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URI", "postgresql://app@db/app")
+
+    assert module._system_database_url() == "postgresql://dbos@db/dbos"
+
+
+def test_system_database_url_defaults_to_application_database(monkeypatch):
+    monkeypatch.delenv("DBOS_DATABASE_URL", raising=False)
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URI", "postgresql://app@db/app")
+
+    assert module._system_database_url() == "postgresql://app@db/app"

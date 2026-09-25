@@ -3,7 +3,7 @@
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from db.database import SessionLocal
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
@@ -137,16 +137,22 @@ class DBOSOrchestrator:
         return str(workflow_id() if callable(workflow_id) else getattr(handle, "workflow_id", handle))
 
 
+def _system_database_url() -> Optional[str]:
+    """DBOS_DATABASE_URL, or the application database (DBOS keeps its tables in the "dbos" schema)."""
+    return os.getenv("DBOS_DATABASE_URL") or os.getenv("SQLALCHEMY_DATABASE_URI")
+
+
 async def initialize_dbos() -> bool:
-    """Initialize DBOS once when a system database is configured."""
-    if DBOS is None or not os.getenv("DBOS_DATABASE_URL"):
+    """Initialize DBOS once when a system database is available."""
+    system_database_url = _system_database_url()
+    if DBOS is None or not system_database_url:
         return False
     if getattr(initialize_dbos, "started", False):
         return True
     config: DBOSConfig = {
         "name": os.getenv("DBOS_APPLICATION_NAME", "mattin-ai"),
         "application_version": os.getenv("APP_VERSION", "0.2.37"),
-        "system_database_url": os.environ["DBOS_DATABASE_URL"],
+        "system_database_url": system_database_url,
     }
     DBOS(config=config)
     DBOS.launch()
