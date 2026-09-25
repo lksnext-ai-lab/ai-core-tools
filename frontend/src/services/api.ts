@@ -40,6 +40,7 @@ import type {
   ToolAgent,
   AgentMCPUsage,
   AppSlugInfo,
+  ClaudePluginImportResult,
 } from '../core/types';
 import type {
   ImportResponse,
@@ -109,6 +110,7 @@ export interface Agent {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  skill_router_enabled?: boolean;
   status?: string;
   server_tools?: string[];
   memory_max_messages: number;
@@ -1276,6 +1278,96 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
       method: 'DELETE',
     });
+  }
+
+  async importSkill(appId: number, file: File): Promise<Skill> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/import`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importClaudePlugin(appId: number, file: File): Promise<ClaudePluginImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/import-claude-plugin`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async exportSkill(appId: number, skillId: number): Promise<Blob> {
+    const headers = this.buildAuthHeaders('GET', false);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/${skillId}/export`,
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async setSkillEnabled(appId: number, skillId: number, isEnabled: boolean): Promise<Skill> {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}/enabled`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_enabled: isEnabled }),
+    });
+  }
+
+  /**
+   * Fetch the text content of a single package file of an app-scoped skill, on demand (never
+   * bulk-fetched with the skill). A 404 means the preview is unavailable (e.g. binary file, or
+   * the file no longer resolves) — callers should treat it as "preview unavailable", not a hard
+   * failure.
+   */
+  async getSkillFileContent(appId: number, skillId: number, path: string): Promise<{ path: string; content: string; media_type?: string; truncated?: boolean }> {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
+  }
+
+  /**
+   * Fetch the text content of a single package file of a SYSTEM skill (platform admin route —
+   * no app scoping). Same response shape and 404 semantics as {@link getSkillFileContent}.
+   */
+  async getSystemSkillFileContent(skillId: number, path: string): Promise<{ path: string; content: string; media_type?: string; truncated?: boolean }> {
+    return this.request(`/internal/admin/system-skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
   }
 
   async getMCPServers(appId: number): Promise<MCPServerListItem[]> {
@@ -2844,6 +2936,105 @@ class ApiService {
   async deleteSystemAIService(serviceId: number): Promise<void> {
     return this.request(`/internal/admin/system-ai-services/${serviceId}`, {
       method: 'DELETE',
+    });
+  }
+
+  async getSystemSkills(): Promise<Skill[]> {
+    return this.request('/internal/admin/system-skills');
+  }
+
+  async getSystemSkill(skillId: number): Promise<Skill> {
+    return this.request(`/internal/admin/system-skills/${skillId}`);
+  }
+
+  async createSystemSkill(data: {
+    name: string;
+    description?: string;
+    content: string;
+    display_name?: string;
+    when_to_use?: string;
+    allowed_tools?: string[];
+    runtime?: string;
+    bootstrap_script_path?: string;
+    runtime_options?: Record<string, unknown>;
+    is_enabled?: boolean;
+  }): Promise<Skill> {
+    return this.request('/internal/admin/system-skills', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemSkill(skillId: number, data: {
+    name: string;
+    description?: string;
+    content: string;
+    display_name?: string;
+    when_to_use?: string;
+    allowed_tools?: string[];
+    runtime?: string;
+    bootstrap_script_path?: string;
+    runtime_options?: Record<string, unknown>;
+    is_enabled?: boolean;
+  }): Promise<Skill> {
+    return this.request(`/internal/admin/system-skills/${skillId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemSkill(skillId: number): Promise<void> {
+    return this.request(`/internal/admin/system-skills/${skillId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async importSystemSkill(file: File): Promise<Skill> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/admin/system-skills/import`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async exportSystemSkill(skillId: number): Promise<Blob> {
+    const headers = this.buildAuthHeaders('GET', false);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/admin/system-skills/${skillId}/export`,
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async setSystemSkillEnabled(skillId: number, isEnabled: boolean): Promise<Skill> {
+    return this.request(`/internal/admin/system-skills/${skillId}/enabled`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_enabled: isEnabled }),
     });
   }
 

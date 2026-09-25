@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import io
+import re
+import subprocess
 import tarfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from schemas.skill_package_payload import SkillPackagePayload
 from tools.sandbox.provider import SandboxExpiredError
 
 
@@ -245,6 +248,31 @@ class TestDaytonaRunCode:
         assert command.startswith("bash -lc ")
         assert sandbox.process.exec.call_args.kwargs["cwd"] == "workspace"
 
+    def test_bash_wraps_code_whose_last_line_is_a_comment(self, provider_and_sandbox, tmp_path):
+        """Round-2 MEDIUM regression test (reliability-auditor): a `code`
+        snippet whose last line is a `#` comment must not have its closing
+        subshell paren swallowed by that comment. Runs the *actual* wrapped
+        command text through a real bash to prove it parses and executes
+        instead of trusting only the pre-fix string shape."""
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.process.exec.return_value = SimpleNamespace(result="ok", exit_code=0)
+
+        provider.run_code(handle, "echo hi  # trailing comment", language="bash")
+
+        command = sandbox.process.exec.call_args.args[0]
+        assert command.startswith("bash -lc ")
+        # Execute the exact wrapped command for real (outside the mocked
+        # sandbox) to confirm bash accepts it without a syntax error. The
+        # wrapped command starts with `cd workspace`, so run it from a temp
+        # dir containing that subdirectory rather than the repo root.
+        (tmp_path / "workspace").mkdir()
+        proc = subprocess.run(
+            ["bash", "-c", command], capture_output=True, text=True, cwd=str(tmp_path)
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "hi" in proc.stdout
+
     def test_bash_extends_auto_stop_for_execution_then_resets_to_idle(
         self, provider_and_sandbox, monkeypatch, tmp_path
     ):
@@ -309,3 +337,76 @@ class TestDaytonaFileIO:
         )
 
         assert provider.list_files(handle) == ["data.csv", "report.pdf"]
+
+
+def _verified_bash_side_effect(cmd: str, **_kwargs: object) -> SimpleNamespace:
+    """Emulate a successful sandbox-side bash run for ``_run_verified_command``
+    and the bootstrap script wrapper by echoing back whichever sentinel/rc
+    marker the real command embedded (step_018 test helper — no real shell)."""
+    ok_match = re.search(r"(__SKILL_CMD_OK_\w+__)", cmd)
+    if ok_match:
+        return SimpleNamespace(result=f"{ok_match.group(1)}\n", exit_code=0)
+    rc_match = re.search(r'"(__SKILL_BOOTSTRAP_RC_\w+__)=\$rc"', cmd)
+    if rc_match:
+        return SimpleNamespace(result=f"{rc_match.group(1)}=0\n", exit_code=0)
+    return SimpleNamespace(result="", exit_code=0)
+
+
+class TestDaytonaSkillsRoot:
+    """step_018: ``skills_root`` override relocates skill materialisation
+    under Daytona's own workspace convention instead of the ABC's ``/workspace``.
+
+    Deliberately a bare ``.skills`` (not ``"workspace/.skills"``) — see the
+    docstring on ``DaytonaProvider.skills_root`` — because bash commands run
+    with ``cwd="workspace"`` already set; prefixing it again would double-nest.
+    """
+
+    def test_skills_root_is_relative_to_the_already_cwd_ed_workspace(
+        self, provider_and_sandbox, tmp_path
+    ):
+        provider, _, _ = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+
+        assert provider.skills_root(handle) == ".skills"
+
+    def test_ensure_skill_materialises_under_skills_root_via_abc_default(
+        self, provider_and_sandbox, monkeypatch, tmp_path
+    ):
+        """No provider-specific ``ensure_skill`` override exists — this exercises
+        ``SandboxProvider.ensure_skill`` (the ABC default) end to end against the
+        Daytona ``write_file``/``read_file``/``run_code`` primitives, verifying
+        files land under the workspace-relative root without double-nesting the
+        ``workspace`` segment inside bash commands that already ``cd``'d there."""
+        provider, _, sandbox = provider_and_sandbox
+        monkeypatch.setattr("config.SANDBOX_IDLE_TIMEOUT_S", 120, raising=False)
+        monkeypatch.delenv("DAYTONA_AUTO_STOP_INTERVAL", raising=False)
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.fs.download_file.side_effect = FileNotFoundError("no marker yet")
+        sandbox.process.exec.side_effect = _verified_bash_side_effect
+
+        payload = SkillPackagePayload(
+            skill_id=1,
+            name="myskill",
+            files=(("SKILL.md", b"# My Skill\n"),),
+        )
+
+        result = provider.ensure_skill(handle, payload)
+
+        assert result.status == "active"
+        assert result.files_dir == ".skills/myskill"
+        upload_calls = [call.args for call in sandbox.fs.upload_file.call_args_list]
+        assert any(path == "workspace/.skills/myskill.tar.gz" for _content, path in upload_calls)
+        assert any(path == "workspace/.skills/.markers/myskill.json" for _content, path in upload_calls)
+        # The extraction command must be relative to the already-cwd'd
+        # workspace shell ("bash -lc ... .skills/myskill ..."), never
+        # double-nested as "workspace/.skills/myskill".
+        extraction_calls = [
+            call.args[0] for call in sandbox.process.exec.call_args_list if "tar -xzf" in call.args[0]
+        ]
+        assert extraction_calls
+        assert all(".skills/myskill" in cmd for cmd in extraction_calls)
+        assert all("workspace/.skills/myskill" not in cmd for cmd in extraction_calls)
+        extraction_exec_calls = [
+            call for call in sandbox.process.exec.call_args_list if "tar -xzf" in call.args[0]
+        ]
+        assert all(call.kwargs.get("cwd") == "workspace" for call in extraction_exec_calls)

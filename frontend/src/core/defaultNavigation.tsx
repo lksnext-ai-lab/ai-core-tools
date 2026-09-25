@@ -23,6 +23,7 @@ import {
   Cpu,
   Box,
   CalendarClock,
+  Target,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -227,6 +228,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/admin/system-sandbox-services',
       name: 'System Sandbox Services',
       icon: <Box size={16} />,
+      section: 'admin',
+      adminOnly: true,
+    },
+    {
+      path: '/admin/system-skills',
+      name: 'System Skills',
+      icon: <Target size={16} />,
       section: 'admin',
       adminOnly: true,
     },

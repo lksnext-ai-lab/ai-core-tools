@@ -118,7 +118,8 @@ docker compose down -v           # Parar y borrar volúmenes
 | **OCRAgent** | Agent subclass (STI via `type` column). Dual-LLM: vision model for scanned pages + text model for structuring output. |
 | **AIService** | LLM provider config (OpenAI, Anthropic, MistralAI, Azure, Google, Custom). |
 | **EmbeddingService** | Embedding model config for vector stores. Providers: OpenAI, MistralAI, Ollama, Custom/HuggingFace, Azure OpenAI, Google AI Studio, Google Cloud Vertex AI. |
-| **Skill** | Reusable markdown prompt block attached to agents (M:N). Injected into system prompt at execution time. |
+| **Skill** | Reusable markdown prompt block attached to agents (M:N). Injected into system prompt at execution time. App-scoped or system-wide (`app_id IS NULL`). |
+| **SkillFile** | One bundled package file (script, reference, template) for a Skill, text/bytes split with checksum. |
 | **OutputParser** | JSON-schema definition for structured LLM output. Dynamically generates a Pydantic model at runtime. |
 | **Conversation** | Chat session. Memory state in LangGraph's PostgreSQL checkpointer; metadata in Conversation table. |
 | **Silo** | Vector store container. Maps to a collection (`silo_{id}`) in PGVector or Qdrant (configurable per silo). |
@@ -281,6 +282,7 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - **Cascade deletion**: `AppService.delete_app()` performs ordered deletion across all entity types
 - **LangSmith tracing**: Per-App key in `App.langsmith_api_key` (project = app name) with optional global env-var fallback (`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT`). Validated via `POST /internal/apps/{id}/langsmith/test`. Central module: `backend/tools/langsmith_config.py`
 - **MCP dual-role**: Mattin AI acts as both MCP server (exposing agents) and MCP client (consuming external tool servers)
+- **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes (self-managed and SaaS alike)
 
 ## Anti-Patterns
 

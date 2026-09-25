@@ -13,6 +13,7 @@ from typing import Any, Optional, Dict, List, Tuple, Type
 from pydantic import BaseModel, Field
 import types as _types
 from services.silo_service import SiloService
+from services.skill_router_service import select_skills as _select_prompt_skills
 from db.database import SessionLocal
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from services.agent_cache_service import CheckpointerCacheService
@@ -29,7 +30,14 @@ from utils.logger import get_logger
 from utils.config import get_app_config
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
-from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.skill_tools import (
+    create_skill_file_reader_tool,
+    create_skill_loader_tool,
+    generate_skills_system_prompt_section,
+    resolve_agent_skills,
+    resolve_prompt_skills,
+    snapshot_skills,
+)
 from tools.sandbox import (
     create_sandbox_builtin_tools,
     create_sandbox_repl_tools,
@@ -209,6 +217,54 @@ class MCPClientManager:
         if self._client is not None:
             self._client = None
 
+async def _resolve_skills_for_prompt(
+    agent: Agent,
+    *,
+    user_message: Optional[str] = None,
+    llm: Optional[Any] = None,
+) -> Tuple[List[Any], Optional[str]]:
+    """Single shared assembly path: resolve -> snapshot -> route -> render.
+
+    AD-13's single-source-of-truth mandate for "which skills does this agent use this
+    turn" extends to this whole pipeline, not just ``resolve_agent_skills`` — every
+    prompt-building call site (the top-level agent in ``create_agent`` and both
+    agent-as-tool builders, ``IACTTool.create`` / ``IACTOCRTool.create``) must go
+    through the exact same sequence: ``resolve_agent_skills`` (collision-safe
+    resolution) -> ``snapshot_skills`` (H1: thread/session-safe before any tool
+    closure can see it) -> ``resolve_prompt_skills`` (step_024's opt-in router hook,
+    a no-op unless ``agent.skill_router_enabled``) -> ``generate_skills_system_prompt_section``.
+
+    Extracted from ``create_agent`` (review-round finding: sub-agent builders had
+    drifted onto a direct, unresolved, unsnapshotted
+    ``generate_skills_system_prompt_section(agent.skill_associations)`` call, costing an
+    N+1 lazy-load per turn and silently skipping the router even when
+    ``skill_router_enabled`` was set) so the three call sites cannot drift again.
+
+    Returns ``(skill_snapshots, skills_section)``:
+      - ``skill_snapshots`` is the FULL resolved+enabled set (never narrowed by the
+        router) — the only list that may be used to register ``load_skill`` /
+        ``read_skill_file`` tools, so the model can always explicitly load a skill the
+        router did not proactively surface.
+      - ``skills_section`` is the (possibly router-narrowed) rendered
+        ``<available_skills>`` block to append to the system prompt, or ``None`` if the
+        agent has no enabled skills.
+    """
+    if not hasattr(agent, "skill_associations") or not agent.skill_associations:
+        return [], None
+
+    resolved_skills = resolve_agent_skills(agent.skill_associations)
+    skill_snapshots = snapshot_skills(resolved_skills)
+    prompt_skills = await resolve_prompt_skills(
+        resolved_skills, agent=agent, user_message=user_message, llm=llm,
+        selector=_select_prompt_skills,
+    )
+    prompt_skill_snapshots = (
+        skill_snapshots if prompt_skills is resolved_skills else snapshot_skills(prompt_skills)
+    )
+    skills_section = generate_skills_system_prompt_section(prompt_skill_snapshots)
+    return skill_snapshots, skills_section
+
+
 async def create_agent(
     agent: Agent,
     search_params=None,
@@ -221,6 +277,7 @@ async def create_agent(
     sandbox_session_service: Optional[Any] = None,
     attached_files: Optional[List[Dict]] = None,
     temp_silo_ids: Optional[List[int]] = None,
+    user_message: Optional[str] = None,
 ):
     """Create a new agent instance with cached checkpointer if memory is enabled.
 
@@ -236,6 +293,10 @@ async def create_agent(
         sandbox_session_service: Optional service used for sandbox active-use leasing
         attached_files: Optional list of attached files to pass to the agent chain
         temp_silo_ids: Optional list of temporary silo IDs (e.g. playground media) to include as extra retrievers
+        user_message: Optional current turn's user message. Only consumed when
+            ``agent.skill_router_enabled`` is True (step_024's opt-in skill router,
+            used to pre-select at most 2 skills to describe in the prompt) — otherwise
+            never read, so passing/omitting it has no effect on today's default path.
     """
     llm = get_llm(agent)
     if llm is None:
@@ -283,10 +344,24 @@ async def create_agent(
     # Inject current date to avoid need for a tool call
     current_date = datetime.now().strftime("%Y-%m-%d")
     system_prompt_content += f"\n\nToday's date is {current_date}."
-    if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        skills_section = generate_skills_system_prompt_section(agent.skill_associations)
-        if skills_section:
-            system_prompt_content = system_prompt_content + "\n" + skills_section
+    # H2 (round-2 review fix): resolve_agent_skills is the single source of truth for
+    # "which skills does this agent use this turn" — call it exactly once here and
+    # reuse the (snapshotted) result for every consumer below (prompt section, the
+    # load_skill map, the read_skill_file map), instead of each one independently
+    # re-resolving. Independent re-resolves risk a skill visible in the prompt but
+    # missing from a tool's map (or vice versa) if resolution ever becomes
+    # non-deterministic (e.g. step_024's planned LLM-routed resolver). Snapshotted
+    # immediately (H1) so no tool closure built below ever holds a live Skill ORM
+    # instance across a thread/session boundary — mirrors ``_capture_silo_data``.
+    # H2 (round-2 review fix) + Finding 3/5 (review-round fix): `_resolve_skills_for_prompt`
+    # is the single shared resolve -> snapshot -> route -> render pipeline, reused by
+    # `IACTTool.create` / `IACTOCRTool.create` below so a sub-agent can never drift onto
+    # an unresolved/unsnapshotted/unrouted skills section again.
+    skill_snapshots, skills_section = await _resolve_skills_for_prompt(
+        agent, user_message=user_message, llm=llm,
+    )
+    if skills_section:
+        system_prompt_content = system_prompt_content + "\n" + skills_section
 
     if working_dir:
         system_prompt_content = (
@@ -387,6 +462,7 @@ async def create_agent(
             sandbox_session_key=sandbox_session_key,
             sandbox_session_service=sandbox_session_service,
             attached_files=attached_files,
+            user_message=user_message,
         ))
 
     # Base tools — always available for every agent
@@ -577,12 +653,33 @@ async def create_agent(
         # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
         mcp_client = None
 
-    # Add skill loader tool if agent has skills
-    if hasattr(agent, 'skill_associations') and agent.skill_associations:
-        skill_tool = create_skill_loader_tool(agent.skill_associations)
+    # Add skill loader / file reader tools if agent has skills. Providers are built lazily
+    # (only when there are skills to wire) via the service-layer factory so this module is
+    # the single site that bridges tools/skill_tools.py (DB-free) to the DB/sandbox layers —
+    # step_013's contract: no other call site iterates skill_associations directly. Reuse
+    # the single resolve+snapshot from above (H1/H2) — never re-resolve here.
+    if skill_snapshots:
+        from services.skill_package_service import build_skill_tool_providers
+
+        payload_provider, list_paths_provider, file_content_provider = build_skill_tool_providers()
+
+        skill_tool = create_skill_loader_tool(
+            skill_snapshots,
+            sandbox_handle=sandbox_handle,
+            sandbox_provider=sandbox_provider,
+            payload_provider=payload_provider,
+        )
         if skill_tool:
             tools.append(skill_tool)
-            logger.info(f"Skill loader tool added with {len(agent.skill_associations)} skills")
+
+        skill_file_reader_tool = create_skill_file_reader_tool(
+            skill_snapshots,
+            list_paths_provider=list_paths_provider,
+            file_content_provider=file_content_provider,
+            sandbox_handle=sandbox_handle,
+        )
+        if skill_file_reader_tool:
+            tools.append(skill_file_reader_tool)
 
     if pydantic_model:
         # In LangChain v1, response_format accepts the pydantic model directly.
@@ -889,12 +986,18 @@ class IACTTool(BaseTool):
         sandbox_session_key: Optional[str] = None,
         sandbox_session_service: Optional[Any] = None,
         attached_files: Optional[List[Dict]] = None,
+        user_message: Optional[str] = None,
     ) -> "IACTTool":
         """Build an agent-as-tool, including the sub-agent's MCP tools.
 
         MCP tools are loaded with an awaited MultiServerMCPClient, which is not
         possible inside a synchronous ``__init__``; hence this async factory. It
         is the only supported way to obtain a ready-to-use ``IACTTool``.
+
+        ``user_message`` is the parent turn's user message, forwarded down from
+        ``create_agent``/``discover_tool`` purely so this sub-agent's own skill-router
+        pass (``agent.skill_router_enabled``, see ``_resolve_skills_for_prompt``) has
+        the same routing signal the top-level agent has — it is otherwise unused here.
         """
         instance = cls(
             agent,
@@ -911,7 +1014,10 @@ class IACTTool(BaseTool):
         # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
-            tools.append(await discover_tool(sub_agent, user_context=user_context, attached_files=attached_files))
+            tools.append(await discover_tool(
+                sub_agent, user_context=user_context, attached_files=attached_files,
+                user_message=user_message,
+            ))
 
         # Add base useful tools
         tools.append(fetch_file_in_base64)
@@ -984,8 +1090,16 @@ class IACTTool(BaseTool):
         # Inject current date to avoid need for a tool call
         current_date = datetime.now().strftime("%Y-%m-%d")
         tool_system_prompt += f"\n\nToday's date is {current_date}."
-        if agent.system_prompt and hasattr(agent, 'skill_associations') and agent.skill_associations:
-            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+        if agent.system_prompt:
+            # Finding 3/5 fix: reuse the shared resolve -> snapshot -> route -> render
+            # pipeline (see `_resolve_skills_for_prompt`) instead of calling
+            # `generate_skills_system_prompt_section(agent.skill_associations)` directly
+            # on the lazy-loaded ORM relationship — that reintroduced an N+1 query per
+            # turn (1 for the association list + 1 per attached skill) and never reached
+            # the opt-in skill router even when `skill_router_enabled` was set.
+            _, skills_section = await _resolve_skills_for_prompt(
+                agent, user_message=user_message, llm=instance.llm,
+            )
             if skills_section:
                 tool_system_prompt = tool_system_prompt + "\n" + skills_section
 
@@ -1270,12 +1384,16 @@ class IACTOCRTool(BaseTool):
         agent: Agent,
         user_context: Optional[Dict] = None,
         attached_files: Optional[List[Dict]] = None,
+        user_message: Optional[str] = None,
     ) -> "IACTOCRTool":
         """Build an OCR agent-as-tool with MCP support.
 
         Similar to ``IACTTool.create`` but adds OCR-specific validation
         and tools.  A failing MCP server degrades the sub-agent but never
         breaks construction.
+
+        ``user_message`` is forwarded from the parent turn purely to feed this
+        sub-agent's own opt-in skill-router pass — see ``IACTTool.create``.
         """
         instance = cls(agent, user_context=user_context, attached_files=attached_files)
 
@@ -1284,7 +1402,10 @@ class IACTOCRTool(BaseTool):
         # Nested tool agents — only recurse into non-OCR agents, because
         for t in agent.tool_associations:
             sub_agent = t.tool
-            nested = await discover_tool(sub_agent, user_context=user_context, attached_files=attached_files)
+            nested = await discover_tool(
+                sub_agent, user_context=user_context, attached_files=attached_files,
+                user_message=user_message,
+            )
             tools.append(nested)
 
         # MCP tools
@@ -1310,8 +1431,11 @@ class IACTOCRTool(BaseTool):
         tool_system_prompt = agent.system_prompt or ""
         current_date = datetime.now().strftime("%Y-%m-%d")
         tool_system_prompt += f"\n\nToday's date is {current_date}."
-        if agent.system_prompt and hasattr(agent, "skill_associations") and agent.skill_associations:
-            skills_section = generate_skills_system_prompt_section(agent.skill_associations)
+        if agent.system_prompt:
+            # Finding 3/5 fix — see the matching comment in IACTTool.create.
+            _, skills_section = await _resolve_skills_for_prompt(
+                agent, user_message=user_message, llm=instance.llm,
+            )
             if skills_section:
                 tool_system_prompt = tool_system_prompt + "\n" + skills_section
 
@@ -1487,6 +1611,7 @@ async def discover_tool(
     sandbox_session_key: Optional[str] = None,
     sandbox_session_service: Optional[Any] = None,
     attached_files: Optional[List[Dict]] = None,
+    user_message: Optional[str] = None,
 ) -> BaseTool:
     """Return the appropriate tool wrapper for *agent*.
 
@@ -1494,9 +1619,17 @@ async def discover_tool(
     (``type == 'ocr_agent'``), otherwise to :class:`IACTTool`. Sandbox
     parameters are only meaningful for :class:`IACTTool` — OCR agents
     don't support code interpreter.
+
+    ``user_message`` is the current turn's user message, forwarded straight through
+    from the top-level ``create_agent`` call (and recursively from nested
+    ``IACTTool``/``IACTOCRTool`` builders) purely to feed each sub-agent's own opt-in
+    skill-router pass (Finding 5) — see ``_resolve_skills_for_prompt``.
     """
     if agent.type == "ocr_agent":
-        return await IACTOCRTool.create(agent, user_context=user_context, attached_files=attached_files)
+        return await IACTOCRTool.create(
+            agent, user_context=user_context, attached_files=attached_files,
+            user_message=user_message,
+        )
     return await IACTTool.create(
         agent,
         user_context=user_context,
@@ -1506,6 +1639,7 @@ async def discover_tool(
         sandbox_session_key=sandbox_session_key,
         sandbox_session_service=sandbox_session_service,
         attached_files=attached_files,
+        user_message=user_message,
     )
 
 

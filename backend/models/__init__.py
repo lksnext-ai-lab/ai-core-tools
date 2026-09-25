@@ -8,12 +8,11 @@ from .sandbox_service import SandboxService
 from .output_parser import OutputParser
 from .mcp_config import MCPConfig
 from .silo import Silo
-from .skill import Skill
+from .skill import Skill, SkillFile
 from .agent import Agent
 from .agent_marketplace_profile import AgentMarketplaceProfile
 from .conversation_starter import ConversationStarter
 from .agent_marketplace_rating import AgentMarketplaceRating
-from .skill import Skill
 from .ocr_agent import OCRAgent
 from .conversation import Conversation
 from .repository import Repository
@@ -38,7 +37,7 @@ from .scheduled_task import ScheduledTask, ScheduledTaskRun
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
-    'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill',
+    'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill', 'SkillFile',
     'Agent', 'AgentMarketplaceProfile', 'ConversationStarter', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
     'Repository', 'Resource', 'Folder', 'Domain',
     'DomainUrl', 'CrawlPolicy', 'CrawlJob', 'SharePointSource', 'SharePointFile',
