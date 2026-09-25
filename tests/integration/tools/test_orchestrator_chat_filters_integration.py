@@ -264,3 +264,145 @@ class TestOrchestratorChatFiltersIntegration:
         call = mock_get_silo_retriever.call_args_list[0]
         call_search_params = call.args[1]
         assert call_search_params["filter"]["machine_model"] == {"$eq": "X200"}
+
+
+class TestOrchestratorChatFilterPrompt:
+    """The ``<active_chat_filters>`` block on a real DB-backed orchestrator.
+
+    Composes with Gate 1: the same whitelisted selection that scopes each sub-agent's
+    retrieval is also announced to the orchestrator, which routes on it. Which
+    sub-agent a selection implies is the model's call, so these tests pin what the
+    prompt SAYS, not a coverage verdict.
+    """
+
+    @staticmethod
+    def _orchestrator_prompt(mock_create):
+        """The orchestrator's own create_langchain_agent call is the LAST one — each
+        IACTTool.create() fires its own call for its sub-agent first."""
+        return mock_create.call_args_list[-1].kwargs["system_prompt"]
+
+    @pytest.mark.asyncio
+    async def test_prompt_announces_selection_and_instructs_routing(self, db, fake_app):
+        from tools import agentTools
+
+        fields = [{"name": "source_type", "type": "str"}]
+        parser_a = _make_output_parser(db, fake_app.app_id, fields=fields)
+        parser_b = _make_output_parser(db, fake_app.app_id, fields=fields)
+        silo_a = _make_silo(db, fake_app.app_id, parser_a.parser_id)
+        silo_b = _make_silo(db, fake_app.app_id, parser_b.parser_id)
+
+        sub_a = _make_subagent(db, fake_app.app_id, silo_a.silo_id, name="SubA")
+        sub_b = _make_subagent(db, fake_app.app_id, silo_b.silo_id, name="SubB")
+
+        orchestrator = _make_orchestrator(
+            db,
+            fake_app.app_id,
+            exposed_chat_filters=["source_type"],
+            sub_agents=[sub_a, sub_b],
+        )
+
+        with (
+            patch("tools.agentTools.get_llm", return_value=object()),
+            patch(
+                "tools.agentTools.create_langchain_agent", return_value=MagicMock()
+            ) as mock_create,
+            patch.object(
+                agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)
+            ),
+            patch(
+                "services.metadata_values_cache_service.MetadataValuesCacheService.get_distinct_values",
+                return_value=[],
+            ),
+        ):
+            await agentTools.create_agent(
+                orchestrator, search_params={"filter": {"source_type": "SAT"}}
+            )
+
+        prompt = self._orchestrator_prompt(mock_create)
+
+        assert "<active_chat_filters>" in prompt
+        assert 'source_type = "SAT"' in prompt
+        assert "decide which tools to call" in prompt
+
+        # Soft approach: the orchestrator is steered, never stripped of tools.
+        assert len(mock_create.call_args_list[-1].kwargs["tools"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_unexposed_field_is_never_announced(self, db, fake_app):
+        """Gate 1 drops it, so it must not leak into the prompt either — the block
+        is built from the SAME whitelisted dict that scopes retrieval."""
+        from tools import agentTools
+
+        parser_a = _make_output_parser(
+            db, fake_app.app_id, fields=[{"name": "source_type", "type": "str"}]
+        )
+        silo_a = _make_silo(db, fake_app.app_id, parser_a.parser_id)
+        sub_a = _make_subagent(db, fake_app.app_id, silo_a.silo_id, name="SubA")
+
+        orchestrator = _make_orchestrator(
+            db,
+            fake_app.app_id,
+            exposed_chat_filters=["source_type"],
+            sub_agents=[sub_a],
+        )
+
+        with (
+            patch("tools.agentTools.get_llm", return_value=object()),
+            patch(
+                "tools.agentTools.create_langchain_agent", return_value=MagicMock()
+            ) as mock_create,
+            patch.object(
+                agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)
+            ),
+            patch(
+                "services.metadata_values_cache_service.MetadataValuesCacheService.get_distinct_values",
+                return_value=[],
+            ),
+        ):
+            await agentTools.create_agent(
+                orchestrator,
+                search_params={
+                    "filter": {"source_type": "SAT", "secret_internal_field": "leak"}
+                },
+            )
+
+        prompt = self._orchestrator_prompt(mock_create)
+
+        assert 'source_type = "SAT"' in prompt
+        assert "secret_internal_field" not in prompt
+        assert "leak" not in prompt
+
+    @pytest.mark.asyncio
+    async def test_no_filter_selection_leaves_prompt_untouched(self, db, fake_app):
+        """Zero behaviour change for an orchestrator with nothing selected."""
+        from tools import agentTools
+
+        parser_a = _make_output_parser(
+            db, fake_app.app_id, fields=[{"name": "source_type", "type": "str"}]
+        )
+        silo_a = _make_silo(db, fake_app.app_id, parser_a.parser_id)
+        sub_a = _make_subagent(db, fake_app.app_id, silo_a.silo_id, name="SubA")
+
+        orchestrator = _make_orchestrator(
+            db,
+            fake_app.app_id,
+            exposed_chat_filters=["source_type"],
+            sub_agents=[sub_a],
+        )
+
+        with (
+            patch("tools.agentTools.get_llm", return_value=object()),
+            patch(
+                "tools.agentTools.create_langchain_agent", return_value=MagicMock()
+            ) as mock_create,
+            patch.object(
+                agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)
+            ),
+            patch(
+                "services.metadata_values_cache_service.MetadataValuesCacheService.get_distinct_values",
+                return_value=[],
+            ),
+        ):
+            await agentTools.create_agent(orchestrator, search_params=None)
+
+        assert "<active_chat_filters>" not in self._orchestrator_prompt(mock_create)

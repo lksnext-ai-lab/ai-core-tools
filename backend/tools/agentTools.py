@@ -28,6 +28,7 @@ from utils.logger import get_logger
 from utils.mcp_auth_utils import prepare_mcp_headers, get_user_token_from_context
 from utils.mcp_ssl_utils import inject_ssl_config
 from tools.skill_tools import create_skill_loader_tool, generate_skills_system_prompt_section
+from tools.chat_filter_scope import build_chat_filter_prompt_block
 from tools.python_sandbox_tools import create_python_repl_tool
 
 logger = get_logger(__name__)
@@ -148,6 +149,17 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
         checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
+    # Gate 1: orchestrator-level whitelist. Only fields the orchestrator itself
+    # declares in exposed_chat_filters may be forwarded to sub-agents — anything
+    # the caller puts in search_params["filter"] that isn't on that list is
+    # dropped right here, before it ever reaches a sub-agent (Gate 2 applies a
+    # second, silo-scoped whitelist per sub-agent in IACTTool.create). It also
+    # drives the <active_chat_filters> block appended to the system prompt below.
+    exposed_fields = set(getattr(agent, "exposed_chat_filters", None) or [])
+    orchestrator_caller_filter = {
+        k: v for k, v in (search_params or {}).get("filter", {}).items() if k in exposed_fields
+    }
+
     # Build system prompt with optional skills section and format instructions
     # In LangChain v1, system_prompt is a static string passed to create_agent
     system_prompt_content = agent.system_prompt
@@ -180,6 +192,13 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             + "Available libraries: pandas, openpyxl, numpy, os, json, csv, re, datetime.\n"
             + "</code_interpreter>"
         )
+
+    # Make the user's chat-filter selection explicit to the agent, so an orchestrator
+    # can route on it instead of fanning out to every sub-agent. Advisory only —
+    # every sub-agent tool is still built and callable.
+    filter_block = build_chat_filter_prompt_block(agent, orchestrator_caller_filter)
+    if filter_block:
+        system_prompt_content = system_prompt_content + "\n\n" + filter_block
 
     if format_instructions:
         system_prompt_content = (
@@ -228,16 +247,6 @@ async def create_agent(agent: Agent, search_params=None, session_id=None, user_c
             logger.info("Server-side tool '%s' injected for provider %s", tool_name, provider_name)
         else:
             logger.warning("Server-side tool '%s' not supported by provider %s — skipped", tool_name, provider_name)
-
-    # Gate 1: orchestrator-level whitelist. Only fields the orchestrator itself
-    # declares in exposed_chat_filters may be forwarded to sub-agents — anything
-    # the caller puts in search_params["filter"] that isn't on that list is
-    # dropped right here, before it ever reaches a sub-agent (Gate 2 applies a
-    # second, silo-scoped whitelist per sub-agent in IACTTool.create).
-    exposed_fields = set(getattr(agent, "exposed_chat_filters", None) or [])
-    orchestrator_caller_filter = {
-        k: v for k, v in (search_params or {}).get("filter", {}).items() if k in exposed_fields
-    }
 
     for tool in agent.tool_associations:
         sub_agent = tool.tool

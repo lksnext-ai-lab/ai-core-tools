@@ -404,3 +404,139 @@ async def test_iact_tool_create_forwards_caller_filter_to_nested_tool_agents():
     mock_resolve.assert_called_once()
     assert mock_resolve.call_args.args[0] is grandchild
     assert mock_resolve.call_args.args[1] == {"filter": {"machine_model": "X100"}}
+
+
+# ---------------------------------------------------------------------------
+# <active_chat_filters> prompt injection (create_agent)
+#
+# Soft approach: the orchestrator is TOLD which sub-agent tools can match the
+# user's filter selection, but every sub-agent tool is still built and callable.
+# ---------------------------------------------------------------------------
+
+_SENTINEL_BLOCK = "<active_chat_filters>\nSENTINEL\n</active_chat_filters>"
+
+
+@pytest.mark.asyncio
+async def test_create_agent_injects_filter_block_and_keeps_all_tools():
+    """The block reaches the orchestrator's system prompt, and — this is the whole
+    point of the soft approach — no sub-agent tool is dropped because of it."""
+    sub_a = _make_agent("Sub A")
+    sub_b = _make_agent("Sub B")
+    orchestrator = _make_orchestrator(
+        exposed_chat_filters=["source_type"], tool_agents=[sub_a, sub_b]
+    )
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch.object(agentTools.IACTTool, "create", new=AsyncMock(return_value=MagicMock())),
+        patch(
+            "tools.agentTools.build_chat_filter_prompt_block",
+            return_value=_SENTINEL_BLOCK,
+        ) as mock_block,
+    ):
+        await agentTools.create_agent(
+            orchestrator, search_params={"filter": {"source_type": "SAT"}}
+        )
+
+    mock_block.assert_called_once()
+    assert mock_block.call_args.args[1] == {"source_type": "SAT"}
+
+    kwargs = mock_create.call_args.kwargs
+    assert _SENTINEL_BLOCK in kwargs["system_prompt"]
+    assert len(kwargs["tools"]) == 2  # both sub-agents still offered to the model
+
+
+@pytest.mark.asyncio
+async def test_create_agent_no_search_params_leaves_prompt_untouched():
+    """Zero behaviour change when the user selected nothing."""
+    orchestrator = _make_orchestrator(
+        exposed_chat_filters=["source_type"], tool_agents=[_make_agent("Sub A")]
+    )
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch.object(agentTools.IACTTool, "create", new=AsyncMock(return_value=MagicMock())),
+    ):
+        await agentTools.create_agent(orchestrator, search_params=None)
+
+    assert "<active_chat_filters>" not in mock_create.call_args.kwargs["system_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_create_agent_no_exposed_chat_filters_leaves_prompt_untouched():
+    """Gate 1 empties the filter, so there is nothing to announce."""
+    orchestrator = _make_orchestrator(
+        exposed_chat_filters=[], tool_agents=[_make_agent("Sub A")]
+    )
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch.object(agentTools.IACTTool, "create", new=AsyncMock(return_value=MagicMock())),
+    ):
+        await agentTools.create_agent(
+            orchestrator, search_params={"filter": {"source_type": "SAT"}}
+        )
+
+    assert "<active_chat_filters>" not in mock_create.call_args.kwargs["system_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_create_agent_survives_filter_block_failure():
+    """A failure building the block must degrade the prompt, never the chat turn."""
+    orchestrator = _make_orchestrator(
+        exposed_chat_filters=["source_type"], tool_agents=[_make_agent("Sub A")]
+    )
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch.object(agentTools.IACTTool, "create", new=AsyncMock(return_value=MagicMock())),
+        patch(
+            "tools.chat_filter_scope.render_chat_filter_block",
+            side_effect=RuntimeError("boom"),
+        ),
+    ):
+        await agentTools.create_agent(
+            orchestrator, search_params={"filter": {"source_type": "SAT"}}
+        )
+
+    # Agent still built; the block is simply absent.
+    assert "<active_chat_filters>" not in mock_create.call_args.kwargs["system_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_filter_block_precedes_output_format_instructions():
+    """<output_format_instructions> must stay the last block in the prompt."""
+    orchestrator = _make_orchestrator(
+        exposed_chat_filters=["source_type"], tool_agents=[_make_agent("Sub A")]
+    )
+    orchestrator.output_parser_id = 7
+
+    parser = MagicMock()
+    parser.get_format_instructions.return_value = "FORMAT_RULES"
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.get_output_parser", return_value=parser),
+        patch("tools.agentTools.get_parser_model_by_id", return_value=None),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch.object(agentTools.IACTTool, "create", new=AsyncMock(return_value=MagicMock())),
+        patch(
+            "tools.agentTools.build_chat_filter_prompt_block",
+            return_value=_SENTINEL_BLOCK,
+        ),
+    ):
+        await agentTools.create_agent(
+            orchestrator, search_params={"filter": {"source_type": "SAT"}}
+        )
+
+    prompt = mock_create.call_args.kwargs["system_prompt"]
+    assert prompt.index("<active_chat_filters>") < prompt.index("<output_format_instructions>")
