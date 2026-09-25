@@ -191,6 +191,7 @@ function ChatInterface({
     const loadConversationHistory = async () => {
       try {
         setIsLoadingHistory(true);
+        setMessages([]);
 
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
