@@ -281,28 +281,41 @@ from typing import Annotated
 from utils.config import is_omniadmin as _is_omniadmin
 
 
+# Route templates (not concrete URLs) viewers may write to, matched against the
+# route FastAPI resolved so an unrelated future ".../respond" route isn't exempted.
+_VIEWER_WRITABLE_ROUTE_SUFFIXES = (
+    "/collaboration/invitations/{collaboration_id}/respond",  # accept/decline an invite
+)
+
+
+def _is_viewer_writable_route(request: Request) -> bool:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    return bool(route_path) and route_path.endswith(_VIEWER_WRITABLE_ROUTE_SUFFIXES)
+
+
 async def require_editor_for_writes(
     request: Request,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
-) -> AuthContext:
+) -> None:
     """Block viewer-role users from write operations (POST/PUT/PATCH/DELETE).
 
+    Router-level guard: it either lets the request through or raises 403.
+
     Exemptions — viewer-legitimate writes:
-      - POST .../invitations/{id}/respond  (accept or decline a collaboration invite)
+      - POST /collaboration/invitations/{id}/respond  (accept or decline a collaboration invite)
     """
     if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
-        return auth_context
-    # Viewers may accept/decline their own invitations
-    if request.url.path.endswith("/respond"):
-        return auth_context
+        return
+    if _is_viewer_writable_route(request):
+        return
     email = auth_context.identity.email
     if _is_omniadmin(email):
-        return auth_context
+        return
     user = UserService.get_user_by_email(db, email)
     if user and user.platform_role == 'viewer':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Viewer role cannot create or modify resources",
         )
-    return auth_context
