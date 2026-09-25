@@ -31,7 +31,8 @@ Enforced with `@require_min_role(AppRole.EDITOR)` on routes. All resources filte
 | **OCRAgent** | Agent subclass (STI via `type`). Dual-LLM: vision model for scanned pages + text model for structuring output. |
 | **AIService** | LLM provider config (OpenAI, Anthropic, MistralAI, Azure, Google, Custom): type, endpoint, API key. Multiple per App. |
 | **EmbeddingService** | Embedding model config for vector stores. Providers: OpenAI, MistralAI, Ollama, Custom/HuggingFace, Azure OpenAI, Google AI Studio, Google Cloud Vertex AI. Selection via `backend/tools/embeddingTools.py`. |
-| **Skill** | Reusable markdown prompt block attached to agents (M:N via `agent_skills`). Injected into the system prompt at execution. |
+| **Skill** | Reusable markdown prompt block attached to agents (M:N via `agent_skills`). Injected into the system prompt at execution. App-scoped or system-wide (`app_id IS NULL`, platform-managed by omniadmins). |
+| **SkillFile** | One bundled package file (script, reference, template) for a Skill; text/bytes split with checksum, cascade-deleted with the Skill. |
 | **OutputParser** | JSON-schema for structured output (`fields` JSON column). Dynamically generates a Pydantic model at runtime. Used by agents and for silo metadata filtering. |
 | **Conversation** | Chat session between a user and an agent. Memory in LangGraph's PostgreSQL checkpointer; metadata (title, count, last message) in the Conversation table. |
 
@@ -168,6 +169,7 @@ Frontend is a **reusable npm library** (`@lksnext/ai-core-tools-base`):
 - **Secure static files**: `/static/{path}` requires a cryptographic signature
 - **Cascade deletion**: `AppService.delete_app()` performs ordered deletion across all entity types
 - **LangSmith tracing**: per-app via `App.langsmith_api_key` (project = app name), global env-var fallback (`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT`). Validated via `POST /internal/apps/{id}/langsmith/test`. Helper: `backend/tools/langsmith_config.py`.
+- **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes. See `docs/guides/skills.md`.
 
 ## Environment Variables
 
