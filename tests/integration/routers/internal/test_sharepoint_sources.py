@@ -108,6 +108,14 @@ def fake_sp_file(db, fake_sp_source):
     return file_obj
 
 
+@pytest.fixture(autouse=True)
+def owner_can_write(fake_user):
+    """fake_user's platform_role defaults to 'viewer', which the internal router's
+    require_editor_for_writes guard blocks from every write. Grant 'editor' so the
+    tests exercise the app-role checks, like the other internal write tests do."""
+    fake_user.platform_role = "editor"
+
+
 @pytest.fixture
 def mock_graph_client():
     """Patch GraphClient to avoid real Microsoft API calls."""
@@ -138,6 +146,7 @@ def editor_headers(db, fake_app, fake_user):
 
     configure_factories(db)
     editor_user = UserFactory(email="editor-sp@mattin-test.com", name="SP Editor User")
+    editor_user.platform_role = "editor"
     collab = AppCollaborator(
         app_id=fake_app.app_id,
         user_id=editor_user.user_id,

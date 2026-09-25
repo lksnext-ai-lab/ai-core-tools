@@ -6,7 +6,9 @@ import json
 import posixpath
 import shutil
 import threading
+import uuid
 from contextlib import nullcontext
+from datetime import datetime
 from time import monotonic
 from typing import List, Dict, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +18,7 @@ from sqlalchemy.orm import Session
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
 from services.agent_execution_context import AgentExecutionContext
+from services.agent_metrics_recorder import record_agent_execution
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
     convert_image_to_base64,
@@ -2164,6 +2167,10 @@ class AgentExecutionService:
         )
 
         mcp_client = None
+        # Metrics: sub-agents built as tools read current_event_id to link their
+        # executions to this one. Copy so the caller's dict is not mutated.
+        event_id = str(uuid.uuid4())
+        user_context = {**(user_context or {}), 'current_event_id': event_id}
         try:
             # Create the agent chain with all tools and capabilities
             agent_chain, mcp_client = await create_agent(
@@ -2213,62 +2220,37 @@ class AgentExecutionService:
                     ls_settings.source,
                 )
 
+            started_at = datetime.utcnow()
+            status, error_code, error_message, result = "SUCCESS", None, None, None
             try:
-                result = await agent_chain.ainvoke(
-                    {"messages": [message_payload]},
-                    config=config,
+                result = await self._ainvoke_with_checkpoint_recovery(
+                    agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
                 )
-            except Exception as invoke_exc:
-                from services.agent_cache_service import (
-                    CheckpointerCacheService,
-                    is_missing_tool_output_error,
+            except asyncio.TimeoutError:
+                status, error_code, error_message = "TIMEOUT", "TIMEOUT", "Execution timed out"
+                raise
+            except asyncio.CancelledError:
+                status, error_code, error_message = "ERROR", "CancelledError", "Execution cancelled"
+                raise
+            except Exception as exc:
+                status, error_code, error_message = "ERROR", type(exc).__name__, str(exc)[:2000]
+                raise
+            finally:
+                finished_at = datetime.utcnow()
+                record_agent_execution(
+                    event_id=event_id,
+                    fresh_agent=fresh_agent,
+                    user_context=user_context,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+                    status=status,
+                    error_code=error_code,
+                    error_message=error_message,
+                    result=result if status == "SUCCESS" else None,
+                    image_files=image_files or [],
+                    message=message,
                 )
-
-                if (
-                    fresh_agent.has_memory
-                    and session_id_for_cache
-                    and is_missing_tool_output_error(invoke_exc)
-                ):
-                    # Recover by forking from the last known-good checkpoint
-                    # instead of deleting the whole thread: adelete_thread
-                    # wipes the user's entire visible conversation history
-                    # (get_conversation_history reads the same checkpointer),
-                    # not just the broken step. Checkpoints are immutable and
-                    # ordered, so retrying with an earlier checkpoint_id set
-                    # simply forks history forward from there — nothing is
-                    # deleted.
-                    rollback_checkpoint_id = await CheckpointerCacheService.get_rollback_checkpoint_id(
-                        fresh_agent.agent_id,
-                        session_id_for_cache,
-                    )
-                    if rollback_checkpoint_id is None:
-                        logger.warning(
-                            "Incomplete tool-call checkpoint for agent %s session %s "
-                            "has no earlier checkpoint to roll back to; failing the "
-                            "turn instead of retrying",
-                            fresh_agent.agent_id,
-                            session_id_for_cache,
-                        )
-                        raise HTTPException(
-                            status_code=502,
-                            detail="Your last message could not be completed. Please resend it.",
-                        ) from invoke_exc
-
-                    logger.warning(
-                        "Detected incomplete tool-call checkpoint for agent %s "
-                        "session %s; retrying turn from prior checkpoint %s "
-                        "(no history deleted)",
-                        fresh_agent.agent_id,
-                        session_id_for_cache,
-                        rollback_checkpoint_id,
-                    )
-                    config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
-                    result = await agent_chain.ainvoke(
-                        {"messages": [message_payload]},
-                        config=config,
-                    )
-                else:
-                    raise
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model
@@ -2304,6 +2286,68 @@ class AgentExecutionService:
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
     
+    async def _ainvoke_with_checkpoint_recovery(
+        self, agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
+    ):
+        """Invoke the agent, retrying once from the prior checkpoint on an incomplete tool-call turn."""
+        try:
+            result = await agent_chain.ainvoke(
+                {"messages": [message_payload]},
+                config=config,
+            )
+        except Exception as invoke_exc:
+            from services.agent_cache_service import (
+                CheckpointerCacheService,
+                is_missing_tool_output_error,
+            )
+
+            if (
+                fresh_agent.has_memory
+                and session_id_for_cache
+                and is_missing_tool_output_error(invoke_exc)
+            ):
+                # Recover by forking from the last known-good checkpoint
+                # instead of deleting the whole thread: adelete_thread
+                # wipes the user's entire visible conversation history
+                # (get_conversation_history reads the same checkpointer),
+                # not just the broken step. Checkpoints are immutable and
+                # ordered, so retrying with an earlier checkpoint_id set
+                # simply forks history forward from there — nothing is
+                # deleted.
+                rollback_checkpoint_id = await CheckpointerCacheService.get_rollback_checkpoint_id(
+                    fresh_agent.agent_id,
+                    session_id_for_cache,
+                )
+                if rollback_checkpoint_id is None:
+                    logger.warning(
+                        "Incomplete tool-call checkpoint for agent %s session %s "
+                        "has no earlier checkpoint to roll back to; failing the "
+                        "turn instead of retrying",
+                        fresh_agent.agent_id,
+                        session_id_for_cache,
+                    )
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Your last message could not be completed. Please resend it.",
+                    ) from invoke_exc
+
+                logger.warning(
+                    "Detected incomplete tool-call checkpoint for agent %s "
+                    "session %s; retrying turn from prior checkpoint %s "
+                    "(no history deleted)",
+                    fresh_agent.agent_id,
+                    session_id_for_cache,
+                    rollback_checkpoint_id,
+                )
+                config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
+                result = await agent_chain.ainvoke(
+                    {"messages": [message_payload]},
+                    config=config,
+                )
+            else:
+                raise
+        return result
+
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location"""
         import tempfile

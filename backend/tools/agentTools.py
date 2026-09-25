@@ -21,6 +21,7 @@ from langchain_core.documents import Document
 from langchain_core.tools import StructuredTool
 import json
 import asyncio
+import uuid
 import os
 import base64
 import mimetypes
@@ -1144,14 +1145,44 @@ class IACTTool(BaseTool):
             raise RuntimeError(
                 "IACTTool must be built via 'await IACTTool.create(...)' before use."
             )
+        started_at = datetime.utcnow()
+        result = None
+        error = None
         try:
             formatted_prompt = self._format_tool_query(query)
             messages = [HumanMessage(content=formatted_prompt)]
             result = self.react_agent.invoke({"messages": messages})
             return self._extract_last_message_content(result)
         except Exception as e:
+            error = e
             logger.error(f"Error executing agent tool {self.name}: {str(e)}")
             return f"Error executing agent tool: {str(e)}"
+        finally:
+            self._record_metrics(query, started_at, result, error)
+
+    def _record_metrics(self, query: str, started_at: datetime, result: Any, error: Optional[Exception]) -> None:
+        """Record this sub-agent run as an AGENT_AS_TOOL execution linked to its parent."""
+        from services.agent_metrics_recorder import record_agent_execution
+
+        finished_at = datetime.utcnow()
+        record_agent_execution(
+            event_id=str(uuid.uuid4()),
+            fresh_agent=self.agent,
+            user_context={
+                **(self.user_context or {}),
+                'parent_execution_id': (self.user_context or {}).get('current_event_id'),
+                'caller_type_override': 'AGENT_AS_TOOL',
+            },
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+            status="ERROR" if error is not None else "SUCCESS",
+            error_code=type(error).__name__ if error is not None else None,
+            error_message=str(error)[:2000] if error is not None else None,
+            result=result if isinstance(result, dict) else None,
+            image_files=[],
+            message=query,
+        )
 
     def _format_tool_query(self, query: str) -> str:
         """Apply the sub-agent prompt template to a tool query."""
@@ -1235,6 +1266,9 @@ class IACTTool(BaseTool):
             raise RuntimeError(
                 "IACTTool must be built via 'await IACTTool.create(...)' before use."
             )
+        started_at = datetime.utcnow()
+        result = None
+        error = None
         try:
             formatted_prompt = self._format_tool_query(query)
             messages = [HumanMessage(content=formatted_prompt)]
@@ -1266,14 +1300,18 @@ class IACTTool(BaseTool):
                 for event in events:
                     self._emit_subagent_stream_event(stream_writer, event)
 
+            result = latest_state
             if latest_state is not None:
                 return self._extract_last_message_content(latest_state)
 
             return ""
 
         except Exception as e:
+            error = e
             logger.error(f"Error executing agent tool {self.name} (async): {str(e)}")
             return f"Error executing agent tool: {str(e)}"
+        finally:
+            self._record_metrics(query, started_at, result, error)
 
 
 async def _execute_tool_agent_ocr(

@@ -74,6 +74,7 @@ import MarketplaceHomePage from '../pages/MarketplaceHomePage';
 import SharePointSourcesPage from '../pages/SharePointSourcesPage';
 import SharePointWizardPage from '../pages/SharePointWizardPage';
 import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
+import AppMetricsPage from '../pages/AppMetricsPage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -302,6 +303,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/sharepoint/:sourceId" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SharePointSourceDetailPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/metrics" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <AppMetricsPage />
                   </EditorLayoutRoute>
                 } />
 

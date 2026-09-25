@@ -16,6 +16,7 @@ import type { SearchFilterMetadataField } from '../components/playground/SearchF
 import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
+import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
 
 // Define the Agent types
 interface Agent {
@@ -657,7 +658,8 @@ function AgentFormPage() {
     { id: 'prompts', label: 'Prompts' },
     { id: 'configuration', label: 'Configuration' },
     { id: 'advanced', label: 'Advanced' },
-    { id: 'marketplace', label: 'Marketplace' }
+    { id: 'marketplace', label: 'Marketplace' },
+    ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
   ];
 
   return (
@@ -1958,6 +1960,15 @@ function AgentFormPage() {
               )}
               </>
               )}
+            </div>
+          )}
+
+          {activeTab === 'metrics' && !isNewAgent && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+              <AgentMetricsTab
+                appId={Number(appId)}
+                agentId={Number(agentId)}
+              />
             </div>
           )}
 
