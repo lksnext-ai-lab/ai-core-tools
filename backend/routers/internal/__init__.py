@@ -14,8 +14,9 @@ from .user import router as user_router
 from .marketplace import marketplace_router
 from .config import router as config_router
 from .platform_chatbot import platform_chatbot_router
-from .capabilities import router as capabilities_router
 from .scheduled_tasks import router as scheduled_tasks_router
+from .sharepoint import router as sharepoint_router
+from .metrics import router as metrics_router
 
 # CSRF double-submit is internal-only; public/v1 and mcp/v1 use API-key auth.
 internal_router = APIRouter(dependencies=[Depends(enforce_csrf)])
@@ -39,8 +40,15 @@ internal_router.include_router(user_router)
 internal_router.include_router(marketplace_router)
 internal_router.include_router(config_router)
 internal_router.include_router(platform_chatbot_router, prefix="/platform-chatbot")
-internal_router.include_router(capabilities_router)
 internal_router.include_router(scheduled_tasks_router)
+internal_router.include_router(
+    sharepoint_router,
+    dependencies=[Depends(require_editor_for_writes)],
+)
+internal_router.include_router(
+    metrics_router,
+    dependencies=[Depends(require_editor_for_writes)],
+)
 
 from deployment_mode import is_saas_mode
 if is_saas_mode():

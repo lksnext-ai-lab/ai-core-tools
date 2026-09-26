@@ -24,6 +24,7 @@ import {
   Box,
   CalendarClock,
   Target,
+  Activity,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -104,8 +105,7 @@ export const defaultNavigation: NavigationConfig = {
           path: '/apps/:appId/sharepoint',
           name: 'SharePoint',
           icon: <Cloud size={16} />,
-          section: 'appNavigation',
-          enterpriseFeature: 'sharepoint'
+          section: 'appNavigation'
         },
       ]
     },
@@ -113,6 +113,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/mcp-servers',
       name: 'MCP Servers',
       icon: <Plug size={16} />,
+      section: 'appNavigation'
+    },
+    {
+      path: '/apps/:appId/metrics',
+      name: 'Metrics',
+      icon: <BarChart2 size={16} />,
       section: 'appNavigation'
     },
     {
@@ -192,6 +198,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/admin/stats',
       name: 'Statistics',
       icon: <BarChart2 size={16} />,
+      section: 'admin',
+      adminOnly: true
+    },
+    {
+      path: '/admin/metrics',
+      name: 'Agent Metrics',
+      icon: <Activity size={16} />,
       section: 'admin',
       adminOnly: true
     },

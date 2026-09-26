@@ -47,6 +47,7 @@ import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
+import AdminMetricsPage from '../pages/admin/AdminMetricsPage';
 import SystemSettingsPage from '../pages/admin/SystemSettingsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
@@ -65,7 +66,6 @@ import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage'
 import SystemSkillsPage from '../pages/admin/SystemSkillsPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
-import { CapabilitiesProvider } from '../contexts/CapabilitiesContext';
 import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
 import PlatformChatbotWidget from '../components/platform-chatbot/PlatformChatbotWidget';
 import MCPServersPage from '../pages/MCPServersPage';
@@ -78,7 +78,7 @@ import MarketplaceHomePage from '../pages/MarketplaceHomePage';
 import SharePointSourcesPage from '../pages/SharePointSourcesPage';
 import SharePointWizardPage from '../pages/SharePointWizardPage';
 import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
-import EnterpriseFeaturePage from '../pages/EnterpriseFeaturePage';
+import AppMetricsPage from '../pages/AppMetricsPage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -151,7 +151,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         <UserProvider>
           <SettingsCacheProvider>
             <DeploymentModeProvider>
-            <CapabilitiesProvider>
             <PlatformChatbotProvider>
             <Router>
               <ScrollToTop />
@@ -297,12 +296,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
 
-                <Route path="/apps/:appId/enterprise" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
-                      <EnterpriseFeaturePage />
-                  </EditorLayoutRoute>
-                } />
-
                 <Route path="/apps/:appId/sharepoint" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SharePointSourcesPage />
@@ -318,6 +311,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/sharepoint/:sourceId" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SharePointSourceDetailPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/metrics" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <AppMetricsPage />
                   </EditorLayoutRoute>
                 } />
 
@@ -417,6 +416,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </AdminLayoutRoute>
                 } />
 
+                <Route path="/admin/metrics" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <AdminMetricsPage />
+                  </AdminLayoutRoute>
+                } />
+
                 <Route path="/admin/settings" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemSettingsPage />
@@ -500,7 +505,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
               </ConfirmProvider>
             </Router>
             </PlatformChatbotProvider>
-            </CapabilitiesProvider>
             </DeploymentModeProvider>
           </SettingsCacheProvider>
         </UserProvider>
