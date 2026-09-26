@@ -1,218 +1,102 @@
-"""Agent metrics dashboard endpoints (mounted under /internal)."""
-from __future__ import annotations
+"""Agent metrics dashboard endpoints (mounted under /internal).
 
-from typing import Annotated, Optional
+Three scopes share the same queries and response shapes:
+  - system:  /admin/metrics/...                          (platform admins)
+  - app:     /apps/{app_id}/metrics/...                  (app administrators)
+  - agent:   /apps/{app_id}/agents/{agent_id}/metrics/... (app editors)
+"""
+
+from typing import Annotated, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from lks_idprovider.models.auth import AuthContext
 from sqlalchemy.orm import Session
 
-from lks_idprovider.models.auth import AuthContext
 from db.database import get_db
-from routers.internal.auth_utils import get_current_user_oauth
-from routers.controls.role_authorization import require_min_role, AppRole
-
+from routers.controls.role_authorization import AppRole, require_min_role
+from routers.internal.admin import require_admin
 from schemas.metrics_schemas import (
-    AppSummaryResponse,
-    AppExecutionsResponse,
-    AppAgentsResponse,
-    AppModelsResponse,
-    AppUsersResponse,
-    AgentSummaryResponse,
-    AgentExecutionsResponse,
-    AgentTokensResponse,
-    AgentErrorsResponse,
-    AgentLatencyResponse,
-    AgentToolsResponse,
-    AgentUsersResponse,
+    BreakdownDimension,
+    BreakdownResponse,
+    ErrorsResponse,
+    MetricsRange,
+    SummaryResponse,
+    TimeseriesResponse,
+    ToolsResponse,
 )
-from services.metrics_query_service import MetricsQueryService
+from services.metrics_query_service import MetricsQueryService, MetricsScope
 
 router = APIRouter(tags=["Metrics"])
 
-VALID_RANGES = {"24h", "7d", "30d"}
+RangeParam = Annotated[MetricsRange, Query(description="Time window")]
+DbSession = Annotated[Session, Depends(get_db)]
+
+SYSTEM_DIMENSIONS = {"app", "agent", "model", "provider", "channel"}
+APP_DIMENSIONS = {"agent", "model", "provider", "channel", "user"}
+AGENT_DIMENSIONS = {"model", "channel", "user"}
 
 
-def _validate_range(range: str) -> str:
-    if range not in VALID_RANGES:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid range. Use one of: 24h, 7d, 30d.",
-        )
-    return range
+def _checked(dimension: str, allowed: set[str]) -> str:
+    if dimension not in allowed:
+        raise HTTPException(status_code=400, detail=f"Breakdown by '{dimension}' is not available here.")
+    return dimension
 
 
-# ── App-level endpoints (require ADMINISTRATOR) ───────────────────────────────
+def _register(prefix: str, guard: Callable, scope_of: Callable[..., MetricsScope], dimensions: set[str]) -> None:
+    """Register the six metrics endpoints for one scope."""
 
-@router.get("/apps/{app_id}/metrics/summary", response_model=AppSummaryResponse)
-async def get_app_metrics_summary(
-    app_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.app_summary(db, app_id, range)
+    @router.get(f"{prefix}/summary", response_model=SummaryResponse)
+    async def summary(db: DbSession, scope: Annotated[MetricsScope, Depends(scope_of)],
+                      _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
+        return MetricsQueryService.summary(db, scope, range)
 
+    @router.get(f"{prefix}/timeseries", response_model=TimeseriesResponse)
+    async def timeseries(db: DbSession, scope: Annotated[MetricsScope, Depends(scope_of)],
+                         _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
+        return MetricsQueryService.timeseries(db, scope, range)
 
-@router.get("/apps/{app_id}/metrics/executions", response_model=AppExecutionsResponse)
-async def get_app_metrics_executions(
-    app_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
-    range: Annotated[str, Query()] = "7d",
-    caller_type: Annotated[Optional[str], Query()] = None,
-):
-    _validate_range(range)
-    return MetricsQueryService.app_executions(db, app_id, range, caller_type)
+    @router.get(f"{prefix}/breakdown/{{dimension}}", response_model=BreakdownResponse)
+    async def breakdown(dimension: BreakdownDimension, db: DbSession,
+                        scope: Annotated[MetricsScope, Depends(scope_of)],
+                        _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
+        return MetricsQueryService.breakdown(db, scope, range, _checked(dimension, dimensions))
 
+    @router.get(f"{prefix}/tools", response_model=ToolsResponse)
+    async def tools(db: DbSession, scope: Annotated[MetricsScope, Depends(scope_of)],
+                    _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
+        return MetricsQueryService.tools(db, scope, range)
 
-@router.get("/apps/{app_id}/metrics/agents", response_model=AppAgentsResponse)
-async def get_app_metrics_agents(
-    app_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.app_agents(db, app_id, range)
+    @router.get(f"{prefix}/errors", response_model=ErrorsResponse)
+    async def errors(db: DbSession, scope: Annotated[MetricsScope, Depends(scope_of)],
+                     _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
+        return MetricsQueryService.errors(db, scope, range)
 
 
-@router.get("/apps/{app_id}/metrics/models", response_model=AppModelsResponse)
-async def get_app_metrics_models(
-    app_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.app_models(db, app_id, range)
+def _system_scope() -> MetricsScope:
+    return MetricsScope()
 
 
-@router.get("/apps/{app_id}/metrics/users", response_model=AppUsersResponse)
-async def get_app_metrics_users(
-    app_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.app_users(db, app_id, range)
+def _app_scope(app_id: int) -> MetricsScope:
+    return MetricsScope(app_id=app_id)
 
 
-# ── Per-agent endpoints (require EDITOR) ─────────────────────────────────────
-
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/summary",
-    response_model=AgentSummaryResponse,
-)
-async def get_agent_metrics_summary(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_summary(db, app_id, agent_id, range)
+def _agent_scope(app_id: int, agent_id: int, db: DbSession) -> MetricsScope:
+    MetricsQueryService.check_agent_in_app(db, app_id, agent_id)
+    return MetricsScope(app_id=app_id, agent_id=agent_id)
 
 
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/executions",
-    response_model=AgentExecutionsResponse,
-)
-async def get_agent_metrics_executions(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_executions(db, app_id, agent_id, range)
+def _app_admin(role: Annotated[AppRole, Depends(require_min_role("administrator"))]) -> AppRole:
+    return role
 
 
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/tokens",
-    response_model=AgentTokensResponse,
-)
-async def get_agent_metrics_tokens(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_tokens(db, app_id, agent_id, range)
+def _app_editor(role: Annotated[AppRole, Depends(require_min_role("editor"))]) -> AppRole:
+    return role
 
 
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/errors",
-    response_model=AgentErrorsResponse,
-)
-async def get_agent_metrics_errors(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_errors(db, app_id, agent_id, range)
+def _platform_admin(auth: Annotated[AuthContext, Depends(require_admin)]) -> AuthContext:
+    return auth
 
 
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/latency",
-    response_model=AgentLatencyResponse,
-)
-async def get_agent_metrics_latency(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_latency(db, app_id, agent_id, range)
-
-
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/tools",
-    response_model=AgentToolsResponse,
-)
-async def get_agent_metrics_tools(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_tools(db, app_id, agent_id, range)
-
-
-@router.get(
-    "/apps/{app_id}/agents/{agent_id}/metrics/users",
-    response_model=AgentUsersResponse,
-)
-async def get_agent_metrics_users(
-    app_id: int,
-    agent_id: int,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)],
-    role: Annotated[AppRole, Depends(require_min_role("editor"))],
-    range: Annotated[str, Query()] = "7d",
-):
-    _validate_range(range)
-    return MetricsQueryService.agent_users(db, app_id, agent_id, range)
+_register("/admin/metrics", _platform_admin, _system_scope, SYSTEM_DIMENSIONS)
+_register("/apps/{app_id}/metrics", _app_admin, _app_scope, APP_DIMENSIONS)
+_register("/apps/{app_id}/agents/{agent_id}/metrics", _app_editor, _agent_scope, AGENT_DIMENSIONS)

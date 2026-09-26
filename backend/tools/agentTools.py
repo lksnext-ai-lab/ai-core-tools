@@ -19,6 +19,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from services.agent_cache_service import CheckpointerCacheService
 from langchain_core.documents import Document
 from langchain_core.tools import StructuredTool
+from services.agent_metrics_collector import METRICS_SUB_AGENT_ID_KEY, METRICS_TOOL_TYPE_KEY
 import json
 import asyncio
 import uuid
@@ -648,6 +649,8 @@ async def create_agent(
                 if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
                     ensure_json_schema_types(tool.args_schema)
             if (mcp_tools):
+                for tool in mcp_tools:
+                    _tag_tool(tool, "MCP")
                 tools.extend(mcp_tools)
     except Exception as e:
         logger.error(f"Error loading MCP tools: {e}", exc_info=True)
@@ -681,6 +684,8 @@ async def create_agent(
         )
         if skill_file_reader_tool:
             tools.append(skill_file_reader_tool)
+
+    _tag_untyped_tools(tools)
 
     if pydantic_model:
         # In LangChain v1, response_format accepts the pydantic model directly.
@@ -761,6 +766,26 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
         getattr(agent, "rag_max_retrieval_calls", None),
         resolved_pinned,
     )
+
+
+
+
+def _tag_tool(tool: Any, tool_type: str, **extra: Any) -> None:
+    """Record the tool's metrics type in its metadata (propagated to callback handlers)."""
+    if not isinstance(tool, BaseTool):
+        return  # provider-side tool dicts never run locally
+    tool.metadata = {**(tool.metadata or {}), METRICS_TOOL_TYPE_KEY: tool_type, **extra}
+
+
+def _tag_untyped_tools(tools: List[Any]) -> None:
+    """Tag every tool not already typed at its source: sub-agents as AGENT, the rest BUILTIN."""
+    for tool in tools:
+        if not isinstance(tool, BaseTool) or METRICS_TOOL_TYPE_KEY in (tool.metadata or {}):
+            continue
+        if isinstance(tool, (IACTTool, IACTOCRTool)):
+            _tag_tool(tool, "AGENT", **{METRICS_SUB_AGENT_ID_KEY: tool.agent.agent_id})
+        else:
+            _tag_tool(tool, "BUILTIN")
 
 
 def prepare_agent_config(agent):
@@ -1285,6 +1310,7 @@ class IACTTool(BaseTool):
             from tools.streaming_utils import map_stream_event
 
             latest_state: Any = None
+            turn_messages: list = []
             async for mode, chunk in self.react_agent.astream(
                 {"messages": messages},
                 stream_mode=["updates", "custom"],
@@ -1293,6 +1319,7 @@ class IACTTool(BaseTool):
                     for state_delta in chunk.values():
                         if isinstance(state_delta, dict) and "messages" in state_delta:
                             latest_state = state_delta
+                            turn_messages.extend(state_delta["messages"] or [])
 
                 events = map_stream_event(mode, chunk)
                 if not events:
@@ -1300,7 +1327,7 @@ class IACTTool(BaseTool):
                 for event in events:
                     self._emit_subagent_stream_event(stream_writer, event)
 
-            result = latest_state
+            result = {"messages": turn_messages}
             if latest_state is not None:
                 return self._extract_last_message_content(latest_state)
 
@@ -2013,5 +2040,6 @@ def get_retriever_tool(
         description=tool_description,
         args_schema=args_schema,
         response_format="content_and_artifact",
+        metadata={METRICS_TOOL_TYPE_KEY: "RETRIEVER"},
     )
 

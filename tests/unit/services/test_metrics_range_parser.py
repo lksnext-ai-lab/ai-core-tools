@@ -1,41 +1,35 @@
-"""Unit tests for the _parse_range helper in services.metrics_query_service."""
-import sys
-import os
+"""Unit tests for range parsing and bucket alignment in services.metrics_query_service."""
 from datetime import datetime, timedelta
 
 import pytest
 
-# Add backend to path for the indirect FastAPI import in service.py
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'backend'))
+from services.metrics_query_service import _align, parse_range
 
-from services.metrics_query_service import _parse_range
-
-TOLERANCE_SECONDS = 10
+NOW = datetime(2026, 9, 26, 14, 37, 12)
 
 
-class TestParseRange:
-    def test_24h(self):
-        before = datetime.utcnow() - timedelta(hours=24)
-        since, bucket_label, _ = _parse_range("24h")
-        after = datetime.utcnow() - timedelta(hours=24)
-        # since should be approximately 24h ago
-        assert abs((since - before).total_seconds()) < TOLERANCE_SECONDS
-        assert bucket_label == "1h"
+@pytest.mark.parametrize("range_str, window, bucket", [
+    ("24h", timedelta(hours=24), "1h"),
+    ("7d", timedelta(days=7), "6h"),
+    ("30d", timedelta(days=30), "1d"),
+    ("90d", timedelta(days=90), "1d"),
+])
+def test_parse_range(range_str, window, bucket):
+    since, until, bucket_label, _ = parse_range(range_str, now=NOW)
+    assert until == NOW
+    assert since == NOW - window
+    assert bucket_label == bucket
 
-    def test_7d(self):
-        before = datetime.utcnow() - timedelta(days=7)
-        since, bucket_label, _ = _parse_range("7d")
-        after = datetime.utcnow() - timedelta(days=7)
-        assert abs((since - before).total_seconds()) < TOLERANCE_SECONDS
-        assert bucket_label == "6h"
 
-    def test_30d(self):
-        before = datetime.utcnow() - timedelta(days=30)
-        since, bucket_label, _ = _parse_range("30d")
-        after = datetime.utcnow() - timedelta(days=30)
-        assert abs((since - before).total_seconds()) < TOLERANCE_SECONDS
-        assert bucket_label == "1d"
+def test_invalid_range():
+    with pytest.raises(ValueError, match="Invalid range"):
+        parse_range("invalid")
 
-    def test_invalid_range(self):
-        with pytest.raises(ValueError, match="Invalid range"):
-            _parse_range("invalid")
+
+@pytest.mark.parametrize("length, expected", [
+    (timedelta(hours=1), datetime(2026, 9, 26, 14, 0)),
+    (timedelta(hours=6), datetime(2026, 9, 26, 12, 0)),  # 6h buckets start at 00/06/12/18 UTC
+    (timedelta(days=1), datetime(2026, 9, 26, 0, 0)),
+])
+def test_align_matches_sql_bucket_starts(length, expected):
+    assert _align(NOW, length) == expected

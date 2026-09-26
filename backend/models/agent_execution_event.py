@@ -60,6 +60,7 @@ class AgentExecutionEvent(Base):
     started_at = Column(DateTime, nullable=False)
     finished_at = Column(DateTime, nullable=True)
     duration_ms = Column(Integer, nullable=True)
+    time_to_first_token_ms = Column(Integer, nullable=True)  # streaming runs only
     status = Column(
         Enum(AgentExecutionStatus, name='agent_execution_status', create_type=False),
         nullable=False,
@@ -67,11 +68,13 @@ class AgentExecutionEvent(Base):
     error_code = Column(String(64), nullable=True)
     error_message = Column(Text, nullable=True)
     model_name = Column(String(255), nullable=True)
+    provider = Column(String(45), nullable=True)
     ai_service_id = Column(
         Integer,
         ForeignKey('AIService.service_id', ondelete='SET NULL'),
         nullable=True,
     )
+    llm_calls = Column(Integer, nullable=True)  # direct LLM calls of this agent in the run
     input_tokens = Column(Integer, nullable=True)
     output_tokens = Column(Integer, nullable=True)
     total_tokens = Column(Integer, nullable=True)

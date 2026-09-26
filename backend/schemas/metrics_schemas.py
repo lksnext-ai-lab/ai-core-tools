@@ -1,170 +1,121 @@
-"""Pydantic response schemas for the agent metrics dashboard."""
+"""Pydantic response schemas for the agent metrics dashboards.
+
+The same shapes serve the three scopes (system, app, agent). "runs" count every
+recorded agent execution; "executions" count only top-level ones (sub-agent
+calls excluded). Token and LLM-call totals sum all runs: each run records only
+its own direct LLM calls, so nothing is counted twice.
+"""
 from __future__ import annotations
-from typing import Optional, Literal
+
+from typing import Literal, Optional
+
 from pydantic import BaseModel
 
-TimeRange = Literal["24h", "7d", "30d"]
+MetricsRange = Literal["24h", "7d", "30d", "90d"]
+BreakdownDimension = Literal["app", "agent", "model", "provider", "channel", "user"]
 
-# ── App-level schemas ──────────────────────────────────────────────────────
 
-class AppSummaryResponse(BaseModel):
-    range: str
-    total_executions: int
-    total_executions_incl_subcalls: int
-    total_input_tokens: int
-    total_output_tokens: int
-    total_tokens: int
+class SummaryStats(BaseModel):
+    executions: int
+    subagent_calls: int
+    errors: int
+    timeouts: int
     error_rate: float
-    avg_latency_ms_p50: Optional[float]
-    avg_latency_ms_p95: Optional[float]
+    llm_calls: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    avg_tokens_per_execution: Optional[float] = None
+    latency_p50_ms: Optional[float] = None
+    latency_p95_ms: Optional[float] = None
+    ttft_p50_ms: Optional[float] = None
+    ttft_p95_ms: Optional[float] = None
+    tool_calls: int
+    tool_errors: int
+    active_apps: int
     active_agents: int
     active_users: int
 
 
-class ExecutionBucket(BaseModel):
-    ts: str
-    root: int
-    sub: int
+class SummaryResponse(BaseModel):
+    range: MetricsRange
+    current: SummaryStats
+    previous: SummaryStats  # same-length window right before the current one
+
+
+class TimeseriesPoint(BaseModel):
+    ts: str  # bucket start, ISO-8601 UTC
+    executions: int
+    subagent_calls: int
     errors: int
-
-
-class AppExecutionsResponse(BaseModel):
-    range: str
-    bucket_size: str
-    series: list[ExecutionBucket]
-
-
-class AgentBreakdown(BaseModel):
-    agent_id: int
-    agent_name: str
-    executions: int
-    total_tokens: int
-    error_rate: float
-    avg_latency_ms: Optional[float]
-    last_execution_at: Optional[str]
-
-
-class AppAgentsResponse(BaseModel):
-    range: str
-    agents: list[AgentBreakdown]
-
-
-class ModelBreakdown(BaseModel):
-    model_name: str
-    executions: int
-    total_tokens: int
     input_tokens: int
     output_tokens: int
+    latency_p50_ms: Optional[float] = None
+    latency_p95_ms: Optional[float] = None
+
+
+class TimeseriesResponse(BaseModel):
+    range: MetricsRange
+    bucket: Literal["1h", "6h", "1d"]
+    points: list[TimeseriesPoint]
+
+
+class BreakdownItem(BaseModel):
+    key: str
+    label: str
+    secondary_label: Optional[str] = None  # e.g. the app of an agent in the system view
+    runs: int
+    errors: int
     error_rate: float
-    avg_latency_ms: Optional[float]
-    last_execution_at: Optional[str]
-
-
-class AppModelsResponse(BaseModel):
-    range: str
-    models: list[ModelBreakdown]
-
-
-class UserBreakdown(BaseModel):
-    user_id: Optional[int]
-    user_name: Optional[str]
-    executions: int
-    total_tokens: int
-
-
-class AppUsersResponse(BaseModel):
-    range: str
-    users: list[UserBreakdown]
-    limit: int
-
-
-# ── Per-agent schemas ──────────────────────────────────────────────────────
-
-class AgentSummaryResponse(BaseModel):
-    range: str
-    executions: int
-    executions_incl_subcalls: int
-    total_tokens: int
+    llm_calls: int
     input_tokens: int
     output_tokens: int
-    error_rate: float
-    latency_p50_ms: Optional[float]
-    latency_p95_ms: Optional[float]
-    latency_p99_ms: Optional[float]
-    active_users: int
+    total_tokens: int
+    avg_latency_ms: Optional[float] = None
+    p95_latency_ms: Optional[float] = None
+    last_seen: Optional[str] = None
 
 
-class AgentExecutionBucket(BaseModel):
-    ts: str
-    root: int
-    as_tool: int
+class BreakdownResponse(BaseModel):
+    range: MetricsRange
+    dimension: BreakdownDimension
+    items: list[BreakdownItem]
 
 
-class AgentExecutionsResponse(BaseModel):
-    range: str
-    bucket_size: str
-    series: list[AgentExecutionBucket]
-
-
-class TokenBucket(BaseModel):
-    ts: str
-    input: int
-    output: int
-
-
-class AgentTokensResponse(BaseModel):
-    range: str
-    bucket_size: str
-    series: list[TokenBucket]
-
-
-class ErrorBucket(BaseModel):
-    ts: str
-    errors: int
-    total: int
-    rate: float
-
-
-class ErrorByCode(BaseModel):
-    error_code: str
-    count: int
-
-
-class AgentErrorsResponse(BaseModel):
-    range: str
-    bucket_size: str
-    series: list[ErrorBucket]
-    by_code: list[ErrorByCode]
-
-
-class LatencyBucket(BaseModel):
-    ts: str
-    p50: Optional[float]
-    p95: Optional[float]
-    p99: Optional[float]
-
-
-class AgentLatencyResponse(BaseModel):
-    range: str
-    bucket_size: str
-    series: list[LatencyBucket]
-
-
-class ToolBreakdown(BaseModel):
+class ToolStats(BaseModel):
     tool_name: str
     tool_type: str
-    sub_agent_id: Optional[int] = None
     calls: int
+    errors: int
     error_rate: float
-    avg_duration_ms: Optional[float]
+    avg_duration_ms: Optional[float] = None
+    p95_duration_ms: Optional[float] = None
 
 
-class AgentToolsResponse(BaseModel):
-    range: str
-    tools: list[ToolBreakdown]
+class ToolsResponse(BaseModel):
+    range: MetricsRange
+    tools: list[ToolStats]
 
 
-class AgentUsersResponse(BaseModel):
-    range: str
-    users: list[UserBreakdown]
-    limit: int
+class ErrorGroup(BaseModel):
+    error_code: str
+    count: int
+    last_seen: str
+    sample_message: Optional[str] = None
+
+
+class RecentError(BaseModel):
+    started_at: str
+    app_id: int
+    app_name: Optional[str] = None
+    agent_id: int
+    agent_name: Optional[str] = None
+    caller_type: str
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class ErrorsResponse(BaseModel):
+    range: MetricsRange
+    groups: list[ErrorGroup]
+    recent: list[RecentError]

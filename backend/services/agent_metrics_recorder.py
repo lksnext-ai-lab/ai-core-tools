@@ -21,8 +21,13 @@ _pending_writes: set[asyncio.Task] = set()
 
 def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
                            finished_at, duration_ms, status, error_code,
-                           error_message, result, image_files, message) -> None:
-    """Build the metrics payload and persist it in the background. Never raises."""
+                           error_message, result, image_files, message,
+                           collector=None, time_to_first_token_ms=None) -> None:
+    """Build the metrics payload and persist it in the background. Never raises.
+
+    ``collector`` (an AgentMetricsCollector attached to the run) is the source of
+    token usage and tool calls; without it they are derived from ``result``.
+    """
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -43,6 +48,8 @@ def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
             result=result,
             image_files=image_files,
             message=message,
+            collector=collector,
+            time_to_first_token_ms=time_to_first_token_ms,
         )
         task = loop.create_task(persist_metrics_payload(payload))
         _pending_writes.add(task)
@@ -69,52 +76,63 @@ def _int_or_none(value: Any) -> Optional[int]:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _turn_messages(result: Any) -> list:
+    """Messages produced in this turn: everything after the last human message.
+
+    With memory enabled the result also carries the restored conversation history.
+    """
+    if not isinstance(result, dict):
+        return []
+    messages = result.get("messages") or []
+    for index in range(len(messages) - 1, -1, -1):
+        if getattr(messages[index], "type", None) == "human":
+            return list(messages[index + 1:])
+    return list(messages)
+
+
+def _usage_from_messages(messages: list) -> tuple[Optional[int], Optional[int], Optional[int], int, Optional[str]]:
+    """Sum token usage over the turn's AI messages -> (input, output, total, llm_calls, model)."""
+    ai_messages = [m for m in messages if getattr(m, "type", None) == "ai"]
+    usages = [m.usage_metadata for m in ai_messages if getattr(m, "usage_metadata", None)]
+    model = None
+    for m in reversed(ai_messages):
+        metadata = getattr(m, "response_metadata", None) or {}
+        model = metadata.get("model_name") or metadata.get("model")
+        if model:
+            break
+    if not usages:
+        return None, None, None, len(ai_messages), model
+    inp = sum(u.get("input_tokens") or 0 for u in usages)
+    out = sum(u.get("output_tokens") or 0 for u in usages)
+    total = sum(u.get("total_tokens") or 0 for u in usages) or inp + out
+    return inp, out, total, len(ai_messages), model
+
+
 def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
                           finished_at, duration_ms, status, error_code,
-                          error_message, result, image_files, message) -> dict[str, Any]:
+                          error_message, result, image_files, message,
+                          collector=None, time_to_first_token_ms=None) -> dict[str, Any]:
     """Build the {"event": ..., "tool_calls": [...]} payload from the execution context."""
     ctx = user_context or {}
     caller_type = _detect_caller_type(ctx)
+    messages = _turn_messages(result)
 
-    input_tokens = None
-    output_tokens = None
-    total_tokens = None
-    tool_calls_summary = None
+    tool_calls = list(collector.tool_calls) if collector is not None else []
+    if collector is not None and collector.llm_calls > 0:
+        input_tokens, output_tokens, total_tokens = collector.token_usage()
+        llm_calls, model = collector.llm_calls, collector.model_name
+    else:
+        # No collector, or no LLM callbacks reached it: derive from the turn's messages.
+        input_tokens, output_tokens, total_tokens, llm_calls, model = _usage_from_messages(messages)
+
     response_chars = None
+    for msg in reversed(messages):
+        content = getattr(msg, "content", None)
+        if content and isinstance(content, str):
+            response_chars = len(content)
+            break
 
-    if result is not None and isinstance(result, dict):
-        messages = result.get("messages") or []
-        # The last message with usage_metadata belongs to this turn; earlier
-        # ones may be conversation history restored from memory.
-        for msg in reversed(messages):
-            usage = getattr(msg, 'usage_metadata', None)
-            if usage is not None:
-                input_tokens = usage.get('input_tokens') or usage.get('prompt_tokens')
-                output_tokens = usage.get('output_tokens') or usage.get('completion_tokens')
-                total_tokens = usage.get('total_tokens')
-                break
-
-        tool_calls_list = []
-        for msg in messages:
-            tc_list = getattr(msg, 'tool_calls', None)
-            if tc_list:
-                for tc in tc_list:
-                    if len(tool_calls_list) >= 20:
-                        break
-                    if isinstance(tc, dict):
-                        tool_calls_list.append({
-                            "tool_name": tc.get("name", ""),
-                            "tool_type": "MCP",
-                            "status": "SUCCESS",
-                        })
-        tool_calls_summary = tool_calls_list if tool_calls_list else None
-
-        for msg in reversed(messages):
-            content = getattr(msg, 'content', None)
-            if content and isinstance(content, str):
-                response_chars = len(content)
-                break
-
+    ai_service = getattr(fresh_agent, "ai_service", None)
     event_payload = {
         "event_id": event_id,
         "app_id": getattr(fresh_agent, 'app_id', None),
@@ -127,15 +145,22 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
         "started_at": started_at.isoformat(),
         "finished_at": finished_at.isoformat() if finished_at else None,
         "duration_ms": duration_ms,
+        "time_to_first_token_ms": time_to_first_token_ms,
         "status": status,
         "error_code": error_code,
         "error_message": error_message,
-        "model_name": getattr(getattr(fresh_agent, 'ai_service', None), 'description', None),
-        "ai_service_id": getattr(fresh_agent, 'ai_service_id', None),
+        # The provider-reported model wins; AIService.description holds the configured model name.
+        "model_name": model or getattr(ai_service, 'description', None),
+        "provider": getattr(ai_service, 'provider', None),
+        "ai_service_id": _int_or_none(getattr(fresh_agent, 'service_id', None)),
+        "llm_calls": llm_calls,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
-        "tool_calls": tool_calls_summary,
+        "tool_calls": [
+            {"tool_name": tc["tool_name"], "tool_type": tc["tool_type"], "status": tc["status"]}
+            for tc in tool_calls[:20]
+        ] or None,
         "retrieved_docs": None,
         "had_files": len(image_files) > 0,
         "file_count": len(image_files),
@@ -148,7 +173,7 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
 
     return {
         "event": event_payload,
-        "tool_calls": [],
+        "tool_calls": tool_calls,
     }
 
 
@@ -182,11 +207,14 @@ async def persist_metrics_payload(payload: dict[str, Any]) -> None:
             started_at=_parse_dt(event_data['started_at']),
             finished_at=_parse_dt(event_data.get('finished_at')),
             duration_ms=event_data.get('duration_ms'),
+            time_to_first_token_ms=event_data.get('time_to_first_token_ms'),
             status=event_data['status'],
             error_code=event_data.get('error_code'),
             error_message=event_data.get('error_message'),
-            model_name=event_data.get('model_name'),
+            model_name=(event_data.get('model_name') or None) and str(event_data['model_name'])[:255],
+            provider=event_data.get('provider'),
             ai_service_id=event_data.get('ai_service_id'),
+            llm_calls=event_data.get('llm_calls'),
             input_tokens=event_data.get('input_tokens'),
             output_tokens=event_data.get('output_tokens'),
             total_tokens=event_data.get('total_tokens'),

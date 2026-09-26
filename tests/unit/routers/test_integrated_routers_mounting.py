@@ -26,11 +26,11 @@ EXPECTED_ROUTES = {
 }
 
 
+_METRICS_ENDPOINTS = ("summary", "timeseries", "breakdown/{dimension}", "tools", "errors")
 EXPECTED_METRICS_PATHS = {
-    f"/apps/{{app_id}}/metrics/{name}" for name in ("summary", "executions", "agents", "models", "users")
-} | {
-    f"/apps/{{app_id}}/agents/{{agent_id}}/metrics/{name}"
-    for name in ("summary", "executions", "tokens", "errors", "latency", "tools", "users")
+    f"{prefix}/{endpoint}"
+    for prefix in ("/admin/metrics", "/apps/{app_id}/metrics", "/apps/{app_id}/agents/{agent_id}/metrics")
+    for endpoint in _METRICS_ENDPOINTS
 }
 
 
