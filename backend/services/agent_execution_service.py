@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
 from services.agent_execution_context import AgentExecutionContext
+from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
@@ -2220,6 +2221,8 @@ class AgentExecutionService:
                     ls_settings.source,
                 )
 
+            metrics_collector = AgentMetricsCollector()
+            config.setdefault("callbacks", []).append(metrics_collector)
             started_at = datetime.utcnow()
             status, error_code, error_message, result = "SUCCESS", None, None, None
             try:
@@ -2250,6 +2253,7 @@ class AgentExecutionService:
                     result=result if status == "SUCCESS" else None,
                     image_files=image_files or [],
                     message=message,
+                    collector=metrics_collector,
                 )
 
             # LangChain v1: structured output is in 'structured_response' key

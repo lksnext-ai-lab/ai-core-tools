@@ -12,6 +12,9 @@ import pytest
 # Ensure backend is on sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'backend'))
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import build_metrics_payload, record_agent_execution
 
 
@@ -48,45 +51,78 @@ def _make_payload(**kwargs):
 # ── Token extraction ──────────────────────────────────────────────────────────
 
 class TestTokenExtraction:
-    def _make_message_with_usage(self, input_tokens, output_tokens, total_tokens):
-        msg = MagicMock()
-        msg.usage_metadata = {
-            'input_tokens': input_tokens,
-            'output_tokens': output_tokens,
-            'total_tokens': total_tokens,
-        }
-        msg.content = "response text"
-        msg.tool_calls = None
-        return msg
+    """Without a collector (sub-agent runs), usage is summed over this turn's AI messages."""
 
-    def test_happy_path_tokens(self):
-        msg = self._make_message_with_usage(100, 50, 150)
-        result = {'messages': [msg]}
-        payload = _make_payload(result=result)
-        event = payload['event']
-        assert event['input_tokens'] == 100
-        assert event['output_tokens'] == 50
-        assert event['total_tokens'] == 150
+    @staticmethod
+    def _ai(inp, out, content="response text", model=None):
+        return AIMessage(
+            content=content,
+            usage_metadata={'input_tokens': inp, 'output_tokens': out, 'total_tokens': inp + out},
+            response_metadata={'model_name': model} if model else {},
+        )
+
+    def test_sums_every_llm_call_of_the_turn(self):
+        # A tool loop: two model calls in the same turn.
+        result = {'messages': [
+            HumanMessage(content="q"),
+            self._ai(100, 20, content=""),
+            ToolMessage(content="tool out", tool_call_id="t1"),
+            self._ai(150, 50, model="gpt-5-mini"),
+        ]}
+        event = _make_payload(result=result)['event']
+        assert (event['input_tokens'], event['output_tokens'], event['total_tokens']) == (250, 70, 320)
+        assert event['llm_calls'] == 2
+        assert event['model_name'] == "gpt-5-mini"
+
+    def test_ignores_restored_history(self):
+        result = {'messages': [
+            HumanMessage(content="old question"),
+            self._ai(999, 999),
+            HumanMessage(content="new question"),
+            self._ai(10, 5),
+        ]}
+        event = _make_payload(result=result)['event']
+        assert (event['input_tokens'], event['output_tokens']) == (10, 5)
 
     def test_missing_usage_metadata(self):
-        msg = MagicMock()
-        msg.usage_metadata = None
-        msg.content = "text"
-        msg.tool_calls = None
-        result = {'messages': [msg]}
-        payload = _make_payload(result=result)
-        event = payload['event']
+        result = {'messages': [HumanMessage(content="q"), AIMessage(content="text")]}
+        event = _make_payload(result=result)['event']
         assert event['input_tokens'] is None
-        assert event['output_tokens'] is None
         assert event['total_tokens'] is None
+        assert event['llm_calls'] == 1
 
     def test_empty_messages_list(self):
-        result = {'messages': []}
-        payload = _make_payload(result=result)
-        event = payload['event']
+        event = _make_payload(result={'messages': []})['event']
         assert event['input_tokens'] is None
-        assert event['output_tokens'] is None
-        assert event['total_tokens'] is None
+        assert event['llm_calls'] == 0
+
+
+class TestCollectorPayload:
+    def test_collector_is_the_source_when_given(self):
+        collector = AgentMetricsCollector()
+        collector.llm_calls, collector._usage_seen = 3, True
+        collector.input_tokens, collector.output_tokens, collector.total_tokens = 30, 12, 42
+        collector._models["claude-sonnet-5"] += 3
+        collector.tool_calls.append({
+            "tool_name": "retrieve_from_knowledge_base", "tool_type": "RETRIEVER", "sub_agent_id": None,
+            "mcp_config_id": None, "status": "SUCCESS", "error_message": None,
+            "duration_ms": 120, "started_at": "2026-01-01T12:00:00",
+        })
+        payload = _make_payload(collector=collector, time_to_first_token_ms=800)
+        event = payload['event']
+        assert (event['llm_calls'], event['total_tokens'], event['model_name']) == (3, 42, "claude-sonnet-5")
+        assert event['time_to_first_token_ms'] == 800
+        assert payload['tool_calls'][0]['tool_type'] == "RETRIEVER"
+        assert event['tool_calls'] == [
+            {"tool_name": "retrieve_from_knowledge_base", "tool_type": "RETRIEVER", "status": "SUCCESS"}
+        ]
+
+    def test_falls_back_to_configured_model_and_service(self):
+        agent = _fake_agent()
+        agent.service_id = 7
+        agent.ai_service = MagicMock(description="gpt-4.1", provider="OpenAI")
+        event = _make_payload(fresh_agent=agent)['event']
+        assert (event['model_name'], event['provider'], event['ai_service_id']) == ("gpt-4.1", "OpenAI", 7)
 
 
 # ── Caller type detection ─────────────────────────────────────────────────────

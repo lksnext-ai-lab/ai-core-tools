@@ -27,6 +27,7 @@ from tools.streaming_utils import (
     SSE_TOKEN,
 )
 from services.agent_execution_service import AgentExecutionService
+from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
 from services.agent_cache_service import (
     CheckpointerCacheService,
@@ -103,7 +104,8 @@ class AgentStreamingService:
         event_id = str(uuid.uuid4())
         started_at = datetime.utcnow()
         metrics_status, metrics_error_code, metrics_error_message = "SUCCESS", None, None
-        stream_messages: list = []
+        metrics_collector = AgentMetricsCollector()
+        first_token_at = None
 
         try:
             # ----------------------------------------------------------------
@@ -208,6 +210,7 @@ class AgentStreamingService:
                 config["configurable"]["question"] = ctx.enhanced_message
                 if rollback_checkpoint_id is not None:
                     config["configurable"]["checkpoint_id"] = rollback_checkpoint_id
+                config.setdefault("callbacks", []).append(metrics_collector)
 
                 # ------------------------------------------------------------
                 # 4. Build the HumanMessage payload (handles multimodal images)
@@ -256,11 +259,6 @@ class AgentStreamingService:
                     ):
 
                         if mode == "updates":
-                            # Keep the latest node messages for token metrics.
-                            if isinstance(chunk, dict):
-                                for node_output in chunk.values():
-                                    if isinstance(node_output, dict) and "messages" in node_output:
-                                        stream_messages = node_output["messages"]
                             if (
                                 isinstance(chunk, dict)
                                 and "model" in chunk
@@ -273,6 +271,8 @@ class AgentStreamingService:
                         if events:
                             for event in events:
                                 if event["type"] == SSE_TOKEN:
+                                    if first_token_at is None:
+                                        first_token_at = datetime.utcnow()
                                     accumulated_content += event["data"].get("content", "")
                                 yield format_sse_event(event["type"], event["data"])
                     break
@@ -388,9 +388,14 @@ class AgentStreamingService:
                     status=metrics_status,
                     error_code=metrics_error_code,
                     error_message=metrics_error_message,
-                    result={"messages": stream_messages} if stream_messages else None,
+                    result=None,
                     image_files=ctx.image_files or [],
                     message=message,
+                    collector=metrics_collector,
+                    time_to_first_token_ms=(
+                        int((first_token_at - started_at).total_seconds() * 1000)
+                        if first_token_at is not None else None
+                    ),
                 )
 
     # ------------------------------------------------------------------
