@@ -23,6 +23,7 @@ import {
   Cpu,
   Box,
   Target,
+  Activity,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -190,6 +191,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/admin/stats',
       name: 'Statistics',
       icon: <BarChart2 size={16} />,
+      section: 'admin',
+      adminOnly: true
+    },
+    {
+      path: '/admin/metrics',
+      name: 'Agent Metrics',
+      icon: <Activity size={16} />,
       section: 'admin',
       adminOnly: true
     },

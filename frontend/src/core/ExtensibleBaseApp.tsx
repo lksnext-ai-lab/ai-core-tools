@@ -44,6 +44,7 @@ import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
+import AdminMetricsPage from '../pages/admin/AdminMetricsPage';
 import SystemSettingsPage from '../pages/admin/SystemSettingsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
@@ -405,6 +406,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/stats" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <StatsPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/metrics" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <AdminMetricsPage />
                   </AdminLayoutRoute>
                 } />
 
