@@ -55,6 +55,7 @@ services:
       # DBOS uses the same Postgres instance; its tables live in the dbos schema.
       # Override this with a dedicated logical database in production if desired.
       DBOS_DATABASE_URL: ${DBOS_DATABASE_URL:-}
+      DBOS_ENABLED: ${DBOS_ENABLED:-true}
       AICT_MIN_SCHEDULE_INTERVAL_SECONDS: ${AICT_MIN_SCHEDULE_INTERVAL_SECONDS:-60}
 
       AICT_LOGIN: ${AICT_LOGIN:-LOCAL}

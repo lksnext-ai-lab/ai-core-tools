@@ -142,10 +142,20 @@ def _system_database_url() -> Optional[str]:
     return os.getenv("DBOS_DATABASE_URL") or os.getenv("SQLALCHEMY_DATABASE_URI")
 
 
+def dbos_enabled() -> bool:
+    """DBOS_ENABLED=false turns scheduling off (e.g. tests); on by default."""
+    return os.getenv("DBOS_ENABLED", "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+def dbos_running() -> bool:
+    """True once initialize_dbos() has launched DBOS in this process."""
+    return bool(getattr(initialize_dbos, "started", False))
+
+
 async def initialize_dbos() -> bool:
-    """Initialize DBOS once when a system database is available."""
+    """Initialize DBOS once when enabled and a system database is available."""
     system_database_url = _system_database_url()
-    if DBOS is None or not system_database_url:
+    if DBOS is None or not system_database_url or not dbos_enabled():
         return False
     if getattr(initialize_dbos, "started", False):
         return True

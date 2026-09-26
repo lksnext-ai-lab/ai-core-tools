@@ -104,3 +104,24 @@ def test_system_database_url_defaults_to_application_database(monkeypatch):
     monkeypatch.setenv("SQLALCHEMY_DATABASE_URI", "postgresql://app@db/app")
 
     assert module._system_database_url() == "postgresql://app@db/app"
+
+
+@pytest.mark.parametrize("value, expected", [
+    (None, True), ("true", True), ("1", True), ("false", False), ("FALSE", False), ("0", False), ("off", False),
+])
+def test_dbos_enabled_flag(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("DBOS_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("DBOS_ENABLED", value)
+    assert module.dbos_enabled() is expected
+
+
+@pytest.mark.asyncio
+async def test_initialize_dbos_does_nothing_when_disabled(monkeypatch):
+    monkeypatch.setenv("DBOS_ENABLED", "false")
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URI", "postgresql://app@db/app")
+    with patch.object(module, "DBOS") as dbos:
+        assert await module.initialize_dbos() is False
+        dbos.launch.assert_not_called()
+    assert module.dbos_running() is False

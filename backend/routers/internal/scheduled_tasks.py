@@ -19,8 +19,10 @@ router = APIRouter(prefix="/scheduled-tasks", tags=["Scheduled tasks"])
 
 
 def _service(db: Session) -> ScheduledTaskService:
-    from scheduling.periodic_agent_task import DBOS, DBOSOrchestrator
-    return ScheduledTaskService(db, DBOSOrchestrator() if DBOS is not None else None)
+    from scheduling.periodic_agent_task import DBOSOrchestrator, dbos_running
+    # Only hand out the orchestrator once DBOS has actually launched: calling DBOS
+    # before that fails with "No DBOS was created yet" (a 500 instead of a clear 400).
+    return ScheduledTaskService(db, DBOSOrchestrator() if dbos_running() else None)
 
 
 @router.post("", response_model=ScheduledTaskResponseSchema, status_code=status.HTTP_201_CREATED)
