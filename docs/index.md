@@ -52,7 +52,7 @@
 - [Skills](guides/skills.md) — Skill packages (SKILL.md frontmatter contract), zip import/export, system skills, sandbox activation, the opt-in skill router, and Claude Code plugin import
 - [Git Workflow & Release Process](guides/git-workflow.md) — GitFlow branching model, release workflow, hotfix process, versioning convention, and commit rules
 - [SharePoint Sync](guides/sharepoint-sync.md) — Index SharePoint and OneDrive drives into silos via Microsoft Graph delta queries; Azure setup and sync behaviour
-- [Agent Metrics](guides/agent-metrics.md) — Per-execution metrics (latency, tokens, errors, callers), app dashboard and per-agent Metrics tab
+- [Agent Metrics](guides/agent-metrics.md) — Platform, app and agent dashboards: executions, errors, latency, time to first token, tokens, tools and channels; how runs are captured and counted
 - [User Deletion and App Ownership Transfer](guides/user-deletion-and-app-transfer.md) — Safe user deletion (deletion taxonomy, cascade and transfer modes), admin-direct and voluntary app ownership transfer, migration `userdel001`, and operator runbook
 
 ### Copilot Agents & Tooling
