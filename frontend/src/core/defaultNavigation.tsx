@@ -97,8 +97,7 @@ export const defaultNavigation: NavigationConfig = {
           path: '/apps/:appId/sharepoint',
           name: 'SharePoint',
           icon: <Cloud size={16} />,
-          section: 'appNavigation',
-          enterpriseFeature: 'sharepoint'
+          section: 'appNavigation'
         },
       ]
     },
@@ -106,6 +105,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/mcp-servers',
       name: 'MCP Servers',
       icon: <Plug size={16} />,
+      section: 'appNavigation'
+    },
+    {
+      path: '/apps/:appId/metrics',
+      name: 'Metrics',
+      icon: <BarChart2 size={16} />,
       section: 'appNavigation'
     },
     {

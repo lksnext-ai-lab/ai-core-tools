@@ -107,16 +107,6 @@ async def lifespan(app: FastAPI):
                 "EntraID provider NOT initialized (development/testing only)"
             )
         
-        from plugins.registry import plugin_registry
-        app.state.plugin_registry = plugin_registry
-        import importlib.metadata
-        for ep in importlib.metadata.entry_points(group="mattin.plugins"):
-            try:
-                ep.load()(app, plugin_registry)
-                logger.info(f"Plugin loaded: {ep.name}")
-            except Exception as e:
-                logger.error(f"Failed to load plugin '{ep.name}': {e}", exc_info=True)
-
         if AuthConfig.LOGIN_MODE == "LOCAL":
             from db.database import SessionLocal as _SessionLocal
             from services.auth.omniadmin_bootstrap import bootstrap_omniadmins
@@ -143,6 +133,9 @@ async def lifespan(app: FastAPI):
         from services.file_cleanup_worker import start_file_cleanup_worker
         app.state.file_cleanup_task = start_file_cleanup_worker()
 
+        from services.sharepoint.worker import start_sharepoint_worker
+        app.state.sharepoint_tasks = await start_sharepoint_worker()
+
         print("✅ Application startup complete")
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
@@ -164,11 +157,8 @@ async def lifespan(app: FastAPI):
 
         sharepoint_tasks = getattr(app.state, 'sharepoint_tasks', None)
         if sharepoint_tasks:
-            try:
-                from mattin_sharepoint.worker import stop_sharepoint_worker
-                await stop_sharepoint_worker(sharepoint_tasks)
-            except ImportError:
-                pass
+            from services.sharepoint.worker import stop_sharepoint_worker
+            await stop_sharepoint_worker(sharepoint_tasks)
 
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.close_pool()

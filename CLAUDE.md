@@ -282,6 +282,7 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - **Cascade deletion**: `AppService.delete_app()` performs ordered deletion across all entity types
 - **LangSmith tracing**: Per-App key in `App.langsmith_api_key` (project = app name) with optional global env-var fallback (`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT`). Validated via `POST /internal/apps/{id}/langsmith/test`. Central module: `backend/tools/langsmith_config.py`
 - **MCP dual-role**: Mattin AI acts as both MCP server (exposing agents) and MCP client (consuming external tool servers)
+- **No plugin system**: SharePoint sync (`services/sharepoint/`) and agent metrics (`services/agent_metrics_recorder.py`, `routers/internal/metrics.py`) are regular core features — the former open-core `mattin.plugins` entry-point loader and `/internal/capabilities` endpoint were removed
 - **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes (self-managed and SaaS alike)
 
 ## Anti-Patterns

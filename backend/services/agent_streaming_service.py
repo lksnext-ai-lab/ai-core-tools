@@ -7,6 +7,9 @@ _finalize_turn(); this service only owns the astream loop that yields tokens
 and tool events to the client.
 """
 
+import asyncio
+import uuid
+from datetime import datetime
 from typing import AsyncGenerator, Dict, List, Any
 
 import psycopg.errors
@@ -24,6 +27,7 @@ from tools.streaming_utils import (
     SSE_TOKEN,
 )
 from services.agent_execution_service import AgentExecutionService
+from services.agent_metrics_recorder import record_agent_execution
 from services.agent_cache_service import (
     CheckpointerCacheService,
     is_missing_tool_output_error,
@@ -95,6 +99,12 @@ class AgentStreamingService:
         ctx = None
         sandbox_turn_active = False
 
+        # Metrics: outcome of this turn, recorded once in the finally block.
+        event_id = str(uuid.uuid4())
+        started_at = datetime.utcnow()
+        metrics_status, metrics_error_code, metrics_error_message = "SUCCESS", None, None
+        stream_messages: list = []
+
         try:
             # ----------------------------------------------------------------
             # 1. Setup phase — delegates entirely to AgentExecutionService
@@ -112,6 +122,8 @@ class AgentStreamingService:
                 ctx,
                 db=effective_db,
             )
+            # Sub-agents built as tools read current_event_id to link their runs to this one.
+            ctx.user_context = {**(ctx.user_context or {}), "current_event_id": event_id}
 
             # ----------------------------------------------------------------
             # 2. Emit early metadata event so the client has conversation_id
@@ -244,6 +256,11 @@ class AgentStreamingService:
                     ):
 
                         if mode == "updates":
+                            # Keep the latest node messages for token metrics.
+                            if isinstance(chunk, dict):
+                                for node_output in chunk.values():
+                                    if isinstance(node_output, dict) and "messages" in node_output:
+                                        stream_messages = node_output["messages"]
                             if (
                                 isinstance(chunk, dict)
                                 and "model" in chunk
@@ -283,6 +300,9 @@ class AgentStreamingService:
                                 ctx.fresh_agent.agent_id,
                                 ctx.session_id_for_cache,
                             )
+                            metrics_status = "ERROR"
+                            metrics_error_code = type(stream_exc).__name__
+                            metrics_error_message = str(stream_exc)[:2000]
                             yield format_sse_event(
                                 "error",
                                 {"message": "Your last message could not be completed. Please resend it."},
@@ -338,9 +358,17 @@ class AgentStreamingService:
                 type(exc).__name__,
                 str(exc),
             )
+            metrics_status, metrics_error_code = "ERROR", type(exc).__name__
+            metrics_error_message = "Connection error, please retry."
             yield format_sse_event("error", {"message": "Connection error, please retry."})
+        except (asyncio.CancelledError, GeneratorExit):
+            # Client went away mid-stream.
+            metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
+            raise
         except Exception as exc:
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
+            metrics_status, metrics_error_code = "ERROR", type(exc).__name__
+            metrics_error_message = str(exc)[:2000]
             yield format_sse_event("error", {"message": "Agent execution failed"})
 
         finally:
@@ -348,6 +376,22 @@ class AgentStreamingService:
                 self.execution_service._end_sandbox_turn(ctx, db=effective_db)
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
+            if ctx is not None:
+                finished_at = datetime.utcnow()
+                record_agent_execution(
+                    event_id=event_id,
+                    fresh_agent=ctx.fresh_agent,
+                    user_context=ctx.user_context,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+                    status=metrics_status,
+                    error_code=metrics_error_code,
+                    error_message=metrics_error_message,
+                    result={"messages": stream_messages} if stream_messages else None,
+                    image_files=ctx.image_files or [],
+                    message=message,
+                )
 
     # ------------------------------------------------------------------
     # Private helpers

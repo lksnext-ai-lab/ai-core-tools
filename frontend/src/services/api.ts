@@ -477,7 +477,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 // DeploymentModeContext cannot be read here (not a hook), so it writes the
 // resolved auth mode via setApiAuthMode(). The default is derived from the
-// env/runtime OIDC flag so early requests (e.g. CapabilitiesContext) already
+// env/runtime OIDC flag so early requests already
 // use the correct mode before the context resolves /internal/config.
 const _rc = (globalThis as Record<string, unknown>).__RUNTIME_CONFIG__ as Record<string, string> | undefined;
 const _oidcDefault = _rc?.VITE_OIDC_ENABLED === undefined

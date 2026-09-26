@@ -5,9 +5,8 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-pytest.importorskip("mattin_sharepoint", reason="mattin-sharepoint plugin not installed")
 
-from mattin_sharepoint.graph_client import (
+from services.sharepoint.graph_client import (
     GraphClient,
     GraphAuthError,
     GraphAccessError,
@@ -41,7 +40,7 @@ class TestGetToken:
         token_json = {"access_token": "my-token-abc"}
         mock_resp = _make_response(200, token_json)
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
@@ -56,7 +55,7 @@ class TestGetToken:
     async def test_get_token_failure(self):
         mock_resp = _make_response(400, {"error": "invalid_client"})
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
@@ -77,7 +76,7 @@ class TestSearchSites:
         sites = [{"id": "s1", "displayName": "Site A", "webUrl": "https://example.com"}]
         mock_resp = _make_response(200, {"value": sites})
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
@@ -99,7 +98,7 @@ class TestListDrives:
         drives = [{"id": "d1", "name": "Documents", "driveType": "documentLibrary"}]
         mock_resp = _make_response(200, {"value": drives})
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
@@ -130,7 +129,7 @@ class TestDeltaQuery:
         resp1 = _make_response(200, page1)
         resp2 = _make_response(200, page2)
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
@@ -160,7 +159,7 @@ class TestDeltaQuery:
             captured_urls.append(url)
             return mock_resp
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
@@ -178,7 +177,7 @@ class TestDeltaQuery:
         mock_resp = MagicMock()
         mock_resp.status_code = 410
 
-        with patch("mattin_sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
+        with patch("services.sharepoint.graph_client.httpx.AsyncClient") as mock_client_cls:
             instance = AsyncMock()
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)

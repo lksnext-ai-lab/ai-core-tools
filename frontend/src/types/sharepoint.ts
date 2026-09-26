@@ -88,8 +88,3 @@ export interface TestConnectionRequest {
   site_id?: string;
   drive_id?: string;
 }
-
-export interface Capabilities {
-  sharepoint?: { enabled: boolean; version?: string };
-  [key: string]: { enabled: boolean; version?: string } | undefined;
-}
