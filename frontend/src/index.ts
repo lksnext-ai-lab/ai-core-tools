@@ -90,6 +90,8 @@ export { default as AgentsPage } from './pages/AgentsPage';
 export { default as AgentFormPage } from './pages/AgentFormPage';
 export { default as ScheduledTasksPage } from './pages/ScheduledTasksPage';
 export { default as ScheduledTaskFormPage } from './pages/ScheduledTaskFormPage';
+export { default as ScheduledTaskDetailPage } from './pages/ScheduledTaskDetailPage';
+export { default as ScheduledTaskRunPage } from './pages/ScheduledTaskRunPage';
 export { default as SilosPage } from './pages/SilosPage';
 export { default as SiloFormPage } from './pages/SiloFormPage';
 export { default as SiloPlaygroundPage } from './pages/SiloPlaygroundPage';

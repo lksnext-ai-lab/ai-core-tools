@@ -9,6 +9,7 @@ from sqlalchemy import Column, DateTime, Enum, ForeignKey, Index, Integer, JSON,
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+from models.agent import MarketplaceVisibility
 
 
 class ScheduledTask(Base):
@@ -16,6 +17,7 @@ class ScheduledTask(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
     agent_id = Column(Integer, ForeignKey("Agent.agent_id", ondelete="CASCADE"), nullable=False)
     app_id = Column(Integer, ForeignKey("App.app_id", ondelete="CASCADE"), nullable=False)
     created_by = Column(Integer, ForeignKey("User.user_id"), nullable=False)
@@ -24,9 +26,23 @@ class ScheduledTask(Base):
     cron_expression = Column(String(120), nullable=False)
     timezone = Column(String(64), nullable=False, default="UTC", server_default="UTC")
     conversation_mode = Column(String(20), nullable=False, default="new_per_run", server_default="new_per_run")
-    persistent_conversation_id = Column(Integer, ForeignKey("Conversation.conversation_id"), nullable=True)
+    # use_alter: Conversation.scheduled_task_id points back here, so this FK closes a cycle.
+    persistent_conversation_id = Column(
+        Integer,
+        ForeignKey(
+            "Conversation.conversation_id", ondelete="SET NULL",
+            use_alter=True, name="scheduled_task_persistent_conversation_id_fkey",
+        ),
+        nullable=True,
+    )
     status = Column(String(20), nullable=False, default="active", server_default="active")
     max_concurrent_runs = Column(Integer, nullable=False, default=1, server_default="1")
+    # Only the newest N runs (with their conversations/files) are kept.
+    max_runs_retained = Column(Integer, nullable=False, default=10, server_default="10")
+    marketplace_visibility = Column(
+        Enum(MarketplaceVisibility), nullable=False,
+        default=MarketplaceVisibility.UNPUBLISHED, server_default="UNPUBLISHED",
+    )
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default="now()")
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default="now()")
 
@@ -49,7 +65,7 @@ class ScheduledTaskRun(Base):
 
     id = Column(Integer, primary_key=True)
     scheduled_task_id = Column(Integer, ForeignKey("scheduled_task.id", ondelete="CASCADE"), nullable=False)
-    conversation_id = Column(Integer, ForeignKey("Conversation.conversation_id"), nullable=True)
+    conversation_id = Column(Integer, ForeignKey("Conversation.conversation_id", ondelete="SET NULL"), nullable=True)
     conversation_anchor_message_id = Column(Integer, nullable=True)
     orchestrator_run_id = Column(String(255), nullable=False)
     scheduled_time = Column(DateTime, nullable=False)
@@ -58,5 +74,9 @@ class ScheduledTaskRun(Base):
     status = Column(String(20), nullable=False, default="queued", server_default="queued")
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     error_summary = Column(Text, nullable=True)
+    # The agent's answer for this run (with file:// markers) and the files it produced:
+    # [{"file_id", "filename", "file_type"}]. Independent of the agent's memory settings.
+    output_text = Column(Text, nullable=True)
+    output_files = Column(JSON, nullable=False, default=list, server_default="[]")
 
     task = relationship("ScheduledTask", back_populates="runs")

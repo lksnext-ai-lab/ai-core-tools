@@ -565,6 +565,17 @@ class AgentService:
 
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
+        # Scheduled tasks own conversations, files, temp silos and DBOS schedules
+        # that a plain FK cascade would leave behind.
+        try:
+            from services.scheduled_task_service import ScheduledTaskService, default_orchestrator
+            ScheduledTaskService(db, default_orchestrator()).purge_for_agent(agent_id)
+        except Exception as exc:
+            db.rollback()
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not delete scheduled tasks of agent %s: %s", agent_id, exc
+            )
         # Destroy all active sandboxes before deletion (IT-1)
         try:
             from services.sandbox_session_service import sandbox_session_service

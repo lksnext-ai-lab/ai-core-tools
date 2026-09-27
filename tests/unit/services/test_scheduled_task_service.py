@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -82,7 +82,7 @@ def test_create_rejects_unknown_agent():
         service.create(app_id=3, created_by=42, data={"name": "x", "agent_id": 99, "cron_expression": "*/5 * * * *"})
 
 
-def test_list_filters_deleted_tasks_and_optional_agent():
+def test_list_filters_by_app_and_optional_agent():
     db, queries = _db_for(runs=["task"])
     service = ScheduledTaskService(db)
 
@@ -108,16 +108,97 @@ def test_update_paused_task_pauses_orchestrator_and_ignores_unknown_fields():
     orchestrator.apply_task.assert_not_called()
 
 
-def test_delete_marks_task_deleted_and_removes_schedule():
-    task = _task()
-    db, _ = _db_for(task=task)
+@pytest.mark.asyncio
+async def test_delete_removes_schedule_conversations_files_and_history():
+    task = _task(persistent_conversation_id=5)
+    conversation = SimpleNamespace(conversation_id=5, agent_id=11, session_id="conv_11_abc")
+    db, queries = _db_for(task=task)
+    db.query.side_effect = None
+    query = MagicMock()
+    query.filter.return_value = query
+    query.one_or_none.return_value = task
+    query.all.return_value = [conversation]
+    db.query.return_value = query
     orchestrator = MagicMock()
 
-    ScheduledTaskService(db, orchestrator).delete(7, 3)
+    with (
+        patch("services.conversation_service.ConversationService.release_conversation_resources") as release,
+        patch("services.conversation_service.ConversationService.delete_thread_history", new=AsyncMock()) as history,
+        patch("services.file_management_service.FileManagementService") as files,
+    ):
+        await ScheduledTaskService(db, orchestrator).delete(7, 3)
 
-    assert task.status == "deleted"
     orchestrator.delete_schedule.assert_called_once_with("scheduled-task-7")
-    db.commit.assert_called_once()
+    release.assert_called_once_with(db, conversation)
+    storage_args = files.return_value.delete_conversation_storage.call_args.args
+    assert storage_args[0] == 11 and storage_args[2] == "5"
+    assert storage_args[1]["user_id"] == "scheduled_task_7"
+    db.delete.assert_any_call(conversation)
+    db.delete.assert_any_call(task)
+    history.assert_awaited_once_with(11, "conv_11_abc")
+    assert task.persistent_conversation_id is None
+
+
+def _prune_db(runs, conversations):
+    db = MagicMock()
+    query = MagicMock()
+    query.filter.return_value = query
+    query.order_by.return_value = query
+    query.all.return_value = runs
+    db.query.return_value = query
+    db.get.side_effect = lambda model, conversation_id: conversations.get(conversation_id)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_prune_keeps_newest_runs_and_drops_old_conversations():
+    task = _task(max_runs_retained=2)
+    runs = [SimpleNamespace(id=i, conversation_id=100 + i, output_files=[]) for i in (4, 3, 2, 1)]
+    conversations = {c: SimpleNamespace(conversation_id=c, agent_id=11, session_id=f"s{c}") for c in (101, 102, 103, 104)}
+    db = _prune_db(runs, conversations)
+
+    with (
+        patch("services.conversation_service.ConversationService.release_conversation_resources") as release,
+        patch("services.conversation_service.ConversationService.delete_thread_history", new=AsyncMock()) as history,
+        patch("services.file_management_service.FileManagementService"),
+    ):
+        pruned = await ScheduledTaskService(db).prune_runs(task)
+
+    assert pruned == 2
+    assert [c.args[1].conversation_id for c in release.call_args_list] == [102, 101]
+    db.delete.assert_any_call(runs[2])
+    db.delete.assert_any_call(runs[3])
+    assert history.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_prune_in_continuous_mode_keeps_conversation_and_removes_run_files():
+    task = _task(max_runs_retained=1, conversation_mode="continuous", persistent_conversation_id=50)
+    runs = [
+        SimpleNamespace(id=2, conversation_id=50, output_files=[]),
+        SimpleNamespace(id=1, conversation_id=50, output_files=[{"file_id": "f1", "filename": "a.png"}]),
+    ]
+    conversation = SimpleNamespace(conversation_id=50, agent_id=11, session_id="s50")
+    db = _prune_db(runs, {50: conversation})
+
+    with (
+        patch("services.conversation_service.ConversationService.release_conversation_resources") as release,
+        patch("services.file_management_service.FileManagementService") as files,
+    ):
+        files.return_value.remove_files = AsyncMock()
+        assert await ScheduledTaskService(db).prune_runs(task) == 1
+
+    release.assert_not_called()
+    files.return_value.remove_files.assert_awaited_once()
+    assert files.return_value.remove_files.await_args.args[0] == ["f1"]
+    db.delete.assert_called_once_with(runs[1])
+
+
+@pytest.mark.asyncio
+async def test_prune_is_a_noop_within_the_limit():
+    db = _prune_db([SimpleNamespace(id=1, conversation_id=1, output_files=[])], {})
+    assert await ScheduledTaskService(db).prune_runs(_task(max_runs_retained=10)) == 0
+    db.commit.assert_not_called()
 
 
 def test_runs_paginates_and_run_now_requires_active_task_and_dbos():
@@ -136,3 +217,12 @@ def test_runs_paginates_and_run_now_requires_active_task_and_dbos():
     service.orchestrator = MagicMock()
     with pytest.raises(ValueError, match="Only active"):
         service.run_now(7, 3)
+
+
+def test_create_rejects_continuous_mode_for_agents_without_memory():
+    db, _ = _db_for(agent=SimpleNamespace(agent_id=11, app_id=3, has_memory=False))
+    service = ScheduledTaskService(db)
+    with pytest.raises(ValueError, match="memory"):
+        service.create(app_id=3, created_by=42, data={
+            "name": "x", "agent_id": 11, "cron_expression": "*/5 * * * *", "conversation_mode": "continuous",
+        })

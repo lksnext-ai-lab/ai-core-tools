@@ -912,6 +912,38 @@ class FileManagementService:
         except Exception as e:
             logger.error(f"Error loading persistent files for session {session_key}: {str(e)}")
 
+    async def remove_files(
+        self,
+        file_ids: List[str],
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ) -> None:
+        """Remove several files (metadata + stored bytes) from one session."""
+        session_key = self._get_session_key(agent_id, user_context, conversation_id)
+        for file_id in file_ids:
+            self._files.get(session_key, {}).pop(file_id, None)
+            await self._remove_file_from_disk(session_key, file_id)
+
+    def delete_conversation_storage(
+        self,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ) -> None:
+        """Delete every file of a conversation: its session metadata and its working directory."""
+        session_key = self._get_session_key(agent_id, user_context, conversation_id)
+        self._files.pop(session_key, None)
+        paths = [os.path.join(self._persistent_dir, session_key)]
+        if conversation_id:
+            paths.append(os.path.join(self._tmp_base_folder, "conversations", str(conversation_id)))
+        for path in paths:
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+            except Exception as e:
+                logger.error(f"Error deleting conversation storage {path}: {e}")
+
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
         try:

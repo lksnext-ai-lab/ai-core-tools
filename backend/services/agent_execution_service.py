@@ -719,6 +719,13 @@ def _ensure_remote_workspace_layout(provider: Any, handle: Any) -> None:
         logger.debug("Could not create remote workspace layout: %s", exc, exc_info=True)
 
 
+def _quota_user_id(user_context: Optional[Dict]) -> Any:
+    """User charged for system-LLM usage: scheduled tasks bill their creator (billing_user_id)."""
+    if not user_context:
+        return None
+    return user_context.get('billing_user_id') or user_context.get('user_id')
+
+
 def _inject_file_markers(text: str, files: list) -> str:
     """Replace [Image saved: x] placeholders with file:// markdown markers.
 
@@ -869,9 +876,9 @@ class AgentExecutionService:
             )
 
         # 4. System LLM quota (SaaS mode, no-op in self-managed)
-        if db and user_context and user_context.get('user_id'):
+        if db and _quota_user_id(user_context):
             from services.tier_enforcement_service import TierEnforcementService
-            TierEnforcementService.check_system_llm_quota(db, user_context['user_id'])
+            TierEnforcementService.check_system_llm_quota(db, _quota_user_id(user_context))
 
         # 5. Convert FileReference objects to plain dicts
         processed_files: List[Dict] = []
@@ -1321,12 +1328,11 @@ class AgentExecutionService:
             ai_svc is not None
             and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
             and db
-            and ctx.user_context
-            and ctx.user_context.get('user_id')
+            and _quota_user_id(ctx.user_context)
         ):
             try:
                 from services.usage_tracking_service import UsageTrackingService
-                UsageTrackingService.record_system_llm_call(db, ctx.user_context['user_id'])
+                UsageTrackingService.record_system_llm_call(db, _quota_user_id(ctx.user_context))
             except Exception as _usage_exc:
                 logger.warning(
                     "Failed to record system LLM usage: %s", _usage_exc, exc_info=True

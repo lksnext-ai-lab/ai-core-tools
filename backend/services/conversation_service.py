@@ -68,6 +68,7 @@ class ConversationService:
         user_context: Dict,
         title: Optional[str] = None,
         source: ConversationSource = ConversationSource.PLAYGROUND,
+        scheduled_task_id: Optional[int] = None,
     ) -> Conversation:
         """
         Create a new conversation for a user and agent
@@ -112,6 +113,7 @@ class ConversationService:
             title=title,
             api_key_hash=api_key_hash,
             source=source,
+            scheduled_task_id=scheduled_task_id,
             message_count=0
         )
         
@@ -273,6 +275,46 @@ class ConversationService:
         return conversation
     
     @staticmethod
+    def release_conversation_resources(db: Session, conversation: Conversation) -> None:
+        """Drop a conversation's temp media (silo + repo + vectors) and its sandbox. Best effort."""
+        conversation_id = conversation.conversation_id
+        try:
+            from services.playground_media_service import PlaygroundMediaService
+            PlaygroundMediaService.cleanup(
+                conversation.agent.app_id, conversation.agent_id, conversation.session_id, db
+            )
+            logger.info(
+                f"Cleaned up playground media for conversation {conversation_id} "
+                f"(agent {conversation.agent_id}, session {conversation.session_id})"
+            )
+        except Exception as e:
+            logger.error(f"Error cleaning up playground media during delete: {e}")
+
+        # Sandbox key: conv_{agent_id}_{conversation_id}
+        try:
+            from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
+            sandbox_key = SandboxSessionService.session_key(conversation.agent_id, conversation_id)
+            sandbox_session_service.destroy(sandbox_key)
+            conversation.sandbox_session_id = None
+            conversation.sandbox_state = None
+        except Exception as e:
+            logger.error(f"Error destroying sandbox on conversation delete: {e}")
+
+    @staticmethod
+    async def delete_conversation_history(conversation: Conversation) -> None:
+        """Delete the conversation's LangGraph checkpoints. Best effort."""
+        await ConversationService.delete_thread_history(conversation.agent_id, conversation.session_id)
+
+    @staticmethod
+    async def delete_thread_history(agent_id: int, session_id: str) -> None:
+        """Delete the checkpoints of thread_{agent_id}_{session_id}. Best effort."""
+        try:
+            await CheckpointerCacheService.invalidate_checkpointer_async(agent_id=agent_id, session_id=session_id)
+            logger.info(f"Deleted chat history thread_{agent_id}_{session_id}")
+        except Exception as e:
+            logger.error(f"Error deleting chat history: {e}")
+
+    @staticmethod
     async def delete_conversation(
         db: Session,
         conversation_id: int,
@@ -294,42 +336,8 @@ class ConversationService:
         if not conversation:
             return False
         
-        # Clean up playground temp media repositories (silo + repo + vectors)
-        try:
-            from services.playground_media_service import PlaygroundMediaService
-            app_id = conversation.agent.app_id
-            PlaygroundMediaService.cleanup(
-                app_id, conversation.agent_id, conversation.session_id, db
-            )
-            logger.info(
-                f"Cleaned up playground media for conversation {conversation_id} "
-                f"(agent {conversation.agent_id}, session {conversation.session_id})"
-            )
-        except Exception as e:
-            logger.error(f"Error cleaning up playground media during delete: {e}")
-        
-        # Delete the chat history from PostgreSQL checkpointer
-        try:
-            # Use the full session_id as-is (don't remove the conv_ prefix)
-            # The thread_id format is: thread_{agent_id}_{full_session_id}
-            await CheckpointerCacheService.invalidate_checkpointer_async(
-                agent_id=conversation.agent_id,
-                session_id=conversation.session_id
-            )
-            logger.info(f"Deleted chat history for conversation {conversation_id} (thread_id: thread_{conversation.agent_id}_{conversation.session_id})")
-        except Exception as e:
-            logger.error(f"Error deleting chat history: {e}")
-        
-        # Destroy any active sandbox for this conversation (sandbox key: conv_{agent_id}_{conversation_id})
-        try:
-            from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
-            sandbox_key = SandboxSessionService.session_key(conversation.agent_id, conversation_id)
-            sandbox_session_service.destroy(sandbox_key)
-            # Clear sandbox DB state before deletion
-            conversation.sandbox_session_id = None
-            conversation.sandbox_state = None
-        except Exception as e:
-            logger.error(f"Error destroying sandbox on conversation delete: {e}")
+        ConversationService.release_conversation_resources(db, conversation)
+        await ConversationService.delete_conversation_history(conversation)
 
         # Delete the conversation record
         db.delete(conversation)
@@ -537,6 +545,13 @@ class ConversationService:
         Returns:
             True if user has access, False otherwise
         """
+        # Scheduled-task executions own their conversations; users never do.
+        if conversation.scheduled_task_id is not None:
+            return (
+                isinstance(user_context, dict)
+                and user_context.get('scheduled_task_id') == conversation.scheduled_task_id
+            )
+
         # Check API key user first (they have user_id as string like "apikey_xxx")
         if isinstance(user_context, dict) and user_context.get('api_key'):
             api_key_hash = hashlib.md5(user_context['api_key'].encode()).hexdigest()

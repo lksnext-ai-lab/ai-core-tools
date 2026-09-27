@@ -17,6 +17,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   PUBLIC_API: 'Public API',
   MCP: 'MCP',
   AGENT_AS_TOOL: 'Agent as tool',
+  SCHEDULED_TASK: 'Scheduled task',
 };
 
 interface Props {

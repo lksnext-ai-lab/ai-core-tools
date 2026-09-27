@@ -26,6 +26,8 @@ class Conversation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     last_message = Column(Text, nullable=True)
     message_count = Column(Integer, default=0, nullable=False)
+    # Set for conversations owned by a scheduled task (user_id is then NULL).
+    scheduled_task_id = Column(Integer, ForeignKey('scheduled_task.id', ondelete='CASCADE'), nullable=True)
     api_key_hash = Column(String(64), nullable=True)  # MD5 hash of the API key; user_id is null for API-key requests
 
     source = Column(

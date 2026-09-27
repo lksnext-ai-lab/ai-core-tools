@@ -11,47 +11,62 @@ def _db_for(row):
     db = MagicMock()
     query = MagicMock()
     query.filter.return_value = query
-    query.one.return_value = row
+    query.one_or_none.return_value = row
     db.query.return_value = query
     return db
 
 
-@pytest.mark.asyncio
-async def test_run_scheduled_task_creates_conversation_and_marks_run_succeeded():
-    task = SimpleNamespace(
+def _task(**overrides):
+    values = dict(
         id=7, agent_id=11, app_id=3, created_by=42, name="Daily", input={"message": "hello"},
-        conversation_mode="new_per_run", persistent_conversation_id=None,
+        conversation_mode="new_per_run", persistent_conversation_id=None, max_runs_retained=10,
     )
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+@pytest.mark.asyncio
+async def test_run_creates_task_owned_conversation_and_stores_output():
+    task = _task()
     db = _db_for(task)
     conversation = SimpleNamespace(conversation_id=99)
+    output = {"response": "Informe listo", "files": [{"file_id": "f1", "filename": "a.csv", "file_type": "csv"}]}
     with (
         patch.object(module, "SessionLocal", return_value=db),
         patch.object(module.ConversationService, "create_conversation", return_value=conversation) as create,
-        patch.object(module, "invoke_agent_step", new=AsyncMock(return_value={"ok": True})) as invoke,
+        patch.object(module, "invoke_agent_step", new=AsyncMock(return_value=output)) as invoke,
+        patch.object(module.ScheduledTaskService, "prune_runs", new=AsyncMock()) as prune,
     ):
         result = await module._run_scheduled_task(datetime.now(timezone.utc), 7)
 
     run = db.add.call_args.args[0]
-    assert result == {"ok": True}
+    assert result == output
     assert run.status == "succeeded"
     assert run.conversation_id == 99
-    create.assert_called_once()
-    invoke.assert_awaited_once_with(11, {"message": "hello"}, 99, 42, 3)
+    assert run.output_text == "Informe listo"
+    assert run.output_files == output["files"]
+    kwargs = create.call_args.kwargs
+    assert kwargs["scheduled_task_id"] == 7
+    assert kwargs["user_context"]["user_id"] == "scheduled_task_7"  # not the creator
+    context = invoke.await_args.args[3]
+    assert context["scheduled_task_id"] == 7
+    assert context["billing_user_id"] == 42
+    assert context["caller_type_override"] == "SCHEDULED_TASK"
+    assert invoke.await_args.args[:3] == (11, {"message": "hello"}, 99)
+    prune.assert_awaited_once()
     db.close.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_run_scheduled_task_reuses_continuous_conversation_and_records_failure():
-    task = SimpleNamespace(
-        id=7, agent_id=11, app_id=3, created_by=42, name="Daily", input="raw",
-        conversation_mode="continuous", persistent_conversation_id=99,
-    )
+async def test_run_reuses_continuous_conversation_and_records_failure():
+    task = _task(input="raw", conversation_mode="continuous", persistent_conversation_id=99)
     db = _db_for(task)
     error = RuntimeError("agent failed")
     with (
         patch.object(module, "SessionLocal", return_value=db),
         patch.object(module.ConversationService, "create_conversation") as create,
         patch.object(module, "invoke_agent_step", new=AsyncMock(side_effect=error)),
+        patch.object(module.ScheduledTaskService, "prune_runs", new=AsyncMock()),
     ):
         with pytest.raises(RuntimeError, match="agent failed"):
             await module._run_scheduled_task(datetime.now(timezone.utc), 7)
@@ -59,7 +74,40 @@ async def test_run_scheduled_task_reuses_continuous_conversation_and_records_fai
     run = db.add.call_args.args[0]
     assert run.status == "failed"
     assert run.error_summary == "agent failed"
+    assert run.conversation_id == 99
     create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_of_a_deleted_task_is_skipped():
+    db = _db_for(None)
+    with (
+        patch.object(module, "SessionLocal", return_value=db),
+        patch.object(module, "invoke_agent_step", new=AsyncMock()) as invoke,
+    ):
+        assert await module._run_scheduled_task(datetime.now(timezone.utc), 7) is None
+    invoke.assert_not_awaited()
+    db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_invoke_agent_keeps_only_text_and_files():
+    service = MagicMock()
+    service.execute_agent_chat_with_file_refs = AsyncMock(return_value={
+        "response": {"summary": "ok"},
+        "files_data": [{"file_id": "f1", "filename": "chart.png", "file_type": "image"}],
+        "metadata": {"agent_name": "x"},
+    })
+    with (
+        patch.object(module, "SessionLocal", return_value=MagicMock()),
+        patch("services.agent_execution_service.AgentExecutionService", return_value=service),
+    ):
+        result = await module._invoke_agent(11, {"message": "hi"}, 99, {"user_id": "scheduled_task_7"})
+
+    assert result == {
+        "response": '{"summary": "ok"}',
+        "files": [{"file_id": "f1", "filename": "chart.png", "file_type": "image"}],
+    }
 
 
 def test_serializable_output_handles_json_and_non_json_results():

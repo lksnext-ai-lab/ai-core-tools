@@ -6,3 +6,4 @@ class AgentExecutionCallerType(str, enum.Enum):
     PUBLIC_API = "PUBLIC_API"
     MCP = "MCP"
     AGENT_AS_TOOL = "AGENT_AS_TOOL"
+    SCHEDULED_TASK = "SCHEDULED_TASK"

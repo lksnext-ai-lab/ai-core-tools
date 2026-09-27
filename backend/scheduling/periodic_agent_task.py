@@ -9,6 +9,10 @@ from db.database import SessionLocal
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from models.conversation import ConversationSource
 from services.conversation_service import ConversationService
+from services.scheduled_task_service import ScheduledTaskService, task_user_context
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from dbos import DBOS, DBOSConfig
@@ -17,14 +21,44 @@ except ImportError:  # Keeps unit tests and local tooling usable before dependen
     DBOSConfig = dict
 
 
+async def _invoke_agent(
+    agent_id: int,
+    input_context: dict[str, Any] | None,
+    conversation_id: int | None,
+    user_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Run the agent once and return only what the run keeps: its answer and produced files."""
+    from services.agent_execution_service import AgentExecutionService
+
+    context = input_context or {}
+    message = context.get("message") or json.dumps(context, ensure_ascii=False, default=str)
+    db = SessionLocal()
+    try:
+        result = await AgentExecutionService().execute_agent_chat_with_file_refs(
+            agent_id=agent_id,
+            message=message,
+            user_context=dict(user_context),
+            conversation_id=conversation_id,
+            db=db,
+        )
+    finally:
+        db.close()
+    return {
+        "response": _response_text(result.get("response")),
+        "files": [
+            {"file_id": f["file_id"], "filename": f["filename"], "file_type": f.get("file_type")}
+            for f in result.get("files_data") or []
+        ],
+    }
+
+
 if DBOS is not None:
     @DBOS.step(retries_allowed=True, max_attempts=3, interval_seconds=5, backoff_rate=2.0)
     async def invoke_agent_step(
         agent_id: int,
         input_context: dict[str, Any] | None,
         conversation_id: int | None = None,
-        user_id: int | None = None,
-        app_id: int | None = None,
+        user_context: dict[str, Any] | None = None,
     ):
         # Check at call time as well as import time. Tests and applications may
         # unload/disable DBOS after this function has been defined, and the
@@ -32,22 +66,7 @@ if DBOS is not None:
         # that state.
         if DBOS is None:
             raise RuntimeError("DBOS is not installed")
-
-        from services.agent_execution_service import AgentExecutionService
-
-        context = input_context or {}
-        message = context.get("message") or json.dumps(context, ensure_ascii=False, default=str)
-        db = SessionLocal()
-        try:
-            return await AgentExecutionService().execute_agent_chat_with_file_refs(
-                agent_id=agent_id,
-                message=message,
-                user_context={"trigger": "scheduled_task", "user_id": user_id, "app_id": app_id},
-                conversation_id=conversation_id,
-                db=db,
-            )
-        finally:
-            db.close()
+        return await _invoke_agent(agent_id, input_context, conversation_id, user_context or {})
 
     @DBOS.workflow(max_recovery_attempts=3)
     async def periodic_task_run(scheduled_time: datetime, task_id: int):
@@ -57,8 +76,7 @@ else:
         agent_id: int,
         input_context: dict[str, Any] | None,
         conversation_id: int | None = None,
-        user_id: int | None = None,
-        app_id: int | None = None,
+        user_context: dict[str, Any] | None = None,
     ):
         raise RuntimeError("DBOS is not installed")
 
@@ -66,25 +84,42 @@ else:
         return await _run_scheduled_task(scheduled_time, task_id)
 
 
+def _response_text(response: Any) -> str:
+    if response is None:
+        return ""
+    if isinstance(response, str):
+        return response
+    return json.dumps(response, ensure_ascii=False, default=str)
+
+
+def _conversation_for_run(db, task: ScheduledTask, scheduled_time: datetime) -> int:
+    """The conversation this run writes to. It belongs to the task, never to a user."""
+    if task.conversation_mode == "continuous" and task.persistent_conversation_id:
+        return task.persistent_conversation_id
+    title = task.name if task.conversation_mode == "continuous" else f"{task.name} · {scheduled_time:%Y-%m-%d %H:%M}"
+    conversation = ConversationService.create_conversation(
+        db=db,
+        agent_id=task.agent_id,
+        user_context=task_user_context(task),
+        title=title[:255],
+        source=ConversationSource.SCHEDULED_TASK,
+        scheduled_task_id=task.id,
+    )
+    if task.conversation_mode == "continuous":
+        task.persistent_conversation_id = conversation.conversation_id
+        db.commit()
+    return conversation.conversation_id
+
+
 async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
     db = SessionLocal()
     run = None
     try:
-        task = db.query(ScheduledTask).filter(ScheduledTask.id == task_id).one()
-        if task.conversation_mode == "continuous" and task.persistent_conversation_id:
-            conversation_id = task.persistent_conversation_id
-        else:
-            conversation = ConversationService.create_conversation(
-                db=db,
-                agent_id=task.agent_id,
-                user_context={"user_id": task.created_by, "app_id": task.app_id},
-                title=task.name,
-                source=ConversationSource.SCHEDULED_TASK,
-            )
-            conversation_id = conversation.conversation_id
-            if task.conversation_mode == "continuous":
-                task.persistent_conversation_id = conversation_id
-                db.commit()
+        task = db.query(ScheduledTask).filter(ScheduledTask.id == task_id).one_or_none()
+        if task is None:
+            logger.info("Scheduled task %s no longer exists; skipping run", task_id)
+            return None
+        conversation_id = _conversation_for_run(db, task, scheduled_time)
         run_id = getattr(DBOS, "workflow_id", None) or f"task-{task_id}-{scheduled_time.isoformat()}"
         run = ScheduledTaskRun(
             scheduled_task_id=task.id, conversation_id=conversation_id,
@@ -94,20 +129,37 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
         db.add(run)
         db.commit()
         context = task.input if isinstance(task.input, dict) else {"input": task.input}
-        result = await invoke_agent_step(task.agent_id, context, conversation_id, task.created_by, task.app_id)
+        result = await invoke_agent_step(task.agent_id, context, conversation_id, task_user_context(task))
         run.status = "succeeded"
         run.finished_at = datetime.now(timezone.utc)
+        run.output_text = (result or {}).get("response")
+        run.output_files = (result or {}).get("files") or []
         db.commit()
+        await _prune(db, task)
         return result
     except Exception as exc:
+        db.rollback()
         if run is not None:
-            run.status = "failed"
-            run.finished_at = datetime.now(timezone.utc)
-            run.error_summary = str(exc)[:4000]
-            db.commit()
+            try:
+                run.status = "failed"
+                run.finished_at = datetime.now(timezone.utc)
+                run.error_summary = str(getattr(exc, "detail", None) or exc)[:4000]
+                db.commit()
+                await _prune(db, run.task)
+            except Exception:  # The task may have been deleted mid-run.
+                db.rollback()
+                logger.warning("Could not record failure of scheduled task %s run", task_id, exc_info=True)
         raise
     finally:
         db.close()
+
+
+async def _prune(db, task: ScheduledTask) -> None:
+    try:
+        await ScheduledTaskService(db).prune_runs(task)
+    except Exception:
+        db.rollback()
+        logger.warning("Could not prune old runs of scheduled task %s", task.id, exc_info=True)
 
 
 class DBOSOrchestrator:
