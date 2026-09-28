@@ -226,3 +226,17 @@ def test_create_rejects_continuous_mode_for_agents_without_memory():
         service.create(app_id=3, created_by=42, data={
             "name": "x", "agent_id": 11, "cron_expression": "*/5 * * * *", "conversation_mode": "continuous",
         })
+
+
+@pytest.mark.asyncio
+async def test_prune_preserves_runs_with_nonterminal_output_deliveries():
+    task = _task(max_runs_retained=1)
+    protected = SimpleNamespace(
+        id=1, conversation_id=101, output_files=[],
+        output_deliveries=[SimpleNamespace(status="pending")],
+    )
+    newest = SimpleNamespace(id=2, conversation_id=102, output_files=[], output_deliveries=[])
+    db = _prune_db([newest, protected], {})
+
+    assert await ScheduledTaskService(db).prune_runs(task) == 0
+    db.delete.assert_not_called()

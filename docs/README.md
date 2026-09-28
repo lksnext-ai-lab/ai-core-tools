@@ -44,6 +44,8 @@ The project aims to simplify the integration and use of AI technologies within L
 - [LLM Integration](ai/llm-integration.md) — Supported LLM providers, configuration, and structured output
 - [RAG & Vector Stores](ai/rag-vector-stores.md) — Silo system, vector database backends (PGVector, Qdrant), and retrieval
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
+- [Scheduled Task Output Providers RFC](ai/rfc-scheduled-task-output-providers.md) — Extensible delivery, Teams channels, retries, permissions, and retention
+- [Teams Channel Attachments — Future Design](ai/rfc-teams-channel-attachments.md) — Deferred native attachments, SharePoint uploads, Graph authorization, and recovery
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
 - [A2A Integration](ai/a2a-integration.md) — Agent2Agent protocol JSON-RPC server, visibility, task lifecycle, and deployment runbook
 

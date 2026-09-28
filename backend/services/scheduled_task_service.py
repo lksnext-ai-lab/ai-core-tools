@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from models.agent import Agent, MarketplaceVisibility
 from models.conversation import Conversation
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from models.output_delivery import OutputDelivery
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -220,7 +221,16 @@ class ScheduledTaskService:
             .order_by(ScheduledTaskRun.scheduled_time.desc(), ScheduledTaskRun.id.desc())
             .all()
         )
-        stale = finished[keep:]
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        protected = {
+            run.id for run in finished
+            if any(
+                delivery.status in {"pending", "sending", "retry_wait", "unknown"}
+                and (not getattr(delivery, "expires_at", None) or delivery.expires_at.replace(tzinfo=None) > now)
+                for delivery in getattr(run, "output_deliveries", [])
+            )
+        }
+        stale = [run for run in finished[keep:] if run.id not in protected]
         if not stale:
             return 0
         kept_conversations = {run.conversation_id for run in finished[:keep]} | {task.persistent_conversation_id}

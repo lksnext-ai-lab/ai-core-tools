@@ -200,6 +200,47 @@ export interface ScheduledTask {
   next_run_at?: string | null;
 }
 
+export interface OutputDestination {
+  id: number;
+  app_id: number;
+  name: string;
+  provider_key: 'teams_workflow' | string;
+  enabled: boolean;
+  has_secret: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledTaskOutputBinding {
+  destination_id: number;
+  enabled: boolean;
+  content_mode: 'result' | 'excerpt' | 'link_only';
+  destination_name?: string | null;
+}
+
+export interface OutputDeliveryAttempt {
+  attempt_number: number;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  http_status?: number | null;
+  error_summary?: string | null;
+}
+
+export interface OutputDelivery {
+  id: number;
+  destination_name: string;
+  provider_key: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  next_attempt_at?: string | null;
+  receipt?: Record<string, unknown> | null;
+  error_summary?: string | null;
+  created_at: string;
+  attempts: OutputDeliveryAttempt[];
+}
+
 export type ScheduledTaskCreate = Pick<ScheduledTask, 'name' | 'agent_id' | 'input' | 'cron_expression' | 'timezone' | 'conversation_mode' | 'max_concurrent_runs'>
   & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>;
 
@@ -860,6 +901,34 @@ class ApiService {
 
   async deleteScheduledTask(appId: number, taskId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}`, { method: 'DELETE' });
+  }
+
+  async getOutputDestinations(appId: number): Promise<OutputDestination[]> {
+    return this.request(`/internal/apps/${appId}/output-destinations`);
+  }
+
+  async createOutputDestination(appId: number, data: { name: string; provider_key: 'teams_workflow'; webhook_url: string }): Promise<OutputDestination> {
+    return this.request(`/internal/apps/${appId}/output-destinations`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async testOutputDestination(appId: number, destinationId: number): Promise<{ accepted: boolean; http_status: number }> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}/test`, { method: 'POST' });
+  }
+
+  async getScheduledTaskOutputs(appId: number, taskId: number): Promise<{ bindings: ScheduledTaskOutputBinding[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/outputs`);
+  }
+
+  async setScheduledTaskOutputs(appId: number, taskId: number, bindings: ScheduledTaskOutputBinding[]): Promise<{ bindings: ScheduledTaskOutputBinding[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/outputs`, { method: 'PUT', body: JSON.stringify({ bindings }) });
+  }
+
+  async getScheduledTaskRunDeliveries(appId: number, taskId: number, runId: number): Promise<{ deliveries: OutputDelivery[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/deliveries`);
+  }
+
+  async retryScheduledTaskDelivery(appId: number, taskId: number, runId: number, deliveryId: number): Promise<{ workflow_id: string }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/deliveries/${deliveryId}/retry`, { method: 'POST' });
   }
 
   async getScheduledTaskRuns(appId: number, taskId: number, page = 1, perPage = 50): Promise<ScheduledTaskRunList> {
