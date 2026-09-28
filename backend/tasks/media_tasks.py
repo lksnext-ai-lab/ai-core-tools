@@ -174,6 +174,13 @@ def process_media_task_sync(media_id: int):
         media.status = 'ready'
         media.processed_at = datetime.utcnow()
         db.commit()
+
+        # Media sent straight to a silo only feeds the vector store: like documents, nothing
+        # else is kept (files and row). Repository media stays, the repository manages it.
+        if media.repository_id is None:
+            _discard_silo_media_files(media)
+            db.delete(media)
+            db.commit()
         
         logger.info(f"✅ Media {media_id} processed successfully")
         
@@ -186,12 +193,28 @@ def process_media_task_sync(media_id: int):
             if media:
                 media.status = 'error'
                 media.error_message = str(e)[:500]  # Limit error message length
+                if media.repository_id is None:
+                    # Keep only the row, so the caller can read the error; never the files.
+                    _discard_silo_media_files(media)
+                    media.file_path = None
                 db.commit()
         except Exception as update_error:
             logger.error(f"Failed to update error status: {str(update_error)}")
         
     finally:
         db.close()
+
+def _discard_silo_media_files(media: Media) -> None:
+    """Delete a silo media item's file and extracted audio."""
+    if not media.file_path:
+        return
+    for path in (media.file_path, os.path.splitext(media.file_path)[0] + "_audio.wav"):
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError as exc:
+            logger.warning(f"Could not delete media file {path}: {exc}")
+
 
 def _download_youtube(url: str, media_id: int, output_dir: str) -> str:
     """

@@ -107,3 +107,37 @@ class TestMediaTaskUsesSiloServices:
         monkeypatch.setattr(media_tasks, "REPO_BASE_FOLDER", "/base")
         assert media_tasks.media_storage_folder(SimpleNamespace(repository_id=3, silo_id=7)) == "/base/3"
         assert media_tasks.media_storage_folder(SimpleNamespace(repository_id=None, silo_id=7)) == "/base/silo_media/7"
+
+
+class TestSiloMediaLeavesNothingBehind:
+    def test_discard_removes_file_and_extracted_audio(self, tmp_path):
+        from tasks import media_tasks
+
+        video, audio = tmp_path / "5.mp4", tmp_path / "5_audio.wav"
+        video.write_bytes(b"v")
+        audio.write_bytes(b"a")
+        media_tasks._discard_silo_media_files(SimpleNamespace(file_path=str(video)))
+        assert not video.exists() and not audio.exists()
+
+    def test_indexed_chunk_source_is_the_original_name(self):
+        store = MagicMock()
+        media = TestIndexMediaChunk()._media()
+        with patch("services.silo_service._get_vector_store", return_value=store):
+            SiloService.index_media_chunk({"text": "x"}, media, db=MagicMock())
+        assert store.index_documents.call_args.args[1][0].metadata["source"] == "demo.mp4"
+
+    def test_failed_silo_media_keeps_the_error_but_not_the_file(self, tmp_path):
+        from tasks import media_tasks
+
+        video = tmp_path / "5.mp4"
+        video.write_bytes(b"v")
+        media = SimpleNamespace(media_id=5, silo_id=7, repository_id=None, source_type="upload",
+                                file_path=str(video), silo=SimpleNamespace(transcription_service_id=None,
+                                                                           video_ai_service_id=None))
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = media
+        with patch.object(media_tasks, "SessionLocal", return_value=db):
+            media_tasks.process_media_task_sync(5)
+        assert media.status == "error" and media.file_path is None
+        assert not video.exists()
+        db.delete.assert_not_called()

@@ -753,7 +753,12 @@ async def get_silo_media(
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Status of a media item: `ready` once indexed, `error` with `error_message` if it failed."""
+    """Status of a media item while it is processed, or `error` with `error_message` if it failed.
+
+    Media sent straight to the silo leaves nothing behind once indexed (like documents): its
+    file and this record are deleted, so this returns 404 after success. Its chunks carry
+    `media_id` in their metadata (delete them with `docs/delete-by-metadata`).
+    """
     validate_api_key_for_app(app_id, api_key, db)
     validate_silo_ownership(db, silo_id, app_id)
     return SiloMediaSchema.model_validate(_silo_media_or_404(db, silo_id, media_id))

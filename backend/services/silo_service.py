@@ -1108,7 +1108,8 @@ class SiloService:
             "source_url": media.source_url,
             "language": media.language,
             "file_type": file_ext.lower() or None,
-            "source": media.file_path,
+            # Silo media files are deleted once indexed: keep the original name, not a dead path.
+            "source": media.file_path if media.repository_id else f"{media.name}{file_ext}",
             "processing_mode": media.processing_mode or "basic",
             
             # Folder information
