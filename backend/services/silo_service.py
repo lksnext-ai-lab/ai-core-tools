@@ -1724,7 +1724,12 @@ class SiloService:
         base = os.getenv('REPO_BASE_FOLDER')
         if not base:
             return
-        folder = os.path.join(os.path.abspath(base), "silo_media", str(silo_id))
+        media_root = os.path.realpath(os.path.join(base, "silo_media"))
+        folder = os.path.realpath(os.path.join(media_root, str(int(silo_id))))
+        # Never delete outside the silo media root (silo_id comes from the request path).
+        if os.path.dirname(folder) != media_root:
+            logger.warning(f"Refusing to delete media folder outside {media_root}: {folder}")
+            return
         try:
             if os.path.isdir(folder):
                 shutil.rmtree(folder)

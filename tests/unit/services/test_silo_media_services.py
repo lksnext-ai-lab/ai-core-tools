@@ -141,3 +141,18 @@ class TestSiloMediaLeavesNothingBehind:
         assert media.status == "error" and media.file_path is None
         assert not video.exists()
         db.delete.assert_not_called()
+
+
+class TestRemoveSiloMediaFiles:
+    def test_removes_only_the_silo_folder(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("REPO_BASE_FOLDER", str(tmp_path))
+        target, other = tmp_path / "silo_media" / "7", tmp_path / "silo_media" / "8"
+        target.mkdir(parents=True)
+        other.mkdir(parents=True)
+        SiloService.remove_silo_media_files(7)
+        assert not target.exists() and other.exists()
+
+    def test_rejects_non_integer_ids(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("REPO_BASE_FOLDER", str(tmp_path))
+        with pytest.raises(ValueError):
+            SiloService.remove_silo_media_files("../../etc")
