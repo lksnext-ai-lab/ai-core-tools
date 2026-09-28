@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
@@ -127,6 +127,9 @@ class PublicSiloSchema(BaseModel):
     docs_count: int = 0
     vector_db_type: Optional[str] = None
     embedding_service_id: Optional[int] = None
+    # Media (video/audio) indexing: transcription is required, video analysis optional
+    transcription_service_id: Optional[int] = None
+    video_ai_service_id: Optional[int] = None
 
 
 class PublicSiloResponseSchema(BaseModel):
@@ -180,9 +183,49 @@ class DocsResponseSchema(BaseModel):
     docs: List[DocumentSchema]
 
 class FileIndexResponseSchema(BaseModel):
-    """File indexing response"""
+    """File indexing response.
+
+    Video/audio files are transcribed and indexed asynchronously: the response is 202 with
+    ``num_documents=0`` and the ``media_id`` to poll at ``GET /silos/{silo_id}/media/{media_id}``.
+    """
     message: str
     num_documents: int
+    media_id: Optional[int] = None
+    status: Optional[str] = None
+
+
+class SiloMediaSchema(BaseModel):
+    """Video/audio indexed in a silo, with its processing status."""
+    model_config = ConfigDict(from_attributes=True)
+
+    media_id: int
+    silo_id: int
+    repository_id: Optional[int] = None
+    name: str
+    source_type: str
+    source_url: Optional[str] = None
+    status: str  # pending | downloading | processing | transcribing | analyzing_video | indexing | ready | error
+    error_message: Optional[str] = None
+    duration: Optional[float] = None
+    language: Optional[str] = None
+    processing_mode: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None, validation_alias="custom_metadata")
+    create_date: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
+
+
+class SiloMediaListResponseSchema(BaseModel):
+    media: List[SiloMediaSchema]
+
+
+class SiloYouTubeIndexRequestSchema(BaseModel):
+    """Index a YouTube video into a silo."""
+    url: str
+    metadata: Optional[Dict[str, Any]] = None
+    forced_language: Optional[str] = None
+    chunk_min_duration: Optional[int] = None
+    chunk_max_duration: Optional[int] = None
+    chunk_overlap: Optional[int] = None
 
 # ==================== REPOSITORY SCHEMAS ====================
 
@@ -287,7 +330,7 @@ class MediaSchema(BaseModel):
     create_date: Optional[datetime] = None
     processed_at: Optional[datetime] = None
     folder_id: Optional[int] = None
-    repository_id: int
+    repository_id: Optional[int] = None
 
 class MediaListResponseSchema(BaseModel):
     """List of media"""

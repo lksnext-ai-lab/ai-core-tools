@@ -64,7 +64,9 @@ class RepositoryService:
         repository: Repository,
         embedding_service_id: Optional[int] = None,
         vector_db_type: Optional[str] = None,
-        db: Session = None
+        db: Session = None,
+        transcription_service_id: Optional[int] = None,
+        video_ai_service_id: Optional[int] = None,
     ) -> Repository:
         """
         Create a new repository with its associated silo
@@ -96,7 +98,10 @@ class RepositoryService:
             'fixed_metadata': False,
             'metadata_definition_id': parser_id,
             'embedding_service_id': embedding_service_id,
-            'vector_db_type': resolved_vector_db_type
+            'vector_db_type': resolved_vector_db_type,
+            # Media services are stored on the silo, which does the indexing.
+            'transcription_service_id': transcription_service_id,
+            'video_ai_service_id': video_ai_service_id,
         }
         silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO, db)
         
@@ -428,14 +433,14 @@ class RepositoryService:
         repo.type = repo_data.type
         repo.status = repo_data.status or 'active'
         repo.create_date = datetime.now()
-        repo.transcription_service_id = repo_data.transcription_service_id
-        repo.video_ai_service_id = repo_data.video_ai_service_id
 
         return RepositoryService.create_repository(
             repo,
             repo_data.embedding_service_id,
             normalized_vector_db_type,
             db,
+            transcription_service_id=repo_data.transcription_service_id,
+            video_ai_service_id=repo_data.video_ai_service_id,
         )
 
     @staticmethod
@@ -463,8 +468,10 @@ class RepositoryService:
             repo.type = repo_data.type
         if repo_data.status is not None:
             repo.status = repo_data.status
-        repo.transcription_service_id = repo_data.transcription_service_id
-        repo.video_ai_service_id = repo_data.video_ai_service_id
+        if repo.silo:
+            SiloService.apply_media_services(
+                repo.silo, repo_data.transcription_service_id, repo_data.video_ai_service_id, app_id, db,
+            )
 
         return RepositoryService.update_repository(
             repo,

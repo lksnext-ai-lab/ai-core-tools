@@ -85,6 +85,7 @@ def fake_media(db, fake_repository, fake_ai_transcription_service):
 
     media = Media(
         name="test_video",
+        silo_id=fake_repository.silo_id,
         repository_id=fake_repository.repository_id,
         transcription_service_id=fake_ai_transcription_service.service_id,
         source_type="upload",
@@ -102,6 +103,7 @@ def fake_youtube_media(db, fake_repository, fake_ai_transcription_service):
 
     media = Media(
         name="YouTube: test_video",
+        silo_id=fake_repository.silo_id,
         repository_id=fake_repository.repository_id,
         transcription_service_id=fake_ai_transcription_service.service_id,
         source_type="youtube",

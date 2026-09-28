@@ -142,17 +142,20 @@ class PlaygroundMediaService:
             # resolve media services (e.g. file vectorization) pass None and
             # must not wipe an in-flight transcription's service configuration.
             updated = False
+            silo = existing.silo
             if (
-                transcription_service_id is not None
-                and existing.transcription_service_id != transcription_service_id
+                silo is not None
+                and transcription_service_id is not None
+                and silo.transcription_service_id != transcription_service_id
             ):
-                existing.transcription_service_id = transcription_service_id
+                silo.transcription_service_id = transcription_service_id
                 updated = True
             if (
-                video_ai_service_id is not None
-                and existing.video_ai_service_id != video_ai_service_id
+                silo is not None
+                and video_ai_service_id is not None
+                and silo.video_ai_service_id != video_ai_service_id
             ):
-                existing.video_ai_service_id = video_ai_service_id
+                silo.video_ai_service_id = video_ai_service_id
                 updated = True
             if updated:
                 db.commit()
@@ -183,14 +186,14 @@ class PlaygroundMediaService:
             type="playground_media",
             status="active",
             app_id=app_id,
-            transcription_service_id=transcription_service_id,
-            video_ai_service_id=video_ai_service_id,
         )
 
         created = RepositoryService.create_repository(
             repository=repo,
             embedding_service_id=embedding_service_id,
             db=db,
+            transcription_service_id=transcription_service_id,
+            video_ai_service_id=video_ai_service_id,
         )
         logger.info(
             "Created temp playground repo %s (silo %s) for agent %s session %s",
