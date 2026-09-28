@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
@@ -112,11 +113,26 @@ class VoidRetriever(BaseRetriever):
         return []
 
 
+# OpenAI reasoning families (o1/o3/o4…, gpt-5 and later) reject `temperature` unless it
+# is 1; the "-chat" variants accept it. langchain-openai only strips it for names starting
+# with "gpt-5", so newer families (e.g. gpt-6-luna) reached OpenAI with the agent's
+# temperature and failed with "Unsupported parameter: 'temperature'".
+_OPENAI_REASONING_MODEL = re.compile(r"^(o\d|gpt-(5|[6-9]|\d{2,}))", re.IGNORECASE)
+
+
+def _openai_temperature(model, temperature):
+    """The temperature to send to OpenAI, or None (not sent) for reasoning models."""
+    model = model or ""
+    if _OPENAI_REASONING_MODEL.match(model) and "chat" not in model.lower():
+        return None
+    return temperature
+
+
 def _build_openai_llm(ai_service, temperature):
     base_url = ai_service.endpoint if ai_service.endpoint else None
     return ChatOpenAI(
         model=ai_service.description,
-        temperature=temperature,
+        temperature=_openai_temperature(ai_service.description, temperature),
         api_key=ai_service.api_key,
         base_url=base_url,
         # Reasoning models reject function tools on /v1/chat/completions ("Function tools

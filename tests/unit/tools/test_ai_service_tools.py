@@ -16,10 +16,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 
-def _ai_service(endpoint: str | None = None) -> SimpleNamespace:
+import pytest
+
+
+def _ai_service(endpoint: str | None = None, model: str = "gpt-5.5") -> SimpleNamespace:
     """Minimal stand-in for an AIService row, with only the fields the builder reads."""
     return SimpleNamespace(
-        description="gpt-5.5",
+        description=model,
         api_key="sk-test-key",
         endpoint=endpoint,
     )
@@ -41,3 +44,23 @@ class TestBuildOpenAILLM:
         )
 
         assert llm.use_responses_api is False
+
+
+class TestOpenAITemperature:
+    """Reasoning models reject `temperature`; it must not reach the request at all."""
+
+    @pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.5", "o3-mini", "o1", "GPT-6-terra"])
+    def test_reasoning_models_send_no_temperature(self, model):
+        from tools.aiServiceTools import _build_openai_llm
+
+        llm = _build_openai_llm(_ai_service(model=model), temperature=0.7)
+
+        assert "temperature" not in llm._get_request_payload([("user", "hi")])
+
+    @pytest.mark.parametrize("model", ["gpt-4o", "gpt-4.1-mini", "gpt-5-chat-latest"])
+    def test_other_models_keep_the_agent_temperature(self, model):
+        from tools.aiServiceTools import _build_openai_llm
+
+        llm = _build_openai_llm(_ai_service(model=model), temperature=0.7)
+
+        assert llm._get_request_payload([("user", "hi")])["temperature"] == 0.7
