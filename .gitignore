@@ -3,6 +3,9 @@
 .env.local
 .env.production
 .env.*.local
+# Local tokens for developer tooling (SonarCloud, Jira)
+.env.sonar
+.env.jira
 .flaskenv
 *.pyc
 *.pyo

@@ -62,3 +62,66 @@ async def test_docx_text_is_extracted(tmp_path):
 
     assert file_type == "document"
     assert "Resumen trimestral de ventas" in content
+
+
+def _fms(tmp_path):
+    from unittest.mock import patch
+    from services.file_management_service import FileManagementService
+
+    with patch("utils.config.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path / "tmp")}):
+        return FileManagementService()
+
+
+@pytest.mark.asyncio
+async def test_save_file_rejects_dotdot_filename(tmp_path):
+    """Regression (Sonar pythonsecurity:S2083): a filename of '..' escaped the target dir."""
+    fms = _fms(tmp_path)
+    source = tmp_path / "upload.bin"
+    source.write_bytes(b"payload")
+    file_ref = FileReference(file_id="f1", filename="..", file_type="text", content="x")
+
+    await fms._save_file_to_disk("session", "f1", file_ref, original_file_path=str(source), conversation_id=7)
+
+    assert file_ref.file_path is None
+    assert not (tmp_path / "tmp" / "conversations" / "upload.bin").exists()
+
+
+@pytest.mark.asyncio
+async def test_save_file_keeps_normal_filename(tmp_path):
+    fms = _fms(tmp_path)
+    source = tmp_path / "upload.bin"
+    source.write_bytes(b"payload")
+    file_ref = FileReference(file_id="f1", filename="../report.xlsx", file_type="text", content="x")
+
+    await fms._save_file_to_disk("session", "f1", file_ref, original_file_path=str(source), conversation_id=7)
+
+    assert file_ref.file_path == "conversations/7/.._report.xlsx"
+    assert (tmp_path / "tmp" / "conversations" / "7" / ".._report.xlsx").read_bytes() == b"payload"
+
+
+@pytest.mark.asyncio
+async def test_remove_file_does_not_delete_outside_tmp_base(tmp_path):
+    """Regression (Sonar pythonsecurity:S2083): a tampered sidecar file_path deleted arbitrary files."""
+    import json
+
+    fms = _fms(tmp_path)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep me")
+    session_dir = tmp_path / "tmp" / "persistent" / "session"
+    session_dir.mkdir(parents=True)
+    (session_dir / "f1.json").write_text(json.dumps({"file_path": "../victim.txt"}))
+
+    await fms._remove_file_from_disk("session", "f1")
+
+    assert victim.exists()
+
+
+@pytest.mark.asyncio
+async def test_remove_file_rejects_traversal_in_session_key(tmp_path):
+    fms = _fms(tmp_path)
+    victim = tmp_path / "tmp" / "f1.json"
+    victim.write_text("{}")
+
+    await fms._remove_file_from_disk("../", "f1")
+
+    assert victim.exists()
