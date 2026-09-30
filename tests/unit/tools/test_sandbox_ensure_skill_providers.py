@@ -624,6 +624,23 @@ def test_bootstrap_command_construction_redirects_and_tails_before_marker(provid
 
 
 @pytest.mark.parametrize("provider_cls", ALL_FAKE_PROVIDERS)
+def test_wrapped_commands_log_to_mktemp_not_fixed_tmp_path(provider_cls):
+    """Sonar python:S5443: the sandbox-side log file must come from `mktemp`,
+    never a fixed path under the world-writable /tmp."""
+    provider = provider_cls()
+    provider.bootstrap_behavior["setup.sh"] = (0, "hello\n")
+    handle = _make_handle(provider)
+
+    provider.ensure_skill(handle, _payload(bootstrap_script_path="setup.sh"))
+
+    wrapped = [c for c in provider.run_code_calls if "2>&1" in c]
+    assert wrapped, "expected at least one log-wrapped command"
+    for cmd in wrapped:
+        assert "/tmp/" not in cmd
+        assert "$(mktemp)" in cmd
+
+
+@pytest.mark.parametrize("provider_cls", ALL_FAKE_PROVIDERS)
 def test_bootstrap_marker_survives_at_near_output_cap_boundary(provider_cls, monkeypatch):
     """H1 fix (fix round 1): the exact boundary plan.md names as the condition
     that reopens the round-1 bug — ``SANDBOX_MAX_OUTPUT_CHARS`` lowered to

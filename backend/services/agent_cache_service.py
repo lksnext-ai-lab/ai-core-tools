@@ -81,7 +81,10 @@ class CheckpointerCacheService:
     def _get_db_uri(cls) -> str:
         """Get database URI from environment variables"""
         if cls._db_uri is None:
-            cls._db_uri = os.getenv('SQLALCHEMY_DATABASE_URI', 'postgresql://iacoretoolsdev:iacoretoolsdev@localhost:5432/iacoretoolsdev')
+            db_uri = os.getenv('SQLALCHEMY_DATABASE_URI')
+            if not db_uri:
+                raise EnvironmentError("SQLALCHEMY_DATABASE_URI environment variable is required")
+            cls._db_uri = db_uri
         return cls._db_uri
 
     @classmethod
