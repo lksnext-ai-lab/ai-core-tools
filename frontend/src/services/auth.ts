@@ -23,6 +23,10 @@ type SessionExpiredListener = () => void;
 // Serialises refresh-token rotation across tabs: the backend revokes the whole
 // token family when a rotated refresh token is presented twice.
 const REFRESH_LOCK_NAME = 'mattin-auth-refresh';
+// The refresh runs while holding a lock shared by every tab, so it must always
+// settle: a request left hanging (e.g. the backend restarting mid-request) would
+// otherwise block session renewal in all other tabs.
+const REFRESH_TIMEOUT_MS = 15_000;
 
 class AuthService {
   private get baseURL(): string {
@@ -166,6 +170,7 @@ class AuthService {
         method: 'POST',
         credentials: 'include',
         headers,
+        signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
       });
       return response.ok;
     } catch {

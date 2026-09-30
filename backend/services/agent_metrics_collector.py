@@ -125,6 +125,11 @@ class AgentMetricsCollector(BaseCallbackHandler):
         }
 
     def on_tool_end(self, output, *, run_id, parent_run_id=None, **kwargs) -> None:
+        # A tool error handled by the tool itself (handle_tool_error) ends normally
+        # with an error ToolMessage for the model; it is still an ERROR here.
+        if getattr(output, "status", None) == "error":
+            self._close_tool(run_id, "ERROR", str(getattr(output, "content", ""))[:_ERROR_MESSAGE_MAX])
+            return
         self._close_tool(run_id, "SUCCESS", None)
 
     def on_tool_error(self, error, *, run_id, parent_run_id=None, **kwargs) -> None:
