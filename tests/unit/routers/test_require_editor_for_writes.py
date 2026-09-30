@@ -1,5 +1,5 @@
 """Unit tests: require_editor_for_writes blocks viewer writes, exempting only the
-collaboration invitation-respond route (matched by route template, not by URL suffix).
+collaboration invitation-respond endpoint (marked with @viewer_writable, not matched by URL).
 
 A small FastAPI app mounts the guard the same way routers/internal/__init__.py does,
 with auth and DB dependencies overridden — no DB required.
@@ -11,11 +11,12 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 
 from db.database import get_db
 from routers.internal import auth_utils
-from routers.internal.auth_utils import get_current_user_oauth, require_editor_for_writes
+from routers.internal.auth_utils import get_current_user_oauth, require_editor_for_writes, viewer_writable
 from routers.internal import internal_router
 
 VIEWER_EMAIL = "viewer@example.com"
@@ -24,7 +25,9 @@ VIEWER_EMAIL = "viewer@example.com"
 def _build_client() -> TestClient:
     collaboration = APIRouter()
     collaboration.add_api_route(
-        "/invitations/{collaboration_id}/respond", lambda collaboration_id: {"ok": True}, methods=["POST"]
+        "/invitations/{collaboration_id}/respond",
+        viewer_writable(lambda collaboration_id: {"ok": True}),
+        methods=["POST"],
     )
     collaboration.add_api_route("/invitations", lambda: {"ok": True}, methods=["POST"])
 
@@ -82,9 +85,12 @@ def test_non_viewer_can_write(mocker):
 
 
 def test_exemption_matches_real_collaboration_respond_route():
-    """Renaming the real route's path would silently lock viewers out of invitations."""
+    """Only the real invitation-respond route may be exempted; losing the mark would
+    silently lock viewers out of invitations."""
     exempted = [
-        route.path for route in internal_router.routes
-        if route.path.endswith(auth_utils._VIEWER_WRITABLE_ROUTE_SUFFIXES)
+        (sorted(route.methods), route.path)
+        for route in iter_route_contexts(internal_router.routes)
+        if isinstance(route.original_route, APIRoute)
+        and getattr(route.endpoint, auth_utils._VIEWER_WRITABLE_ATTR, False)
     ]
-    assert exempted == ["/collaboration/invitations/{collaboration_id}/respond"]
+    assert exempted == [(["POST"], "/collaboration/invitations/{collaboration_id}/respond")]
