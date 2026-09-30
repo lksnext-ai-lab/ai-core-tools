@@ -3,7 +3,6 @@ from typing import List, Tuple, Optional, Annotated
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 import json
-import os
 from pydantic import ValidationError
 
 from db.database import get_db
@@ -42,6 +41,7 @@ from .repositories import repositories_router
 from .folders import folders_router
 from .mcp_servers import mcp_servers_router
 from .skills import skills_router
+from .middlewares import middlewares_router
 
 from utils.logger import get_logger
 
@@ -497,6 +497,7 @@ apps_router.include_router(repositories_router, prefix="/{app_id}/repositories",
 apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repository_id}/folders", tags=["Folders"])
 apps_router.include_router(mcp_servers_router, prefix="/{app_id}/mcp-servers", tags=["MCP Servers"])
 apps_router.include_router(skills_router, prefix="/{app_id}/skills", tags=["Skills"])
+apps_router.include_router(middlewares_router, prefix="/{app_id}/middlewares", tags=["Middlewares"])
 
 def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     """Return initialised AppService and AppCollaborationService."""
