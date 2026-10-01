@@ -37,19 +37,19 @@ function StepperHeader({
   };
 
   const statusColors: Record<StepStatus, string> = {
-    pending: 'bg-gray-300 text-gray-600',
-    active: 'bg-blue-600 text-white',
-    completed: 'bg-green-500 text-white',
-    error: 'bg-red-500 text-white',
-    skipped: 'bg-gray-200 text-gray-400',
+    pending: 'bg-surface border border-line-strong text-fg-tertiary dark:bg-surface-dark dark:border-line-strong-dark dark:text-fg-tertiary-dark',
+    active: 'bg-ink text-ink-on ring-2 ring-accent ring-offset-2 dark:bg-ink-dark dark:text-ink-on-dark dark:ring-accent-dark dark:ring-offset-surface-dark',
+    completed: 'bg-success-bg text-success border border-success-border dark:bg-success-bg-dark dark:text-success-dark dark:border-success-border-dark',
+    error: 'bg-error-bg text-error border border-error-border dark:bg-error-bg-dark dark:text-error-dark dark:border-error-border-dark',
+    skipped: 'bg-surface-hover text-fg-faint dark:bg-surface-hover-dark dark:text-fg-faint-dark',
   };
 
   const lineColors: Record<StepStatus, string> = {
-    pending: 'bg-gray-300',
-    active: 'bg-gray-300',
-    completed: 'bg-green-500',
-    error: 'bg-red-500',
-    skipped: 'bg-gray-200',
+    pending: 'bg-line dark:bg-line-dark',
+    active: 'bg-line dark:bg-line-dark',
+    completed: 'bg-success dark:bg-success-dark',
+    error: 'bg-error dark:bg-error-dark',
+    skipped: 'bg-line dark:bg-line-dark',
   };
 
   return (
@@ -68,7 +68,7 @@ function StepperHeader({
                 onClick={() => clickable && onStepClick(index)}
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${statusColors[s]} ${
                   clickable
-                    ? 'cursor-pointer hover:ring-2 hover:ring-blue-300'
+                    ? 'cursor-pointer hover:ring-2 hover:ring-line-strong dark:hover:ring-line-strong-dark'
                     : 'cursor-default'
                 }`}
               >
@@ -77,8 +77,8 @@ function StepperHeader({
               <span
                 className={`mt-1 text-xs text-center max-w-[80px] leading-tight ${
                   s === 'active'
-                    ? 'text-blue-600 font-medium'
-                    : 'text-gray-500'
+                    ? 'text-fg font-medium dark:text-fg-dark'
+                    : 'text-fg-tertiary dark:text-fg-tertiary-dark'
                 }`}
               >
                 {step.label}
@@ -130,12 +130,12 @@ function StepperNavigation({
   const label = nextLabel || defaultNextLabel;
 
   return (
-    <div className="flex items-center justify-between pt-4 border-t border-gray-200 mt-4 flex-shrink-0">
+    <div className="flex items-center justify-between pt-4 border-t border-line dark:border-line-dark mt-4 flex-shrink-0">
       <button
         type="button"
         onClick={onCancel}
         disabled={isSubmitting}
-        className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+        className="px-4 py-2 text-sm font-medium text-fg bg-transparent border border-line-strong rounded-lg hover:bg-surface-hover dark:text-fg-dark dark:border-line-strong-dark dark:hover:bg-surface-hover-dark disabled:opacity-50"
       >
         {cancelLabel}
       </button>
@@ -145,7 +145,7 @@ function StepperNavigation({
             type="button"
             onClick={onBack}
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-fg bg-transparent border border-line-strong rounded-lg hover:bg-surface-hover dark:text-fg-dark dark:border-line-strong-dark dark:hover:bg-surface-hover-dark disabled:opacity-50"
           >
             {backLabel}
           </button>
@@ -155,10 +155,10 @@ function StepperNavigation({
             type="button"
             onClick={onNext}
             disabled={nextDisabled || isSubmitting}
-            className={`px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 ${
+            className={`px-4 py-2 text-sm font-medium text-ink-on rounded-lg disabled:opacity-50 dark:text-ink-on-dark ${
               isFinalStep
-                ? 'bg-green-600 hover:bg-green-700'
-                : 'bg-blue-600 hover:bg-blue-700'
+                ? 'font-semibold bg-ink hover:bg-ink/85 dark:bg-ink-dark dark:hover:bg-ink-dark/85'
+                : 'bg-ink hover:bg-ink/85 dark:bg-ink-dark dark:hover:bg-ink-dark/85'
             }`}
           >
             {isSubmitting ? 'Importing...' : label}

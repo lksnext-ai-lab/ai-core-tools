@@ -19,11 +19,11 @@ export function ErrorState({
 }: ErrorStateProps) {
   return (
     <div className={`p-6 ${className}`}>
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="bg-error-bg border border-error-border rounded-lg p-4 dark:bg-error-bg-dark dark:border-error-border-dark">
         <div className="flex items-start">
           <div className="flex-shrink-0">
             <svg 
-              className="h-5 w-5 text-red-400" 
+              className="h-5 w-5 text-error dark:text-error-dark"
               xmlns="http://www.w3.org/2000/svg" 
               viewBox="0 0 20 20" 
               fill="currentColor"
@@ -36,11 +36,11 @@ export function ErrorState({
             </svg>
           </div>
           <div className="ml-3 flex-1">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-error dark:text-error-dark">{error}</p>
             {onRetry && (
-              <button 
+              <button
                 onClick={onRetry}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline font-medium"
+                className="mt-2 text-sm text-error-strong hover:text-error underline underline-offset-2 font-medium dark:text-error-strong-dark dark:hover:text-error-dark"
               >
                 {retryLabel}
               </button>

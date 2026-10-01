@@ -13,7 +13,7 @@ export const Footer: React.FC<FooterProps> = ({
   showVersion = true 
 }) => {
   return (
-    <footer className={`bg-white border-t border-gray-200 ${className}`}>
+    <footer className={`bg-surface border-t border-line dark:bg-surface-dark dark:border-line-dark ${className}`}>
       {children || (showVersion && <VersionFooter />)}
     </footer>
   );

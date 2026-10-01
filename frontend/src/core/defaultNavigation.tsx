@@ -79,7 +79,7 @@ export const defaultNavigation: NavigationConfig = {
     },
     {
       path: '/apps/:appId/data',
-      name: 'Data',
+      name: 'Data sources',
       icon: <Database size={16} />,
       section: 'appNavigation',
       children: [
@@ -137,6 +137,12 @@ export const defaultNavigation: NavigationConfig = {
   // Settings sub-navigation (rendered inside collapsible in sidebar)
   settingsNavigation: [
     {
+      path: '/apps/:appId/settings/general',
+      name: 'General',
+      icon: <Settings size={16} />,
+      section: 'settings'
+    },
+    {
       path: '/apps/:appId/settings/ai-services',
       name: 'AI Services',
       icon: <Bot size={16} />,
@@ -176,12 +182,6 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/settings/collaboration',
       name: 'Collaboration',
       icon: <Users size={16} />,
-      section: 'settings'
-    },
-    {
-      path: '/apps/:appId/settings/general',
-      name: 'General',
-      icon: <Settings size={16} />,
       section: 'settings'
     }
   ],

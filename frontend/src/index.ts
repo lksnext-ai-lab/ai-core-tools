@@ -79,7 +79,8 @@ export type {
   ExtraRoute,
   FeatureConfig,
   CustomPage,
-  LibraryConfig
+  LibraryConfig,
+  OrganizationConfig
 } from './core/types';
 export type { AuthProps } from './auth/AuthConfig';
 

@@ -20,17 +20,17 @@ export function Badge({
   icon
 }: BadgeProps) {
   const variantClasses: Record<BadgeVariant, string> = {
-    success: 'bg-green-100 text-green-800',
-    info: 'bg-blue-100 text-blue-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    error: 'bg-red-100 text-red-800',
-    default: 'bg-gray-100 text-gray-800',
-    primary: 'bg-indigo-100 text-indigo-800',
-    secondary: 'bg-purple-100 text-purple-800'
+    success: 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark',
+    info: 'bg-info-bg text-info dark:bg-info-bg-dark dark:text-info-dark',
+    warning: 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark',
+    error: 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark',
+    default: 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
+    primary: 'bg-ink text-ink-on dark:bg-ink-dark dark:text-ink-on-dark',
+    secondary: 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark'
   };
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variantClasses[variant]} ${className}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${variantClasses[variant]} ${className}`}>
       {icon && <span className="mr-1">{icon}</span>}
       {label}
     </span>
@@ -47,26 +47,27 @@ interface ProviderBadgeProps {
  */
 export function ProviderBadge({ provider, className = '' }: ProviderBadgeProps) {
   const providerColors: Record<string, string> = {
-    'openai': 'bg-green-100 text-green-800',
-    'OpenAI': 'bg-green-100 text-green-800',
-    'azure': 'bg-blue-100 text-blue-800',
-    'Azure': 'bg-blue-100 text-blue-800',
-    'mistralai': 'bg-purple-100 text-purple-800',
-    'MistralAI': 'bg-purple-100 text-purple-800',
-    'ollama': 'bg-orange-100 text-orange-800',
-    'Ollama': 'bg-orange-100 text-orange-800',
-    'custom': 'bg-gray-100 text-gray-800',
-    'Custom': 'bg-gray-100 text-gray-800',
-    'anthropic': 'bg-red-100 text-red-800',
-    'Anthropic': 'bg-red-100 text-red-800',
-    'google': 'bg-yellow-100 text-yellow-800',
-    'Google': 'bg-yellow-100 text-yellow-800',
+    // Provider palette from the v3 design (OpenAI=success, Azure=info, Anthropic=bronze, Mistral=error, rest neutral)
+    'openai': 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark',
+    'OpenAI': 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark',
+    'azure': 'bg-info-bg text-info dark:bg-info-bg-dark dark:text-info-dark',
+    'Azure': 'bg-info-bg text-info dark:bg-info-bg-dark dark:text-info-dark',
+    'mistralai': 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark',
+    'MistralAI': 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark',
+    'ollama': 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark',
+    'Ollama': 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark',
+    'custom': 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
+    'Custom': 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
+    'anthropic': 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark',
+    'Anthropic': 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark',
+    'google': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'Google': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
   };
 
-  const colorClass = providerColors[provider] || 'bg-gray-100 text-gray-800';
+  const colorClass = providerColors[provider] || 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark';
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass} ${className}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${colorClass} ${className}`}>
       {provider}
     </span>
   );
@@ -85,19 +86,19 @@ interface StatusBadgeProps {
  */
 export function StatusBadge({ status, className = '', customLabel }: StatusBadgeProps) {
   const statusConfig: Record<StatusType, { label: string; color: string; icon?: React.ReactNode }> = {
-    active: { label: 'Active', color: 'bg-green-100 text-green-800', icon: <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> },
-    inactive: { label: 'Inactive', color: 'bg-gray-100 text-gray-800', icon: <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> },
-    pending: { label: 'Pending', color: 'bg-yellow-100 text-yellow-800', icon: <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> },
-    error: { label: 'Error', color: 'bg-red-100 text-red-800', icon: <X className="w-3 h-3" /> },
-    success: { label: 'Success', color: 'bg-green-100 text-green-800', icon: <Check className="w-3 h-3" /> },
-    warning: { label: 'Warning', color: 'bg-orange-100 text-orange-800', icon: <AlertTriangle className="w-3 h-3" /> }
+    active: { label: 'Active', color: 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-success dark:bg-success-dark inline-block" /> },
+    inactive: { label: 'Inactive', color: 'bg-surface-hover text-fg-tertiary dark:bg-surface-hover-dark dark:text-fg-tertiary-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-fg-faint2 dark:bg-fg-faint2-dark inline-block" /> },
+    pending: { label: 'Pending', color: 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-bronze dark:bg-bronze-dark inline-block" /> },
+    error: { label: 'Error', color: 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark', icon: <X className="w-3 h-3" /> },
+    success: { label: 'Success', color: 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark', icon: <Check className="w-3 h-3" /> },
+    warning: { label: 'Warning', color: 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark', icon: <AlertTriangle className="w-3 h-3" /> }
   };
 
   const config = statusConfig[status];
   const label = customLabel || config.label;
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color} ${className}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${config.color} ${className}`}>
       {config.icon && <span className="mr-1">{config.icon}</span>}
       {label}
     </span>

@@ -96,7 +96,7 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-ink/40 dark:bg-black/60 transition-opacity"
         aria-hidden="true"
         onClick={onClose}
       />
@@ -108,16 +108,16 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className={`relative bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full overflow-hidden focus:outline-none ${sizeClasses[size]}`}
+          className={`relative bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg shadow-[0_14px_40px_rgba(32,28,20,0.14)] dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)] w-full overflow-hidden focus:outline-none ${sizeClasses[size]}`}
         >
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 sticky top-0 z-10">
-            <h3 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-line dark:border-line-dark bg-surface dark:bg-surface-dark sticky top-0 z-10">
+            <h3 id={titleId} className="font-display text-lg font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
               {title}
             </h3>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+              className="p-1 text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark rounded-lg"
             >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>

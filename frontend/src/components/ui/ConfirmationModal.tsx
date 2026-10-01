@@ -20,20 +20,21 @@ const variantStyles: Record<
   ConfirmVariant,
   { icon: ReactNode; iconBg: string; button: string }
 > = {
+  // Design v3 action language: red only for destructive, graphite for everything else.
   danger: {
-    icon: <AlertTriangle className="w-6 h-6 text-red-600" />,
-    iconBg: 'bg-red-100',
-    button: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+    icon: <AlertTriangle className="w-6 h-6 text-error dark:text-error-dark" />,
+    iconBg: 'bg-error-bg dark:bg-error-bg-dark',
+    button: 'bg-error text-white hover:bg-error-strong focus-visible:ring-error dark:bg-error-dark dark:text-ink-on-dark dark:hover:bg-error-strong-dark',
   },
   warning: {
-    icon: <AlertCircle className="w-6 h-6 text-yellow-600" />,
-    iconBg: 'bg-yellow-100',
-    button: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500',
+    icon: <AlertCircle className="w-6 h-6 text-bronze dark:text-bronze-dark" />,
+    iconBg: 'bg-bronze-bg dark:bg-bronze-bg-dark',
+    button: 'bg-ink text-ink-on hover:bg-ink/85 focus-visible:ring-focus dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-dark/85',
   },
   info: {
-    icon: <Info className="w-6 h-6 text-blue-600" />,
-    iconBg: 'bg-blue-100',
-    button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+    icon: <Info className="w-6 h-6 text-info dark:text-info-dark" />,
+    iconBg: 'bg-info-bg dark:bg-info-bg-dark',
+    button: 'bg-ink text-ink-on hover:bg-ink/85 focus-visible:ring-focus dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-dark/85',
   },
 };
 
@@ -54,18 +55,18 @@ function ConfirmationModal({
     <Modal isOpen={isOpen} onClose={isLoading ? () => {} : onCancel} title={title} size="small">
       <div className="flex gap-4">
         <div
-          className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${styles.iconBg}`}
+          className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center ${styles.iconBg}`}
         >
           {styles.icon}
         </div>
-        <div className="flex-1 text-sm text-gray-700 pt-2">{message}</div>
+        <div className="flex-1 text-sm text-fg-secondary dark:text-fg-secondary-dark pt-2">{message}</div>
       </div>
       <div className="mt-6 flex justify-end gap-3">
         <button
           type="button"
           onClick={onCancel}
           disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium text-fg bg-transparent border border-line-strong rounded-lg hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-focus disabled:opacity-50 dark:text-fg-dark dark:border-line-strong-dark dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark dark:focus-visible:ring-offset-surface-dark"
         >
           {cancelLabel}
         </button>
@@ -73,11 +74,11 @@ function ConfirmationModal({
           type="button"
           onClick={onConfirm}
           disabled={isLoading}
-          className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${styles.button}`}
+          className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-dark disabled:opacity-50 ${styles.button}`}
         >
           {isLoading && (
             <svg
-              className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+              className="animate-spin -ml-1 mr-2 h-4 w-4 text-current"
               fill="none"
               viewBox="0 0 24 24"
               aria-hidden="true"

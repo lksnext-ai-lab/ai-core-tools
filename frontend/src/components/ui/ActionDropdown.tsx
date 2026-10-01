@@ -149,17 +149,17 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   const getVariantStyles = (variant: ActionItem['variant']) => {
     switch (variant) {
       case 'primary':
-        return 'text-blue-600 hover:text-blue-900 hover:bg-blue-50';
+        return 'text-fg font-medium hover:bg-surface-hover dark:text-fg-dark dark:hover:bg-surface-hover-dark';
       case 'secondary':
-        return 'text-gray-600 hover:text-gray-900 hover:bg-gray-50';
+        return 'text-fg-secondary hover:text-fg hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark';
       case 'success':
-        return 'text-green-600 hover:text-green-900 hover:bg-green-50';
+        return 'text-success hover:bg-success-bg dark:text-success-dark dark:hover:bg-success-bg-dark';
       case 'warning':
-        return 'text-yellow-600 hover:text-yellow-900 hover:bg-yellow-50';
+        return 'text-bronze hover:bg-bronze-bg dark:text-bronze-dark dark:hover:bg-bronze-bg-dark';
       case 'danger':
-        return 'text-red-600 hover:text-red-900 hover:bg-red-50';
+        return 'text-error hover:bg-error-bg dark:text-error-dark dark:hover:bg-error-bg-dark';
       default:
-        return 'text-gray-700 hover:text-gray-900 hover:bg-gray-50';
+        return 'text-fg hover:bg-surface-hover dark:text-fg-dark dark:hover:bg-surface-hover-dark';
     }
   };
 
@@ -209,7 +209,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
           aria-haspopup="menu"
           aria-expanded={isOpen}
           aria-label={triggerAriaLabel}
-          className={`inline-flex items-center justify-center rounded-md border border-gray-300 bg-white ${getSizeStyles()} font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+          className={`inline-flex items-center justify-center rounded-lg border border-line bg-surface ${getSizeStyles()} font-medium text-fg-secondary hover:bg-surface-hover hover:text-fg dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark dark:hover:text-fg-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark`}
         >
           {triggerIcon && <span className="mr-1">{triggerIcon}</span>}
           {triggerText}
@@ -230,10 +230,10 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
       {isOpen && (
         <div 
           ref={menuRef}
-          className="w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+          className="w-48 origin-top-right rounded-lg bg-surface border border-line shadow-[0_14px_40px_rgba(32,28,20,0.14)] dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)] focus:outline-none overflow-hidden"
           style={getDropdownStyle()}
         >
-          <div className="py-1">
+          <div className="p-1">
             {actions.map((action) => (
               <button
                 key={action.label}

@@ -32,14 +32,14 @@ const VersionFooter: React.FC<VersionFooterProps> = ({ className = '' }) => {
 
   if (loading) {
     return (
-      <div className={`version-info text-end text-gray-500 text-xs py-2 px-4 ${className}`}>
+      <div className={`version-info text-end text-fg-faint dark:text-fg-faint-dark text-xs py-2 px-4 ${className}`}>
         Loading version...
       </div>
     );
   }
 
   return (
-    <div className={`version-info text-end text-gray-500 text-xs py-2 px-4 ${className}`}>
+    <div className={`version-info text-end text-fg-faint dark:text-fg-faint-dark text-xs py-2 px-4 ${className}`}>
       {versionInfo.name} v{versionInfo.version}
     </div>
   );

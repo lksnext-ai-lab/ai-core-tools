@@ -137,7 +137,8 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
     headerProps: {
       ...config.headerProps,
       title: config.headerProps?.title || config.name,
-      logoUrl: config.headerProps?.logoUrl || config.logo
+      logoUrl: config.headerProps?.logoUrl || config.logo,
+      organization: config.organization
     },
     footerProps: config.footerProps,
     layoutProps: config.layoutProps,

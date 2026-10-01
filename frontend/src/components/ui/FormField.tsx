@@ -40,10 +40,10 @@ export function FormField({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-gray-700 mb-2"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-2"
       >
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
       </label>
 
       <input
@@ -57,21 +57,21 @@ export function FormField({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:ring-1 transition-colors ${
           error
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
+            : 'border-line-strong focus:ring-ink focus:border-ink dark:border-line-strong-dark dark:focus:ring-ink-dark dark:focus:border-ink-dark'
         } ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : ''
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${inputClassName}`}
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
       )}
     </div>
   );
@@ -117,10 +117,10 @@ export function FormTextArea({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-gray-700 mb-2"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-2"
       >
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
       </label>
 
       <textarea
@@ -134,21 +134,21 @@ export function FormTextArea({
         rows={rows}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:ring-1 transition-colors ${
           error
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
+            : 'border-line-strong focus:ring-ink focus:border-ink dark:border-line-strong-dark dark:focus:ring-ink-dark dark:focus:border-ink-dark'
         } ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : ''
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${textareaClassName}`}
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
       )}
     </div>
   );
@@ -192,10 +192,10 @@ export function FormSelect({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-gray-700 mb-2"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-2"
       >
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
       </label>
 
       <select
@@ -207,12 +207,12 @@ export function FormSelect({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:ring-1 transition-colors ${
           error
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
+            : 'border-line-strong focus:ring-ink focus:border-ink dark:border-line-strong-dark dark:focus:ring-ink-dark dark:focus:border-ink-dark'
         } ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : ''
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${selectClassName}`}
       >
         {options.map(option => (
@@ -223,11 +223,11 @@ export function FormSelect({
       </select>
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
       )}
     </div>
   );
@@ -265,18 +265,18 @@ export function FormCheckbox({
           checked={checked}
           onChange={onChange}
           disabled={disabled}
-          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-4 h-4 accent-ink dark:accent-ink-dark border-line-strong rounded focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       <div className="ml-3">
-        <label 
-          htmlFor={id} 
-          className="text-sm font-medium text-gray-700"
+        <label
+          htmlFor={id}
+          className="text-sm font-medium text-fg dark:text-fg-dark"
         >
           {label}
         </label>
         {helpText && (
-          <p className="text-sm text-gray-500">{helpText}</p>
+          <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
         )}
       </div>
     </div>

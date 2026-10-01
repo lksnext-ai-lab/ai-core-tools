@@ -268,4 +268,4 @@ export interface ExtensibleNavigationConfig {
 }
 
 // Re-export LibraryConfig from LibraryConfig.ts
-export type { LibraryConfig } from './LibraryConfig';
+export type { LibraryConfig, OrganizationConfig } from './LibraryConfig';

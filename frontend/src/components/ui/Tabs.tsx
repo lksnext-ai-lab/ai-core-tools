@@ -91,7 +91,7 @@ export function Tabs({
   }, [activeTab, tabs]);
 
   return (
-    <div className={`border-b border-gray-200 ${className}`}>
+    <div className={`border-b border-line dark:border-line-dark ${className}`}>
       <div
         ref={tabListRef}
         role="tablist"
@@ -117,11 +117,12 @@ export function Tabs({
               className={`
                 px-4 py-3 text-sm font-medium whitespace-nowrap
                 transition-colors duration-200
-                focus:outline-none
+                -mb-px border-b-2
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                 ${
                   isActive
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
+                    ? 'border-accent text-fg dark:border-accent-dark dark:text-fg-dark'
+                    : 'border-transparent text-fg-tertiary hover:text-fg dark:text-fg-tertiary-dark dark:hover:text-fg-dark'
                 }
               `}
             >

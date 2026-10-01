@@ -17,10 +17,10 @@ function ReadOnlyBanner({ userRole, minRole = 'app owners' }: Readonly<ReadOnlyB
   const roleDisplay = getRoleDisplay(minRole);
 
   return (
-    <div role="status" aria-live="polite" className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+    <div role="status" aria-live="polite" className="mb-4 bg-bronze-bg border border-bronze-border rounded-lg p-3 dark:bg-bronze-bg-dark dark:border-bronze-border-dark">
       <div className="flex items-center">
-        <Lock className="w-4 h-4 text-amber-500 mr-2" aria-hidden="true" />
-        <p className="text-sm text-amber-700">
+        <Lock className="w-4 h-4 text-bronze mr-2 dark:text-bronze-dark" aria-hidden="true" />
+        <p className="text-sm text-bronze dark:text-bronze-dark">
           <strong>Read-only mode:</strong> Only {roleDisplay} can modify these settings. You have {userRole} access.
         </p>
       </div>

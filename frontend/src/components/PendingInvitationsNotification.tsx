@@ -67,14 +67,14 @@ function PendingInvitationsNotification() {
     <div className="relative">
       <button
         onClick={toggleDetails}
-        className="relative p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+        className="relative w-[34px] h-[34px] flex items-center justify-center text-fg-secondary hover:bg-surface-hover transition-colors rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark"
         title={`${invitations.length} pending invitation${invitations.length === 1 ? '' : 's'}`}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-3.5-3.5a2.5 2.5 0 010-3.5L19 7h-5M9 17H4l3.5-3.5a2.5 2.5 0 000-3.5L4 7h5m0 0V4a2 2 0 112 4h2a2 2 0 112 4v3" />
         </svg>
         
-        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+        <span className="absolute top-0.5 right-0.5 bg-accent text-white text-[10px] font-medium rounded-full h-4 min-w-4 px-1 flex items-center justify-center dark:bg-accent-dark dark:text-ink-on-dark">
           {invitations.length}
         </span>
       </button>

@@ -69,12 +69,12 @@ function DataTable<T>({
       {
         header: 'Actions',
         headerClassName:
-          'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+          'px-6 py-3 text-right text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark',
         className: 'px-6 py-4 whitespace-nowrap text-right',
         render: (row: T) => {
           const actions = rowActions(row);
           if (actions.length === 0) {
-            return <span className="text-gray-400 text-sm">—</span>;
+            return <span className="text-fg-faint text-sm dark:text-fg-faint-dark">—</span>;
           }
           return (
             <div className="inline-flex justify-end">
@@ -93,8 +93,8 @@ function DataTable<T>({
       {showHeader && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            {title && <h2 className="text-xl font-semibold text-gray-900">{title}</h2>}
-            {subtitle && <p className="text-sm text-gray-600 mt-1">{subtitle}</p>}
+            {title && <h2 className="font-display text-xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">{title}</h2>}
+            {subtitle && <p className="text-sm text-fg-secondary mt-1 dark:text-fg-secondary-dark">{subtitle}</p>}
           </div>
           {headerActions && <div className="flex items-center gap-2">{headerActions}</div>}
         </div>
@@ -103,7 +103,7 @@ function DataTable<T>({
       {searchable && (
         <div className="relative">
           <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-tertiary pointer-events-none dark:text-fg-tertiary-dark"
             aria-hidden="true"
           />
           <input
@@ -112,7 +112,7 @@ function DataTable<T>({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={searchPlaceholder}
             aria-label={searchPlaceholder}
-            className="w-full sm:max-w-xs pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:max-w-xs pl-9 pr-3 py-2 border border-line rounded-lg bg-surface-hover text-sm text-fg placeholder:text-fg-tertiary focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink dark:border-line-dark dark:bg-surface-hover-dark dark:text-fg-dark dark:placeholder:text-fg-tertiary-dark dark:focus:border-ink-dark dark:focus:ring-ink-dark"
           />
         </div>
       )}

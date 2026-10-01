@@ -13,12 +13,12 @@ interface LoadingStateProps {
 export function LoadingState({ 
   message = "Loading...",
   className = '',
-  spinnerColor = 'border-blue-600'
+  spinnerColor = 'border-accent dark:border-accent-dark'
 }: LoadingStateProps) {
   return (
     <div className={`p-6 text-center ${className}`}>
       <div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${spinnerColor} mx-auto`}></div>
-      <p className="mt-2 text-gray-600">{message}</p>
+      <p className="mt-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{message}</p>
     </div>
   );
 }

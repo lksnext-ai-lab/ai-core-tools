@@ -28,13 +28,13 @@ export function FormActions({
   submitDisabled = false
 }: Readonly<FormActionsProps>) {
   return (
-    <div className={`flex justify-end space-x-3 pt-4 border-t border-gray-200 ${containerClassName}`}>
+    <div className={`flex justify-end space-x-3 pt-4 border-t border-line dark:border-line-dark ${containerClassName}`}>
       {showCancel && (
         <button
           type="button"
           onClick={onCancel}
           disabled={isSubmitting}
-          className={`px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${cancelClassName}`}
+          className={`px-4 py-2 text-sm font-medium border border-line-strong rounded-lg text-fg bg-transparent hover:bg-surface-hover dark:border-line-strong-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${cancelClassName}`}
         >
           {cancelLabel}
         </button>
@@ -43,11 +43,11 @@ export function FormActions({
       <button
         type="submit"
         disabled={isSubmitting || submitDisabled}
-        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center ${submitClassName}`}
+        className={`px-4 py-2 text-sm font-medium bg-ink text-ink-on rounded-lg hover:bg-ink/85 dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-dark/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center ${submitClassName}`}
       >
         {isSubmitting && (
-          <svg 
-            className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" 
+          <svg
+            className="animate-spin -ml-1 mr-2 h-4 w-4 text-current"
             xmlns="http://www.w3.org/2000/svg" 
             fill="none" 
             viewBox="0 0 24 24"

@@ -37,7 +37,12 @@ const demoConfig: LibraryConfig = {
   name: 'Mattin AI',
   logo: '/mattin-small.png',
   favicon: '/favicon.ico',
-  
+
+  // Client organization chip in the header — hidden unless VITE_ORGANIZATION_NAME is set
+  organization: getConfig('VITE_ORGANIZATION_NAME')
+    ? { name: getConfig('VITE_ORGANIZATION_NAME'), logo: getConfig('VITE_ORGANIZATION_LOGO') || undefined }
+    : undefined,
+
   themeProps: {
     defaultTheme: 'base',
     customThemes: {

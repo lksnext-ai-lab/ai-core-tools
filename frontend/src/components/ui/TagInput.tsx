@@ -57,17 +57,17 @@ export function TagInput({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-300 rounded-xl min-h-[44px] focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200">
+      <div className="flex flex-wrap items-center gap-2 p-2 border border-line-strong rounded-lg bg-surface min-h-[44px] focus-within:ring-1 focus-within:ring-ink focus-within:border-ink dark:border-line-strong-dark dark:bg-surface-dark dark:focus-within:ring-ink-dark dark:focus-within:border-ink-dark transition-all duration-200">
         {tags.map((tag, idx) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 text-sm bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full"
+            className="inline-flex items-center gap-1 text-xs font-medium bg-surface-hover text-fg-secondary px-2.5 py-1 rounded-full dark:bg-surface-hover-dark dark:text-fg-secondary-dark"
           >
             {tag}
             <button
               type="button"
               onClick={() => removeTag(idx)}
-              className="ml-0.5 text-blue-600 hover:text-blue-900 font-medium"
+              className="ml-0.5 text-fg-tertiary hover:text-fg font-medium dark:text-fg-tertiary-dark dark:hover:text-fg-dark"
               aria-label={`Remove tag ${tag}`}
             >
               <X className="w-3 h-3" />
@@ -82,11 +82,11 @@ export function TagInput({
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={tags.length === 0 ? placeholder : ''}
-            className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1"
+            className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent text-fg placeholder:text-fg-faint dark:text-fg-dark dark:placeholder:text-fg-faint-dark py-1 px-1"
           />
         )}
       </div>
-      <p className="text-xs text-gray-500 mt-1">
+      <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
         {tags.length}/{maxTags} tags
         {atLimit ? ' (maximum reached)' : ' — press Enter to add'}
       </p>

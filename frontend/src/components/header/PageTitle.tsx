@@ -117,17 +117,17 @@ function renderTitle(parts: TitlePart[]): React.ReactElement | null {
   if (parts.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-[9px] min-w-0 overflow-hidden">
       {parts.map((part, index) => (
         <React.Fragment key={`${part.label}-${index}`}>
           {index > 0 && (
-            <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
+            <ChevronRight size={13} className="text-fg-faint2 flex-shrink-0 dark:text-fg-faint2-dark" />
           )}
           <span
             className={
               index === parts.length - 1 && parts.length > 1
-                ? 'text-sm text-gray-500'
-                : 'text-sm font-medium text-gray-700'
+                ? 'text-[13px] font-medium text-fg whitespace-nowrap dark:text-fg-dark'
+                : 'text-[13px] text-fg-tertiary whitespace-nowrap dark:text-fg-tertiary-dark'
             }
           >
             {part.label}
