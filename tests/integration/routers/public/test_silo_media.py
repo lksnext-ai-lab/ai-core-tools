@@ -134,7 +134,8 @@ class TestIndexMediaIntoSilo:
         )
         assert resp.status_code == 202, resp.text
         body = resp.json()
-        assert body["num_documents"] == 0 and body["status"] == "pending"
+        assert body["num_documents"] == 0
+        assert body["status"] == "pending"
 
         media = db.get(Media, body["media_id"])
         assert media.silo_id == media_silo.silo_id
@@ -163,7 +164,8 @@ class TestIndexMediaIntoSilo:
         resp = client.post(url, headers=api_headers(fake_api_key.key), json=payload)
         assert resp.status_code == 202, resp.text
         media = db.get(Media, resp.json()["media_id"])
-        assert media.source_type == "youtube" and media.custom_metadata == {"topic": "demo"}
+        assert media.source_type == "youtube"
+        assert media.custom_metadata == {"topic": "demo"}
 
         duplicate = client.post(url, headers=api_headers(fake_api_key.key), json=payload)
         assert duplicate.status_code == 400

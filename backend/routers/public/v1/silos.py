@@ -567,6 +567,29 @@ async def find_docs_in_collection(
         )
 
 
+_CONTENT_TYPE_EXTENSIONS = {
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "text/plain": ".txt",
+}
+
+
+def _document_extension(file: UploadFile) -> str:
+    """File extension from the name, else from the content type, defaulting to .txt."""
+    file_extension = os.path.splitext(file.filename or "")[1].lower()
+    if file_extension:
+        return file_extension
+    return _CONTENT_TYPE_EXTENSIONS.get(file.content_type or "", ".txt")
+
+
+def _media_accepted(media: Media) -> FileIndexResponseSchema:
+    return FileIndexResponseSchema(
+        message="Media accepted; it is being transcribed and indexed",
+        num_documents=0, media_id=media.media_id, status=media.status,
+    )
+
+
 @silos_router.post(
     "/{silo_id}/docs/index-file",
     summary="Index file content",
@@ -596,7 +619,7 @@ async def index_file_document(
     `chunk_*` durations (seconds) apply to video/audio only.
     """
     validate_api_key_for_app(app_id, api_key, db)
-    validate_silo_ownership(db, silo_id, app_id)
+    silo = validate_silo_ownership(db, silo_id, app_id)
 
     metadata_dict = {}
     if metadata:
@@ -606,7 +629,6 @@ async def index_file_document(
             logger.warning("Invalid JSON metadata: Will use empty dict!")
 
     if MediaService.is_media_filename(file.filename):
-        silo = SiloService.get_silo(silo_id, db)
         try:
             media = await MediaService.create_silo_media_from_file(
                 file, silo, db, background_tasks, metadata=metadata_dict if isinstance(metadata_dict, dict) else None,
@@ -616,27 +638,12 @@ async def index_file_document(
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         response.status_code = status.HTTP_202_ACCEPTED
-        logger.info(f"Queued media {media.media_id} ({file.filename}) for indexing in silo {silo_id}")
-        return FileIndexResponseSchema(
-            message="Media accepted; it is being transcribed and indexed",
-            num_documents=0, media_id=media.media_id, status=media.status,
-        )
+        logger.info(f"Queued media {media.media_id} for indexing in silo {silo_id}")
+        return _media_accepted(media)
 
     temp_file_path = None
     try:
-
-        file_extension = os.path.splitext(file.filename or "")[1].lower()
-        if not file_extension:
-            if file.content_type:
-                content_type_map = {
-                    "application/pdf": ".pdf",
-                    "application/msword": ".doc",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-                    "text/plain": ".txt",
-                }
-                file_extension = content_type_map.get(file.content_type, ".txt")
-            else:
-                file_extension = ".txt"
+        file_extension = _document_extension(file)
 
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=file_extension
@@ -705,8 +712,7 @@ async def index_youtube_video(
 ):
     """Download, transcribe and index a YouTube video into the silo, in the background."""
     validate_api_key_for_app(app_id, api_key, db)
-    validate_silo_ownership(db, silo_id, app_id)
-    silo = SiloService.get_silo(silo_id, db)
+    silo = validate_silo_ownership(db, silo_id, app_id)
     try:
         media = await MediaService.create_silo_media_from_youtube(
             body.url, silo, db, background_tasks, metadata=body.metadata,
@@ -715,10 +721,7 @@ async def index_youtube_video(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    return FileIndexResponseSchema(
-        message="Media accepted; it is being transcribed and indexed",
-        num_documents=0, media_id=media.media_id, status=media.status,
-    )
+    return _media_accepted(media)
 
 
 @silos_router.get(
