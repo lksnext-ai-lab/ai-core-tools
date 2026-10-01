@@ -1,40 +1,23 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useUser } from '../contexts/UserContext';
+import { SessionGate } from './SessionGate';
 
 interface AdminRouteProps {
   children: React.ReactNode;
 }
 
 /**
- * AdminRoute component - Protects routes that require admin access
- * 
- * This component checks if:
- * 1. User is authenticated
- * 2. User has admin privileges (is_admin === true)
- * 
- * If not authenticated or not admin, redirects to home page
+ * Requires a confirmed session with platform admin rights; other users go to the home page.
+ * is_admin = env-var omniadmin; platform_role='admin' = DB-promoted admin.
  */
 function AdminRoute({ children }: Readonly<AdminRouteProps>) {
-  const { user, loading } = useUser();
-
-  // Show nothing while loading
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  // is_admin = env-var omniadmin; platform_role='admin' = DB-promoted admin
-  if (!user?.is_admin && user?.platform_role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
-
-  // User is authenticated and is admin, render the protected content
-  return <>{children}</>;
+  return (
+    <SessionGate>
+      {user => (user.is_admin || user.platform_role === 'admin'
+        ? children
+        : <Navigate to="/" replace />)}
+    </SessionGate>
+  );
 }
 
 export default AdminRoute;
-

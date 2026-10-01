@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       enabled: true,
       authority: config.oidc.authority,
       clientId: config.oidc.client_id,
-      redirectUri: `${globalThis.location.origin}${config.oidc.callbackPath || '/callback'}`,
+      redirectUri: `${globalThis.location.origin}${config.oidc.callbackPath || '/auth/success'}`,
       scope: config.oidc.scope || 'openid profile email',
       audience: config.oidc.audience
     }

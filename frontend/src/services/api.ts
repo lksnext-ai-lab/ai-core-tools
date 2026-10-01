@@ -589,26 +589,25 @@ class ApiService {
     return configService.getApiBaseUrl();
   }
 
-  // Coalesces concurrent 401-triggered refreshes into a single in-flight promise.
-  private _refreshPromise: Promise<boolean> | null = null;
-
-  private async _doRefresh(): Promise<boolean> {
-    if (!this._refreshPromise) {
-      this._refreshPromise = authService.refresh().finally(() => {
-        this._refreshPromise = null;
-      });
-    }
-    return this._refreshPromise;
+  // Renews the session once: refresh-token rotation (LOCAL) or OIDC silent renew.
+  private renewSession(): Promise<boolean> {
+    return _apiAuthMode === 'oidc' ? authService.renewOidcSession() : authService.refresh();
   }
 
-  // Called when a refresh fails or a retried request still 401s (LOCAL mode only).
-  private clearClientAuthAndRedirect(): void {
-    // Use logout() (not clearAuth()) to clear the httpOnly session cookies. Best-effort.
-    authService.logout().catch(() => {}).finally(() => {
-      if (typeof globalThis !== 'undefined' && globalThis.location) {
-        globalThis.location.href = '/login';
-      }
-    });
+  private _sessionExpiring: Promise<void> | null = null;
+
+  // Route guards react to the expired session and navigate to /login in-app,
+  // preserving the requested location. Concurrent 401s share one expiry.
+  private expireSession(): void {
+    if (this._sessionExpiring) return;
+    // LOCAL: clear the httpOnly session cookies first. Best-effort.
+    const clearCookies = _apiAuthMode === 'local' ? authService.logout() : Promise.resolve();
+    this._sessionExpiring = clearCookies
+      .catch(() => {})
+      .finally(() => {
+        this._sessionExpiring = null;
+        authService.notifySessionExpired();
+      });
   }
 
   // LOCAL: cookies carry auth; CSRF header on mutating calls. OIDC: Authorization bearer.
@@ -700,21 +699,16 @@ class ApiService {
         throw new Error('Authentication required');
       }
 
-      // OIDC re-auth is owned by oidc-client-ts / OIDCProvider / ProtectedRoute.
-      if (_apiAuthMode === 'oidc') {
-        throw new Error('Authentication required');
-      }
-
       const isRefreshEndpoint = endpoint.includes('/auth/refresh');
       if (!_isRetryAfterRefresh && !isRefreshEndpoint) {
-        const refreshed = await this._doRefresh();
-        if (refreshed) {
-          // Cookie may have rotated — rebuild headers on retry.
+        const renewed = await this.renewSession();
+        if (renewed) {
+          // Token or cookie changed — rebuild headers on retry.
           return this.request(endpoint, options, true, _requestOptions);
         }
       }
-      this.clearClientAuthAndRedirect();
-      throw new Error('Authentication required');
+      this.expireSession();
+      throw new ApiError('Your session has expired. Please sign in again.', 401);
     }
 
     if (!response.ok) {

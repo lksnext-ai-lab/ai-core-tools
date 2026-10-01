@@ -281,17 +281,22 @@ from typing import Annotated
 from utils.config import is_omniadmin as _is_omniadmin
 
 
-# Route templates (not concrete URLs) viewers may write to, matched against the
-# route FastAPI resolved so an unrelated future ".../respond" route isn't exempted.
-_VIEWER_WRITABLE_ROUTE_SUFFIXES = (
-    "/collaboration/invitations/{collaboration_id}/respond",  # accept/decline an invite
-)
+_VIEWER_WRITABLE_ATTR = "_viewer_writable"
+
+
+def viewer_writable(endpoint):
+    """Mark an endpoint as a write that viewer-role users may perform.
+
+    The mark is checked on the endpoint FastAPI resolved for the request, so it
+    doesn't depend on route paths or on how routers are nested (since FastAPI
+    0.137 ``scope["route"].path`` is relative to its router).
+    """
+    setattr(endpoint, _VIEWER_WRITABLE_ATTR, True)
+    return endpoint
 
 
 def _is_viewer_writable_route(request: Request) -> bool:
-    route = request.scope.get("route")
-    route_path = getattr(route, "path", None)
-    return bool(route_path) and route_path.endswith(_VIEWER_WRITABLE_ROUTE_SUFFIXES)
+    return getattr(request.scope.get("endpoint"), _VIEWER_WRITABLE_ATTR, False) is True
 
 
 async def require_editor_for_writes(

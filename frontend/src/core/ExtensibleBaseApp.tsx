@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '../themes/ThemeProvider';
@@ -94,7 +94,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   extraRoutes = [],
 }) => {
   const allExtraRoutes = [...(config.routes || []), ...extraRoutes];
-  const clientConfig = {
+  const clientConfig = useMemo(() => ({
     clientId: 'library-client',
     name: config.name || 'AI Core Tools',
     theme: config.themeProps?.customThemes?.[config.themeProps?.defaultTheme || 'default'] || baseTheme,
@@ -104,7 +104,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         enabled: true,
         authority: config.authProps.oidc.authority,
         clientId: config.authProps.oidc.client_id,
-        redirectUri: `${globalThis.location.origin}${config.authProps.oidc.callbackPath || '/callback'}`,
+        redirectUri: `${globalThis.location.origin}${config.authProps.oidc.callbackPath || '/auth/success'}`,
         scope: config.authProps.oidc.scope || 'openid profile email'
       } : undefined
     } : { type: 'session' as const },
@@ -120,11 +120,13 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
       retries: config.apiConfig.retries || 3
     } : undefined,
     navigation: config.navigationConfig
-  };
+  }), [config]);
 
-  useEffect(() => {
+  // Applied during render, not in an effect: child providers' effects run first
+  // and their bootstrap requests (/internal/me, /internal/config) need the API base URL.
+  if (configService.getClientConfig() !== clientConfig) {
     configService.setClientConfig(clientConfig);
-  }, [clientConfig]);
+  }
 
   const features = config.features || {};
   

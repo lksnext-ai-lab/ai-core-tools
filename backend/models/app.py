@@ -66,8 +66,3 @@ class App(Base):
                         nullable=True)
     default_sandbox_service = relationship('SandboxService',
                         foreign_keys=[default_sandbox_service_id])
-
-    def get_user_role(self, user_id):
-        """Get the role of a user in this app"""
-        from services.app_collaboration_service import AppCollaborationService
-        return AppCollaborationService.get_user_app_role(user_id, self.app_id) 

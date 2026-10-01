@@ -645,9 +645,7 @@ async def create_agent(
         if (mcp_client):
             mcp_tools = await mcp_client.get_tools()
             logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
-            for tool in mcp_tools:
-                if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
-                    ensure_json_schema_types(tool.args_schema)
+            _prepare_mcp_tools(mcp_tools)
             if (mcp_tools):
                 for tool in mcp_tools:
                     _tag_tool(tool, "MCP")
@@ -768,6 +766,28 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     )
 
 
+
+
+def _mcp_tool_error_message(error: Exception) -> str:
+    return (
+        f"Error: the tool call failed: {error}\n"
+        "Check the arguments against the tool's input schema and try again."
+    )
+
+
+def _prepare_mcp_tools(mcp_tools: List[Any]) -> None:
+    """Make tools from external MCP servers safe to hand to a model.
+
+    - Completes missing ``type`` keys in their input schemas (providers reject them).
+    - Returns tool errors (a ``ToolException`` for an ``isError`` result, e.g.
+      rejected arguments) to the model as the tool's output instead of aborting
+      the whole turn, so the model can correct the call.
+    """
+    for tool in mcp_tools:
+        if hasattr(tool, "args_schema") and isinstance(tool.args_schema, dict):
+            ensure_json_schema_types(tool.args_schema)
+        if isinstance(tool, BaseTool):
+            tool.handle_tool_error = _mcp_tool_error_message
 
 
 def _tag_tool(tool: Any, tool_type: str, **extra: Any) -> None:
@@ -1102,6 +1122,7 @@ class IACTTool(BaseTool):
                     f"MCP tools loaded successfully for sub-agent {agent.agent_id}: "
                     f"{len(mcp_tools)} tools"
                 )
+                _prepare_mcp_tools(mcp_tools)
                 if mcp_tools:
                     tools.extend(mcp_tools)
         except Exception as e:
@@ -1483,6 +1504,7 @@ class IACTOCRTool(BaseTool):
                     f"MCP tools loaded successfully for OCR sub-agent {agent.agent_id}: "
                     f"{len(mcp_tools)} tools"
                 )
+                _prepare_mcp_tools(mcp_tools)
                 if mcp_tools:
                     tools.extend(mcp_tools)
         except Exception as e:

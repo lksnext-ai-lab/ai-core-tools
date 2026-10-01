@@ -62,22 +62,25 @@ export const DeploymentModeProvider: React.FC<DeploymentModeProviderProps> = ({ 
       try {
         const baseUrl = configService.getApiBaseUrl();
         const response = await fetch(`${baseUrl}/internal/config`);
-        if (response.ok) {
-          const data: {
-            deployment_mode?: string;
-            tiers?: Tiers;
-            auth_mode?: string;
-          } = await response.json();
-          setIsSaasMode(data.deployment_mode === 'saas');
-          setTiers(data.tiers ?? null);
-
-          const resolvedMode: AuthMode =
-            data.auth_mode === 'oidc' || data.auth_mode === 'local'
-              ? data.auth_mode
-              : resolveEnvAuthMode();
-          setAuthMode(resolvedMode);
-          setApiAuthMode(resolvedMode);
+        // A 5xx while the backend starts must not leave authMode unresolved —
+        // the login page renders no sign-in option until it is set.
+        if (!response.ok) {
+          throw new Error(`Config request failed: ${response.status}`);
         }
+        const data: {
+          deployment_mode?: string;
+          tiers?: Tiers;
+          auth_mode?: string;
+        } = await response.json();
+        setIsSaasMode(data.deployment_mode === 'saas');
+        setTiers(data.tiers ?? null);
+
+        const resolvedMode: AuthMode =
+          data.auth_mode === 'oidc' || data.auth_mode === 'local'
+            ? data.auth_mode
+            : resolveEnvAuthMode();
+        setAuthMode(resolvedMode);
+        setApiAuthMode(resolvedMode);
       } catch {
         // Preserve the env-intended mode so OIDC deployments survive a transient failure.
         const fallbackMode = resolveEnvAuthMode();

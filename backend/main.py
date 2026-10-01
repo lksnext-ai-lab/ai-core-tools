@@ -304,6 +304,20 @@ async def get_client_config():
 _openapi_internal_schema = None
 _openapi_public_schema = None
 
+def _routes_with_prefix(prefix: str):
+    """Routes of the app whose full path starts with ``prefix``.
+
+    Since FastAPI 0.137 ``app.routes`` is a tree (included routers are kept as
+    nodes), so it is walked with ``iter_route_contexts`` to get every route
+    with its effective path.
+    """
+    from fastapi.routing import iter_route_contexts
+
+    return [
+        route for route in iter_route_contexts(app.routes)
+        if route.path and route.path.startswith(prefix)
+    ]
+
 def get_openapi_internal():
     """Generate OpenAPI schema for internal API only."""
     global _openapi_internal_schema
@@ -312,10 +326,7 @@ def get_openapi_internal():
     if _openapi_internal_schema:
         return _openapi_internal_schema
     
-    internal_routes = [
-        route for route in app.routes
-        if hasattr(route, 'path') and route.path.startswith('/internal')
-    ]
+    internal_routes = _routes_with_prefix('/internal')
     
     _openapi_internal_schema = get_openapi(
         title=os.getenv('INTERNAL_API_TITLE', 'IA Core Tools - Internal API'),
@@ -333,10 +344,7 @@ def get_openapi_public():
     if _openapi_public_schema:
         return _openapi_public_schema
     
-    public_routes = [
-        route for route in app.routes
-        if hasattr(route, 'path') and route.path.startswith('/public')
-    ]
+    public_routes = _routes_with_prefix('/public')
     
     _openapi_public_schema = get_openapi(
         title=os.getenv('PUBLIC_API_TITLE', 'IA Core Tools - Public API'),

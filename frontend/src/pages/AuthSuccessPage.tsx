@@ -1,26 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { OIDCContext } from '../auth/OIDCProvider';
 
 function AuthSuccessPage() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, sessionError } = useAuth();
+  const returnTo = useContext(OIDCContext)?.returnTo ?? null;
 
   useEffect(() => {
-    // Wait for auth to complete
-    if (!loading) {
-      if (isAuthenticated) {
-        console.log('Authentication successful, redirecting...');
-        // Redirect to home page after successful authentication
-        navigate('/', { replace: true });
-      } else {
-        // If not authenticated after loading completes, show error
-        setError('Authentication failed - please try again');
-      }
+    if (loading) return;
+    if (isAuthenticated) {
+      navigate(returnTo ?? '/', { replace: true });
+    } else if (sessionError === 'unavailable') {
+      setError('The server could not be reached. Please try again in a moment.');
+    } else {
+      setError('Authentication failed - please try again');
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [isAuthenticated, loading, sessionError, returnTo, navigate]);
 
   if (loading) {
     return (
@@ -48,7 +47,7 @@ function AuthSuccessPage() {
           
           <div className="text-center">
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/login', { replace: true })}
               className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
             >
               Try Again

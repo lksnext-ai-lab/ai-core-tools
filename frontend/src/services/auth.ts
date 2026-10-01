@@ -2,6 +2,32 @@ import { configService } from '../core/ConfigService';
 import type { User } from 'oidc-client-ts';
 import { getCsrfToken } from './cookies';
 
+export interface CurrentUserPayload {
+  user_id: number;
+  email: string;
+  name?: string;
+  is_admin?: boolean;
+  is_omniadmin?: boolean;
+  platform_role?: 'viewer' | 'editor' | 'admin';
+}
+
+/** `unauthorized`: the backend rejected the credentials. `unavailable`: network or server failure. */
+export type CurrentUserResult =
+  | { readonly status: 'ok'; readonly user: CurrentUserPayload }
+  | { readonly status: 'unauthorized' }
+  | { readonly status: 'unavailable' };
+
+type OidcRenewHandler = () => Promise<boolean>;
+type SessionExpiredListener = () => void;
+
+// Serialises refresh-token rotation across tabs: the backend revokes the whole
+// token family when a rotated refresh token is presented twice.
+const REFRESH_LOCK_NAME = 'mattin-auth-refresh';
+// The refresh runs while holding a lock shared by every tab, so it must always
+// settle: a request left hanging (e.g. the backend restarting mid-request) would
+// otherwise block session renewal in all other tabs.
+const REFRESH_TIMEOUT_MS = 15_000;
+
 class AuthService {
   private get baseURL(): string {
     return configService.getApiBaseUrl();
@@ -52,6 +78,37 @@ class AuthService {
     return this.oidcAccessToken !== null;
   }
 
+  private oidcRenewHandler: OidcRenewHandler | null = null;
+  private sessionExpiredListeners = new Set<SessionExpiredListener>();
+  private refreshPromise: Promise<boolean> | null = null;
+
+  /** Registered by OIDCProvider so non-React callers (api.ts) can trigger a token renewal. */
+  setOidcRenewHandler(handler: OidcRenewHandler | null) {
+    this.oidcRenewHandler = handler;
+  }
+
+  /** Resolves true when a fresh OIDC ID token is available. */
+  async renewOidcSession(): Promise<boolean> {
+    if (!this.oidcRenewHandler) return false;
+    try {
+      return await this.oidcRenewHandler();
+    } catch {
+      return false;
+    }
+  }
+
+  onSessionExpired(listener: SessionExpiredListener): () => void {
+    this.sessionExpiredListeners.add(listener);
+    return () => {
+      this.sessionExpiredListeners.delete(listener);
+    };
+  }
+
+  /** Signals that the backend rejected the session and it could not be renewed. */
+  notifySessionExpired() {
+    this.sessionExpiredListeners.forEach(listener => listener());
+  }
+
   /** Sets httpOnly access_token + refresh_token cookies and a readable csrf_token cookie. */
   async localLogin(email: string, password: string): Promise<{ user: { user_id: number; email: string; name?: string; is_admin?: boolean; is_omniadmin?: boolean } }> {
     const url = `${this.baseURL}/internal/auth/login`;
@@ -84,8 +141,23 @@ class AuthService {
     }).catch(() => {}); // best-effort
   }
 
-  /** Rotates the cookie pair; used by api.ts for silent-refresh on 401. */
-  async refresh(): Promise<boolean> {
+  /**
+   * Rotates the cookie pair (LOCAL mode). Concurrent callers share one in-flight
+   * request, and the Web Locks API serialises rotation across tabs.
+   */
+  refresh(): Promise<boolean> {
+    if (!this.refreshPromise) {
+      const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+      const run = () => this.rotateRefreshToken();
+      const pending = locks ? locks.request(REFRESH_LOCK_NAME, run) : run();
+      this.refreshPromise = pending.finally(() => {
+        this.refreshPromise = null;
+      });
+    }
+    return this.refreshPromise;
+  }
+
+  private async rotateRefreshToken(): Promise<boolean> {
     const url = `${this.baseURL}/internal/auth/refresh`;
     const csrf = getCsrfToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -98,6 +170,7 @@ class AuthService {
         method: 'POST',
         credentials: 'include',
         headers,
+        signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
       });
       return response.ok;
     } catch {
@@ -137,6 +210,31 @@ class AuthService {
 
     if (!response.ok) {
       throw new Error(await this.extractErrorMessage(response, 'Set password failed. The link may have expired.'));
+    }
+  }
+
+  /** Resolves the backend session without throwing; the caller decides how to recover. */
+  async fetchCurrentUser(): Promise<CurrentUserResult> {
+    const headers: Record<string, string> = {};
+    if (this.oidcAccessToken) {
+      headers['Authorization'] = `Bearer ${this.oidcAccessToken}`;
+    }
+
+    try {
+      const response = await fetch(`${this.baseURL}/internal/me`, {
+        credentials: 'include',
+        headers,
+      });
+      // 404: authenticated identity without a platform account — not usable either.
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        return { status: 'unauthorized' };
+      }
+      if (!response.ok) {
+        return { status: 'unavailable' };
+      }
+      return { status: 'ok', user: await response.json() };
+    } catch {
+      return { status: 'unavailable' };
     }
   }
 
