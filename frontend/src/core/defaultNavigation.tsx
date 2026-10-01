@@ -21,6 +21,10 @@ import {
   CreditCard,
   Sliders,
   Cpu,
+  Box,
+  CalendarClock,
+  Target,
+  Activity,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -68,6 +72,12 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      path: '/apps/:appId/scheduled-tasks',
+      name: 'Scheduled Tasks',
+      icon: <CalendarClock size={16} />,
+      section: 'appNavigation'
+    },
+    {
       path: '/apps/:appId/data',
       name: 'Data',
       icon: <Database size={16} />,
@@ -95,8 +105,7 @@ export const defaultNavigation: NavigationConfig = {
           path: '/apps/:appId/sharepoint',
           name: 'SharePoint',
           icon: <Cloud size={16} />,
-          section: 'appNavigation',
-          enterpriseFeature: 'sharepoint'
+          section: 'appNavigation'
         },
       ]
     },
@@ -104,6 +113,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/mcp-servers',
       name: 'MCP Servers',
       icon: <Plug size={16} />,
+      section: 'appNavigation'
+    },
+    {
+      path: '/apps/:appId/metrics',
+      name: 'Metrics',
+      icon: <BarChart2 size={16} />,
       section: 'appNavigation'
     },
     {
@@ -131,6 +146,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/settings/embedding-services',
       name: 'Embedding Services',
       icon: <Brain size={16} />,
+      section: 'settings'
+    },
+    {
+      path: '/apps/:appId/settings/sandbox-services',
+      name: 'Sandbox Services',
+      icon: <Box size={16} />,
       section: 'settings'
     },
     {
@@ -181,6 +202,13 @@ export const defaultNavigation: NavigationConfig = {
       adminOnly: true
     },
     {
+      path: '/admin/metrics',
+      name: 'Agent Metrics',
+      icon: <Activity size={16} />,
+      section: 'admin',
+      adminOnly: true
+    },
+    {
       path: '/admin/settings',
       name: 'Settings',
       icon: <Settings size={16} />,
@@ -206,6 +234,20 @@ export const defaultNavigation: NavigationConfig = {
       path: '/admin/system-embedding-services',
       name: 'System Embedding Services',
       icon: <Brain size={16} />,
+      section: 'admin',
+      adminOnly: true,
+    },
+    {
+      path: '/admin/system-sandbox-services',
+      name: 'System Sandbox Services',
+      icon: <Box size={16} />,
+      section: 'admin',
+      adminOnly: true,
+    },
+    {
+      path: '/admin/system-skills',
+      name: 'System Skills',
+      icon: <Target size={16} />,
       section: 'admin',
       adminOnly: true,
     },

@@ -3,6 +3,9 @@
 .env.local
 .env.production
 .env.*.local
+# Local tokens for developer tooling (SonarCloud, Jira)
+.env.sonar
+.env.jira
 .flaskenv
 *.pyc
 *.pyo
@@ -64,3 +67,16 @@ reports/
 .claude/agent-memory/
 **/.claude/agent-memory/
 .claude/settings.local.json
+
+# Codex agent system: ship AGENTS.md, .codex/agents and .agents/skills,
+# but keep per-run specs and personal config out of git.
+.codex/specs/
+.codex/config.local.toml
+
+# Entornos Docker locales: un .env por entorno, con secretos. Las plantillas
+# .env.example sí se versionan.
+docker/envs/*.env
+!docker/envs/*.env.example
+
+# Dumps de BD locales (docker/mattin.ps1). Nunca al repo.
+docker/backups/

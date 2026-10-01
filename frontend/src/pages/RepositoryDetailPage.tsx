@@ -296,7 +296,7 @@ const RepositoryDetailPage: React.FC = () => {
           mediaConfig,
         );
         
-        if (result.failed_files?.length > 0) {
+        if (result.failed_files && result.failed_files.length > 0) {
           const failedMessages = result.failed_files.map((f: any) => 
             `${f.filename}: ${f.error}`
           ).join('\n');
@@ -1379,4 +1379,4 @@ const RepositoryDetailPage: React.FC = () => {
   );
 };
 
-export default RepositoryDetailPage; 
+export default RepositoryDetailPage;

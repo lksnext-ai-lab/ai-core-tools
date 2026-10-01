@@ -140,6 +140,7 @@ class AgentExportService(BaseExportService):
             agent_tool_refs=agent_tool_refs,
             agent_mcp_refs=agent_mcp_refs,
             has_memory=agent.has_memory,
+            skill_router_enabled=getattr(agent, 'skill_router_enabled', False) or False,
             memory_max_messages=agent.memory_max_messages,
             memory_max_tokens=agent.memory_max_tokens,
             memory_summarize_threshold=agent.memory_summarize_threshold,

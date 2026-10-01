@@ -265,6 +265,7 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_for_detail', return_value=agent)
         mocker.patch.object(service, '_get_form_data', return_value={
             'ai_services': [],
+            'sandbox_services': [],
             'silos': [],
             'output_parsers': [],
             'tools': [],
@@ -304,6 +305,7 @@ class TestGetAgentDetail:
         # Return dicts instead of MagicMock objects for schema validation
         form_data = {
             'ai_services': [{"service_id": 1, "name": "OpenAI GPT-4", "provider": "OpenAI"}],
+            'sandbox_services': [],
             'silos': [],
             'output_parsers': [],
             'tools': [],
@@ -856,6 +858,113 @@ class TestCreateOrUpdateAgent:
 
 
 # ---------------------------------------------------------------------------
+# sandbox_service_id ownership validation (cross-tenant IDOR fix)
+# ---------------------------------------------------------------------------
+
+class TestSandboxServiceIdValidation:
+    """Test that create_or_update_agent enforces sandbox_service_id ownership."""
+
+    def _base_agent_data(self, **overrides) -> dict:
+        data = {
+            'agent_id': 0,
+            'app_id': 1,
+            'name': 'Sandboxed Agent',
+            'description': 'Test',
+            'system_prompt': 'Test prompt',
+            'prompt_template': None,
+            'status': None,
+            'service_id': None,
+            'silo_id': None,
+            'has_memory': False,
+            'output_parser_id': None,
+            'temperature': 0.7,
+            'is_tool': False,
+            'vision_service_id': None,
+            'vision_system_prompt': None,
+            'text_system_prompt': None,
+        }
+        data.update(overrides)
+        return data
+
+    def test_rejects_sandbox_service_from_a_different_app(self, mocker):
+        """A sandbox_service_id owned by another App must be rejected."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(app_id=1, sandbox_service_id=99)
+
+        other_app_sandbox_service = MagicMock()
+        other_app_sandbox_service.app_id = 2  # belongs to a different app
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.sandbox_service_repository.SandboxServiceRepository.get_by_id',
+            return_value=other_app_sandbox_service,
+        )
+
+        with pytest.raises(ValueError, match="sandbox_service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_rejects_nonexistent_sandbox_service(self, mocker):
+        """A sandbox_service_id that doesn't exist must be rejected."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(app_id=1, sandbox_service_id=999)
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.sandbox_service_repository.SandboxServiceRepository.get_by_id',
+            return_value=None,
+        )
+
+        with pytest.raises(ValueError, match="sandbox_service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_system_scoped_sandbox_service(self, mocker):
+        """A sandbox_service_id with app_id=None (system-scoped) is allowed for any app."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(app_id=1, sandbox_service_id=7)
+
+        system_sandbox_service = MagicMock()
+        system_sandbox_service.app_id = None  # system/platform-scoped
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.sandbox_service_repository.SandboxServiceRepository.get_by_id',
+            return_value=system_sandbox_service,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 11
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+        assert result == 11
+
+    def test_accepts_sandbox_service_from_same_app(self, mocker):
+        """A sandbox_service_id owned by the same App is allowed."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(app_id=1, sandbox_service_id=42)
+
+        same_app_sandbox_service = MagicMock()
+        same_app_sandbox_service.app_id = 1
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.sandbox_service_repository.SandboxServiceRepository.get_by_id',
+            return_value=same_app_sandbox_service,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 12
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+        assert result == 12
+
+
+# ---------------------------------------------------------------------------
 # update_agent_tools
 # ---------------------------------------------------------------------------
 
@@ -978,3 +1087,33 @@ class TestEdgeCases:
         
         # Verify the temperature was set to 0 on the returned agent
         assert result == 10
+
+
+# ---------------------------------------------------------------------------
+# prompt_template default (issue #235)
+# ---------------------------------------------------------------------------
+
+class TestPromptTemplateDefault:
+    """An empty prompt template drops the user's message, so it's never persisted."""
+
+    def test_new_agent_detail_defaults_to_question_template(self):
+        new_agent = AgentService()._get_agent_for_detail(MagicMock(), 0)
+
+        assert new_agent.prompt_template == '{question}'
+
+    @pytest.mark.parametrize('value', ['', '   ', None])
+    def test_empty_template_falls_back_to_default(self, value):
+        assert AgentService._resolve_prompt_template(value, None) == '{question}'
+
+    def test_missing_template_keeps_current_value(self):
+        assert AgentService._resolve_prompt_template(None, 'Q: {question}') == 'Q: {question}'
+
+    def test_explicit_template_is_kept(self):
+        assert AgentService._resolve_prompt_template('Answer: {question}', '{question}') == 'Answer: {question}'
+
+    def test_update_prompt_endpoint_never_stores_empty_template(self, mocker):
+        agent = make_agent(agent_id=5)
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=agent)
+
+        assert AgentService().update_agent_prompt(MagicMock(), 5, 'template', '') is True
+        assert agent.prompt_template == '{question}'

@@ -3,7 +3,6 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
-import { useCapability } from '../../contexts/CapabilitiesContext';
 import { apiService } from '../../services/api';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
@@ -83,34 +82,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       active ? 'text-gray-900 bg-gray-100' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
     }`;
 
-  // Renders a leaf navigation item, with EE badge support
-  const EnterpriseAwareLink: React.FC<{
+  const NavItemLink: React.FC<{
     item: NavigationItem;
     resolvedPath: string;
     useAppStyle: boolean;
   }> = ({ item, resolvedPath, useAppStyle }) => {
-    const isEnabled = useCapability(item.enterpriseFeature ?? '');
-    const isEE = !!item.enterpriseFeature;
-    const locked = isEE && !isEnabled;
     const cls = useAppStyle ? appItemClass : globalItemClass;
-    const active = !locked && isItemActive(resolvedPath);
-    const label = locked ? `${item.name} [EE]` : item.name;
-    const dest = locked
-      ? `/apps/${appId}/enterprise?feature=${encodeURIComponent(item.name)}`
-      : resolvedPath;
-
     return (
-      <Link
-        to={dest}
-        className={`${cls(active)} ${locked ? 'opacity-60' : ''}`}
-        title={locked ? `${item.name} — Enterprise Edition` : undefined}
-      >
+      <Link to={resolvedPath} className={cls(isItemActive(resolvedPath))}>
         {item.icon && (
           <span className="mr-3 flex items-center w-4 h-4 shrink-0 text-current">
             {item.icon}
           </span>
         )}
-        <span className="flex-1">{label}</span>
+        <span className="flex-1">{item.name}</span>
       </Link>
     );
   };
@@ -164,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       const childPath = appId ? child.path.replace(':appId', appId) : child.path;
                       return (
                         <li key={`${section}-${index}-child-${ci}`}>
-                          <EnterpriseAwareLink item={child} resolvedPath={childPath} useAppStyle={useAppStyle} />
+                          <NavItemLink item={child} resolvedPath={childPath} useAppStyle={useAppStyle} />
                         </li>
                       );
                     })}
@@ -174,21 +159,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         }
 
-        // Leaf item (may have enterpriseFeature)
         return (
           <li key={`${section}-${index}`}>
-            {item.enterpriseFeature ? (
-              <EnterpriseAwareLink item={item} resolvedPath={path} useAppStyle={useAppStyle} />
-            ) : (
-              <Link to={path} className={useAppStyle ? appItemClass(isItemActive(path)) : globalItemClass(isItemActive(path))}>
-                {item.icon && (
-                  <span className="mr-3 flex items-center w-4 h-4 shrink-0 text-current">
-                    {item.icon}
-                  </span>
-                )}
-                {item.name}
-              </Link>
-            )}
+            <NavItemLink item={item} resolvedPath={path} useAppStyle={useAppStyle} />
           </li>
         );
       });

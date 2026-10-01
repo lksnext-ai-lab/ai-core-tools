@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square } from 'lucide-react';
+import { ArrowLeft, Bot, MessageCircle, Paperclip, Plus, Square, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
@@ -11,7 +11,8 @@ import OrchestratorFilterDropdowns from '../components/playground/OrchestratorFi
 import type { ChatFilterField } from '../components/playground/OrchestratorFilterDropdowns';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
-import { useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
+import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
+import { formatDuration } from '../utils/duration';
 import { errorMessage } from '../constants/messages';
 
 interface ChatMessage {
@@ -19,6 +20,7 @@ interface ChatMessage {
   readonly type: 'user' | 'agent' | 'error';
   readonly content: string;
   readonly timestamp: Date;
+  readonly elapsedMs?: number;
 }
 
 interface RawAttachedFile {
@@ -90,7 +92,7 @@ export default function MarketplaceChatPage() {
     [numericId, persistentFiles],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, sendMessage, abortStream } =
+  const { streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream } =
     useStreamingChat(marketplaceStream);
 
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
@@ -265,6 +267,12 @@ export default function MarketplaceChatPage() {
     };
   }, [numericId]);
 
+  useEffect(() => {
+    if (!isStreaming && textareaRef.current && !isQuotaExceeded) {
+      textareaRef.current.focus();
+    }
+  }, [isStreaming, isQuotaExceeded]);
+
   const refreshFileList = useCallback(async () => {
     try {
       const response = await apiService.listMarketplaceFiles(numericId);
@@ -327,6 +335,7 @@ export default function MarketplaceChatPage() {
           type: 'agent',
           content: responseContent,
           timestamp: new Date(),
+          elapsedMs: result.elapsedMs,
         },
       ]);
       setHoldStreamingContent(false);
@@ -350,6 +359,7 @@ export default function MarketplaceChatPage() {
           type: 'error',
           content,
           timestamp: new Date(),
+          elapsedMs: err instanceof StreamingChatError ? err.elapsedMs : responseElapsedMs,
         },
       ]);
       void fetchQuotaInfo();
@@ -478,8 +488,8 @@ export default function MarketplaceChatPage() {
     !isStreaming && !isQuotaExceeded && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   return (
-    <div className="flex gap-4 items-start h-full min-h-0">
-      <div className="flex-1 pg-glass rounded-2xl flex flex-col h-full min-h-[480px]">
+    <div className="flex gap-4 items-stretch h-full min-h-0">
+      <div className="flex-1 pg-glass rounded-2xl flex flex-col h-full min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-white/20 dark:border-gray-700/30 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -639,6 +649,12 @@ export default function MarketplaceChatPage() {
                         minute: '2-digit',
                       })}
                     </span>
+                    {message.elapsedMs !== undefined && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                        <Timer className="h-3 w-3" aria-hidden="true" />
+                        {formatDuration(message.elapsedMs)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -649,6 +665,7 @@ export default function MarketplaceChatPage() {
             <StreamingMessage
               content={streamingContent}
               isStreaming={isStreaming}
+              elapsedMs={responseElapsedMs}
               activeTools={activeTools}
               thinkingMessage={thinkingMessage}
             />
@@ -710,7 +727,7 @@ export default function MarketplaceChatPage() {
             </div>
           )}
 
-           <div className="pg-glass rounded-2xl px-4 py-3 flex items-end gap-3 shadow-sm border border-white/20 dark:border-gray-700/30">
+           <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
              <input
                ref={fileInputRef}
                type="file"
@@ -742,7 +759,7 @@ export default function MarketplaceChatPage() {
                placeholder={`Message ${agentName}…`}
                disabled={isStreaming || isQuotaExceeded}
                rows={1}
-               className="flex-1 bg-transparent border-none outline-none resize-none
+               className="flex-1 py-2 bg-transparent border-none outline-none resize-none
                           text-sm text-gray-800 dark:text-gray-100
                           placeholder:text-gray-400 dark:placeholder:text-gray-500
                           disabled:opacity-50

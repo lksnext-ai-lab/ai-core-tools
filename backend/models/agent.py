@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, text
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -18,6 +18,10 @@ DEFAULT_AGENT_TEMPERATURE = 0.7
 
 # Default memory summarize threshold (number of messages)
 DEFAULT_MEMORY_SUMMARIZE_THRESHOLD = 20
+
+# Default prompt template: passes the user message through unchanged. An empty
+# template would format to an empty string and drop the user's message.
+DEFAULT_PROMPT_TEMPLATE = '{question}'
 
 
 class AgentSkill(Base):
@@ -57,13 +61,16 @@ class Agent(Base):
     description = Column(String(1000))
     create_date = Column(DateTime, default=datetime.now)
     system_prompt = Column(Text)
-    prompt_template = Column(Text)
+    prompt_template = Column(Text, default=DEFAULT_PROMPT_TEMPLATE)
     type = Column(String(45), nullable=False, default='agent')
     status = Column(String(45))
     request_count = Column(Integer, default=0)
     is_tool = Column(Boolean, default=False)
     service_id = Column(Integer,
                         ForeignKey('AIService.service_id', ondelete='SET NULL'),
+                        nullable=True)
+    sandbox_service_id = Column(Integer,
+                        ForeignKey('SandboxService.service_id', ondelete='SET NULL'),
                         nullable=True)
     silo_id = Column(Integer,
                         ForeignKey('Silo.silo_id'),
@@ -74,6 +81,7 @@ class Agent(Base):
 
     has_memory = Column(Boolean)
     enable_code_interpreter = Column(Boolean, default=False, nullable=False, server_default='false')
+    skill_router_enabled = Column(Boolean, nullable=False, server_default=text('false'), default=False)
     server_tools = Column(JSON, default=list, nullable=False, server_default='[]')
 
     # RAG retrieval config (step_007 / FR-7); rag_search_type values validated in schemas (step_008).
@@ -97,6 +105,31 @@ class Agent(Base):
     temperature = Column(Float, default=DEFAULT_AGENT_TEMPERATURE, nullable=False)
     is_frozen = Column(Boolean, default=False, nullable=False)
 
+    # Media processing configuration (used by the playground media upload).
+    # Configured once at agent level so uploads only require the file/URL.
+    transcription_service_id = Column(
+        Integer,
+        ForeignKey('AIService.service_id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    video_ai_service_id = Column(
+        Integer,
+        ForeignKey('AIService.service_id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    # Embedding service used to vectorize media/documents into the session's
+    # temp playground silo. Required at agent level (enforced by the API schema)
+    # so uploads never fall back to an arbitrary/misconfigured app service.
+    media_embedding_service_id = Column(
+        Integer,
+        ForeignKey('embedding_service.service_id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    media_forced_language = Column(String(10), nullable=True)
+    media_chunk_min_duration = Column(Integer, default=30, nullable=False, server_default='30')
+    media_chunk_max_duration = Column(Integer, default=120, nullable=False, server_default='120')
+    media_chunk_overlap = Column(Integer, default=5, nullable=False, server_default='5')
+
     marketplace_visibility = Column(
         Enum(MarketplaceVisibility),
         nullable=False,
@@ -105,6 +138,9 @@ class Agent(Base):
 
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
+
+    sandbox_service = relationship('SandboxService',
+                           foreign_keys=[sandbox_service_id])
 
     silo = relationship('Silo',
                            back_populates='agents',

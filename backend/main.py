@@ -70,6 +70,9 @@ async def lifespan(app: FastAPI):
     try:
         validate_secret_key()
 
+        from scheduling.periodic_agent_task import initialize_dbos
+        app.state.dbos_enabled = await initialize_dbos()
+
         if is_saas_mode():
             validate_saas_env()
             logger.info("SaaS mode: environment validation passed")
@@ -80,6 +83,17 @@ async def lifespan(app: FastAPI):
                 seed_default_tier_configs(_db)
             finally:
                 _db.close()
+
+        # Unconditional (not SaaS-only): system skills are seeded in every deployment mode.
+        from db.database import SessionLocal
+        from services.system_skills_seeder import seed_system_skills
+        _db = SessionLocal()
+        try:
+            seed_system_skills(_db)
+        except Exception:
+            logger.error("system_skills_seeder: failed to seed system skills at startup", exc_info=True)
+        finally:
+            _db.close()
 
         AuthConfig.load_config()
 
@@ -96,16 +110,6 @@ async def lifespan(app: FastAPI):
                 "EntraID provider NOT initialized (development/testing only)"
             )
         
-        from plugins.registry import plugin_registry
-        app.state.plugin_registry = plugin_registry
-        import importlib.metadata
-        for ep in importlib.metadata.entry_points(group="mattin.plugins"):
-            try:
-                ep.load()(app, plugin_registry)
-                logger.info(f"Plugin loaded: {ep.name}")
-            except Exception as e:
-                logger.error(f"Failed to load plugin '{ep.name}': {e}", exc_info=True)
-
         if AuthConfig.LOGIN_MODE == "LOCAL":
             from db.database import SessionLocal as _SessionLocal
             from services.auth.omniadmin_bootstrap import bootstrap_omniadmins
@@ -124,16 +128,6 @@ async def lifespan(app: FastAPI):
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.initialize_pool()
 
-        # Ensure vector-store backend tables exist before any background workers run.
-        # Best-effort: try once and log warnings on failure; do not break startup.
-        try:
-            from db.database import db as db_obj
-            from tools.vector_store_factory import VectorStoreFactory
-            VectorStoreFactory.get_vector_store(db_obj)
-            logger.info("VectorStoreFactory: ensured backend readiness at startup")
-        except Exception as _vs_exc:
-            logger.warning("VectorStoreFactory startup readiness check failed: %s", _vs_exc)
-
         # Start crawl workers (job executor + scheduler)
         from services.crawl.worker import start_crawl_workers, stop_crawl_workers
         crawl_tasks = await start_crawl_workers(app)
@@ -141,6 +135,9 @@ async def lifespan(app: FastAPI):
 
         from services.file_cleanup_worker import start_file_cleanup_worker
         app.state.file_cleanup_task = start_file_cleanup_worker()
+
+        from services.sharepoint.worker import start_sharepoint_worker
+        app.state.sharepoint_tasks = await start_sharepoint_worker()
 
         print("✅ Application startup complete")
     except Exception as e:
@@ -151,6 +148,9 @@ async def lifespan(app: FastAPI):
     yield
 
     try:
+        from scheduling.periodic_agent_task import shutdown_dbos
+        shutdown_dbos()
+
         crawl_tasks = getattr(app.state, 'crawl_tasks', None)
         if crawl_tasks:
             from services.crawl.worker import stop_crawl_workers
@@ -163,11 +163,8 @@ async def lifespan(app: FastAPI):
 
         sharepoint_tasks = getattr(app.state, 'sharepoint_tasks', None)
         if sharepoint_tasks:
-            try:
-                from mattin_sharepoint.worker import stop_sharepoint_worker
-                await stop_sharepoint_worker(sharepoint_tasks)
-            except ImportError:
-                pass
+            from services.sharepoint.worker import stop_sharepoint_worker
+            await stop_sharepoint_worker(sharepoint_tasks)
 
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.close_pool()
@@ -307,6 +304,20 @@ async def get_client_config():
 _openapi_internal_schema = None
 _openapi_public_schema = None
 
+def _routes_with_prefix(prefix: str):
+    """Routes of the app whose full path starts with ``prefix``.
+
+    Since FastAPI 0.137 ``app.routes`` is a tree (included routers are kept as
+    nodes), so it is walked with ``iter_route_contexts`` to get every route
+    with its effective path.
+    """
+    from fastapi.routing import iter_route_contexts
+
+    return [
+        route for route in iter_route_contexts(app.routes)
+        if route.path and route.path.startswith(prefix)
+    ]
+
 def get_openapi_internal():
     """Generate OpenAPI schema for internal API only."""
     global _openapi_internal_schema
@@ -315,10 +326,7 @@ def get_openapi_internal():
     if _openapi_internal_schema:
         return _openapi_internal_schema
     
-    internal_routes = [
-        route for route in app.routes
-        if hasattr(route, 'path') and route.path.startswith('/internal')
-    ]
+    internal_routes = _routes_with_prefix('/internal')
     
     _openapi_internal_schema = get_openapi(
         title=os.getenv('INTERNAL_API_TITLE', 'IA Core Tools - Internal API'),
@@ -336,10 +344,7 @@ def get_openapi_public():
     if _openapi_public_schema:
         return _openapi_public_schema
     
-    public_routes = [
-        route for route in app.routes
-        if hasattr(route, 'path') and route.path.startswith('/public')
-    ]
+    public_routes = _routes_with_prefix('/public')
     
     _openapi_public_schema = get_openapi(
         title=os.getenv('PUBLIC_API_TITLE', 'IA Core Tools - Public API'),

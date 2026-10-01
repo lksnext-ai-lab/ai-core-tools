@@ -29,18 +29,40 @@ class App(Base):
     
     api_keys = relationship('APIKey', back_populates='app', lazy=True)
     mcp_configs = relationship('MCPConfig', back_populates='app', lazy=True)
-    skills = relationship('Skill', back_populates='app', lazy=True)
+    # passive_deletes='all': never let the ORM UPDATE Skill.app_id=NULL on app deletion. Skill.app_id
+    # IS NULL means "system/platform skill" (see models/skill.py), so an ORM-driven nullify on a
+    # leftover row would silently promote a tenant's skill into a platform-wide one visible to every
+    # app. With the FK's default NO ACTION, any leftover Skill row instead raises IntegrityError,
+    # which AppService.delete_app already catches -> rollback -> return False (FR-15/AC-12 hardening).
+    skills = relationship('Skill', back_populates='app', lazy=True, passive_deletes='all')
 
     silos = relationship('Silo', back_populates='app', lazy=True)
     ai_services = relationship('AIService', back_populates='app', lazy=True)
     embedding_services = relationship('EmbeddingService', back_populates='app', lazy=True)
+    sandbox_services = relationship('SandboxService',
+                        back_populates='app',
+                        foreign_keys='SandboxService.app_id',
+                        lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     sharepoint_sources = relationship('SharePointSource', back_populates='app', cascade='all, delete-orphan', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')
     is_frozen = Column(Boolean, default=False, nullable=False)
     enable_openai_api = Column(Boolean, default=False, nullable=False, server_default='false')
 
-    def get_user_role(self, user_id):
-        """Get the role of a user in this app"""
-        from services.app_collaboration_service import AppCollaborationService
-        return AppCollaborationService.get_user_app_role(user_id, self.app_id) 
+    # Sandbox configuration.
+    # NULL means "inherit system default" (SANDBOX_DEFAULT_PROVIDER env var).
+    # use_alter=True breaks the App<->SandboxService table creation cycle
+    # (SandboxService.app_id -> App.app_id, App.default_sandbox_service_id ->
+    # SandboxService.service_id) so Base.metadata.create_all/drop_all (used by
+    # unit tests) can order DDL via a deferred ALTER TABLE, matching how the
+    # sandbox001 migration adds/drops this FK as a separate, named step.
+    default_sandbox_service_id = Column(Integer,
+                        ForeignKey(
+                            'SandboxService.service_id',
+                            ondelete='SET NULL',
+                            use_alter=True,
+                            name='App_default_sandbox_service_id_fkey',
+                        ),
+                        nullable=True)
+    default_sandbox_service = relationship('SandboxService',
+                        foreign_keys=[default_sandbox_service_id])

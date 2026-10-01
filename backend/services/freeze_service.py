@@ -76,6 +76,10 @@ class FreezeService:
             )
             _freeze_resources(silos, silo_limit)
 
+            # NOTE (FR-15/AC-12): must stay `Skill.app_id == app.app_id` — system skills
+            # (app_id IS NULL) are platform-owned, never per-app quota'd, and must never be frozen
+            # as a side effect of a tenant's tier change. See backend/services/skill_service.py
+            # module docstring for the full list of call sites that must stay app-private.
             skills = (
                 db.query(Skill)
                 .filter(Skill.app_id == app.app_id)
@@ -125,6 +129,10 @@ class FreezeService:
             )
             _freeze_resources(apps, limit)
         elif app_id is not None:
+            # NOTE (FR-15/AC-12): the "skills" entry MUST stay `Skill.app_id == app_id` (via the
+            # shared `model_cls.app_id == app_id` filter below) — system skills (app_id IS NULL)
+            # are never counted or frozen here. See backend/services/skill_service.py module
+            # docstring for the full list of call sites that must stay app-private.
             model_map = {
                 "agents": Agent,
                 "silos": Silo,

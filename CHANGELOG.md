@@ -7,13 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-01
+
+### Breaking Changes
+
+- **FAKE auth mode retired**: `AICT_LOGIN=FAKE` and the dev-login endpoint no longer exist. Use `OIDC` or the new `LOCAL` mode.
+- **`SECRET_KEY` is mandatory**: The backend fails fast at startup if `SECRET_KEY` is missing, shorter than 32 characters, or a known-insecure placeholder.
+- **Plugin system removed**: The `mattin.plugins` entry-point loader and the `/internal/capabilities` endpoint are gone. SharePoint sync and agent metrics are now regular core features.
+- **Provider auth errors return 400**: Unauthorized errors from LLM/embedding providers are mapped to HTTP 400 instead of 401, so they no longer log the user out.
+- **Release images**: Pushing to `main` no longer builds an image. Stable images are built when a GitHub Release is published (see *Changed*).
+- **`requirements.txt` removed**: Dependencies are managed exclusively with Poetry.
+
 ### Added
+
+- **LOCAL authentication mode**: Self-hosted, admin-provisioned email + password login with cookie sessions, CSRF protection, refresh-token rotation, per-IP/account throttling and lockout, set/change-password flows, and optional SMTP delivery of set-password emails.
+- **Platform-level roles**: Viewer / editor / admin roles at platform level; omniadmin accounts are protected from role changes and hidden from the users list.
+- **User deletion and app-ownership transfer**: Admins can delete users transferring or cascading their apps; owners can offer, accept, decline or cancel voluntary ownership transfers.
+- **Scheduled tasks**: Agent-based scheduled tasks (DBOS) with run history, produced files, retention, and read-only publication in the marketplace.
+- **Code-interpreter sandbox**: Sandbox subsystem (OpenSandbox / E2B / Daytona) for agents with `enable_code_interpreter`, plus `opensandbox-server` and code-interpreter images published to GHCR.
+- **Skill packages**: Skills can bundle files (scripts, references, templates), platform-wide system skills are seeded from `system_defaults.yaml`, opt-in skill router, sandbox activation, and Claude plugin import.
+- **Metadata-aware RAG**: Dynamic retrieval tool with metadata filtering, per-agent RAG configuration, sub-agent dynamic retrieval, Qdrant `$in` operator, and a resource reindex action.
+- **Playground media**: Media upload, audio chunking, agent video support with multiple videos per chat, agent-level media processing configuration, clipboard image paste, and chat response timers.
+- **New providers**: AWS Bedrock (AI + embeddings), OpenRouter (AI), and Google embedding models.
+- **Output parsers**: Support for optional fields in structured outputs.
+- **MCP**: Authentication token support for external MCP servers.
+- **Docker**: Multi-environment local stack (`mattin.ps1`) and containerized dev user seeding.
 
 ### Changed
 
 - **Release image tagging**: The backend/frontend CI now tags `develop` builds with a moving `nightly` alias, and builds stable images when a **GitHub Release is published** — tagged `X.Y.Z`, `X.Y` and `latest` (the leading `v` is dropped; pre-releases are excluded from `latest`). Pushing to `main` no longer builds an image.
+- **Agent metrics reworked**: Metrics dashboards at platform, app and agent level as part of the core.
+- **OpenAI Responses API**: OpenAI models use the Responses API so reasoning models work with tools; `temperature` is no longer sent to reasoning models.
+- **Current date in system prompt**: The current date is injected into the system prompt instead of being exposed as a tool.
+- **Dependencies**: FastAPI upgraded to 0.142 and Starlette to 1.7; vulnerable dependencies upgraded; unused OpenStack Mistral client dropped.
+- **Docker**: Defaults to 2 uvicorn workers with a parametrizable DB pool.
+- **CI**: SonarCloud analysis for backend and frontend, PR comments, and restricted `GITHUB_TOKEN` permissions.
 
 ### Fixed
+
+- **Resilience**: Chat turns and browser tabs stay alive when a dependency fails; DB connection pool hardened against exhaustion; sync DB connections released during LLM streaming and SSE endpoints.
+- **Security**: SonarCloud blocker and critical vulnerabilities resolved; anti-enumeration dummy hash derived from random bytes; viewer write exemption matched by route.
+- **Sandbox**: 500 errors, cross-user sandbox sharing, and checkpoint data loss after merge.
+- **Multi-worker**: Attached-file listings work across uvicorn workers, a single cleanup leader is elected (cross-platform), and agent file uploads respect the file lifecycle to stop disk leaks.
+- **RAG**: Resource reindex no longer duplicates chunks; recursive splitter and domain page chunking; silently ignored search filters; public silo search forwards `search_type` / `score_threshold`; PDF/text files vectorized at upload time.
+- **Agents**: Attached document content restored in chat turns; MCP tools loaded for agents used as tools; agent-as-tool `args_schema` pinned; MCP + structured output schema completion and sanitized tool names.
+- **Auth / OIDC**: Duplicate user creation race condition; auth bootstrap flash and OIDC callback alignment; omniadmins visible/invitable and app admins can invite collaborators.
+- **Frontend**: Prompt template defaults to `{question}` and is never saved empty; API base URL resolution with empty runtime placeholder; conversation delete confirmation modal.
+- **Misc**: App name conflict checks scoped to the importing user; PGVector/LangChain tables ensured at startup.
 
 ## [0.4.2] - 2026-05-21
 

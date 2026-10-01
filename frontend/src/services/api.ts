@@ -40,6 +40,7 @@ import type {
   ToolAgent,
   AgentMCPUsage,
   AppSlugInfo,
+  ClaudePluginImportResult,
 } from '../core/types';
 import type {
   ImportResponse,
@@ -81,6 +82,7 @@ export interface App {
   max_file_size_mb?: number;
   agent_cors_origins?: string;
   enable_openai_api?: boolean;
+  default_sandbox_service_id?: number | null;
   agent_count: number;
   repository_count: number;
   domain_count: number;
@@ -108,12 +110,14 @@ export interface Agent {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  skill_router_enabled?: boolean;
   status?: string;
   server_tools?: string[];
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -128,6 +132,14 @@ export interface Agent {
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
+  // Media processing configuration
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  media_embedding_service_id?: number | null;
+  media_forced_language?: string | null;
+  media_chunk_min_duration?: number | null;
+  media_chunk_max_duration?: number | null;
+  media_chunk_overlap?: number | null;
   // RAG retrieval config
   rag_k?: number;
   rag_search_type?: 'similarity' | 'mmr' | 'similarity_score_threshold';
@@ -150,9 +162,102 @@ export interface Agent {
     fields: Array<{ name: string; type: string; description: string; optional?: boolean }>;
   };
   output_parsers: Array<{ parser_id: number; name: string }>;
+  sandbox_services: Array<{ service_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
+}
+
+export type ScheduledTaskVisibility = 'unpublished' | 'private' | 'public';
+
+export interface ScheduledTask {
+  id: number;
+  name: string;
+  description?: string | null;
+  agent_id: number;
+  app_id: number;
+  created_by: number;
+  orchestrator_schedule_name: string;
+  input: Record<string, unknown>;
+  cron_expression: string;
+  timezone: string;
+  conversation_mode: 'new_per_run' | 'continuous' | string;
+  persistent_conversation_id?: number | null;
+  status: 'active' | 'paused' | string;
+  max_concurrent_runs: number;
+  max_runs_retained: number;
+  marketplace_visibility: ScheduledTaskVisibility;
+  created_at: string;
+  updated_at: string;
+  next_run_at?: string | null;
+}
+
+export type ScheduledTaskCreate = Pick<ScheduledTask, 'name' | 'agent_id' | 'input' | 'cron_expression' | 'timezone' | 'conversation_mode' | 'max_concurrent_runs'>
+  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>;
+
+export type ScheduledTaskUpdate = Partial<Pick<ScheduledTask,
+  'name' | 'description' | 'input' | 'cron_expression' | 'timezone' | 'max_concurrent_runs' | 'status'
+  | 'max_runs_retained' | 'marketplace_visibility'>>;
+
+export interface ScheduledTaskRunFile {
+  file_id: string;
+  filename: string;
+  file_type?: string | null;
+}
+
+export interface ScheduledTaskRun {
+  id: number;
+  scheduled_task_id: number;
+  conversation_id?: number | null;
+  conversation_anchor_message_id?: number | null;
+  orchestrator_run_id: string;
+  scheduled_time: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  status: string;
+  attempt_count: number;
+  error_summary?: string | null;
+  output_text?: string | null;
+  output_files: ScheduledTaskRunFile[];
+}
+
+export interface ScheduledTaskRunList {
+  items: ScheduledTaskRun[];
+  page: number;
+  per_page: number;
+  total: number;
+}
+
+/** What the marketplace shows of a scheduled task (never its input). */
+export interface MarketplaceScheduledTask {
+  id: number;
+  name: string;
+  description?: string | null;
+  app_id: number;
+  app_name?: string | null;
+  cron_expression: string;
+  timezone: string;
+  conversation_mode: string;
+  status: string;
+  marketplace_visibility: ScheduledTaskVisibility;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  last_run_status?: string | null;
+  run_count: number;
+}
+
+export interface MarketplaceScheduledTaskCatalog {
+  tasks: MarketplaceScheduledTask[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface ScheduledTaskTriggerResponse {
+  task_id: number;
+  workflow_id: string;
+  status: string;
 }
 
 export interface AIService {
@@ -465,7 +570,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 // DeploymentModeContext cannot be read here (not a hook), so it writes the
 // resolved auth mode via setApiAuthMode(). The default is derived from the
-// env/runtime OIDC flag so early requests (e.g. CapabilitiesContext) already
+// env/runtime OIDC flag so early requests already
 // use the correct mode before the context resolves /internal/config.
 const _rc = (globalThis as Record<string, unknown>).__RUNTIME_CONFIG__ as Record<string, string> | undefined;
 const _oidcDefault = _rc?.VITE_OIDC_ENABLED === undefined
@@ -482,26 +587,25 @@ class ApiService {
     return configService.getApiBaseUrl();
   }
 
-  // Coalesces concurrent 401-triggered refreshes into a single in-flight promise.
-  private _refreshPromise: Promise<boolean> | null = null;
-
-  private async _doRefresh(): Promise<boolean> {
-    if (!this._refreshPromise) {
-      this._refreshPromise = authService.refresh().finally(() => {
-        this._refreshPromise = null;
-      });
-    }
-    return this._refreshPromise;
+  // Renews the session once: refresh-token rotation (LOCAL) or OIDC silent renew.
+  private renewSession(): Promise<boolean> {
+    return _apiAuthMode === 'oidc' ? authService.renewOidcSession() : authService.refresh();
   }
 
-  // Called when a refresh fails or a retried request still 401s (LOCAL mode only).
-  private clearClientAuthAndRedirect(): void {
-    // Use logout() (not clearAuth()) to clear the httpOnly session cookies. Best-effort.
-    authService.logout().catch(() => {}).finally(() => {
-      if (typeof globalThis !== 'undefined' && globalThis.location) {
-        globalThis.location.href = '/login';
-      }
-    });
+  private _sessionExpiring: Promise<void> | null = null;
+
+  // Route guards react to the expired session and navigate to /login in-app,
+  // preserving the requested location. Concurrent 401s share one expiry.
+  private expireSession(): void {
+    if (this._sessionExpiring) return;
+    // LOCAL: clear the httpOnly session cookies first. Best-effort.
+    const clearCookies = _apiAuthMode === 'local' ? authService.logout() : Promise.resolve();
+    this._sessionExpiring = clearCookies
+      .catch(() => {})
+      .finally(() => {
+        this._sessionExpiring = null;
+        authService.notifySessionExpired();
+      });
   }
 
   // LOCAL: cookies carry auth; CSRF header on mutating calls. OIDC: Authorization bearer.
@@ -593,21 +697,16 @@ class ApiService {
         throw new Error('Authentication required');
       }
 
-      // OIDC re-auth is owned by oidc-client-ts / OIDCProvider / ProtectedRoute.
-      if (_apiAuthMode === 'oidc') {
-        throw new Error('Authentication required');
-      }
-
       const isRefreshEndpoint = endpoint.includes('/auth/refresh');
       if (!_isRetryAfterRefresh && !isRefreshEndpoint) {
-        const refreshed = await this._doRefresh();
-        if (refreshed) {
-          // Cookie may have rotated — rebuild headers on retry.
+        const renewed = await this.renewSession();
+        if (renewed) {
+          // Token or cookie changed — rebuild headers on retry.
           return this.request(endpoint, options, true, _requestOptions);
         }
       }
-      this.clearClientAuthAndRedirect();
-      throw new Error('Authentication required');
+      this.expireSession();
+      throw new ApiError('Your session has expired. Please sign in again.', 401);
     }
 
     if (!response.ok) {
@@ -637,7 +736,7 @@ class ApiService {
     });
   }
 
-  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean }): Promise<App> {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean; default_sandbox_service_id?: number | null }): Promise<App> {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -757,6 +856,77 @@ class ApiService {
     return this.request(`/internal/marketplace/conversations/${conversationId}/chat-filters`);
   }
 
+  async getScheduledTasks(appId: number, agentId?: number): Promise<ScheduledTask[]> {
+    const query = agentId === undefined ? '' : `?agent_id=${agentId}`;
+    return this.request(`/internal/apps/${appId}/scheduled-tasks${query}`);
+  }
+
+  async getScheduledTask(appId: number, taskId: number): Promise<ScheduledTask> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}`);
+  }
+
+  async createScheduledTask(appId: number, data: ScheduledTaskCreate): Promise<ScheduledTask> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateScheduledTask(appId: number, taskId: number, data: ScheduledTaskUpdate): Promise<ScheduledTask> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  async deleteScheduledTask(appId: number, taskId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}`, { method: 'DELETE' });
+  }
+
+  async getScheduledTaskRuns(appId: number, taskId: number, page = 1, perPage = 50): Promise<ScheduledTaskRunList> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs?page=${page}&per_page=${perPage}`);
+  }
+
+  async getScheduledTaskRun(appId: number, taskId: number, runId: number): Promise<ScheduledTaskRun> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}`);
+  }
+
+  async getScheduledTaskRunFileUrl(appId: number, taskId: number, runId: number, fileId: string): Promise<string> {
+    const result: { download_url: string } = await this.request(
+      `/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/files/${encodeURIComponent(fileId)}/download`,
+    );
+    return result.download_url;
+  }
+
+  async runScheduledTaskNow(appId: number, taskId: number): Promise<ScheduledTaskTriggerResponse> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/run-now`, { method: 'POST' });
+  }
+
+  async getMarketplaceScheduledTasks(
+    params: { search?: string; my_apps_only?: boolean; page?: number; page_size?: number } = {},
+  ): Promise<MarketplaceScheduledTaskCatalog> {
+    const qs = new URLSearchParams();
+    if (params.search) qs.set('search', params.search);
+    if (params.my_apps_only) qs.set('my_apps_only', 'true');
+    if (params.page) qs.set('page', String(params.page));
+    if (params.page_size) qs.set('page_size', String(params.page_size));
+    const query = qs.toString();
+    return this.request(`/internal/marketplace/scheduled-tasks${query ? `?${query}` : ''}`);
+  }
+
+  async getMarketplaceScheduledTask(taskId: number): Promise<MarketplaceScheduledTask> {
+    return this.request(`/internal/marketplace/scheduled-tasks/${taskId}`);
+  }
+
+  async getMarketplaceScheduledTaskRuns(taskId: number, page = 1, perPage = 50): Promise<ScheduledTaskRunList> {
+    return this.request(`/internal/marketplace/scheduled-tasks/${taskId}/runs?page=${page}&per_page=${perPage}`);
+  }
+
+  async getMarketplaceScheduledTaskRun(taskId: number, runId: number): Promise<ScheduledTaskRun> {
+    return this.request(`/internal/marketplace/scheduled-tasks/${taskId}/runs/${runId}`);
+  }
+
+  async getMarketplaceScheduledTaskRunFileUrl(taskId: number, runId: number, fileId: string): Promise<string> {
+    const result: { download_url: string } = await this.request(
+      `/internal/marketplace/scheduled-tasks/${taskId}/runs/${runId}/files/${encodeURIComponent(fileId)}/download`,
+    );
+    return result.download_url;
+  }
+
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string): Promise<Agent> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/update-prompt`, {
       method: 'POST',
@@ -767,8 +937,9 @@ class ApiService {
     });
   }
 
-  async resetAgentConversation(appId: number, agentId: number): Promise<void> {
-    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset`, {
+  async resetAgentConversation(appId: number, agentId: number, conversationId?: number | null): Promise<void> {
+    const params = conversationId ? `?conversation_id=${conversationId}` : '';
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/reset${params}`, {
       method: 'POST',
     });
   }
@@ -1058,6 +1229,54 @@ class ApiService {
     return response.json();
   }
 
+  async getSandboxServices(appId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/`);
+  }
+
+  async getSandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`);
+  }
+
+  async createSandboxService(appId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSandboxService(appId: number, serviceId: number, data: any) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async copySandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}/copy`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteSandboxService(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testSandboxServiceConnection(appId: number, serviceId: number) {
+    return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async testSandboxServiceConnectionWithConfig(appId: number, data: any, serviceId?: number) {
+    const qs = serviceId != null ? `?service_id=${serviceId}` : '';
+    return this.request(`/internal/apps/${appId}/sandbox-services/test-connection${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getMCPConfigs(appId: number): Promise<MCPConfig[]> {
     return this.request(`/internal/apps/${appId}/mcp-configs/`);
   }
@@ -1173,6 +1392,96 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
       method: 'DELETE',
     });
+  }
+
+  async importSkill(appId: number, file: File): Promise<Skill> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/import`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async importClaudePlugin(appId: number, file: File): Promise<ClaudePluginImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/import-claude-plugin`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async exportSkill(appId: number, skillId: number): Promise<Blob> {
+    const headers = this.buildAuthHeaders('GET', false);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/apps/${appId}/skills/${skillId}/export`,
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async setSkillEnabled(appId: number, skillId: number, isEnabled: boolean): Promise<Skill> {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}/enabled`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_enabled: isEnabled }),
+    });
+  }
+
+  /**
+   * Fetch the text content of a single package file of an app-scoped skill, on demand (never
+   * bulk-fetched with the skill). A 404 means the preview is unavailable (e.g. binary file, or
+   * the file no longer resolves) — callers should treat it as "preview unavailable", not a hard
+   * failure.
+   */
+  async getSkillFileContent(appId: number, skillId: number, path: string): Promise<{ path: string; content: string; media_type?: string; truncated?: boolean }> {
+    return this.request(`/internal/apps/${appId}/skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
+  }
+
+  /**
+   * Fetch the text content of a single package file of a SYSTEM skill (platform admin route —
+   * no app scoping). Same response shape and 404 semantics as {@link getSkillFileContent}.
+   */
+  async getSystemSkillFileContent(skillId: number, path: string): Promise<{ path: string; content: string; media_type?: string; truncated?: boolean }> {
+    return this.request(`/internal/admin/system-skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
   }
 
   async getMCPServers(appId: number): Promise<MCPServerListItem[]> {
@@ -1452,6 +1761,95 @@ class ApiService {
     })
   }
 
+  // ==================== PLAYGROUND MEDIA API ====================
+
+  async uploadPlaygroundMedia(appId: number, agentId: number, sessionId: string, files: File[], config?: {
+    transcription_service_id?: number;
+    video_ai_service_id?: number;
+    embedding_service_id?: number;
+    forced_language?: string;
+    chunk_min_duration?: number;
+    chunk_max_duration?: number;
+    chunk_overlap?: number;
+  }) {
+    const formData = new FormData();
+
+    files.forEach(file => formData.append('files', file));
+    formData.append('session_id', sessionId);
+    
+    if (config?.transcription_service_id) formData.append('transcription_service_id', config.transcription_service_id.toString());
+    if (config?.video_ai_service_id) formData.append('video_ai_service_id', config.video_ai_service_id.toString());
+    if (config?.embedding_service_id) formData.append('embedding_service_id', config.embedding_service_id.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async addPlaygroundYouTube(appId: number, agentId: number, sessionId: string, url: string, config?: {
+    transcription_service_id?: number;
+    video_ai_service_id?: number;
+    embedding_service_id?: number;
+    forced_language?: string;
+    chunk_min_duration?: number;
+    chunk_max_duration?: number;
+    chunk_overlap?: number;
+  }) {
+    const formData = new FormData();
+
+    formData.append('url', url);
+    formData.append('session_id', sessionId);
+    
+    if (config?.transcription_service_id) formData.append('transcription_service_id', config.transcription_service_id.toString());
+    if (config?.video_ai_service_id) formData.append('video_ai_service_id', config.video_ai_service_id.toString());
+    if (config?.embedding_service_id) formData.append('embedding_service_id', config.embedding_service_id.toString());
+    if (config?.forced_language) formData.append('forced_language', config.forced_language);
+    if (config?.chunk_min_duration) formData.append('chunk_min_duration', config.chunk_min_duration.toString());
+    if (config?.chunk_max_duration) formData.append('chunk_max_duration', config.chunk_max_duration.toString());
+    if (config?.chunk_overlap) formData.append('chunk_overlap', config.chunk_overlap.toString());
+
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media/youtube`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async listPlaygroundMedia(appId: number, agentId: number, sessionId: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media?session_id=${encodeURIComponent(sessionId)}`);
+  }
+
+  async deletePlaygroundMedia(appId: number, agentId: number, sessionId: string) {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/playground-media?session_id=${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async fetchPlaygroundMediaBlob(appId: number, agentId: number, mediaId: number, sessionId: string): Promise<Blob> {
+    const url = this.getPlaygroundMediaStreamUrl(appId, agentId, mediaId, sessionId);
+    const headers = this.buildAuthHeaders('GET', false);
+    const response = await fetch(url, { headers, credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch media: ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  /**
+   * Build the direct stream URL for a playground media item. Used as the
+   * <video>/<audio> `src` so the browser can issue HTTP Range requests for
+   * true seeking instead of downloading the whole file into memory. The
+   * session cookie is sent automatically for same-origin requests.
+   */
+  getPlaygroundMediaStreamUrl(appId: number, agentId: number, mediaId: number, sessionId: string): string {
+    return `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/playground-media/${mediaId}/stream?session_id=${encodeURIComponent(sessionId)}`;
+  }
+
+  // ==================== SILOS API ====================
   async getSilos(appId: number): Promise<Silo[]> {
     return this.request(`/internal/apps/${appId}/silos/`);
   }
@@ -2134,7 +2532,7 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`);
   }
 
-  async getConversationWithHistory(conversationId: number): Promise<{ messages: Array<{ role: string; content: string }> }> {
+  async getConversationWithHistory(conversationId: number): Promise<{ session_id?: string | null; messages: Array<{ role: string; content: string }> }> {
     return this.request(`/internal/conversations/${conversationId}/history`);
   }
 
@@ -2659,6 +3057,105 @@ class ApiService {
     });
   }
 
+  async getSystemSkills(): Promise<Skill[]> {
+    return this.request('/internal/admin/system-skills');
+  }
+
+  async getSystemSkill(skillId: number): Promise<Skill> {
+    return this.request(`/internal/admin/system-skills/${skillId}`);
+  }
+
+  async createSystemSkill(data: {
+    name: string;
+    description?: string;
+    content: string;
+    display_name?: string;
+    when_to_use?: string;
+    allowed_tools?: string[];
+    runtime?: string;
+    bootstrap_script_path?: string;
+    runtime_options?: Record<string, unknown>;
+    is_enabled?: boolean;
+  }): Promise<Skill> {
+    return this.request('/internal/admin/system-skills', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemSkill(skillId: number, data: {
+    name: string;
+    description?: string;
+    content: string;
+    display_name?: string;
+    when_to_use?: string;
+    allowed_tools?: string[];
+    runtime?: string;
+    bootstrap_script_path?: string;
+    runtime_options?: Record<string, unknown>;
+    is_enabled?: boolean;
+  }): Promise<Skill> {
+    return this.request(`/internal/admin/system-skills/${skillId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemSkill(skillId: number): Promise<void> {
+    return this.request(`/internal/admin/system-skills/${skillId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async importSystemSkill(file: File): Promise<Skill> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = this.buildAuthHeaders('POST', true);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/admin/system-skills/import`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.json();
+  }
+
+  async exportSystemSkill(skillId: number): Promise<Blob> {
+    const headers = this.buildAuthHeaders('GET', false);
+
+    const response = await fetch(
+      `${this.baseURL}/internal/admin/system-skills/${skillId}/export`,
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+
+    return response.blob();
+  }
+
+  async setSystemSkillEnabled(skillId: number, isEnabled: boolean): Promise<Skill> {
+    return this.request(`/internal/admin/system-skills/${skillId}/enabled`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_enabled: isEnabled }),
+    });
+  }
+
   async getSystemEmbeddingServices(): Promise<SystemEmbeddingService[]> {
     return this.request('/internal/admin/system-embedding-services');
   }
@@ -2728,6 +3225,42 @@ class ApiService {
   async testSystemEmbeddingServiceConnectionWithConfig(data: any, serviceId?: number): Promise<TestConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';
     return this.request(`/internal/admin/system-embedding-services/test-connection${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSystemSandboxServices() {
+    return this.request('/internal/admin/system-sandbox-services');
+  }
+
+  async getSystemSandboxService(serviceId: number) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`);
+  }
+
+  async createSystemSandboxService(data: any) {
+    return this.request('/internal/admin/system-sandbox-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSystemSandboxService(serviceId: number, data: any) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSystemSandboxService(serviceId: number) {
+    return this.request(`/internal/admin/system-sandbox-services/${serviceId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testSystemSandboxServiceConnectionWithConfig(data: any, serviceId?: number) {
+    const qs = serviceId != null ? `?service_id=${serviceId}` : '';
+    return this.request(`/internal/admin/system-sandbox-services/test-connection${qs}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

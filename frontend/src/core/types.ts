@@ -87,6 +87,46 @@ export interface Skill {
   description?: string;
   content?: string;
   created_at: string;
+  display_name?: string;
+  is_system?: boolean;
+  is_enabled?: boolean;
+  is_frozen?: boolean;
+  source?: 'yaml' | 'admin';
+  file_count?: number;
+  frontmatter?: Record<string, unknown>;
+  allowed_tools?: string[];
+  runtime?: string;
+  bootstrap_script_path?: string;
+  runtime_options?: Record<string, unknown>;
+  files?: SkillFileInfo[];
+}
+
+export interface SkillFileInfo {
+  path: string;
+  media_type?: string;
+  size_bytes: number;
+  checksum_sha256?: string;
+  is_text: boolean;
+}
+
+// Claude Code plugin import (step_035/036) — see backend/schemas/skill_schemas.py
+export type ClaudePluginSkillStatus = 'imported' | 'skipped' | 'failed';
+
+export interface ClaudePluginSkillResult {
+  name: string;
+  status: ClaudePluginSkillStatus;
+  reason?: string | null;
+  skill_id?: number | null;
+  bootstrap_script_path?: string | null;
+  runtime?: string | null;
+  has_bootstrap: boolean;
+}
+
+export interface ClaudePluginImportResult {
+  skills: ClaudePluginSkillResult[];
+  imported_count: number;
+  skipped_count: number;
+  failed_count: number;
 }
 
 // MCP Server types - for exposing agents as MCP tools
@@ -187,7 +227,6 @@ export interface NavigationItem {
   editorOnly?: boolean;  // Only shown to editors and admins (not viewers)
   saasOnly?: boolean;  // Only shown when deployment_mode === 'saas'
   children?: NavigationItem[];  // Renders as a collapsible group in the sidebar
-  enterpriseFeature?: string;  // Capability key — shows [EE] badge + upgrade page link when not enabled
 }
 
 export interface NavigationConfig {

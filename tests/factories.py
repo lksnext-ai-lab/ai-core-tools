@@ -12,6 +12,8 @@ Objects are added and flushed (not committed) so they're visible within
 the current test transaction but do not persist after rollback.
 """
 
+import hashlib
+
 import factory
 from datetime import datetime
 from factory.alchemy import SQLAlchemyModelFactory
@@ -23,6 +25,7 @@ from models.agent import Agent
 from models.api_key import APIKey
 from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
 from models.silo import Silo
+from models.skill import Skill, SkillFile
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +188,79 @@ class SiloFactory(BaseFactory):
 
 
 # ---------------------------------------------------------------------------
+# Skill / SystemSkill / SkillFile
+# ---------------------------------------------------------------------------
+
+class SkillFactory(BaseFactory):
+    """App-scoped skill."""
+    class Meta:
+        model = Skill
+
+    name = factory.Sequence(lambda n: f"skill-{n}")
+    description = "A test skill"
+    content = "# Skill\n"
+    source = "admin"
+    is_enabled = True
+    is_frozen = False
+    create_date = factory.LazyFunction(datetime.now)
+    app = factory.SubFactory(AppFactory)
+
+    @factory.lazy_attribute
+    def app_id(self):
+        return self.app.app_id if self.app else None
+
+
+class SystemSkillFactory(BaseFactory):
+    """System/platform skill (app_id NULL, source 'admin').
+
+    System names are unique case-insensitively (partial unique index uq_skill_system_name),
+    so the sequence keeps every generated name distinct regardless of case.
+    """
+    class Meta:
+        model = Skill
+
+    name = factory.Sequence(lambda n: f"system-skill-{n}")
+    description = "A test system skill"
+    content = "# Skill\n"
+    source = "admin"
+    is_enabled = True
+    is_frozen = False
+    create_date = factory.LazyFunction(datetime.now)
+    app_id = None
+
+
+class SkillFileFactory(BaseFactory):
+    """Skill package file. Exactly one of content_text / content_bytes must be set.
+
+    Text (default):   SkillFileFactory(skill=skill)
+    Binary:           SkillFileFactory(skill=skill, content_bytes=b"\x89PNG", media_type="image/png")
+    The checksum is computed from whichever content is set.
+    """
+    class Meta:
+        model = SkillFile
+
+    path = factory.Sequence(lambda n: f"references/file-{n}.md")
+    media_type = "text/markdown"
+    content_bytes = None
+    create_date = factory.LazyFunction(datetime.now)
+    skill = factory.SubFactory(SkillFactory)
+
+    @factory.lazy_attribute
+    def content_text(self):
+        # XOR trap: default text is only set when no binary content was provided.
+        return None if self.content_bytes is not None else "# Reference\n"
+
+    @factory.lazy_attribute
+    def skill_id(self):
+        return self.skill.skill_id if self.skill else None
+
+    @factory.lazy_attribute
+    def checksum_sha256(self):
+        data = self.content_bytes if self.content_bytes is not None else (self.content_text or "").encode("utf-8")
+        return hashlib.sha256(data).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # Helper: bind factories to a session at test time
 # ---------------------------------------------------------------------------
 
@@ -207,5 +283,8 @@ def configure_factories(session) -> None:
         APIKeyFactory,
         AppCollaboratorFactory,
         SiloFactory,
+        SkillFactory,
+        SystemSkillFactory,
+        SkillFileFactory,
     ]:
         factory_cls._meta.sqlalchemy_session = session

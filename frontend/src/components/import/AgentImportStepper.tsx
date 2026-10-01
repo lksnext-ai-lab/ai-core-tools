@@ -85,11 +85,13 @@ function AgentImportStepper({
     const loadAIServices = async () => {
       try {
         const services = await apiService.getAIServices(appId);
-        setAvailableAIServices(
-          (services as Array<{ service_id: number; name: string }>).map(
-            (svc) => ({ id: svc.service_id, name: svc.name })
-          )
-        );
+        if (Array.isArray(services)) {
+          setAvailableAIServices(
+            (services as Array<{ service_id: number; name: string }>).map(
+              (svc) => ({ id: svc.service_id, name: svc.name })
+            )
+          );
+        }
       } catch {
         // Non-critical - user can still import bundled
       }

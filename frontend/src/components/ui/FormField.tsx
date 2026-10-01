@@ -32,16 +32,20 @@ export function FormField({
   className = '',
   inputClassName = ''
 }: Readonly<FormFieldProps>) {
+  const helpTextId = helpText && !error ? `${id}-help` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [errorId, helpTextId].filter(Boolean).join(' ') || undefined;
+
   return (
     <div className={className}>
-      <label 
-        htmlFor={id} 
+      <label
+        htmlFor={id}
         className="block text-sm font-medium text-gray-700 mb-2"
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      
+
       <input
         id={id}
         name={id}
@@ -51,21 +55,23 @@ export function FormField({
         placeholder={placeholder}
         disabled={disabled}
         required={required}
+        aria-invalid={!!error}
+        aria-describedby={describedBy}
         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
-          error 
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+          error
+            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
             : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
         } ${
           disabled ? 'bg-gray-100 cursor-not-allowed' : ''
         } ${inputClassName}`}
       />
-      
+
       {helpText && !error && (
-        <p className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
       )}
-      
+
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
       )}
     </div>
   );
@@ -103,16 +109,20 @@ export function FormTextArea({
   className = '',
   textareaClassName = ''
 }: Readonly<FormTextAreaProps>) {
+  const helpTextId = helpText && !error ? `${id}-help` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [errorId, helpTextId].filter(Boolean).join(' ') || undefined;
+
   return (
     <div className={className}>
-      <label 
-        htmlFor={id} 
+      <label
+        htmlFor={id}
         className="block text-sm font-medium text-gray-700 mb-2"
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      
+
       <textarea
         id={id}
         name={id}
@@ -122,21 +132,23 @@ export function FormTextArea({
         disabled={disabled}
         required={required}
         rows={rows}
+        aria-invalid={!!error}
+        aria-describedby={describedBy}
         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
-          error 
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+          error
+            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
             : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
         } ${
           disabled ? 'bg-gray-100 cursor-not-allowed' : ''
         } ${textareaClassName}`}
       />
-      
+
       {helpText && !error && (
-        <p className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
       )}
-      
+
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
       )}
     </div>
   );
@@ -172,16 +184,20 @@ export function FormSelect({
   className = '',
   selectClassName = ''
 }: Readonly<FormSelectProps>) {
+  const helpTextId = helpText && !error ? `${id}-help` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [errorId, helpTextId].filter(Boolean).join(' ') || undefined;
+
   return (
     <div className={className}>
-      <label 
-        htmlFor={id} 
+      <label
+        htmlFor={id}
         className="block text-sm font-medium text-gray-700 mb-2"
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      
+
       <select
         id={id}
         name={id}
@@ -189,9 +205,11 @@ export function FormSelect({
         onChange={onChange}
         disabled={disabled}
         required={required}
+        aria-invalid={!!error}
+        aria-describedby={describedBy}
         className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
-          error 
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+          error
+            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
             : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
         } ${
           disabled ? 'bg-gray-100 cursor-not-allowed' : ''
@@ -203,13 +221,13 @@ export function FormSelect({
           </option>
         ))}
       </select>
-      
+
       {helpText && !error && (
-        <p className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
       )}
-      
+
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
       )}
     </div>
   );

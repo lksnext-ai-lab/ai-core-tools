@@ -54,13 +54,41 @@ jobs:
             latest=auto
 
       - name: Build Docker image (push on non-PR events)
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: backend/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
+          # Always load the (single-platform) image into the local daemon too, so the
+          # image-content assertion step below can `docker run` it regardless of whether
+          # this run also pushed it (OQ-7 / step_037 deferred follow-up, step_038).
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+
+      - name: Verify curated skill packages are present in the built image (OQ-7)
+        timeout-minutes: 5
+        env:
+          # Passed via `env:` (not spliced into the script text with `${{ }}`) to avoid the
+          # canonical GHA script-injection shape, even though docker/metadata-action already
+          # sanitizes tags to [A-Za-z0-9._-].
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          # sed (not `head -n1`) avoids a SIGPIPE/exit-141 edge case under `set -o pipefail`.
+          IMAGE_TAG="$(printf '%s\n' "${IMAGE_TAGS}" | sed -n 1p)"
+          echo "Checking curated skill packages in image: ${IMAGE_TAG}"
+          # --network none: the image may be built from contributor-controlled Dockerfile/context
+          # on a PR; this verification run gets no outbound network regardless.
+          docker run --rm --network none --entrypoint sh "${IMAGE_TAG}" -c '
+            for s in word pdf pptx data-analysis charts; do
+              test -s /aict_backend/system_skills/$s/SKILL.md || { echo "MISSING SKILL.md: $s"; exit 1; }
+              test -s /aict_backend/system_skills/$s/scripts/bootstrap.sh || { echo "MISSING bootstrap.sh: $s"; exit 1; }
+              [ "$(find /aict_backend/system_skills/$s/references -type f 2>/dev/null | wc -l)" -gt 0 ] || { echo "MISSING references/ files: $s"; exit 1; }
+            done
+            echo "All 5 curated skill packages present with SKILL.md, bootstrap.sh, and references/"
+          '

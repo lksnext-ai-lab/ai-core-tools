@@ -1,0 +1,96 @@
+{
+  "metadata": {
+    "export_version": "1.0.0",
+    "export_date": "2026-07-30T00:00:00",
+    "exported_by": null,
+    "source_app_id": null
+  },
+  "app": {
+    "name": "Sandbox QA Test App",
+    "agent_rate_limit": null,
+    "enable_langsmith": false
+  },
+  "ai_services": [
+    {
+      "name": "QA OpenAI Service",
+      "api_key": null,
+      "provider": "OpenAI",
+      "model_name": "gpt-4o-mini",
+      "endpoint": null,
+      "description": "Shared LLM used by every QA agent in this app. Set a real api_key at import time (api_keys_json) or afterward in App Settings > AI Services.",
+      "api_version": null
+    }
+  ],
+  "embedding_services": [],
+  "output_parsers": [],
+  "mcp_configs": [],
+  "silos": [],
+  "repositories": [],
+  "domains": [],
+  "agents": [
+    {
+      "name": "QA - Memory Chat",
+      "description": "Regression baseline: memory-enabled multi-turn conversation, summarization, and conversation reset. Unaffected code paths should behave exactly as before this branch.",
+      "system_prompt": "You are a helpful assistant used for manual QA regression testing. Answer concisely and remember context from earlier in the conversation.",
+      "prompt_template": "{question}",
+      "service_name": "QA OpenAI Service",
+      "silo_name": null,
+      "output_parser_name": null,
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": true,
+      "memory_max_messages": 20,
+      "memory_max_tokens": 4000,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.7
+    },
+    {
+      "name": "QA - Stateless Chat",
+      "description": "Regression target for the conversation-ownership fix: memory-less (has_memory=false) agents previously let a client-supplied conversation_id through with NO ownership check, which keyed both the LangGraph session and (once code interpreter is on) the sandbox session. Use this agent to confirm an unowned/foreign conversation_id is now rejected with 404.",
+      "system_prompt": "You are a helpful assistant used for manual QA regression testing. You have no persistent memory between messages.",
+      "prompt_template": "{question}",
+      "service_name": "QA OpenAI Service",
+      "silo_name": null,
+      "output_parser_name": null,
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": false,
+      "memory_max_messages": 20,
+      "memory_max_tokens": null,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.7
+    },
+    {
+      "name": "QA - Sandbox Code Interpreter",
+      "description": "Primary sandbox feature test agent (stateless). AFTER IMPORT: open this agent's form, check 'Code Interpreter', and pick a Sandbox Service (see the manual QA plan, Step 2) — enable_code_interpreter and sandbox_service_id are not part of the app-export format yet, so they can't be set by this import file.",
+      "system_prompt": "You are a data-analysis assistant with access to a Python/Bash code execution sandbox. Use the code interpreter tools to compute results, read/write files, and verify your answers whenever a task involves calculation, data processing, or file manipulation.",
+      "prompt_template": "{question}",
+      "service_name": "QA OpenAI Service",
+      "silo_name": null,
+      "output_parser_name": null,
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": false,
+      "memory_max_messages": 20,
+      "memory_max_tokens": null,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.2
+    },
+    {
+      "name": "QA - Sandbox + Memory",
+      "description": "Sandbox feature test agent with memory enabled, to cover the interaction between conversation memory and sandbox session persistence (both are keyed by the same conversation_id). AFTER IMPORT: enable Code Interpreter and attach a Sandbox Service, same as 'QA - Sandbox Code Interpreter'.",
+      "system_prompt": "You are a data-analysis assistant with access to a Python/Bash code execution sandbox and conversation memory. Remember files and variables from earlier in the conversation where possible, and say so explicitly if you cannot.",
+      "prompt_template": "{question}",
+      "service_name": "QA OpenAI Service",
+      "silo_name": null,
+      "output_parser_name": null,
+      "agent_tool_refs": [],
+      "agent_mcp_refs": [],
+      "has_memory": true,
+      "memory_max_messages": 20,
+      "memory_max_tokens": 4000,
+      "memory_summarize_threshold": 10,
+      "temperature": 0.2
+    }
+  ]
+}

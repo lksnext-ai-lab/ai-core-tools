@@ -167,6 +167,7 @@ class ExportAgentSchema(BaseModel):
     agent_tool_refs: List[ExportAgentToolRefSchema] = []
     agent_mcp_refs: List[ExportAgentMCPRefSchema] = []
     has_memory: Optional[bool] = False
+    skill_router_enabled: Optional[bool] = False
     memory_max_messages: Optional[int] = 20
     memory_max_tokens: Optional[int] = None
     memory_summarize_threshold: Optional[int] = 10

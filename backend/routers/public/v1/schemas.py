@@ -162,12 +162,6 @@ class MultipleDocumentIndexSchema(BaseModel):
     """Schema for indexing multiple documents"""
     documents: List[Dict[str, Any]]
 
-class SiloSearchSchema(BaseModel):
-    """Schema for searching in a silo"""
-    query: str
-    limit: Optional[int] = None
-    filter_metadata: Optional[Dict[str, Any]] = None
-
 class DeleteDocsRequestSchema(BaseModel):
     """Schema for deleting documents"""
     ids: List[str]

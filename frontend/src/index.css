@@ -124,6 +124,18 @@
          border-emerald-200/50 dark:border-emerald-700/30;
 }
 
+/* Visual grouping for nested sub-agent tool activity */
+.pg-tool-group {
+  @apply inline-flex max-w-full items-center gap-1.5 rounded-full
+         border border-sky-200/70 dark:border-sky-700/40
+         bg-sky-50/80 dark:bg-sky-950/30 px-1.5 py-1;
+}
+
+.pg-tool-group-label {
+  @apply max-w-32 px-1.5 text-[10px] font-semibold uppercase tracking-wide
+         text-sky-700 dark:text-sky-300;
+}
+
 /* Blinking cursor for streaming text */
 .pg-cursor::after {
   content: '▍';

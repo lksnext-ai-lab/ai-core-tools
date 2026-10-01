@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Any, Optional, Set
 from sqlalchemy.orm import Session
-from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
+from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
@@ -9,6 +9,14 @@ from services.metadata_values_cache_service import MetadataValuesCacheService
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _typed_attr(obj, name: str, expected_type, default=None):
+    """Read an optional ORM attribute without leaking dynamic mock values."""
+    value = getattr(obj, name, None)
+    if value is None:
+        return default
+    return value if isinstance(value, expected_type) else default
 
 
 def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
@@ -91,6 +99,22 @@ class AgentService:
         # Get related information
         silo_info = self._get_silo_info(db, agent) if agent_id != 0 else None
         output_parser_info = self._get_output_parser_info(db, agent) if agent_id != 0 else None
+
+        media_transcription_service_id = _typed_attr(
+            agent, "transcription_service_id", int
+        )
+        media_video_ai_service_id = _typed_attr(agent, "video_ai_service_id", int)
+        media_embedding_service_id = _typed_attr(
+            agent, "media_embedding_service_id", int
+        )
+        media_forced_language = _typed_attr(agent, "media_forced_language", str)
+        media_chunk_min_duration = _typed_attr(
+            agent, "media_chunk_min_duration", int, 30
+        )
+        media_chunk_max_duration = _typed_attr(
+            agent, "media_chunk_max_duration", int, 120
+        )
+        media_chunk_overlap = _typed_attr(agent, "media_chunk_overlap", int, 5)
         
         return AgentDetailSchema(
             agent_id=agent.agent_id,
@@ -102,11 +126,13 @@ class AgentService:
             is_tool=agent.is_tool or False,
             has_memory=getattr(agent, 'has_memory', False) or False,
             enable_code_interpreter=getattr(agent, 'enable_code_interpreter', False) or False,
+            skill_router_enabled=getattr(agent, 'skill_router_enabled', False) or False,
             server_tools=getattr(agent, 'server_tools', None) or [],
             memory_max_messages=getattr(agent, 'memory_max_messages', 20) or 20,
             memory_max_tokens=getattr(agent, 'memory_max_tokens', 4000),
             memory_summarize_threshold=getattr(agent, 'memory_summarize_threshold', DEFAULT_MEMORY_SUMMARIZE_THRESHOLD) or DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
             service_id=getattr(agent, 'service_id', None),
+            sandbox_service_id=getattr(agent, 'sandbox_service_id', None),
             silo_id=getattr(agent, 'silo_id', None),
             output_parser_id=getattr(agent, 'output_parser_id', None),
             temperature=agent.temperature if agent.temperature is not None else DEFAULT_AGENT_TEMPERATURE,
@@ -119,11 +145,20 @@ class AgentService:
             vision_service_id=getattr(agent, 'vision_service_id', None),
             vision_system_prompt=getattr(agent, 'vision_system_prompt', None),
             text_system_prompt=getattr(agent, 'text_system_prompt', None),
+            # Media processing configuration
+            transcription_service_id=media_transcription_service_id,
+            video_ai_service_id=media_video_ai_service_id,
+            media_embedding_service_id=media_embedding_service_id,
+            media_forced_language=media_forced_language,
+            media_chunk_min_duration=media_chunk_min_duration,
+            media_chunk_max_duration=media_chunk_max_duration,
+            media_chunk_overlap=media_chunk_overlap,
             # Related information
             silo=silo_info,
             output_parser=output_parser_info,
             # Form data
             ai_services=form_data['ai_services'],
+            sandbox_services=form_data['sandbox_services'],
             silos=form_data['silos'],
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
@@ -152,7 +187,7 @@ class AgentService:
         if agent_id == 0:
             # New agent
             return type('Agent', (), {
-                'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': '', 
+                'agent_id': 0, 'name': '', 'system_prompt': '', 'prompt_template': DEFAULT_PROMPT_TEMPLATE,
                 'type': 'agent', 'is_tool': False, 'create_date': None, 'request_count': 0,
                 'temperature': DEFAULT_AGENT_TEMPERATURE
             })()
@@ -477,7 +512,7 @@ class AgentService:
                 )
 
         update_method = self._update_normal_agent
-        update_method(agent, agent_data)
+        update_method(db, agent, agent_data)
 
         # Threshold search needs a threshold value, else it degrades to plain similarity at
         # retrieval. Checked on the merged state (the schema can't see the stored value on a
@@ -503,14 +538,46 @@ class AgentService:
 
 
     
-    def _update_normal_agent(self, agent: Agent, data: dict):
+    @staticmethod
+    def _resolve_prompt_template(new_value: Optional[str], current_value: Optional[str]) -> str:
+        """Never persist an empty prompt template: it would drop the user's message.
+
+        ``None`` (field not sent, e.g. a partial update) keeps the current template;
+        an empty/blank value falls back to the default.
+        """
+        if new_value is None:
+            new_value = current_value
+        if not new_value or not new_value.strip():
+            return DEFAULT_PROMPT_TEMPLATE
+        return new_value
+
+    def _update_normal_agent(self, db: Session, agent: Agent, data: dict):
         """Update agent fields"""
         agent.name = data['name']
         agent.description = data.get('description', '')  # Ensure it's not None
         agent.system_prompt = data.get('system_prompt')
-        agent.prompt_template = data.get('prompt_template')
+        agent.prompt_template = self._resolve_prompt_template(
+            data.get('prompt_template'), agent.prompt_template
+        )
         agent.status = data.get('status')
         agent.service_id = data.get('service_id') or None
+
+        # Validate sandbox_service_id belongs to the target app (or is system-scoped)
+        # before assigning it. Without this check, any caller could point an agent at
+        # a SandboxService owned by a different App, silently running code execution
+        # against that other App's provider credentials/endpoint/quota.
+        sandbox_service_id = data.get('sandbox_service_id') or None
+        if sandbox_service_id:
+            from repositories.sandbox_service_repository import SandboxServiceRepository
+            sandbox_service = SandboxServiceRepository.get_by_id(db, sandbox_service_id)
+            if sandbox_service is None or (
+                sandbox_service.app_id is not None and sandbox_service.app_id != data['app_id']
+            ):
+                raise ValueError(
+                    f"sandbox_service_id {sandbox_service_id} does not exist or does not "
+                    "belong to this app"
+                )
+        agent.sandbox_service_id = sandbox_service_id
         agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
@@ -522,6 +589,13 @@ class AgentService:
 
         enable_ci_value = data.get('enable_code_interpreter', False)
         agent.enable_code_interpreter = bool(enable_ci_value)
+
+        # Gated on presence (unlike the sibling enable_code_interpreter field above): the
+        # public API route builds its update dict via model_dump(exclude_unset=True), so
+        # a partial update that never touches this field must leave the existing value
+        # untouched instead of silently resetting it to False.
+        if 'skill_router_enabled' in data:
+            agent.skill_router_enabled = bool(data['skill_router_enabled'])
 
         agent.server_tools = data.get('server_tools') or []
 
@@ -544,6 +618,24 @@ class AgentService:
             agent.vision_system_prompt = data.get('vision_system_prompt')
             agent.text_system_prompt = data.get('text_system_prompt')
 
+        # Media processing configuration (playground media upload). Only touch
+        # each field when its key is present in the payload, so callers that
+        # build the data dict without media keys don't silently wipe the config.
+        if 'transcription_service_id' in data:
+            agent.transcription_service_id = data.get('transcription_service_id') or None
+        if 'video_ai_service_id' in data:
+            agent.video_ai_service_id = data.get('video_ai_service_id') or None
+        if 'media_embedding_service_id' in data:
+            agent.media_embedding_service_id = data.get('media_embedding_service_id') or None
+        if 'media_forced_language' in data:
+            agent.media_forced_language = data.get('media_forced_language') or None
+        if data.get('media_chunk_min_duration') is not None:
+            agent.media_chunk_min_duration = data['media_chunk_min_duration']
+        if data.get('media_chunk_max_duration') is not None:
+            agent.media_chunk_max_duration = data['media_chunk_max_duration']
+        if data.get('media_chunk_overlap') is not None:
+            agent.media_chunk_overlap = data['media_chunk_overlap']
+        
         # Handle is_tool field - can be boolean from API or 'on' from form
         is_tool_value = data.get('is_tool')
         if isinstance(is_tool_value, bool):
@@ -651,7 +743,13 @@ class AgentService:
         db.commit()
 
     def update_agent_skills(self, db: Session, agent_id: int, skill_ids: list, form_data: dict = None):
-        """Update agent skill associations"""
+        """Update agent skill associations.
+
+        New attachments must be the app's own skills or enabled, non-colliding system skills (other apps' ids and
+        disabled system skills are silently dropped). Existing associations that the client resubmits are RETAINED
+        while the skill is still visible to the app, even if it has since been disabled, so disabling a system
+        skill never silently detaches it from agents.
+        """
         # Get the agent
         agent = AgentRepository.get_by_id(db, agent_id)
         if not agent:
@@ -663,15 +761,27 @@ class AgentService:
         elif not isinstance(skill_ids, list):
             skill_ids = []
 
+        # Agents without an app can never attach skills (system skills must not be treated as app skills)
+        if agent.app_id is None:
+            logger.warning("Agent %s has no app_id; skill associations were not updated", agent_id)
+            return
+
         # Get existing skill associations
         existing_skills = {assoc.skill_id: assoc for assoc in AgentRepository.get_agent_skill_associations(db, agent_id)}
 
         # Convert skill_ids to set of integers
         requested_skill_ids = {int(id) for id in skill_ids if id}
-        
-        # Validate that skills exist and belong to the same app as the agent
-        # This prevents cross-app associations and FK errors
-        valid_skill_ids = SkillRepository.get_valid_skill_ids_for_app(db, requested_skill_ids, agent.app_id)
+
+        # NEW attachments must belong to the agent's app or be enabled system skills; ids from other apps and
+        # disabled system skills are silently dropped.
+        new_ids = requested_skill_ids - set(existing_skills)
+        valid_skill_ids = SkillRepository.get_valid_skill_ids_for_app(db, new_ids, agent.app_id)
+        # Existing associations that are resubmitted are RETAINED while the skill is still visible to the app,
+        # even if it has been disabled since.
+        retained_ids = SkillRepository.get_visible_skill_ids_for_app(
+            db, requested_skill_ids & set(existing_skills), agent.app_id
+        )
+        valid_skill_ids = valid_skill_ids | retained_ids
 
         # Remove associations that are no longer needed
         for skill_id in existing_skills.keys():
@@ -694,6 +804,45 @@ class AgentService:
 
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
+        # Scheduled tasks own conversations, files, temp silos and DBOS schedules
+        # that a plain FK cascade would leave behind.
+        try:
+            from services.scheduled_task_service import ScheduledTaskService, default_orchestrator
+            ScheduledTaskService(db, default_orchestrator()).purge_for_agent(agent_id)
+        except Exception as exc:
+            db.rollback()
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not delete scheduled tasks of agent %s: %s", agent_id, exc
+            )
+        # Destroy all active sandboxes before deletion (IT-1)
+        try:
+            from services.sandbox_session_service import sandbox_session_service
+            sandbox_session_service.destroy_all_for_agent(agent_id)
+        except Exception as exc:
+            # Sandbox cleanup failure must not block agent deletion
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not destroy sandboxes for agent %s during deletion: %s",
+                agent_id, exc
+            )
+        # Clear sandbox DB state for all conversations belonging to this agent
+        try:
+            from models.conversation import Conversation
+            db.query(Conversation).filter(
+                Conversation.agent_id == agent_id,
+                Conversation.sandbox_session_id.isnot(None),
+            ).update(
+                {"sandbox_session_id": None, "sandbox_state": None},
+                synchronize_session=False,
+            )
+            db.commit()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not clear sandbox DB state for agent %s conversations: %s",
+                agent_id, exc
+            )
         return AgentRepository.delete_by_id(db, agent_id)
 
     def _remove_tool_references(self, db: Session, tool_id: int):
@@ -710,7 +859,7 @@ class AgentService:
         if prompt_type == 'system':
             agent.system_prompt = prompt
         elif prompt_type == 'template':
-            agent.prompt_template = prompt
+            agent.prompt_template = self._resolve_prompt_template(prompt, None)
         else:
             return False
         

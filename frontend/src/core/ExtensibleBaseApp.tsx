@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '../themes/ThemeProvider';
@@ -21,6 +21,12 @@ import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
 import AgentsPage from '../pages/AgentsPage';
 import AgentFormPage from '../pages/AgentFormPage';
+import ScheduledTasksPage from '../pages/ScheduledTasksPage';
+import ScheduledTaskFormPage from '../pages/ScheduledTaskFormPage';
+import ScheduledTaskDetailPage from '../pages/ScheduledTaskDetailPage';
+import ScheduledTaskRunPage from '../pages/ScheduledTaskRunPage';
+import MarketplaceScheduledTaskPage from '../pages/MarketplaceScheduledTaskPage';
+import MarketplaceScheduledTaskRunPage from '../pages/MarketplaceScheduledTaskRunPage';
 import SilosPage from '../pages/SilosPage';
 import SiloFormPage from '../pages/SiloFormPage';
 import SiloPlaygroundPage from '../pages/SiloPlaygroundPage';
@@ -37,12 +43,14 @@ import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
+import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
+import AdminMetricsPage from '../pages/admin/AdminMetricsPage';
 import SystemSettingsPage from '../pages/admin/SystemSettingsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
@@ -57,9 +65,10 @@ import SubscriptionPage from '../pages/SubscriptionPage';
 import SaasUserListPage from '../pages/admin/SaasUserListPage';
 import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
+import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage';
+import SystemSkillsPage from '../pages/admin/SystemSkillsPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
-import { CapabilitiesProvider } from '../contexts/CapabilitiesContext';
 import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
 import PlatformChatbotWidget from '../components/platform-chatbot/PlatformChatbotWidget';
 import MCPServersPage from '../pages/MCPServersPage';
@@ -72,7 +81,7 @@ import MarketplaceHomePage from '../pages/MarketplaceHomePage';
 import SharePointSourcesPage from '../pages/SharePointSourcesPage';
 import SharePointWizardPage from '../pages/SharePointWizardPage';
 import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
-import EnterpriseFeaturePage from '../pages/EnterpriseFeaturePage';
+import AppMetricsPage from '../pages/AppMetricsPage';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -85,7 +94,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   extraRoutes = [],
 }) => {
   const allExtraRoutes = [...(config.routes || []), ...extraRoutes];
-  const clientConfig = {
+  const clientConfig = useMemo(() => ({
     clientId: 'library-client',
     name: config.name || 'AI Core Tools',
     theme: config.themeProps?.customThemes?.[config.themeProps?.defaultTheme || 'default'] || baseTheme,
@@ -95,7 +104,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         enabled: true,
         authority: config.authProps.oidc.authority,
         clientId: config.authProps.oidc.client_id,
-        redirectUri: `${globalThis.location.origin}${config.authProps.oidc.callbackPath || '/callback'}`,
+        redirectUri: `${globalThis.location.origin}${config.authProps.oidc.callbackPath || '/auth/success'}`,
         scope: config.authProps.oidc.scope || 'openid profile email'
       } : undefined
     } : { type: 'session' as const },
@@ -111,11 +120,13 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
       retries: config.apiConfig.retries || 3
     } : undefined,
     navigation: config.navigationConfig
-  };
+  }), [config]);
 
-  useEffect(() => {
+  // Applied during render, not in an effect: child providers' effects run first
+  // and their bootstrap requests (/internal/me, /internal/config) need the API base URL.
+  if (configService.getClientConfig() !== clientConfig) {
     configService.setClientConfig(clientConfig);
-  }, [clientConfig]);
+  }
 
   const features = config.features || {};
   
@@ -145,7 +156,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         <UserProvider>
           <SettingsCacheProvider>
             <DeploymentModeProvider>
-            <CapabilitiesProvider>
             <PlatformChatbotProvider>
             <Router>
               <ScrollToTop />
@@ -191,6 +201,10 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </ProtectedLayoutRoute>
                 } />
 
+                <Route path="/marketplace/scheduled-tasks/:taskId" element={<ProtectedLayoutRoute {...commonLayoutProps}><MarketplaceScheduledTaskPage /></ProtectedLayoutRoute>} />
+                <Route path="/marketplace/scheduled-tasks/:taskId/runs/:runId" element={<ProtectedLayoutRoute {...commonLayoutProps}><MarketplaceScheduledTaskRunPage /></ProtectedLayoutRoute>} />
+                <Route path="/marketplace/scheduled-tasks/:taskId/conversation" element={<ProtectedLayoutRoute {...commonLayoutProps}><MarketplaceScheduledTaskRunPage /></ProtectedLayoutRoute>} />
+
                 <Route path="/marketplace/chat/:conversationId" element={
                   <ProtectedLayoutRoute {...commonLayoutProps}>
                     <MarketplaceChatPage />
@@ -220,6 +234,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       <AgentFormPage />
                   </EditorLayoutRoute>
                 } />
+                <Route path="/apps/:appId/scheduled-tasks" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTasksPage /></ProtectedLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/new" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId/edit" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskDetailPage /></ProtectedLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId/runs/:runId" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskRunPage /></ProtectedLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId/conversation" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskRunPage /></ProtectedLayoutRoute>} />
 
                 <Route path="/apps/:appId/agents/:agentId/playground" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
@@ -287,12 +307,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
 
-                <Route path="/apps/:appId/enterprise" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
-                      <EnterpriseFeaturePage />
-                  </EditorLayoutRoute>
-                } />
-
                 <Route path="/apps/:appId/sharepoint" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SharePointSourcesPage />
@@ -308,6 +322,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/sharepoint/:sourceId" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SharePointSourceDetailPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/metrics" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <AppMetricsPage />
                   </EditorLayoutRoute>
                 } />
 
@@ -365,6 +385,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
 
+                <Route path="/apps/:appId/settings/sandbox-services" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SettingsLayout><SandboxServicesPage /></SettingsLayout>
+                  </EditorLayoutRoute>
+                } />
+
                 <Route path="/apps/:appId/settings/mcp-configs" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><MCPConfigsPage /></SettingsLayout>
@@ -401,6 +427,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </AdminLayoutRoute>
                 } />
 
+                <Route path="/admin/metrics" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <AdminMetricsPage />
+                  </AdminLayoutRoute>
+                } />
+
                 <Route path="/admin/settings" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemSettingsPage />
@@ -422,6 +454,18 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/system-embedding-services" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemEmbeddingServicesPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-sandbox-services" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSandboxServicesPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-skills" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSkillsPage />
                   </AdminLayoutRoute>
                 } />
 
@@ -472,7 +516,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
               </ConfirmProvider>
             </Router>
             </PlatformChatbotProvider>
-            </CapabilitiesProvider>
             </DeploymentModeProvider>
           </SettingsCacheProvider>
         </UserProvider>

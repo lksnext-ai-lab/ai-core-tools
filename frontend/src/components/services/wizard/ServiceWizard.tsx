@@ -10,18 +10,27 @@ import { getProviderDescriptor } from './providers';
 import { getServiceApiClient } from '../serviceApi';
 import type { TestConnectionResult } from '../serviceApi';
 import type {
+  ExistingSandboxService,
   ExistingService,
   ProviderModelInfo,
+  SandboxServiceFormData,
   ServiceFormData,
   ServiceKind,
   ServiceScope,
   ServiceWizardMode,
 } from '../../../types/services';
 
-const STEPS: StepDefinition[] = [
+const STEPS_WITH_MODEL: StepDefinition[] = [
   { id: 'provider', label: 'Provider' },
   { id: 'credentials', label: 'Credentials' },
   { id: 'model', label: 'Model' },
+  { id: 'confirm', label: 'Confirm' },
+];
+
+/** Sandbox services have no model to pick — the Model step is skipped entirely. */
+const STEPS_WITHOUT_MODEL: StepDefinition[] = [
+  { id: 'provider', label: 'Provider' },
+  { id: 'credentials', label: 'Credentials' },
   { id: 'confirm', label: 'Confirm' },
 ];
 
@@ -38,11 +47,18 @@ interface ServiceWizardProps {
   readonly appId?: number;
   readonly mode?: ServiceWizardMode;
   /** When `mode === 'edit-model'`, the existing service to mutate. */
-  readonly initialService?: ExistingService | null;
+  readonly initialService?: ExistingService | ExistingSandboxService | null;
   /** Existing service names in scope, used to disambiguate auto-generated names. */
   readonly existingNames?: readonly string[];
   readonly onClose: () => void;
-  readonly onSave: (data: ServiceFormData) => Promise<void>;
+  /**
+   * Declared with method shorthand (not an arrow-typed property) on purpose:
+   * TypeScript checks method-shorthand parameters bivariantly, so callers
+   * that only ever deal with one kind (e.g. a page fixed to `kind="ai"`) can
+   * keep a narrower `(data: ServiceFormData) => Promise<void>` handler
+   * without widening it to the full union.
+   */
+  onSave(data: ServiceFormData | SandboxServiceFormData): Promise<void>;
 }
 
 function ServiceWizard({
@@ -73,18 +89,33 @@ function ServiceWizard({
     if (!isOpen) return;
     if (mode === 'edit-model' && initialService) {
       setProvider(initialService.provider || '');
-      setCredentials({
-        ...EMPTY_CREDENTIALS,
-        // We never receive the real key — leave it blank so the user
-        // re-enters it (required to list models again).
-        api_key: '',
-        base_url: initialService.base_url || '',
-        api_version: initialService.api_version || '',
-        aws_access_key_id: initialService.aws_access_key_id || '',
-        aws_region: initialService.aws_region || '',
-      });
-      setManualModelName(initialService.model_name || '');
-      setSupportsVideo(!!initialService.supports_video);
+      if (kind === 'sandbox') {
+        const svc = initialService as ExistingSandboxService;
+        setCredentials({
+          ...EMPTY_CREDENTIALS,
+          // We never receive the real key — leave it blank so the user
+          // re-enters it (required to test the connection again).
+          api_key: '',
+          base_url: svc.base_url || '',
+          image: svc.opensandbox_image || '',
+          target: svc.daytona_target || '',
+          template: svc.e2b_template || '',
+        });
+      } else {
+        const svc = initialService as ExistingService;
+        setCredentials({
+          ...EMPTY_CREDENTIALS,
+          // We never receive the real key — leave it blank so the user
+          // re-enters it (required to list models again).
+          api_key: '',
+          base_url: svc.base_url || '',
+          api_version: svc.api_version || '',
+          aws_access_key_id: svc.aws_access_key_id || '',
+          aws_region: svc.aws_region || '',
+        });
+        setManualModelName(svc.model_name || '');
+        setSupportsVideo(!!svc.supports_video);
+      }
       setCurrentStep(1); // skip provider step in edit mode
       setStepStatuses({ provider: 'completed' });
     } else {
@@ -104,18 +135,25 @@ function ServiceWizard({
 
   const descriptor = getProviderDescriptor(provider);
 
+  // Sandbox services have no "model" concept — the Model step is skipped
+  // entirely (see `steps` below), so a model name never drives the name.
+  const steps = kind === 'sandbox' ? STEPS_WITHOUT_MODEL : STEPS_WITH_MODEL;
+
   const autoName = useMemo(() => {
     if (!provider) return '';
+    if (kind === 'sandbox') {
+      return ensureUnique(descriptor?.label || provider, existingNames);
+    }
     const modelPart = descriptor?.supportsModelListing
       ? selectedModel?.display_name || selectedModel?.id || ''
       : manualModelName;
     if (!modelPart) return '';
     const base = `${descriptor?.label || provider} - ${modelPart}`;
     return ensureUnique(base, existingNames);
-  }, [provider, descriptor, selectedModel, manualModelName, existingNames]);
+  }, [provider, kind, descriptor, selectedModel, manualModelName, existingNames]);
 
   const stepDisabled = useMemo(() => {
-    switch (STEPS[currentStep].id) {
+    switch (steps[currentStep].id) {
       case 'provider':
         return !provider;
       case 'credentials':
@@ -128,10 +166,10 @@ function ServiceWizard({
       default:
         return false;
     }
-  }, [currentStep, provider, descriptor, credentials, selectedModel, manualModelName, autoName]);
+  }, [steps, currentStep, provider, descriptor, credentials, selectedModel, manualModelName, autoName]);
 
   const handleNext = async () => {
-    const stepId = STEPS[currentStep].id;
+    const stepId = steps[currentStep].id;
     if (stepId === 'confirm') {
       await handleSubmit();
       return;
@@ -140,20 +178,32 @@ function ServiceWizard({
     // test result — credentials or the selected model may have changed.
     setTestResult(null);
     setStepStatuses((prev) => ({ ...prev, [stepId]: 'completed' }));
-    setCurrentStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const handleBack = () => {
     setStepStatuses((prev) => {
       const next = { ...prev };
-      const stepId = STEPS[currentStep].id;
+      const stepId = steps[currentStep].id;
       delete next[stepId];
       return next;
     });
     setCurrentStep((s) => Math.max(s - 1, 0));
   };
 
-  const buildPayload = (): ServiceFormData => {
+  const buildPayload = (): ServiceFormData | SandboxServiceFormData => {
+    if (kind === 'sandbox') {
+      const sandboxPayload: SandboxServiceFormData = {
+        name: autoName || provider,
+        provider,
+        api_key: credentials.api_key,
+        base_url: credentials.base_url,
+        opensandbox_image: credentials.image?.trim() || undefined,
+        daytona_target: credentials.target?.trim() || undefined,
+        e2b_template: credentials.template?.trim() || undefined,
+      };
+      return sandboxPayload;
+    }
     const modelName = descriptor?.supportsModelListing
       ? selectedModel?.id || ''
       : manualModelName.trim();
@@ -203,14 +253,16 @@ function ServiceWizard({
     }
   };
 
-  let title = kind === 'ai' ? 'Add AI Service' : 'Add Embedding Service';
-  if (mode === 'edit-model') title = 'Change model';
+  let title = 'Add Sandbox Service';
+  if (kind === 'ai') title = 'Add AI Service';
+  else if (kind === 'embedding') title = 'Add Embedding Service';
+  if (mode === 'edit-model') title = kind === 'sandbox' ? 'Edit sandbox service' : 'Change model';
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="xlarge">
       <div className="flex flex-col" style={{ minHeight: '500px' }}>
         <StepperContainer
-          steps={STEPS}
+          steps={steps}
           currentStep={currentStep}
           stepStatuses={stepStatuses}
           onNext={handleNext}
@@ -218,11 +270,11 @@ function ServiceWizard({
           onCancel={onClose}
           nextDisabled={stepDisabled}
           isSubmitting={submitting}
-          nextLabel={STEPS[currentStep].id === 'confirm' ? (submitting ? 'Saving...' : 'Save') : undefined}
+          nextLabel={steps[currentStep].id === 'confirm' ? (submitting ? 'Saving...' : 'Save') : undefined}
           showBack={mode === 'create' || currentStep > 1}
         >
           <div className="px-2 py-3">
-            {STEPS[currentStep].id === 'provider' && (
+            {steps[currentStep].id === 'provider' && (
               <ProviderStep
                 kind={kind}
                 selected={provider}
@@ -246,15 +298,16 @@ function ServiceWizard({
                 }}
               />
             )}
-            {STEPS[currentStep].id === 'credentials' && (
+            {steps[currentStep].id === 'credentials' && (
               <CredentialsStep
+                kind={kind}
                 provider={provider}
                 mode={mode}
                 value={credentials}
                 onChange={setCredentials}
               />
             )}
-            {STEPS[currentStep].id === 'model' && (
+            {steps[currentStep].id === 'model' && (
               <ModelSelectionStep
                 kind={kind}
                 scope={scope}
@@ -267,7 +320,7 @@ function ServiceWizard({
                 onManualModelNameChange={setManualModelName}
               />
             )}
-            {STEPS[currentStep].id === 'confirm' && (
+            {steps[currentStep].id === 'confirm' && (
               <ConfirmStep
                 kind={kind}
                 provider={provider}

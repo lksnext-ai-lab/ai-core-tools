@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bot, Cloud, Cpu, Globe, Server, Sparkles, Zap } from 'lucide-react';
+import { Bot, Box, Cloud, Cpu, Globe, Server, Sparkles, Zap } from 'lucide-react';
 import type { ServiceKind } from '../../../types/services';
 
 export type ApiKeyMode = 'required' | 'optional' | 'none';
@@ -28,6 +28,12 @@ export interface ProviderUIDescriptor {
     | 'region'
     | 'aws_access_key_id'
     | 'aws_region'
+    // Sandbox service providers (OpenSandbox / Daytona / E2B) — generic
+    // names mapped to the provider-specific extra_config fields
+    // (opensandbox_image / daytona_target / e2b_template) in ServiceWizard.
+    | 'image'
+    | 'target'
+    | 'template'
   )[];
   readonly apiKeyPlaceholder: string;
   readonly apiKeyHelp: string;
@@ -203,6 +209,49 @@ const ALL_PROVIDERS: readonly ProviderUIDescriptor[] = [
     apiKeyHelp: 'Your AWS Secret Access Key. Needs the bedrock:ListFoundationModels and bedrock:InvokeModel permissions.',
     apiKeyDocUrl: 'https://console.aws.amazon.com/iam/home#/security_credentials',
     supportedFor: ['ai', 'embedding'],
+  },
+  {
+    value: 'opensandbox',
+    label: 'OpenSandbox',
+    description: 'Self-hosted, container-isolated code execution sandbox.',
+    Icon: Box,
+    apiKey: 'optional',
+    needsBaseUrl: true,
+    baseUrlPlaceholder: 'localhost:8080',
+    supportsModelListing: false,
+    manualFields: ['image'],
+    apiKeyPlaceholder: 'optional bearer token',
+    apiKeyHelp: 'Optional. Only needed if your self-hosted OpenSandbox server requires auth.',
+    supportedFor: ['sandbox'],
+  },
+  {
+    value: 'daytona',
+    label: 'Daytona',
+    description: 'Managed SaaS sandbox for isolated code execution.',
+    Icon: Box,
+    apiKey: 'required',
+    needsBaseUrl: true,
+    baseUrlPlaceholder: 'https://app.daytona.io/api',
+    supportsModelListing: false,
+    manualFields: ['target'],
+    apiKeyPlaceholder: 'Daytona API key',
+    apiKeyHelp: 'Find your API key in the Daytona dashboard.',
+    apiKeyDocUrl: 'https://app.daytona.io/',
+    supportedFor: ['sandbox'],
+  },
+  {
+    value: 'e2b',
+    label: 'E2B',
+    description: 'Managed cloud sandbox for isolated code execution.',
+    Icon: Box,
+    apiKey: 'required',
+    needsBaseUrl: false,
+    supportsModelListing: false,
+    manualFields: ['template'],
+    apiKeyPlaceholder: 'e2b_...',
+    apiKeyHelp: 'Find your API key at e2b.dev/dashboard.',
+    apiKeyDocUrl: 'https://e2b.dev/dashboard',
+    supportedFor: ['sandbox'],
   },
 ];
 

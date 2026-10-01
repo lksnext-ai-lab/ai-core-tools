@@ -1,5 +1,8 @@
 import React from 'react';
+import { Timer } from 'lucide-react';
 import type { ActiveTool } from '../../types/streaming';
+import { formatDuration } from '../../utils/duration';
+import ActiveToolBar from './ActiveToolBar';
 import MessageContent from './MessageContent';
 
 interface StreamingMessageProps {
@@ -7,6 +10,8 @@ interface StreamingMessageProps {
   content: string;
   /** Whether tokens are still arriving */
   isStreaming: boolean;
+  /** Client-side wall-clock time since the current response started */
+  elapsedMs?: number;
   /** Active tools (shown as status pills) — rendered ABOVE the message */
   activeTools?: ActiveTool[];
   /** Human-readable thinking status */
@@ -16,6 +21,7 @@ interface StreamingMessageProps {
 const StreamingMessage: React.FC<StreamingMessageProps> = ({
   content,
   isStreaming,
+  elapsedMs,
   activeTools = [],
   thinkingMessage,
 }) => {
@@ -29,49 +35,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
           <div className="mb-2 ml-1 space-y-1.5">
             {/* Tool status pills */}
             {activeTools.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {activeTools.map((tool) => (
-                  <span
-                    key={`${tool.name}-${tool.startedAt}`}
-                    className={`pg-tool-pill animate-fade-in ${
-                      tool.status === 'complete' ? 'pg-tool-pill--complete' : ''
-                    }`}
-                  >
-                    {tool.status === 'running' ? (
-                      <svg
-                        className="w-3 h-3 animate-tool-spin"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        aria-hidden="true"
-                      >
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          strokeDasharray="31.4 31.4"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="w-3 h-3"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                    {tool.displayName}
-                  </span>
-                ))}
-              </div>
+              <ActiveToolBar activeTools={activeTools} />
             )}
 
             {/* Thinking status text */}
@@ -91,6 +55,16 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
                 </span>
               </div>
             )}
+          </div>
+        )}
+
+        {isStreaming && elapsedMs !== undefined && (
+          <div
+            className="mt-1 ml-1 flex items-center gap-1.5 text-xs tabular-nums text-gray-400 dark:text-gray-500"
+            aria-live="polite"
+          >
+            <Timer className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Generating for {formatDuration(elapsedMs)}</span>
           </div>
         )}
 

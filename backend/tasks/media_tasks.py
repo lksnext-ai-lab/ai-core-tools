@@ -4,7 +4,9 @@ from services.transcription_service import TranscriptionService
 from services.silo_service import SiloService
 from services.video_analysis_service import VideoAnalysisService
 from utils.logger import get_logger
+import json
 import os
+import subprocess
 import yt_dlp
 from pydub import AudioSegment
 from datetime import datetime
@@ -46,7 +48,7 @@ def process_media_task_sync(media_id: int):
         if not effective_transcription_id:
             raise ValueError(
                 f"No transcription service configured on repository {media.repository_id}. "
-                f"Please configure a transcription service in the repository settings."
+                f"Please configure a transcription service on the agent's media settings."
             )
         
         logger.info(
@@ -68,7 +70,13 @@ def process_media_task_sync(media_id: int):
         # Step 2: Extract audio
         media.status = 'processing'
         db.commit()
-        
+
+        if not _has_audio_stream(media.file_path):
+            raise ValueError(
+                "The uploaded file has no audio track. Upload a video or audio "
+                "file that contains speech."
+            )
+
         audio_path = _extract_audio(media.file_path, media_id, media.repository_id)
         logger.info(f"Extracted audio for media {media_id}: {audio_path}")
         
@@ -88,11 +96,20 @@ def process_media_task_sync(media_id: int):
         media.duration = float(transcription['duration'])
         db.commit()
         
-        logger.info(f"Transcribed media {media_id}: {len(transcription['segments'])} segments, language: {transcription['language']}")
-        
+        segments = transcription.get('segments') or []
+        logger.info(
+            f"Transcribed media {media_id}: {len(segments)} segments, "
+            f"language: {transcription['language']}"
+        )
+        if not segments:
+            raise ValueError(
+                "No speech was detected in the audio. Make sure the file "
+                "contains spoken words."
+            )
+
         # Step 4: Create chunks with custom configuration
         chunks_data = TranscriptionService.create_chunks(
-            transcription['segments'],
+            segments,
             min_window=media.chunk_min_duration or 30,
             max_window=media.chunk_max_duration or 120,
             overlap=media.chunk_overlap or 0
@@ -101,8 +118,11 @@ def process_media_task_sync(media_id: int):
         logger.info(f"Created {len(chunks_data)} chunks (in-memory) for media {media_id}")
         logger.info(f"First chunk sample: {chunks_data[0] if chunks_data else 'NO CHUNKS'}")
 
-        # Step 4b: Multimodal video analysis (if repository has a video service configured)
-        if effective_video_service_id:
+        # Step 4b: Multimodal video analysis — only when the media actually
+        # carries a video stream. A video service configured on the agent must
+        # not trigger analysis of an audio-only file: the model then invents
+        # "visual" descriptions that pollute retrieval with fiction.
+        if effective_video_service_id and _has_video_stream(media.file_path):
             try:
                 media.status = 'analyzing_video'
                 db.commit()
@@ -205,10 +225,92 @@ def _download_youtube(url: str, media_id: int, repo_id: int) -> str:
             
             logger.info(f"Downloaded YouTube video to: {actual_path}")
             return actual_path
-            
+
     except Exception as e:
-        logger.error(f"Error downloading YouTube video: {str(e)}")
-        raise
+        raw = str(e)
+        logger.error(f"Error downloading YouTube video: {raw}")
+        raise ValueError(_youtube_download_error_message(raw)) from e
+
+
+def _youtube_download_error_message(raw: str) -> str:
+    """Map a raw yt-dlp failure to a concise, user-actionable message."""
+    low = raw.lower()
+    if "403" in raw or "forbidden" in low or "sign in to confirm" in low:
+        return (
+            "YouTube is blocking downloads from this server. Download the video "
+            "yourself and upload the file directly."
+        )
+    if "private video" in low:
+        return "This YouTube video is private and cannot be downloaded."
+    if any(s in low for s in ("video unavailable", "not available", "has been removed", "age-restricted")):
+        return (
+            "This YouTube video is unavailable (removed, region-locked, or "
+            "age-restricted)."
+        )
+    if any(s in low for s in ("unsupported url", "is not a valid url", "not a valid url")):
+        return "The provided URL is not a valid YouTube video URL."
+    return f"Could not download the YouTube video: {raw[:200]}"
+
+
+def _has_audio_stream(path: str) -> bool:
+    """Return True if the media file contains at least one audio stream.
+
+    Uses ffprobe (already required by pydub). On any probe failure it returns
+    True so extraction still runs and surfaces the real error instead of a
+    false "no audio" verdict.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "a",
+                "-show_entries", "stream=index",
+                "-of", "json",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        streams = json.loads(result.stdout or "{}").get("streams", [])
+        return len(streams) > 0
+    except Exception as exc:
+        logger.warning("Could not probe audio streams for %s: %s", path, exc)
+        return True
+
+
+def _has_video_stream(path: str) -> bool:
+    """Return True if the file has a real video stream (not just cover art).
+
+    Unlike the audio probe this fails closed: if ffprobe cannot confirm a
+    video stream, skip video analysis rather than let the model invent
+    "visual" descriptions for an audio-only file.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v",
+                "-show_entries", "stream=codec_type,disposition",
+                "-of", "json",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        streams = json.loads(result.stdout or "{}").get("streams", [])
+        for stream in streams:
+            if stream.get("codec_type") != "video":
+                continue
+            # An MP3/M4A cover image is exposed as a video stream too — skip it.
+            if (stream.get("disposition") or {}).get("attached_pic") == 1:
+                continue
+            return True
+        return False
+    except Exception as exc:
+        logger.warning("Could not probe video streams for %s: %s", path, exc)
+        return False
 
 def _extract_audio(video_path: str, media_id: int, repo_id: int) -> str:
     """
@@ -238,7 +340,15 @@ def _extract_audio(video_path: str, media_id: int, repo_id: int) -> str:
         
         logger.info(f"Extracted and normalized audio to: {audio_path}")
         return audio_path
-        
+
+    except IndexError as e:
+        # pydub raises a bare "list index out of range" when the container has
+        # no decodable audio stream. Surface something actionable instead.
+        logger.error(f"Error extracting audio (no readable audio stream): {e}")
+        raise ValueError(
+            "The file's audio track could not be read. It may be missing, "
+            "empty, or in an unsupported codec."
+        ) from e
     except Exception as e:
         logger.error(f"Error extracting audio: {str(e)}")
         raise

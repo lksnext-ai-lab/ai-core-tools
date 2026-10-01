@@ -308,6 +308,32 @@ class TestFindDocs:
             assert len(data["docs"]) == 1
             assert data["docs"][0]["page_content"] == "Test content"
 
+    def test_find_docs_forwards_search_type_and_score_threshold(
+        self, client, fake_app, fake_repository, fake_api_key, db
+    ):
+        """Regression test for issue #217: this route imported a stale local
+        SiloSearchSchema without search_type/score_threshold fields at all,
+        and even after fixing that, never forwarded them to the service
+        call."""
+        with patch(
+            "routers.public.v1.repositories.SiloService.find_docs_in_collection",
+            return_value=[],
+        ) as mock_find:
+            resp = client.post(
+                repos_url(fake_app.app_id, fake_repository.repository_id, "/docs/find"),
+                json={
+                    "query": "test query",
+                    "search_type": "similarity_score_threshold",
+                    "score_threshold": 0.7,
+                },
+                headers=api_headers(fake_api_key.key),
+            )
+            assert resp.status_code == 200
+
+            _, kwargs = mock_find.call_args
+            assert kwargs["search_type"] == "similarity_score_threshold"
+            assert kwargs["score_threshold"] == 0.7
+
     def test_find_docs_repo_not_found_returns_404(
         self, client, fake_app, fake_api_key, db
     ):

@@ -41,3 +41,12 @@ def verify_signature(path: str, username: str, signature: str) -> bool:
 
     expected_signature = generate_signature(path, username)
     return hmac.compare_digest(expected_signature, signature)
+
+
+def hash_api_key(api_key: str) -> str:
+    """Return the SHA-256 hex digest used to tie conversations to an API key.
+
+    The raw key is never stored on a conversation; this digest identifies the
+    caller instead (see ``Conversation.api_key_hash``).
+    """
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()

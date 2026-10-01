@@ -1,4 +1,4 @@
-import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Loader2 } from 'lucide-react';
+import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Loader2, Film } from 'lucide-react';
 
 export interface PanelFile {
   id: string;
@@ -8,6 +8,7 @@ export interface PanelFile {
   file_size_display?: string;
   has_extractable_content?: boolean;
   content_preview?: string;
+  error_message?: string;
 }
 
 interface AttachedFilesPanelProps {
@@ -19,9 +20,13 @@ interface AttachedFilesPanelProps {
 }
 
 function getStatusClassName(status?: string): string {
-  if (status === 'ready') return 'bg-green-100 text-green-700';
+  if (status === 'ready' || status === 'uploaded') return 'bg-green-100 text-green-700';
   if (status === 'error') return 'bg-red-100 text-red-700';
   return 'bg-yellow-100 text-yellow-700';
+}
+
+function getDisplayStatus(status?: string): string | undefined {
+  return status === 'uploaded' ? 'ready' : status;
 }
 
 function getExtractableLabel(fileType?: string, hasExtractableContent?: boolean): string {
@@ -37,6 +42,7 @@ function getFileIcon(fileType?: string) {
     case 'text': return <FileType className="w-4 h-4 text-gray-500" />;
     case 'document': return <FileText className="w-4 h-4 text-gray-500" />;
     case 'output': return <ArrowDown className="w-4 h-4 text-gray-500" />;
+    case 'media': return <Film className="w-4 h-4 text-purple-500" />;
     default: return <FolderOpen className="w-4 h-4 text-gray-500" />;
   }
 }
@@ -49,9 +55,9 @@ export default function AttachedFilesPanel({
   title = 'Attached Files',
 }: Readonly<AttachedFilesPanelProps>) {
   return (
-    <div className="w-64 shrink-0 bg-white shadow rounded-lg flex flex-col">
+    <div className="w-64 shrink-0 bg-white shadow rounded-lg flex flex-col h-full max-h-full min-h-0">
       {/* Header */}
-      <div className="p-3 border-b">
+      <div className="p-3 border-b shrink-0">
         <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           <Paperclip className="w-4 h-4" />
           <span>{title}</span>
@@ -64,7 +70,7 @@ export default function AttachedFilesPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 overscroll-contain">
         {isLoading && (
           <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-500">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
@@ -110,10 +116,14 @@ export default function AttachedFilesPanel({
                       getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {file.processing_status === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
-                    {file.processing_status === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
-                    {file.processing_status === 'uploaded' && <><Loader2 className="w-3 h-3 animate-spin" /> Uploaded</>}
-                    {file.processing_status === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
+                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
+                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
+                    {getDisplayStatus(file.processing_status) === 'pending' && <><Loader2 className="w-3 h-3 animate-spin" /> Pending</>}
+                    {getDisplayStatus(file.processing_status) === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
+                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Loader2 className="w-3 h-3 animate-spin" /> Transcribing</>}
+                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Loader2 className="w-3 h-3 animate-spin" /> Analyzing video</>}
+                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Loader2 className="w-3 h-3 animate-spin" /> Downloading</>}
+                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Loader2 className="w-3 h-3 animate-spin" /> Indexing</>}
                   </span>
                 )}
               </div>
@@ -134,6 +144,14 @@ export default function AttachedFilesPanel({
                   title={file.content_preview}
                 >
                   {file.content_preview}
+                </p>
+              )}
+              {getDisplayStatus(file.processing_status) === 'error' && file.error_message && (
+                <p
+                  className="text-xs text-red-600 mt-0.5 line-clamp-2"
+                  title={file.error_message}
+                >
+                  {file.error_message}
                 </p>
               )}
             </div>

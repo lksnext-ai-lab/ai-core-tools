@@ -34,6 +34,12 @@ class AgentExecutionContext:
     working_dir: Optional[str] = None
     pre_existing_files: set = field(default_factory=set)
 
+    # Sandbox (IT-4) — populated when enable_code_interpreter is True for non-subprocess providers
+    sandbox_handle: Optional[Any] = None           # SandboxHandle (typed as Any to avoid circular import)
+    sandbox_provider: Optional[Any] = None         # SandboxProvider instance
+    sandbox_session_key: Optional[str] = None      # Key used with SandboxSessionService
+    pre_existing_remote_files: set = field(default_factory=set)  # Snapshot before turn for remote pull diff
+
     # Original inputs (needed by finalize for metadata)
     processed_files: List[Dict[str, Any]] = field(default_factory=list)
     search_params: Optional[Dict[str, Any]] = None

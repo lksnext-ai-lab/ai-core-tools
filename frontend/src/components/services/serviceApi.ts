@@ -2,6 +2,7 @@ import { apiService } from '../../services/api';
 import type {
   ListProviderModelsRequest,
   ListProviderModelsResponse,
+  SandboxServiceFormData,
   ServiceFormData,
   ServiceKind,
   ServiceScope,
@@ -15,21 +16,25 @@ export interface TestConnectionResult {
 
 /** Strongly-typed view of the API surface needed by a single (kind, scope) combo. */
 export interface ServiceApiClient {
-  listModels(req: ListProviderModelsRequest): Promise<ListProviderModelsResponse>;
+  /** Sandbox services have no "list models" concept — omitted for `kind === 'sandbox'`. */
+  listModels?(req: ListProviderModelsRequest): Promise<ListProviderModelsResponse>;
   /**
    * Test the connection with the provided payload. When ``serviceId`` is
    * supplied (edit mode) and the payload's API key is masked, the backend
    * recovers the stored key transparently — so the user doesn't have to
    * re-type the secret on every check.
    */
-  testConnection(payload: ServiceFormData, serviceId?: number): Promise<TestConnectionResult>;
+  testConnection(
+    payload: ServiceFormData | SandboxServiceFormData,
+    serviceId?: number,
+  ): Promise<TestConnectionResult>;
 }
 
 /**
  * Resolve the right API methods for the given service context.
  *
  * Both the wizard's "list models" hook and the "test connection" button
- * need to fan out across four endpoints (AI/embedding × app/system).
+ * need to fan out across six endpoints (AI/embedding/sandbox × app/system).
  * Centralising that fan-out here keeps the dispatch logic in one place
  * — adding a new action means touching this factory only.
  *
@@ -53,11 +58,20 @@ export function getServiceApiClient(
           ) as Promise<TestConnectionResult>,
       };
     }
+    if (kind === 'embedding') {
+      return {
+        listModels: (req) =>
+          apiService.listSystemEmbeddingServiceProviderModels(req),
+        testConnection: (payload, serviceId) =>
+          apiService.testSystemEmbeddingServiceConnectionWithConfig(
+            payload,
+            serviceId,
+          ) as Promise<TestConnectionResult>,
+      };
+    }
     return {
-      listModels: (req) =>
-        apiService.listSystemEmbeddingServiceProviderModels(req),
       testConnection: (payload, serviceId) =>
-        apiService.testSystemEmbeddingServiceConnectionWithConfig(
+        apiService.testSystemSandboxServiceConnectionWithConfig(
           payload,
           serviceId,
         ) as Promise<TestConnectionResult>,
@@ -80,10 +94,20 @@ export function getServiceApiClient(
         ) as Promise<TestConnectionResult>,
     };
   }
+  if (kind === 'embedding') {
+    return {
+      listModels: (req) => apiService.listEmbeddingServiceProviderModels(id, req),
+      testConnection: (payload, serviceId) =>
+        apiService.testEmbeddingServiceConnectionWithConfig(
+          id,
+          payload,
+          serviceId,
+        ) as Promise<TestConnectionResult>,
+    };
+  }
   return {
-    listModels: (req) => apiService.listEmbeddingServiceProviderModels(id, req),
     testConnection: (payload, serviceId) =>
-      apiService.testEmbeddingServiceConnectionWithConfig(
+      apiService.testSandboxServiceConnectionWithConfig(
         id,
         payload,
         serviceId,

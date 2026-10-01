@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus } from 'lucide-react';
-import { apiService } from '../services/api';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
+import { apiService, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
-import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD } from '../constants/agentConstants';
+import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
@@ -16,6 +17,7 @@ import type { SearchFilterMetadataField } from '../components/playground/SearchF
 import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
+import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
 
 // Define the Agent types
 interface Agent {
@@ -28,10 +30,12 @@ interface Agent {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  skill_router_enabled?: boolean;
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -52,12 +56,21 @@ interface Agent {
   rag_score_threshold?: number | null;
   rag_max_retrieval_calls?: number | null;
   rag_fixed_filters?: RagFixedFilter[];
-  ai_services: Array<{ service_id: number; name: string }>;
+  // Media processing configuration (playground media upload)
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  media_embedding_service_id?: number | null;
+  media_forced_language?: string | null;
+  media_chunk_min_duration?: number | null;
+  media_chunk_max_duration?: number | null;
+  media_chunk_overlap?: number | null;
+  ai_services: Array<{ service_id: number; name: string; supports_video?: boolean }>;
+  sandbox_services: Array<{ service_id: number; name: string }>;
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
-  skills: Array<{ skill_id: number; name: string; description?: string }>;
+  skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean; is_system?: boolean }>;
 }
 
 interface AgentFormData {
@@ -69,11 +82,13 @@ interface AgentFormData {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  skill_router_enabled: boolean;
   server_tools: string[];
   memory_max_messages: number;
   memory_max_tokens: number;
   memory_summarize_threshold: number;
   service_id?: number;
+  sandbox_service_id?: number;
   silo_id?: number;
   output_parser_id?: number;
   temperature: number;
@@ -91,6 +106,14 @@ interface AgentFormData {
   rag_score_threshold: number | null;
   rag_max_retrieval_calls: number | null;
   rag_fixed_filters: RagFixedFilter[];
+  // Media processing configuration (playground media upload)
+  transcription_service_id?: number;
+  video_ai_service_id?: number;
+  media_embedding_service_id?: number;
+  media_forced_language?: string;
+  media_chunk_min_duration: number;
+  media_chunk_max_duration: number;
+  media_chunk_overlap: number;
 }
 
 // Output Parser Field Component
@@ -159,6 +182,12 @@ function getPageDescription(type: string, isNewAgent: boolean, agentName?: strin
   return `Modify agent: ${agentName}`;
 }
 
+function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: number }) {
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
+  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-gray-900">Scheduled tasks using this agent</h3><p className="text-sm text-gray-500">Scheduling is managed independently from the agent.</p></div><button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button></div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-gray-500">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
+}
+
 function AgentFormPage() {
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
@@ -206,11 +235,12 @@ function AgentFormPage() {
     name: '',
     description: '',
     system_prompt: '',
-    prompt_template: '{question}',
+    prompt_template: DEFAULT_PROMPT_TEMPLATE,
     type: 'agent',
     is_tool: false,
     has_memory: false,
     enable_code_interpreter: false,
+    skill_router_enabled: false,
     server_tools: [],
     memory_max_messages: 20,
     memory_max_tokens: 4000,
@@ -224,11 +254,16 @@ function AgentFormPage() {
     rag_search_type: 'similarity',
     rag_score_threshold: null,
     rag_max_retrieval_calls: 4,
-    rag_fixed_filters: []
+    rag_fixed_filters: [],
+    media_embedding_service_id: undefined,
+    media_chunk_min_duration: 30,
+    media_chunk_max_duration: 120,
+    media_chunk_overlap: 5
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
   const [loadingSiloMetadata, setLoadingSiloMetadata] = useState(false);
+  const [embeddingServices, setEmbeddingServices] = useState<Array<{ service_id: number; name: string }>>([]);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -252,6 +287,31 @@ function AgentFormPage() {
       setLoading(false);
     }
   }, [appId, agentId]);
+
+  // Load the app's embedding services to populate the media embedding selector.
+  useEffect(() => {
+    if (!appId) return;
+    let cancelled = false;
+    apiService
+      .getEmbeddingServices(Number.parseInt(appId))
+      .then((services) => {
+        if (cancelled) return;
+        const list = Array.isArray(services) ? services : [];
+        setEmbeddingServices(
+          list.map((s: { service_id: number; name: string }) => ({
+            service_id: s.service_id,
+            name: s.name,
+          }))
+        );
+      })
+      .catch((err) => {
+        console.error('Error loading embedding services:', err);
+        setEmbeddingServices([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appId]);
 
   // Load the selected silo's metadata fields to power the fixed-filter editor.
   useEffect(() => {
@@ -292,16 +352,18 @@ function AgentFormPage() {
         name: response.name || '',
         description: response.description || '',
         system_prompt: response.system_prompt || '',
-        prompt_template: response.prompt_template || '',
+        prompt_template: response.prompt_template || DEFAULT_PROMPT_TEMPLATE,
         type: response.type || 'agent',
         is_tool: response.is_tool || false,
         has_memory: response.has_memory || false,
         enable_code_interpreter: response.enable_code_interpreter || false,
+        skill_router_enabled: response.skill_router_enabled || false,
         server_tools: response.server_tools || [],
         memory_max_messages: response.memory_max_messages || 20,
         memory_max_tokens: response.memory_max_tokens || 4000,
         memory_summarize_threshold: response.memory_summarize_threshold || DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
         service_id: response.service_id || undefined,
+        sandbox_service_id: response.sandbox_service_id || undefined,
         silo_id: response.silo_id || undefined,
         output_parser_id: response.output_parser_id || undefined,
         temperature: response.temperature ?? DEFAULT_AGENT_TEMPERATURE,
@@ -321,7 +383,15 @@ function AgentFormPage() {
         rag_fixed_filters: (response.rag_fixed_filters ?? []).map((f) => ({
           ...f,
           _key: Math.random().toString(36).slice(2),
-        }))
+        })),
+        // Media processing configuration
+        transcription_service_id: response.transcription_service_id || undefined,
+        video_ai_service_id: response.video_ai_service_id || undefined,
+        media_embedding_service_id: response.media_embedding_service_id || undefined,
+        media_forced_language: response.media_forced_language || '',
+        media_chunk_min_duration: response.media_chunk_min_duration ?? 30,
+        media_chunk_max_duration: response.media_chunk_max_duration ?? 120,
+        media_chunk_overlap: response.media_chunk_overlap ?? 5
       });
 
       // Set output parser toggle based on whether agent has an output parser
@@ -485,10 +555,25 @@ function AgentFormPage() {
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
 
+    // The template is formatted with the user message; without {question} the message is lost.
+    if (!formData.prompt_template.includes(DEFAULT_PROMPT_TEMPLATE)) {
+      setActiveTab('prompts');
+      setError('The Prompt Template must include {question} before saving.');
+      return;
+    }
+
     // Mirror the backend invariant: a threshold strategy needs a threshold value.
     if (usesThreshold && formData.rag_score_threshold == null) {
       setActiveTab('configuration');
       setError(SCORE_THRESHOLD_REQUIRED_MSG);
+      return;
+    }
+
+    // Mirror the backend invariant: a media embedding service is required so
+    // uploaded media/documents are always vectorized with a valid model.
+    if (!formData.media_embedding_service_id) {
+      setActiveTab('configuration');
+      setError('Select a media embedding service in Media Processing before saving.');
       return;
     }
 
@@ -507,11 +592,13 @@ function AgentFormPage() {
       is_tool: formData.is_tool,
       has_memory: formData.has_memory,
       enable_code_interpreter: formData.enable_code_interpreter,
+      skill_router_enabled: formData.skill_router_enabled,
       server_tools: formData.server_tools,
       memory_max_messages: formData.memory_max_messages,
       memory_max_tokens: formData.memory_max_tokens,
       memory_summarize_threshold: formData.memory_summarize_threshold,
       service_id: formData.service_id,
+      sandbox_service_id: formData.enable_code_interpreter ? formData.sandbox_service_id : undefined,
       silo_id: formData.silo_id,
       output_parser_id: formData.output_parser_id,
       temperature: formData.temperature,
@@ -529,6 +616,14 @@ function AgentFormPage() {
       rag_score_threshold: usesThreshold ? formData.rag_score_threshold : null,
       rag_max_retrieval_calls: formData.rag_max_retrieval_calls,
       rag_fixed_filters: hasSilo ? cleanedFilters : [],
+      // Media processing configuration
+      transcription_service_id: formData.transcription_service_id,
+      video_ai_service_id: formData.video_ai_service_id,
+      media_embedding_service_id: formData.media_embedding_service_id,
+      media_forced_language: formData.media_forced_language || undefined,
+      media_chunk_min_duration: formData.media_chunk_min_duration,
+      media_chunk_max_duration: formData.media_chunk_max_duration,
+      media_chunk_overlap: formData.media_chunk_overlap,
       app_id: Number.parseInt(appId),
     };
 
@@ -575,7 +670,8 @@ function AgentFormPage() {
     { id: 'prompts', label: 'Prompts' },
     { id: 'configuration', label: 'Configuration' },
     { id: 'advanced', label: 'Advanced' },
-    { id: 'marketplace', label: 'Marketplace' }
+    { id: 'marketplace', label: 'Marketplace' },
+    ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
   ];
 
   return (
@@ -620,6 +716,7 @@ function AgentFormPage() {
             activeTab={activeTab}
             onChange={setActiveTab}
           />
+          {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
 
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (
@@ -634,7 +731,7 @@ function AgentFormPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre *
+                    Name *
                   </label>
                   <input
                     type="text"
@@ -643,7 +740,7 @@ function AgentFormPage() {
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     required
-                    placeholder="Nombre..."
+                    placeholder="Name..."
                   />
                 </div>
 
@@ -664,7 +761,7 @@ function AgentFormPage() {
 
                 <div className="md:col-span-2">
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Descripción
+                    Description
                   </label>
                   <input
                     type="text"
@@ -672,7 +769,7 @@ function AgentFormPage() {
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    placeholder="Descripción..."
+                    placeholder="Description..."
                   />
                 </div>
               </div>
@@ -728,7 +825,7 @@ function AgentFormPage() {
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configura la estrategia de gestión de memoria del agente</p>
+                        <p className="text-sm text-gray-600 mt-1">Configure the agent's memory management strategy</p>
                       </div>
                     </div>
 
@@ -736,10 +833,10 @@ function AgentFormPage() {
                       <div className="flex items-start">
                         <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
                         <div>
-                          <p className="text-sm text-indigo-800 font-medium">Estrategia Híbrida Automática</p>
+                          <p className="text-sm text-indigo-800 font-medium">Automatic Hybrid Strategy</p>
                           <p className="text-xs text-indigo-700 mt-1">
-                            El agente aplica automáticamente una estrategia híbrida que elimina mensajes de herramientas, 
-                            recorta el historial y gestiona los límites de tokens para optimizar el rendimiento y los costos.
+                            The agent automatically applies a hybrid strategy that removes tool messages, trims the history,
+                            and manages token limits to optimize performance and costs.
                           </p>
                         </div>
                       </div>
@@ -748,7 +845,7 @@ function AgentFormPage() {
                     <div className="space-y-6">
                       <div>
                         <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                          Máximo de Mensajes
+                          Maximum Messages
                         </label>
                         <input
                           type="number"
@@ -760,13 +857,13 @@ function AgentFormPage() {
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de mensajes a mantener en el historial de conversación (recomendado: 20)
+                          Maximum number of messages to keep in the conversation history (recommended: 20)
                         </p>
                       </div>
 
                       <div>
                         <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                          Límite de Tokens
+                          Token Limit
                         </label>
                         <input
                           type="number"
@@ -779,13 +876,13 @@ function AgentFormPage() {
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          Número máximo de tokens para el historial de conversación (recomendado: 4000)
+                          Maximum number of tokens for the conversation history (recommended: 4000)
                         </p>
                       </div>
 
                       <div>
                         <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                          Umbral de Resumen
+                          Summarization Threshold
                         </label>
                         <input
                           type="number"
@@ -797,16 +894,16 @@ function AgentFormPage() {
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
                         <p className="text-xs text-gray-500 mt-2">
-                          Número de mensajes antiguos a partir del cual se considera resumir (futura implementación, recomendado: 10)
+                          Number of old messages at which summarization is considered (future implementation, recommended: 10)
                         </p>
                       </div>
                     </div>
 
                     <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Configuración Actual:</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600">Mensajes:</span>
+                          <span className="text-gray-600">Messages:</span>
                           <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
                         </div>
                         <div>
@@ -814,7 +911,7 @@ function AgentFormPage() {
                           <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Umbral:</span>
+                          <span className="text-gray-600">Threshold:</span>
                           <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
                         </div>
                       </div>
@@ -1033,13 +1130,53 @@ function AgentFormPage() {
                           type="checkbox"
                           checked={formData.enable_code_interpreter}
                           onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
+                          aria-describedby="enable_code_interpreter_help"
                           className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                         <div className="ml-3">
                           <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
-                          <p className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
+                          <p id="enable_code_interpreter_help" className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
                         </div>
                       </div>
+
+                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
+                        <input
+                          id="skill_router_enabled"
+                          type="checkbox"
+                          checked={formData.skill_router_enabled}
+                          onChange={(e) => handleInputChange('skill_router_enabled', e.target.checked)}
+                          aria-describedby="skill_router_enabled_help"
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="skill_router_enabled" className="text-sm font-medium text-gray-900">Skill Router</label>
+                          <p id="skill_router_enabled_help" className="text-xs text-gray-500">Let the model pre-select at most 2 skills per turn; off by default.</p>
+                        </div>
+                      </div>
+
+                      {formData.enable_code_interpreter && (
+                        <div className="md:col-span-2">
+                          <label htmlFor="sandbox_service" className="block text-sm font-medium text-gray-700 mb-2">
+                            Sandbox Service
+                          </label>
+                          <select
+                            id="sandbox_service"
+                            value={formData.sandbox_service_id || ''}
+                            onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                          >
+                            <option value="">Use app/system default</option>
+                            {agent?.sandbox_services.map((service) => (
+                              <option key={service.service_id} value={service.service_id}>
+                                {service.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Provider-side Tools */}
@@ -1125,9 +1262,153 @@ function AgentFormPage() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Media Processing Card */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                    <div className="flex items-center mb-6">
+                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
+                        <Tv className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-semibold text-gray-900">Media Processing</h3>
+                        <p className="text-sm text-gray-500">
+                          Default configuration used when uploading audio/video or YouTube URLs in the playground.
+                          Set it here once so uploads only require choosing the file or URL.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <label htmlFor="media_embedding_service" className="block text-sm font-medium text-gray-700 mb-2">
+                        Embedding Service <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="media_embedding_service"
+                        required
+                        value={formData.media_embedding_service_id || ''}
+                        onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                      >
+                        <option value="">Select Embedding Service</option>
+                        {embeddingServices.map((service) => (
+                          <option key={service.service_id} value={service.service_id}>
+                            {service.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Required. Model used to vectorize uploaded media/documents into the conversation's
+                        temporary knowledge base for retrieval.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label htmlFor="transcription_service" className="block text-sm font-medium text-gray-700 mb-2">
+                          Transcription Service
+                        </label>
+                        <select
+                          id="transcription_service"
+                          value={formData.transcription_service_id || ''}
+                          onChange={(e) => handleInputChange('transcription_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        >
+                          <option value="">Select Transcription Service</option>
+                          {agent?.ai_services.map((service) => (
+                            <option key={service.service_id} value={service.service_id}>
+                              {service.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Speech-to-text model used to transcribe media.</p>
+                      </div>
+
+                      <div>
+                        <label htmlFor="video_ai_service" className="block text-sm font-medium text-gray-700 mb-2">
+                          Video Analysis Service (optional)
+                        </label>
+                        <select
+                          id="video_ai_service"
+                          value={formData.video_ai_service_id || ''}
+                          onChange={(e) => handleInputChange('video_ai_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        >
+                          <option value="">None (audio only)</option>
+                          {agent?.ai_services.filter((service) => service.supports_video).map((service) => (
+                            <option key={service.service_id} value={service.service_id}>
+                              {service.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Enables multimodal analysis (visual descriptions from video frames).</p>
+                      </div>
+
+                      <div>
+                        <label htmlFor="media_forced_language" className="block text-sm font-medium text-gray-700 mb-2">
+                          Language
+                        </label>
+                        <select
+                          id="media_forced_language"
+                          value={formData.media_forced_language || ''}
+                          onChange={(e) => handleInputChange('media_forced_language', e.target.value || undefined)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        >
+                          <option value="">Auto-detect</option>
+                          <option value="es">Spanish</option>
+                          <option value="en">English</option>
+                          <option value="eu">Basque</option>
+                          <option value="fr">French</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                      <div>
+                        <label htmlFor="media_chunk_min_duration" className="block text-sm font-medium text-gray-700 mb-2">
+                          Min Chunk (s)
+                        </label>
+                        <input
+                          id="media_chunk_min_duration"
+                          type="number"
+                          min={10}
+                          max={60}
+                          value={formData.media_chunk_min_duration}
+                          onChange={(e) => handleInputChange('media_chunk_min_duration', Number.parseInt(e.target.value) || 30)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="media_chunk_max_duration" className="block text-sm font-medium text-gray-700 mb-2">
+                          Max Chunk (s)
+                        </label>
+                        <input
+                          id="media_chunk_max_duration"
+                          type="number"
+                          min={60}
+                          max={300}
+                          value={formData.media_chunk_max_duration}
+                          onChange={(e) => handleInputChange('media_chunk_max_duration', Number.parseInt(e.target.value) || 120)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="media_chunk_overlap" className="block text-sm font-medium text-gray-700 mb-2">
+                          Overlap (s)
+                        </label>
+                        <input
+                          id="media_chunk_overlap"
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={formData.media_chunk_overlap}
+                          onChange={(e) => handleInputChange('media_chunk_overlap', Number.parseInt(e.target.value) || 5)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
-
               {/* Configuration for OCR agents */}
               {formData.type === 'ocr_agent' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -1137,7 +1418,43 @@ function AgentFormPage() {
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
                   </div>
-                  
+
+                  {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 mb-6">
+                    <div className="flex items-center mb-4">
+                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <Zap className="w-4 h-4 text-green-600" />
+                      </div>
+                      <h4 className="text-base font-semibold text-gray-900">Capabilities</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center p-3 bg-white rounded-lg border border-gray-200">
+                        <input
+                          id="is_tool_ocr"
+                          type="checkbox"
+                          checked={formData.is_tool}
+                          onChange={(e) => {
+                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                              setShowMcpWarning(true);
+                            } else {
+                              handleInputChange('is_tool', e.target.checked);
+                            }
+                          }}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="ml-3">
+                          <label htmlFor="is_tool_ocr" className="text-sm font-medium text-gray-900">Tool Agent</label>
+                          <p className="text-xs text-gray-500">Can be used by other agents (including OCR tools)</p>
+                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                            <p className="text-xs text-purple-600 mt-1">
+                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* No AI Services Warning */}
                   {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
 
@@ -1392,34 +1709,53 @@ function AgentFormPage() {
                   {agent.skills.length > 0 ? (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {agent.skills.map((skill) => (
-                          <label
-                            key={skill.skill_id}
-                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
-                              formData.skill_ids.includes(skill.skill_id)
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center">
-                                <input
-                                  type="checkbox"
-                                  checked={formData.skill_ids.includes(skill.skill_id)}
-                                  onChange={() => handleSkillToggle(skill.skill_id)}
-                                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
+                        {agent.skills.map((skill) => {
+                          const descriptionId = skill.description ? `skill-desc-${skill.skill_id}` : undefined;
+                          const disabledBadgeId = skill.is_enabled === false ? `skill-disabled-${skill.skill_id}` : undefined;
+                          const systemBadgeId = skill.is_system ? `skill-system-${skill.skill_id}` : undefined;
+                          const describedBy = [systemBadgeId, disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
+                          return (
+                            <label
+                              key={skill.skill_id}
+                              className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
+                                formData.skill_ids.includes(skill.skill_id)
+                                  ? 'border-purple-500 bg-purple-50'
+                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={formData.skill_ids.includes(skill.skill_id)}
+                                    onChange={() => handleSkillToggle(skill.skill_id)}
+                                    aria-label={skill.name}
+                                    aria-describedby={describedBy}
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                  />
+                                  <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
+                                </div>
+                                <div className={`w-2 h-2 rounded-full ${
+                                  formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
+                                }`} />
                               </div>
-                              <div className={`w-2 h-2 rounded-full ${
-                                formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
-                              }`} />
-                            </div>
-                            {skill.description && (
-                              <p className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
-                            )}
-                          </label>
-                        ))}
+                              {skill.is_system && (
+                                <p id={systemBadgeId} className="mt-2 ml-7">
+                                  <Badge label="System" variant="secondary" />
+                                </p>
+                              )}
+                              {skill.is_enabled === false && (
+                                <p id={disabledBadgeId} className="mt-2 ml-7 inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
+                                  <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                                  Disabled — ignored at execution until re-enabled
+                                </p>
+                              )}
+                              {skill.description && (
+                                <p id={descriptionId} className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
+                              )}
+                            </label>
+                          );
+                        })}
                       </div>
 
                       {formData.skill_ids.length > 0 && (
@@ -1649,6 +1985,15 @@ function AgentFormPage() {
               )}
               </>
               )}
+            </div>
+          )}
+
+          {activeTab === 'metrics' && !isNewAgent && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+              <AgentMetricsTab
+                appId={Number(appId)}
+                agentId={Number(agentId)}
+              />
             </div>
           )}
 

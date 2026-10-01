@@ -3,11 +3,13 @@ from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.ocr_agent import OCRAgent
 from models.ai_service import AIService
+from models.sandbox_service import SandboxService
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
 from models.skill import Skill
 from repositories.ai_service_repository import AIServiceRepository
+from repositories.sandbox_service_repository import SandboxServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
@@ -208,7 +210,21 @@ class AgentRepository:
             s.service_id: {"name": s.name, "model_name": s.description, "provider": s.provider}
             for s in ai_services
         }
-    
+
+    @staticmethod
+    def get_sandbox_services_by_app_id(db: Session, app_id: int) -> List[SandboxService]:
+        """Get all sandbox services for a specific app, including system (app_id=NULL) services."""
+        return SandboxServiceRepository.get_by_app_id(db, app_id) + SandboxServiceRepository.get_system_services(db)
+
+    @staticmethod
+    def get_sandbox_services_dict_by_app_id(db: Session, app_id: int) -> Dict[int, Dict[str, str]]:
+        """Get sandbox services as a dictionary for quick lookup"""
+        sandbox_services = AgentRepository.get_sandbox_services_by_app_id(db, app_id)
+        return {
+            s.service_id: {"name": s.name, "provider": s.provider}
+            for s in sandbox_services
+        }
+
     @staticmethod
     def get_silos_by_app_id(db: Session, app_id: int) -> List[Silo]:
         """Get all silos for a specific app"""
@@ -226,9 +242,13 @@ class AgentRepository:
         return MCPConfigRepository.get_all_by_app_id(db, app_id)
 
     @staticmethod
-    def get_skills_by_app_id(db: Session, app_id: int) -> List[Skill]:
-        """Get all skills for a specific app"""
-        return SkillRepository.get_all_by_app_id(db, app_id)
+    def get_selectable_skills_for_app(db: Session, app_id: int, agent_id: Optional[int] = None) -> List[Skill]:
+        """Skills selectable in an agent form: app skills plus enabled, non-colliding system skills.
+
+        Delegates to ``SkillRepository.get_selectable_for_app`` (the single visibility predicate). System skills
+        already attached to ``agent_id`` are kept even if disabled so the form can flag them.
+        """
+        return SkillRepository.get_selectable_for_app(db, app_id, agent_id)
 
     @staticmethod
     def get_silo_by_id(db: Session, silo_id: int) -> Optional[Silo]:
@@ -287,10 +307,21 @@ class AgentRepository:
         # Get AI services
         ai_services = AgentRepository.get_ai_services_by_app_id(db, app_id)
         ai_services_list = [
-            {"service_id": s.service_id, "name": f"[System] {s.name}" if s.app_id is None else s.name}
+            {
+                "service_id": s.service_id,
+                "name": f"[System] {s.name}" if s.app_id is None else s.name,
+                "supports_video": s.supports_video,
+            }
             for s in ai_services
         ]
         
+        # Get sandbox services
+        sandbox_services = AgentRepository.get_sandbox_services_by_app_id(db, app_id)
+        sandbox_services_list = [
+            {"service_id": s.service_id, "name": f"[System] {s.name}" if s.app_id is None else s.name}
+            for s in sandbox_services
+        ]
+
         # Get silos
         silos = AgentRepository.get_silos_by_app_id(db, app_id)
         silos_list = [{"silo_id": s.silo_id, "name": s.name} for s in silos]
@@ -308,11 +339,21 @@ class AgentRepository:
         mcp_configs_list = [{"config_id": c.config_id, "name": c.name} for c in mcp_configs]
 
         # Get skills
-        skills = AgentRepository.get_skills_by_app_id(db, app_id)
-        skills_list = [{"skill_id": s.skill_id, "name": s.name, "description": s.description} for s in skills]
+        skills = AgentRepository.get_selectable_skills_for_app(db, app_id, agent_id=agent_id)
+        skills_list = [
+            {
+                "skill_id": s.skill_id,
+                "name": s.name,
+                "description": s.description,
+                "is_system": s.is_system,
+                "is_enabled": True if s.is_enabled is None else bool(s.is_enabled),
+            }
+            for s in skills
+        ]
 
         return {
             'ai_services': ai_services_list,
+            'sandbox_services': sandbox_services_list,
             'silos': silos_list,
             'output_parsers': output_parsers_list,
             'tools': tools_list,

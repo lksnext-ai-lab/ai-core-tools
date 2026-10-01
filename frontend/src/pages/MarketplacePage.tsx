@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { MarketplaceAgentCard } from '../components/marketplace/MarketplaceAgentCard';
+import { MarketplaceScheduledTasksTab } from '../components/marketplace/MarketplaceScheduledTasksTab';
+import { Pagination } from '../components/marketplace/Pagination';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 import type {
   MarketplaceAgentCard as MarketplaceAgentCardType,
@@ -21,10 +23,58 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'alphabetical', label: 'A–Z' },
 ];
 
+type MarketplaceTab = 'agents' | 'tasks';
+
+const TABS: { value: MarketplaceTab; label: string }[] = [
+  { value: 'agents', label: 'Agents' },
+  { value: 'tasks', label: 'Scheduled tasks' },
+];
+
 /**
- * Marketplace catalog page — browse, search, and filter published agents.
+ * Marketplace page — published agents (to chat with) and published scheduled tasks
+ * (read-only results), each in its own tab.
  */
 export default function MarketplacePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: MarketplaceTab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'agents';
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Marketplace</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          {tab === 'agents'
+            ? 'Discover and chat with AI agents published across the platform.'
+            : 'Browse the results of scheduled tasks published across the platform.'}
+        </p>
+      </div>
+      <div role="tablist" aria-label="Marketplace sections" className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+        {TABS.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.value}
+            onClick={() => setSearchParams(item.value === 'agents' ? {} : { tab: item.value })}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              tab === item.value
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel">
+        {tab === 'agents' ? <MarketplaceAgentsTab /> : <MarketplaceScheduledTasksTab />}
+      </div>
+    </div>
+  );
+}
+
+/** Catalog of published agents — browse, search, and filter. */
+function MarketplaceAgentsTab() {
   const navigate = useNavigate();
 
   // Filter / pagination state
@@ -128,14 +178,6 @@ export default function MarketplacePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Agent Marketplace</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Discover and chat with AI agents published across the platform.
-        </p>
-      </div>
-
       {/* Controls bar */}
       <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
         {/* Search */}
@@ -218,84 +260,5 @@ function EmptyState({ search, category }: EmptyStateProps) {
           : 'No agents have been published to the marketplace yet.'}
       </p>
     </div>
-  );
-}
-
-interface PaginationProps {
-  readonly page: number;
-  readonly totalPages: number;
-  readonly onPageChange: (page: number) => void;
-}
-
-function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
-  // Build a window of page numbers around the current page
-  const pages: number[] = [];
-  const start = Math.max(1, page - 2);
-  const end = Math.min(totalPages, page + 2);
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
-
-  return (
-    <nav className="flex items-center justify-center gap-1 mt-4" aria-label="Pagination">
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
-      >
-        Previous
-      </button>
-
-      {start > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={() => onPageChange(1)}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-          >
-            1
-          </button>
-          {start > 2 && <span className="px-2 text-gray-400">…</span>}
-        </>
-      )}
-
-      {pages.map((p) => (
-        <button
-          key={p}
-          type="button"
-          onClick={() => onPageChange(p)}
-          className={`px-3 py-2 text-sm rounded-lg border ${
-            p === page
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          {p}
-        </button>
-      ))}
-
-      {end < totalPages && (
-        <>
-          {end < totalPages - 1 && <span className="px-2 text-gray-400">…</span>}
-          <button
-            type="button"
-            onClick={() => onPageChange(totalPages)}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-          >
-            {totalPages}
-          </button>
-        </>
-      )}
-
-      <button
-        type="button"
-        disabled={page >= totalPages}
-        onClick={() => onPageChange(page + 1)}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
-      >
-        Next
-      </button>
-    </nav>
   );
 }

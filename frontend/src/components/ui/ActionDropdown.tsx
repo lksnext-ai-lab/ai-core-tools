@@ -177,6 +177,7 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   const handleActionClick = (action: ActionItem) => {
     if (!action.disabled) {
       setIsOpen(false);
+      triggerRef.current?.focus();
       setTimeout(() => {
         action.onClick();
       }, 0);

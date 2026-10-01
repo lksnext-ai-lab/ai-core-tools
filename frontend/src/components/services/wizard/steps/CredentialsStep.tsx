@@ -2,7 +2,7 @@ import { ExternalLink } from 'lucide-react';
 import { FormField } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
 import { getProviderDescriptor } from '../providers';
-import type { ServiceWizardMode } from '../../../../types/services';
+import type { ServiceKind, ServiceWizardMode } from '../../../../types/services';
 
 /** Provider-specific label for the secret field. */
 const API_KEY_LABELS: Record<string, string> = {
@@ -22,9 +22,16 @@ export interface CredentialsState {
   aws_access_key_id?: string;
   /** AWS Bedrock: region, e.g. us-east-1. */
   aws_region?: string;
+  /** Sandbox (OpenSandbox): container image used to create sandboxes. */
+  image?: string;
+  /** Sandbox (Daytona): target/region identifier. */
+  target?: string;
+  /** Sandbox (E2B): template id used to create sandboxes. */
+  template?: string;
 }
 
 interface CredentialsStepProps {
+  readonly kind: ServiceKind;
   readonly provider: string;
   readonly mode: ServiceWizardMode;
   readonly value: CredentialsState;
@@ -32,6 +39,7 @@ interface CredentialsStepProps {
 }
 
 function CredentialsStep({
+  kind,
   provider,
   mode,
   value,
@@ -61,6 +69,8 @@ function CredentialsStep({
   let baseUrlLabel = 'Base URL';
   if (descriptor.value === 'GoogleCloud') baseUrlLabel = 'GCP Project ID';
   else if (descriptor.value === 'Azure') baseUrlLabel = 'Azure endpoint';
+  else if (descriptor.value === 'opensandbox') baseUrlLabel = 'OpenSandbox server domain';
+  else if (descriptor.value === 'daytona') baseUrlLabel = 'Daytona API URL';
 
   return (
     <div className="space-y-4">
@@ -159,6 +169,42 @@ function CredentialsStep({
         />
       )}
 
+      {manualFields.includes('image') && (
+        <FormField
+          label="Container image"
+          id="image"
+          type="text"
+          value={value.image ?? ''}
+          onChange={(e) => update({ image: e.target.value })}
+          placeholder="python:3.11-slim"
+          helpText="Docker image used to create sandbox containers. Leave empty to use the server default."
+        />
+      )}
+
+      {manualFields.includes('target') && (
+        <FormField
+          label="Target"
+          id="target"
+          type="text"
+          value={value.target ?? ''}
+          onChange={(e) => update({ target: e.target.value })}
+          placeholder="us"
+          helpText="Daytona target/region identifier. Leave empty to use the account default."
+        />
+      )}
+
+      {manualFields.includes('template') && (
+        <FormField
+          label="Template"
+          id="template"
+          type="text"
+          value={value.template ?? ''}
+          onChange={(e) => update({ template: e.target.value })}
+          placeholder="base"
+          helpText="E2B sandbox template id. Leave empty to use the default template."
+        />
+      )}
+
       {descriptor.value === 'Bedrock' && (
         <Alert
           type="info"
@@ -167,7 +213,7 @@ function CredentialsStep({
         />
       )}
 
-      {!descriptor.supportsModelListing && (
+      {kind !== 'sandbox' && !descriptor.supportsModelListing && (
         <Alert
           type="info"
           title="Manual model entry"

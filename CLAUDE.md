@@ -83,6 +83,18 @@ docker compose down -v           # Parar y borrar volúmenes
 - Acceso: `http://localhost/` en local, `http://<ip-servidor>/` en cliente.
 - Swagger: `/docs/internal` y `/docs/public` desde el mismo origen.
 - Utilities aisladas (p. ej. Qdrant + web UI): `docker/utilities/`.
+- **Sandbox / Code Interpreter**: el servicio `opensandbox` (monta el socket de Docker,
+  así que está deshabilitado por defecto) NO arranca con el `docker compose up -d` de
+  arriba — está detrás de un profile, igual que `db_test`. Para habilitar el code
+  interpreter de los agentes:
+  ```bash
+  docker compose --profile opensandbox up -d --build
+  ```
+  `SANDBOX_DEFAULT_PROVIDER=opensandbox` viene activo por defecto en `.env.example`
+  aunque no se use este profile; sin el profile, cualquier agente con
+  `enable_code_interpreter=true` degrada el code interpreter para ese turno en vez de
+  fallar (no hace falta desactivar el provider por defecto si no vas a usar el
+  sandbox).
 
 ### Client Project Management
 
@@ -106,7 +118,8 @@ docker compose down -v           # Parar y borrar volúmenes
 | **OCRAgent** | Agent subclass (STI via `type` column). Dual-LLM: vision model for scanned pages + text model for structuring output. |
 | **AIService** | LLM provider config (OpenAI, Anthropic, MistralAI, Azure, Google, Custom). |
 | **EmbeddingService** | Embedding model config for vector stores. Providers: OpenAI, MistralAI, Ollama, Custom/HuggingFace, Azure OpenAI, Google AI Studio, Google Cloud Vertex AI. |
-| **Skill** | Reusable markdown prompt block attached to agents (M:N). Injected into system prompt at execution time. |
+| **Skill** | Reusable markdown prompt block attached to agents (M:N). Injected into system prompt at execution time. App-scoped or system-wide (`app_id IS NULL`). |
+| **SkillFile** | One bundled package file (script, reference, template) for a Skill, text/bytes split with checksum. |
 | **OutputParser** | JSON-schema definition for structured LLM output. Dynamically generates a Pydantic model at runtime. |
 | **Conversation** | Chat session. Memory state in LangGraph's PostgreSQL checkpointer; metadata in Conversation table. |
 | **Silo** | Vector store container. Maps to a collection (`silo_{id}`) in PGVector or Qdrant (configurable per silo). |
@@ -269,6 +282,9 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - **Cascade deletion**: `AppService.delete_app()` performs ordered deletion across all entity types
 - **LangSmith tracing**: Per-App key in `App.langsmith_api_key` (project = app name) with optional global env-var fallback (`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT`). Validated via `POST /internal/apps/{id}/langsmith/test`. Central module: `backend/tools/langsmith_config.py`
 - **MCP dual-role**: Mattin AI acts as both MCP server (exposing agents) and MCP client (consuming external tool servers)
+- **No plugin system**: SharePoint sync (`services/sharepoint/`) and agent metrics (`services/agent_metrics_collector.py` + `agent_metrics_recorder.py`, `routers/internal/metrics.py`, dashboards at platform/app/agent level) are regular core features — the former open-core `mattin.plugins` entry-point loader and `/internal/capabilities` endpoint were removed
+- **Scheduled tasks** (DBOS, `backend/scheduling/`): runs execute as the task, not a user (`task_user_context`) — conversations carry `Conversation.scheduled_task_id` with `user_id` NULL, system-LLM usage bills the creator, metrics use the `SCHEDULED_TASK` channel. Each run stores its answer + produced files (`scheduled_task_run.output_text/output_files`); only the newest `max_runs_retained` (default 10) are kept. Deleting a task (or its agent/app) removes its schedule, conversations, history, files and temp silos. Published tasks (`marketplace_visibility`) show read-only results in the marketplace's "Scheduled tasks" tab
+- **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes (self-managed and SaaS alike)
 
 ## Anti-Patterns
 
