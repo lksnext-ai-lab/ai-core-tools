@@ -40,6 +40,7 @@ from tools.skill_tools import (
     resolve_prompt_skills,
     snapshot_skills,
 )
+from tools.chat_filter_scope import build_chat_filter_prompt_block
 from tools.sandbox import (
     create_sandbox_builtin_tools,
     create_sandbox_repl_tools,
@@ -327,6 +328,17 @@ async def create_agent(
         checkpointer = await CheckpointerCacheService.get_async_checkpointer()
         logger.info(f"Using async PostgreSQL checkpointer for agent {agent.agent_id} (session: {cache_session_id})")
 
+    # Gate 1: orchestrator-level whitelist. Only fields the orchestrator itself
+    # declares in exposed_chat_filters may be forwarded to sub-agents — anything
+    # the caller puts in search_params["filter"] that isn't on that list is
+    # dropped right here, before it ever reaches a sub-agent (Gate 2 applies a
+    # second, silo-scoped whitelist per sub-agent in IACTTool.create). It also
+    # drives the <active_chat_filters> block appended to the system prompt below.
+    exposed_fields = set(getattr(agent, "exposed_chat_filters", None) or [])
+    orchestrator_caller_filter = {
+        k: v for k, v in (search_params or {}).get("filter", {}).items() if k in exposed_fields
+    }
+
     ci_provider_for_prompt = None
     ci_languages: list[str] = []
     if agent.enable_code_interpreter and working_dir:
@@ -405,6 +417,13 @@ async def create_agent(
             + "</code_interpreter>"
         )
 
+    # Make the user's chat-filter selection explicit to the agent, so an orchestrator
+    # can route on it instead of fanning out to every sub-agent. Advisory only —
+    # every sub-agent tool is still built and callable.
+    filter_block = build_chat_filter_prompt_block(agent, orchestrator_caller_filter)
+    if filter_block:
+        system_prompt_content = system_prompt_content + "\n\n" + filter_block
+
     if format_instructions:
         system_prompt_content = (
             system_prompt_content
@@ -465,6 +484,7 @@ async def create_agent(
             sandbox_session_service=sandbox_session_service,
             attached_files=attached_files,
             user_message=user_message,
+            caller_filter=orchestrator_caller_filter,
         ))
 
     # Base tools — always available for every agent
@@ -756,6 +776,20 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     MUST be invoked via ``asyncio.to_thread`` so it never blocks the event loop.
     """
     from services.silo_service import resolve_search_params  # noqa: PLC0415 — avoids import cycle
+    from tools.vector_stores.metadata_filters import MetadataFilterClause, validate_clauses, ops_for_backend  # noqa: PLC0415
+
+    # Gate 2: silo-scoped whitelist. A caller_search_params["filter"] entry may have
+    # survived the orchestrator's own exposed_chat_filters whitelist (Gate 1, in
+    # create_agent) but this specific subagent's silo might not declare that field at
+    # all. validate_clauses discards anything this silo's metadata_definition doesn't
+    # know about, so a filter never gets applied to a nonexistent metadata key.
+    raw_filter = (caller_search_params or {}).get("filter") or {}
+    if raw_filter and agent.silo is not None:
+        backend_ops = ops_for_backend(getattr(agent.silo, "vector_db_type", None))
+        clauses = [MetadataFilterClause(field=k, op="$eq", value=v) for k, v in raw_filter.items()]
+        valid = validate_clauses(clauses, getattr(agent.silo, "metadata_definition", None), backend_ops)
+        scoped_filter = {c.field: c.value for c in valid}
+        caller_search_params = {**caller_search_params, "filter": scoped_filter} if scoped_filter else None
 
     resolved_sp, resolved_pinned = resolve_search_params(agent, caller_search_params)
     return get_retriever_tool(
@@ -1033,6 +1067,7 @@ class IACTTool(BaseTool):
         sandbox_session_service: Optional[Any] = None,
         attached_files: Optional[List[Dict]] = None,
         user_message: Optional[str] = None,
+        caller_filter: Optional[Dict[str, Any]] = None,
     ) -> "IACTTool":
         """Build an agent-as-tool, including the sub-agent's MCP tools.
 
@@ -1044,6 +1079,18 @@ class IACTTool(BaseTool):
         ``create_agent``/``discover_tool`` purely so this sub-agent's own skill-router
         pass (``agent.skill_router_enabled``, see ``_resolve_skills_for_prompt``) has
         the same routing signal the top-level agent has — it is otherwise unused here.
+
+        Args:
+            caller_filter: Optional flat ``{field: value}`` filter already
+                whitelisted against the root orchestrator's own
+                ``exposed_chat_filters`` (Gate 1, in ``create_agent``). It is
+                forwarded unchanged to nested tool-agents — a nested
+                orchestrator's own sub-agents get a shot at the same
+                already-whitelisted fields, no re-derivation needed. Each
+                sub-agent's silo retriever applies its own silo-scoped
+                whitelist on top (Gate 2, in
+                ``_resolve_and_build_retriever_tool``) before merging it into
+                the existing RAG precedence resolution.
         """
         instance = cls(
             agent,
@@ -1062,7 +1109,7 @@ class IACTTool(BaseTool):
             sub_agent = tool.tool
             tools.append(await discover_tool(
                 sub_agent, user_context=user_context, attached_files=attached_files,
-                user_message=user_message,
+                user_message=user_message, caller_filter=caller_filter,
             ))
 
         # Add base useful tools
@@ -1071,13 +1118,17 @@ class IACTTool(BaseTool):
         # Add silo retriever if configured. The sub-agent uses the same dynamic
         # metadata-aware tool as the root agent, driven by its OWN RAG config
         # (rag_k / rag_search_type / rag_score_threshold / rag_fixed_filters /
-        # rag_max_retrieval_calls). Caller search params are NOT propagated from the
-        # root agent (caller_search_params=None) — sub-agents are self-contained (FR-12).
+        # rag_max_retrieval_calls). Gate 1 (in create_agent) already whitelisted
+        # caller_filter by field name against the orchestrator's own
+        # exposed_chat_filters; here Gate 2 additionally scopes it down to fields
+        # THIS sub-agent's own silo declares (_resolve_and_build_retriever_tool),
+        # before it is merged into the existing RAG precedence resolution.
         if agent.silo_id is not None:
-            # Caller params NOT propagated (None) — the sub-agent uses its OWN config.
             # Off the event loop: resolution + construction do synchronous DB work.
             retriever_tool = await asyncio.to_thread(
-                _resolve_and_build_retriever_tool, agent, None
+                _resolve_and_build_retriever_tool,
+                agent,
+                {"filter": caller_filter} if caller_filter else None,
             )
             if retriever_tool is not None:
                 tools.append(retriever_tool)
@@ -1471,6 +1522,7 @@ class IACTOCRTool(BaseTool):
         user_context: Optional[Dict] = None,
         attached_files: Optional[List[Dict]] = None,
         user_message: Optional[str] = None,
+        caller_filter: Optional[Dict[str, Any]] = None,
     ) -> "IACTOCRTool":
         """Build an OCR agent-as-tool with MCP support.
 
@@ -1480,6 +1532,7 @@ class IACTOCRTool(BaseTool):
 
         ``user_message`` is forwarded from the parent turn purely to feed this
         sub-agent's own opt-in skill-router pass — see ``IACTTool.create``.
+        ``caller_filter`` is only forwarded to nested tool-agents (OCR agents have no silo).
         """
         instance = cls(agent, user_context=user_context, attached_files=attached_files)
 
@@ -1490,7 +1543,7 @@ class IACTOCRTool(BaseTool):
             sub_agent = t.tool
             nested = await discover_tool(
                 sub_agent, user_context=user_context, attached_files=attached_files,
-                user_message=user_message,
+                user_message=user_message, caller_filter=caller_filter,
             )
             tools.append(nested)
 
@@ -1697,6 +1750,7 @@ async def discover_tool(
     sandbox_session_service: Optional[Any] = None,
     attached_files: Optional[List[Dict]] = None,
     user_message: Optional[str] = None,
+    caller_filter: Optional[Dict[str, Any]] = None,
 ) -> BaseTool:
     """Return the appropriate tool wrapper for *agent*.
 
@@ -1704,6 +1758,8 @@ async def discover_tool(
     (``type == 'ocr_agent'``), otherwise to :class:`IACTTool`. Sandbox
     parameters are only meaningful for :class:`IACTTool` — OCR agents
     don't support code interpreter.
+    ``caller_filter`` is the Gate-1-whitelisted chat filter, forwarded to the
+    sub-agent's silo retriever (see ``IACTTool.create``).
 
     ``user_message`` is the current turn's user message, forwarded straight through
     from the top-level ``create_agent`` call (and recursively from nested
@@ -1713,7 +1769,7 @@ async def discover_tool(
     if agent.type == "ocr_agent":
         return await IACTOCRTool.create(
             agent, user_context=user_context, attached_files=attached_files,
-            user_message=user_message,
+            user_message=user_message, caller_filter=caller_filter,
         )
     return await IACTTool.create(
         agent,
@@ -1725,6 +1781,7 @@ async def discover_tool(
         sandbox_session_service=sandbox_session_service,
         attached_files=attached_files,
         user_message=user_message,
+        caller_filter=caller_filter,
     )
 
 
