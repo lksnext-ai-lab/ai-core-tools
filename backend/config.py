@@ -32,7 +32,7 @@ def load_client_config() -> ClientConfig:
 
 CLIENT_CONFIG = load_client_config()
 
-DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI', 'postgresql://iacoretoolsdev:iacoretoolsdev@localhost:5432/iacoretoolsdev')
+DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI')
 
 # Fails fast at import if SECRET_KEY is absent, too short, or a known weak value.
 SECRET_KEY: str = get_secret_key()

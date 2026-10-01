@@ -151,7 +151,7 @@ export const libraryConfig: LibraryConfig = {
     oidc: {
       authority: 'https://your-oidc-provider.com',
       client_id: 'CLIENT_ID_HERE',
-      callbackPath: '/callback',
+      callbackPath: '/auth/success',
       scope: 'openid profile email'
     }
   },

@@ -10,6 +10,7 @@ from fastapi import UploadFile, HTTPException
 
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
+from utils.path_safety import resolve_within
 
 logger = get_logger(__name__)
 
@@ -678,7 +679,7 @@ class FileManagementService:
                 if storage_strategy == STORAGE_STRATEGY_EPHEMERAL
                 else self._persistent_dir
             )
-            session_dir = os.path.join(base_dir, session_key)
+            session_dir = resolve_within(base_dir, session_key)
             os.makedirs(session_dir, exist_ok=True)
 
             # Save original file FIRST (to set file_path before saving metadata)
@@ -689,7 +690,7 @@ class FileManagementService:
                 if storage_strategy == STORAGE_STRATEGY_EPHEMERAL:
                     target_dir = session_dir
                 elif conversation_id:
-                    target_dir = os.path.join(
+                    target_dir = resolve_within(
                         self._tmp_base_folder, "conversations", str(conversation_id),
                     )
                 else:
@@ -699,9 +700,12 @@ class FileManagementService:
 
                 # Use the original user-facing filename so the code interpreter can
                 # reference files by the name the user knows (e.g. 'report.xlsx').
-                # Path separators are stripped to prevent directory traversal.
+                # Path separators are stripped, and the result must stay inside
+                # target_dir (rejects names such as '..').
                 safe_filename = file_ref.filename.replace('/', '_').replace('\\', '_')
-                original_file = os.path.join(target_dir, safe_filename)
+                original_file = resolve_within(target_dir, safe_filename)
+                if original_file == target_dir:
+                    raise ValueError(f"Invalid filename: {file_ref.filename!r}")
 
                 shutil.copy2(original_file_path, original_file)
 
@@ -717,12 +721,12 @@ class FileManagementService:
                 logger.info(f"FileReference file_path set to: {file_ref.file_path}")
 
             # Save file metadata AFTER setting file_path
-            metadata_file = os.path.join(session_dir, f"{file_id}.json")
+            metadata_file = resolve_within(session_dir, f"{file_id}.json")
             with open(metadata_file, 'w') as f:
                 json.dump(file_ref.to_dict(), f, indent=2)
 
             # Save file content (extracted text)
-            content_file = os.path.join(session_dir, f"{file_id}.content")
+            content_file = resolve_within(session_dir, f"{file_id}.content")
             with open(content_file, 'w', encoding='utf-8') as f:
                 f.write(file_ref.content)
 
@@ -947,9 +951,9 @@ class FileManagementService:
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
         try:
-            session_dir = os.path.join(self._persistent_dir, session_key)
-            metadata_file = os.path.join(session_dir, f"{file_id}.json")
-            content_file = os.path.join(session_dir, f"{file_id}.content")
+            session_dir = resolve_within(self._persistent_dir, session_key)
+            metadata_file = resolve_within(session_dir, f"{file_id}.json")
+            content_file = resolve_within(session_dir, f"{file_id}.content")
 
             # Read metadata BEFORE deleting it to locate the original file
             # (original files stored in conversations/ dir have a relative file_path)
@@ -959,8 +963,10 @@ class FileManagementService:
                         metadata = json.load(f)
                     file_path = metadata.get('file_path')
                     if file_path:
-                        abs_path = os.path.join(self._tmp_base_folder, file_path)
-                        if os.path.exists(abs_path):
+                        # file_path is read back from a sidecar, so it must
+                        # still resolve inside TMP_BASE_FOLDER before deleting.
+                        abs_path = resolve_within(self._tmp_base_folder, file_path)
+                        if os.path.isfile(abs_path):
                             os.remove(abs_path)
                             logger.info(f"Removed original file {abs_path}")
                 except Exception as e:
@@ -974,8 +980,8 @@ class FileManagementService:
             if os.path.exists(session_dir):
                 for filename in os.listdir(session_dir):
                     if filename.startswith(file_id) and not filename.endswith(('.json', '.content')):
-                        original_file = os.path.join(session_dir, filename)
-                        if os.path.exists(original_file):
+                        original_file = resolve_within(session_dir, filename)
+                        if os.path.isfile(original_file):
                             os.remove(original_file)
                             logger.info(f"Removed original file {filename}")
 

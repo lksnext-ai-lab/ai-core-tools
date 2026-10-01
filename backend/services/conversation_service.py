@@ -1,5 +1,4 @@
 import uuid
-import hashlib
 import ast
 import json
 import re
@@ -15,6 +14,7 @@ from models.agent import Agent
 from schemas.conversation_schemas import ConversationCreate, ConversationUpdate
 from services.agent_cache_service import CheckpointerCacheService
 from utils.logger import get_logger
+from utils.security import hash_api_key
 from lks_idprovider import AuthContext
 
 logger = get_logger(__name__)
@@ -99,7 +99,7 @@ class ConversationService:
         
         if api_key:
             # Hash the API key for tracking (without storing the actual key)
-            api_key_hash = hashlib.md5(api_key.encode()).hexdigest()
+            api_key_hash = hash_api_key(api_key)
         
         # Generate auto-title if not provided
         if not title:
@@ -210,7 +210,7 @@ class ConversationService:
         elif isinstance(user_context, dict) and user_context.get('api_key'):
             # API key users are identified by api_key_hash, not user_id
             api_key = user_context.get('api_key')
-            api_key_hash = hashlib.md5(api_key.encode()).hexdigest()
+            api_key_hash = hash_api_key(api_key)
             query = query.filter(Conversation.api_key_hash == api_key_hash)
         elif isinstance(user_context, dict) and user_context.get('user_id'):
             # OAuth user via dict context
@@ -554,7 +554,7 @@ class ConversationService:
 
         # Check API key user first (they have user_id as string like "apikey_xxx")
         if isinstance(user_context, dict) and user_context.get('api_key'):
-            api_key_hash = hashlib.md5(user_context['api_key'].encode()).hexdigest()
+            api_key_hash = hash_api_key(user_context['api_key'])
             if conversation.api_key_hash == api_key_hash:
                 return True
             return False

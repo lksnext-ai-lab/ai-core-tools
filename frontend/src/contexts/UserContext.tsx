@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { authService } from '../services/auth';
+import { authService, type CurrentUserPayload } from '../services/auth';
 import { OIDCContext } from '../auth/OIDCProvider';
-import { configService } from '../core/ConfigService';
+import { resolveCurrentUser } from '../auth/resolveCurrentUser';
 
 export interface User {
   user_id: number;
@@ -16,9 +16,14 @@ export interface User {
   is_editor?: boolean;
 }
 
+/** `unavailable`: the backend could not be reached, so the session state is unknown. */
+export type SessionError = 'unavailable';
+
 interface UserContextType {
   user: User | null;
+  /** True until the backend has confirmed (or rejected) the session. */
   loading: boolean;
+  sessionError: SessionError | null;
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -38,155 +43,125 @@ interface UserProviderProps {
   children: ReactNode;
 }
 
-async function fetchUserFromBackend(
-  bearerToken: string | null,
-): Promise<User | null> {
-  const baseUrl = configService.getApiBaseUrl();
-  const headers: Record<string, string> = {};
-
-  if (bearerToken) {
-    headers['Authorization'] = `Bearer ${bearerToken}`;
-  }
-
-  try {
-    const response = await fetch(`${baseUrl}/internal/me`, {
-      credentials: 'include',
-      headers,
-    });
-
-    if (!response.ok) return null;
-
-    const userData: {
-      user_id: number;
-      email: string;
-      name?: string;
-      is_admin?: boolean;
-      is_omniadmin?: boolean;
-      platform_role?: 'viewer' | 'editor' | 'admin';
-    } = await response.json();
-
-    return {
-      user_id: userData.user_id,
-      email: userData.email,
-      name: userData.name,
-      is_authenticated: true,
-      is_admin: userData.is_admin ?? userData.is_omniadmin ?? false,
-      is_omniadmin: userData.is_omniadmin ?? false,
-      platform_role: userData.platform_role,
-      is_editor: (userData.is_admin ?? false) || userData.platform_role !== 'viewer',
-    };
-  } catch {
-    return null;
-  }
+function toUser(payload: CurrentUserPayload): User {
+  return {
+    user_id: payload.user_id,
+    email: payload.email,
+    name: payload.name,
+    is_authenticated: true,
+    is_admin: payload.is_admin ?? payload.is_omniadmin ?? false,
+    is_omniadmin: payload.is_omniadmin ?? false,
+    platform_role: payload.platform_role,
+    is_editor: (payload.is_admin ?? false) || payload.platform_role !== 'viewer',
+  };
 }
 
 export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [resolving, setResolving] = useState(true);
+  const [resolvedIdentity, setResolvedIdentity] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<SessionError | null>(null);
+  const requestIdRef = useRef(0);
 
   const oidcContext = useContext(OIDCContext);
+  const isOidc = oidcContext !== undefined;
+  const oidcLoading = oidcContext?.loading ?? false;
+  const oidcAuthenticated = oidcContext?.isAuthenticated ?? false;
+  // Keyed on the subject, not the User object, so token renewals don't re-resolve.
+  const oidcSubject = oidcContext?.user?.profile.sub ?? null;
+  const oidcRenew = oidcContext?.renew;
+  const oidcEndSession = oidcContext?.endSession;
+  const oidcLogout = oidcContext?.logout;
+  // Identity the current `user` belongs to; a mismatch means it is still being resolved.
+  const identity = isOidc ? `oidc:${oidcAuthenticated ? oidcSubject : 'anonymous'}` : 'local';
 
-  const refreshUser = useCallback(async () => {
+  const resolveUser = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setResolving(true);
+
     try {
-      if (oidcContext?.user) {
-        const token = oidcContext.user.id_token ?? null;
-        const resolved = await fetchUserFromBackend(token);
+      const result = await resolveCurrentUser({
+        fetchCurrentUser: () => authService.fetchCurrentUser(),
+        renewSession: () => (oidcRenew ? oidcRenew() : authService.refresh()),
+      });
+      if (requestId !== requestIdRef.current) return;
 
-        if (resolved) {
-          setUser(resolved);
-          return;
-        }
-
-        // Backend unreachable — fall back to OIDC profile fields.
-        const oidcUser = oidcContext.user;
-        setUser({
-          user_id: 0,
-          email: (oidcUser.profile as Record<string, string>)?.email ?? '',
-          name: (oidcUser.profile as Record<string, string>)?.name
-            ?? (oidcUser.profile as Record<string, string>)?.preferred_username,
-          is_authenticated: true,
-          is_admin: false,
-          is_omniadmin: false,
-          platform_role: 'viewer',
-          is_editor: false,
-        });
-      } else {
-        // LOCAL mode: httpOnly cookie sent automatically; no bearer needed.
-        const resolved = await fetchUserFromBackend(null);
-        setUser(resolved);
+      if (result.status === 'ok') {
+        setUser(toUser(result.user));
+        setSessionError(null);
+        return;
       }
-    } catch {
+
       setUser(null);
+      if (result.status === 'unavailable') {
+        setSessionError('unavailable');
+        return;
+      }
+      setSessionError(null);
+      if (oidcEndSession) {
+        // The IdP session exists but the backend rejects it even after renewal.
+        await oidcEndSession();
+      }
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setResolving(false);
+        setResolvedIdentity(identity);
+      }
     }
-  }, [oidcContext?.user]);
+  }, [oidcRenew, oidcEndSession, identity]);
+
+  useEffect(() => {
+    if (oidcLoading) return;
+
+    if (isOidc && !oidcAuthenticated) {
+      requestIdRef.current++;
+      setUser(null);
+      setSessionError(null);
+      setResolving(false);
+      setResolvedIdentity(identity);
+      return;
+    }
+
+    void resolveUser();
+    return () => {
+      requestIdRef.current++;
+    };
+  }, [isOidc, oidcLoading, oidcAuthenticated, identity, resolveUser]);
+
+  useEffect(() => {
+    return authService.onSessionExpired(() => {
+      requestIdRef.current++;
+      setUser(null);
+      if (oidcEndSession) {
+        void oidcEndSession();
+      }
+    });
+  }, [oidcEndSession]);
+
+  const refreshUser = useCallback(() => resolveUser(), [resolveUser]);
 
   const logout = useCallback(async () => {
-    if (oidcContext?.user) {
-      await oidcContext.logout();
+    requestIdRef.current++;
+    if (oidcLogout) {
+      await oidcLogout();
     } else {
       await authService.logout();
     }
     setUser(null);
-  }, [oidcContext?.user, oidcContext?.logout]);
+  }, [oidcLogout]);
 
-  useEffect(() => {
-    const initializeUser = async () => {
-      try {
-        if (oidcContext?.user) {
-          const token = oidcContext.user.id_token ?? null;
-          const resolved = await fetchUserFromBackend(token);
-
-          if (resolved) {
-            setUser(resolved);
-            setLoading(false);
-            return;
-          }
-
-          // Backend unreachable — fall back to OIDC profile fields.
-          const oidcUser = oidcContext.user;
-          setUser({
-            user_id: 0,
-            email: (oidcUser.profile as Record<string, string>)?.email ?? '',
-            name: (oidcUser.profile as Record<string, string>)?.name
-              ?? (oidcUser.profile as Record<string, string>)?.preferred_username,
-            is_authenticated: true,
-            is_admin: false,
-            is_omniadmin: false,
-            platform_role: 'viewer',
-            is_editor: false,
-          });
-        } else {
-          const resolved = await fetchUserFromBackend(null);
-          setUser(resolved);
-        }
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (!oidcContext?.loading) {
-      initializeUser();
-    }
-  }, [oidcContext?.user, oidcContext?.loading]);
-
-  // Mirrors OIDC loading to prevent auth-flash during callback or silent-renew.
-  useEffect(() => {
-    if (oidcContext) {
-      setLoading(oidcContext.loading);
-    }
-  }, [oidcContext?.loading]);
+  const loading = oidcLoading || resolving || resolvedIdentity !== identity;
 
   const value: UserContextType = useMemo(
     () => ({
       user,
       loading,
+      sessionError,
       setUser,
       logout,
       refreshUser,
     }),
-    [user, loading, logout, refreshUser],
+    [user, loading, sessionError, logout, refreshUser],
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

@@ -134,13 +134,14 @@ function LoginPage() {
 
   const { isSaasMode, isLoading: configLoading, authMode } = useDeploymentMode();
 
-  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/apps';
+  const requested = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+  const from = requested?.pathname ? `${requested.pathname}${requested.search ?? ''}` : '/apps';
 
   useEffect(() => {
-    if (user !== null || auth.isAuthenticated) {
+    if (user !== null) {
       navigate(from, { replace: true });
     }
-  }, [user, auth.isAuthenticated, navigate, from]);
+  }, [user, navigate, from]);
 
   const triggerError = (message: string, field: LoginErrorField = null) => {
     setError(message);
@@ -153,7 +154,7 @@ function LoginPage() {
     try {
       setLoading(true);
       setError(null);
-      await auth.login();
+      await auth.login(from);
     } catch (err) {
       triggerError(err instanceof Error ? err.message : 'Login failed');
       setLoading(false);
@@ -179,7 +180,8 @@ function LoginPage() {
     }
   };
 
-  if (user !== null || auth.isAuthenticated) {
+  // Avoids flashing the form while an existing session is still being confirmed.
+  if (user !== null || auth.loading) {
     return null;
   }
 

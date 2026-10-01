@@ -18,7 +18,7 @@ from schemas.apps_schemas import (
     InvitationResponseSchema
 )
 from schemas.common_schemas import MessageResponseSchema
-from .auth_utils import get_current_user_oauth
+from .auth_utils import get_current_user_oauth, viewer_writable
 from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
@@ -290,6 +290,7 @@ async def remove_collaborator(
                            summary="Respond to invitation",
                            tags=["Collaboration"],
                            response_model=MessageResponseSchema)
+@viewer_writable  # viewers must be able to accept/decline the invites they receive
 async def respond_to_invitation(
     collaboration_id: int,
     response_data: InvitationResponseSchema,

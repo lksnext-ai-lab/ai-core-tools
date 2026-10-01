@@ -44,6 +44,10 @@ logger = get_logger(__name__)
 #: alike — so no single phase result can blow up logs/DB rows.
 _DETAIL_TRUNCATE_CHARS = 2000
 
+#: Shell variable holding the sandbox-side log file of a wrapped skill command;
+#: namespaced so it can't clash with variables the wrapped command uses.
+_LOG_VAR = "__mattin_skill_log"
+
 
 def truncate_detail(text: str) -> str:
     """Truncate a phase-result ``detail`` string.
@@ -757,8 +761,6 @@ class SandboxProvider(ABC):
         """
         nonce = uuid.uuid4().hex
         sentinel = f"__SKILL_CMD_OK_{nonce}__"
-        log_path = f"/tmp/.mattin-skill-cmd-{nonce}.log"
-        quoted_log_path = shlex.quote(log_path)
         # Round-2 LOW fix (reliability-auditor): the trailing `rm -f` only ran
         # on the normal fall-through path — a timeout or interruption of the
         # outer run_code call (which kills this shell) skipped it, leaking
@@ -766,12 +768,15 @@ class SandboxProvider(ABC):
         # (normal, killed, or interrupted), so the log is always cleaned up;
         # the explicit `rm -f` at the end is left in place too so the file is
         # gone before the sentinel line is even printed in the common case.
+        # The log file comes from `mktemp` (unique name, 0600) rather than a
+        # fixed path under the world-writable /tmp.
         full_command = (
-            f"trap 'rm -f {quoted_log_path}' EXIT; "
-            f"( {command} ) > {quoted_log_path} 2>&1; rc=$?; "
-            f"tail -c 4000 {quoted_log_path}; "
+            f"{_LOG_VAR}=\"$(mktemp)\"; "
+            f"trap 'rm -f \"${_LOG_VAR}\"' EXIT; "
+            f"( {command} ) > \"${_LOG_VAR}\" 2>&1; rc=$?; "
+            f"tail -c 4000 \"${_LOG_VAR}\"; "
             f"if [ $rc -eq 0 ]; then echo {sentinel}; fi; "
-            f"rm -f {quoted_log_path}"
+            f"rm -f \"${_LOG_VAR}\""
         )
         output = self.run_code(
             handle, full_command, language=language, timeout=timeout, max_output_chars=max_output_chars
@@ -1041,8 +1046,6 @@ class SandboxProvider(ABC):
         target_dir = skill_dir(root, name)
         nonce = uuid.uuid4().hex
         rc_marker = f"__SKILL_BOOTSTRAP_RC_{nonce}__"
-        log_path = f"/tmp/.mattin-skill-bootstrap-{nonce}.log"
-        quoted_log_path = shlex.quote(log_path)
         # Round-2 H-C fix: the documented bootstrap use case (`pip install`)
         # routinely emits well over `SANDBOX_MAX_OUTPUT_CHARS` (20000 by
         # default) of output, and providers truncate captured output by
@@ -1058,11 +1061,12 @@ class SandboxProvider(ABC):
         # sentinel is what lets us tell a failed/timed-out script apart from
         # a successful one (run_code returns a string either way — C2).
         cmd = (
+            f"{_LOG_VAR}=\"$(mktemp)\"; "
             f"( cd {shlex.quote(target_dir)} && bash {shlex.quote(payload.bootstrap_script_path)} ) "
-            f"> {quoted_log_path} 2>&1; rc=$?; "
-            f"tail -c 4000 {quoted_log_path}; "
+            f"> \"${_LOG_VAR}\" 2>&1; rc=$?; "
+            f"tail -c 4000 \"${_LOG_VAR}\"; "
             f'echo "{rc_marker}=$rc"; '
-            f"rm -f {quoted_log_path}"
+            f"rm -f \"${_LOG_VAR}\""
         )
         try:
             output = self.run_code(

@@ -88,7 +88,7 @@ class ConfigService {
             enabled: true,
             authority: config.oidc_authority || '',
             clientId: config.oidc_client_id || '',
-            redirectUri: `${globalThis.location.origin}/callback`,
+            redirectUri: `${globalThis.location.origin}/auth/success`,
             scope: 'openid profile email'
           } : undefined
         }
