@@ -7,7 +7,7 @@ import {
   Database,
   Globe,
   Settings,
-  ArrowLeft,
+  ChevronLeft,
   ArrowRight,
   AlertTriangle,
   Users,
@@ -23,6 +23,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Speedometer from '../components/ui/Speedometer';
+import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
 interface App {
   app_id: number;
@@ -65,8 +68,6 @@ interface FeatureCard {
   icon: LucideIcon;
   href: string;
   label: string;
-  gradient: string;
-  iconColor: string;
   accentColor: string;
 }
 
@@ -179,8 +180,6 @@ function AppDashboard() {
       icon: Bot,
       href: `/apps/${appId}/agents`,
       label: 'Manage agents',
-      gradient: 'from-blue-50 to-indigo-50',
-      iconColor: 'text-blue-600',
       accentColor: 'text-blue-600 hover:text-blue-700',
     },
     {
@@ -190,8 +189,6 @@ function AppDashboard() {
       icon: FolderOpen,
       href: `/apps/${appId}/repositories`,
       label: 'Manage repositories',
-      gradient: 'from-emerald-50 to-teal-50',
-      iconColor: 'text-emerald-600',
       accentColor: 'text-emerald-600 hover:text-emerald-700',
     },
     {
@@ -201,8 +198,6 @@ function AppDashboard() {
       icon: Database,
       href: `/apps/${appId}/silos`,
       label: 'Manage silos',
-      gradient: 'from-amber-50 to-yellow-50',
-      iconColor: 'text-amber-600',
       accentColor: 'text-amber-600 hover:text-amber-700',
     },
     {
@@ -212,8 +207,6 @@ function AppDashboard() {
       icon: Globe,
       href: `/apps/${appId}/domains`,
       label: 'Manage domains',
-      gradient: 'from-violet-50 to-purple-50',
-      iconColor: 'text-violet-600',
       accentColor: 'text-violet-600 hover:text-violet-700',
     },
     {
@@ -223,8 +216,6 @@ function AppDashboard() {
       icon: Settings,
       href: `/apps/${appId}/settings`,
       label: 'Open settings',
-      gradient: 'from-slate-50 to-gray-50',
-      iconColor: 'text-slate-500',
       accentColor: 'text-slate-600 hover:text-slate-700',
     },
   ];
@@ -233,7 +224,7 @@ function AppDashboard() {
   const rateLimitBadge = () => {
     if (currentApp.agent_rate_limit === 0) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--bg-sticky-verde)] text-[var(--text-sticky-verde)]">
           <InfinityIcon className="w-3 h-3" />
           No limit
         </span>
@@ -241,7 +232,7 @@ function AppDashboard() {
     }
     if (!usageStats) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
           <Zap className="w-3 h-3" />
           {currentApp.agent_rate_limit} req/min
         </span>
@@ -418,17 +409,18 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Block 1: Enriched Hero Banner                                       */}
       {/* ------------------------------------------------------------------ */}
-      <div className="bg-gradient-to-r from-slate-50 via-blue-50 to-indigo-50 border border-slate-200 rounded-xl p-6">
+      <div className="bg-[var(--color-card-bg-tit)] from-slate-50 via-blue-50 to-indigo-50 border border-slate-200 rounded-xl p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Workspace</p>
-            <h1 className="text-2xl font-bold text-gray-900 truncate">{currentApp.name}</h1>
-            <p className="text-slate-500 text-sm mt-1">Manage your AI components and data resources</p>
-
+            <p className="text-xs text-[var(--text-bronze)] uppercase tracking-wider mb-1">Workspace</p>
+            <Title
+              titulo={currentApp.name}
+              subtitulo='Manage your AI components and data resources'
+            />
             {/* Info badges row */}
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {/* Collaborators */}
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+              <span className="inline-flex items-center gap-1 rounded-full border border-color-border-card bg-white px-2.5 py-1 text-xs font-medium text-[var(--text-sticky-blanco)]">
                 <Users className="w-3 h-3" />
                 {currentApp.collaborator_count} collaborator{currentApp.collaborator_count === 1 ? '' : 's'}
               </span>
@@ -449,19 +441,19 @@ function AppDashboard() {
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
             {canEdit && (
-              <button
+              <ButtonApp
+                label="New Agent"
+                variant="primary"
+                size="medium"
+                icon={<Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
                 onClick={() => navigate(`/apps/${appId}/agents`)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors font-medium"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                New Agent
-              </button>
+              />
             )}
             <Link
               to="/apps"
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors"
+              className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-ink bg-surface px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-fg transition-colors hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-3.5 h-3.5" />
               All Apps
             </Link>
           </div>
@@ -473,7 +465,6 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {cards.map((card) => {
-          const Icon = card.icon;
           return (
             <div
               key={card.href}
@@ -481,9 +472,13 @@ function AppDashboard() {
             >
               {/* Icon + Count */}
               <div className="flex items-start justify-between mb-4">
-                <div className={`w-11 h-11 bg-gradient-to-br ${card.gradient} rounded-xl flex items-center justify-center transition-all duration-200`}>
-                  <Icon className={`w-5 h-5 ${card.iconColor}`} />
-                </div>
+                <BackgroundImage
+                  icon={card.icon}
+                  size={44}
+                  backgroundColor="#ebe6dd"
+                  iconColor="#816729"
+                  className="rounded-xl transition-all duration-200"
+                />
                 {card.count !== null && (
                   <div className="text-right">
                     <p className={`text-2xl font-bold ${card.count > 0 ? 'text-gray-900' : 'text-gray-300'}`}>

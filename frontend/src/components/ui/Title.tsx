@@ -1,11 +1,11 @@
 import './Title.css';
 
 export interface TitleProps {
-  titulo: string;
-  subtitulo: string;
+  readonly titulo: string;
+  readonly subtitulo: string;
 }
 
-export function Title({ titulo, subtitulo }: TitleProps) {
+export function Title({titulo, subtitulo }: TitleProps) {
   return (
     <div className="ui-title">
       <h1 className="ui-title__heading">{titulo}</h1>

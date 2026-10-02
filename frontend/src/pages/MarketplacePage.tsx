@@ -12,6 +12,8 @@ import type {
   MarketplaceAgentCard as MarketplaceAgentCardType,
   MarketplaceCatalogParams,
 } from '../types/marketplace';
+import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
 
 const PAGE_SIZE = 12;
 
@@ -40,14 +42,18 @@ export default function MarketplacePage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      {/*<div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Marketplace</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           {tab === 'agents'
             ? 'Discover and chat with AI agents published across the platform.'
             : 'Browse the results of scheduled tasks published across the platform.'}
         </p>
-      </div>
+      </div>*/}
+      <Title
+        titulo="Marketplace"
+        subtitulo="Discover and interact with AI agents and scheduled tasks across the platform."
+      />
       <div role="tablist" aria-label="Marketplace sections" className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
         {TABS.map((item) => (
           <button
@@ -56,9 +62,9 @@ export default function MarketplacePage() {
             role="tab"
             aria-selected={tab === item.value}
             onClick={() => setSearchParams(item.value === 'agents' ? {} : { tab: item.value })}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`-mb-px inline cursor-pointer border-b-2 px-4 py-2 font-display text-[14.5px] font-medium text-[#202020] transition-colors ${
               tab === item.value
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-black text-black'
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
@@ -190,7 +196,7 @@ function MarketplaceAgentsTab() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search agents..."
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 focus:bordergray-300"
           />
         </div>
 
@@ -198,7 +204,7 @@ function MarketplaceAgentsTab() {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="marketplace-filter-select border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-gray-300"
         >
           <option value="">All Categories</option>
           {MARKETPLACE_CATEGORIES.map((cat) => (
@@ -212,7 +218,7 @@ function MarketplaceAgentsTab() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="marketplace-filter-select border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-gray-300"
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -222,17 +228,13 @@ function MarketplaceAgentsTab() {
         </select>
 
         {/* My Apps toggle */}
-        <button
-          type="button"
+        <ButtonApp
+          label="My Apps"
+          variant="primary"
+          size="control"
+          ariaPressed={myAppsOnly}
           onClick={() => setMyAppsOnly((v) => !v)}
-          className={`text-sm py-2 px-4 rounded-lg border transition-colors ${
-            myAppsOnly
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          My Apps
-        </button>
+        />
       </div>
 
       {/* Content */}

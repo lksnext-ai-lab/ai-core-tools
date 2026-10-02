@@ -2,6 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
+
+:root {
+  /* Colores */
+  /*--color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-secondary: #6b7280;
+  --color-background: #ffffff;
+  --color-surface: #f8fafc;
+  --color-text: #111827;*/
+
+  --color-border-card: #E8E8E8;         /* rgb(232, 232, 232)*/
+  --color-border-card-hover: #e8c4bd;   /* rgb(232, 196, 189) */
+
+  --color-bronze-bg-sof: #ebe6dd;       /* rgb(235, 230, 221) */
+  --text-bronze: #816729;               /* rgb(129, 103, 41) */
+
+  --text-subtitle: #202020;             /* rgb(32, 32, 32) */
+
+  --color-card-bg-tit: #FBFAF8;         /* rgb(251, 250, 248) */
+
+  --text-sticky-blanco:  #4d4d4d;          /* rgb(77,77,77) */
+  --text-sticky-verde:  #1F7A4D;          /* rgb(31, 122, 77) */
+  --bg-sticky-verde:  #EAF5EF;          /* rgb(234,245,239) */
+  
+
+
+  /* Bordes */
+  /*--border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+
+  /* Sombras */
+  /*--shadow-card: 0 4px 12px rgb(0 0 0 / 0.08);*/
+
+  /* Tipografía */
+  /*--font-family: 'Inter', sans-serif;*/
+}
+
+/* Customizable select (Chrome/Edge 135+); other browsers keep the native picker */
+@supports (appearance: base-select) {
+  .marketplace-filter-select,
+  .marketplace-filter-select::picker(select) {
+    appearance: base-select;
+  }
+
+  /* Keep the closed select unchanged on hover/open (base-select adds a grey tint) */
+  .marketplace-filter-select,
+  .marketplace-filter-select:hover,
+  .marketplace-filter-select:open {
+    background-color: #fff;
+  }
+
+  .marketplace-filter-select::picker(select) {
+    border: 1px solid var(--color-border-card);
+    border-radius: 8px;
+    padding: 4px;
+    background: #fff;
+  }
+
+  .marketplace-filter-select option:hover,
+  .marketplace-filter-select option:focus-visible {
+    background-color: rgb(250, 249, 247);
+    outline: none;
+  }
+
+  .marketplace-filter-select option:checked {
+    background-color: var(--color-bronze-bg-sof);
+    color: var(--text-bronze);
+  }
+
+  .marketplace-filter-select option::checkmark {
+    display: none;
+  }
+}
+
 /* Staggered entrance: elements start invisible, animation fills to opacity:1 */
 .animate-fade-in-up,
 .animate-fade-in-up-d1,

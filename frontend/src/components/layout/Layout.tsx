@@ -84,8 +84,10 @@ export const Layout: React.FC<LayoutProps> = ({
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
           {/* Page Content — owns its own scroll so the sidebar never pushes it */}
-          <main className={`flex-1 min-h-0 overflow-auto p-6 bg-surface dark:bg-surface-dark ${mainProps.className || ''}`}>
-            {children}
+          <main className={`flex-1 min-h-0 overflow-auto bg-surface dark:bg-surface-dark px-4 py-6 sm:px-6 lg:px-10 lg:py-11 ${mainProps.className || ''}`}>
+            <div className="mx-auto w-full max-w-7xl">
+              {children}
+            </div>
           </main>
           
           {/* Footer */}

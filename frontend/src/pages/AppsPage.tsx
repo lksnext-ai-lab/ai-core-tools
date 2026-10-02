@@ -1,26 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
-import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, BarChart2, Check } from 'lucide-react';
+import { Download } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
-import ActionDropdown from '../components/ui/ActionDropdown';
-import Speedometer from '../components/ui/Speedometer';
 import Alert from '../components/ui/Alert';
-import Table from '../components/ui/Table';
 import AppImportStepper from '../components/import/AppImportStepper';
-
-// Define the App type (like your Pydantic models!)
-interface UsageStats {
-  usage_percentage: number;
-  stress_level: 'low' | 'moderate' | 'high' | 'critical' | 'unlimited';
-  current_usage: number;
-  limit: number;
-  remaining: number;
-  reset_in_seconds: number;
-  is_over_limit: boolean;
-}
+import Title from '../components/ui/Title';
+import CardDetailEntidad from '../components/ui/CardDetailEntidad';
+import ButtonApp from '../components/ui/ButtonApp';
 
 interface App {
   app_id: number;
@@ -29,46 +17,38 @@ interface App {
   owner_id: number;
   owner_name?: string;
   owner_email?: string;
-  role: string; // "owner" or "editor"
+  role: string;
   langsmith_configured: boolean;
   agent_rate_limit: number;
-  // Entity counts for display
   agent_count: number;
   repository_count: number;
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
-  // Usage statistics for speedometer
-  usage_stats?: UsageStats;
 }
 
-// React Component = Function that returns HTML-like JSX
+function getAppRoleLabel(role: string) {
+  if (role === 'owner') return 'Owner';
+  if (role === 'administrator') return 'Administrator';
+  if (role === 'editor') return 'Editor';
+  if (role === 'viewer') return 'Viewer';
+  return role;
+}
+
 function AppsPage() {
   const { user } = useUser();
   const isEditor = user?.is_admin || (user?.is_editor ?? false);
-
-  // State = variables that trigger re-renders when they change
-  const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
-  const [loading, setLoading] = useState(true);          // Like self.loading = True
+  const [apps, setApps] = useState<App[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [usageStats, setUsageStats] = useState<Record<number, UsageStats>>({});
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
     void loadApps();
-    
-    // Auto-refresh only usage stats every 30 seconds (not full page)
-    const interval = setInterval(() => {
-      void loadUsageStats();
-    }, 3000);
-    
-    return () => clearInterval(interval);
   }, []);
 
-  // Function to load apps from API
   async function loadApps() {
     try {
       setLoading(true);
@@ -76,15 +56,6 @@ function AppsPage() {
       setSuccess(null);
       const response = await apiService.getApps();
       setApps(response);
-      
-      // Extract usage stats from response
-      const stats: Record<number, UsageStats> = {};
-      response.forEach((app: App) => {
-        if (app.usage_stats) {
-          stats[app.app_id] = app.usage_stats;
-        }
-      });
-      setUsageStats(stats);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load apps');
     } finally {
@@ -92,142 +63,22 @@ function AppsPage() {
     }
   }
 
-  // Function to refresh apps without showing loading spinner (for after create/import)
   async function refreshApps() {
     try {
       const response = await apiService.getApps();
       setApps(response);
-      
-      // Extract usage stats from response
-      const stats: Record<number, UsageStats> = {};
-      response.forEach((app: App) => {
-        if (app.usage_stats) {
-          stats[app.app_id] = app.usage_stats;
-        }
-      });
-      setUsageStats(stats);
     } catch (err) {
-      // Silently fail to avoid disrupting user experience
       console.error('Failed to refresh apps:', err);
     }
   }
 
-  // Function to load only usage stats (optimized for auto-refresh)
-  async function loadUsageStats() {
-    try {
-      const response = await apiService.getUsageStats();
-      
-      // Update only the usage stats, not the full apps data
-      const stats: Record<number, UsageStats> = {};
-      response.forEach((stat: UsageStats & { app_id: number }) => {
-        stats[stat.app_id] = {
-          usage_percentage: stat.usage_percentage,
-          stress_level: stat.stress_level,
-          current_usage: stat.current_usage,
-          limit: stat.limit,
-          remaining: stat.remaining,
-          reset_in_seconds: stat.reset_in_seconds,
-          is_over_limit: stat.is_over_limit
-        };
-      });
-      setUsageStats(stats);
-    } catch (err) {
-      // Silently fail for usage stats refresh to avoid disrupting user experience
-      console.warn('Failed to refresh usage stats:', err);
-    }
-  }
-
-  // Function to create a new app
   async function handleCreateApp(data: { name: string }) {
     await apiService.createApp(data);
     setShowCreateModal(false);
     setSuccess(`App "${data.name}" created successfully!`);
     setError(null);
-    void refreshApps(); // Refresh the list without loading spinner
-    // Auto-dismiss notification after 5 seconds
+    void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
-  }
-
-  // Function to leave an app (for editors only)
-  async function handleLeaveApp(app: App) {
-    if (!globalThis.confirm(`Are you sure you want to leave "${app.name}"?`)) {
-      return;
-    }
-
-    try {
-      setError(null);
-      setSuccess(null);
-      await apiService.leaveApp(app.app_id);
-      setSuccess(`Successfully left "${app.name}"`);
-      void refreshApps(); // Refresh the list without loading spinner
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to leave app');
-    }
-  }
-
-  // Function to delete an app (for owners only)
-  async function handleDeleteApp(app: App) {
-    const confirmMessage = `⚠️ DELETE APP: "${app.name}"
-
-This will permanently delete:
-• All agents and configurations
-• All repositories and uploaded files
-• All domains and URLs
-• All silos and vector data
-• All API keys and settings
-• All collaborations
-
-This action cannot be undone!
-
-Type the app name to confirm: "${app.name}"`;
-
-    const userInput = globalThis.prompt(confirmMessage);
-    
-    if (userInput !== app.name) {
-      if (userInput !== null) { // User didn't cancel
-        setError('App name does not match. Deletion cancelled.');
-        setSuccess(null);
-      }
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-      await apiService.deleteApp(app.app_id);
-      setSuccess(`App "${app.name}" has been successfully deleted.`);
-      void refreshApps(); // Refresh the list without loading spinner
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete app');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Function to export full app
-  async function handleExportApp(app: App) {
-    try {
-      setError(null);
-      setSuccess(null);
-      const blob = await apiService.exportFullApp(app.app_id);
-      
-      // Create download link
-      const url = globalThis.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const date = new Date().toISOString().split('T')[0];
-      a.download = `${app.name.replaceAll(/\s+/g, '-')}-full-export-${date}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      globalThis.URL.revokeObjectURL(url);
-      
-      setSuccess(`Full app "${app.name}" exported successfully!`);
-      setTimeout(() => setSuccess(null), 5000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export app');
-    }
   }
 
   // Function to handle import completion
@@ -237,17 +88,6 @@ Type the app name to confirm: "${app.name}"`;
     void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
   }
-
-  // Function to get user initials for avatar
-  const getUserInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase();
-    }
-    return 'U';
-  };
 
   // Show loading spinner while fetching data
   if (loading) {
@@ -267,32 +107,78 @@ Type the app name to confirm: "${app.name}"`;
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
+        {/*<div>
           <h1 className="text-2xl font-bold text-gray-900">My Apps</h1>
           <p className="text-gray-600">Manage your AI applications and workspaces</p>
-        </div>
+        </div>*/}
+        <Title
+          titulo="My Apps"
+          subtitulo="Manage your AI applications and workspaces"
+        />
         {isEditor && (
           <div className="flex gap-3">
-            <button
+            <ButtonApp
+              label="Import App"
+              variant="secondary"
+              size="medium"
+              icon={<Download className="h-4 w-4" aria-hidden="true" />}
+              className="h-[41px] !py-2"
               onClick={() => setShowImportModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Import App
-            </button>
-            <button
+            />
+            <ButtonApp
+              label="+ New App"
+              variant="primary"
+              size="spacious"
+              className="h-[41px] !py-2"
               onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}New App
-            </button>
+            />
           </div>
         )}
       </div>
 
-      {/* Apps Table */}
-      <Table
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {apps.map((app) => {
+          const ownerBonus = app.role === 'owner' ? 1 : 0;
+          const totalCollaborators = app.collaborator_count + ownerBonus;
+
+          return (
+            <CardDetailEntidad
+              key={app.app_id}
+              title={app.name}
+              description={((app) => app.created_at ? new Date(app.created_at).toLocaleDateString() : '-')(app)}
+              badges={[{
+                text: app.langsmith_configured ? 'Configured' : 'Not configured',
+                className: app.langsmith_configured
+                  ? 'bg-[#eaf5ef] text-[#1f7a4d]'
+                  : 'bg-[#fbf1ef] text-[#b23b2e]'
+              }]}
+              table={[
+                { label: 'AGENTS', value: app.agent_count },
+                { label: 'REPOS', value: app.repository_count },
+                { label: 'DOMAINS', value: app.domain_count },
+                { label: 'SILOS', value: app.silo_count },
+                { label: 'COLLABS', value: totalCollaborators },
+              ]}
+              topRight={(
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
+                  {getAppRoleLabel(app.role)}
+                </span>
+              )}
+              imageSrc=""
+              imageAlt=""
+              badgeText="TP"
+              onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
+              actionLabel=""
+              onActionClick={() => undefined}
+              actionDisabled
+              className=""
+            />
+          );
+        })}
+      </div>
+
+      {/* Legacy table kept as reference during the migration. */}
+      {/*<Table
         data={apps}
         keyExtractor={(app) => app.app_id.toString()}
         columns={[
@@ -446,9 +332,9 @@ Type the app name to confirm: "${app.name}"`;
                     usageStats={usageStats[app.app_id]} 
                     size="sm" 
                     showDetails={false}
-                  />
+                  />*/}
                   {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                  {/*<div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
                     <div className="font-medium">
                       {usageStats[app.app_id].stress_level.charAt(0).toUpperCase() + usageStats[app.app_id].stress_level.slice(1)} Stress
                     </div>
@@ -530,7 +416,8 @@ Type the app name to confirm: "${app.name}"`;
         emptyMessage="No apps yet"
         emptySubMessage="Create your first AI application to get started"
         loading={loading}
-      />
+      />*/}
+
 
       {!loading && apps.length === 0 && isEditor && (
         <div className="text-center py-6">

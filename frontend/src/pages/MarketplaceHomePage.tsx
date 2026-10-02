@@ -9,6 +9,9 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { errorMessage, MESSAGES } from '../constants/messages';
 import type { MarketplaceConversation } from '../types/marketplace';
+import Title from '../components/ui/Title';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import ButtonApp from '../components/ui/ButtonApp';
 
 /** Simple relative-time formatter — no external dependency needed. */
 function formatRelativeTime(dateStr: string): string {
@@ -133,54 +136,61 @@ export default function MarketplaceHomePage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Page header */}
-      <div>
+      {/*<div>
         <h1 className="text-3xl font-bold text-gray-900">Welcome back</h1>
         <p className="text-gray-600 mt-1">Your AI agent dashboard</p>
-      </div>
+      </div>*/}
+      <Title
+        titulo="Welcome back"
+        subtitulo="Your AI agent dashboard"
+      />  
 
       {/* Browse agents CTA */}
       <button
         type="button"
         onClick={() => navigate('/marketplace')}
-        className="w-full text-left bg-white rounded-2xl shadow-sm border border-blue-200 p-6 hover:border-blue-400 hover:shadow-md transition-all duration-200 group"
+        className="w-full text-left bg-white rounded-2xl shadow-sm border border-[var(--color-border-card)] p-6 hover:border-[var(--color-border-card-hover)] hover:shadow-md transition-all duration-200 group"
       >
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors duration-200">
-            <Store className="w-7 h-7 text-blue-600" aria-hidden="true" />
-          </div>
+          <BackgroundImage
+            icon="Store"
+            size={56}
+            backgroundColor="var(--color-bronze-bg-sof)"
+            iconColor="var(--text-bronze)"
+            className="rounded-2xl"
+          />
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-semibold text-gray-900 group-hover:text-blue-700 transition-colors duration-200">
+            <h2 className="text-xl font-semibold text-gray-900 ">
               Browse Agents
             </h2>
             <p className="text-gray-500 text-sm mt-0.5">
               Discover and chat with AI agents published by your organisation
             </p>
           </div>
-          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" aria-hidden="true" />
+          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-[var(--color-border-card-hover)] transition-colors duration-200" aria-hidden="true" />
         </div>
       </button>
 
       {/* Recent conversations */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">My Recent Conversations</h2>
+        <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">My Recent Conversations</h2>
 
         {conversations.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 text-center">
+          <div className="bg-white rounded-2xl shadow-sm border border-[var(--color-border-card)] p-10 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-8 h-8 text-gray-400" aria-hidden="true" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
-            <p className="text-gray-500 text-sm mb-6">
+            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">No conversations yet</h3>
+            <p className="text-gray-500 text-sm mt-0.5 mb-6">
               You haven't chatted with any agents yet. Browse the marketplace to get started!
             </p>
-            <button
-              type="button"
+            <ButtonApp
+              label="Browse Agents"
+              variant="primary"
+              size="spacious"
+              icon={<Store className="h-4 w-4" aria-hidden="true" />}
               onClick={() => navigate('/marketplace')}
-              className="inline-flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors duration-200"
-            >
-              <Store className="w-4 h-4 mr-2" aria-hidden="true" />
-              Browse Agents
-            </button>
+            />
           </div>
         ) : (
           <ul className="space-y-3">

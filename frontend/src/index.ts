@@ -47,6 +47,10 @@ export { SettingsPageWrapper } from './components/settings/SettingsPageWrapper';
 
 // Export badge components
 export { Badge, ProviderBadge, StatusBadge } from './components/ui/Badge';
+export { ButtonApp } from './components/ui/ButtonApp';
+export type { ButtonAppProps, ButtonAppSize, ButtonAppVariant } from './components/ui/ButtonApp';
+export { BackgroundImage } from './components/ui/BackgroundImage';
+export type { BackgroundImageIconName, BackgroundImageProps } from './components/ui/BackgroundImage';
 
 // Export route protection components
 export { default as ProtectedRoute } from './components/ProtectedRoute';

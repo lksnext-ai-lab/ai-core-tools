@@ -6,6 +6,7 @@ import { LoadingState } from '../ui/LoadingState';
 import { ErrorState } from '../ui/ErrorState';
 import { MarketplaceScheduledTaskCard } from './MarketplaceScheduledTaskCard';
 import { Pagination } from './Pagination';
+import ButtonApp from '../ui/ButtonApp';
 
 const PAGE_SIZE = 12;
 
@@ -80,6 +81,8 @@ export function MarketplaceScheduledTasksTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col flex-wrap items-start gap-3 sm:flex-row sm:items-center">
+
+
         <div className="relative min-w-[200px] flex-1">
           <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
             <Search className="h-4 w-4" aria-hidden="true" />
@@ -90,20 +93,18 @@ export function MarketplaceScheduledTasksTab() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search scheduled tasks..."
             aria-label="Search scheduled tasks"
-            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300"
           />
         </div>
-        <button
-          type="button"
-          aria-pressed={myAppsOnly}
+        <ButtonApp
+          label="My Apps"
+          variant="primary"
+          size="control"
+          ariaPressed={myAppsOnly}
           onClick={() => setMyAppsOnly((v) => !v)}
-          className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-            myAppsOnly ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          My Apps
-        </button>
+        />
       </div>
+     
       {content}
     </div>
   );
