@@ -25,6 +25,9 @@ interface Silo {
   output_parsers?: { parser_id: number; name: string }[];
   embedding_services?: { service_id: number; name: string }[];
   vector_db_options?: VectorDbOption[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  ai_services?: { service_id: number; name: string; supports_video?: boolean }[];
 }
 
 function SiloFormPage() {

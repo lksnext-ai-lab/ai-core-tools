@@ -200,7 +200,12 @@ class MediaService:
         if not media:
             logger.warning(f"Media {media_id} not found for deletion")
             return False
-        
+        return MediaService.delete_media_item(media, db)
+
+    @staticmethod
+    def delete_media_item(media: Media, db: Session) -> bool:
+        """Remove a media item's vectors, files and row."""
+        media_id = media.media_id
         try:
             # Delete from silo first
             SiloService.delete_media(media)
@@ -240,51 +245,122 @@ class MediaService:
         chunk_max_duration: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
     ) -> Media:
-        """Create media from uploaded file"""
+        """Create media from a file uploaded to a repository."""
+        return await MediaService._create_upload(
+            file, db, background_tasks,
+            silo_id=MediaService._repository_silo_id(repository_id, db),
+            repository_id=repository_id, folder_id=folder_id,
+            forced_language=forced_language, chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration, chunk_overlap=chunk_overlap,
+        )
+
+    @staticmethod
+    async def create_silo_media_from_file(
+        file: UploadFile,
+        silo,
+        db: Session,
+        background_tasks: BackgroundTasks,
+        metadata: Optional[dict] = None,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None,
+    ) -> Media:
+        """Index a video/audio file straight into a silo (no repository), asynchronously."""
+        MediaService.check_silo_accepts_media(silo)
+        return await MediaService._create_upload(
+            file, db, background_tasks,
+            silo_id=silo.silo_id, repository_id=None, folder_id=None, custom_metadata=metadata or None,
+            forced_language=forced_language, chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration, chunk_overlap=chunk_overlap,
+        )
+
+    @staticmethod
+    def is_media_filename(filename: Optional[str]) -> bool:
+        ext = os.path.splitext(filename or "")[1].lower()
+        return ext in (MediaService.SUPPORTED_VIDEO_EXTENSIONS | MediaService.SUPPORTED_AUDIO_EXTENSIONS)
+
+    @staticmethod
+    def check_silo_accepts_media(silo) -> None:
+        """Media needs an embedding service to index and a transcription service to transcribe."""
+        if not silo.embedding_service_id:
+            raise ValueError(f"Silo {silo.silo_id} has no embedding service configured")
+        if not silo.transcription_service_id:
+            raise ValueError(
+                f"Silo {silo.silo_id} has no transcription service configured; "
+                "set transcription_service_id on the silo to index video or audio"
+            )
+
+    @staticmethod
+    def _repository_silo_id(repository_id: int, db: Session) -> int:
+        from models.repository import Repository
+        silo_id = db.query(Repository.silo_id).filter(Repository.repository_id == repository_id).scalar()
+        if silo_id is None:
+            raise ValueError(f"Repository {repository_id} not found")
+        return silo_id
+
+    @staticmethod
+    async def _create_upload(
+        file: UploadFile,
+        db: Session,
+        background_tasks: BackgroundTasks,
+        *,
+        silo_id: int,
+        repository_id: Optional[int],
+        folder_id: Optional[int],
+        custom_metadata: Optional[dict] = None,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None,
+    ) -> Media:
         file_extension = os.path.splitext(file.filename)[1].lower()
-        
+
         # Validate extension
-        if file_extension not in (MediaService.SUPPORTED_VIDEO_EXTENSIONS | MediaService.SUPPORTED_AUDIO_EXTENSIONS):
+        if not MediaService.is_media_filename(file.filename):
             raise ValueError(f"Unsupported file type: {file_extension}")
-        
+
         # Create media record
         name = os.path.splitext(file.filename)[0]
         media = Media(
             name=name,
+            silo_id=silo_id,
             repository_id=repository_id,
             folder_id=folder_id,
             source_type='upload',
             status='pending',
+            custom_metadata=custom_metadata,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap
         )
-        
+
         db.add(media)
         db.flush()  # Get media_id without committing
-        
+
         # Save file
-        media_folder = os.path.join(REPO_BASE_FOLDER, str(repository_id))
+        from tasks.media_tasks import media_storage_folder
+        media_folder = media_storage_folder(media)
         os.makedirs(media_folder, exist_ok=True)
-        
+
         file_path = os.path.join(media_folder, f"{media.media_id}{file_extension}")
-        
+
         content = await file.read()
         with open(file_path, 'wb') as f:
             f.write(content)
-        
+
         media.file_path = file_path
         db.commit()
         db.refresh(media)
-        
+
         # Schedule background task
         from tasks.media_tasks import process_media_task_sync
         background_tasks.add_task(process_media_task_sync, media.media_id)
-        
+
         logger.info(f"Created media {media.media_id} from file upload: {file.filename}")
         return media
-    
+
     @staticmethod
     async def create_media_from_youtube(
         url: str,
@@ -297,53 +373,96 @@ class MediaService:
         chunk_max_duration: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
     ) -> Media:
-        """Create media from YouTube URL"""
+        """Create media from a YouTube URL in a repository."""
+        # Convert 0 to None for root folder
+        if folder_id == 0:
+            folder_id = None
+        return MediaService._create_youtube(
+            url, db, background_tasks,
+            silo_id=MediaService._repository_silo_id(repository_id, db),
+            repository_id=repository_id, folder_id=folder_id,
+            forced_language=forced_language, chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration, chunk_overlap=chunk_overlap,
+        )
+
+    @staticmethod
+    async def create_silo_media_from_youtube(
+        url: str,
+        silo,
+        db: Session,
+        background_tasks: BackgroundTasks,
+        metadata: Optional[dict] = None,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None,
+    ) -> Media:
+        """Index a YouTube video straight into a silo (no repository), asynchronously."""
+        MediaService.check_silo_accepts_media(silo)
+        return MediaService._create_youtube(
+            url, db, background_tasks,
+            silo_id=silo.silo_id, repository_id=None, folder_id=None, custom_metadata=metadata or None,
+            forced_language=forced_language, chunk_min_duration=chunk_min_duration,
+            chunk_max_duration=chunk_max_duration, chunk_overlap=chunk_overlap,
+        )
+
+    @staticmethod
+    def _create_youtube(
+        url: str,
+        db: Session,
+        background_tasks: BackgroundTasks,
+        *,
+        silo_id: int,
+        repository_id: Optional[int],
+        folder_id: Optional[int],
+        custom_metadata: Optional[dict] = None,
+        forced_language: Optional[str] = None,
+        chunk_min_duration: Optional[int] = None,
+        chunk_max_duration: Optional[int] = None,
+        chunk_overlap: Optional[int] = None,
+    ) -> Media:
         import re
-        
+
         # Validate YouTube URL
         youtube_regex = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+'
         if not re.match(youtube_regex, url):
             raise ValueError("Invalid YouTube URL")
-        
-        # Convert 0 to None for root folder
-        if folder_id == 0:
-            folder_id = None
-        
-        # Check for duplicate URL in the same repository
+
+        # Check for duplicate URL in the same repository (or, without one, the same silo)
+        scope = (Media.repository_id == repository_id) if repository_id else (Media.silo_id == silo_id)
         existing_media = db.query(Media).filter(
-            and_(
-                Media.repository_id == repository_id,
-                Media.source_url == url,
-                Media.source_type == 'youtube'
-            )
+            and_(scope, Media.source_url == url, Media.source_type == 'youtube')
         ).first()
-        
+
         if existing_media:
-            raise ValueError(f"This YouTube URL already exists in this repository (Media ID: {existing_media.media_id})")
-        
+            where = "repository" if repository_id else "silo"
+            raise ValueError(f"This YouTube URL already exists in this {where} (Media ID: {existing_media.media_id})")
+
         # Extract video title (basic extraction from URL)
         name = f"YouTube: {url.split('/')[-1][:30]}"
-        
+
         media = Media(
             name=name,
+            silo_id=silo_id,
             repository_id=repository_id,
             folder_id=folder_id,
             source_type='youtube',
             source_url=url,
             status='pending',
+            custom_metadata=custom_metadata,
             forced_language=forced_language,
             chunk_min_duration=chunk_min_duration,
             chunk_max_duration=chunk_max_duration,
             chunk_overlap=chunk_overlap
         )
-        
+
         db.add(media)
         db.commit()
         db.refresh(media)
-        
+
         # Schedule background task
         from tasks.media_tasks import process_media_task_sync
         background_tasks.add_task(process_media_task_sync, media.media_id)
-        
+
         logger.info(f"Created media {media.media_id} from YouTube URL: {url}")
         return media

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, status, Request, Response
 from typing import Optional, Annotated
 from sqlalchemy.orm import Session
 import json
@@ -6,6 +6,8 @@ import tempfile
 import os
 
 from services.silo_service import SiloService
+from services.media_service import MediaService
+from models.media import Media
 
 from .schemas import (
     MessageResponseSchema,
@@ -21,6 +23,9 @@ from .schemas import (
     PublicSilosResponseSchema,
     PublicSiloSearchResultSchema,
     PublicSiloSearchResponseSchema,
+    SiloMediaSchema,
+    SiloMediaListResponseSchema,
+    SiloYouTubeIndexRequestSchema,
 )
 from .auth import get_api_key_auth, validate_api_key_for_app, validate_silo_ownership
 from db.database import get_db
@@ -73,6 +78,8 @@ async def create_silo(
 
     except HTTPException:
         raise
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating silo for app {app_id}: {str(e)}")
         raise HTTPException(
@@ -560,6 +567,29 @@ async def find_docs_in_collection(
         )
 
 
+_CONTENT_TYPE_EXTENSIONS = {
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "text/plain": ".txt",
+}
+
+
+def _document_extension(file: UploadFile) -> str:
+    """File extension from the name, else from the content type, defaulting to .txt."""
+    file_extension = os.path.splitext(file.filename or "")[1].lower()
+    if file_extension:
+        return file_extension
+    return _CONTENT_TYPE_EXTENSIONS.get(file.content_type or "", ".txt")
+
+
+def _media_accepted(media: Media) -> FileIndexResponseSchema:
+    return FileIndexResponseSchema(
+        message="Media accepted; it is being transcribed and indexed",
+        num_documents=0, media_id=media.media_id, status=media.status,
+    )
+
+
 @silos_router.post(
     "/{silo_id}/docs/index-file",
     summary="Index file content",
@@ -572,33 +602,48 @@ async def index_file_document(
     file: Annotated[UploadFile, File(...)],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
+    background_tasks: BackgroundTasks,
     metadata: Annotated[Optional[str], Form()] = None,
+    forced_language: Annotated[Optional[str], Form()] = None,
+    chunk_min_duration: Annotated[Optional[int], Form()] = None,
+    chunk_max_duration: Annotated[Optional[int], Form()] = None,
+    chunk_overlap: Annotated[Optional[int], Form()] = None,
 ):
-    """Index file content in a silo."""
+    """Index file content in a silo.
+
+    Documents (pdf, docx, txt, ...) are indexed synchronously. Video and audio files are
+    transcribed (and, with a video service, visually analysed) in the background using the
+    silo's `transcription_service_id` / `video_ai_service_id`: the response is **202** with a
+    `media_id` to follow at `GET /silos/{silo_id}/media/{media_id}`. `forced_language` and the
+    `chunk_*` durations (seconds) apply to video/audio only.
+    """
     validate_api_key_for_app(app_id, api_key, db)
-    validate_silo_ownership(db, silo_id, app_id)
+    silo = validate_silo_ownership(db, silo_id, app_id)
+
+    metadata_dict = {}
+    if metadata:
+        try:
+            metadata_dict = json.loads(metadata)
+        except json.JSONDecodeError:
+            logger.warning("Invalid JSON metadata: Will use empty dict!")
+
+    if MediaService.is_media_filename(file.filename):
+        try:
+            media = await MediaService.create_silo_media_from_file(
+                file, silo, db, background_tasks, metadata=metadata_dict if isinstance(metadata_dict, dict) else None,
+                forced_language=forced_language, chunk_min_duration=chunk_min_duration,
+                chunk_max_duration=chunk_max_duration, chunk_overlap=chunk_overlap,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        response.status_code = status.HTTP_202_ACCEPTED
+        logger.info(f"Queued media {media.media_id} for indexing in silo {silo_id}")
+        return _media_accepted(media)
 
     temp_file_path = None
     try:
-        metadata_dict = {}
-        if metadata:
-            try:
-                metadata_dict = json.loads(metadata)
-            except json.JSONDecodeError:
-                logger.warning("Invalid JSON metadata: Will use empty dict!")
-
-        file_extension = os.path.splitext(file.filename or "")[1].lower()
-        if not file_extension:
-            if file.content_type:
-                content_type_map = {
-                    "application/pdf": ".pdf",
-                    "application/msword": ".doc",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-                    "text/plain": ".txt",
-                }
-                file_extension = content_type_map.get(file.content_type, ".txt")
-            else:
-                file_extension = ".txt"
+        file_extension = _document_extension(file)
 
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=file_extension
@@ -638,3 +683,112 @@ async def index_file_document(
                 os.unlink(temp_file_path)
             except Exception as e:
                 logger.warning(f"Failed to delete temp file {temp_file_path}: {str(e)}")
+
+
+# ==================== MEDIA (VIDEO / AUDIO) ENDPOINTS ====================
+
+
+def _silo_media_or_404(db: Session, silo_id: int, media_id: int) -> Media:
+    media = db.query(Media).filter(Media.media_id == media_id, Media.silo_id == silo_id).first()
+    if not media:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+    return media
+
+
+@silos_router.post(
+    "/{silo_id}/media/youtube",
+    summary="Index a YouTube video",
+    tags=["Silos"],
+    response_model=FileIndexResponseSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def index_youtube_video(
+    app_id: int,
+    silo_id: int,
+    body: SiloYouTubeIndexRequestSchema,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+    background_tasks: BackgroundTasks,
+):
+    """Download, transcribe and index a YouTube video into the silo, in the background."""
+    validate_api_key_for_app(app_id, api_key, db)
+    silo = validate_silo_ownership(db, silo_id, app_id)
+    try:
+        media = await MediaService.create_silo_media_from_youtube(
+            body.url, silo, db, background_tasks, metadata=body.metadata,
+            forced_language=body.forced_language, chunk_min_duration=body.chunk_min_duration,
+            chunk_max_duration=body.chunk_max_duration, chunk_overlap=body.chunk_overlap,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return _media_accepted(media)
+
+
+@silos_router.get(
+    "/{silo_id}/media",
+    summary="List video/audio indexed in the silo",
+    tags=["Silos"],
+    response_model=SiloMediaListResponseSchema,
+)
+async def list_silo_media(
+    app_id: int,
+    silo_id: int,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """List every media item of the silo (including those managed by a repository) with its status."""
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_silo_ownership(db, silo_id, app_id)
+    items = db.query(Media).filter(Media.silo_id == silo_id).order_by(Media.create_date.desc()).all()
+    return SiloMediaListResponseSchema(media=[SiloMediaSchema.model_validate(m) for m in items])
+
+
+@silos_router.get(
+    "/{silo_id}/media/{media_id}",
+    summary="Get media processing status",
+    tags=["Silos"],
+    response_model=SiloMediaSchema,
+)
+async def get_silo_media(
+    app_id: int,
+    silo_id: int,
+    media_id: int,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Status of a media item while it is processed, or `error` with `error_message` if it failed.
+
+    Media sent straight to the silo leaves nothing behind once indexed (like documents): its
+    file and this record are deleted, so this returns 404 after success. Its chunks carry
+    `media_id` in their metadata (delete them with `docs/delete-by-metadata`).
+    """
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_silo_ownership(db, silo_id, app_id)
+    return SiloMediaSchema.model_validate(_silo_media_or_404(db, silo_id, media_id))
+
+
+@silos_router.delete(
+    "/{silo_id}/media/{media_id}",
+    summary="Delete media and its indexed chunks",
+    tags=["Silos"],
+    response_model=MessageResponseSchema,
+)
+async def delete_silo_media(
+    app_id: int,
+    silo_id: int,
+    media_id: int,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a media item indexed straight into the silo (repository media is managed from its repository)."""
+    validate_api_key_for_app(app_id, api_key, db)
+    validate_silo_ownership(db, silo_id, app_id)
+    media = _silo_media_or_404(db, silo_id, media_id)
+    if media.repository_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This media belongs to a repository; delete it from the repository",
+        )
+    if not MediaService.delete_media_item(media, db):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete media")
+    return MessageResponseSchema(message="Media deleted")

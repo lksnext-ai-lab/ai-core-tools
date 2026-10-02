@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertTriangle, Info } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { MediaServicesFields, type MediaAIServiceOption } from './MediaServicesFields';
 
 interface VectorDbOption {
   code: string;
@@ -22,6 +23,9 @@ interface Silo {
   output_parsers?: { parser_id: number; name: string }[];
   embedding_services?: { service_id: number; name: string; provider?: string; is_system?: boolean }[];
   vector_db_options?: VectorDbOption[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  ai_services?: MediaAIServiceOption[];
 }
 
 // Define the form data type
@@ -32,6 +36,9 @@ interface SiloFormData {
   output_parser_id?: number;
   embedding_service_id?: number;
   vector_db_type?: string;
+  // null clears the service; the backend keeps a field only when it is omitted
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
 }
 
 // Define the props for the component
@@ -90,7 +97,9 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       type: 'CUSTOM',
       output_parser_id: silo?.metadata_definition_id || undefined,
       embedding_service_id: silo?.embedding_service_id || undefined,
-      vector_db_type: vectorDbTypeValue
+      vector_db_type: vectorDbTypeValue,
+      transcription_service_id: silo?.transcription_service_id ?? null,
+      video_ai_service_id: silo?.video_ai_service_id ?? null,
     }));
   }, [silo]);
 
@@ -335,6 +344,21 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
               )}
             </div>
           </div>
+
+          {/* Media (video/audio) indexing */}
+          {(silo?.ai_services?.length ?? 0) > 0 && (
+            <fieldset className="space-y-4 border-t border-gray-200 pt-6">
+              <legend className="text-sm font-semibold text-gray-900">Video and audio</legend>
+              <MediaServicesFields
+                scope="silo"
+                aiServices={silo?.ai_services ?? []}
+                transcriptionServiceId={formData.transcription_service_id}
+                videoServiceId={formData.video_ai_service_id}
+                disabled={isSubmitting}
+                onChange={(field, value) => setFormData(prev => ({ ...prev, [field]: value }))}
+              />
+            </fieldset>
+          )}
 
           {/* Error Message */}
           {error && (

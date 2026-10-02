@@ -295,6 +295,9 @@ export interface Silo {
   vector_db_type?: string;
   metadata_definition_id?: number;
   embedding_service_id?: number;
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  ai_services?: Array<{ service_id: number; name: string; supports_video?: boolean }>;
   metadata_fields?: Array<{ name: string; type: string; description?: string }>;
   output_parsers?: Array<{ parser_id: number; name: string }>;
   embedding_services?: Array<{ service_id: number; name: string; provider?: string; is_system?: boolean }>;
@@ -1834,14 +1837,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/silos/0`);
   }
 
-  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean }): Promise<Silo> {
+  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean; transcription_service_id?: number | null; video_ai_service_id?: number | null }): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string }): Promise<Silo> {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string; transcription_service_id?: number | null; video_ai_service_id?: number | null }): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
