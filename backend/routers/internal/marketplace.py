@@ -675,6 +675,7 @@ async def marketplace_chat(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            approval_ui=False,  # marketplace chat cannot collect HITL decisions
         )
 
         _safe_increment_marketplace_usage(user_id, db)

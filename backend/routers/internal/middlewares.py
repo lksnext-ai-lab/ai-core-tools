@@ -1,24 +1,22 @@
+from typing import Annotated, List
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Annotated
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
-from schemas.middleware_schemas import MiddlewareListItemSchema, MiddlewareDetailSchema, CreateUpdateMiddlewareSchema
-from .auth_utils import get_current_user_oauth
-from routers.controls.role_authorization import require_min_role, AppRole
-
 from db.database import get_db
-from services.middleware_service import MiddlewareService
-
-from utils.logger import get_logger
+from routers.controls.role_authorization import require_min_role, AppRole
+from schemas.middleware_schemas import (
+    CreateUpdateMiddlewareSchema,
+    MiddlewareDetailSchema,
+    MiddlewareListItemSchema,
+)
+from services.middleware_service import MiddlewareService, MiddlewareValidationError
+from .auth_utils import get_current_user_oauth
 
 MIDDLEWARE_NOT_FOUND_ERROR = "Middleware not found"
 
-logger = get_logger(__name__)
-
 middlewares_router = APIRouter()
-
-# ==================== MIDDLEWARE MANAGEMENT ====================
 
 
 @middlewares_router.get("/",
@@ -31,14 +29,8 @@ async def list_middlewares(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """List all middlewares for a specific app."""
-    try:
-        return MiddlewareService.list_middlewares(db, app_id)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving middlewares: {str(e)}"
-        )
+    """List all middlewares of an app."""
+    return MiddlewareService.list_middlewares(db, app_id)
 
 
 @middlewares_router.get("/{middleware_id}",
@@ -52,25 +44,11 @@ async def get_middleware(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    """Get detailed information about a specific middleware."""
-    try:
-        detail = MiddlewareService.get_middleware_detail(db, app_id, middleware_id)
-
-        if detail is None and middleware_id != 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=MIDDLEWARE_NOT_FOUND_ERROR
-            )
-
-        return detail
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving middleware: {str(e)}"
-        )
+    """Get one middleware of the app."""
+    detail = MiddlewareService.get_middleware_detail(db, app_id, middleware_id)
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MIDDLEWARE_NOT_FOUND_ERROR)
+    return detail
 
 
 @middlewares_router.post("/{middleware_id}",
@@ -85,30 +63,14 @@ async def create_or_update_middleware(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
-    """Create a new middleware or update an existing one."""
+    """Create (``middleware_id`` = 0) or update a middleware."""
     try:
-        middleware = MiddlewareService.create_or_update_middleware(db, app_id, middleware_id, data)
-
-        if middleware is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=MIDDLEWARE_NOT_FOUND_ERROR
-            )
-
-        return await get_middleware(app_id, middleware.middleware_id, auth_context, db, role)
-
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating/updating middleware: {str(e)}"
-        )
+        detail = MiddlewareService.create_or_update_middleware(db, app_id, middleware_id, data)
+    except MiddlewareValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MIDDLEWARE_NOT_FOUND_ERROR)
+    return detail
 
 
 @middlewares_router.delete("/{middleware_id}",
@@ -121,22 +83,7 @@ async def delete_middleware(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
-    """Delete a middleware."""
-    try:
-        success = MiddlewareService.delete_middleware(db, app_id, middleware_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=MIDDLEWARE_NOT_FOUND_ERROR
-            )
-
-        return {"message": "Middleware deleted successfully"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting middleware: {str(e)}"
-        )
+    """Delete a middleware (it is detached from every agent using it)."""
+    if not MiddlewareService.delete_middleware(db, app_id, middleware_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MIDDLEWARE_NOT_FOUND_ERROR)
+    return {"message": "Middleware deleted successfully"}

@@ -306,6 +306,28 @@ class CheckpointerCacheService:
             logger.error(f"Error invalidating session checkpointers: {str(e)}")
 
     @classmethod
+    async def get_pending_tool_calls_async(cls, agent_id: int, session_id: str) -> list:
+        """Tool calls of the last AI message when they are still unanswered, else [].
+
+        That is the state a human-in-the-loop interrupt leaves in the checkpoint.
+        """
+        try:
+            checkpointer = await cls.get_async_checkpointer()
+            state_tuple = await checkpointer.aget_tuple(
+                {"configurable": {"thread_id": f"thread_{agent_id}_{session_id}"}}
+            )
+        except Exception as exc:
+            logger.warning("Could not read checkpoint for pending tool calls: %s", exc)
+            return []
+        if not state_tuple or not state_tuple.checkpoint:
+            return []
+        messages = state_tuple.checkpoint.get("channel_values", {}).get("messages", [])
+        last = messages[-1] if messages else None
+        if getattr(last, "type", None) == "ai" and getattr(last, "tool_calls", None):
+            return list(last.tool_calls)
+        return []
+
+    @classmethod
     async def get_conversation_history_async(cls, agent_id: int, session_id: str = "default"):
         """
         Retrieve conversation history from PostgreSQL checkpointer.

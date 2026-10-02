@@ -754,6 +754,30 @@ def _inject_file_markers(text: str, files: list) -> str:
     return text
 
 
+def _raise_if_awaiting_approval(result) -> None:
+    """Fail clearly when a non-interactive run stops at a human-in-the-loop interrupt.
+
+    Only the interactive streaming chat can collect a reviewer's decision. Elsewhere
+    (public API, MCP, scheduled tasks) the run cannot continue, and the last message in
+    the state would be the user's own input, so answering with it would be wrong.
+    """
+    interrupts = result.get("__interrupt__") if isinstance(result, dict) else None
+    if not interrupts:
+        return
+    tools = [
+        req.get("name", "?")
+        for intr in interrupts
+        for req in ((getattr(intr, "value", None) or {}).get("action_requests", []))
+    ]
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"This agent needs human approval before running {', '.join(tools) or 'a tool'}. "
+            "Approvals can only be given from the interactive chat."
+        ),
+    )
+
+
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
@@ -2354,6 +2378,7 @@ class AgentExecutionService:
                 )
             else:
                 raise
+        _raise_if_awaiting_approval(result)
         return result
 
     async def _save_uploaded_file(self, file: UploadFile) -> str:

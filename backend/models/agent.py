@@ -173,7 +173,9 @@ class Agent(Base):
     middleware_associations = relationship('AgentMiddleware',
                                           primaryjoin=(agent_id == AgentMiddleware.agent_id),
                                           back_populates='agent',
-                                          order_by=AgentMiddleware.order)
+                                          order_by=AgentMiddleware.order,
+                                          cascade='all, delete-orphan',
+                                          passive_deletes=True)
 
     # Marketplace profile (1:1)
     marketplace_profile = relationship(

@@ -35,7 +35,9 @@ class App(Base):
     # app. With the FK's default NO ACTION, any leftover Skill row instead raises IntegrityError,
     # which AppService.delete_app already catches -> rollback -> return False (FR-15/AC-12 hardening).
     skills = relationship('Skill', back_populates='app', lazy=True, passive_deletes='all')
-    middlewares = relationship('Middleware', back_populates='app', lazy=True)
+    # Middleware.app_id is ON DELETE CASCADE: let the database remove them with the app.
+    middlewares = relationship('Middleware', back_populates='app', lazy=True,
+                               cascade='all, delete-orphan', passive_deletes=True)
 
     silos = relationship('Silo', back_populates='app', lazy=True)
     ai_services = relationship('AIService', back_populates='app', lazy=True)

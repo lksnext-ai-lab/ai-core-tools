@@ -43,6 +43,8 @@ class ConversationListResponse(BaseModel):
 class ConversationWithHistoryResponse(ConversationResponse):
     """Schema for conversation with message history"""
     messages: list[dict] = []  # List of {role: str, content: str}
+    # Human-in-the-loop request the conversation is paused on (LangChain HITL format)
+    pending_approval: Optional[dict] = None
 
 class MarketplaceConversationResponse(BaseModel):
     conversation_id: int

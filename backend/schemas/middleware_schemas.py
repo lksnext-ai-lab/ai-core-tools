@@ -1,9 +1,132 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, Dict, Any, List
 from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+from models.middleware import MiddlewareType
+
+# ==================== PER-TYPE CONFIG ====================
+#
+# Each middleware type has a strict config model. Configs are validated on write
+# (CreateUpdateMiddlewareSchema) and re-validated when the agent chain is built, so
+# a malformed stored config can never reach a LangChain middleware constructor.
+
+AI_SERVICE_PATTERN = r"^(agent_llm|ai_service:\d+)$"
+# Detectors built into langchain's PIIMiddleware (no custom detector needed).
+BuiltinPIIType = Literal["email", "credit_card", "ip", "mac_address", "url"]
+HITLDecision = Literal["approve", "edit", "reject"]
 
 
-# ==================== MIDDLEWARE SCHEMAS ====================
+class _StrictConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SummarizationConfig(_StrictConfig):
+    summarization_model: str = Field("agent_llm", pattern=AI_SERVICE_PATTERN)
+    trigger_tokens: int = Field(4000, ge=500, le=1_000_000)
+    keep_messages: int = Field(20, ge=1, le=500)
+    trim_tokens: int = Field(4000, ge=500, le=1_000_000)
+
+
+class CallLimitConfig(_StrictConfig):
+    max_calls: int = Field(..., ge=1, le=10_000)
+
+
+class LLMDetectorConfig(_StrictConfig):
+    enabled: bool = False
+    ai_service: str = Field("agent_llm", pattern=AI_SERVICE_PATTERN)
+    extra_entities: List[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("extra_entities")
+    @classmethod
+    def _clean_entities(cls, v: List[str]) -> List[str]:
+        cleaned = list(dict.fromkeys(e.strip() for e in v if e and e.strip()))
+        if any(len(e) > 50 for e in cleaned):
+            raise ValueError("each extra entity must be at most 50 characters")
+        return cleaned
+
+
+class PIIConfig(_StrictConfig):
+    pii_types: List[BuiltinPIIType] = Field(..., min_length=1)
+    strategy: Literal["redact", "mask", "hash", "block"] = "redact"
+    apply_to_input: bool = True
+    apply_to_output: bool = True
+    apply_to_tool_results: bool = True
+    llm_detector: Optional[LLMDetectorConfig] = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "PIIConfig":
+        self.pii_types = list(dict.fromkeys(self.pii_types))
+        if not (self.apply_to_input or self.apply_to_output or self.apply_to_tool_results):
+            raise ValueError("enable at least one of apply_to_input, apply_to_output or apply_to_tool_results")
+        return self
+
+
+class HITLToolConfig(_StrictConfig):
+    allowed_decisions: List[HITLDecision] = Field(..., min_length=1)
+
+    @field_validator("allowed_decisions")
+    @classmethod
+    def _dedupe(cls, v: List[str]) -> List[str]:
+        return list(dict.fromkeys(v))
+
+
+class HITLConfig(_StrictConfig):
+    interrupt_on: Dict[str, HITLToolConfig] = Field(..., min_length=1)
+    description_prefix: str = Field("Tool execution requires approval", max_length=500)
+
+    @field_validator("interrupt_on")
+    @classmethod
+    def _tool_names(cls, v: Dict[str, HITLToolConfig]) -> Dict[str, HITLToolConfig]:
+        for name in v:
+            if not name or len(name) > 128:
+                raise ValueError("tool names must be 1-128 characters")
+        return v
+
+
+class GuardrailsInput(_StrictConfig):
+    block_malicious_prompts: bool = True
+    block_jailbreak: bool = True
+
+
+class GuardrailsOutput(_StrictConfig):
+    prevent_pii_leakage: bool = True
+    block_toxic_biased: bool = True
+    enforce_business_facts: bool = True
+
+
+class GuardrailsConfig(_StrictConfig):
+    input: GuardrailsInput = Field(default_factory=GuardrailsInput)
+    output: GuardrailsOutput = Field(default_factory=GuardrailsOutput)
+    custom_prompt: str = Field("", max_length=4000)
+
+
+CONFIG_MODELS: Dict[MiddlewareType, type[BaseModel]] = {
+    MiddlewareType.SUMMARIZATION: SummarizationConfig,
+    MiddlewareType.MODEL_CALL_LIMIT: CallLimitConfig,
+    MiddlewareType.TOOL_CALL_LIMIT: CallLimitConfig,
+    MiddlewareType.PII: PIIConfig,
+    MiddlewareType.HUMAN_IN_THE_LOOP: HITLConfig,
+    MiddlewareType.GUARDRAILS: GuardrailsConfig,
+}
+
+
+def parse_middleware_config(middleware_type: MiddlewareType, config: Optional[Dict[str, Any]]) -> BaseModel:
+    """Validate a raw config dict for the given type. Raises pydantic.ValidationError."""
+    return CONFIG_MODELS[middleware_type].model_validate(config or {})
+
+
+def referenced_ai_service_ids(middleware_type: MiddlewareType, config: BaseModel) -> List[int]:
+    """AIService ids referenced by a validated config (``ai_service:<id>`` values)."""
+    refs: List[str] = []
+    if isinstance(config, SummarizationConfig):
+        refs.append(config.summarization_model)
+    elif isinstance(config, PIIConfig) and config.llm_detector and config.llm_detector.enabled:
+        refs.append(config.llm_detector.ai_service)
+    return [int(r.split(":", 1)[1]) for r in refs if r.startswith("ai_service:")]
+
+
+# ==================== API SCHEMAS ====================
 
 class MiddlewareListItemSchema(BaseModel):
     """Schema for middleware list items"""
@@ -14,31 +137,75 @@ class MiddlewareListItemSchema(BaseModel):
     config: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
     is_frozen: bool = False
-    mcp_config_ids: List[int] = []
-    tool_agent_ids: List[int] = []
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class MiddlewareDetailSchema(BaseModel):
+class MiddlewareDetailSchema(MiddlewareListItemSchema):
     """Schema for detailed middleware information"""
-    middleware_id: int
-    name: str
-    description: Optional[str] = ""
-    middleware_type: str
-    config: Optional[Dict[str, Any]] = None
-    created_at: Optional[datetime] = None
-    is_frozen: bool = False
-    mcp_config_ids: List[int] = []
-    tool_agent_ids: List[int] = []
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class CreateUpdateMiddlewareSchema(BaseModel):
-    """Schema for creating or updating a middleware"""
-    name: str
-    description: Optional[str] = ""
-    middleware_type: str = "monitoring"
+    """Create/update payload. ``config`` is validated against ``middleware_type``."""
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field("", max_length=1000)
+    middleware_type: MiddlewareType
     config: Optional[Dict[str, Any]] = None
-    mcp_config_ids: List[int] = []
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name must not be blank")
+        return v
+
+    @field_validator("middleware_type", mode="before")
+    @classmethod
+    def _type_from_value(cls, v: Any) -> Any:
+        # Accept the public value ("pii"), as the API always has.
+        if isinstance(v, str):
+            try:
+                return MiddlewareType(v)
+            except ValueError:
+                valid = ", ".join(t.value for t in MiddlewareType)
+                raise ValueError(f"must be one of: {valid}") from None
+        return v
+
+    @model_validator(mode="after")
+    def _validate_config(self) -> "CreateUpdateMiddlewareSchema":
+        try:
+            parsed = parse_middleware_config(self.middleware_type, self.config)
+        except ValidationError as exc:
+            first = exc.errors()[0]
+            loc = ".".join(str(p) for p in first["loc"]) or "config"
+            raise ValueError(f"invalid config for {self.middleware_type.value} ({loc}): {first['msg']}") from None
+        self.config = parsed.model_dump()
+        return self
+
+
+# ==================== HUMAN-IN-THE-LOOP ====================
+
+class HITLEditedAction(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    args: Dict[str, Any] = Field(default_factory=dict)
+
+
+class HITLDecisionSchema(BaseModel):
+    """One reviewer decision, in LangChain's HumanInTheLoopMiddleware format."""
+    model_config = ConfigDict(extra="forbid")
+
+    type: HITLDecision
+    edited_action: Optional[HITLEditedAction] = None
+    message: Optional[str] = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _edit_needs_action(self) -> "HITLDecisionSchema":
+        if self.type == "edit" and self.edited_action is None:
+            raise ValueError("an 'edit' decision needs edited_action")
+        if self.type != "edit" and self.edited_action is not None:
+            raise ValueError("edited_action is only valid for 'edit' decisions")
+        return self
+
+    def to_langchain(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_none=True)

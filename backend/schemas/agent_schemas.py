@@ -204,7 +204,8 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
-    middleware_ids: Optional[List[int]] = []
+    # None = leave the agent's middlewares untouched; a list replaces them (order = chain order).
+    middleware_ids: Optional[List[int]] = None
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None

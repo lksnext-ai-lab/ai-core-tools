@@ -6,7 +6,7 @@ from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
 from repositories.middleware_repository import MiddlewareRepository
-from models.middleware import AgentMiddleware
+from models.middleware import AgentMiddleware, MiddlewareType
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -567,50 +567,43 @@ class AgentService:
 
         db.commit()
 
-    def update_agent_middlewares(self, db: Session, agent_id: int, middleware_ids: list):
-        """Update agent middleware associations"""
-        agent = AgentRepository.get_by_id(db, agent_id)
-        if not agent:
-            return
+    @staticmethod
+    def validate_middleware_selection(db: Session, app_id: int, middleware_ids: list, has_memory: bool) -> list:
+        """Validate an agent's middleware selection and return the ids in chain order.
 
-        if not isinstance(middleware_ids, list):
-            middleware_ids = []
+        Raises ValueError when the selection references middlewares outside the app,
+        repeats a middleware type (LangChain rejects duplicate middleware instances),
+        or uses human-in-the-loop without conversation memory (HITL needs the checkpointer
+        to pause and resume).
+        """
+        ordered_ids = list(dict.fromkeys(int(mid) for mid in middleware_ids))
+        middlewares = {m.middleware_id: m for m in MiddlewareRepository.get_by_ids_and_app_id(db, ordered_ids, app_id)}
+        if len(middlewares) != len(ordered_ids):
+            raise ValueError("One or more selected middlewares do not exist in this app")
+        seen_types = set()
+        for mid in ordered_ids:
+            mw_type = middlewares[mid].middleware_type
+            if mw_type in seen_types:
+                raise ValueError(f"Only one {mw_type.value} middleware can be attached to an agent")
+            seen_types.add(mw_type)
+        if MiddlewareType.HUMAN_IN_THE_LOOP in seen_types and not has_memory:
+            raise ValueError("Human-in-the-loop middlewares require conversation memory to be enabled")
+        return ordered_ids
 
-        # Get existing middleware associations
-        existing = {assoc.middleware_id: assoc for assoc in db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()}
-
-        # Validate middleware IDs, preserving the caller's requested order
-        # (order determines application order in the LangChain middleware chain).
-        requested_ordered = list(dict.fromkeys(int(mid) for mid in middleware_ids if mid))
-        valid_ids = MiddlewareRepository.get_valid_middleware_ids_for_app(db, set(requested_ordered), agent.app_id)
-        ordered_valid_ids = [mid for mid in requested_ordered if mid in valid_ids]
-
-        # Remove stale
-        for mid in existing:
-            if mid not in valid_ids:
-                db.delete(existing[mid])
-
-        # Add new / reorder existing
-        for position, mid in enumerate(ordered_valid_ids):
+    def update_agent_middlewares(self, db: Session, agent_id: int, ordered_ids: list):
+        """Replace the agent's middleware chain; list position is the execution order."""
+        existing = {
+            assoc.middleware_id: assoc
+            for assoc in db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()
+        }
+        for mid, assoc in existing.items():
+            if mid not in ordered_ids:
+                db.delete(assoc)
+        for position, mid in enumerate(ordered_ids):
             if mid in existing:
                 existing[mid].order = position
-                db.add(existing[mid])
             else:
-                assoc = AgentMiddleware(agent_id=agent_id, middleware_id=mid, order=position)
-                db.add(assoc)
-
-        # Auto-enable memory when a human_in_the_loop middleware is associated,
-        # because HumanInTheLoopMiddleware requires a LangGraph checkpointer.
-        if valid_ids:
-            from models.middleware import Middleware, MiddlewareType
-            hitl_exists = db.query(Middleware).filter(
-                Middleware.middleware_id.in_(valid_ids),
-                Middleware.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP,
-            ).first()
-            if hitl_exists and not agent.has_memory:
-                agent.has_memory = True
-                db.add(agent)
-
+                db.add(AgentMiddleware(agent_id=agent_id, middleware_id=mid, order=position))
         db.commit()
 
     def delete_agent(self, db: Session, agent_id: int) -> bool:

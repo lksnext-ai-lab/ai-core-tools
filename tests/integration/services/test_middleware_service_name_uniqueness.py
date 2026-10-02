@@ -11,18 +11,17 @@ def _schema(name: str) -> CreateUpdateMiddlewareSchema:
     return CreateUpdateMiddlewareSchema(
         name=name,
         description="",
-        middleware_type="monitoring",
+        middleware_type="guardrails",
         config=None,
-        mcp_config_ids=[],
     )
 
 
 class TestMiddlewareNameUniqueness:
     def test_creating_duplicate_name_in_same_app_is_rejected(self, db, fake_app):
-        MiddlewareService.create_or_update_middleware(db, fake_app.app_id, 0, _schema("Test Monitoring"))
+        MiddlewareService.create_or_update_middleware(db, fake_app.app_id, 0, _schema("Test Guardrails"))
 
         with pytest.raises(ValueError, match="already exists"):
-            MiddlewareService.create_or_update_middleware(db, fake_app.app_id, 0, _schema("Test Monitoring"))
+            MiddlewareService.create_or_update_middleware(db, fake_app.app_id, 0, _schema("Test Guardrails"))
 
     def test_renaming_to_another_middlewares_existing_name_is_rejected(self, db, fake_app):
         MiddlewareService.create_or_update_middleware(db, fake_app.app_id, 0, _schema("Alpha"))

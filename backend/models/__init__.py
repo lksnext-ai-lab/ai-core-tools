@@ -9,7 +9,7 @@ from .output_parser import OutputParser
 from .mcp_config import MCPConfig
 from .silo import Silo
 from .skill import Skill, SkillFile
-from .middleware import Middleware, AgentMiddleware, MiddlewareMCP
+from .middleware import Middleware, AgentMiddleware
 from .agent import Agent
 from .agent_marketplace_profile import AgentMarketplaceProfile
 from .conversation_starter import ConversationStarter

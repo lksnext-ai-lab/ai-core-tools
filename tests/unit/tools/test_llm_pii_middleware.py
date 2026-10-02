@@ -1,7 +1,7 @@
 """Unit tests for LLMPIIMiddleware (LLM-based PII detection, additive to regex)."""
 import pytest
 
-from langchain.agents.middleware._redaction import PIIDetectionError
+from langchain.agents.middleware import PIIDetectionError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from tools.middleware.llm_pii import LLMPIIMiddleware, _PIIDetectionResult, _PIIFinding
@@ -37,7 +37,7 @@ async def test_redacts_detected_entity_in_input():
     mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="redact")
     state = {"messages": [HumanMessage(content="My name is John Smith.")]}
 
-    result = await mw.abefore_model(state, _FakeRuntime())
+    result = await mw.abefore_agent(state, _FakeRuntime())
 
     assert result is not None
     assert result["messages"][0].content == "My name is [REDACTED_PERSON]."
@@ -49,7 +49,7 @@ async def test_no_findings_returns_none():
     mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="redact")
     state = {"messages": [HumanMessage(content="Nothing sensitive here.")]}
 
-    result = await mw.abefore_model(state, _FakeRuntime())
+    result = await mw.abefore_agent(state, _FakeRuntime())
 
     assert result is None
 
@@ -60,7 +60,7 @@ async def test_value_not_found_verbatim_is_skipped_not_raised():
     mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="redact")
     state = {"messages": [HumanMessage(content="My name is John Smith.")]}
 
-    result = await mw.abefore_model(state, _FakeRuntime())
+    result = await mw.abefore_agent(state, _FakeRuntime())
 
     assert result is None
 
@@ -72,7 +72,7 @@ async def test_block_strategy_raises_on_match():
     state = {"messages": [HumanMessage(content="My name is John Smith.")]}
 
     with pytest.raises(PIIDetectionError):
-        await mw.abefore_model(state, _FakeRuntime())
+        await mw.abefore_agent(state, _FakeRuntime())
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,7 @@ async def test_apply_to_tool_results_redacts_tool_message():
     result = await mw.abefore_model(state, _FakeRuntime())
 
     assert result is not None
-    assert "10.0.0.5" not in result["messages"][1].content
+    assert "10.0.0.5" not in result["messages"][0].content  # only changed messages are returned
 
 
 @pytest.mark.asyncio
@@ -117,7 +117,7 @@ async def test_detector_call_tagged_with_lc_source_pii():
     mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="redact")
     state = {"messages": [HumanMessage(content="My name is John Smith.")]}
 
-    await mw.abefore_model(state, _FakeRuntime())
+    await mw.abefore_agent(state, _FakeRuntime())
 
     assert llm.structured_llm.last_config == {"metadata": {"lc_source": "pii"}}
 
@@ -128,6 +128,49 @@ async def test_empty_entities_list_skips_detection_entirely():
     mw = LLMPIIMiddleware(llm=llm, entities=[], strategy="redact")
     state = {"messages": [HumanMessage(content="My name is John Smith.")]}
 
-    result = await mw.abefore_model(state, _FakeRuntime())
+    result = await mw.abefore_agent(state, _FakeRuntime())
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_multimodal_message_keeps_non_text_blocks():
+    llm = _FakeLLM([_PIIFinding(type="person", value="John Smith")])
+    mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="redact")
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+    msg = HumanMessage(content=[{"type": "text", "text": "I am John Smith"}, image], id="m1")
+
+    result = await mw.abefore_agent({"messages": [msg]}, _FakeRuntime())
+
+    redacted = result["messages"][0]
+    assert redacted.id == "m1"  # same id -> replaced in place by add_messages
+    assert redacted.content[0]["text"] == "I am [REDACTED_PERSON]"
+    assert redacted.content[1] == image
+
+
+@pytest.mark.asyncio
+async def test_detector_failure_does_not_break_the_turn():
+    class _Failing:
+        def with_structured_output(self, schema):
+            return self
+
+        async def ainvoke(self, prompt, config=None):
+            raise TimeoutError("detector down")
+
+    mw = LLMPIIMiddleware(llm=_Failing(), entities=["person"], strategy="redact")
+    state = {"messages": [HumanMessage(content="My name is John Smith.")]}
+
+    assert await mw.abefore_agent(state, _FakeRuntime()) is None
+
+
+@pytest.mark.asyncio
+async def test_output_redaction_keeps_message_metadata():
+    llm = _FakeLLM([_PIIFinding(type="email", value="jane@example.com")])
+    mw = LLMPIIMiddleware(llm=llm, entities=["email"], strategy="redact")
+    ai = AIMessage(content="Write to jane@example.com", id="a1",
+                   usage_metadata={"input_tokens": 3, "output_tokens": 4, "total_tokens": 7})
+
+    result = await mw.aafter_model({"messages": [ai]}, _FakeRuntime())
+
+    out = result["messages"][0]
+    assert out.id == "a1" and out.usage_metadata["total_tokens"] == 7

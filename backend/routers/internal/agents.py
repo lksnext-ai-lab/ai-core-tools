@@ -18,6 +18,8 @@ from services.user_service import UserService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
+from schemas.middleware_schemas import HITLDecisionSchema
+from pydantic import TypeAdapter, ValidationError
 from schemas.import_schemas import (
     ConflictMode,
     ImportResponseSchema,
@@ -416,6 +418,12 @@ async def create_or_update_agent(
     )
 
     try:
+        # Validate before writing anything so a bad selection leaves the agent untouched.
+        middleware_ids = None
+        if agent_data.middleware_ids is not None:
+            middleware_ids = AgentService.validate_middleware_selection(
+                db, app_id, agent_data.middleware_ids, bool(agent_data.has_memory)
+            )
         # Create or update agent
         created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
     except ValueError as exc:
@@ -425,7 +433,8 @@ async def create_or_update_agent(
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
     agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
-    agent_service.update_agent_middlewares(db, created_agent_id, agent_data.middleware_ids)
+    if middleware_ids is not None:
+        agent_service.update_agent_middlewares(db, created_agent_id, middleware_ids)
 
     # Return updated agent (reuse the GET logic)
     return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
@@ -823,9 +832,12 @@ async def chat_with_agent_stream(
 
 @agents_router.post(
     "/{agent_id}/chat/resume",
-    summary="Resume HITL-interrupted agent chat",
+    summary="Resume a chat paused for human approval",
     tags=["Agents"],
-    responses={500: {"description": "Internal server error"}},
+    responses={
+        404: {"description": "Agent or conversation not found"},
+        422: {"description": "Malformed decisions"},
+    },
 )
 async def resume_agent_chat(
     app_id: int,
@@ -834,59 +846,51 @@ async def resume_agent_chat(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
-    decisions: Annotated[str, Form()],
-    conversation_id: Annotated[Optional[int], Form()] = None,
+    decisions: Annotated[str, Form(description="JSON array of HITL decisions, one per pending action, in order")],
+    conversation_id: Annotated[int, Form()],
 ):
-    """Resume an agent chat that was paused by Human-in-the-Loop middleware.
+    """Answer a pending human-in-the-loop approval and stream the rest of the turn.
 
-    Accepts a JSON-encoded list of decisions (approve / edit / reject) and
-    resumes the LangGraph execution from the saved checkpoint.
+    Same SSE contract as ``/chat/stream``. Decisions are checked against the pending
+    approval (count, order and allowed types) before execution resumes.
     """
+    _get_agent_or_404(db, agent_id, app_id)
     try:
-        _get_agent_or_404(db, agent_id, app_id)
+        parsed = TypeAdapter(List[HITLDecisionSchema]).validate_json(decisions)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid decisions: {exc.errors()[0]['msg']}")
+    if not parsed:
+        raise HTTPException(status_code=422, detail="At least one decision is required")
 
-        import json
-        parsed_decisions = json.loads(decisions)
-        if not isinstance(parsed_decisions, list):
-            raise HTTPException(status_code=400, detail="decisions must be a JSON array")
+    user_context = {
+        "user_id": int(auth_context.identity.id),
+        "email": auth_context.identity.email,
+        "oauth": True,
+        "app_id": app_id,
+        "token": _extract_jwt_token(request),
+    }
+    base_generator = AgentStreamingService(db).stream_agent_chat(
+        agent_id=agent_id,
+        message="",
+        user_context=user_context,
+        conversation_id=conversation_id,
+        db=db,
+        resume_decisions=[d.to_langchain() for d in parsed],
+    )
 
-        jwt_token = _extract_jwt_token(request)
-        user_context = {
-            "user_id": int(auth_context.identity.id),
-            "email": auth_context.identity.email,
-            "oauth": True,
-            "app_id": app_id,
-            "token": jwt_token,
-        }
+    async def generator() -> AsyncGenerator[str, None]:
+        try:
+            async for chunk in base_generator:
+                yield chunk
+        finally:
+            # get_db teardown runs too late for a StreamingResponse.
+            db.close()
 
-        streaming_service = AgentStreamingService(db)
-        generator = streaming_service.stream_resume_agent_chat(
-            agent_id=agent_id,
-            decisions=parsed_decisions,
-            user_context=user_context,
-            conversation_id=conversation_id,
-            db=db,
-        )
-
-        logger.info(
-            "Resuming HITL chat for agent %s by user %s with %d decisions",
-            agent_id, auth_context.identity.id, len(parsed_decisions),
-        )
-        return StreamingResponse(
-            generator,
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in resume chat endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
 
 
 @agents_router.post(

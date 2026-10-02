@@ -13,6 +13,8 @@ from datetime import datetime
 from typing import AsyncGenerator, Dict, List, Any
 
 import psycopg.errors
+from langchain_core.messages import AIMessage
+from langgraph.types import Command
 from sqlalchemy.orm import Session
 
 from tools.agentTools import create_agent, prepare_agent_config, build_human_message, compute_thread_id
@@ -28,6 +30,8 @@ from tools.streaming_utils import (
     SSE_HITL_INTERRUPT,
 )
 from services.agent_execution_service import AgentExecutionService
+from services.hitl_service import HITLDecisionError, pending_approval_from_state, validate_decisions
+from tools.middleware.factory import human_in_the_loop_config, redacts_output
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
 from services.agent_cache_service import (
@@ -39,16 +43,23 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def _has_pending_interrupt(agent_chain, config) -> bool:
-    """True when the graph is parked on a HITL interrupt awaiting a decision."""
+async def _pending_approval(agent_chain, config) -> dict | None:
+    """The HITL request the graph is paused on, or None."""
     try:
-        state = await agent_chain.aget_state(config)
-        return any(getattr(task, "interrupts", None) for task in getattr(state, "tasks", []))
+        return pending_approval_from_state(await agent_chain.aget_state(config))
     except Exception as exc:
-        # ponytail: unreadable state falls back to "no interrupt" so the caller's
-        # existing recovery path stays reachable.
+        # Unreadable state falls back to "no interrupt" so the normal recovery path stays reachable.
         logger.warning("Could not read graph state for pending interrupts: %s", exc)
-        return False
+        return None
+
+
+async def _final_answer_text(agent_chain, config) -> str:
+    """Text of the last AI message in the checkpoint (after after_model middlewares ran)."""
+    state = await agent_chain.aget_state(config)
+    for msg in reversed((state.values or {}).get("messages", [])):
+        if isinstance(msg, AIMessage):
+            return msg.text
+    return ""
 
 
 class AgentStreamingService:
@@ -71,8 +82,16 @@ class AgentStreamingService:
         user_context: dict | None = None,
         conversation_id: int | None = None,
         db: Session | None = None,
+        resume_decisions: list[dict] | None = None,
+        approval_ui: bool = True,
     ) -> AsyncGenerator[str, None]:
         """Stream an agent chat turn as SSE events.
+
+        With ``resume_decisions`` the turn resumes a human-in-the-loop pause instead of
+        sending a new message: the decisions are validated against the pending approval
+        and passed to the graph as ``Command(resume={"decisions": ...})``.
+        Callers whose UI cannot collect a decision pass ``approval_ui=False`` and get an
+        ``error`` event instead of a pause they could never resume.
 
         Yields ``format_sse_event`` strings for each event in the following
         sequence:
@@ -224,9 +243,18 @@ class AgentStreamingService:
                 # ------------------------------------------------------------
                 # 4. Build the HumanMessage payload (handles multimodal images)
                 # ------------------------------------------------------------
-                message_payload = build_human_message(
-                    ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
-                )
+                if resume_decisions is None:
+                    stream_input = {"messages": [build_human_message(
+                        ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
+                    )]}
+                else:
+                    try:
+                        validate_decisions(await _pending_approval(agent_chain, config), resume_decisions)
+                    except HITLDecisionError as exc:
+                        metrics_status, metrics_error_code, metrics_error_message = "ERROR", "HITLDecisionError", str(exc)
+                        yield format_sse_event("error", {"message": str(exc)})
+                        return
+                    stream_input = Command(resume={"decisions": resume_decisions})
 
                 # ------------------------------------------------------------
                 # 5. Attach LangSmith tracer + metadata when configured
@@ -259,10 +287,14 @@ class AgentStreamingService:
 
                 accumulated_content = ""
                 structured_response = None
+                # PIIMiddleware(apply_to_output) redacts the AI message in after_model, i.e.
+                # after its tokens were streamed; hold tokens back so PII never reaches the UI.
+                buffer_output = redacts_output(ctx.fresh_agent)
+                hitl_enabled = human_in_the_loop_config(ctx.fresh_agent) is not None
 
                 try:
                     async for mode, chunk in agent_chain.astream(
-                        {"messages": [message_payload]},
+                        stream_input,
                         config=config,
                         stream_mode=["messages", "updates", "custom"],
                     ):
@@ -283,6 +315,10 @@ class AgentStreamingService:
                                     if first_token_at is None:
                                         first_token_at = datetime.utcnow()
                                     accumulated_content += event["data"].get("content", "")
+                                    if buffer_output:
+                                        # Raw tokens are not PII-redacted yet; send the
+                                        # redacted final message instead (see below).
+                                        continue
                                 yield format_sse_event(event["type"], event["data"])
                     break
                 except Exception as stream_exc:
@@ -294,7 +330,7 @@ class AgentStreamingService:
                         # A HITL pause leaves the same unanswered tool_call a corrupt
                         # checkpoint does. Deleting it would silently discard the
                         # pending approval and the whole thread's memory.
-                        and not await _has_pending_interrupt(agent_chain, config)
+                        and not (hitl_enabled and await _pending_approval(agent_chain, config))
                     ):
                         # Recover by forking from the last known-good checkpoint
                         # instead of deleting the whole thread — see the mirrored
@@ -337,64 +373,47 @@ class AgentStreamingService:
                 if structured_response is not None
                 else accumulated_content
             )
-            logger.info("Stream completed — accumulated_content length=%d", len(accumulated_content))
-
-            # Check for pending interrupts after stream completes
-            has_pending_interrupt = False
-            try:
-                graph_state = await agent_chain.aget_state(config)
-                if hasattr(graph_state, 'tasks'):
-                    for task in graph_state.tasks:
-                        if hasattr(task, 'interrupts') and task.interrupts:
-                            has_pending_interrupt = True
-                            logger.info("PENDING INTERRUPT found in graph state: %s", task.interrupts)
-                            for intr in task.interrupts:
-                                payload = intr.value if hasattr(intr, 'value') else intr
-                                action_requests = []
-                                review_configs = []
-                                if isinstance(payload, dict):
-                                    action_requests = payload.get("action_requests", [])
-                                    review_configs = payload.get("review_configs", [])
-                                yield format_sse_event(
-                                    "hitl_interrupt",
-                                    {
-                                        "action_requests": action_requests,
-                                        "review_configs": review_configs,
-                                    },
-                                )
-            except Exception as state_err:
-                logger.warning("Could not check graph state for interrupts: %s", state_err)
-
-            # If HITL interrupted, emit done with interrupt message and skip normal finalization
-            if has_pending_interrupt:
+            pending = await _pending_approval(agent_chain, config) if hitl_enabled else None
+            if pending and not approval_ui:
+                tools = ", ".join(a["name"] for a in pending["action_requests"])
+                metrics_status, metrics_error_code = "ERROR", "HumanApprovalRequired"
+                metrics_error_message = f"Approval required for {tools}"
+                yield format_sse_event("error", {
+                    "message": f"This agent needs human approval before running {tools}, "
+                               "which is not available in this chat.",
+                })
+                return
+            if pending:
+                # Paused by HumanInTheLoopMiddleware: nothing to finalize until the
+                # reviewer answers through the resume endpoint.
+                yield format_sse_event(SSE_HITL_INTERRUPT, pending)
                 yield format_sse_event(
                     "done",
-                    {
-                        "response": "⏸️ Execution paused — awaiting human approval.",
-                        "conversation_id": ctx.effective_conv_id,
-                        "files": [],
-                        "hitl_paused": True,
-                    },
+                    {"response": "", "conversation_id": ctx.effective_conv_id, "files": [], "hitl_paused": True},
                 )
-            else:
-                # ----------------------------------------------------------------
-                # 7. Post-processing phase — delegates to AgentExecutionService
-                # ----------------------------------------------------------------
-                result = await self.execution_service._finalize_turn(
-                    ctx, raw_response, effective_db
-                )
+                return
 
-                # ----------------------------------------------------------------
-                # 8. Emit done event
-                # ----------------------------------------------------------------
-                yield format_sse_event(
-                    "done",
-                    {
-                        "response": result["parsed_response"],
-                        "conversation_id": result["effective_conv_id"],
-                        "files": result["files_data"],
-                    },
-                )
+            if buffer_output and structured_response is None:
+                raw_response = await _final_answer_text(agent_chain, config)
+
+            # ----------------------------------------------------------------
+            # 7. Post-processing phase — delegates to AgentExecutionService
+            # ----------------------------------------------------------------
+            result = await self.execution_service._finalize_turn(
+                ctx, raw_response, effective_db
+            )
+
+            # ----------------------------------------------------------------
+            # 8. Emit done event
+            # ----------------------------------------------------------------
+            yield format_sse_event(
+                "done",
+                {
+                    "response": result["parsed_response"],
+                    "conversation_id": result["effective_conv_id"],
+                    "files": result["files_data"],
+                },
+            )
 
         except (
             psycopg.errors.AdminShutdown,
@@ -417,44 +436,10 @@ class AgentStreamingService:
             metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
             raise
         except Exception as exc:
-            # Check if this is a GraphInterrupt from HumanInTheLoop middleware
-            from langgraph.errors import GraphInterrupt
-            if isinstance(exc, GraphInterrupt):
-                interrupts = getattr(exc, "interrupts", [])
-                logger.info(
-                    "GraphInterrupt caught — HITL middleware paused execution. "
-                    "Interrupts: %s", interrupts
-                )
-                # Emit HITL interrupt event to the frontend
-                for intr in interrupts:
-                    payload = intr.value if hasattr(intr, "value") else intr
-                    action_requests = []
-                    review_configs = []
-                    if isinstance(payload, dict):
-                        action_requests = payload.get("action_requests", [])
-                        review_configs = payload.get("review_configs", [])
-                    yield format_sse_event(
-                        "hitl_interrupt",
-                        {
-                            "action_requests": action_requests,
-                            "review_configs": review_configs,
-                        },
-                    )
-                # Emit done with a placeholder so the UI shows the interrupt message
-                yield format_sse_event(
-                    "done",
-                    {
-                        "response": "⏸️ Execution paused — awaiting human approval.",
-                        "conversation_id": ctx.effective_conv_id if ctx else None,
-                        "files": [],
-                        "hitl_paused": True,
-                    },
-                )
-            else:
-                logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
-                metrics_status, metrics_error_code = "ERROR", type(exc).__name__
-                metrics_error_message = str(exc)[:2000]
-                yield format_sse_event("error", {"message": "Agent execution failed"})
+            logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
+            metrics_status, metrics_error_code = "ERROR", type(exc).__name__
+            metrics_error_message = str(exc)[:2000]
+            yield format_sse_event("error", {"message": "Agent execution failed"})
 
         finally:
             if ctx is not None and sandbox_turn_active:
@@ -486,141 +471,3 @@ class AgentStreamingService:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
-
-    async def stream_resume_agent_chat(
-        self,
-        agent_id: int,
-        decisions: list[dict],
-        user_context: dict | None = None,
-        conversation_id: int | None = None,
-        db: Session | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """Resume a HITL-interrupted agent turn by sending decisions back.
-
-        After a ``hitl_interrupt`` event paused the graph, the client calls
-        this method with the user's decisions (approve / edit / reject) to
-        resume execution from the saved checkpoint.
-
-        Yields:
-            SSE-formatted strings identical to ``stream_agent_chat``.
-        """
-        from langgraph.types import Command
-
-        effective_db = db or self.db
-        mcp_client = None
-        ctx = None
-
-        try:
-            # 1. Prepare turn (reuses same session / conversation)
-            ctx = await self.execution_service._prepare_turn(
-                agent_id=agent_id,
-                message="",  # No new user message for resume
-                user_context=user_context,
-                conversation_id=conversation_id,
-                db=effective_db,
-            )
-
-            yield format_sse_event(
-                "metadata",
-                {
-                    "conversation_id": ctx.effective_conv_id,
-                    "session_id": ctx.conversation.session_id if ctx.conversation else None,
-                    "agent_id": agent_id,
-                    "agent_name": ctx.agent.name,
-                    "has_memory": ctx.agent.has_memory,
-                },
-            )
-
-            # 2. Rebuild agent chain (same tools, same checkpointer)
-            agent_chain, mcp_client = await create_agent(
-                ctx.fresh_agent,
-                ctx.search_params,
-                ctx.session_id_for_cache,
-                ctx.user_context,
-                ctx.working_dir,
-            )
-
-            config = prepare_agent_config(ctx.fresh_agent)
-            config["configurable"]["thread_id"] = compute_thread_id(ctx.fresh_agent, ctx.session_id_for_cache)
-
-            # 3. Build the Command to resume with decisions
-            resume_value = {"decisions": decisions}
-            resume_input = Command(resume=resume_value)
-
-            logger.info(
-                "Resuming HITL for agent %s with %d decision(s): %s",
-                agent_id, len(decisions),
-                [d.get("type") for d in decisions],
-            )
-
-            # 4. Stream resumed execution
-            accumulated_content = ""
-
-            async for mode, chunk in agent_chain.astream(
-                resume_input,
-                config=config,
-                stream_mode=["messages", "updates", "custom"],
-            ):
-                events = map_stream_event(mode, chunk)
-                if events:
-                    for event in events:
-                        if event["type"] == SSE_TOKEN:
-                            accumulated_content += event["data"].get("content", "")
-                        yield format_sse_event(event["type"], event["data"])
-
-            # 5. Check for further interrupts (chained HITL)
-            has_pending_interrupt = False
-            try:
-                graph_state = await agent_chain.aget_state(config)
-                for task in getattr(graph_state, 'tasks', []):
-                    if hasattr(task, 'interrupts') and task.interrupts:
-                        has_pending_interrupt = True
-                        for intr in task.interrupts:
-                            payload = intr.value if hasattr(intr, 'value') else intr
-                            if isinstance(payload, dict):
-                                action_requests = payload.get("action_requests", [])
-                                review_configs = payload.get("review_configs", [])
-                            else:
-                                action_requests = []
-                                review_configs = []
-                            yield format_sse_event(
-                                "hitl_interrupt",
-                                {
-                                    "action_requests": action_requests,
-                                    "review_configs": review_configs,
-                                },
-                            )
-            except Exception as state_err:
-                logger.warning("Could not check graph state after resume: %s", state_err)
-
-            if has_pending_interrupt:
-                yield format_sse_event(
-                    "done",
-                    {
-                        "response": "⏸️ Execution paused — awaiting human approval.",
-                        "conversation_id": ctx.effective_conv_id,
-                        "files": [],
-                        "hitl_paused": True,
-                    },
-                )
-            else:
-                # 6. Normal finalization
-                result = await self.execution_service._finalize_turn(
-                    ctx, accumulated_content, effective_db
-                )
-                yield format_sse_event(
-                    "done",
-                    {
-                        "response": result["parsed_response"],
-                        "conversation_id": result["effective_conv_id"],
-                        "files": result["files_data"],
-                    },
-                )
-
-        except Exception as exc:
-            logger.error("Error resuming HITL agent chat: %s", str(exc), exc_info=True)
-            yield format_sse_event("error", {"message": str(exc)})
-
-        finally:
-            if mcp_client:
-                logger.info("MCP client will be cleaned up automatically")

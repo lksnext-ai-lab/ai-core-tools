@@ -1,186 +1,102 @@
-"""Unit tests for GuardrailsMiddleware and guardrail compose functions."""
+"""GuardrailsMiddleware: policy goes into the system prompt of each model call only.
+
+Regression for the original implementation, which wrote SystemMessages into the agent
+state: they landed between an AIMessage's tool_calls and its ToolMessage (OpenAI 400),
+broke Anthropic ("multiple non-consecutive system messages"), were persisted in the
+checkpoint and became the "answer" of non-streaming calls.
+"""
 import pytest
-from tools.middleware.guardrails import (
-    compose_guardrail_message,
-    compose_input_guardrail_message,
-    compose_output_guardrail_message,
-    GUARDRAILS_DEFAULT_CONFIG,
-    GUARDRAILS_DEFAULT_CUSTOM_PROMPT,
-    GuardrailsMiddleware,
-)
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+
+from schemas.middleware_schemas import GuardrailsConfig
+from tools.middleware.guardrails import GuardrailsMiddleware, compose_guardrail_policy
 
 
-class TestComposeInputGuardrailMessage:
-    def test_all_input_flags_on(self):
-        config = {"input": {"block_malicious_prompts": True, "block_jailbreak": True}, "custom_prompt": ""}
-        result = compose_input_guardrail_message(config)
-        assert result is not None
-        assert "INPUT GUARDRAIL" in result
-        assert "[Input]" in result
+class _ToolCallingFake(BaseChatModel):
+    """First call asks for the `add` tool, second call answers. Records every request."""
 
-    def test_no_input_flags_no_prompt_returns_none(self):
-        config = {"input": {"block_malicious_prompts": False, "block_jailbreak": False}, "custom_prompt": ""}
-        result = compose_input_guardrail_message(config)
-        assert result is None
+    calls: list = []
 
-    def test_custom_prompt_included_in_input_message(self):
-        config = {"input": {"block_malicious_prompts": False, "block_jailbreak": False}, "custom_prompt": "Only cats."}
-        result = compose_input_guardrail_message(config)
-        assert result is not None
-        assert "Only cats." in result
+    def bind_tools(self, tools, **kwargs):
+        return self
 
-    def test_missing_flags_default_to_on(self):
-        result = compose_input_guardrail_message({})
-        assert result is not None
-        assert "[Input]" in result
+    @property
+    def _llm_type(self) -> str:
+        return "fake-tool-calling"
 
-    def test_whitespace_custom_prompt_treated_as_empty(self):
-        config = {"input": {"block_malicious_prompts": False, "block_jailbreak": False}, "custom_prompt": "   "}
-        result = compose_input_guardrail_message(config)
-        assert result is None
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.calls.append(list(messages))
+        if len(self.calls) == 1:
+            msg = AIMessage(content="", tool_calls=[{"name": "add", "args": {"a": 1, "b": 2}, "id": "call_1"}])
+        else:
+            msg = AIMessage(content="The result is 3")
+        return ChatResult(generations=[ChatGeneration(message=msg)])
 
 
-class TestComposeOutputGuardrailMessage:
-    def test_all_output_flags_on(self):
-        config = {"output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True}}
-        result = compose_output_guardrail_message(config)
-        assert result is not None
-        assert "OUTPUT GUARDRAIL" in result
-        assert "[Output]" in result
-
-    def test_no_output_flags_returns_none(self):
-        config = {"output": {"prevent_pii_leakage": False, "block_toxic_biased": False, "enforce_business_facts": False}}
-        result = compose_output_guardrail_message(config)
-        assert result is None
-
-    def test_missing_flags_default_to_on(self):
-        result = compose_output_guardrail_message({})
-        assert result is not None
-        assert "[Output]" in result
+@tool
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
 
 
-class TestComposeGuardrailMessage:
-    """Backward-compat combined compose function."""
+class TestComposePolicy:
+    def test_all_rules_enabled_by_default(self):
+        policy = compose_guardrail_policy(GuardrailsConfig())
+        assert policy.startswith("<guardrails>")
+        assert "jailbreak" in policy and "personally identifiable" in policy
 
-    def test_all_flags_on_returns_both_sections(self):
-        config = {
-            "input": {"block_malicious_prompts": True, "block_jailbreak": True},
-            "output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True},
-            "custom_prompt": "",
-        }
-        result = compose_guardrail_message(config)
-        assert result is not None
-        assert "[Input]" in result
-        assert "[Output]" in result
+    def test_nothing_enabled_returns_none(self):
+        cfg = GuardrailsConfig(
+            input={"block_malicious_prompts": False, "block_jailbreak": False},
+            output={"prevent_pii_leakage": False, "block_toxic_biased": False, "enforce_business_facts": False},
+        )
+        assert compose_guardrail_policy(cfg) is None
 
-    def test_no_flags_no_prompt_returns_none(self):
-        config = {
-            "input": {"block_malicious_prompts": False, "block_jailbreak": False},
-            "output": {"prevent_pii_leakage": False, "block_toxic_biased": False, "enforce_business_facts": False},
-            "custom_prompt": "",
-        }
-        result = compose_guardrail_message(config)
-        assert result is None
-
-    def test_missing_flags_default_to_on(self):
-        result = compose_guardrail_message({})
-        assert result is not None
-        assert "[Input]" in result
-        assert "[Output]" in result
-
-    def test_default_config_produces_message(self):
-        config = dict(GUARDRAILS_DEFAULT_CONFIG)
-        config["custom_prompt"] = GUARDRAILS_DEFAULT_CUSTOM_PROMPT
-        assert compose_guardrail_message(config) is not None
+    def test_custom_prompt_included(self):
+        cfg = GuardrailsConfig(custom_prompt="Only talk about invoices.")
+        assert "Only talk about invoices." in compose_guardrail_policy(cfg)
 
 
-class TestGuardrailsMiddlewareBeforeModel:
-    def test_no_injection_when_no_input_rules(self):
-        config = {
-            "input": {"block_malicious_prompts": False, "block_jailbreak": False},
-            "output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True},
-            "custom_prompt": "",
-        }
-        mw = GuardrailsMiddleware(config)
-        from langchain.messages import HumanMessage
-        state = {"messages": [HumanMessage(content="hello")]}
-        result = mw.before_model(state, None)
-        assert result is None  # no input rules → before_model is a no-op
+class TestGuardrailsInAgent:
+    @pytest.mark.asyncio
+    async def test_policy_is_in_system_prompt_and_state_is_untouched(self):
+        model = _ToolCallingFake()
+        model.calls = []
+        agent = create_agent(
+            model,
+            tools=[add],
+            system_prompt="You are a calculator.",
+            middleware=[GuardrailsMiddleware(GuardrailsConfig())],
+        )
 
-    def test_injects_input_system_message_before_human(self):
-        config = {
-            "input": {"block_malicious_prompts": True, "block_jailbreak": True},
-            "output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True},
-            "custom_prompt": "",
-        }
-        mw = GuardrailsMiddleware(config)
-        from langchain.messages import HumanMessage, SystemMessage
-        state = {"messages": [HumanMessage(content="hello")]}
-        result = mw.before_model(state, None)
-        assert result is not None
-        msgs = result["messages"]
-        sys_idx = next(i for i, m in enumerate(msgs) if isinstance(m, SystemMessage))
-        hum_idx = next(i for i, m in enumerate(msgs) if isinstance(m, HumanMessage))
-        assert sys_idx < hum_idx
-        assert "INPUT GUARDRAIL" in msgs[sys_idx].content
+        result = await agent.ainvoke({"messages": [HumanMessage("what is 1+2?")]})
 
-    def test_before_model_does_not_inject_output_rules(self):
-        config = {
-            "input": {"block_malicious_prompts": True, "block_jailbreak": True},
-            "output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True},
-            "custom_prompt": "",
-        }
-        mw = GuardrailsMiddleware(config)
-        from langchain.messages import HumanMessage, SystemMessage
-        state = {"messages": [HumanMessage(content="hello")]}
-        result = mw.before_model(state, None)
-        assert result is not None
-        injected = next(m for m in result["messages"] if isinstance(m, SystemMessage))
-        assert "[Output]" not in injected.content
-        assert "OUTPUT GUARDRAIL" not in injected.content
+        assert len(model.calls) == 2
+        for sent in model.calls:
+            # Exactly one system message, first, holding agent prompt + policy.
+            assert isinstance(sent[0], SystemMessage)
+            assert [m for m in sent if isinstance(m, SystemMessage)] == [sent[0]]
+            assert "You are a calculator." in sent[0].text
+            assert "<guardrails>" in sent[0].text
+        # tool_calls are followed directly by their ToolMessage.
+        second = model.calls[1]
+        ai_idx = next(i for i, m in enumerate(second) if isinstance(m, AIMessage))
+        assert isinstance(second[ai_idx + 1], ToolMessage)
+        # Nothing was written to the conversation state; the answer is the last message.
+        assert not any(isinstance(m, SystemMessage) for m in result["messages"])
+        assert result["messages"][-1].content == "The result is 3"
 
+    @pytest.mark.asyncio
+    async def test_works_without_agent_system_prompt(self):
+        model = _ToolCallingFake()
+        model.calls = []
+        agent = create_agent(model, tools=[add], middleware=[GuardrailsMiddleware(GuardrailsConfig())])
 
-class TestGuardrailsMiddlewareAfterModel:
-    def test_no_injection_when_no_output_rules(self):
-        config = {
-            "input": {"block_malicious_prompts": True, "block_jailbreak": True},
-            "output": {"prevent_pii_leakage": False, "block_toxic_biased": False, "enforce_business_facts": False},
-            "custom_prompt": "",
-        }
-        mw = GuardrailsMiddleware(config)
-        from langchain.messages import HumanMessage, AIMessage
-        state = {"messages": [HumanMessage(content="hello"), AIMessage(content="hi there")]}
-        result = mw.after_model(state, None)
-        assert result is None  # no output rules → after_model is a no-op
+        await agent.ainvoke({"messages": [HumanMessage("what is 1+2?")]})
 
-    def test_injects_output_system_message_after_ai_response(self):
-        config = {
-            "input": {"block_malicious_prompts": True, "block_jailbreak": True},
-            "output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True},
-            "custom_prompt": "",
-        }
-        mw = GuardrailsMiddleware(config)
-        from langchain.messages import HumanMessage, AIMessage, SystemMessage
-        state = {"messages": [HumanMessage(content="hello"), AIMessage(content="hi there")]}
-        result = mw.after_model(state, None)
-        assert result is not None
-        msgs = result["messages"]
-        last_msg = msgs[-1]
-        assert isinstance(last_msg, SystemMessage)
-        assert "OUTPUT GUARDRAIL" in last_msg.content
-        assert "[Output]" in last_msg.content
-
-    def test_after_model_does_not_inject_input_rules(self):
-        config = {
-            "input": {"block_malicious_prompts": True, "block_jailbreak": True},
-            "output": {"prevent_pii_leakage": True, "block_toxic_biased": True, "enforce_business_facts": True},
-            "custom_prompt": "",
-        }
-        mw = GuardrailsMiddleware(config)
-        from langchain.messages import HumanMessage, AIMessage, SystemMessage
-        state = {"messages": [HumanMessage(content="hello"), AIMessage(content="hi there")]}
-        result = mw.after_model(state, None)
-        assert result is not None
-        last_msg = result["messages"][-1]
-        assert "[Input]" not in last_msg.content
-        assert "INPUT GUARDRAIL" not in last_msg.content
+        assert isinstance(model.calls[0][0], SystemMessage)
+        assert model.calls[0][0].text.startswith("<guardrails>")
