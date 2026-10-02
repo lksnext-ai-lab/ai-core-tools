@@ -373,8 +373,8 @@ async def search_silo_documents(
         
         t0 = time.perf_counter()
         result = SiloService.search_silo_documents_router(
-            silo_id,
-            search_query.query,
+            silo_id, 
+            search_query.query, 
             search_query.filter_metadata,
             search_query.limit,
             search_query.search_type,

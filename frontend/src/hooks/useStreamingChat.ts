@@ -70,6 +70,18 @@ interface SendOptions {
   readonly searchParams?: any;
 }
 
+export interface HitlInterruptData {
+  actionRequests: Array<{
+    name: string;
+    args: Record<string, unknown>;
+    description?: string;
+  }>;
+  reviewConfigs: Array<{
+    action_name: string;
+    allowed_decisions: string[];
+  }>;
+}
+
 interface UseStreamingChatReturn {
   readonly streamingContent: string;
   readonly activeTools: ActiveTool[];
@@ -77,12 +89,15 @@ interface UseStreamingChatReturn {
   readonly isStreaming: boolean;
   readonly responseElapsedMs: number;
   readonly streamError: string | null;
+  readonly hitlInterrupt: HitlInterruptData | null;
   readonly codeOutputLines: string[];
   readonly isCodeRunning: boolean;
   readonly toolExecutionHistory: ToolExecutionRecord[];
   readonly clearToolHistory: () => void;
   readonly sendMessage: (message: string, options?: SendOptions) => Promise<StreamResult>;
   readonly abortStream: () => void;
+  readonly clearHitlInterrupt: () => void;
+  readonly setHitlInterrupt: (data: HitlInterruptData | null) => void;
 }
 
 function buildActiveTool(
@@ -174,9 +189,12 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [responseElapsedMs, setResponseElapsedMs] = useState(0);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [hitlInterrupt, setHitlInterrupt] = useState<HitlInterruptData | null>(null);
   const [codeOutputLines, setCodeOutputLines] = useState<string[]>([]);
   const [isCodeRunning, setIsCodeRunning] = useState(false);
   const [toolExecutionHistory, setToolExecutionHistory] = useState<ToolExecutionRecord[]>([]);
+
+  const hitlInterruptRef = useRef(false);
 
   const clearToolHistory = useCallback(() => setToolExecutionHistory([]), []);
 
@@ -222,6 +240,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       streamStartedAtRef.current = performance.now();
       setResponseElapsedMs(0);
       setStreamError(null);
+      setHitlInterrupt(null);
+      hitlInterruptRef.current = false;
       setCodeOutputLines([]);
       setIsCodeRunning(false);
       contentRef.current = '';
@@ -435,6 +455,24 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 setIsCodeRunning(false);
                 break;
               }
+
+              case 'hitl_interrupt': {
+                const data = event.data as {
+                  action_requests?: Array<{ name?: string; args?: Record<string, unknown>; description?: string }>;
+                  review_configs?: Array<{ action_name: string; allowed_decisions: string[] }>;
+                };
+                const actionRequests = (data.action_requests ?? []).map((r) => ({
+                  name: r.name ?? 'unknown_tool',
+                  args: r.args ?? {},
+                  description: r.description,
+                }));
+                const reviewConfigs = data.review_configs ?? [];
+                const toolNames = actionRequests.map((r) => r.name).join(', ');
+                setThinkingMessage(`⏸ Esperando aprobación humana para: ${toolNames}`);
+                setHitlInterrupt({ actionRequests, reviewConfigs });
+                hitlInterruptRef.current = true;
+                break;
+              }
             }
           },
         });
@@ -457,7 +495,10 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
         flushRequestedRef.current = false;
         setStreamingContent(contentRef.current);
         setIsStreaming(false);
-        setThinkingMessage(null);
+        // Keep thinking message visible when HITL is pending
+        if (!hitlInterruptRef.current) {
+          setThinkingMessage(null);
+        }
         setActiveTools((prev) =>
           prev.map((tool) => tool.status === 'running' ? { ...tool, status: 'complete' as const } : tool),
         );
@@ -477,6 +518,12 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
     [],
   );
 
+  const clearHitlInterrupt = useCallback(() => {
+    setHitlInterrupt(null);
+    hitlInterruptRef.current = false;
+    setThinkingMessage(null);
+  }, []);
+
   return {
     streamingContent,
     activeTools,
@@ -484,11 +531,14 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
     isStreaming,
     responseElapsedMs,
     streamError,
+    hitlInterrupt,
     codeOutputLines,
     isCodeRunning,
     toolExecutionHistory,
     clearToolHistory,
     sendMessage,
     abortStream,
+    clearHitlInterrupt,
+    setHitlInterrupt,
   };
 }
