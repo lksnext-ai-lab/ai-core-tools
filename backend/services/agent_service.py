@@ -587,22 +587,17 @@ class AgentService:
                 "Could not destroy sandboxes for agent %s during deletion: %s",
                 agent_id, exc
             )
-        # Clear sandbox DB state for all conversations belonging to this agent
+        # Remaining conversations (playground, marketplace, API) with their media, files and
+        # LangGraph checkpoints. If this fails, the Conversation.agent_id ON DELETE CASCADE FK
+        # still removes the rows so the agent delete is never blocked by them.
         try:
-            from models.conversation import Conversation
-            db.query(Conversation).filter(
-                Conversation.agent_id == agent_id,
-                Conversation.sandbox_session_id.isnot(None),
-            ).update(
-                {"sandbox_session_id": None, "sandbox_state": None},
-                synchronize_session=False,
-            )
-            db.commit()
+            from services.conversation_service import ConversationService
+            ConversationService.purge_for_agent(db, agent_id)
         except Exception as exc:
+            db.rollback()
             import logging
             logging.getLogger(__name__).warning(
-                "Could not clear sandbox DB state for agent %s conversations: %s",
-                agent_id, exc
+                "Could not purge conversations of agent %s: %s", agent_id, exc
             )
         return AgentRepository.delete_by_id(db, agent_id)
 

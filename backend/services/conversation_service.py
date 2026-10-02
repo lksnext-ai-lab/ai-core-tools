@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import ast
 import json
@@ -18,6 +19,9 @@ from utils.security import hash_api_key
 from lks_idprovider import AuthContext
 
 logger = get_logger(__name__)
+
+# Strong refs to fire-and-forget checkpoint cleanups so they are not garbage-collected mid-run.
+_pending_cleanups: set = set()
 
 
 async def _resolve_image_placeholders(
@@ -313,6 +317,54 @@ class ConversationService:
             logger.info(f"Deleted chat history thread_{agent_id}_{session_id}")
         except Exception as e:
             logger.error(f"Error deleting chat history: {e}")
+
+    @staticmethod
+    async def delete_thread_histories(threads: List[tuple]) -> None:
+        """Delete the checkpoints of each (agent_id, session_id) thread. Best effort."""
+        for agent_id, session_id in threads:
+            await ConversationService.delete_thread_history(agent_id, session_id)
+
+    @staticmethod
+    def delete_thread_histories_in_background(threads: List[tuple]) -> None:
+        """Delete checkpoints from sync code: as a task on the running loop, or inline if there is none."""
+        if not threads:
+            return
+        coro = ConversationService.delete_thread_histories(threads)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(coro)
+            return
+        task = loop.create_task(coro)
+        _pending_cleanups.add(task)
+        task.add_done_callback(_pending_cleanups.discard)
+
+    @staticmethod
+    def purge_for_agent(db: Session, agent_id: int) -> int:
+        """Delete every conversation of an agent with its media, sandbox, files and checkpoints.
+
+        Called from AgentService.delete_agent before the agent row goes. Commits.
+        Returns the number of conversations deleted.
+        """
+        from services.file_management_service import FileManagementService
+
+        conversations = db.query(Conversation).filter(Conversation.agent_id == agent_id).all()
+        threads = []
+        for conversation in conversations:
+            ConversationService.release_conversation_resources(db, conversation)
+            threads.append((conversation.agent_id, conversation.session_id))
+        conversation_ids = [conversation.conversation_id for conversation in conversations]
+        for conversation in conversations:
+            db.delete(conversation)
+        db.commit()
+
+        try:
+            FileManagementService().delete_agent_storage(agent_id, conversation_ids)
+        except Exception as e:
+            logger.error(f"Error deleting file storage of agent {agent_id}: {e}")
+        ConversationService.delete_thread_histories_in_background(threads)
+        logger.info(f"Deleted {len(conversations)} conversations of agent {agent_id}")
+        return len(conversations)
 
     @staticmethod
     async def delete_conversation(

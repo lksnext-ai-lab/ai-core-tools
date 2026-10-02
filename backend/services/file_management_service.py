@@ -948,6 +948,30 @@ class FileManagementService:
             except Exception as e:
                 logger.error(f"Error deleting conversation storage {path}: {e}")
 
+    def delete_agent_storage(self, agent_id: int, conversation_ids: List[int]) -> None:
+        """Delete every file session of an agent (any user/app/conversation) and the
+        working directories of the given conversations."""
+        prefix = f"agent_{agent_id}_"
+        paths = []
+        if os.path.isdir(self._persistent_dir):
+            paths.extend(
+                os.path.join(self._persistent_dir, name)
+                for name in os.listdir(self._persistent_dir)
+                if name.startswith(prefix)
+            )
+        paths.extend(
+            os.path.join(self._tmp_base_folder, "conversations", str(conversation_id))
+            for conversation_id in conversation_ids
+        )
+        for session_key in [key for key in self._files if key.startswith(prefix)]:
+            self._files.pop(session_key, None)
+        for path in paths:
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+            except Exception as e:
+                logger.error(f"Error deleting agent storage {path}: {e}")
+
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
         try:
