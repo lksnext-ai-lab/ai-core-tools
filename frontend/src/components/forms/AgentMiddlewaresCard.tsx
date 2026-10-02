@@ -103,9 +103,11 @@ function AgentMiddlewaresCard({
                       />
                       <span className="ml-3 text-sm font-medium text-gray-900 truncate">{mw.name}</span>
                     </div>
-                    <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                      {middlewareTypeLabel(mw.middleware_type)}
-                    </span>
+                    {mw.name !== middlewareTypeLabel(mw.middleware_type) && (
+                      <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        {middlewareTypeLabel(mw.middleware_type)}
+                      </span>
+                    )}
                   </div>
                   <p id={hintId} className="mt-2 ml-7 text-xs text-gray-500">
                     {blocked
