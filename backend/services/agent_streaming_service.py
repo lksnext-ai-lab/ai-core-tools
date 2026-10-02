@@ -31,6 +31,8 @@ from tools.streaming_utils import (
 )
 from services.agent_execution_service import AgentExecutionService
 from services.hitl_service import HITLDecisionError, pending_approval_from_state, validate_decisions
+from langchain.agents.middleware import PIIDetectionError
+from services.agent_execution_service import pii_blocked_message
 from tools.middleware.factory import human_in_the_loop_config, redacts_output
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
@@ -435,6 +437,10 @@ class AgentStreamingService:
             # Client went away mid-stream.
             metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
             raise
+        except PIIDetectionError as exc:
+            # PIIMiddleware(strategy="block"): expected outcome, not a server error.
+            metrics_status, metrics_error_code, metrics_error_message = "ERROR", "PIIDetectionError", str(exc)
+            yield format_sse_event("error", {"message": pii_blocked_message(exc)})
         except Exception as exc:
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
             metrics_status, metrics_error_code = "ERROR", type(exc).__name__

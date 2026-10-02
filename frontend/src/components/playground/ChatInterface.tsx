@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
-import { StreamingChatError, useStreamingChat } from '../../hooks/useStreamingChat';
+import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
 import MessageContent from './MessageContent';
 import StreamingMessage from './StreamingMessage';
@@ -12,6 +12,8 @@ import type { PanelFile } from './AttachedFilesPanel';
 import ToolHistoryPanel from './ToolHistoryPanel';
 import MediaUploadModal from './MediaUploadModal';
 import VideoPlayer from './VideoPlayer';
+import HitlApprovalCard from './HitlApprovalCard';
+import type { HitlDecision } from '../../types/streaming';
 import type { VideoTimestamp } from './VideoPlayer';
 
 interface Message {
@@ -101,23 +103,28 @@ function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const playgroundStream = useCallback(
-    (message: string, opts: Parameters<typeof apiService.chatWithAgentStream>[3]) =>
-      apiService.chatWithAgentStream(appId, agentId, message, opts),
+    (message: string, opts: StreamFnOptions) => {
+      if (opts.resumeDecisions && opts.conversationId) {
+        return apiService.resumeAgentChat(appId, agentId, opts.resumeDecisions, {
+          conversationId: opts.conversationId,
+          onEvent: opts.onEvent,
+          signal: opts.signal,
+        });
+      }
+      return apiService.chatWithAgentStream(appId, agentId, message, opts);
+    },
     [appId, agentId],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, hitlInterrupt, sendMessage, abortStream, clearHitlInterrupt, setHitlInterrupt, toolExecutionHistory, clearToolHistory } =
-    useStreamingChat(playgroundStream);
+  const {
+    streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream,
+    toolExecutionHistory, clearToolHistory, pendingApproval, setPendingApproval,
+  } = useStreamingChat(playgroundStream);
 
   // Hold streaming content visible briefly after isStreaming flips to false,
   // so the transition to the final committed message is seamless.
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
-  const showStreaming = isStreaming || holdStreamingContent || hitlInterrupt !== null;
-  const [hitlEditedArgs, setHitlEditedArgs] = useState<Record<number, string>>({});
-
-  useEffect(() => {
-    setHitlEditedArgs({});
-  }, [hitlInterrupt]);
+  const showStreaming = isStreaming || holdStreamingContent;
 
   // ─── Scroll helpers ──────────────────────────────────────────────────────────
 
@@ -197,6 +204,7 @@ function ChatInterface({
       try {
         setIsLoadingHistory(true);
         setMessages([]);
+        setPendingApproval(null);
 
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
@@ -204,6 +212,8 @@ function ChatInterface({
           if (response.session_id) {
             setCurrentSessionId(response.session_id);
           }
+          // Restore an approval the conversation is still waiting for (e.g. after a reload).
+          setPendingApproval(response.pending_approval ?? null);
 
           if (response.messages && response.messages.length > 0) {
             const loadedMessages: Message[] = response.messages.map(
@@ -338,54 +348,56 @@ function ChatInterface({
     }
   }, [metadataFields, filterMetadata]);
 
-  // ─── HITL Resume ──────────────────────────────────────────────────────────
-
-  const resumeWithDecisions = useCallback(
-    async (decisions: Array<{ type: string; edited_action?: { name: string; args: Record<string, unknown> }; message?: string }>) => {
-      let finalResponse: string | Record<string, unknown> = '';
-      let finalConversationId: number | null = currentConversationId;
-      let hitlPaused = false;
-
-      await apiService.resumeAgentChat(appId, agentId, decisions, {
-        conversationId: currentConversationId,
-        onEvent: (event) => {
-          if (event.type === 'hitl_interrupt') {
-            // Handle subsequent HITL interrupts during resume — show approval window
-            const data = event.data as {
-              action_requests?: Array<{ name?: string; args?: Record<string, unknown>; description?: string }>;
-              review_configs?: Array<{ action_name: string; allowed_decisions: string[] }>;
-            };
-            const actionRequests = (data.action_requests ?? []).map((r) => ({
-              name: r.name ?? 'unknown_tool',
-              args: r.args ?? {},
-              description: r.description,
-            }));
-            const reviewConfigs = data.review_configs ?? [];
-            setHitlInterrupt({ actionRequests, reviewConfigs });
-            setHoldStreamingContent(false);
-          } else if (event.type === 'done') {
-            const doneData = event.data as {
-              response?: string | Record<string, unknown>;
-              conversation_id?: number;
-              hitl_paused?: boolean;
-            };
-            finalResponse = doneData.response ?? '';
-            if (doneData.conversation_id) finalConversationId = doneData.conversation_id;
-            hitlPaused = doneData.hitl_paused ?? false;
-          }
-        },
-      });
-
-      return {
-        response: finalResponse,
-        conversationId: finalConversationId,
-        hitlPaused,
-      };
-    },
-    [appId, agentId, currentConversationId, setHitlInterrupt, setHoldStreamingContent],
-  );
-
   // ─── Message sending ─────────────────────────────────────────────────────────
+
+  /** Commit a finished turn as an agent message (nothing to commit while it awaits approval). */
+  const commitAgentResponse = (
+    rawResponse: string | Record<string, unknown>,
+    elapsedMs: number,
+    awaitingApproval: boolean,
+  ) => {
+    const responseContent: string =
+      typeof rawResponse === 'object' ? JSON.stringify(rawResponse, null, 2) : rawResponse || '';
+    if (awaitingApproval && !responseContent.trim()) {
+      setHoldStreamingContent(false);
+      return;
+    }
+    const agentMsgId = (Date.now() + 1).toString();
+    lastStreamedMsgIdRef.current = agentMsgId;
+    const agentMsg: Message = {
+      id: agentMsgId,
+      type: 'agent',
+      content: responseContent,
+      timestamp: new Date(),
+      elapsedMs,
+    };
+    // Commit the message and release the streaming hold in the same batch
+    setMessages((prev) => [...prev, agentMsg]);
+    setHoldStreamingContent(false);
+  };
+
+  const handleApprovalDecision = async (decisions: HitlDecision[]) => {
+    const approval = pendingApproval;
+    if (!currentConversationId || !approval) return;
+    resetScrollLock();
+    try {
+      setHoldStreamingContent(true);
+      const result = await sendMessage('', { conversationId: currentConversationId, resumeDecisions: decisions });
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
+      await refreshFileList(currentConversationId);
+      onMessageSent?.();
+    } catch (error) {
+      setHoldStreamingContent(false);
+      // The decision was not applied: keep the request on screen so it can be answered again.
+      setPendingApproval(approval);
+      setMessages((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        type: 'error',
+        content: error instanceof Error ? error.message : 'The approval could not be sent',
+        timestamp: new Date(),
+      }]);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && persistentFiles.length === 0) return;
@@ -418,24 +430,7 @@ function ChatInterface({
         searchParams,
       });
 
-      const rawResponse = result.response || '';
-      const responseContent: string =
-        typeof rawResponse === 'object'
-          ? JSON.stringify(rawResponse, null, 2)
-          : rawResponse;
-
-      const agentMsgId = (Date.now() + 1).toString();
-      lastStreamedMsgIdRef.current = agentMsgId;
-      const agentMsg: Message = {
-        id: agentMsgId,
-        type: 'agent',
-        content: responseContent,
-        timestamp: new Date(),
-        elapsedMs: result.elapsedMs,
-      };
-      // Commit the message and release the streaming hold in the same batch
-      setMessages((prev) => [...prev, agentMsg]);
-      setHoldStreamingContent(false);
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
 
       if (result.conversationId && !currentConversationId) {
         setCurrentConversationId(result.conversationId);
@@ -678,39 +673,6 @@ function ChatInterface({
     }
   };
 
-  const handleHitlDecision = async (
-    decisions: Array<{ type: string; edited_action?: { name: string; args: Record<string, unknown> }; message?: string }>
-  ) => {
-    clearHitlInterrupt();
-    setHoldStreamingContent(true);
-    try {
-      const result = await resumeWithDecisions(decisions);
-      const responseContent = typeof result.response === 'object'
-        ? JSON.stringify(result.response, null, 2)
-        : String(result.response || '');
-      // Only add message if response is not empty and not a HITL pause placeholder
-      if (responseContent.trim() && !result.hitlPaused) {
-        const agentMsgId = (Date.now() + 1).toString();
-        lastStreamedMsgIdRef.current = agentMsgId;
-        setMessages((prev) => [...prev, {
-          id: agentMsgId,
-          type: 'agent' as const,
-          content: responseContent,
-          timestamp: new Date(),
-        }]);
-      }
-      setHoldStreamingContent(false);
-    } catch (err) {
-      setHoldStreamingContent(false);
-      setMessages((prev) => [...prev, {
-        id: (Date.now() + 1).toString(),
-        type: 'error' as const,
-        content: err instanceof Error ? err.message : 'Resume failed',
-        timestamp: new Date(),
-      }]);
-    }
-  };
-
   const panelFiles: PanelFile[] = [
     ...persistentFiles.map((f) => ({
       id: f.file_id,
@@ -898,8 +860,9 @@ function ChatInterface({
               Filter by Metadata
             </span>
             <svg
-              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isFilterExpanded ? 'rotate-180' : ''
-                }`}
+              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                isFilterExpanded ? 'rotate-180' : ''
+              }`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -916,8 +879,9 @@ function ChatInterface({
 
           <div
             id={filterPanelId}
-            className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 ${isFilterExpanded ? '' : 'hidden'
-              }`}
+            className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 ${
+              isFilterExpanded ? '' : 'hidden'
+            }`}
           >
             <SearchFilters
               key={filtersKey}
@@ -1179,82 +1143,8 @@ function ChatInterface({
                     thinkingMessage={thinkingMessage}
                   />
                 )}
-
-                {/* HITL Approval UI */}
-                {hitlInterrupt && !isStreaming && (
-                  <div className="flex justify-start mb-4">
-                    <div className="max-w-[85%] w-full">
-                      <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 text-sm font-medium">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                          </svg>
-                          Approval required
-                        </div>
-                        {hitlInterrupt.actionRequests.map((req, idx) => (
-                          <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-100 dark:border-amber-800">
-                            <div className="text-sm font-mono text-gray-700 dark:text-gray-300 mb-1">
-                              🔧 {req.name}
-                            </div>
-                            <textarea
-                              className="w-full text-xs text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded p-2 font-mono border-2 border-amber-300 dark:border-amber-600 resize-none focus:outline-none focus:ring-2 focus:ring-amber-500"
-                              rows={Math.min(8, Math.max(3, JSON.stringify(req.args, null, 2).split('\n').length))}
-                              value={hitlEditedArgs[idx] ?? JSON.stringify(req.args, null, 2)}
-                              onChange={(e) => setHitlEditedArgs((prev) => ({ ...prev, [idx]: e.target.value }))}
-                              spellCheck="false"
-                            />
-                          </div>
-                        ))}
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const decisions = hitlInterrupt.actionRequests.map((req, idx) => {
-                                let editedArgs = req.args;
-                                const rawValue = hitlEditedArgs[idx];
-                                if (rawValue !== undefined) {
-                                  try {
-                                    editedArgs = JSON.parse(rawValue);
-                                  } catch {
-                                    // Keep original if invalid JSON
-                                  }
-                                }
-                                // If args were edited, send as 'edit' decision; otherwise 'approve'
-                                const hasEdits = JSON.stringify(editedArgs) !== JSON.stringify(req.args);
-                                if (hasEdits) {
-                                  return {
-                                    type: 'edit' as const,
-                                    edited_action: {
-                                      name: req.name,
-                                      args: editedArgs,
-                                    },
-                                  };
-                                }
-                                return { type: 'approve' as const };
-                              });
-                              handleHitlDecision(decisions);
-                            }}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
-                          >
-                            ✓ Approve
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const decisions = hitlInterrupt.actionRequests.map((req) => ({
-                                type: 'reject' as const,
-                                message: `User rejected tool call: ${req.name}`,
-                              }));
-                              handleHitlDecision(decisions);
-                            }}
-                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
-                          >
-                            ✗ Reject
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                {pendingApproval && !isStreaming && (
+                  <HitlApprovalCard approval={pendingApproval} onDecide={handleApprovalDecision} />
                 )}
               </>
             )}

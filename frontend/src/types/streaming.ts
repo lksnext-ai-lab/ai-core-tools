@@ -78,3 +78,33 @@ export interface StreamingState {
   conversationId: number | null;
   error: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Human-in-the-loop (LangChain HumanInTheLoopMiddleware interrupt format)
+// ---------------------------------------------------------------------------
+
+export type HitlDecisionType = 'approve' | 'edit' | 'reject';
+
+export interface HitlActionRequest {
+  name: string;
+  args: Record<string, unknown>;
+  description?: string;
+}
+
+export interface HitlReviewConfig {
+  action_name: string;
+  allowed_decisions: HitlDecisionType[];
+}
+
+/** Payload of the `hitl_interrupt` event and of `pending_approval` in conversation history. */
+export interface HitlPendingApproval {
+  action_requests: HitlActionRequest[];
+  review_configs: HitlReviewConfig[];
+}
+
+/** One decision per action request, in the same order. */
+export interface HitlDecision {
+  type: HitlDecisionType;
+  edited_action?: { name: string; args: Record<string, unknown> };
+  message?: string;
+}

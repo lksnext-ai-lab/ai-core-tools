@@ -129,14 +129,29 @@ export interface ClaudePluginImportResult {
   failed_count: number;
 }
 
+export type MiddlewareType =
+  | 'summarization'
+  | 'model_call_limit'
+  | 'tool_call_limit'
+  | 'pii'
+  | 'human_in_the_loop'
+  | 'guardrails';
+
 export interface Middleware {
   middleware_id: number;
   name: string;
   description?: string;
-  middleware_type: string;
+  middleware_type: MiddlewareType;
   config?: Record<string, any> | null;
-  created_at: string;
-  mcp_config_ids?: number[];
+  created_at?: string | null;
+  is_frozen?: boolean;
+}
+
+export interface MiddlewarePayload {
+  name: string;
+  description?: string;
+  middleware_type: MiddlewareType;
+  config: Record<string, any> | null;
 }
 
 // MCP Server types - for exposing agents as MCP tools

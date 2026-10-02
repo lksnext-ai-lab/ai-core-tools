@@ -1,30 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Layers, Pencil, Trash2, Lightbulb } from 'lucide-react';
+import { toast } from 'sonner';
 import Modal from '../../components/ui/Modal';
 import MiddlewareForm from '../../components/forms/MiddlewareForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
-import type { Middleware } from '../../core/types';
+import type { Middleware, MiddlewarePayload } from '../../core/types';
+import { MIDDLEWARE_TYPES, MIDDLEWARE_TYPE_INFO, middlewareTypeLabel } from '../../constants/middlewares';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
-
-const MIDDLEWARE_TYPE_LABELS: Record<string, string> = {
-    monitoring: 'Monitoring',
-    summarization: 'Summarization',
-    model_call_limit: 'Model Call Limit',
-    tool_call_limit: 'Tool Call Limit',
-    pii: 'PII Detection',
-    human_in_the_loop: 'Human in the Loop',
-    guardrails: 'Guardrails',
-    custom: 'Custom',
-};
 
 function MiddlewaresPage() {
     const { appId } = useParams();
@@ -36,7 +27,7 @@ function MiddlewaresPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingMiddleware, setEditingMiddleware] = useState<any>(null);
+    const [editingMiddleware, setEditingMiddleware] = useState<Middleware | null>(null);
 
     useEffect(() => {
         loadMiddlewares();
@@ -98,20 +89,20 @@ function MiddlewaresPage() {
             setEditingMiddleware(mw);
             setIsModalOpen(true);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load middleware details');
-            console.error('Error loading middleware:', err);
+            toast.error(errorMessage(err, 'Failed to load middleware'));
         }
     }
 
-    async function handleSaveMiddleware(data: any) {
+    async function handleSaveMiddleware(data: MiddlewarePayload) {
         if (!appId) return;
 
-        const isUpdate = Boolean(editingMiddleware && editingMiddleware.middleware_id !== 0);
+        const editing = editingMiddleware;
+        const isUpdate = editing !== null;
 
         const result = await mutate<Middleware>(
             () =>
-                isUpdate
-                    ? apiService.updateMiddleware(Number.parseInt(appId), editingMiddleware.middleware_id, data)
+                editing
+                    ? apiService.updateMiddleware(Number.parseInt(appId), editing.middleware_id, data)
                     : apiService.createMiddleware(Number.parseInt(appId), data),
             {
                 loading: isUpdate ? MESSAGES.UPDATING('middleware') : MESSAGES.CREATING('middleware'),
@@ -154,7 +145,7 @@ function MiddlewaresPage() {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h2 className="text-xl font-semibold text-gray-900">Middlewares</h2>
-                    <p className="text-gray-600">Manage LangChain middlewares that can be attached to your agents</p>
+                    <p className="text-gray-600">Reusable safety, approval and cost controls for your agents</p>
                 </div>
                 {canEdit && (
                     <button
@@ -200,7 +191,7 @@ function MiddlewaresPage() {
                         header: 'Type',
                         render: (mw) => (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                {MIDDLEWARE_TYPE_LABELS[mw.middleware_type] || mw.middleware_type}
+                                {middlewareTypeLabel(mw.middleware_type)}
                             </span>
                         ),
                         className: 'px-6 py-4'
@@ -249,20 +240,9 @@ function MiddlewaresPage() {
                 ]}
                 emptyIcon={<Layers className="w-10 h-10 text-gray-300" />}
                 emptyMessage="No Middlewares"
-                emptySubMessage="Add your first middleware to extend agent capabilities with monitoring, logging, and more."
+                emptySubMessage="Create one, then turn it on from an agent's Advanced tab."
                 loading={loading}
             />
-
-            {middlewares.length === 0 && canEdit && (
-                <div className="text-center py-6">
-                    <button
-                        onClick={handleCreateMiddleware}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg"
-                    >
-                        Add First Middleware
-                    </button>
-                </div>
-            )}
 
             {/* Info Box */}
             <div className="mt-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
@@ -276,25 +256,17 @@ function MiddlewaresPage() {
                         </h3>
                         <div className="mt-2 text-sm text-indigo-700">
                             <p>
-                                Middlewares are LangChain components that intercept and process agent execution.
-                                When attached to an agent, middlewares can monitor token usage, limit calls,
-                                detect PII, and provide observability into agent behavior.
+                                Middlewares run around every model and tool call of the agents that use them.
+                                Create them here once, then select them in each agent&apos;s <strong>Advanced</strong> tab.
+                                An agent can use one middleware of each type.
                             </p>
-                            <div className="mt-2">
-                                <strong>Available Types:</strong>
-                                <ul className="list-disc list-inside mt-1 space-y-1">
-                                    <li><strong>Monitoring</strong> — Tracks input/output tokens and LLM call count via callback</li>
-                                    <li><strong>Summarization</strong> — Summarizes conversation history when token limits are exceeded</li>
-                                    <li><strong>Model Call Limit</strong> — Caps LLM calls per run to prevent infinite loops (configurable)</li>
-                                    <li><strong>Tool Call Limit</strong> — Caps tool invocations per run to prevent runaway execution (configurable)</li>
-                                    <li><strong>PII Detection</strong> — Redacts personal data before the LLM and restores it in responses</li>
-                                    <li><strong>Human in the Loop</strong> — Requires explicit human approval/edit/reject before selected tools run</li>
-                                    <li><strong>Guardrails</strong> — Applies safety and policy checks on prompts and model responses</li>
-                                </ul>
-                            </div>
-                            <p className="mt-2 text-xs text-indigo-600 italic">
-                                Custom middleware upload (.py files with LangChain middleware classes) will be available in a future release.
-                            </p>
+                            <ul className="list-disc list-inside mt-2 space-y-1">
+                                {MIDDLEWARE_TYPES.map((type) => (
+                                    <li key={type}>
+                                        <strong>{MIDDLEWARE_TYPE_INFO[type].label}</strong> — {MIDDLEWARE_TYPE_INFO[type].description}
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -309,7 +281,7 @@ function MiddlewaresPage() {
             >
                 <MiddlewareForm
                     middleware={editingMiddleware}
-                    appId={appId ? Number.parseInt(appId) : undefined}
+                    appId={Number.parseInt(appId ?? '0')}
                     onSubmit={handleSaveMiddleware}
                     onCancel={handleCloseModal}
                 />

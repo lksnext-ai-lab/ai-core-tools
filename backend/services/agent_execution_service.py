@@ -754,6 +754,12 @@ def _inject_file_markers(text: str, files: list) -> str:
     return text
 
 
+def pii_blocked_message(exc) -> str:
+    """User-facing text for a PII middleware configured to block (never echoes the data)."""
+    kind = str(getattr(exc, "pii_type", "personal data")).replace("_", " ")
+    return f"The message was blocked because it contains personal data ({kind})."
+
+
 def _raise_if_awaiting_approval(result) -> None:
     """Fail clearly when a non-interactive run stops at a human-in-the-loop interrupt.
 
@@ -2322,11 +2328,15 @@ class AgentExecutionService:
         self, agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
     ):
         """Invoke the agent, retrying once from the prior checkpoint on an incomplete tool-call turn."""
+        from langchain.agents.middleware import PIIDetectionError
+
         try:
             result = await agent_chain.ainvoke(
                 {"messages": [message_payload]},
                 config=config,
             )
+        except PIIDetectionError as pii_exc:
+            raise HTTPException(status_code=422, detail=pii_blocked_message(pii_exc)) from pii_exc
         except Exception as invoke_exc:
             from services.agent_cache_service import (
                 CheckpointerCacheService,
