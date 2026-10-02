@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "mediasilo001"
-down_revision = "periodic005"
+down_revision = "apikeyhash001"
 branch_labels = None
 depends_on = None
 
