@@ -41,11 +41,10 @@ COPY pyproject.toml poetry.lock ./
 # picked up a newer e2b release that broke `create_code_context()`/
 # `run_code()` with `AttributeError: 'Sandbox' object has no attribute
 # '_transport'`.)
-# installer.only-binary: every dependency is installed from a wheel, so no
-# package setup script runs during the build.
+# POETRY_INSTALLER_ONLY_BINARY: every dependency is installed from a wheel,
+# so no package setup script runs during the build.
 RUN poetry config virtualenvs.create false && \
-    poetry config installer.only-binary :all: && \
-    poetry install --only=main --no-interaction --no-ansi --no-cache
+    POETRY_INSTALLER_ONLY_BINARY=:all: poetry install --only=main --no-interaction --no-ansi --no-cache
 
 # ----------------------------------------------------------------------------
 # Stage 2: Production

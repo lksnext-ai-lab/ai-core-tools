@@ -31,8 +31,7 @@ RUN pip install --no-cache-dir --require-hashes --only-binary :all: -r requireme
 # Install all dependencies (main + test group)
 COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false && \
-    poetry config installer.only-binary :all: && \
-    poetry install --with test --no-interaction --no-ansi --no-cache
+    POETRY_INSTALLER_ONLY_BINARY=:all: poetry install --with test --no-interaction --no-ansi --no-cache
 
 # Copy source code and tests
 COPY backend/ /app/backend/

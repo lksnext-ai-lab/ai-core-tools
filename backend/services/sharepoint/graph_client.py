@@ -65,7 +65,7 @@ class GraphClient:
         """
         if not _TENANT_RE.match(tenant_id or ""):
             raise GraphAuthError(f"Invalid tenant id: {tenant_id!r}")
-        url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        url = f"https://login.microsoftonline.com/{quote(tenant_id, safe='.-')}/oauth2/v2.0/token"
         data = {
             "grant_type": "client_credentials",
             "client_id": client_id,
