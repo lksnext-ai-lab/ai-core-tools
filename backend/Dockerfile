@@ -24,16 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar Poetry
-RUN pip install --no-cache-dir "poetry>=2.2.0,<3.0.0"
-
-# `simplegeneric` (pulled in by the legacy OpenStack `WSME` dependency in the
-# lock file) imports the private `_adapters` symbol from importlib-metadata
-# while its source distribution is being built. That symbol was removed in
-# importlib-metadata 8.7.0. Build it with the last compatible release first;
-# Poetry then reuses the already-installed wheel instead of rebuilding the
-# broken sdist.
-RUN pip install --no-cache-dir "importlib-metadata<8.7.0" "simplegeneric==0.8.1"
+# Instalar Poetry: versión fijada y verificada por hash, solo wheels (no se
+# ejecutan scripts de instalación de paquetes en código fuente).
+COPY backend/requirements-poetry.txt ./
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: -r requirements-poetry.txt
 
 # Copiar archivos de dependencias
 COPY pyproject.toml poetry.lock ./
@@ -47,7 +41,10 @@ COPY pyproject.toml poetry.lock ./
 # picked up a newer e2b release that broke `create_code_context()`/
 # `run_code()` with `AttributeError: 'Sandbox' object has no attribute
 # '_transport'`.)
+# installer.only-binary: every dependency is installed from a wheel, so no
+# package setup script runs during the build.
 RUN poetry config virtualenvs.create false && \
+    poetry config installer.only-binary :all: && \
     poetry install --only=main --no-interaction --no-ansi --no-cache
 
 # ----------------------------------------------------------------------------

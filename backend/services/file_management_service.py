@@ -9,7 +9,7 @@ from fastapi import UploadFile, HTTPException
 
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
-from utils.path_safety import resolve_within
+from utils.path_safety import UnsafePathError, resolve_within
 from utils.async_files import read_json, read_text, write_json, write_temp_file, write_text
 
 logger = get_logger(__name__)
@@ -807,8 +807,13 @@ class FileManagementService:
             ):
                 if not os.path.exists(base_dir):
                     continue
-                candidate = os.path.join(base_dir, session_key)
-                if os.path.exists(candidate) and os.path.isdir(candidate):
+                try:
+                    # session_key embeds caller-supplied ids: never probe a path
+                    # outside the storage dir (filesystem oracle).
+                    candidate = resolve_within(base_dir, session_key)
+                except UnsafePathError:
+                    return
+                if os.path.isdir(candidate):
                     session_path = candidate
                     loaded_strategy = strategy
                     # Prefer persistent if it exists; ephemeral is only checked

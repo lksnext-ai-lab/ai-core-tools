@@ -125,3 +125,21 @@ async def test_remove_file_rejects_traversal_in_session_key(tmp_path):
     await fms._remove_file_from_disk("../", "f1")
 
     assert victim.exists()
+
+
+def test_load_session_files_does_not_probe_outside_storage(tmp_path):
+    """Regression (Sonar pythonsecurity:S6549): a crafted session key must not
+    reveal whether arbitrary directories exist."""
+    from unittest.mock import patch
+
+    fms = _fms(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "f1.json").write_text('{"filename": "secret.txt", "file_type": "text"}')
+    (outside / "f1.content").write_text("x")
+
+    with patch("services.file_management_service.os.path.isdir", wraps=__import__("os").path.isdir) as isdir:
+        fms._load_session_files("../../outside")
+
+    assert "../../outside" not in fms._files
+    assert not any(str(outside) in str(call.args[0]) for call in isdir.call_args_list)
