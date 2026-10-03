@@ -8,6 +8,7 @@ from utils.logger import get_logger
 
 from repositories.media_repository import MediaRepository
 from services.silo_service import SiloService
+from utils.async_files import write_bytes
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
 logger = get_logger(__name__)
@@ -271,8 +272,7 @@ class MediaService:
         file_path = os.path.join(media_folder, f"{media.media_id}{file_extension}")
         
         content = await file.read()
-        with open(file_path, 'wb') as f:
-            f.write(content)
+        await write_bytes(file_path, content)
         
         media.file_path = file_path
         db.commit()

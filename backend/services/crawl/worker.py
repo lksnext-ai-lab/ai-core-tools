@@ -34,7 +34,7 @@ async def _worker_loop(worker_id: str) -> None:
                 await asyncio.sleep(CRAWL_POLL_INTERVAL_SECONDS)
         except asyncio.CancelledError:
             logger.info(f"Worker {worker_id} shutting down")
-            break
+            raise
         except Exception as e:
             logger.error(f"Worker {worker_id} error: {e}", exc_info=True)
             await asyncio.sleep(CRAWL_POLL_INTERVAL_SECONDS)
@@ -57,7 +57,7 @@ async def _scheduler_loop() -> None:
             await asyncio.sleep(CRAWL_SCHEDULER_INTERVAL_SECONDS)
         except asyncio.CancelledError:
             logger.info("Scheduler loop shutting down")
-            break
+            raise
         except Exception as e:
             logger.error(f"Scheduler error: {e}", exc_info=True)
             await asyncio.sleep(CRAWL_SCHEDULER_INTERVAL_SECONDS)

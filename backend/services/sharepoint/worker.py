@@ -62,7 +62,7 @@ async def _worker_loop() -> None:
             await SharePointSyncService.run_sync(source_id)
         except asyncio.CancelledError:
             logger.info("SharePoint worker shutting down")
-            break
+            raise
         except RuntimeError as exc:
             # Break out if the queue is bound to a different event loop —
             # this happens when the worker task outlives a TestClient event loop.

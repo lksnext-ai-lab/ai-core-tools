@@ -2,7 +2,6 @@ import json
 import os
 import shutil
 import uuid
-import tempfile
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -11,6 +10,7 @@ from fastapi import UploadFile, HTTPException
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
 from utils.path_safety import resolve_within
+from utils.async_files import read_json, read_text, write_json, write_temp_file, write_text
 
 logger = get_logger(__name__)
 
@@ -317,8 +317,7 @@ class FileManagementService:
                 return extract_text_from_pdf(file_path)
             elif file_type in ["txt", "md", "json"]:
                 # Read text files directly
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                return await read_text(file_path)
             else:
                 # For other file types, return basic info
                 return f"File: {os.path.basename(file_path)} (type: {file_type})"
@@ -481,12 +480,10 @@ class FileManagementService:
             session_dir = os.path.join(self._persistent_dir, session_key)
             os.makedirs(session_dir, exist_ok=True)
             metadata_file = os.path.join(session_dir, f"{file_id}.json")
-            with open(metadata_file, 'w') as f:
-                json.dump(file_ref.to_dict(), f, indent=2)
+            await write_json(metadata_file, file_ref.to_dict())
             # _load_session_files requires a matching .content file to load the entry
             content_file = os.path.join(session_dir, f"{file_id}.content")
-            with open(content_file, 'w', encoding='utf-8') as f:
-                f.write(file_ref.content)
+            await write_text(content_file, file_ref.content)
 
             logger.info(f"Registered output file {filename} (id={file_id}) for session {session_key}")
             return file_ref
@@ -548,8 +545,7 @@ class FileManagementService:
                 
                 elif file_type == "text":
                     # Read text files
-                    with open(temp_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
+                    content = await read_text(temp_path)
                     return content, temp_path, file_size
                 
                 elif file_type == "image":
@@ -584,18 +580,8 @@ class FileManagementService:
         """Save uploaded file to temporary location and return path with file size"""
         # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=self._temp_dir)
-        
-        try:
-            # Write file content and track size
-            content = await file.read()
-            file_size = len(content)
-            temp_file.write(content)
-            temp_file.flush()
-            
-            return temp_file.name, file_size
-        finally:
-            temp_file.close()
+        content = await file.read()
+        return await write_temp_file(content, suffix=suffix, dir=self._temp_dir), len(content)
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location (legacy method for compatibility)"""
@@ -722,13 +708,11 @@ class FileManagementService:
 
             # Save file metadata AFTER setting file_path
             metadata_file = resolve_within(session_dir, f"{file_id}.json")
-            with open(metadata_file, 'w') as f:
-                json.dump(file_ref.to_dict(), f, indent=2)
+            await write_json(metadata_file, file_ref.to_dict())
 
             # Save file content (extracted text)
             content_file = resolve_within(session_dir, f"{file_id}.content")
-            with open(content_file, 'w', encoding='utf-8') as f:
-                f.write(file_ref.content)
+            await write_text(content_file, file_ref.content)
 
             logger.info(
                 "Saved file %s to disk: %s (strategy: %s)",
@@ -959,8 +943,7 @@ class FileManagementService:
             # (original files stored in conversations/ dir have a relative file_path)
             if os.path.exists(metadata_file):
                 try:
-                    with open(metadata_file, 'r') as f:
-                        metadata = json.load(f)
+                    metadata = await read_json(metadata_file)
                     file_path = metadata.get('file_path')
                     if file_path:
                         # file_path is read back from a sidecar, so it must

@@ -37,6 +37,7 @@ from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
 from utils.config import get_app_config
+from utils.async_files import write_bytes, write_temp_file
 
 logger = get_logger(__name__)
 
@@ -1279,8 +1280,7 @@ class AgentExecutionService:
                             file_bytes = ctx.sandbox_provider.read_file(sandbox_handle, remote_rel)
                             dest = os.path.join(output_dir, basename)
                             os.makedirs(output_dir, exist_ok=True)
-                            with open(dest, "wb") as _fh:
-                                _fh.write(file_bytes)
+                            await write_bytes(dest, file_bytes)
                             logger.debug("IT4: pulled '%s' → %s", remote_path, dest)
                         except Exception as _pull_exc:
                             logger.warning(
@@ -2371,17 +2371,8 @@ class AgentExecutionService:
         
         # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=uploads_dir)
-        
-        try:
-            # Write file content
-            content = await file.read()
-            temp_file.write(content)
-            temp_file.flush()
-            
-            return temp_file.name
-        finally:
-            temp_file.close()
+        content = await file.read()
+        return await write_temp_file(content, suffix=suffix, dir=uploads_dir)
     
     def _update_request_count(self, agent: Agent, db: Session):
         """Update agent request count"""

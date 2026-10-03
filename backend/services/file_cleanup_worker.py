@@ -265,7 +265,11 @@ async def stop_file_cleanup_worker(task: asyncio.Task | None) -> None:
         try:
             await task
         except asyncio.CancelledError:
-            pass
+            # Expected: the worker task we just cancelled. Only propagate if
+            # this shutdown coroutine is itself being cancelled.
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise
         except Exception:
             logger.warning(
                 "file_cleanup_worker: unexpected error while awaiting "

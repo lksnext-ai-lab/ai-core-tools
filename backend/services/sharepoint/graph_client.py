@@ -1,6 +1,8 @@
 """Microsoft Graph API client for SharePoint drive operations."""
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 
@@ -194,6 +196,10 @@ class GraphClient:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             async with client.stream("GET", url, headers=headers) as response:
                 response.raise_for_status()
-                with open(dest_path, "wb") as f:
+                # File I/O runs in a worker thread so a large download never blocks the loop.
+                f = await asyncio.to_thread(open, dest_path, "wb")
+                try:
                     async for chunk in response.aiter_bytes():
-                        f.write(chunk)
+                        await asyncio.to_thread(f.write, chunk)
+                finally:
+                    await asyncio.to_thread(f.close)
