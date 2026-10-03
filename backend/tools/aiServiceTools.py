@@ -117,7 +117,7 @@ class VoidRetriever(BaseRetriever):
 # is 1; the "-chat" variants accept it. langchain-openai only strips it for names starting
 # with "gpt-5", so newer families (e.g. gpt-6-luna) reached OpenAI with the agent's
 # temperature and failed with "Unsupported parameter: 'temperature'".
-_OPENAI_REASONING_MODEL = re.compile(r"^(o\d|gpt-([5-9]|\d{2,}))", re.IGNORECASE)
+_OPENAI_REASONING_MODEL = re.compile(r"^(o\d|gpt-([5-9]|[0-4]\d))", re.IGNORECASE)
 
 
 def _openai_temperature(model, temperature):

@@ -49,7 +49,7 @@ class TestBuildOpenAILLM:
 class TestOpenAITemperature:
     """Reasoning models reject `temperature`; it must not reach the request at all."""
 
-    @pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.5", "o3-mini", "o1", "GPT-6-terra"])
+    @pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.5", "gpt-10", "o3-mini", "o1", "GPT-6-terra"])
     def test_reasoning_models_send_no_temperature(self, model):
         from tools.aiServiceTools import _build_openai_llm
 
@@ -57,7 +57,7 @@ class TestOpenAITemperature:
 
         assert "temperature" not in llm._get_request_payload([("user", "hi")])
 
-    @pytest.mark.parametrize("model", ["gpt-4o", "gpt-4.1-mini", "gpt-5-chat-latest"])
+    @pytest.mark.parametrize("model", ["gpt-4o", "gpt-4.1-mini", "gpt-3.5-turbo", "gpt-5-chat-latest"])
     def test_other_models_keep_the_agent_temperature(self, model):
         from tools.aiServiceTools import _build_openai_llm
 
