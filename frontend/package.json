@@ -76,5 +76,8 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
     "vite": "^7.3.6"
+  },
+  "overrides": {
+    "uri-js": "npm:fast-uri@^3.1.8"
   }
 }
