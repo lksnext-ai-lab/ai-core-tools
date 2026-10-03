@@ -4,7 +4,8 @@ from utils.log_safety import sanitize_for_log
 def test_line_breaks_cannot_forge_log_lines():
     forged = "abc\n2026-10-03 [INFO] admin logged in\r\nx"
     out = sanitize_for_log(forged)
-    assert "\n" not in out and "\r" not in out
+    assert "\n" not in out
+    assert "\r" not in out
     assert out == "abc\\n2026-10-03 [INFO] admin logged in\\r\\nx"
 
 

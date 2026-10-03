@@ -906,9 +906,9 @@ class FileManagementService:
                 len(self._files.get(session_key, {})), sanitize_for_log(session_key),
             )
 
-        except Exception as e:
-            logger.error(
-                "Error loading persistent files for session %s: %s", sanitize_for_log(session_key), e
+        except Exception:
+            logger.exception(
+                "Error loading persistent files for session %s", sanitize_for_log(session_key)
             )
 
     async def remove_files(
