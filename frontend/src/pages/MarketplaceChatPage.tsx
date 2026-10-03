@@ -167,7 +167,7 @@ export default function MarketplaceChatPage() {
   }, []);
 
   useEffect(() => {
-    fetchQuotaInfo();
+    void fetchQuotaInfo();
   }, [fetchQuotaInfo]);
 
   useEffect(() => {
@@ -218,7 +218,7 @@ export default function MarketplaceChatPage() {
       }
     };
 
-    loadHistory();
+    void loadHistory();
     return () => {
       isMounted = false;
     };
@@ -235,7 +235,7 @@ export default function MarketplaceChatPage() {
         if (isMounted) setPersistentFiles([]);
       }
     };
-    loadFiles();
+    void loadFiles();
     return () => {
       isMounted = false;
     };
@@ -353,7 +353,7 @@ export default function MarketplaceChatPage() {
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleSendMessage();
+        void handleSendMessage();
       }
     },
     [handleSendMessage],

@@ -121,7 +121,7 @@ function EmbeddingServicesPage() {
           type: 'success'
         });
         // Refresh the list
-        forceReload();
+        void forceReload();
         // Auto-dismiss notification after 5 seconds
         setTimeout(() => setNotification(null), 5000);
       }

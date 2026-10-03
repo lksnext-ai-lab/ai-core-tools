@@ -169,7 +169,7 @@ const RepositoryDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (appId && repositoryId) {
-      loadRepository();
+      void loadRepository();
     }
   }, [appId, repositoryId]);
 

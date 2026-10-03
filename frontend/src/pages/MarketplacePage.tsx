@@ -137,7 +137,7 @@ function MarketplaceAgentsTab() {
   }, [debouncedSearch, category, sortBy, myAppsOnly, page]);
 
   useEffect(() => {
-    fetchCatalog();
+    void fetchCatalog();
   }, [fetchCatalog]);
 
   const handleAgentClick = useCallback(

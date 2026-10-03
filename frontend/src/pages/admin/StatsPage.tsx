@@ -25,7 +25,7 @@ function StatsPage() {
   }, []);
 
   useEffect(() => {
-    loadStats();
+    void loadStats();
   }, [loadStats]);
 
   if (loading) {

@@ -66,7 +66,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
 
   // Load form data (output parsers and embedding services)
   useEffect(() => {
-    loadFormData();
+    void loadFormData();
   }, [appId]);
 
   // Initialize form with existing silo data
