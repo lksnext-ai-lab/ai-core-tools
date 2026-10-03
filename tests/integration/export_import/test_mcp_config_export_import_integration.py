@@ -38,7 +38,7 @@ from schemas.import_schemas import ConflictMode, ComponentType
 # ==================== FIXTURES ====================
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def test_app(db_session: Session):
     """Create a test app for testing."""
     # Check if app exists
@@ -72,7 +72,7 @@ def test_app(db_session: Session):
         db_session.commit()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def sample_mcp_config(db_session: Session, test_app: App):
     """Create a sample MCP config with sensitive data for testing."""
     config_data = {

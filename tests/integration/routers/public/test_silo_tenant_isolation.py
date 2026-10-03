@@ -42,7 +42,7 @@ def docs_url(app_id: int, silo_id: int, suffix: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def other_app(db, fake_user):
     """A second App owned by the same user — simulates a different tenant."""
     from models.app import App
@@ -59,7 +59,7 @@ def other_app(db, fake_user):
     return app_obj
 
 
-@pytest.fixture()
+@pytest.fixture
 def other_silo(db, other_app):
     """A Silo that belongs to *other_app*, not to fake_app."""
     from models.silo import Silo

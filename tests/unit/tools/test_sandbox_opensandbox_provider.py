@@ -53,7 +53,7 @@ class TestRegistryWithoutPackage:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_sdk():
     """Patch all opensandbox SDK classes so no real server is needed."""
 
@@ -85,7 +85,7 @@ def mock_sdk():
         }
 
 
-@pytest.fixture()
+@pytest.fixture
 def provider_and_handle(mock_sdk):
     """Create a real OpenSandboxProvider and call create_sandbox with mocked SDK."""
     from tools.sandbox.opensandbox_provider import OpenSandboxProvider, _META_SANDBOX, _META_INTERPRETER, _META_CONTEXTS
