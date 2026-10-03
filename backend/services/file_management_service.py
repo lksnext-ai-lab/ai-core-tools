@@ -9,6 +9,7 @@ from fastapi import UploadFile, HTTPException
 
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
+from utils.log_safety import sanitize_for_log
 from utils.path_safety import UnsafePathError, resolve_within
 from utils.async_files import read_json, read_text, write_json, write_temp_file, write_text
 
@@ -900,10 +901,15 @@ class FileManagementService:
                         except Exception as e:
                             logger.error(f"Error loading file {file_id}: {str(e)}")
                             
-            logger.info(f"Loaded {len(self._files.get(session_key, {}))} persistent files for session {session_key}")
-            
+            logger.info(
+                "Loaded %d persistent files for session %s",
+                len(self._files.get(session_key, {})), sanitize_for_log(session_key),
+            )
+
         except Exception as e:
-            logger.error(f"Error loading persistent files for session {session_key}: {str(e)}")
+            logger.error(
+                "Error loading persistent files for session %s: %s", sanitize_for_log(session_key), e
+            )
 
     async def remove_files(
         self,
