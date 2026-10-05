@@ -1,10 +1,12 @@
 """Teams Workflows webhook provider using Adaptive Cards and authenticated links."""
 
+import base64
 import ipaddress
 import json
 import socket
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -15,6 +17,8 @@ from output.contracts import ProviderDescriptor
 
 MAX_CARD_BYTES = 24 * 1024
 MAX_RESULT_CHARS = 5000
+MATTIN_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mattin-small.png"
+MATTIN_LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(MATTIN_LOGO_PATH.read_bytes()).decode("ascii")
 
 
 class DeliveryError(Exception):
@@ -58,7 +62,39 @@ def build_adaptive_card(
         result_text = result_text[:MAX_RESULT_CHARS].rstrip() + "…"
 
     body: list[dict[str, Any]] = [
-        {"type": "TextBlock", "text": title[:255], "weight": "Bolder", "size": "Large", "wrap": True},
+        {
+            "type": "Container",
+            "style": "emphasis",
+            "items": [
+                {
+                    "type": "ColumnSet",
+                    "verticalContentAlignment": "Center",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "verticalContentAlignment": "Center",
+                            "items": [{
+                                "type": "Image",
+                                "url": MATTIN_LOGO_DATA_URI,
+                                "size": "Small",
+                                "altText": "Mattin AI",
+                            }],
+                        },
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "verticalContentAlignment": "Center",
+                            "items": [
+                                {"type": "TextBlock", "text": "MATTIN AI", "weight": "Bolder", "size": "Small", "color": "Accent", "spacing": "None"},
+                                {"type": "TextBlock", "text": "Scheduled task", "size": "Small", "isSubtle": True, "spacing": "None"},
+                            ],
+                        },
+                    ],
+                },
+                {"type": "TextBlock", "text": title[:255], "weight": "Bolder", "size": "Large", "wrap": True, "spacing": "Medium"},
+            ],
+        },
         {"type": "FactSet", "facts": [
             {"title": "Status", "value": status[:40]},
             {"title": "Scheduled", "value": scheduled_time[:80]},

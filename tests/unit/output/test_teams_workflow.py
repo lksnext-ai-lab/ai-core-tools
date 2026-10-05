@@ -28,6 +28,26 @@ def test_card_has_result_and_authenticated_file_actions():
     assert any("Report is ready" in block.get("text", "") for block in content["body"])
 
 
+def test_card_uses_mattin_brand_and_embeds_logo():
+    import base64
+    from pathlib import Path
+
+    card = module.build_adaptive_card(
+        title="Daily report", status="succeeded", scheduled_time="today",
+        result="Report is ready", view_url="https://mattin.test/run/1",
+    )
+    content = card["attachments"][0]["content"]
+    header = content["body"][0]
+    logo = header["items"][0]["columns"][0]["items"][0]
+
+    assert header["type"] == "Container"
+    assert header["style"] == "emphasis"
+    assert logo["altText"] == "Mattin AI"
+    assert logo["url"].startswith("data:image/png;base64,")
+    image_bytes = base64.b64decode(logo["url"].split(",", 1)[1])
+    assert image_bytes == (Path(module.__file__).parent / "assets" / "mattin-small.png").read_bytes()
+
+
 def test_card_bounds_result_excerpt():
     card = module.build_adaptive_card(
         title="Daily report", status="succeeded", scheduled_time="today",
