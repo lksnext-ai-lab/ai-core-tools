@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StreamEvent, ActiveTool } from '../types/streaming';
 import { getStreamingMessage } from '../i18n/streaming';
+import { randomId } from '../utils/randomId';
 
 function isCodeTool(toolName: string): boolean {
   return toolName === 'code_interpreter' || toolName.endsWith('_repl');
@@ -28,7 +29,7 @@ export interface ToolExecutionRecord {
 }
 
 function buildToolRecordId(toolName: string, toolCallId?: string): string {
-  return toolCallId || `${toolName}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return toolCallId || `${toolName}-${Date.now()}-${randomId()}`;
 }
 
 function buildToolDisplayName(toolName: string, subagentName?: string): string {

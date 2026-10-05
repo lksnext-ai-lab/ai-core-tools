@@ -33,7 +33,7 @@ const ProfilePage: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      loadData();
+      void loadData();
     }
   }, [user]);
 
@@ -69,7 +69,7 @@ const ProfilePage: React.FC = () => {
     try {
       await apiService.respondToInvitation(invitationId, action);
       setSuccess(`Invitation ${action}ed successfully`);
-      loadData();
+      void loadData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error(err);
@@ -85,7 +85,7 @@ const ProfilePage: React.FC = () => {
     try {
       await apiService.leaveApp(appId);
       setSuccess(`Left app "${appName}" successfully`);
-      loadData();
+      void loadData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error(err);

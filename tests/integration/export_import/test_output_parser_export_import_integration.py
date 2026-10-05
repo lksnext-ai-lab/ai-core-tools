@@ -29,12 +29,13 @@ from services.output_parser_export_service import OutputParserExportService
 from services.output_parser_import_service import OutputParserImportService
 from schemas.export_schemas import OutputParserExportFileSchema
 from schemas.import_schemas import ConflictMode, ComponentType
+from pydantic import ValidationError
 
 
 # ==================== FIXTURES ====================
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def test_app(db_session: Session):
     """Create a test app for testing."""
     # Check if app exists
@@ -68,7 +69,7 @@ def test_app(db_session: Session):
         db_session.commit()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def sample_output_parser(db_session: Session, test_app: App):
     """Create a sample output parser for testing."""
     parser = OutputParser(
@@ -495,7 +496,7 @@ class TestOutputParserImportIntegration:
     ):
         """Test import with invalid JSON structure."""
         # Missing required fields
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             OutputParserExportFileSchema(
                 metadata={
                     "export_version": "1.0.0",

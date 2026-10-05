@@ -489,8 +489,8 @@ class TestBuildRetrieverToolName:
         assert build_retriever_tool_name(silo_a) != build_retriever_tool_name(silo_b)
 
     def test_stability_same_silo(self):
-        silo = _make_silo(silo_id=99, name="HR Documents")
-        assert build_retriever_tool_name(silo) == build_retriever_tool_name(silo)
+        name = build_retriever_tool_name(_make_silo(silo_id=99, name="HR Documents"))
+        assert build_retriever_tool_name(_make_silo(silo_id=99, name="HR Documents")) == name
 
     def test_empty_name_fallback(self):
         silo = _make_silo(silo_id=5, name="")

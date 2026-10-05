@@ -1,10 +1,10 @@
 import base64
 import hashlib
 import httpx
+import io
 import ipaddress
 import mimetypes
 import socket
-import tempfile
 import time
 import uuid
 import json
@@ -315,9 +315,8 @@ async def chat_completions(
                                     ),
                                 )
                         try:
-                            temp_f = tempfile.SpooledTemporaryFile(max_size=1024*1024*10)
-                            temp_f.write(img_data)
-                            temp_f.seek(0)
+                            # The bytes are already in memory; wrap them without a temp file.
+                            temp_f = io.BytesIO(img_data)
                             upload_file = UploadFile(file=temp_f, filename=f"image_{uuid.uuid4().hex[:8]}{ext}")
                             file_ref = await file_service.upload_file(
                                 file=upload_file,
@@ -332,9 +331,8 @@ async def chat_completions(
                     audio_format = part.input_audio.format  # "wav" or "mp3"
                     try:
                         audio_bytes = base64.b64decode(part.input_audio.data)
-                        temp_f = tempfile.SpooledTemporaryFile(max_size=1024 * 1024 * 10)
-                        temp_f.write(audio_bytes)
-                        temp_f.seek(0)
+                        # The bytes are already in memory; wrap them without a temp file.
+                        temp_f = io.BytesIO(audio_bytes)
                         upload_file = UploadFile(
                             file=temp_f,
                             filename=f"audio_{uuid.uuid4().hex[:8]}.{audio_format}",
@@ -361,9 +359,8 @@ async def chat_completions(
                         filename = file_obj.filename or f"file_{uuid.uuid4().hex[:8]}.bin"
                         try:
                             raw_bytes = base64.b64decode(file_obj.file_data)
-                            temp_f = tempfile.SpooledTemporaryFile(max_size=1024 * 1024 * 10)
-                            temp_f.write(raw_bytes)
-                            temp_f.seek(0)
+                            # The bytes are already in memory; wrap them without a temp file.
+                            temp_f = io.BytesIO(raw_bytes)
                             upload_file = UploadFile(file=temp_f, filename=filename)
                             file_ref = await file_service.upload_file(
                                 file=upload_file,

@@ -236,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="mt-1 pt-1 border-t border-line dark:border-line-dark">
                     <button
                       onClick={() => {
-                        logout();
+                        void logout();
                         setIsUserMenuOpen(false);
                       }}
                       className="flex items-center w-full px-2.5 py-[9px] text-[13.5px] text-fg rounded-md hover:bg-surface-hover transition-colors dark:text-fg-dark dark:hover:bg-surface-hover-dark"

@@ -42,7 +42,7 @@ function SilosPage() {
 
   // Load silos from the API
   useEffect(() => {
-    loadSilos();
+    void loadSilos();
   }, [appId]);
 
   async function loadSilos() {

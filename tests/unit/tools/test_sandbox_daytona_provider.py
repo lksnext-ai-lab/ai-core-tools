@@ -82,7 +82,7 @@ class TestDaytonaCredentials:
         }
 
 
-@pytest.fixture()
+@pytest.fixture
 def provider_and_sandbox(monkeypatch):
     from tools.sandbox.daytona_provider import DaytonaProvider
 
