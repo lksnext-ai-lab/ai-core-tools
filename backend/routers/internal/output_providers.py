@@ -62,7 +62,7 @@ async def list_output_providers(app_id: int, role: CanView):
 
 @router.get("/output-destinations", response_model=list[OutputDestinationResponseSchema])
 async def list_output_destinations(app_id: int, role: CanView, db: DB):
-    items = db.query(OutputDestination).filter_by(app_id=app_id).order_by(OutputDestination.name).all()
+    items = db.query(OutputDestination).filter_by(app_id=app_id, enabled=True).order_by(OutputDestination.name).all()
     return [destination_dto(item) for item in items]
 
 
@@ -90,8 +90,14 @@ async def delete_output_destination(app_id: int, destination_id: int, role: CanE
     try:
         item = get_destination(db, app_id=app_id, destination_id=destination_id)
         if item.bindings:
-            # Preserve bindings and delivery history while preventing new deliveries.
+            # Keep delivery history but remove this destination from every task.
             item.enabled = False
+            for binding in item.bindings:
+                binding.enabled = False
+            db.query(OutputDelivery).filter(
+                OutputDelivery.destination_id == destination_id,
+                OutputDelivery.status.in_(["pending", "retry_wait"]),
+            ).update({OutputDelivery.status: "cancelled"}, synchronize_session=False)
         else:
             db.delete(item)
         db.commit()

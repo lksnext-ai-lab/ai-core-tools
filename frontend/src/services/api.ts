@@ -911,6 +911,10 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/output-destinations`, { method: 'POST', body: JSON.stringify(data) });
   }
 
+  async deleteOutputDestination(appId: number, destinationId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'DELETE' });
+  }
+
   async testOutputDestination(appId: number, destinationId: number): Promise<{ accepted: boolean; http_status: number }> {
     return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}/test`, { method: 'POST' });
   }
