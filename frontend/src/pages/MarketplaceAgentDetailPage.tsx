@@ -113,7 +113,7 @@ export default function MarketplaceAgentDetailPage() {
   }, [numericId]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   const handleStartChat = useCallback(async () => {

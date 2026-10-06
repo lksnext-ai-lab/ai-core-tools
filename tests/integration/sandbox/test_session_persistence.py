@@ -40,7 +40,7 @@ from tools.sandbox.provider import SandboxHandle
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def real_agent_and_conversation(test_engine):
     """A really-committed Agent + Conversation, cleaned up via cascade delete.
 
@@ -144,7 +144,7 @@ def _load_conversation_from_db(conversation_id: int):
         verify_db.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def opensandbox_provider():
     """OpenSandboxProvider with the SDK boundary mocked — no real server needed.
 
@@ -187,7 +187,7 @@ def opensandbox_provider():
             yield provider
 
 
-@pytest.fixture()
+@pytest.fixture
 def sandbox_session_service():
     """A fresh SandboxSessionService instance (not the global singleton)."""
     return SandboxSessionService()

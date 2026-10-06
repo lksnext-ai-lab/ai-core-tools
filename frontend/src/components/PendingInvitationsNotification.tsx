@@ -19,7 +19,7 @@ function PendingInvitationsNotification() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    loadPendingInvitations();
+    void loadPendingInvitations();
   }, []);
 
   async function loadPendingInvitations() {
@@ -36,7 +36,7 @@ function PendingInvitationsNotification() {
     setShowDetails(newShowDetails);
     
     if (newShowDetails) {
-      loadPendingInvitations();
+      void loadPendingInvitations();
     }
   };
 

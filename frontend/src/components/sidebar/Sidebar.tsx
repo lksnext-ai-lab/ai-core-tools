@@ -43,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [appId]);
 
-  useEffect(() => { loadAppData(); }, [loadAppData]);
+  useEffect(() => { void loadAppData(); }, [loadAppData]);
 
   // Auto-open settings group when navigating into a settings page
   useEffect(() => {

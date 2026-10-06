@@ -97,7 +97,7 @@ function AgentImportStepper({
       }
     };
 
-    loadAIServices();
+    void loadAIServices();
   }, [isOpen, appId]);
 
   const handleFileSelect = useCallback(

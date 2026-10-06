@@ -40,7 +40,7 @@ export function useServicesManager<T = any>(
   const [editingService, setEditingService] = useState<any>(null);
 
   useEffect(() => {
-    load();
+    void load();
   }, [appId]);
 
   async function load() {

@@ -36,7 +36,7 @@ from schemas.import_schemas import ConflictMode
 # ==================== FIXTURES ====================
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def test_app(db_session: Session):
     """Create a test app with an owner user for testing."""
     timestamp = datetime.now().timestamp()
@@ -65,7 +65,7 @@ def test_app(db_session: Session):
         db_session.rollback()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def populated_app(db_session: Session, test_app: App):
     """Create an app with sample data for all component types."""
     # Create 2 AI services

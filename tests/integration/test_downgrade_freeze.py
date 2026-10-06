@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 # Environment fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(autouse=True)
 def saas_env(monkeypatch):
     monkeypatch.setenv("AICT_DEPLOYMENT_MODE", "saas")
     monkeypatch.setenv("STRIPE_API_KEY", "sk_test_fake")
@@ -48,7 +48,7 @@ def saas_env(monkeypatch):
 # Fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def tier_config(db):
     """Seed TierConfig with known limits for downgrade tests."""
     from models.tier_config import TierConfig
@@ -87,7 +87,7 @@ def tier_config(db):
     db.flush()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def pro_user(db, tier_config):
     """A Pro-tier user with one app and 8 agents (sorted by age)."""
     from models.user import User
