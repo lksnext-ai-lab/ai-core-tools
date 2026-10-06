@@ -57,7 +57,7 @@ export function CardDetailEntidad({
 
   return (
     <button
-      className={`group flex h-full flex-col rounded-md bg-surface-ash p-5 text-left  ${
+      className={`group flex h-full flex-col rounded-md bg-surface-ash dark:bg-btCard-dark p-5 text-left  ${
         isClickable ? 'cursor-pointer' : ''
       } ${className}`}
       role={isClickable ? 'button' : undefined}

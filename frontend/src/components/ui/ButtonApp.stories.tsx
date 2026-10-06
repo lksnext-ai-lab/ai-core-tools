@@ -20,7 +20,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const DashboardMyApps: Story = {
+export const Secunday: Story = {
   args: {
     label: 'My Apps',
     variant: 'secondary',
@@ -30,7 +30,7 @@ export const DashboardMyApps: Story = {
   },
 };
 
-export const AgentsNewAgent: Story = {
+export const Primary: Story = {
   args: {
     label: '+ Nuevo agente',
     variant: 'primary',
@@ -39,7 +39,7 @@ export const AgentsNewAgent: Story = {
   },
 };
 
-export const AgentsOpen: Story = {
+export const Table: Story = {
   args: {
     label: 'Abrir',
     variant: 'table',
@@ -48,7 +48,7 @@ export const AgentsOpen: Story = {
   },
 };
 
-export const AgentsEdit: Story = {
+export const Muted: Story = {
   args: {
     label: 'Editar',
     variant: 'muted',
@@ -57,7 +57,7 @@ export const AgentsEdit: Story = {
   },
 };
 
-export const DataSourcesRetry: Story = {
+export const Danger: Story = {
   args: {
     label: 'Reintentar',
     variant: 'danger',
@@ -66,25 +66,8 @@ export const DataSourcesRetry: Story = {
   },
 };
 
-export const McpServerConnect: Story = {
-  args: {
-    label: '+ Conectar',
-    variant: 'secondary',
-    size: 'medium',
-    onClick: fn(),
-  },
-};
 
-export const GeneralSettingsSave: Story = {
-  args: {
-    label: 'Guardar cambios',
-    variant: 'primary',
-    size: 'large',
-    onClick: fn(),
-  },
-};
-
-export const MarketplaceBrowseAgents: Story = {
+export const PrtimaryIcon: Story = {
   args: {
     label: 'Browse Agents',
     variant: 'primary',

@@ -71,7 +71,7 @@ function Table<T = any>({
     <div className={`bg-surface border border-line rounded-lg overflow-visible dark:bg-surface-dark dark:border-line-dark ${className}`}>
       <div className="overflow-x-auto overflow-visible">
         <table className="min-w-full divide-y divide-line dark:divide-line-dark">
-          <thead className="bg-canvas-alt dark:bg-canvas-alt-dark">
+          <thead className="bg-tableCab dark:bg-tableCab-dark">
             <tr>
               {columns.map((column) => (
                 <th

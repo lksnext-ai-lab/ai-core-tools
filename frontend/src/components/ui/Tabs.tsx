@@ -95,7 +95,7 @@ export function Tabs({
       <div
         ref={tabListRef}
         role="tablist"
-        className="flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide"
+        className="flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide "
         aria-label="Tab navigation"
       >
         {tabs.map((tab, index) => {

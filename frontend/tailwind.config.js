@@ -24,7 +24,7 @@ export default {
         accent: { DEFAULT: '#ff682c', dark: '#ff8452' },
         bronze: {
           DEFAULT: '#816729', strong: '#6b571f', bg: '#f3ece0', 'bg-soft': '#ebe6dd', border: '#e6ddcb',
-          dark: '#c9a45c', 'strong-dark': '#e0bd7c', 'bg-dark': '#2b2410', 'bg-soft-dark': '#241f10', 'border-dark': '#4a3d1f',
+          dark: '#c9a45c', 'strong-dark': '#e0bd7c', 'bg-dark': '#2a271c', 'bg-soft-dark': '#241f10', 'border-dark': '#4a3d1f',
         },
         success: {
           DEFAULT: '#1f7a4d', strong: '#1f6a45', bg: '#eaf5ef', border: '#cfe6da',
@@ -39,6 +39,8 @@ export default {
           dark: '#8fb8dd', 'strong-dark': '#b7d4ee', 'bg-dark': '#16232f', 'border-dark': '#33475c',
         },
         focus: { DEFAULT: '#1a5fd6', dark: '#7fb3ff' },
+        btCard: { DEFAULT: '#E8E8E8', bg: '#ffffff', border: '#e8e8e8', hover: '#212121', dark: '#2a271c', 'bg-dark': '#2a271c','border-dark': '#3a362a' },
+        tableCab: { DEFAULT: '#f5f5f5', bg: '#f5f5f5', dark: '#2a271c',  },
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],

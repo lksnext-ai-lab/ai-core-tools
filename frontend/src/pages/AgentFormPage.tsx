@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
+import { AlertTriangle, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
 import { apiService, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -18,6 +18,7 @@ import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/m
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
 import { randomId } from '../utils/randomId';
+import Title from '../components/ui/Title';
 
 // Define the Agent types
 interface Agent {
@@ -672,26 +673,32 @@ function AgentFormPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-6xl mx-auto">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
-          <div>
+          {/*<div>
             <h1 className="text-3xl font-bold text-gray-900">
               {pageTitle}
             </h1>
             <p className="text-gray-600 mt-2">
               {pageDescription}
             </p>
-          </div>
-          <button
+          </div>*/}
+          <Title
+            titulo={pageTitle}
+            subtitulo={pageDescription}
+            variant="titPrincipal"
+            subtitleMarginBottom={0}
+          />
+          {/*<button
             onClick={() => navigate(`/apps/${appId}/agents`)}
             className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-gray-700 shadow-sm border border-gray-200 transition-all duration-200"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {' '}
             Back to Agents
-          </button>
+          </button>*/}
         </div>
 
         {/* Error Message */}

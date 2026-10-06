@@ -93,7 +93,7 @@ export function MarketplaceScheduledTasksTab() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search scheduled tasks..."
             aria-label="Search scheduled tasks"
-            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:bg-surface-dark dark:border-btCard-border-dark"
           />
         </div>
         <ButtonApp

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -14,6 +14,9 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { AgentMCPUsage } from '../core/types';
+import BackgroundImage, { type BackgroundImageIconName } from '../components/ui/BackgroundImage';
+import ButtonApp from '../components/ui/ButtonApp';
+import Title from '../components/ui/Title';
 
 // Define the Agent type
 interface Agent {
@@ -220,13 +223,13 @@ function AgentsPage() {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const getAgentTypeIcon = (type: string) => {
+  const getAgentTypeIcon = (type: string): BackgroundImageIconName => {
     switch (type) {
       case 'ocr_agent':
-        return <FileText className="w-4 h-4" />;
+        return 'FileText';
       case 'agent':
       default:
-        return <Bot className="w-4 h-4" />;
+        return 'Bot';
     }
   };
 
@@ -245,10 +248,18 @@ function AgentsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
+          {/*<div>
             <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
             <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
-          </div>
+          </div>*/}
+
+          <Title
+            titulo="Agents"
+            subtitulo={`Manage your AI agents for app ${app?.name || appId}`}
+            variant="titSecundario"
+            titleMarginBottom={6}
+            subtitleMarginBottom={0}
+          />
         </div>
 
         <div className="flex items-center justify-center py-12">
@@ -263,28 +274,34 @@ function AgentsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
+        {/*<div>
           <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
           <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
-        </div>
+        </div>*/}
+        <Title
+          titulo="Agents"
+          subtitulo={`Manage your AI agents for app ${app?.name || appId}`}
+          variant="titSecundario"
+          titleMarginBottom={6}
+          subtitleMarginBottom={0}
+        />
         <div className="flex items-center space-x-3">
           {hasMinRole(AppRole.ADMINISTRATOR) && (
-            <button
+            <ButtonApp
+              label="Import Agent"
+              variant="secondary"
+              size="medium"
+              icon={<ArrowUp className="h-4 w-4" aria-hidden="true" />}
               onClick={() => setShowImportModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <ArrowUp className="w-4 h-4 mr-2" aria-hidden="true" />
-              <span>Import Agent</span>
-            </button>
+            />
           )}
           {canEdit && (
-            <button 
+            <ButtonApp
+              label="+ Create Agent"
+              variant="primary"
+              size="medium"
               onClick={handleCreateAgent}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}Create Agent
-            </button>
+            />
           )}
         </div>
       </div>
@@ -302,22 +319,24 @@ function AgentsPage() {
             header: 'Agent',
             render: (agent) => (
               <div className="flex items-center">
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <span className="text-blue-600 text-lg">{getAgentTypeIcon(agent.type)}</span>
-                  </div>
-                </div>
+                <BackgroundImage
+                  icon={getAgentTypeIcon(agent.type)}
+                  size={28}
+                  iconSize={14}
+                  variant="marron"
+                  className="rounded-lg"
+                />
                 <div className="ml-4">
                   <div className="text-sm font-medium text-gray-900">
                     {canEdit ? (
                       <Link 
                         to={`/apps/${appId}/agents/${agent.agent_id}`} 
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                        className="text-sm font-medium text-fg dark:text-fg-dark"
                       >
                         {agent.name}
                       </Link>
                     ) : (
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-fg dark:text-fg-dark">
                         {agent.name}
                       </span>
                     )}
@@ -334,13 +353,13 @@ function AgentsPage() {
           {
             header: 'Description',
             render: (agent) => (
-              <div className="text-sm text-gray-900 max-w-xs">
+              <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs">
                 {agent.description ? (
                   <div className="truncate" title={agent.description}>
                     {agent.description}
                   </div>
                 ) : (
-                  <span className="text-gray-400 italic">No description</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark italic">No description</span>
                 )}
               </div>
             ),
@@ -359,15 +378,15 @@ function AgentsPage() {
             render: (agent) => (
               agent.ai_service ? (
                 <div className="text-sm">
-                  <div className="font-medium text-gray-900">
+                  <div className="font-medium text-fg dark:text-fg-dark">
                     {agent.ai_service.name}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                     {agent.ai_service.model_name} • {agent.ai_service.provider}
                   </div>
                 </div>
               ) : (
-                <span className="text-gray-400 italic text-sm">No AI Service</span>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark italic text-sm">No AI Service</span>
               )
             )
           },

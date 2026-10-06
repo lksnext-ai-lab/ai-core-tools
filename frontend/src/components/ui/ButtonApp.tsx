@@ -24,7 +24,7 @@ const sizeClasses: Record<ButtonAppSize, string> = {
 };
 
 const variantClasses: Record<ButtonAppVariant, string> = {
-  primary: 'border border-transparent bg-ink text-ink-on hover:bg-[#383838] dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-[#d8d3c8]',
+  primary: 'border border-transparent bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark hover:bg-[#383838] dark:hover:bg-[#d8d3c8]',
   secondary: 'border border-ink bg-surface text-fg hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark',
   table: 'border border-ink bg-transparent text-fg hover:bg-surface-hover dark:border-ink-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark',
   muted: 'border border-line bg-transparent text-fg-secondary hover:bg-surface-hover dark:border-line-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark',

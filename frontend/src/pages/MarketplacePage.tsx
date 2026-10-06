@@ -53,6 +53,7 @@ export default function MarketplacePage() {
       <Title
         titulo="Marketplace"
         subtitulo="Discover and interact with AI agents and scheduled tasks across the platform."
+        variant="titPrincipal"
       />
       <div role="tablist" aria-label="Marketplace sections" className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
         {TABS.map((item) => (
@@ -62,10 +63,10 @@ export default function MarketplacePage() {
             role="tab"
             aria-selected={tab === item.value}
             onClick={() => setSearchParams(item.value === 'agents' ? {} : { tab: item.value })}
-            className={`-mb-px inline cursor-pointer border-b-2 px-4 py-2 font-display text-[14.5px] font-medium text-[#202020] transition-colors ${
+            className={`-mb-px inline cursor-pointer border-b-2 px-4 py-2 font-display text-[14.5px] font-medium text-fg-primary transition-colors ${
               tab === item.value
-                ? 'border-black text-black'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                ? 'border-black text-fg-primary dark:text-fg-primary-dark dark:border-white'
+                : 'border-transparent text-fg-tertiary hover:text-fg-primary dark:text-fg-tertiary-dark dark:hover:text-fg-primary-dark'
             }`}
           >
             {item.label}
@@ -196,7 +197,7 @@ function MarketplaceAgentsTab() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search agents..."
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 focus:bordergray-300"
+            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:bg-surface-dark dark:border-btCard-border-dark"
           />
         </div>
 
@@ -204,7 +205,7 @@ function MarketplaceAgentsTab() {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="marketplace-filter-select border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className="marketplace-filter-select border border-gray-300 dark:border-btCard-border-dark dark:bg-surface-dark focus:outline-none focus:border-accent rounded-lg text-sm py-2 px-3"
         >
           <option value="">All Categories</option>
           {MARKETPLACE_CATEGORIES.map((cat) => (
@@ -218,7 +219,7 @@ function MarketplaceAgentsTab() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          className="marketplace-filter-select border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-gray-300"
+          className="marketplace-filter-select border border-gray-300 dark:border-btCard-border-dark dark:bg-surface-dark rounded-lg text-sm py-2 px-3 focus:outline-none focus:border-accent"
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -254,9 +255,9 @@ function EmptyState({ search, category }: EmptyStateProps) {
   const hasFilters = Boolean(search || category);
   return (
     <div className="text-center py-16">
-      <Search className="w-12 h-12 text-gray-300 mx-auto" aria-hidden="true" />
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No agents found</h3>
-      <p className="mt-1 text-sm text-gray-500">
+      <Search className="w-12 h-12 text-gray-300 mx-auto" aria-hidden="true"  />
+      <h3 className="mt-4 text-lg font-medium text-fg-primary dark:text-fg-primary-dark">No agents found</h3>
+      <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
         {hasFilters
           ? 'Try adjusting your search or filters.'
           : 'No agents have been published to the marketplace yet.'}

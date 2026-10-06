@@ -2,6 +2,7 @@ import { Bot, FileText, MessagesSquare, Store } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type BackgroundImageIconName = 'Bot' | 'FileText' | 'MessagesSquare' | 'Store';
+export type BackgroundImageVariant = 'marron';
 
 const icons: Record<BackgroundImageIconName, LucideIcon> = {
   Bot,
@@ -10,11 +11,21 @@ const icons: Record<BackgroundImageIconName, LucideIcon> = {
   Store,
 };
 
+function getVariantBackgroundClass(variant: BackgroundImageVariant): string {
+  if (variant === 'marron') return 'bg-bronze-bg-soft dark:bg-[#2A1A14]';
+  return '';
+}
+
+function getVariantIconClass(variant: BackgroundImageVariant): string {
+  if (variant === 'marron') return 'text-bronze dark:text-bronze-dark';
+  return '';
+}
+
 export interface BackgroundImageProps {
   readonly icon: BackgroundImageIconName | LucideIcon;
   readonly size?: number;
-  readonly backgroundColor?: string;
-  readonly iconColor?: string;
+  readonly iconSize?: number;
+  readonly variant?: BackgroundImageVariant;
   readonly className?: string;
 }
 
@@ -22,8 +33,8 @@ export interface BackgroundImageProps {
 export function BackgroundImage({
   icon,
   size = 34,
-  backgroundColor = '#ebe6dd',
-  iconColor = '#816729',
+  iconSize,
+  variant = 'marron',
   className = '',
 }: BackgroundImageProps) {
   const Icon = typeof icon === 'string' ? icons[icon] : icon;
@@ -31,10 +42,10 @@ export function BackgroundImage({
   return (
     <span
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${className}`}
-      style={{ width: size, height: size, backgroundColor }}
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${getVariantBackgroundClass(variant)} ${className}`}
+      style={{ width: size, height: size }}
     >
-      <Icon size={size / 2} color={iconColor} strokeWidth={1.5} />
+      <Icon className={getVariantIconClass(variant)} size={iconSize ?? size / 2} strokeWidth={1.5} />
     </span>
   );
 }

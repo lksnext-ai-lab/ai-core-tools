@@ -143,27 +143,28 @@ export default function MarketplaceHomePage() {
       <Title
         titulo="Welcome back"
         subtitulo="Your AI agent dashboard"
+        variant="titPrincipal"
+        subtitleMarginBottom={0}
       />  
 
       {/* Browse agents CTA */}
       <button
         type="button"
         onClick={() => navigate('/marketplace')}
-        className="w-full text-left bg-white rounded-2xl shadow-sm border border-[var(--color-border-card)] p-6 hover:border-[var(--color-border-card-hover)] hover:shadow-md transition-all duration-200 group"
+        className="w-full text-left bg-btCard dark:bg-btCard-dark rounded-2xl shadow-sm border border-btCard-border dark:border-btCard-border-dark p-6 hover:border-btCard-hover dark:hover:bg-btCard-hover transition-all duration-200 group"
       >
         <div className="flex items-center gap-4">
           <BackgroundImage
             icon="Store"
             size={56}
-            backgroundColor="var(--color-bronze-bg-sof)"
-            iconColor="var(--text-bronze)"
+            variant="marron"
             className="rounded-2xl"
           />
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-semibold text-gray-900 ">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white ">
               Browse Agents
             </h2>
-            <p className="text-gray-500 text-sm mt-0.5">
+            <p className="text-gray-500 dark:text-[#9d978a] text-sm mt-0.5">
               Discover and chat with AI agents published by your organisation
             </p>
           </div>
@@ -176,12 +177,12 @@ export default function MarketplaceHomePage() {
         <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">My Recent Conversations</h2>
 
         {conversations.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-[var(--color-border-card)] p-10 text-center">
+          <div className="bg-btCard dark:bg-btCard-dark rounded-2xl shadow-sm border border-btCard-border dark:border-btCard-border-dark p-10 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-8 h-8 text-gray-400" aria-hidden="true" />
             </div>
-            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">No conversations yet</h3>
-            <p className="text-gray-500 text-sm mt-0.5 mb-6">
+            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)] dark:text-white">No conversations yet</h3>
+            <p className="text-gray-500 dark:text-[#9d978a] text-sm mt-0.5 mb-6">
               You haven't chatted with any agents yet. Browse the marketplace to get started!
             </p>
             <ButtonApp
@@ -203,7 +204,7 @@ export default function MarketplaceHomePage() {
                     if ((e.target as HTMLElement).closest('button[data-action]')) return;
                     navigate(`/marketplace/chat/${conv.conversation_id}`);
                   }}
-                  className="flex-1 min-w-0 text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
+                  className="flex-1 min-w-0 text-left bg-btCard dark:bg-btCard-dark rounded-xl shadow-sm border border-btCard-border dark:border-btCard-border-dark p-4 hover:border-btCard-hover dark:hover:bg-btCard-hover transition-all duration-200 group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 overflow-hidden">

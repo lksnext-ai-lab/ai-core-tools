@@ -304,8 +304,8 @@ function AppDashboard() {
         <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center">
           <InfinityIcon className="w-8 h-8 text-green-500" />
         </div>
-        <p className="text-sm font-medium text-green-700">No limit configured</p>
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark">No limit configured</p>
+        <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark text-center">
           This workspace has unlimited request capacity.
         </p>
       </div>
@@ -332,7 +332,7 @@ function AppDashboard() {
     );
   } else {
     speedometerContent = (
-      <p className="text-xs text-gray-400 text-center py-6">Usage data unavailable.</p>
+      <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark text-center py-6">Usage data unavailable.</p>
     );
   }
 
@@ -351,12 +351,12 @@ function AppDashboard() {
     );
   } else if (topAgents.length === 0) {
     agentsContent = (
-      <div className="flex flex-col items-center justify-center py-6 gap-3 text-center">
-        <TrendingUp className="w-8 h-8 text-gray-200" />
-        <p className="text-sm text-gray-500">No agents yet.</p>
+      <div className="flex flex-col items-center justify-center py-6 gap-3 text-center bg-btCard dark:bg-btCard-dark">
+        <TrendingUp className="w-8 h-8 text-fg-secondary dark:text-fg-secondary-dark" />
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">No agents yet.</p>
         <Link
           to={`/apps/${appId}/agents`}
-          className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-0.5"
+          className="text-xs text-fg-secondary dark:text-fg-secondary-dark font-medium flex items-center gap-0.5"
         >
           Create your first agent
           <ChevronRight className="w-3 h-3" />
@@ -367,7 +367,7 @@ function AppDashboard() {
     agentsContent = (
       <>
         {!hasActivity && (
-          <p className="text-xs text-gray-400 mb-3">No activity yet</p>
+          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mb-3">No activity yet</p>
         )}
         <div className="space-y-3">
           {topAgents.map((agent) => {
@@ -381,7 +381,7 @@ function AppDashboard() {
                 className="flex items-center gap-2 group rounded-lg px-1 -mx-1 hover:bg-blue-50 transition-colors"
                 aria-label={`Go to ${agent.name}`}
               >
-                <span className="text-xs text-gray-700 w-28 truncate shrink-0 group-hover:text-blue-700 transition-colors" title={agent.name}>
+                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark w-28 truncate shrink-0 group-hover:text-blue-700 transition-colors" title={agent.name}>
                   {agent.name}
                 </span>
                 <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -409,24 +409,27 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Block 1: Enriched Hero Banner                                       */}
       {/* ------------------------------------------------------------------ */}
-      <div className="bg-[var(--color-card-bg-tit)] from-slate-50 via-blue-50 to-indigo-50 border border-slate-200 rounded-xl p-6">
+      <div className="bg-[var(--color-card-bg-tit)] dark:bg-canvas-alt-dark from-slate-50 via-blue-50 to-indigo-50 border border-slate-200 dark:border-btCard-border-dark rounded-xl p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-[var(--text-bronze)] uppercase tracking-wider mb-1">Workspace</p>
             <Title
               titulo={currentApp.name}
               subtitulo='Manage your AI components and data resources'
+              variant="titTerciario"
+              subtitleMarginBottom={0}
+              titleMarginBottom={0}
             />
             {/* Info badges row */}
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {/* Collaborators */}
-              <span className="inline-flex items-center gap-1 rounded-full border border-color-border-card bg-white px-2.5 py-1 text-xs font-medium text-[var(--text-sticky-blanco)]">
+              <span className="inline-flex items-center gap-1 rounded-full border border-color-border-card dark:border-btCard-border-dark bg-white dark:bg-canvas-alt-dark px-2.5 py-1 text-xs font-medium text-[var(--text-sticky-blanco)] dark:text-fg-secondary-dark">
                 <Users className="w-3 h-3" />
                 {currentApp.collaborator_count} collaborator{currentApp.collaborator_count === 1 ? '' : 's'}
               </span>
 
               {/* LangSmith */}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium  bg-slate-100 text-slate-600 dark:bg-canvas-alt-dark dark:text-fg-secondary-dark">
                 <span
                   className={`w-2 h-2 rounded-full ${currentApp.langsmith_configured ? 'bg-green-500' : 'bg-gray-400'}`}
                 />
@@ -468,35 +471,34 @@ function AppDashboard() {
           return (
             <div
               key={card.href}
-              className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md hover:border-gray-300 transition-all duration-200 group flex flex-col"
+              className="bg-white dark:bg-btCard-dark rounded-xl border border-gray-200 dark:border-btCard-border-dark p-5 hover:shadow-md hover:border-gray-300 transition-all duration-200 group flex flex-col"
             >
               {/* Icon + Count */}
               <div className="flex items-start justify-between mb-4">
                 <BackgroundImage
                   icon={card.icon}
                   size={44}
-                  backgroundColor="#ebe6dd"
-                  iconColor="#816729"
+                  variant="marron"
                   className="rounded-xl transition-all duration-200"
                 />
                 {card.count !== null && (
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${card.count > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+                    <p className="text-2xl font-bold text-ink dark:dark:text-ink-dark">
                       {card.count}
                     </p>
-                    <p className="text-xs text-gray-400 leading-none">total</p>
+                    <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">total</p>
                   </div>
                 )}
               </div>
 
               {/* Title + Subtitle */}
-              <h3 className="font-semibold text-gray-900 text-sm mb-0.5">{card.title}</h3>
-              <p className="text-gray-400 text-xs mb-4 flex-1">{card.subtitle}</p>
+              <h3 className="font-semibold text-ink dark:dark:text-ink-dark text-sm mb-0.5">{card.title}</h3>
+              <p className="text-fg-secondary dark:text-fg-secondary-dark text-xs mb-4 flex-1">{card.subtitle}</p>
 
               {/* CTA */}
               <Link
                 to={card.href}
-                className={`flex items-center text-sm font-medium ${card.accentColor} transition-colors`}
+                className={`flex items-center text-sm font-medium text-bronze dark:text-bronze-dark transition-colors`}
               >
                 {card.label}
                 <ArrowRight className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform duration-150" />
@@ -511,20 +513,20 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Block 2: Rate Limit Speedometer */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white dark:bg-btCard-dark rounded-xl border border-gray-200 dark:border-btCard-border-dark p-5">
           <div className="flex items-center gap-2 mb-4">
             <Zap className="w-4 h-4 text-amber-500" />
-            <h2 className="text-sm font-semibold text-gray-800">Rate Limit Usage</h2>
+            <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">Rate Limit Usage</h2>
           </div>
 
           {speedometerContent}
         </div>
 
         {/* Block 3: Top Agents Leaderboard */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white  dark:bg-btCard-dark rounded-xl border border-gray-200 dark:border-btCard-border-dark p-5">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="w-4 h-4 text-blue-500" />
-            <h2 className="text-sm font-semibold text-gray-800">Top Agents by Usage</h2>
+            <h2 className="text-sm font-semibold text-fg-secondary dark:text-fg-secondary-dark">Top Agents by Usage</h2>
           </div>
 
           {agentsContent}
@@ -540,8 +542,8 @@ function AppDashboard() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-sm font-semibold text-gray-800">Getting Started</h2>
-              <span className="text-xs text-gray-400 font-normal">
+              <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">Getting Started</h2>
+              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark font-normal">
                 {completedCount} / {checklistSteps.length} steps
               </span>
             </div>

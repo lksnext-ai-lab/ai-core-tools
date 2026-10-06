@@ -114,6 +114,7 @@ function AppsPage() {
         <Title
           titulo="My Apps"
           subtitulo="Manage your AI applications and workspaces"
+          variant="titPrincipal"
         />
         {isEditor && (
           <div className="flex gap-3">

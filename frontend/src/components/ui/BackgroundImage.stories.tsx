@@ -10,6 +10,10 @@ const meta = {
   },
   tags: ['autodocs'],
   argTypes: {
+    variant: {
+      control: 'select',
+      options: ['marron'],
+    },
     icon: {
       control: 'select',
       options: ['Bot', 'FileText', 'MessagesSquare', 'Store'],
@@ -24,8 +28,7 @@ export const RecentConversation: Story = {
   args: {
     icon: 'Bot',
     size: 34,
-    backgroundColor: '#ebe6dd',
-    iconColor: '#816729',
+    variant: 'marron',
   },
 };
 
@@ -33,8 +36,7 @@ export const DocumentConversation: Story = {
   args: {
     icon: 'FileText',
     size: 40,
-    backgroundColor: '#eef4fb',
-    iconColor: '#3a5573',
+    variant: 'marron',
   },
 };
 
@@ -42,7 +44,23 @@ export const SupportConversation: Story = {
   args: {
     icon: 'MessagesSquare',
     size: 48,
-    backgroundColor: '#eaf5ef',
-    iconColor: '#1f7a4d',
+    variant: 'marron',
   },
 };
+
+export const Dark: Story = {
+  args: {
+    icon: 'Bot',
+    size: 34,
+    variant: 'marron',
+  },
+  parameters: {
+    layout: 'fullscreen',
+  },
+  render: (args) => (
+    <div className="dark flex min-h-screen items-center justify-center bg-canvas-dark p-8">
+      <BackgroundImage {...args} />
+    </div>
+  ),
+};
+
