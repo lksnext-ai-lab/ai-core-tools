@@ -776,7 +776,7 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     MUST be invoked via ``asyncio.to_thread`` so it never blocks the event loop.
     """
     from services.silo_service import resolve_search_params  # noqa: PLC0415 — avoids import cycle
-    from tools.vector_stores.metadata_filters import MetadataFilterClause, validate_clauses, ops_for_backend  # noqa: PLC0415
+    from tools.vector_stores.metadata_filters import flat_filter_clause, validate_clauses, ops_for_backend  # noqa: PLC0415
 
     # Gate 2: silo-scoped whitelist. A caller_search_params["filter"] entry may have
     # survived the orchestrator's own exposed_chat_filters whitelist (Gate 1, in
@@ -786,7 +786,7 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     raw_filter = (caller_search_params or {}).get("filter") or {}
     if raw_filter and agent.silo is not None:
         backend_ops = ops_for_backend(getattr(agent.silo, "vector_db_type", None))
-        clauses = [MetadataFilterClause(field=k, op="$eq", value=v) for k, v in raw_filter.items()]
+        clauses = [c for c in (flat_filter_clause(k, v) for k, v in raw_filter.items()) if c is not None]
         valid = validate_clauses(clauses, getattr(agent.silo, "metadata_definition", None), backend_ops)
         scoped_filter = {c.field: c.value for c in valid}
         caller_search_params = {**caller_search_params, "filter": scoped_filter} if scoped_filter else None
@@ -1839,18 +1839,20 @@ def _build_pinned_filter(
     from tools.vector_stores.metadata_filters import (
         MetadataFilterClause,
         convert_clause_types,
+        flat_filter_clause,
         to_backend_filter,
     )
 
     clauses: List[MetadataFilterClause] = []
     for field, value in raw_caller_filter.items():
-        try:
-            clauses.append(MetadataFilterClause(field=field, op="$eq", value=value))
-        except Exception:
+        clause = flat_filter_clause(field, value)
+        if clause is None:
             logger.warning(
                 "get_retriever_tool: could not build pinned clause for field '%s' — skipped",
                 field,
             )
+            continue
+        clauses.append(clause)
 
     if not clauses:
         return {}

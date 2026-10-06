@@ -31,6 +31,9 @@ _MAX_BLOCK_LENGTH = 2000
 # Cap on filters listed, so a pathological selection cannot bloat the prompt.
 _MAX_LISTED_FILTERS = 25
 
+# Cap on values rendered for one multi-value ("any of") filter.
+_MAX_LISTED_VALUES = 10
+
 
 def _render_value(value: Any) -> str:
     """Render a filter value for prompt text.
@@ -48,6 +51,17 @@ def _render_value(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     return f'"{sanitize_metadata_value(str(value), max_len=100)}"'
+
+
+def _render_selection_line(field: str, value: Any) -> str:
+    """``- field = "A"`` for a scalar, ``- field in ("A", "B", … +N more)`` for a list."""
+    if not isinstance(value, (list, tuple)):
+        return f"- {field} = {_render_value(value)}"
+
+    shown = ", ".join(_render_value(v) for v in value[:_MAX_LISTED_VALUES])
+    extra = len(value) - _MAX_LISTED_VALUES
+    suffix = f", … +{extra} more" if extra > 0 else ""
+    return f"- {field} in ({shown}{suffix})"
 
 
 def render_chat_filter_block(
@@ -72,7 +86,7 @@ def render_chat_filter_block(
     from tools.vector_stores.metadata_filters import sanitize_metadata_value  # noqa: PLC0415
 
     selection_lines = [
-        f"- {sanitize_metadata_value(str(field), max_len=80)} = {_render_value(value)}"
+        _render_selection_line(sanitize_metadata_value(str(field), max_len=80), value)
         for field, value in list(active_filter.items())[:_MAX_LISTED_FILTERS]
     ]
 

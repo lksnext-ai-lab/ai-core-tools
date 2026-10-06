@@ -638,6 +638,67 @@ class TestGetChatFilterFieldValues:
 
         assert result == ["X200"]
 
+    def test_query_searches_live_and_caps_to_limit(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101, 102]
+        )
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}},
+        )
+        cached = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values'
+        )
+        search = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.search_values',
+            side_effect=lambda silo_id, field, query, limit, db_arg: (
+                ["Horno 3", "Horno 1"] if silo_id == 101 else ["Horno 2", "Horno 1"]
+            ),
+        )
+
+        result = service.get_chat_filter_field_values(
+            db, agent, "machine_model", query="horno", limit=3
+        )
+
+        assert result == ["Horno 1", "Horno 2", "Horno 3"]
+        cached.assert_not_called()
+        assert {call.args[2] for call in search.call_args_list} == {"horno"}
+
+    def test_query_on_unexposed_field_still_returns_none(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+        search = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.search_values'
+        )
+
+        assert service.get_chat_filter_field_values(db, agent, "secret", query="x") is None
+        search.assert_not_called()
+
+    def test_get_chat_filter_values_flags_has_more_only_when_truncated(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}},
+        )
+        full = [f"M{i:03d}" for i in range(50)]
+        mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            return_value=full,
+        )
+
+        assert service.get_chat_filter_values(db, agent) == [
+            {"field_name": "machine_model", "values": full, "has_more": True}
+        ]
+
     def test_get_chat_filter_values_still_works_after_refactor(self, mocker):
         """Regression: extracting _collect_candidate_silo_ids must not change
         get_chat_filter_values' existing behavior (own silo + subagents' silos)."""

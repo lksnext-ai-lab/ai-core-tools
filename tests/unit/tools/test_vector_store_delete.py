@@ -272,6 +272,25 @@ class TestPGVectorStoreDistinctMetadataValues:
         sql = str(self.mock_conn.execute.call_args.args[0])
         assert "cmetadata ->> :k0" not in sql
 
+    def test_contains_binds_an_escaped_substring_pattern(self):
+        store = self._make_store()
+
+        store.get_distinct_metadata_values("silo_3", "machine_model", contains="50%_x")
+
+        sql_arg, params = self.mock_conn.execute.call_args.args
+        assert "ILIKE :contains_pattern" in str(sql_arg)
+        assert params["contains"] == "50%_x"
+        assert params["contains_pattern"] == "%50\\%\\_x%"
+
+    def test_without_contains_the_pattern_params_are_null(self):
+        store = self._make_store()
+
+        store.get_distinct_metadata_values("silo_3", "machine_model")
+
+        params = self.mock_conn.execute.call_args.args[1]
+        assert params["contains"] is None
+        assert params["contains_pattern"] is None
+
     def test_failure_returns_empty_instead_of_raising(self):
         store = self._make_store()
         self.mock_conn.execute.side_effect = RuntimeError("boom")

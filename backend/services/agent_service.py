@@ -1,4 +1,4 @@
-from typing import Union, List, Dict, Any, Optional, Set
+from typing import Union, List, Dict, Any, Optional, Set, Tuple
 from sqlalchemy.orm import Session
 from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
 from models.ocr_agent import OCRAgent
@@ -338,22 +338,41 @@ class AgentService:
 
         return silo_ids
 
-    def _fetch_distinct_values(self, db: Session, silo_ids: Set[int], field_name: str) -> Set[str]:
+    def _fetch_distinct_values(
+        self, db: Session, silo_ids: Set[int], field_name: str
+    ) -> Tuple[Set[str], bool]:
         """Union distinct values for *field_name* across *silo_ids*.
+
+        Returns ``(values, truncated)``; ``truncated`` is True when any silo hit
+        the cache's sampling cap, i.e. more values may exist than were returned.
 
         Never raises: a failure fetching values for one silo is logged and
         skipped, never blowing up the aggregation for the others.
         """
         values: Set[str] = set()
+        truncated = False
         for silo_id in silo_ids:
             try:
-                values.update(MetadataValuesCacheService.get_distinct_values(silo_id, field_name, db))
+                silo_values = MetadataValuesCacheService.get_distinct_values(silo_id, field_name, db)
             except Exception as exc:
                 logger.warning(
                     f"Failed to fetch distinct values for silo {silo_id}, field {field_name!r}: {exc}"
                 )
                 continue
-        return values
+            values.update(silo_values)
+            truncated = truncated or MetadataValuesCacheService.is_truncated(silo_values)
+        return values, truncated
+
+    def _search_distinct_values(
+        self, db: Session, silo_ids: Set[int], field_name: str, query: str, limit: int
+    ) -> List[str]:
+        """Union of values containing *query* across *silo_ids*, sorted and capped to *limit*."""
+        values: Set[str] = set()
+        for silo_id in silo_ids:
+            values.update(
+                MetadataValuesCacheService.search_values(silo_id, field_name, query, limit, db)
+            )
+        return sorted(values)[:limit]
 
     def get_chat_filter_values(self, db: Session, agent: Agent) -> List[Dict[str, Any]]:
         """Get the distinct values for each orchestrator-exposed chat filter field.
@@ -396,16 +415,24 @@ class AgentService:
             if not candidate_silo_ids:
                 continue
 
-            values = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
+            values, truncated = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
             if not values:
                 continue
 
-            results.append({"field_name": field_name, "values": sorted(values)})
+            entry: Dict[str, Any] = {"field_name": field_name, "values": sorted(values)}
+            if truncated:
+                entry["has_more"] = True
+            results.append(entry)
 
         return sorted(results, key=lambda r: r['field_name'])
 
     def get_chat_filter_field_values(
-        self, db: Session, agent: Agent, field_name: str
+        self,
+        db: Session,
+        agent: Agent,
+        field_name: str,
+        query: Optional[str] = None,
+        limit: int = 50,
     ) -> Optional[List[str]]:
         """Distinct values for ONE orchestrator-exposed chat filter field.
 
@@ -421,6 +448,9 @@ class AgentService:
             db: Database session.
             agent: The orchestrator agent.
             field_name: The single filter field to look up.
+            query: Optional case-insensitive substring; when set, values are
+                searched live (uncached) and capped to *limit*.
+            limit: Maximum values returned when *query* is set.
 
         Returns:
             Sorted list of distinct values, ``[]`` if none, or ``None`` if
@@ -439,7 +469,10 @@ class AgentService:
         if not candidate_silo_ids:
             return []
 
-        values = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
+        if query:
+            return self._search_distinct_values(db, candidate_silo_ids, field_name, query, limit)
+
+        values, _ = self._fetch_distinct_values(db, candidate_silo_ids, field_name)
         return sorted(values)
 
     def create_or_update_agent(self, db: Session, agent_data: dict, agent_type: str, user_id: int = None) -> int:

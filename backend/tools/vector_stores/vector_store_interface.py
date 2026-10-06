@@ -243,6 +243,7 @@ class VectorStoreInterface(ABC):
         prefix: Optional[str] = None,
         limit: int = 100,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
     ) -> List[str]:
         """
         Return distinct string values for a metadata field in a collection.
@@ -252,6 +253,7 @@ class VectorStoreInterface(ABC):
             field: Metadata field name
             prefix: Optional case-insensitive prefix filter
             limit: Maximum number of values to return
+            contains: Optional case-insensitive substring filter
             filter_metadata: Optional PGVector-style metadata filter narrowing
                 which documents contribute values (e.g.
                 ``{"modelo_maquina": {"$eq": "LS5000"}}``). Lets a caller

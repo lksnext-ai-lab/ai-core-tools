@@ -451,6 +451,7 @@ class PGVectorStore(VectorStoreInterface):
         prefix: Optional[str] = None,
         limit: int = 100,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
     ) -> List[str]:
         # The embedding table is aliased ``e`` because _build_filter_sql always
         # emits fragments prefixed with it.
@@ -459,6 +460,8 @@ class PGVectorStore(VectorStoreInterface):
             "collection_name": collection_name,
             "prefix_pattern": (prefix + "%") if prefix else None,
             "prefix": prefix if prefix else None,
+            "contains": contains if contains else None,
+            "contains_pattern": f"%{self._escape_like(contains)}%" if contains else None,
             "limit": limit,
         }
         where_extra = self._build_filter_sql(filter_metadata, params) if filter_metadata else ""
@@ -472,6 +475,7 @@ class PGVectorStore(VectorStoreInterface):
               AND e.cmetadata->>:field IS NOT NULL
               AND e.cmetadata->>:field != ''
               AND (:prefix IS NULL OR LOWER(e.cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+              AND (:contains IS NULL OR e.cmetadata->>:field ILIKE :contains_pattern ESCAPE '\\')
               {where_extra}
             ORDER BY val
             LIMIT :limit
@@ -485,6 +489,10 @@ class PGVectorStore(VectorStoreInterface):
         except Exception as exc:
             logger.error("PGVector get_distinct_metadata_values error: %s", exc)
             return []
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     @staticmethod
     def _build_filter_sql(filter_metadata: Dict[str, Any], params: Dict[str, Any]) -> str:

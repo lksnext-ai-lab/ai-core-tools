@@ -365,6 +365,32 @@ async def test_iact_tool_create_gate2_forwards_filter_when_silo_declares_field()
 
 
 @pytest.mark.asyncio
+async def test_iact_tool_create_gate2_keeps_a_multi_value_filter_as_a_list():
+    """A list caller_filter value ("any of") survives Gate 2 intact so that
+    ``resolve_search_params`` can turn it into a ``$in`` clause."""
+    agent = _make_agent("RAG Sub-Agent")
+    agent.silo_id = 99
+    agent.silo = _make_silo_stub(fields=[{"name": "machine_model", "type": "str"}])
+    agent.rag_max_retrieval_calls = 3
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()),
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+        patch(
+            "services.silo_service.resolve_search_params",
+            return_value=({"k": 7}, {"machine_model": {"$in": ["X100", "Z900"]}}),
+        ) as mock_resolve,
+        patch("tools.agentTools.get_retriever_tool", return_value=MagicMock()),
+    ):
+        await agentTools.IACTTool.create(
+            agent, caller_filter={"machine_model": ["X100", "Z900"], "undeclared": ["a"]}
+        )
+
+    assert mock_resolve.call_args.args[1] == {"filter": {"machine_model": ["X100", "Z900"]}}
+
+
+@pytest.mark.asyncio
 async def test_iact_tool_create_gate2_drops_filter_when_silo_does_not_declare_field():
     """A caller_filter field NOT declared by this sub-agent's silo is dropped for
     this sub-agent only (Gate 2) — resolve_search_params receives no filter."""

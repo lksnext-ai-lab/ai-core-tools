@@ -621,12 +621,12 @@ def _safe_increment_marketplace_usage(user_id: int, db: Session) -> None:
         logger.error(f"Failed to increment marketplace usage for user {user_id}: {inc_err}")
 
 
-def _prepare_marketplace_chat(
+def _validate_marketplace_conversation(
     conversation_id: int,
     user_id: int,
     db: Session,
 ) -> tuple[Conversation, Agent]:
-    """Validate the conversation/agent/quota for a marketplace chat call."""
+    """Validate ownership of the conversation and visibility of its agent (no quota)."""
     conversation = ConversationService.get_marketplace_conversation(
         db=db,
         conversation_id=conversation_id,
@@ -639,6 +639,16 @@ def _prepare_marketplace_chat(
         )
     agent = _get_agent_or_404(db, conversation.agent_id)
     _validate_marketplace_agent(agent)
+    return conversation, agent
+
+
+def _prepare_marketplace_chat(
+    conversation_id: int,
+    user_id: int,
+    db: Session,
+) -> tuple[Conversation, Agent]:
+    """Validate the conversation/agent/quota for a marketplace chat call."""
+    conversation, agent = _validate_marketplace_conversation(conversation_id, user_id, db)
     _enforce_marketplace_quota(user_id, db)
     return conversation, agent
 
@@ -664,6 +674,37 @@ async def get_marketplace_chat_filter_values(
 
     filters = AgentService().get_chat_filter_values(db, agent)
     return {"filters": filters}
+
+
+@marketplace_router.get(
+    "/conversations/{conversation_id}/chat-filters/{field_name}/values",
+    summary="Search the values of one chat-time filter field for a marketplace conversation's agent",
+)
+async def search_marketplace_chat_filter_values(
+    conversation_id: int,
+    field_name: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    q: Annotated[str, Query(max_length=100)] = "",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+):
+    """Live substring search over one exposed filter field's values.
+
+    Fires on every pause while typing, so it validates ownership/visibility
+    but deliberately skips the per-call marketplace quota check.
+    """
+    user_id = int(current_user.identity.id)
+    _, agent = _validate_marketplace_conversation(conversation_id, user_id, db)
+
+    values = AgentService().get_chat_filter_field_values(
+        db, agent, field_name, query=q.strip() or None, limit=limit
+    )
+    if values is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Filter '{field_name}' not found for this agent",
+        )
+    return {"values": values[:limit]}
 
 
 @marketplace_router.post(

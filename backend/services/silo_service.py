@@ -264,7 +264,13 @@ def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> t
     raw_caller_filter = caller.get("filter") or {}
     if raw_caller_filter:
         try:
-            caller_clauses = [{"field": f, "op": "$eq", "value": v} for f, v in raw_caller_filter.items()]
+            from tools.vector_stores.metadata_filters import flat_filter_clause  # local import avoids cycles
+
+            caller_clauses = [
+                clause
+                for clause in (flat_filter_clause(f, v) for f, v in raw_caller_filter.items())
+                if clause is not None
+            ]
             caller_backend = _build_backend_filter(caller_clauses)
         except Exception as exc:
             logger.warning("resolve_search_params: failed to build caller filter: %s", exc)
@@ -1836,11 +1842,12 @@ class SiloService:
         limit: int = 100,
         db: Session = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
     ) -> List[str]:
         """
         Return distinct values for a metadata field in the silo's vector collection.
-        Sorted alphabetically, filtered by optional case-insensitive prefix and by
-        an optional PGVector-style metadata filter.
+        Sorted alphabetically, filtered by optional case-insensitive prefix or
+        substring (``contains``) and by an optional PGVector-style metadata filter.
         limit is clamped to 1–MAX_METADATA_VALUES_LIMIT.
         Raises ValueError for invalid field names, NotFoundError for missing silo.
         """
@@ -1857,5 +1864,5 @@ class SiloService:
         collection_name = COLLECTION_PREFIX + str(silo_id)
         return _get_vector_store(silo).get_distinct_metadata_values(
             collection_name, field, prefix=prefix, limit=limit,
-            filter_metadata=filter_metadata,
+            filter_metadata=filter_metadata, contains=contains,
         )

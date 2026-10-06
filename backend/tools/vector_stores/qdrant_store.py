@@ -558,6 +558,7 @@ class QdrantStore(VectorStoreInterface):
         prefix: Optional[str] = None,
         limit: int = 100,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
     ) -> List[str]:
         seen: set = set()
         offset = None
@@ -574,7 +575,7 @@ class QdrantStore(VectorStoreInterface):
                     with_payload=True,
                     with_vectors=False,
                 )
-                self._collect_metadata_values(results, field, prefix, seen)
+                self._collect_metadata_values(results, field, prefix, seen, contains)
                 if next_offset is None or len(results) < batch_size:
                     break
                 offset = next_offset
@@ -587,7 +588,9 @@ class QdrantStore(VectorStoreInterface):
         return sorted(seen)[:limit]
 
     @staticmethod
-    def _collect_metadata_values(points, field: str, prefix: Optional[str], seen: set) -> None:
+    def _collect_metadata_values(
+        points, field: str, prefix: Optional[str], seen: set, contains: Optional[str] = None
+    ) -> None:
         """Collect matching metadata values from a batch of points into ``seen``."""
         for point in points:
             payload = point.payload or {}
@@ -597,6 +600,8 @@ class QdrantStore(VectorStoreInterface):
                 continue
             str_val = str(val)
             if prefix and not str_val.lower().startswith(prefix.lower()):
+                continue
+            if contains and contains.lower() not in str_val.lower():
                 continue
             seen.add(str_val)
 

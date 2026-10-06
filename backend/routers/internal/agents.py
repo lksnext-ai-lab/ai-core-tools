@@ -542,6 +542,38 @@ async def get_chat_filter_values(
     return {"filters": filters}
 
 
+@agents_router.get("/{agent_id}/chat-filters/{field_name}/values",
+                   summary="Search the values of one chat-time filter field",
+                   tags=["Agents"])
+async def search_chat_filter_field_values(
+    app_id: int,
+    agent_id: int,
+    field_name: str,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+    agent_service: Annotated[AgentService, Depends(get_agent_service)],
+    q: Annotated[str, Query(max_length=100)] = "",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+):
+    """
+    Live, case-insensitive substring search over the values of one exposed
+    chat filter field, aggregated across the agent's own and its subagents'
+    silos. Backs the Playground filter select when a field has more values
+    than the preloaded list. 404 if the field is not exposed by this agent.
+    """
+    agent = _get_agent_or_404(db, agent_id, app_id)
+    values = agent_service.get_chat_filter_field_values(
+        db, agent, field_name, query=q.strip() or None, limit=limit
+    )
+    if values is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Filter '{field_name}' not found for this agent",
+        )
+    return {"values": values[:limit]}
+
+
 @agents_router.post("/{agent_id}/update-prompt",
                    summary="Update agent prompt",
                    tags=["Agents"])
