@@ -7,8 +7,14 @@ import MessageContent from '../components/playground/MessageContent';
 import StreamingMessage from '../components/playground/StreamingMessage';
 import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
 import type { PanelFile } from '../components/playground/AttachedFilesPanel';
-import OrchestratorFilterDropdowns from '../components/playground/OrchestratorFilterDropdowns';
-import type { ChatFilterField } from '../components/playground/OrchestratorFilterDropdowns';
+import OrchestratorFilterDropdowns, {
+  toSearchFilter,
+} from '../components/playground/OrchestratorFilterDropdowns';
+import type {
+  ChatFilterField,
+  ChatFilterSelection,
+} from '../components/playground/OrchestratorFilterDropdowns';
+import { SEARCH_RESULT_LIMIT } from '../components/playground/SearchableMultiSelect';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
@@ -64,7 +70,7 @@ export default function MarketplaceChatPage() {
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [chatFilters, setChatFilters] = useState<ChatFilterField[]>([]);
-  const [exposedFilterValues, setExposedFilterValues] = useState<Record<string, string>>({});
+  const [exposedFilterValues, setExposedFilterValues] = useState<ChatFilterSelection>({});
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -172,7 +178,7 @@ export default function MarketplaceChatPage() {
   }, []);
 
   useEffect(() => {
-    fetchQuotaInfo();
+    void fetchQuotaInfo();
   }, [fetchQuotaInfo]);
 
   useEffect(() => {
@@ -223,7 +229,7 @@ export default function MarketplaceChatPage() {
       }
     };
 
-    loadHistory();
+    void loadHistory();
     return () => {
       isMounted = false;
     };
@@ -240,7 +246,7 @@ export default function MarketplaceChatPage() {
         if (isMounted) setPersistentFiles([]);
       }
     };
-    loadFiles();
+    void loadFiles();
     return () => {
       isMounted = false;
     };
@@ -261,7 +267,7 @@ export default function MarketplaceChatPage() {
         if (isMounted) setChatFilters([]);
       }
     };
-    loadChatFilters();
+    void loadChatFilters();
     return () => {
       isMounted = false;
     };
@@ -281,6 +287,19 @@ export default function MarketplaceChatPage() {
       // Non-critical
     }
   }, [numericId]);
+
+  const searchChatFilterValues = useCallback(
+    async (fieldName: string, query: string) => {
+      const response = await apiService.searchMarketplaceChatFilterValues(
+        numericId,
+        fieldName,
+        query,
+        SEARCH_RESULT_LIMIT,
+      );
+      return response.values;
+    },
+    [numericId],
+  );
 
   const handleStarterClick = useCallback((prompt: string) => {
     setInputMessage(prompt);
@@ -314,10 +333,10 @@ export default function MarketplaceChatPage() {
 
     try {
       setHoldStreamingContent(true);
-      const hasExposedFilters = Object.keys(exposedFilterValues).length > 0;
+      const exposedFilter = toSearchFilter(exposedFilterValues);
       const result = await sendMessage(trimmed, {
         conversationId: numericId,
-        searchParams: hasExposedFilters ? { filter: exposedFilterValues } : undefined,
+        searchParams: exposedFilter ? { filter: exposedFilter } : undefined,
       });
 
       const rawResponse = result.response || '';
@@ -382,7 +401,7 @@ export default function MarketplaceChatPage() {
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleSendMessage();
+        void handleSendMessage();
       }
     },
     [handleSendMessage],
@@ -722,6 +741,7 @@ export default function MarketplaceChatPage() {
                 filters={chatFilters}
                 selected={exposedFilterValues}
                 onChange={setExposedFilterValues}
+                onSearchValues={searchChatFilterValues}
                 disabled={isStreaming || isQuotaExceeded}
               />
             </div>

@@ -9,8 +9,9 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
-import OrchestratorFilterDropdowns from './OrchestratorFilterDropdowns';
-import type { ChatFilterField } from './OrchestratorFilterDropdowns';
+import OrchestratorFilterDropdowns, { toSearchFilter } from './OrchestratorFilterDropdowns';
+import type { ChatFilterField, ChatFilterSelection } from './OrchestratorFilterDropdowns';
+import { SEARCH_RESULT_LIMIT } from './SearchableMultiSelect';
 import ToolHistoryPanel from './ToolHistoryPanel';
 import MediaUploadModal from './MediaUploadModal';
 import VideoPlayer from './VideoPlayer';
@@ -79,7 +80,7 @@ function ChatInterface({
   );
   const [filtersKey, setFiltersKey] = useState(0);
   const [chatFilters, setChatFilters] = useState<ChatFilterField[]>([]);
-  const [exposedFilterValues, setExposedFilterValues] = useState<Record<string, string>>({});
+  const [exposedFilterValues, setExposedFilterValues] = useState<ChatFilterSelection>({});
   /** UI-only state to render the floating "scroll to bottom" button. Behaviour
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -252,8 +253,8 @@ function ChatInterface({
       }
     };
 
-    loadConversationHistory();
-    loadPersistentFiles();
+    void loadConversationHistory();
+    void loadPersistentFiles();
 
     // Load playground media if session exists
     if (currentSessionId) {
@@ -352,13 +353,27 @@ function ChatInterface({
       }
     };
 
-    loadChatFilters();
+    void loadChatFilters();
     setExposedFilterValues({});
 
     return () => {
       isMounted = false;
     };
   }, [appId, agentId]);
+
+  const searchChatFilterValues = useCallback(
+    async (fieldName: string, query: string) => {
+      const response = await apiService.searchAgentChatFilterValues(
+        appId,
+        agentId,
+        fieldName,
+        query,
+        SEARCH_RESULT_LIMIT,
+      );
+      return response.values;
+    },
+    [appId, agentId],
+  );
 
   // ─── Message sending ─────────────────────────────────────────────────────────
 
@@ -387,12 +402,12 @@ function ChatInterface({
       // Merge defensively so neither panel clobbers the other if both happen to render.
       const hasLegacyFilters =
         filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
-      const hasExposedFilters = Object.keys(exposedFilterValues).length > 0;
+      const exposedFilter = toSearchFilter(exposedFilterValues);
       const searchParams =
-        hasLegacyFilters || hasExposedFilters
+        hasLegacyFilters || exposedFilter
           ? {
               ...(hasLegacyFilters ? filterMetadata : {}),
-              ...(hasExposedFilters ? { filter: exposedFilterValues } : {}),
+              ...(exposedFilter ? { filter: exposedFilter } : {}),
             }
           : undefined;
 
@@ -661,7 +676,7 @@ function ChatInterface({
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      if (canSend) handleSendMessage();
+      if (canSend) void handleSendMessage();
     }
   };
 
@@ -1184,6 +1199,7 @@ function ChatInterface({
                   filters={chatFilters}
                   selected={exposedFilterValues}
                   onChange={setExposedFilterValues}
+                  onSearchValues={searchChatFilterValues}
                   disabled={isStreaming}
                 />
               </div>

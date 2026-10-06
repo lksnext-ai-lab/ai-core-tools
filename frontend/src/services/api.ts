@@ -846,13 +846,26 @@ class ApiService {
   async getAgentChatFilters(
     appId: number,
     agentId: number,
-  ): Promise<{ filters: { field_name: string; values: string[] }[] }> {
+  ): Promise<{ filters: { field_name: string; values: string[]; has_more?: boolean }[] }> {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/chat-filters`);
+  }
+
+  async searchAgentChatFilterValues(
+    appId: number,
+    agentId: number,
+    fieldName: string,
+    query: string,
+    limit = 50,
+  ): Promise<{ values: string[] }> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/chat-filters/${encodeURIComponent(fieldName)}/values?${params}`,
+    );
   }
 
   async getMarketplaceChatFilters(
     conversationId: number,
-  ): Promise<{ filters: { field_name: string; values: string[] }[] }> {
+  ): Promise<{ filters: { field_name: string; values: string[]; has_more?: boolean }[] }> {
     return this.request(`/internal/marketplace/conversations/${conversationId}/chat-filters`);
   }
 
@@ -925,6 +938,18 @@ class ApiService {
       `/internal/marketplace/scheduled-tasks/${taskId}/runs/${runId}/files/${encodeURIComponent(fileId)}/download`,
     );
     return result.download_url;
+  }
+
+  async searchMarketplaceChatFilterValues(
+    conversationId: number,
+    fieldName: string,
+    query: string,
+    limit = 50,
+  ): Promise<{ values: string[] }> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/chat-filters/${encodeURIComponent(fieldName)}/values?${params}`,
+    );
   }
 
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string): Promise<Agent> {
