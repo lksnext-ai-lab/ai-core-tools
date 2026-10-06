@@ -193,15 +193,26 @@ app = FastAPI(
 )
 
 from utils.config import get_app_config
-from utils.security import verify_signature
+from utils.security import verify_static_access
 
 app_config = get_app_config()
 tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
 os.makedirs(tmp_base_folder, exist_ok=True)
 
 @app.get("/static/{file_path:path}")
-async def get_static_file(file_path: str, user: str = None, sig: str = None, filename: str = None):
-    if not user or not sig or not verify_signature(file_path, user, sig):
+async def get_static_file(
+    file_path: str,
+    user: str = None,
+    sig: str = None,
+    filename: str = None,
+    exp: str | None = None,
+):
+    # `exp` is declared as `str | None` (not `int | None`) so that a malformed value
+    # (e.g. "abc") fails the same 403 path below instead of FastAPI's 422 validation
+    # error, which would otherwise leak which query params are well-formed.
+    # All parsing, missing-parameter checks and the expiring/legacy dispatch live in
+    # verify_static_access, which collapses every failure reason to a single False.
+    if not verify_static_access(file_path, user, sig, exp, filename):
         raise HTTPException(status_code=403, detail="Invalid signature or missing parameters")
 
     if ".." in file_path:  # directory traversal guard
