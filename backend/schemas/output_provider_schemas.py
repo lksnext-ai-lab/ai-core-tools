@@ -23,6 +23,7 @@ class OutputDestinationCreateSchema(BaseModel):
 class OutputDestinationUpdateSchema(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     enabled: Optional[bool] = None
+    webhook_url: Optional[str] = Field(default=None, min_length=1, max_length=4096)
 
 
 class OutputDestinationResponseSchema(BaseModel):

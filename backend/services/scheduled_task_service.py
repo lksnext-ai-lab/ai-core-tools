@@ -84,7 +84,10 @@ class ScheduledTaskService:
     def get(self, task_id: int, app_id: int) -> ScheduledTask:
         return self._task(task_id, app_id)
 
-    def create(self, *, app_id: int, created_by: int, data: Dict[str, Any]) -> ScheduledTask:
+    def create(
+        self, *, app_id: int, created_by: int, data: Dict[str, Any],
+        output_bindings: Optional[List[Dict[str, Any]]] = None,
+    ) -> ScheduledTask:
         agent = self._agent(data["agent_id"], app_id)
         if data.get("conversation_mode") == "continuous" and not getattr(agent, "has_memory", False):
             # Without memory every run would start from scratch: not a continuous conversation.
@@ -102,6 +105,11 @@ class ScheduledTaskService:
         )
         self.db.add(task)
         self.db.flush()
+        if output_bindings:
+            from output.service import replace_task_bindings
+            replace_task_bindings(
+                self.db, task=task, app_id=app_id, bindings=output_bindings, commit=False,
+            )
         task.orchestrator_schedule_name = f"scheduled-task-{task.id}"
         self._apply(task)
         self.db.commit()
@@ -211,7 +219,7 @@ class ScheduledTaskService:
         return thread
 
     async def prune_runs(self, task: ScheduledTask) -> int:
-        """Keep only the newest ``max_runs_retained`` finished runs; drop the older ones and their outputs."""
+        """Prune old runs and outputs once their notification deliveries expire."""
         from services.file_management_service import FileManagementService
 
         keep = max(1, task.max_runs_retained or 10)
@@ -225,7 +233,7 @@ class ScheduledTaskService:
         protected = {
             run.id for run in finished
             if any(
-                delivery.status in {"pending", "sending", "retry_wait", "unknown"}
+                delivery.status != "cancelled"
                 and (not getattr(delivery, "expires_at", None) or delivery.expires_at.replace(tzinfo=None) > now)
                 for delivery in getattr(run, "output_deliveries", [])
             )
@@ -233,7 +241,10 @@ class ScheduledTaskService:
         stale = [run for run in finished[keep:] if run.id not in protected]
         if not stale:
             return 0
-        kept_conversations = {run.conversation_id for run in finished[:keep]} | {task.persistent_conversation_id}
+        kept_conversations = {
+            run.conversation_id for index, run in enumerate(finished)
+            if index < keep or run.id in protected
+        } | {task.persistent_conversation_id}
         threads = []
         files = FileManagementService()
         for run in stale:

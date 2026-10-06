@@ -5,7 +5,7 @@ import re
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,6 +17,14 @@ from output.teams_workflow import DeliveryError, build_adaptive_card
 
 MAX_ATTEMPTS = 5
 LEASE_SECONDS = 120
+
+
+def _delivery_expiry() -> datetime:
+    # Keep pending deliveries inside the file cleanup worker's persistent-file
+    # retention window so a card cannot be retried after its links have expired.
+    persistent_ttl_days = max(1, int(os.getenv("TMP_PERSISTENT_TTL_DAYS", "7")))
+    persistent_ttl_seconds = persistent_ttl_days * 86400
+    return datetime.utcnow() + timedelta(seconds=min(30 * 86400, persistent_ttl_seconds - 3600))
 
 
 def _base_url() -> str:
@@ -66,6 +74,15 @@ def update_destination(db: Session, destination: OutputDestination, changes: dic
         destination.name = name
     if "enabled" in changes and changes["enabled"] is not None:
         destination.enabled = changes["enabled"]
+    if changes.get("webhook_url"):
+        rotated_url = get_output_provider(destination.provider_key).validate_secret(changes["webhook_url"])
+        current_endpoint = urlparse(destination.webhook_url)
+        rotated_endpoint = urlparse(rotated_url)
+        if (current_endpoint.scheme, current_endpoint.netloc, current_endpoint.path) != (
+            rotated_endpoint.scheme, rotated_endpoint.netloc, rotated_endpoint.path,
+        ):
+            raise ValueError("Changing the Workflow or channel requires creating a new destination")
+        destination.webhook_url = rotated_url
     try:
         db.commit()
     except IntegrityError as exc:
@@ -84,7 +101,9 @@ def get_destination(db: Session, *, app_id: int, destination_id: int) -> OutputD
     return destination
 
 
-def replace_task_bindings(db: Session, *, task: ScheduledTask, app_id: int, bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def replace_task_bindings(
+    db: Session, *, task: ScheduledTask, app_id: int, bindings: list[dict[str, Any]], commit: bool = True,
+) -> list[dict[str, Any]]:
     desired: dict[int, dict[str, Any]] = {}
     for item in bindings:
         destination_id = int(item["destination_id"])
@@ -110,7 +129,7 @@ def replace_task_bindings(db: Session, *, task: ScheduledTask, app_id: int, bind
         if content_mode not in {"result", "excerpt", "link_only"}:
             raise ValueError("Unsupported output content mode")
         binding.content_mode = content_mode
-    db.commit()
+    db.commit() if commit else db.flush()
     return task_bindings(db, task=task, app_id=app_id)
 
 
@@ -186,7 +205,7 @@ def create_deliveries_for_run(db: Session, *, task: ScheduledTask, run: Schedule
             destination_snapshot={"provider_key": destination.provider_key, "name": destination.name},
             payload=_run_payload(task, run, binding),
             status="pending",
-            expires_at=datetime.utcnow() + timedelta(days=30),
+            expires_at=_delivery_expiry(),
         )
         db.add(delivery)
         deliveries.append(delivery)
@@ -228,6 +247,8 @@ async def test_destination(destination: OutputDestination) -> dict[str, Any]:
 def request_retry(db: Session, delivery: OutputDelivery) -> None:
     if delivery.status not in {"failed", "unknown"}:
         raise ValueError("Only failed or uncertain deliveries can be retried manually")
+    if delivery.expires_at and delivery.expires_at <= datetime.utcnow():
+        raise ValueError("This delivery expired and can no longer be retried")
     delivery.dispatch_generation += 1
     delivery.status = "pending"
     delivery.next_attempt_at = None
@@ -298,6 +319,10 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         delivery = db.query(OutputDelivery).filter_by(id=delivery_id).with_for_update().one_or_none()
         attempt = db.query(OutputDeliveryAttempt).filter_by(id=attempt_id).one_or_none()
         if delivery is None or attempt is None:
+            return
+        # A late response must not overwrite a retried generation or a lease
+        # that the reconciler has already classified as uncertain.
+        if delivery.dispatch_generation != generation or delivery.status != "sending" or attempt.status != "sending":
             return
         kind, receipt, http_status, message, retry_after = outcome
         now = datetime.utcnow()

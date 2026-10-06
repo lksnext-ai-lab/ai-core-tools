@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import and_, or_
+
 from db.database import SessionLocal
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
@@ -56,11 +58,26 @@ async def _reconcile_pending_deliveries() -> int:
             .all()
         )
         for run in missing_outbox_runs:
-            create_deliveries_for_run(db, task=run.task, run=run)
-            run.outputs_reconciled = True
+            run_id = run.id
+            try:
+                with db.begin_nested():
+                    create_deliveries_for_run(db, task=run.task, run=run)
+                    run.outputs_reconciled = True
+            except Exception:
+                logger.exception("Could not repair output deliveries for scheduled task run %s", run_id)
         rows = (
             db.query(OutputDelivery)
-            .filter(OutputDelivery.status.in_(["pending", "retry_wait", "sending"]))
+            .filter(or_(
+                OutputDelivery.status == "pending",
+                and_(
+                    OutputDelivery.status == "retry_wait",
+                    or_(OutputDelivery.next_attempt_at.is_(None), OutputDelivery.next_attempt_at <= now),
+                ),
+                and_(
+                    OutputDelivery.status == "sending",
+                    or_(OutputDelivery.lease_until.is_(None), OutputDelivery.lease_until <= now),
+                ),
+            ))
             .order_by(OutputDelivery.id)
             .limit(200)
             .with_for_update(skip_locked=True)
@@ -72,8 +89,6 @@ async def _reconcile_pending_deliveries() -> int:
                 item.error_summary = "Delivery expired before it was sent."
                 continue
             if item.status == "sending":
-                if item.lease_until and item.lease_until > now:
-                    continue
                 item.status = "unknown"
                 item.error_summary = "Worker stopped while the Teams request was in flight; verify the channel before resending."
                 item.lease_until = None

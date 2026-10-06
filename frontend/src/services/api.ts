@@ -52,6 +52,20 @@ import type {
 
 type ConflictMode = 'fail' | 'rename' | 'override';
 
+/** Fields accepted by the admin skill create/update endpoints. Null clears nullable fields. */
+export interface SystemSkillWriteData {
+  name: string;
+  description?: string | null;
+  content: string;
+  display_name?: string | null;
+  when_to_use?: string | null;
+  allowed_tools?: string[] | null;
+  runtime?: string | null;
+  bootstrap_script_path?: string | null;
+  runtime_options?: Record<string, unknown> | null;
+  is_enabled?: boolean | null;
+}
+
 /** Rate-limit usage snapshot for a single app (also the per-item shape returned by getUsageStats()). */
 export interface UsageStats {
   usage_percentage: number;
@@ -242,7 +256,8 @@ export interface OutputDelivery {
 }
 
 export type ScheduledTaskCreate = Pick<ScheduledTask, 'name' | 'agent_id' | 'input' | 'cron_expression' | 'timezone' | 'conversation_mode' | 'max_concurrent_runs'>
-  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>;
+  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>
+  & { output_bindings?: Omit<ScheduledTaskOutputBinding, 'destination_name'>[] };
 
 export type ScheduledTaskUpdate = Partial<Pick<ScheduledTask,
   'name' | 'description' | 'input' | 'cron_expression' | 'timezone' | 'max_concurrent_runs' | 'status'
@@ -909,6 +924,10 @@ class ApiService {
 
   async createOutputDestination(appId: number, data: { name: string; provider_key: 'teams_workflow'; webhook_url: string }): Promise<OutputDestination> {
     return this.request(`/internal/apps/${appId}/output-destinations`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateOutputDestination(appId: number, destinationId: number, data: { webhook_url?: string; enabled?: boolean; name?: string }): Promise<OutputDestination> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'PATCH', body: JSON.stringify(data) });
   }
 
   async deleteOutputDestination(appId: number, destinationId: number): Promise<void> {
@@ -3119,36 +3138,14 @@ class ApiService {
     return this.request(`/internal/admin/system-skills/${skillId}`);
   }
 
-  async createSystemSkill(data: {
-    name: string;
-    description?: string;
-    content: string;
-    display_name?: string;
-    when_to_use?: string;
-    allowed_tools?: string[];
-    runtime?: string;
-    bootstrap_script_path?: string;
-    runtime_options?: Record<string, unknown>;
-    is_enabled?: boolean;
-  }): Promise<Skill> {
+  async createSystemSkill(data: SystemSkillWriteData): Promise<Skill> {
     return this.request('/internal/admin/system-skills', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSystemSkill(skillId: number, data: {
-    name: string;
-    description?: string;
-    content: string;
-    display_name?: string;
-    when_to_use?: string;
-    allowed_tools?: string[];
-    runtime?: string;
-    bootstrap_script_path?: string;
-    runtime_options?: Record<string, unknown>;
-    is_enabled?: boolean;
-  }): Promise<Skill> {
+  async updateSystemSkill(skillId: number, data: SystemSkillWriteData): Promise<Skill> {
     return this.request(`/internal/admin/system-skills/${skillId}`, {
       method: 'PUT',
       body: JSON.stringify(data),

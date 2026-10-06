@@ -13,6 +13,9 @@ Two concerns live here:
   ``TMP_PERSISTENT_TTL_DAYS`` of inactivity (mtime-based), matching the
   OpenAI Threads convention of "7 days from last activity".
 
+Notification outputs and their metadata are exempt from these sweeps until
+their associated deliveries expire, even when the files predate the delivery.
+
 The worker follows the existing ``services.crawl.worker`` pattern:
 asyncio task started from ``main.lifespan``, ``asyncio.CancelledError``
 for graceful shutdown, no extra dependencies. The actual filesystem
@@ -41,8 +44,10 @@ leader lock" notice.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
+from datetime import datetime
 from typing import List
 
 from filelock import FileLock, Timeout
@@ -57,6 +62,49 @@ def _config() -> dict:
     from utils.config import get_app_config
 
     return get_app_config()
+
+
+def _protected_output_paths(tmp_base: str) -> set[str]:
+    """Keep notification artifacts, including sidecars, until delivery expiry."""
+    from sqlalchemy import or_
+
+    from db.database import SessionLocal
+    from models.output_delivery import OutputDelivery
+    from models.scheduled_task import ScheduledTaskRun
+
+    with SessionLocal() as db:
+        outputs = db.query(ScheduledTaskRun.output_files).filter(
+            ScheduledTaskRun.output_deliveries.any(
+                (OutputDelivery.status != "cancelled") & or_(
+                    OutputDelivery.expires_at.is_(None),
+                    OutputDelivery.expires_at > datetime.utcnow(),
+                )
+            )
+        ).all()
+    file_ids = {str(item["file_id"]) for (files,) in outputs for item in (files or []) if item.get("file_id")}
+    if not file_ids:
+        return set()
+    protected: set[str] = set()
+    for tree in ("persistent", "ephemeral"):
+        for directory, _, filenames in os.walk(os.path.join(tmp_base, tree)):
+            for filename in filenames:
+                if not filename.endswith(".json") or filename[:-5] not in file_ids:
+                    continue
+                metadata_path = os.path.join(directory, filename)
+                # An unreadable reference must abort the sweep: its backing file
+                # may still be needed by a notification.
+                with open(metadata_path, encoding="utf-8") as handle:
+                    metadata = json.load(handle)
+                protected.add(os.path.realpath(metadata_path))
+                protected.add(os.path.realpath(os.path.join(directory, filename[:-5] + ".content")))
+                if metadata.get("file_path"):
+                    protected.add(os.path.realpath(os.path.join(tmp_base, metadata["file_path"])))
+                else:
+                    # Legacy references can omit file_path and resolve by name.
+                    for candidate in filenames:
+                        if candidate.startswith(filename[:-5]) or candidate == metadata.get("filename"):
+                            protected.add(os.path.realpath(os.path.join(directory, candidate)))
+    return protected
 
 
 def _collect_expired_files(root: str, cutoff: float) -> List[str]:
@@ -103,7 +151,7 @@ def _prune_empty_dirs(root: str) -> None:
             pass
 
 
-def _purge_tree_older_than(root: str, ttl_seconds: int, *, label: str) -> int:
+def _purge_tree_older_than(root: str, ttl_seconds: int, *, label: str, protected_paths: set[str] | None = None) -> int:
     """Walk ``root`` and remove files whose mtime is older than the TTL.
 
     After per-file removal, empty directories under ``root`` are removed
@@ -116,7 +164,11 @@ def _purge_tree_older_than(root: str, ttl_seconds: int, *, label: str) -> int:
 
     cutoff = time.time() - ttl_seconds
     try:
-        victims = _collect_expired_files(root, cutoff)
+        protected = protected_paths or set()
+        victims = [
+            path for path in _collect_expired_files(root, cutoff)
+            if os.path.realpath(path) not in protected
+        ]
         removed = _remove_files(victims, label)
         _prune_empty_dirs(root)
         return removed
@@ -143,14 +195,20 @@ def _run_one_sweep_sync() -> None:
     ephemeral_ttl_seconds = int(cfg['TMP_EPHEMERAL_ORPHAN_HOURS']) * 3600
     persistent_ttl_seconds = int(cfg['TMP_PERSISTENT_TTL_DAYS']) * 86400
 
+    try:
+        protected_paths = _protected_output_paths(tmp_base)
+    except Exception:
+        logger.exception("file_cleanup_worker: skipping sweep because notification file protection is unavailable")
+        return
+
     ephemeral_removed = _purge_tree_older_than(
-        ephemeral_root, ephemeral_ttl_seconds, label="ephemeral",
+        ephemeral_root, ephemeral_ttl_seconds, label="ephemeral", protected_paths=protected_paths,
     )
     uploads_removed = _purge_tree_older_than(
-        uploads_root, ephemeral_ttl_seconds, label="uploads",
+        uploads_root, ephemeral_ttl_seconds, label="uploads", protected_paths=protected_paths,
     )
     persistent_removed = _purge_tree_older_than(
-        persistent_root, persistent_ttl_seconds, label="persistent",
+        persistent_root, persistent_ttl_seconds, label="persistent", protected_paths=protected_paths,
     )
 
     if ephemeral_removed or uploads_removed or persistent_removed:

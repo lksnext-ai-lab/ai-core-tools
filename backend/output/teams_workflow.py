@@ -3,6 +3,7 @@
 import base64
 import ipaddress
 import json
+import logging
 import socket
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -17,8 +18,25 @@ from output.contracts import ProviderDescriptor
 
 MAX_CARD_BYTES = 24 * 1024
 MAX_RESULT_CHARS = 5000
+MAX_EXCERPT_CHARS = 1200
+ALLOWED_WEBHOOK_HOST_SUFFIXES = (
+    ".logic.azure.com", ".logic.azure.us", ".logic.azure.cn", ".api.powerplatform.com",
+)
 MATTIN_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mattin-small.png"
 MATTIN_LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(MATTIN_LOGO_PATH.read_bytes()).decode("ascii")
+
+
+class _RedactHttpxRequestUrls(logging.Filter):
+    """Prevent HTTPX's INFO request log from exposing webhook credentials."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == "httpx" and "HTTP Request:" in str(record.msg):
+            record.msg = "HTTP request completed (URL redacted)"
+            record.args = ()
+        return True
+
+
+logging.getLogger("httpx").addFilter(_RedactHttpxRequestUrls())
 
 
 class DeliveryError(Exception):
@@ -35,6 +53,8 @@ def validate_webhook_url(value: str) -> str:
     parsed = urlparse(raw)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("Teams Workflow URL must be an HTTPS URL")
+    if not parsed.hostname.lower().endswith(ALLOWED_WEBHOOK_HOST_SUFFIXES):
+        raise ValueError("Teams Workflow URL must use a Microsoft Power Automate host")
     if parsed.port not in (None, 443):
         raise ValueError("Teams Workflow URL must use the standard HTTPS port")
     try:
@@ -55,11 +75,12 @@ def build_adaptive_card(
     files: list[dict[str, str]] | None = None, content_mode: str = "result",
 ) -> dict[str, Any]:
     files = files or []
-    result_text = result if content_mode == "result" else result[:MAX_RESULT_CHARS]
+    limit = MAX_EXCERPT_CHARS if content_mode == "excerpt" else MAX_RESULT_CHARS
+    result_text = result[:limit - 1].rstrip() + "…" if content_mode == "excerpt" and len(result) > limit else result
     if content_mode == "link_only":
         result_text = "The scheduled task has completed. Open the result to view its full output."
-    elif len(result_text) > MAX_RESULT_CHARS:
-        result_text = result_text[:MAX_RESULT_CHARS].rstrip() + "…"
+    elif len(result_text) > limit:
+        result_text = result_text[:limit].rstrip() + "…"
 
     body: list[dict[str, Any]] = [
         {
@@ -127,6 +148,8 @@ def build_adaptive_card(
             "type": "TextBlock", "text": "The output is too large to include here. Open the result to view it.", "wrap": True,
         }]
         content["actions"] = actions[:1]
+        if len(json.dumps(card, ensure_ascii=False).encode("utf-8")) > MAX_CARD_BYTES:
+            content["actions"] = []
     return card
 
 
@@ -151,6 +174,8 @@ async def post_card(webhook_url: str, payload: dict[str, Any]) -> dict[str, Any]
         validate_webhook_url(webhook_url)
         async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0), follow_redirects=False, trust_env=False) as client:
             response = await client.post(webhook_url, json=payload)
+    except httpx.ConnectTimeout as exc:
+        raise DeliveryError("Timed out connecting to Teams Workflow", kind="retryable") from exc
     except httpx.ConnectError as exc:
         raise DeliveryError("Could not connect to Teams Workflow", kind="retryable") from exc
     except httpx.TimeoutException as exc:

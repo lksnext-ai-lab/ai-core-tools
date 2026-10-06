@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Trash2 } from 'lucide-react';
-import { apiService, type OutputDestination, type ScheduledTask, type ScheduledTaskVisibility } from '../services/api';
+import { apiService, type OutputDestination, type ScheduledTask, type ScheduledTaskOutputBinding, type ScheduledTaskVisibility } from '../services/api';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 
 interface AgentOption { agent_id: number; name: string; }
@@ -49,26 +49,52 @@ export default function ScheduledTaskFormPage() {
   const [weekday, setWeekday] = useState('1');
   const [monthDay, setMonthDay] = useState('1');
   const [saving, setSaving] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [destinations, setDestinations] = useState<OutputDestination[]>([]);
   const [outputDestinationIds, setOutputDestinationIds] = useState<number[]>([]);
+  const [outputContentModes, setOutputContentModes] = useState<Record<number, ScheduledTaskOutputBinding['content_mode']>>({});
   const [destinationName, setDestinationName] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookDrafts, setWebhookDrafts] = useState<Record<number, string>>({});
   const [testingDestinationId, setTestingDestinationId] = useState<number | null>(null);
   const [destinationToDelete, setDestinationToDelete] = useState<OutputDestination | null>(null);
   const [deletingDestinationId, setDeletingDestinationId] = useState<number | null>(null);
 
   useEffect(() => {
-    void apiService.getAgents(numericAppId).then((items) => setAgents(items.map((item) => ({ agent_id: item.agent_id, name: item.name })))).catch(() => toast.error('No se pudieron cargar los agentes'));
-    void apiService.getOutputDestinations(numericAppId).then(setDestinations).catch(() => toast.error('No se pudieron cargar los destinos de salida'));
+    let active = true;
+    setTask(null);
+    setOutputDestinationIds([]);
+    setOutputContentModes({});
+    setLoadState('loading');
+    void apiService.getAgents(numericAppId).then((items) => {
+      if (active) setAgents(items.map((item) => ({ agent_id: item.agent_id, name: item.name })));
+    }).catch(() => { if (active) toast.error('No se pudieron cargar los agentes'); });
+    const destinationsRequest = apiService.getOutputDestinations(numericAppId);
     if (editing) {
-      void apiService.getScheduledTask(numericAppId, Number(taskId)).then((found) => {
+      void Promise.all([
+        apiService.getScheduledTask(numericAppId, Number(taskId)),
+        apiService.getScheduledTaskOutputs(numericAppId, Number(taskId)),
+        destinationsRequest,
+      ]).then(([found, result, loadedDestinations]) => {
+        if (!active) return;
         setTask(found);
-        void apiService.getScheduledTaskOutputs(numericAppId, found.id).then((result) => setOutputDestinationIds(result.bindings.map((binding) => binding.destination_id))).catch(() => toast.error('No se pudieron cargar los canales configurados'));
+        setDestinations(loadedDestinations);
+        setOutputDestinationIds(result.bindings.map((binding) => binding.destination_id));
+        setOutputContentModes(Object.fromEntries(result.bindings.map((binding) => [binding.destination_id, binding.content_mode])));
         setName(found.name); setDescription(found.description ?? ''); setMaxRunsRetained(found.max_runs_retained); setVisibility(found.marketplace_visibility); setAgentId(String(found.agent_id)); setInput(found.input?.message ? String(found.input.message) : JSON.stringify(found.input ?? {}, null, 2)); setTimezone(found.timezone); setMode(found.conversation_mode === 'continuous' ? 'continuous' : 'new_per_run');
         applyCronToSimpleSchedule(found.cron_expression, setFrequency, setInterval, setTime, setWeekday, setMonthDay);
-      }).catch(() => toast.error('No se pudo cargar la tarea'));
+        setLoadState('ready');
+      }).catch(() => {
+        if (active) setLoadState('error');
+      });
+    } else {
+      void destinationsRequest.then((loadedDestinations) => {
+        if (active) { setDestinations(loadedDestinations); setLoadState('ready'); }
+      }).catch(() => { if (active) setLoadState('error'); });
     }
-  }, [editing, numericAppId, taskId]);
+    return () => { active = false; };
+  }, [editing, numericAppId, taskId, loadAttempt]);
 
   const simpleCron = () => {
     const [hour, minute] = time.split(':').map(Number);
@@ -81,6 +107,10 @@ export default function ScheduledTaskFormPage() {
   };
 
   const save = async () => {
+    if (loadState !== 'ready' || (editing && task?.id !== Number(taskId))) {
+      toast.error('Espera a que se carguen la tarea y sus canales antes de guardar');
+      return;
+    }
     const effectiveCron = simpleCron();
     if (!name.trim() || !agentId || !effectiveCron) { toast.error('Completa el nombre, el agente y la programación'); return; }
     let parsedInput: Record<string, unknown> = {};
@@ -91,10 +121,13 @@ export default function ScheduledTaskFormPage() {
     setSaving(true);
     try {
       const common = { name, description: description.trim() || null, input: parsedInput, cron_expression: effectiveCron, timezone, max_runs_retained: maxRunsRetained, marketplace_visibility: visibility };
+      const outputBindings = outputDestinationIds.map((destination_id) => ({
+        destination_id, enabled: true, content_mode: outputContentModes[destination_id] ?? 'result',
+      }));
       const saved = task
         ? await apiService.updateScheduledTask(numericAppId, task.id, common)
-        : await apiService.createScheduledTask(numericAppId, { ...common, agent_id: Number(agentId), conversation_mode: mode, max_concurrent_runs: 1 });
-      await apiService.setScheduledTaskOutputs(numericAppId, saved.id, outputDestinationIds.map((destination_id) => ({ destination_id, enabled: true, content_mode: 'result' as const })));
+        : await apiService.createScheduledTask(numericAppId, { ...common, agent_id: Number(agentId), conversation_mode: mode, max_concurrent_runs: 1, output_bindings: outputBindings });
+      if (task) await apiService.setScheduledTaskOutputs(numericAppId, saved.id, outputBindings);
       toast.success(task ? 'Tarea actualizada' : 'Tarea creada');
       navigate(`/apps/${appId}/scheduled-tasks/${saved.id}`);
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la tarea'); }
@@ -107,6 +140,7 @@ export default function ScheduledTaskFormPage() {
       const created = await apiService.createOutputDestination(numericAppId, { name: destinationName.trim(), provider_key: 'teams_workflow', webhook_url: webhookUrl.trim() });
       setDestinations((items) => [...items, created]);
       setOutputDestinationIds((items) => [...items, created.id]);
+      setOutputContentModes((items) => ({ ...items, [created.id]: 'result' }));
       setDestinationName(''); setWebhookUrl('');
       toast.success('Canal de Teams configurado');
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo configurar el canal'); }
@@ -119,6 +153,17 @@ export default function ScheduledTaskFormPage() {
     finally { setTestingDestinationId(null); }
   };
 
+  const rotateDestinationWebhook = async (id: number) => {
+    const webhook_url = webhookDrafts[id]?.trim();
+    if (!webhook_url) { toast.error('Indica la nueva URL del Workflow'); return; }
+    try {
+      const updated = await apiService.updateOutputDestination(numericAppId, id, { webhook_url });
+      setDestinations((items) => items.map((item) => item.id === id ? updated : item));
+      setWebhookDrafts((items) => ({ ...items, [id]: '' }));
+      toast.success('URL del Workflow actualizada');
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la URL'); }
+  };
+
   const deleteDestination = async () => {
     if (!destinationToDelete) return;
     const { id } = destinationToDelete;
@@ -127,6 +172,7 @@ export default function ScheduledTaskFormPage() {
       await apiService.deleteOutputDestination(numericAppId, id);
       setDestinations((items) => items.filter((item) => item.id !== id));
       setOutputDestinationIds((items) => items.filter((destinationId) => destinationId !== id));
+      setOutputContentModes((items) => { const next = { ...items }; delete next[id]; return next; });
       setDestinationToDelete(null);
       toast.success('Canal de Teams eliminado');
     } catch (error) {
@@ -136,5 +182,49 @@ export default function ScheduledTaskFormPage() {
     }
   };
 
-  return <div className="mx-auto max-w-3xl space-y-6"><div><h1 className="text-2xl font-bold text-gray-900">{task ? 'Editar tarea programada' : 'Nueva tarea programada'}</h1><p className="text-gray-600">Configura qué agente ejecutar y con qué periodicidad.</p></div><div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6"><div><label htmlFor="task-name" className="mb-1 block text-sm font-medium text-gray-700">Nombre de la tarea</label><input id="task-name" value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border px-3 py-2" placeholder="Informe diario" /></div><div><label htmlFor="task-description" className="mb-1 block text-sm font-medium text-gray-700">Descripción <span className="font-normal text-gray-500">(opcional, visible en el marketplace)</span></label><textarea id="task-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={2} maxLength={4000} className="w-full rounded-lg border px-3 py-2" placeholder="Qué produce esta tarea y para quién" /></div><div><label htmlFor="task-agent" className="mb-1 block text-sm font-medium text-gray-700">Agente</label><select id="task-agent" value={agentId} disabled={Boolean(task)} onChange={(event) => setAgentId(event.target.value)} className="w-full rounded-lg border px-3 py-2"><option value="">Selecciona un agente</option>{agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.name}</option>)}</select></div><div><label htmlFor="task-input" className="mb-1 block text-sm font-medium text-gray-700">Input de la tarea</label><textarea id="task-input" value={input} onChange={(event) => setInput(event.target.value)} rows={5} className="w-full rounded-lg border px-3 py-2" placeholder="Escribe el mensaje inicial o un objeto JSON…" /></div><fieldset disabled={Boolean(task)}><legend className="mb-2 text-sm font-medium text-gray-700">Modo de conversación</legend><label className="mb-2 flex gap-2 text-sm"><input type="radio" checked={mode === 'new_per_run'} onChange={() => setMode('new_per_run')} />Cada ejecución empieza una conversación nueva</label><label className="flex gap-2 text-sm"><input type="radio" checked={mode === 'continuous'} onChange={() => setMode('continuous')} />Todas las ejecuciones continúan la misma conversación</label>{mode === 'continuous' && <p className="mt-1 text-xs text-gray-500">El agente verá lo ocurrido en ejecuciones anteriores, como en una conversación normal. Requiere un agente con memoria.</p>}{task && <p className="mt-1 text-xs text-gray-500">El modo no se puede cambiar una vez creada la tarea.</p>}</fieldset><section className="rounded-lg border border-blue-100 bg-blue-50/40 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-gray-800">Programación</h2><p className="text-xs text-gray-500">Define la frecuencia sin tener que escribir CRON.</p></div><div className="space-y-3"><div><label htmlFor="task-frequency" className="mb-1 block text-sm font-medium text-gray-700">Frecuencia</label><select id="task-frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as Frequency)} className="w-full rounded-lg border px-3 py-2"><option value="interval">Cada X minutos/horas</option><option value="daily">Diariamente</option><option value="weekly">Semanalmente</option><option value="monthly">Mensualmente</option></select></div>{frequency === 'interval' && <div><label htmlFor="task-interval" className="mb-1 block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input id="task-interval" type="number" min="1" max="1440" value={interval} onChange={(event) => setInterval(Number(event.target.value))} className="w-full rounded-lg border px-3 py-2" /></div>}{frequency !== 'interval' && <div><label htmlFor="task-time" className="mb-1 block text-sm font-medium text-gray-700">Hora</label><input id="task-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div>}{frequency === 'weekly' && <div><label htmlFor="task-weekday" className="mb-1 block text-sm font-medium text-gray-700">Día de la semana</label><select id="task-weekday" value={weekday} onChange={(event) => setWeekday(event.target.value)} className="w-full rounded-lg border px-3 py-2"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></div>}{frequency === 'monthly' && <div><label htmlFor="task-month-day" className="mb-1 block text-sm font-medium text-gray-700">Día del mes</label><input id="task-month-day" type="number" min="1" max="28" value={monthDay} onChange={(event) => setMonthDay(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div>}<p className="text-xs text-gray-500">Se guardará como <code className="rounded bg-white px-1 font-mono">{simpleCron()}</code>.</p></div></section><section className="rounded-lg border border-gray-200 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-gray-800">Enviar resultados a Teams</h2><p className="text-xs text-gray-500">Publica una tarjeta con el resultado y enlaces protegidos a Mattin AI.</p></div>{destinations.length === 0 && <p className="mb-3 text-sm text-gray-500">Todavía no hay destinos configurados para esta aplicación.</p>}<div className="space-y-2">{destinations.map((destination) => <div key={destination.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"><input id={`output-destination-${destination.id}`} type="checkbox" checked={outputDestinationIds.includes(destination.id)} onChange={(event) => setOutputDestinationIds((items) => event.target.checked ? [...items, destination.id] : items.filter((id) => id !== destination.id))} /><label htmlFor={`output-destination-${destination.id}`} className="min-w-0 flex-1">{destination.name}{!destination.enabled && <span className="ml-2 text-xs text-red-600">Deshabilitado</span>}</label><button type="button" disabled={testingDestinationId === destination.id || deletingDestinationId === destination.id} onClick={() => { void testDestination(destination.id); }} className="rounded border px-2 py-1 text-xs text-blue-700 disabled:opacity-50">{testingDestinationId === destination.id ? 'Enviando…' : 'Probar tarjeta'}</button><button type="button" disabled={deletingDestinationId === destination.id} onClick={() => setDestinationToDelete(destination)} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`Eliminar canal ${destination.name}`}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Eliminar</button></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-sm font-medium text-blue-700">Añadir un canal de Teams</summary><div className="mt-3 space-y-2"><input value={destinationName} onChange={(event) => setDestinationName(event.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Nombre del canal, por ejemplo Informes diarios" aria-label="Nombre del destino" /><input type="url" value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="URL del trigger de Workflows" aria-label="URL del Workflow de Teams" /><p className="text-xs text-gray-500">La URL se guarda como credencial y nunca se vuelve a mostrar. Crea el Workflow para el canal deseado y pega aquí su URL de trigger.</p><button type="button" onClick={() => { void addDestination(); }} className="rounded-lg border px-3 py-2 text-sm font-medium">Guardar destino</button></div></details></section><div><label htmlFor="task-timezone" className="mb-1 block text-sm font-medium text-gray-700">Zona horaria</label><input id="task-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div><div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="task-retention" className="mb-1 block text-sm font-medium text-gray-700">Ejecuciones a conservar</label><input id="task-retention" type="number" min="1" max="100" value={maxRunsRetained} onChange={(event) => setMaxRunsRetained(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} className="w-full rounded-lg border px-3 py-2" aria-describedby="task-retention-help" /><p id="task-retention-help" className="mt-1 text-xs text-gray-500">Al superar el límite se borran las más antiguas, con sus archivos.</p></div><div><label htmlFor="task-visibility" className="mb-1 block text-sm font-medium text-gray-700">Visibilidad en el marketplace</label><select id="task-visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as ScheduledTaskVisibility)} className="w-full rounded-lg border px-3 py-2"><option value="unpublished">No publicada</option><option value="private">Privada · miembros de la app</option><option value="public">Pública · todos los usuarios</option></select><p className="mt-1 text-xs text-gray-500">En el marketplace solo se muestran los resultados, nunca el input.</p></div></div><div className="flex justify-end gap-3"><button type="button" onClick={() => navigate(task ? `/apps/${appId}/scheduled-tasks/${task.id}` : `/apps/${appId}/scheduled-tasks`)} className="rounded-lg border px-4 py-2">Cancelar</button><button type="button" disabled={saving} onClick={() => { void save(); }} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar y activar'}</button></div></div><ConfirmationModal isOpen={destinationToDelete !== null} title="Eliminar canal de Teams" message={destinationToDelete ? `Se eliminará «${destinationToDelete.name}» de esta aplicación y dejará de enviar notificaciones en todas las tareas que lo usan. El historial de envíos se conservará.` : ''} confirmLabel="Eliminar canal" isLoading={deletingDestinationId !== null} onConfirm={() => { void deleteDestination(); }} onCancel={() => setDestinationToDelete(null)} /></div>;
+  const destinationSettings = destinations.filter((destination) => outputDestinationIds.includes(destination.id)).map((destination) => (
+    <div key={`settings-${destination.id}`} className="mt-3 grid gap-2 rounded-lg bg-gray-50 p-3 sm:grid-cols-2">
+      <label className="text-xs text-gray-600">
+        Contenido para {destination.name}
+        <select
+          value={outputContentModes[destination.id] ?? 'result'}
+          onChange={(event) => setOutputContentModes((items) => ({ ...items, [destination.id]: event.target.value as ScheduledTaskOutputBinding['content_mode'] }))}
+          className="mt-1 w-full rounded-lg border bg-white px-2 py-1.5 text-sm"
+          aria-label={`Contenido de la notificación para ${destination.name}`}
+        >
+          <option value="result">Resultado (hasta 5.000 caracteres)</option>
+          <option value="excerpt">Extracto (hasta 1.200 caracteres)</option>
+          <option value="link_only">Sólo enlace</option>
+        </select>
+      </label>
+      <div className="text-xs text-gray-600">
+        <label htmlFor={`webhook-rotation-${destination.id}`}>Rotar URL secreta del Workflow</label>
+        <div className="mt-1 flex gap-2">
+          <input
+            id={`webhook-rotation-${destination.id}`}
+            type="url"
+            value={webhookDrafts[destination.id] ?? ''}
+            onChange={(event) => setWebhookDrafts((items) => ({ ...items, [destination.id]: event.target.value }))}
+            className="min-w-0 flex-1 rounded-lg border bg-white px-2 py-1.5 text-sm"
+            placeholder="Nueva URL; nunca se muestra la actual"
+            aria-label={`Nueva URL secreta de ${destination.name}`}
+          />
+          <button type="button" onClick={() => { void rotateDestinationWebhook(destination.id); }} className="shrink-0 rounded border px-2 py-1.5 text-xs text-blue-700">Actualizar</button>
+        </div>
+      </div>
+    </div>
+  ));
+
+  if (loadState !== 'ready' || (editing && task?.id !== Number(taskId))) {
+    return <div className="mx-auto max-w-3xl space-y-4">
+      <h1 className="text-2xl font-bold text-gray-900">{editing ? 'Editar tarea programada' : 'Nueva tarea programada'}</h1>
+      {loadState === 'error' ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <p>No se pudieron cargar la tarea y sus canales. Reintenta la carga para poder guardar.</p>
+        <button type="button" onClick={() => { setLoadState('loading'); setLoadAttempt((attempt) => attempt + 1); }} className="mt-3 rounded-lg border px-3 py-2">Reintentar carga</button>
+      </div> : <p role="status">Cargando configuración de la tarea y sus canales…</p>}
+      <button type="button" onClick={() => navigate(`/apps/${appId}/scheduled-tasks`)} className="rounded-lg border px-4 py-2">Cancelar</button>
+    </div>;
+  }
+
+  return <div className="mx-auto max-w-3xl space-y-6"><div><h1 className="text-2xl font-bold text-gray-900">{task ? 'Editar tarea programada' : 'Nueva tarea programada'}</h1><p className="text-gray-600">Configura qué agente ejecutar y con qué periodicidad.</p></div><div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6"><div><label htmlFor="task-name" className="mb-1 block text-sm font-medium text-gray-700">Nombre de la tarea</label><input id="task-name" value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border px-3 py-2" placeholder="Informe diario" /></div><div><label htmlFor="task-description" className="mb-1 block text-sm font-medium text-gray-700">Descripción <span className="font-normal text-gray-500">(opcional, visible en el marketplace)</span></label><textarea id="task-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={2} maxLength={4000} className="w-full rounded-lg border px-3 py-2" placeholder="Qué produce esta tarea y para quién" /></div><div><label htmlFor="task-agent" className="mb-1 block text-sm font-medium text-gray-700">Agente</label><select id="task-agent" value={agentId} disabled={Boolean(task)} onChange={(event) => setAgentId(event.target.value)} className="w-full rounded-lg border px-3 py-2"><option value="">Selecciona un agente</option>{agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.name}</option>)}</select></div><div><label htmlFor="task-input" className="mb-1 block text-sm font-medium text-gray-700">Input de la tarea</label><textarea id="task-input" value={input} onChange={(event) => setInput(event.target.value)} rows={5} className="w-full rounded-lg border px-3 py-2" placeholder="Escribe el mensaje inicial o un objeto JSON…" /></div><fieldset disabled={Boolean(task)}><legend className="mb-2 text-sm font-medium text-gray-700">Modo de conversación</legend><label className="mb-2 flex gap-2 text-sm"><input type="radio" checked={mode === 'new_per_run'} onChange={() => setMode('new_per_run')} />Cada ejecución empieza una conversación nueva</label><label className="flex gap-2 text-sm"><input type="radio" checked={mode === 'continuous'} onChange={() => setMode('continuous')} />Todas las ejecuciones continúan la misma conversación</label>{mode === 'continuous' && <p className="mt-1 text-xs text-gray-500">El agente verá lo ocurrido en ejecuciones anteriores, como en una conversación normal. Requiere un agente con memoria.</p>}{task && <p className="mt-1 text-xs text-gray-500">El modo no se puede cambiar una vez creada la tarea.</p>}</fieldset><section className="rounded-lg border border-blue-100 bg-blue-50/40 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-gray-800">Programación</h2><p className="text-xs text-gray-500">Define la frecuencia sin tener que escribir CRON.</p></div><div className="space-y-3"><div><label htmlFor="task-frequency" className="mb-1 block text-sm font-medium text-gray-700">Frecuencia</label><select id="task-frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as Frequency)} className="w-full rounded-lg border px-3 py-2"><option value="interval">Cada X minutos/horas</option><option value="daily">Diariamente</option><option value="weekly">Semanalmente</option><option value="monthly">Mensualmente</option></select></div>{frequency === 'interval' && <div><label htmlFor="task-interval" className="mb-1 block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input id="task-interval" type="number" min="1" max="1440" value={interval} onChange={(event) => setInterval(Number(event.target.value))} className="w-full rounded-lg border px-3 py-2" /></div>}{frequency !== 'interval' && <div><label htmlFor="task-time" className="mb-1 block text-sm font-medium text-gray-700">Hora</label><input id="task-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div>}{frequency === 'weekly' && <div><label htmlFor="task-weekday" className="mb-1 block text-sm font-medium text-gray-700">Día de la semana</label><select id="task-weekday" value={weekday} onChange={(event) => setWeekday(event.target.value)} className="w-full rounded-lg border px-3 py-2"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></div>}{frequency === 'monthly' && <div><label htmlFor="task-month-day" className="mb-1 block text-sm font-medium text-gray-700">Día del mes</label><input id="task-month-day" type="number" min="1" max="28" value={monthDay} onChange={(event) => setMonthDay(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div>}<p className="text-xs text-gray-500">Se guardará como <code className="rounded bg-white px-1 font-mono">{simpleCron()}</code>.</p></div></section><section className="rounded-lg border border-gray-200 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-gray-800">Enviar resultados a Teams</h2><p className="text-xs text-gray-500">Publica una tarjeta con el resultado y enlaces protegidos a Mattin AI.</p></div>{destinations.length === 0 && <p className="mb-3 text-sm text-gray-500">Todavía no hay destinos configurados para esta aplicación.</p>}<div className="space-y-2">{destinations.map((destination) => <div key={destination.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"><input id={`output-destination-${destination.id}`} type="checkbox" checked={outputDestinationIds.includes(destination.id)} onChange={(event) => setOutputDestinationIds((items) => event.target.checked ? [...items, destination.id] : items.filter((id) => id !== destination.id))} /><label htmlFor={`output-destination-${destination.id}`} className="min-w-0 flex-1">{destination.name}{!destination.enabled && <span className="ml-2 text-xs text-red-600">Deshabilitado</span>}</label><button type="button" disabled={testingDestinationId === destination.id || deletingDestinationId === destination.id} onClick={() => { void testDestination(destination.id); }} className="rounded border px-2 py-1 text-xs text-blue-700 disabled:opacity-50">{testingDestinationId === destination.id ? 'Enviando…' : 'Probar tarjeta'}</button><button type="button" disabled={deletingDestinationId === destination.id} onClick={() => setDestinationToDelete(destination)} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50" aria-label={`Eliminar canal ${destination.name}`}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Eliminar</button></div>)}</div>{destinationSettings}<details className="mt-4"><summary className="cursor-pointer text-sm font-medium text-blue-700">Añadir un canal de Teams</summary><div className="mt-3 space-y-2"><input value={destinationName} onChange={(event) => setDestinationName(event.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Nombre del canal, por ejemplo Informes diarios" aria-label="Nombre del destino" /><input type="url" value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="URL del trigger de Workflows" aria-label="URL del Workflow de Teams" /><p className="text-xs text-gray-500">La URL se guarda como credencial y nunca se vuelve a mostrar. Crea el Workflow para el canal deseado y pega aquí su URL de trigger. El trigger debe aceptar llamadas por URL («Anyone»); los triggers restringidos que requieren OAuth aún no están admitidos.</p><button type="button" onClick={() => { void addDestination(); }} className="rounded-lg border px-3 py-2 text-sm font-medium">Guardar destino</button></div></details></section><div><label htmlFor="task-timezone" className="mb-1 block text-sm font-medium text-gray-700">Zona horaria</label><input id="task-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div><div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="task-retention" className="mb-1 block text-sm font-medium text-gray-700">Ejecuciones a conservar</label><input id="task-retention" type="number" min="1" max="100" value={maxRunsRetained} onChange={(event) => setMaxRunsRetained(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} className="w-full rounded-lg border px-3 py-2" aria-describedby="task-retention-help" /><p id="task-retention-help" className="mt-1 text-xs text-gray-500">Al superar el límite se borran las más antiguas, con sus archivos. Las que tengan notificaciones vigentes se conservan hasta que caduquen.</p></div><div><label htmlFor="task-visibility" className="mb-1 block text-sm font-medium text-gray-700">Visibilidad en el marketplace</label><select id="task-visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as ScheduledTaskVisibility)} className="w-full rounded-lg border px-3 py-2"><option value="unpublished">No publicada</option><option value="private">Privada · miembros de la app</option><option value="public">Pública · todos los usuarios</option></select><p className="mt-1 text-xs text-gray-500">En el marketplace solo se muestran los resultados, nunca el input.</p></div></div><div className="flex justify-end gap-3"><button type="button" onClick={() => navigate(task ? `/apps/${appId}/scheduled-tasks/${task.id}` : `/apps/${appId}/scheduled-tasks`)} className="rounded-lg border px-4 py-2">Cancelar</button><button type="button" disabled={saving} onClick={() => { void save(); }} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar y activar'}</button></div></div><ConfirmationModal isOpen={destinationToDelete !== null} title="Eliminar canal de Teams" message={destinationToDelete ? `Se eliminará «${destinationToDelete.name}» de esta aplicación y dejará de enviar notificaciones en todas las tareas que lo usan. El historial de envíos se conservará.` : ''} confirmLabel="Eliminar canal" isLoading={deletingDestinationId !== null} onConfirm={() => { void deleteDestination(); }} onCancel={() => setDestinationToDelete(null)} /></div>;
 }

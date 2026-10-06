@@ -23,7 +23,7 @@ from schemas.output_provider_schemas import (
     ScheduledTaskOutputBindingsRequestSchema,
 )
 from output.service import create_destination, destination_dto, get_destination, request_retry, task_bindings, test_destination, update_destination, replace_task_bindings, delivery_dto
-from output.registry import list_output_providers
+from output.registry import list_output_providers as registered_output_providers
 from scheduling.output_delivery import enqueue_delivery
 
 router = APIRouter(prefix="/apps/{app_id}", tags=["Scheduled task output providers"])
@@ -57,7 +57,7 @@ async def list_output_providers(app_id: int, role: CanView):
     return [{"key": provider.descriptor.key, "name": provider.descriptor.name,
              "supports_links": provider.descriptor.supports_links,
              "supports_native_attachments": provider.descriptor.supports_native_attachments,
-             "content_modes": list(provider.descriptor.content_modes)} for provider in list_output_providers()]
+             "content_modes": list(provider.descriptor.content_modes)} for provider in registered_output_providers()]
 
 
 @router.get("/output-destinations", response_model=list[OutputDestinationResponseSchema])

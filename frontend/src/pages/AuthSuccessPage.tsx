@@ -11,13 +11,20 @@ function AuthSuccessPage() {
   const returnTo = useContext(OIDCContext)?.returnTo ?? null;
 
   useEffect(() => {
-    if (loading) return;
-    if (isAuthenticated) {
-      navigate(returnTo ?? '/', { replace: true });
-    } else if (sessionError === 'unavailable') {
-      setError('The server could not be reached. Please try again in a moment.');
-    } else {
-      setError('Authentication failed - please try again');
+    // Wait for auth to complete
+    if (!loading) {
+      if (isAuthenticated) {
+        console.log('Authentication successful, redirecting...');
+        const requestedPath = globalThis.sessionStorage.getItem('postLoginReturnTo');
+        globalThis.sessionStorage.removeItem('postLoginReturnTo');
+        const returnTo = requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
+          ? requestedPath
+          : '/';
+        navigate(returnTo, { replace: true });
+      } else {
+        // If not authenticated after loading completes, show error
+        setError('Authentication failed - please try again');
+      }
     }
   }, [isAuthenticated, loading, sessionError, returnTo, navigate]);
 
@@ -62,4 +69,4 @@ function AuthSuccessPage() {
   return null;
 }
 
-export default AuthSuccessPage; 
+export default AuthSuccessPage;
