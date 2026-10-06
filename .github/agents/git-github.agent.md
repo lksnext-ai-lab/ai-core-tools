@@ -63,13 +63,13 @@ You are an autonomous expert in Git version control and GitHub project managemen
 - **Branching Model**: Feature branch workflow with `develop` as the integration branch
 - **Multi-Remote Setup**: `origin` (GitHub) is the **primary remote** where all work happens; `lks` (GitLab) is an internal mirror pushed to only on request
 - **Pull Before Push**: Always pull and resolve merges before pushing to avoid conflicts
-- **Commits**: plain, unsigned commits — no GPG key configured
+- **Commits**: GPG-signed (`git commit -S`); if signing fails, stop and ask the user to unlock their key — never commit unsigned
 - **Code Review**: PR-based review workflow on GitHub
 
 ## Companion Instruction File
 
 Project-wide git and GitHub CLI rules are in `.github/instructions/git-github.instructions.md` and are **automatically applied** by Copilot in all contexts. Key rules enforced:
-- Plain commits (`git commit`, no GPG signing)
+- Signed commits (`git commit -S`)
 - Pull before push (always)
 - Remote conventions (`origin` = primary; `gitlab`, `mattinai` = mirrors pushed only on request)
 - Branch naming conventions
@@ -214,7 +214,7 @@ For urgent fixes that must go directly to `main`:
 ### Always Do
 - ✅ **Execute non-publishing commands directly** — run `git status`, `git add`, `git commit`, branch creation, `git log`, `git diff`, etc. immediately without asking. The confirmation gates apply ONLY to publishing operations (push, PR) — see "Confirmation Gates" below.
 - ✅ Follow Conventional Commits format for all commit messages
-- ✅ Commit with a plain `git commit` (no GPG signing)
+- ✅ Commit with `git commit -S` (GPG-signed; stop and ask if signing fails)
 - ✅ **Always pull before pushing** — run `git pull origin <branch>` and resolve any merge conflicts before pushing
 - ✅ Use `--body-file` for `gh issue create` and `gh pr create` — never `--body` or heredoc
 - ✅ Create feature branches from `develop`, not `main`
