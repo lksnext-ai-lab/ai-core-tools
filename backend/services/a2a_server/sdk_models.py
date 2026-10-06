@@ -40,6 +40,14 @@ patch release could rename or repurpose the private attributes that
 ``store.as_task_store.task_model`` means. An upgrade must be a deliberate pin
 bump that re-runs ``tests/integration/a2a_server/test_sdk_contract.py`` before
 it lands.
+
+**Table names live in a separate, SDK-free module.** ``TASKS_TABLE``,
+``EVENTS_TABLE`` and ``VERSIONS_TABLE`` are defined in
+``services.a2a_server.table_names`` (re-exported here for every existing
+caller) rather than in this module, because ``alembic/env.py`` needs them at
+import time for every Alembic CLI invocation, and must never import
+``a2a-sdk`` itself just to read three string constants (see that module's
+docstring).
 """
 
 from __future__ import annotations
@@ -52,7 +60,8 @@ from a2a.server.models import (
     create_task_model,
     create_task_version_model,
 )
-from sqlalchemy import MetaData
+from services.a2a_server.table_names import EVENTS_TABLE, TASKS_TABLE, VERSIONS_TABLE
+from sqlalchemy import Index, MetaData
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -65,11 +74,6 @@ class A2ASdkBase(DeclarativeBase):
     source of truth the Alembic migration (step_007) and the schema-drift test
     compare against.
     """
-
-
-TASKS_TABLE = "a2a_tasks"
-EVENTS_TABLE = "a2a_task_events"
-VERSIONS_TABLE = "a2a_task_versions"
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,18 @@ class A2ASdkContractError(RuntimeError):
     """
 
 
+# Mattin-owned addition to a2a_tasks, not part of the SDK's TaskMixin (which only
+# declares ix_a2a_tasks_id and idx_a2a_tasks_owner_last_updated). Needed by the
+# retention and stale-task sweeps (step_018), which scan by last_updated alone
+# (no owner filter). Declared once here, on the registry's own `task` table, so
+# `get_sdk_metadata()` is the single source of truth the schema-drift test and
+# `tests/conftest.py` both read -- there is no second, ad-hoc declaration
+# anywhere else. It has no runtime effect on its own: `storage.py` always builds
+# the SDK store/stream with `create_table=False`, so only Alembic's migration
+# (a2a001) actually creates it in the database.
+TASKS_LAST_UPDATED_INDEX = "ix_a2a_tasks_last_updated"
+
+
 @functools.cache
 def get_sdk_models() -> A2ASdkModels:
     """Builds (once per process) the `a2a_*`-named SDK model classes.
@@ -101,11 +117,11 @@ def get_sdk_models() -> A2ASdkModels:
     table name. A second call with the same name on the SDK's own `Base`
     raises `InvalidRequestError`; this cache is what prevents that.
     """
-    return A2ASdkModels(
-        task=create_task_model(TASKS_TABLE, A2ASdkBase),
-        event=create_task_event_model(EVENTS_TABLE, A2ASdkBase),
-        version=create_task_version_model(VERSIONS_TABLE, A2ASdkBase),
-    )
+    task = create_task_model(TASKS_TABLE, A2ASdkBase)
+    event = create_task_event_model(EVENTS_TABLE, A2ASdkBase)
+    version = create_task_version_model(VERSIONS_TABLE, A2ASdkBase)
+    Index(TASKS_LAST_UPDATED_INDEX, task.__table__.c.last_updated)
+    return A2ASdkModels(task=task, event=event, version=version)
 
 
 def get_sdk_metadata() -> MetaData:
