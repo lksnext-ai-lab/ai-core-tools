@@ -15,6 +15,7 @@
   "exclude": [
     "src/**/*.test.*", 
     "src/**/*.spec.*",
+    "src/**/*.stories.*",
     "src/main.tsx",
     "src/App.tsx"
   ]
