@@ -155,8 +155,11 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
             run.output_text = completed_output["response"]
             run.output_files = completed_output["files"]
             run.outputs_reconciled = True
-            from output.service import create_deliveries_for_run
-            deliveries = create_deliveries_for_run(db, task=task, run=run)
+            from output.service import create_deliveries_for_run, prepare_run_attachments
+            artifacts, attachment_error = await prepare_run_attachments(db, task=task, run=run)
+            deliveries = create_deliveries_for_run(
+                db, task=task, run=run, artifacts=artifacts, attachment_error=attachment_error,
+            )
             db.commit()
         except Exception:
             # A completed durable agent step remains a successful run even if outbox

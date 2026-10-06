@@ -5,6 +5,8 @@
 **First provider:** Teams channels through Workflows and Adaptive Cards.  
 **First-iteration scope:** post a card with the result and links to the run details and files in Mattin AI. Native file attachments are deferred to a future extension.
 
+**Second-provider proposal:** [Generic webhooks](rfc-scheduled-task-webhooks.md) designs a webhook destination that can be used alongside Teams, with optional binary attachments configured per webhook and sent through multipart. It documents the changes still required to the current contract, payload preparation, credentials, artifact storage, and recovery; the webhook provider is not implemented.
+
 ## 1. Recommendation
 
 Add a result-delivery subsystem independent of agent execution, with destinations reusable within an application and support for multiple destinations per task. Start with `teams_workflow`: a Workflows webhook and an Adaptive Card containing text, metadata, and links. Configure a destination with the workflow URL and its authentication settings; this does not require uploading files to SharePoint or implementing delegated Graph message posting in this iteration. Add email, Slack, and other providers later through adapters implementing the same contract.
@@ -30,8 +32,8 @@ Use the run's `output_text` and `output_files` as the source, not the entire con
 
 | Entity | Responsibility |
 |---|---|
-| `OutputDestination` | `id`, `app_id`, name, `provider_key`, versioned public configuration, write-only provider credentials stored with the destination, enabled flag, and audit data. Reusable across tasks in the same app. Credentials stay in the application database; the MVP adds no vault, secret table, or `secret_ref` indirection. |
-| `ScheduledTaskOutputBinding` | Task/destination, enabled flag, events (`succeeded`, `failed`), and content options (`result`, `excerpt`, `link_only`). One binding per task/destination in the MVP. |
+| `OutputDestination` | `id`, `app_id`, name, `provider_key`, shared `content_mode` (`result`, `excerpt`, `link_only`), versioned public configuration, write-only provider credentials stored with the destination, enabled flag, and audit data. Reusable across tasks in the same app. Credentials stay in the application database; the MVP adds no vault, secret table, or `secret_ref` indirection. |
+| `ScheduledTaskOutputBinding` | Task/destination, enabled flag, and events (`succeeded`, `failed`). One binding per task/destination in the MVP. Content options belong to the channel. |
 | `OutputDelivery` | Outbox: run/binding/event, destination and message snapshot, status, attempts, next attempt, lease, expiry, receipt, and sanitized error. |
 | `OutputDeliveryAttempt` | Start/end times, outcome, and sanitized diagnostics for each attempt. No tokens or full external response bodies. |
 

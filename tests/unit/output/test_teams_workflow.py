@@ -117,7 +117,7 @@ def test_provider_registry_exposes_teams_capabilities():
     provider = get_output_provider("teams_workflow")
     assert provider.descriptor.supports_links is True
     assert provider.descriptor.supports_native_attachments is False
-    assert [item.descriptor.key for item in list_output_providers()] == ["teams_workflow"]
+    assert "teams_workflow" in [item.descriptor.key for item in list_output_providers()]
 
 
 def test_run_payload_never_publishes_file_scheme(monkeypatch):
@@ -130,7 +130,7 @@ def test_run_payload_never_publishes_file_scheme(monkeypatch):
         id=12, scheduled_time=__import__("datetime").datetime(2026, 9, 28), status="succeeded",
         output_text="Open file://f-123 for details", output_files=[{"file_id": "f-123", "filename": "report.csv"}],
     )
-    binding = SimpleNamespace(content_mode="result")
+    binding = SimpleNamespace(destination=SimpleNamespace(content_mode="result"))
     payload = _run_payload(task, run, binding)
     serialized = str(payload)
     assert "file://" not in serialized

@@ -1,7 +1,7 @@
 """DBOS queue workers for the scheduled-task output outbox."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, or_
@@ -9,8 +9,7 @@ from sqlalchemy import and_, or_
 from db.database import SessionLocal
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
-from output.service import create_deliveries_for_run
-from output.service import process_delivery
+from output.service import cleanup_spool_files, create_deliveries_for_run, process_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,12 @@ async def _reconcile_pending_deliveries() -> int:
             run_id = run.id
             try:
                 with db.begin_nested():
-                    create_deliveries_for_run(db, task=run.task, run=run)
+                    from output.service import prepare_run_attachments
+                    artifacts, attachment_error = await prepare_run_attachments(db, task=run.task, run=run)
+                    create_deliveries_for_run(
+                        db, task=run.task, run=run,
+                        artifacts=artifacts, attachment_error=attachment_error,
+                    )
                     run.outputs_reconciled = True
             except Exception:
                 logger.exception("Could not repair output deliveries for scheduled task run %s", run_id)
@@ -89,12 +93,24 @@ async def _reconcile_pending_deliveries() -> int:
                 item.error_summary = "Delivery expired before it was sent."
                 continue
             if item.status == "sending":
-                item.status = "unknown"
-                item.error_summary = "Worker stopped while the Teams request was in flight; verify the channel before resending."
+                snapshot = item.destination_snapshot or {}
+                retry_deduplicated = (
+                    snapshot.get("provider_key") == "webhook"
+                    and snapshot.get("receiver_deduplicates") is True
+                    and item.attempt_count < 5
+                )
+                item.status = "retry_wait" if retry_deduplicated else "unknown"
+                item.error_summary = (
+                    "Webhook worker stopped during an idempotent request; retry scheduled."
+                    if retry_deduplicated else
+                    "Worker stopped while the external request was in flight; verify receipt before resending."
+                )
+                if retry_deduplicated:
+                    item.next_attempt_at = now + timedelta(seconds=30)
                 item.lease_until = None
                 if item.attempts:
                     attempt = item.attempts[-1]
-                    attempt.status = "unknown"
+                    attempt.status = item.status
                     attempt.finished_at = now
                     attempt.error_summary = item.error_summary
                 continue
@@ -106,6 +122,10 @@ async def _reconcile_pending_deliveries() -> int:
                 item.status = "pending"
             enqueue.append((item.id, item.dispatch_generation))
         db.commit()
+        try:
+            cleanup_spool_files(db)
+        except Exception:
+            logger.exception("Could not clean expired webhook spool files")
     except Exception:
         db.rollback()
         logger.exception("Could not reconcile scheduled-task output deliveries")

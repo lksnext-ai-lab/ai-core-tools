@@ -11,19 +11,27 @@ class OutputProviderDescriptorSchema(BaseModel):
     name: str
     supports_links: bool = True
     supports_native_attachments: bool = False
+    supports_binary_attachments: bool = False
     content_modes: list[str] = ["result", "excerpt", "link_only"]
 
 
 class OutputDestinationCreateSchema(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    provider_key: Literal["teams_workflow"] = "teams_workflow"
+    provider_key: Literal["teams_workflow", "webhook"] = "teams_workflow"
     webhook_url: str = Field(min_length=1, max_length=4096)
+    content_mode: Literal["result", "excerpt", "link_only"] = "result"
+    public_config: dict[str, Any] = Field(default_factory=dict)
+    credentials: Optional[dict[str, str]] = None
 
 
 class OutputDestinationUpdateSchema(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     enabled: Optional[bool] = None
+    content_mode: Optional[Literal["result", "excerpt", "link_only"]] = None
     webhook_url: Optional[str] = Field(default=None, min_length=1, max_length=4096)
+    public_config: Optional[dict[str, Any]] = None
+    credentials: Optional[dict[str, str]] = None
+    clear_credentials: bool = False
 
 
 class OutputDestinationResponseSchema(BaseModel):
@@ -32,7 +40,10 @@ class OutputDestinationResponseSchema(BaseModel):
     name: str
     provider_key: str
     enabled: bool
+    content_mode: Literal["result", "excerpt", "link_only"] = "result"
     has_secret: bool
+    public_config: dict[str, Any] = Field(default_factory=dict)
+    has_credentials: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -40,13 +51,15 @@ class OutputDestinationResponseSchema(BaseModel):
 class OutputDestinationTestResponseSchema(BaseModel):
     accepted: bool = True
     http_status: int
+    event_id: Optional[str] = None
 
 
 class ScheduledTaskOutputBindingSchema(BaseModel):
     destination_id: int
     enabled: bool = True
-    content_mode: Literal["result", "excerpt", "link_only"] = "result"
     destination_name: Optional[str] = None
+    provider_key: Optional[str] = None
+    include_attachments: bool = False
 
 
 class ScheduledTaskOutputBindingsRequestSchema(BaseModel):

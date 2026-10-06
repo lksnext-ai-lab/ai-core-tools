@@ -2,9 +2,11 @@
 
 from output.contracts import OutputProvider
 from output.teams_workflow import TeamsWorkflowProvider
+from output.webhook import WebhookProvider
 
 _PROVIDERS: dict[str, OutputProvider] = {
     "teams_workflow": TeamsWorkflowProvider(),
+    "webhook": WebhookProvider(),
 }
 
 

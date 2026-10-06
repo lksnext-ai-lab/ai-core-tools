@@ -46,6 +46,7 @@ import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
 import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
+import OutputDestinationsPage from '../pages/settings/OutputDestinationsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
@@ -372,6 +373,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/settings/general" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><AppSettingsPage /></SettingsLayout>
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/output-destinations" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SettingsLayout><OutputDestinationsPage /></SettingsLayout>
                   </EditorLayoutRoute>
                 } />
 

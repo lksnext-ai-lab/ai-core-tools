@@ -214,13 +214,18 @@ export interface ScheduledTask {
   next_run_at?: string | null;
 }
 
+export type OutputContentMode = 'result' | 'excerpt' | 'link_only';
+
 export interface OutputDestination {
   id: number;
   app_id: number;
   name: string;
-  provider_key: 'teams_workflow' | string;
+  provider_key: 'teams_workflow' | 'webhook' | string;
   enabled: boolean;
   has_secret: boolean;
+  content_mode: OutputContentMode;
+  public_config: Record<string, unknown>;
+  has_credentials: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -228,8 +233,9 @@ export interface OutputDestination {
 export interface ScheduledTaskOutputBinding {
   destination_id: number;
   enabled: boolean;
-  content_mode: 'result' | 'excerpt' | 'link_only';
   destination_name?: string | null;
+  provider_key?: string | null;
+  include_attachments?: boolean;
 }
 
 export interface OutputDeliveryAttempt {
@@ -922,11 +928,11 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/output-destinations`);
   }
 
-  async createOutputDestination(appId: number, data: { name: string; provider_key: 'teams_workflow'; webhook_url: string }): Promise<OutputDestination> {
+  async createOutputDestination(appId: number, data: { name: string; provider_key: 'teams_workflow' | 'webhook'; webhook_url: string; content_mode?: OutputContentMode; public_config?: Record<string, unknown>; credentials?: Record<string, string> }): Promise<OutputDestination> {
     return this.request(`/internal/apps/${appId}/output-destinations`, { method: 'POST', body: JSON.stringify(data) });
   }
 
-  async updateOutputDestination(appId: number, destinationId: number, data: { webhook_url?: string; enabled?: boolean; name?: string }): Promise<OutputDestination> {
+  async updateOutputDestination(appId: number, destinationId: number, data: { webhook_url?: string; enabled?: boolean; name?: string; content_mode?: OutputContentMode; public_config?: Record<string, unknown>; credentials?: Record<string, string>; clear_credentials?: boolean }): Promise<OutputDestination> {
     return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'PATCH', body: JSON.stringify(data) });
   }
 
@@ -934,7 +940,7 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'DELETE' });
   }
 
-  async testOutputDestination(appId: number, destinationId: number): Promise<{ accepted: boolean; http_status: number }> {
+  async testOutputDestination(appId: number, destinationId: number): Promise<{ accepted: boolean; http_status: number; event_id?: string | null }> {
     return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}/test`, { method: 'POST' });
   }
 

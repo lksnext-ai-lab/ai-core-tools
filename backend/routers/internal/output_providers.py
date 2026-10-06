@@ -57,6 +57,7 @@ async def list_output_providers(app_id: int, role: CanView):
     return [{"key": provider.descriptor.key, "name": provider.descriptor.name,
              "supports_links": provider.descriptor.supports_links,
              "supports_native_attachments": provider.descriptor.supports_native_attachments,
+             "supports_binary_attachments": provider.descriptor.supports_binary_attachments,
              "content_modes": list(provider.descriptor.content_modes)} for provider in registered_output_providers()]
 
 
@@ -70,7 +71,9 @@ async def list_output_destinations(app_id: int, role: CanView, db: DB):
 async def create_output_destination(app_id: int, payload: OutputDestinationCreateSchema, auth: Auth, role: CanEdit, db: DB):
     try:
         item = create_destination(db, app_id=app_id, created_by=int(auth.identity.id), name=payload.name,
-                                  webhook_url=payload.webhook_url, provider_key=payload.provider_key)
+                                  webhook_url=payload.webhook_url, provider_key=payload.provider_key,
+                                  content_mode=payload.content_mode,
+                                  public_config=payload.public_config, credentials=payload.credentials)
         return destination_dto(item)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

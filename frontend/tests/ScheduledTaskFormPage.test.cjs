@@ -96,7 +96,7 @@ function elements(node) {
 const button = (view, label) => elements(view).find((node) => node.type === 'button' && node.props.children === label);
 const save = (view) => button(view, 'Guardar y activar');
 
-test('waits for channel bindings and preserves their content mode when saving', async () => {
+test('waits for channel bindings and saves only the selected channel references', async () => {
   const outputs = deferred();
   const page = mount({ getScheduledTaskOutputs: () => outputs.promise });
   assert.equal(save(page.render()), undefined);
@@ -109,7 +109,8 @@ test('waits for channel bindings and preserves their content mode when saving', 
   await flush();
   assert.equal(page.calls.updates.length, 1);
   assert.equal(page.calls.outputs[0][2][0].destination_id, 7);
-  assert.equal(page.calls.outputs[0][2][0].content_mode, 'excerpt');
+  assert.equal('content_mode' in page.calls.outputs[0][2][0], false);
+  assert.equal(elements(page.render()).some((node) => node.props['aria-label']?.startsWith('Contenido de la notificación')), false);
 });
 
 test('failed channel load blocks saving and a successful retry restores the configured bindings', async () => {

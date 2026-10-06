@@ -9,25 +9,28 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db import database
-from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
+from models.output_delivery import OutputArtifact, OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from scheduling import output_delivery
 from services import file_cleanup_worker
 
 
 @pytest.fixture
-def sessions(monkeypatch):
+def sessions(monkeypatch, tmp_path):
     engine = create_engine("sqlite://")
     # Foreign keys to unrelated application entities are not enforced by SQLite.
     # Use the production outbox models and real SQL transactions/savepoints.
     tables = [model.__table__ for model in (
         ScheduledTask, ScheduledTaskRun, OutputDestination, ScheduledTaskOutputBinding,
-        OutputDelivery, OutputDeliveryAttempt,
+        OutputDelivery, OutputDeliveryAttempt, OutputArtifact,
     )]
     database.Base.metadata.create_all(engine, tables=tables)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(database, "SessionLocal", factory)
     monkeypatch.setattr(output_delivery, "SessionLocal", factory)
+    spool = tmp_path / "output-deliveries"
+    spool.mkdir()
+    monkeypatch.setattr("output.service._spool_root", lambda: spool)
     with factory() as db:
         db.add(ScheduledTask(id=1, name="Daily", app_id=1, agent_id=1, created_by=1,
                              cron_expression="0 8 * * *", orchestrator_schedule_name="task-1"))
@@ -129,8 +132,8 @@ async def test_failed_outbox_repair_does_not_block_other_runs_or_pending_deliver
         db.commit()
 
     create = output_delivery.create_deliveries_for_run
-    def repair(db, *, task, run):
-        deliveries = create(db, task=task, run=run)
+    def repair(db, *, task, run, **kwargs):
+        deliveries = create(db, task=task, run=run, **kwargs)
         if run.id == 1:
             if database_error:
                 db.add(_delivery(1))  # Violates the outbox's uniqueness constraint.

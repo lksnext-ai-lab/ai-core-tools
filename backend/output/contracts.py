@@ -10,6 +10,7 @@ class ProviderDescriptor:
     name: str
     supports_links: bool = True
     supports_native_attachments: bool = False
+    supports_binary_attachments: bool = False
     content_modes: tuple[str, ...] = ("result", "excerpt", "link_only")
 
 
