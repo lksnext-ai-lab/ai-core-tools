@@ -83,9 +83,10 @@ class AgentService:
 
     def get_agent_detail(self, db: Session, app_id: int, agent_id: int) -> Optional[AgentDetailSchema]:
         """Get detailed agent information with form data for editing"""
-        
-        # Get agent details
-        agent = self._get_agent_for_detail(db, agent_id)
+
+        # Get agent details, scoped to this app (defense in depth: the router already
+        # checks app ownership, but the service must never leak another tenant's agent).
+        agent = self._get_agent_for_detail(db, agent_id, app_id)
         if agent_id != 0 and not agent:
             return None
         
@@ -180,8 +181,12 @@ class AgentService:
             rag_fixed_filters=getattr(agent, 'rag_fixed_filters', None) if isinstance(getattr(agent, 'rag_fixed_filters', None), (list, type(None))) else None,
         )
 
-    def _get_agent_for_detail(self, db: Session, agent_id: int):
-        """Get agent for detail view"""
+    def _get_agent_for_detail(self, db: Session, agent_id: int, app_id: Optional[int] = None):
+        """Get agent for detail view, optionally scoped to ``app_id``.
+
+        When ``app_id`` is provided, an agent that exists but belongs to a different
+        app is treated as not found (returns ``None``) rather than leaking it.
+        """
         if agent_id == 0:
             # New agent
             return type('Agent', (), {
@@ -194,7 +199,9 @@ class AgentService:
             agent = self.get_agent(db, agent_id)
             if not agent:
                 return None
-            
+            if app_id is not None and agent.app_id != app_id:
+                return None
+
             # If it's an OCR agent, get the OCR-specific data
             if agent.type == 'ocr_agent':
                 agent = self.get_agent(db, agent_id, 'ocr')
@@ -235,6 +242,16 @@ class AgentService:
             agent_id = None
 
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+
+        # Defense in depth: never let an update move an existing agent into a different
+        # app (the router already verifies ownership, but the service must not silently
+        # allow a cross-tenant takeover if ever called without that check upstream).
+        if agent and agent.app_id is not None and agent.app_id != agent_data.get('app_id'):
+            raise ValueError(
+                f"Agent {agent_id} does not belong to app {agent_data.get('app_id')}"
+            )
+
+        is_new_agent = agent is None
 
         if not agent:
             # Enforce per-app agent limit before creation (SaaS mode only)
@@ -278,7 +295,7 @@ class AgentService:
                 )
 
         update_method = self._update_normal_agent
-        update_method(db, agent, agent_data)
+        update_method(db, agent, agent_data, is_new_agent=is_new_agent)
 
         # Threshold search needs a threshold value, else it degrades to plain similarity at
         # retrieval. Checked on the merged state (the schema can't see the stored value on a
@@ -317,8 +334,14 @@ class AgentService:
             return DEFAULT_PROMPT_TEMPLATE
         return new_value
 
-    def _update_normal_agent(self, db: Session, agent: Agent, data: dict):
-        """Update agent fields"""
+    def _update_normal_agent(self, db: Session, agent: Agent, data: dict, is_new_agent: bool = False):
+        """Update agent fields.
+
+        ``is_new_agent`` gates ``app_id`` assignment: it is only ever set at creation
+        time. An update must never move an existing agent to a different app's
+        ``app_id`` (that would allow a cross-tenant takeover of the agent and the
+        AI service/silo it references).
+        """
         agent.name = data['name']
         agent.description = data.get('description', '')  # Ensure it's not None
         agent.system_prompt = data.get('system_prompt')
@@ -344,7 +367,8 @@ class AgentService:
                     "belong to this app"
                 )
         agent.sandbox_service_id = sandbox_service_id
-        agent.app_id = data['app_id']
+        if is_new_agent:
+            agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
         has_memory_value = data.get('has_memory')

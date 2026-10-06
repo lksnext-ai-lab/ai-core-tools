@@ -290,8 +290,11 @@ async def get_agent(
     """
     Get detailed information about a specific agent plus form data for editing.
     """
-    # App access validation would be implemented here
-    
+    # Verify the agent exists and belongs to this app before returning its details
+    # (agent_id == 0 is the "new agent" sentinel and has no app-scoped row to check).
+    if agent_id != 0:
+        _get_agent_or_404(db, agent_id, app_id)
+
     # Get agent details using service
     agent_detail = agent_service.get_agent_detail(db, app_id, agent_id)
     
@@ -365,8 +368,11 @@ async def create_or_update_agent(
     """
     Create a new agent or update an existing one.
     """
-    # App access validation would be implemented here
-    
+    # Verify the target agent (if updating an existing one) belongs to this app before
+    # mutating it — otherwise a caller could overwrite/move another app's agent.
+    if agent_id != 0:
+        _get_agent_or_404(db, agent_id, app_id)
+
     # Prepare agent data
     agent_dict = {
         'agent_id': agent_id,
