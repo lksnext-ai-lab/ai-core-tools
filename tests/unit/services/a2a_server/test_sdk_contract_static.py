@@ -20,7 +20,6 @@ AD-6 cancellation end-to-end) lives in
 
 from __future__ import annotations
 
-import asyncio
 import importlib.metadata
 import inspect
 import uuid
@@ -37,7 +36,6 @@ from services.a2a_server.sdk_models import (
     get_sdk_models,
 )
 from services.a2a_server.storage import build_bound_storage
-from sqlalchemy.ext.asyncio import create_async_engine
 
 _CONTRACT_MSG = (
     "a2a-sdk contract changed; review services/a2a_server/storage.py before bumping the pin"
@@ -49,6 +47,35 @@ def _test_owner_resolver(_context) -> str:
     the resolver's return value is never read -- it only has to satisfy
     `build_bound_storage`'s now-required `owner_resolver` parameter."""
     return "a2a:static-contract-test:owner"
+
+
+class _DummyEngine:
+    """A stand-in for `AsyncEngine`, good enough for these tests.
+
+    `VersionedDatabaseTaskStore.__init__`/`DatabaseTaskEventStream.__init__`
+    only ever *store* the engine they're given (`self.engine = engine`,
+    `async_sessionmaker(self.engine, ...)`) -- neither validates its type nor
+    uses it for anything until a query actually runs, which these static,
+    no-DB tests never do.
+
+    Deliberately **not** `sqlalchemy.ext.asyncio.create_async_engine(...)`: a
+    real `AsyncEngine` needs disposing, and these are plain synchronous `def`
+    tests (not `pytest-asyncio` coroutines). `asyncio.run(engine.dispose())`
+    from inside a sync test was tried here before and was the root cause of
+    a real regression: `asyncio.run()` always resets the thread's default
+    event loop to `None` when it returns, even if the thread already had one
+    (e.g. one implicitly created by the legacy `asyncio.get_event_loop()`
+    pattern a different test module -- `test_agent_execution_service_it4.py`
+    -- relies on). Running `asyncio.run()` five times across this module's
+    sync tests destroyed that default loop for the rest of the `pytest
+    tests/unit` session, well outside this file. Avoiding a real engine
+    (and therefore any asyncio call at all) in these tests removes the need
+    to dispose anything, so the issue cannot recur here.
+    """
+
+
+def _dummy_engine() -> _DummyEngine:
+    return _DummyEngine()
 
 
 class TestStaticContract:
@@ -106,44 +133,35 @@ class TestStaticContract:
 
     def test_fresh_store_and_stream_use_sdk_default_models(self) -> None:
         """An unbound store/stream takes the no-factory branch (AD-2 point 2)."""
-        engine = create_async_engine("postgresql+psycopg://user:pass@localhost/unused")
-        try:
-            store = VersionedDatabaseTaskStore(engine, create_table=False)
-            stream = DatabaseTaskEventStream(engine, create_table=False)
-            assert store.as_task_store.task_model is a2a_sdk_models.TaskModel, _CONTRACT_MSG
-            # contract: test_sdk_contract_static.py::test_fresh_store_and_stream_use_sdk_default_models
-            assert store._event_model is a2a_sdk_models.TaskEventModel, _CONTRACT_MSG
-            assert store._version_model is a2a_sdk_models.TaskVersionModel, _CONTRACT_MSG
-            assert stream._event_model is a2a_sdk_models.TaskEventModel, _CONTRACT_MSG
-        finally:
-            asyncio.run(engine.dispose())
+        engine = _dummy_engine()
+        store = VersionedDatabaseTaskStore(engine, create_table=False)
+        stream = DatabaseTaskEventStream(engine, create_table=False)
+        assert store.as_task_store.task_model is a2a_sdk_models.TaskModel, _CONTRACT_MSG
+        # contract: test_sdk_contract_static.py::test_fresh_store_and_stream_use_sdk_default_models
+        assert store._event_model is a2a_sdk_models.TaskEventModel, _CONTRACT_MSG
+        assert store._version_model is a2a_sdk_models.TaskVersionModel, _CONTRACT_MSG
+        assert stream._event_model is a2a_sdk_models.TaskEventModel, _CONTRACT_MSG
 
     def test_bound_storage_attributes(self) -> None:
-        engine = create_async_engine("postgresql+psycopg://user:pass@localhost/unused")
-        try:
-            store, stream = build_bound_storage(engine=engine, owner_resolver=_test_owner_resolver)
-            models = get_sdk_models()
-            assert store.as_task_store.task_model is models.task, _CONTRACT_MSG
-            assert store._event_model is models.event, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_bound_storage_attributes
-            assert store._version_model is models.version, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_bound_storage_attributes
-            assert stream._event_model is models.event, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_bound_storage_attributes
-            assert store.as_task_store.task_model.__tablename__ == TASKS_TABLE, _CONTRACT_MSG
-            assert store._event_model.__tablename__ == EVENTS_TABLE, _CONTRACT_MSG
-            assert store._version_model.__tablename__ == VERSIONS_TABLE, _CONTRACT_MSG
-        finally:
-            asyncio.run(engine.dispose())
+        engine = _dummy_engine()
+        store, stream = build_bound_storage(engine=engine, owner_resolver=_test_owner_resolver)
+        models = get_sdk_models()
+        assert store.as_task_store.task_model is models.task, _CONTRACT_MSG
+        assert store._event_model is models.event, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_bound_storage_attributes
+        assert store._version_model is models.version, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_bound_storage_attributes
+        assert stream._event_model is models.event, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_bound_storage_attributes
+        assert store.as_task_store.task_model.__tablename__ == TASKS_TABLE, _CONTRACT_MSG
+        assert store._event_model.__tablename__ == EVENTS_TABLE, _CONTRACT_MSG
+        assert store._version_model.__tablename__ == VERSIONS_TABLE, _CONTRACT_MSG
 
     def test_build_bound_storage_is_idempotent_across_calls(self) -> None:
-        engine = create_async_engine("postgresql+psycopg://user:pass@localhost/unused")
-        try:
-            store1, stream1 = build_bound_storage(engine=engine, owner_resolver=_test_owner_resolver)
-            store2, stream2 = build_bound_storage(engine=engine, owner_resolver=_test_owner_resolver)
-            assert store1.as_task_store.task_model is store2.as_task_store.task_model, _CONTRACT_MSG
-            assert store1._event_model is store2._event_model, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_build_bound_storage_is_idempotent_across_calls
-            assert store1._version_model is store2._version_model, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_build_bound_storage_is_idempotent_across_calls
-            assert stream1._event_model is stream2._event_model, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_build_bound_storage_is_idempotent_across_calls
-        finally:
-            asyncio.run(engine.dispose())
+        engine = _dummy_engine()
+        store1, stream1 = build_bound_storage(engine=engine, owner_resolver=_test_owner_resolver)
+        store2, stream2 = build_bound_storage(engine=engine, owner_resolver=_test_owner_resolver)
+        assert store1.as_task_store.task_model is store2.as_task_store.task_model, _CONTRACT_MSG
+        assert store1._event_model is store2._event_model, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_build_bound_storage_is_idempotent_across_calls
+        assert store1._version_model is store2._version_model, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_build_bound_storage_is_idempotent_across_calls
+        assert stream1._event_model is stream2._event_model, _CONTRACT_MSG  # contract: test_sdk_contract_static.py::test_build_bound_storage_is_idempotent_across_calls
 
     def test_calling_sdk_factories_directly_for_the_same_name_collides(self) -> None:
         """Collision proof: documents *why* the registry in `sdk_models.py` exists.
@@ -154,16 +172,13 @@ class TestStaticContract:
         every time -- never collide with a previous run's leftover class.
         """
         throwaway_name = f"a2a_dup_events_contract_test_{uuid.uuid4().hex}"
-        engine = create_async_engine("postgresql+psycopg://user:pass@localhost/unused")
-        try:
-            store = VersionedDatabaseTaskStore(
-                engine, create_table=False, event_table_name=throwaway_name
-            )
-            del store
-            with pytest.raises(sa.exc.InvalidRequestError):
-                DatabaseTaskEventStream(engine, create_table=False, table_name=throwaway_name)
-        finally:
-            asyncio.run(engine.dispose())
+        engine = _dummy_engine()
+        store = VersionedDatabaseTaskStore(
+            engine, create_table=False, event_table_name=throwaway_name
+        )
+        del store
+        with pytest.raises(sa.exc.InvalidRequestError):
+            DatabaseTaskEventStream(engine, create_table=False, table_name=throwaway_name)
 
     def test_task_and_version_model_primary_keys(self) -> None:
         """The task PK is `id`; the version PK is `task_id`.
