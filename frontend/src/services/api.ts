@@ -124,6 +124,7 @@ export interface Agent {
   tool_ids?: number[];
   mcp_config_ids?: number[];
   skill_ids?: number[];
+  exposed_chat_filters?: string[];
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
@@ -828,6 +829,46 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/agents/${agentId}/mcp-usage`);
   }
 
+  async getAvailableChatFilterFields(
+    appId: number,
+    agentId: number,
+    toolIds: number[],
+    siloId?: number | null,
+  ): Promise<{ fields: { name: string; type: string; description?: string }[] }> {
+    const params = new URLSearchParams();
+    toolIds.forEach((id) => params.append('tool_ids', String(id)));
+    if (siloId) params.append('silo_id', String(siloId));
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/available-chat-filter-fields?${params}`,
+    );
+  }
+
+  async getAgentChatFilters(
+    appId: number,
+    agentId: number,
+  ): Promise<{ filters: { field_name: string; values: string[]; has_more?: boolean }[] }> {
+    return this.request(`/internal/apps/${appId}/agents/${agentId}/chat-filters`);
+  }
+
+  async searchAgentChatFilterValues(
+    appId: number,
+    agentId: number,
+    fieldName: string,
+    query: string,
+    limit = 50,
+  ): Promise<{ values: string[] }> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.request(
+      `/internal/apps/${appId}/agents/${agentId}/chat-filters/${encodeURIComponent(fieldName)}/values?${params}`,
+    );
+  }
+
+  async getMarketplaceChatFilters(
+    conversationId: number,
+  ): Promise<{ filters: { field_name: string; values: string[]; has_more?: boolean }[] }> {
+    return this.request(`/internal/marketplace/conversations/${conversationId}/chat-filters`);
+  }
+
   async getScheduledTasks(appId: number, agentId?: number): Promise<ScheduledTask[]> {
     const query = agentId === undefined ? '' : `?agent_id=${agentId}`;
     return this.request(`/internal/apps/${appId}/scheduled-tasks${query}`);
@@ -897,6 +938,18 @@ class ApiService {
       `/internal/marketplace/scheduled-tasks/${taskId}/runs/${runId}/files/${encodeURIComponent(fileId)}/download`,
     );
     return result.download_url;
+  }
+
+  async searchMarketplaceChatFilterValues(
+    conversationId: number,
+    fieldName: string,
+    query: string,
+    limit = 50,
+  ): Promise<{ values: string[] }> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.request(
+      `/internal/marketplace/conversations/${conversationId}/chat-filters/${encodeURIComponent(fieldName)}/values?${params}`,
+    );
   }
 
   async updateAgentPrompt(appId: number, agentId: number, promptType: 'system' | 'template', prompt: string): Promise<Agent> {
@@ -2618,6 +2671,7 @@ class ApiService {
     options: {
       files?: File[];
       fileReferences?: string[];
+      searchParams?: unknown;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     },
@@ -2627,6 +2681,9 @@ class ApiService {
 
     if (options.fileReferences && options.fileReferences.length > 0) {
       formData.append('file_references', JSON.stringify(options.fileReferences));
+    }
+    if (options.searchParams) {
+      formData.append('search_params', JSON.stringify(options.searchParams));
     }
     if (options.files && options.files.length > 0) {
       options.files.forEach((file) => formData.append('files', file));

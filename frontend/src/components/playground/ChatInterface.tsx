@@ -9,6 +9,9 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import OrchestratorFilterDropdowns, { toSearchFilter } from './OrchestratorFilterDropdowns';
+import type { ChatFilterField, ChatFilterSelection } from './OrchestratorFilterDropdowns';
+import { SEARCH_RESULT_LIMIT } from './SearchableMultiSelect';
 import ToolHistoryPanel from './ToolHistoryPanel';
 import MediaUploadModal from './MediaUploadModal';
 import VideoPlayer from './VideoPlayer';
@@ -76,6 +79,8 @@ function ChatInterface({
     undefined
   );
   const [filtersKey, setFiltersKey] = useState(0);
+  const [chatFilters, setChatFilters] = useState<ChatFilterField[]>([]);
+  const [exposedFilterValues, setExposedFilterValues] = useState<ChatFilterSelection>({});
   /** UI-only state to render the floating "scroll to bottom" button. Behaviour
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -333,6 +338,43 @@ function ChatInterface({
     }
   }, [metadataFields, filterMetadata]);
 
+  // Orchestrator-level exposed chat filters — aggregated across the agent's own
+  // silo + all its subagents' silos, for whatever field names the designer whitelisted.
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadChatFilters = async () => {
+      try {
+        const response = await apiService.getAgentChatFilters(appId, agentId);
+        if (isMounted) setChatFilters(response.filters || []);
+      } catch (error) {
+        console.error('Error loading chat filters:', error);
+        if (isMounted) setChatFilters([]);
+      }
+    };
+
+    void loadChatFilters();
+    setExposedFilterValues({});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [appId, agentId]);
+
+  const searchChatFilterValues = useCallback(
+    async (fieldName: string, query: string) => {
+      const response = await apiService.searchAgentChatFilterValues(
+        appId,
+        agentId,
+        fieldName,
+        query,
+        SEARCH_RESULT_LIMIT,
+      );
+      return response.values;
+    },
+    [appId, agentId],
+  );
+
   // ─── Message sending ─────────────────────────────────────────────────────────
 
   const handleSendMessage = async () => {
@@ -354,9 +396,20 @@ function ChatInterface({
     setTimeout(() => scrollToBottom('instant'), 50);
 
     try {
-      const hasFilters =
+      // Legacy "Filter by Metadata" panel sends its filter as the entire search_params
+      // root (a pre-existing bug, out of scope here — see SearchFilters.tsx). The new
+      // orchestrator dropdowns must be nested under a "filter" key per resolve_search_params.
+      // Merge defensively so neither panel clobbers the other if both happen to render.
+      const hasLegacyFilters =
         filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
-      const searchParams = hasFilters ? filterMetadata : undefined;
+      const exposedFilter = toSearchFilter(exposedFilterValues);
+      const searchParams =
+        hasLegacyFilters || exposedFilter
+          ? {
+              ...(hasLegacyFilters ? filterMetadata : {}),
+              ...(exposedFilter ? { filter: exposedFilter } : {}),
+            }
+          : undefined;
 
       // Hold streaming content visible while we commit the final message
       setHoldStreamingContent(true);
@@ -432,6 +485,7 @@ function ChatInterface({
       setCurrentSessionId(null);
       setFilterMetadata(undefined);
       setFiltersKey((prev) => prev + 1);
+      setExposedFilterValues({});
       clearToolHistory();
       onConversationReset?.();
     } catch (error) {
@@ -1133,6 +1187,23 @@ function ChatInterface({
 
           {/* Input area */}
           <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
+            {/* Orchestrator-level exposed chat filters — independent of the legacy
+                "Filter by Metadata" panel above, since orchestrators typically have
+                no own silo/metadataFields at all. Self-contained: owns its own
+                collapse state, active-filter chips, and container. Placed directly
+                above the composer (mirrors MarketplaceChatPage) so it stays visible
+                without scrolling and reads as "what will scope my next message". */}
+            {chatFilters.length > 0 && (
+              <div className="mb-3">
+                <OrchestratorFilterDropdowns
+                  filters={chatFilters}
+                  selected={exposedFilterValues}
+                  onChange={setExposedFilterValues}
+                  onSearchValues={searchChatFilterValues}
+                  disabled={isStreaming}
+                />
+              </div>
+            )}
             <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
               {/* File attach button */}
               <div>
