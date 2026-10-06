@@ -27,8 +27,6 @@
   --text-sticky-verde:  #1F7A4D;          /* rgb(31, 122, 77) */
   --bg-sticky-verde:  #EAF5EF;          /* rgb(234,245,239) */
   
-
-
   /* Bordes */
   /*--border-radius-sm: 4px;
   --border-radius-md: 8px;
@@ -75,15 +73,35 @@
     background: #fff;
   }
 
+  .dark .marketplace-filter-select::picker(select) {
+    border-color: theme('colors.line.dark');
+    background: theme('colors.surface.dark');
+  }
+
   .marketplace-filter-select option:hover,
   .marketplace-filter-select option:focus-visible {
     background-color: rgb(250, 249, 247);
     outline: none;
   }
 
+  .dark .marketplace-filter-select option:not(:checked) {
+    background-color: theme('colors.surface.dark');
+    color: theme('colors.ink.dark');
+  }
+
+  .dark .marketplace-filter-select option:hover,
+  .dark .marketplace-filter-select option:focus-visible {
+    background-color: theme('colors.surface.dark');
+  }
+
   .marketplace-filter-select option:checked {
     background-color: var(--color-bronze-bg-sof);
     color: var(--text-bronze);
+  }
+
+  .dark .marketplace-filter-select option:checked {
+    background-color: theme('colors.bronze.bg-dark');
+    color: theme('colors.bronze.dark');
   }
 
   .marketplace-filter-select option::checkmark {

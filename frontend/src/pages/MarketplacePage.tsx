@@ -65,7 +65,7 @@ export default function MarketplacePage() {
             onClick={() => setSearchParams(item.value === 'agents' ? {} : { tab: item.value })}
             className={`-mb-px inline cursor-pointer border-b-2 px-4 py-2 font-display text-[14.5px] font-medium text-fg-primary transition-colors ${
               tab === item.value
-                ? 'border-black text-fg-primary dark:text-fg-primary-dark dark:border-white'
+                ? 'border-fg text-fg dark:text-fg-dark dark:border-fg-dark'
                 : 'border-transparent text-fg-tertiary hover:text-fg-primary dark:text-fg-tertiary-dark dark:hover:text-fg-primary-dark'
             }`}
           >
@@ -168,6 +168,7 @@ function MarketplaceAgentsTab() {
           Showing {agents.length} of {total} agent{total === 1 ? '' : 's'}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
           {agents.map((agent) => (
             <MarketplaceAgentCard
               key={agent.agent_id}

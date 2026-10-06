@@ -368,7 +368,7 @@ function AgentsPage() {
           {
             header: 'Type',
             render: (agent) => (
-              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                 {getAgentTypeLabel(agent.type)}
               </span>
             )
@@ -393,8 +393,7 @@ function AgentsPage() {
           {
             header: 'Status',
             render: () => (
-              <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
+              <span className="inline-flex items-center justify-center px-[9px] py-[3px] text-[11.5px] rounded-[200px] w-24 bg-success-bg text-success">
                 {' '}Active
               </span>
             )
@@ -403,7 +402,7 @@ function AgentsPage() {
             header: 'Scheduling',
             render: (agent) => {
               const count = scheduledTaskCounts[agent.agent_id] ?? 0;
-              if (!count) return <span className="text-gray-400 text-sm">—</span>;
+              if (!count) return <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">—</span>;
               return (
                 <button
                   type="button"
@@ -420,13 +419,13 @@ function AgentsPage() {
           {
             header: 'Usage',
             render: (agent) => (
-              <div className="text-sm text-gray-900">
+              <div className="text-fg-secondary dark:text-fg-secondary-dark text-sm">
                 <div className="flex items-center">
                   <span className="font-medium">{agent.request_count}</span>
-                  <span className="text-gray-500 ml-1">requests</span>
+                  <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark ml-1">requests</span>
                 </div>
                 {agent.request_count > 0 && (
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                     Last used: {formatDate(agent.created_at)}
                   </div>
                 )}
@@ -436,7 +435,7 @@ function AgentsPage() {
           {
             header: 'Created',
             render: (agent) => formatDate(agent.created_at),
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
             header: 'Actions',
