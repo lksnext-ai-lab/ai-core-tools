@@ -64,6 +64,14 @@ class A2AAgentFieldsMixin(BaseModel):
     (``PublicAgentSchema``, ``PublicAgentDetailSchema``): A2A config is edited only
     through the internal agent API.
 
+    Also mixed into ``schemas.export_schemas.ExportAgentSchema`` (step_010, FR-24,
+    AC-39), so export/import reuse these exact caps and validators instead of
+    duplicating them. Import treats the file as untrusted input and always forces
+    ``a2a_enabled=False`` after validation, but that forcing happens in
+    ``AgentImportService`` (see ``_a2a_import_fields``), never in this mixin or in
+    ``ExportAgentSchema`` itself, so the schema stays a faithful round-trip of
+    whatever the file actually contains.
+
     ``a2a_enabled`` and ``a2a_card_visibility`` are intentionally **not** ``Optional``:
     there is no "unset" meaning for either (FR-3 defines them as bool / a 2-value
     enum with a default), so an explicit JSON ``null`` must be a 422, never silently

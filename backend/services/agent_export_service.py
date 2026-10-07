@@ -149,6 +149,13 @@ class AgentExportService(BaseExportService):
             vision_service_name=vision_service_name,
             vision_system_prompt=vision_system_prompt,
             text_system_prompt=text_system_prompt,
+            # A2A fields (FR-24, AC-39): exported as-is; import forces a2a_enabled=False.
+            a2a_enabled=agent.a2a_enabled,
+            a2a_card_visibility=agent.a2a_card_visibility,
+            a2a_name_override=agent.a2a_name_override,
+            a2a_description_override=agent.a2a_description_override,
+            a2a_skill_tags=list(agent.a2a_skill_tags or []),
+            a2a_examples=list(agent.a2a_examples or []),
         )
 
         # Create metadata
