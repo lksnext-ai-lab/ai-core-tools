@@ -127,6 +127,7 @@ export interface Agent {
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
+  a2a_enabled?: boolean;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
