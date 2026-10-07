@@ -127,7 +127,6 @@ class TestAgentNotFound:
         svc, _ = make_service(agent=agent, fresh_agent=None)
 
         with (
-            patch.object(svc, "_validate_agent_access", new=AsyncMock()),
             patch("services.agent_execution_service.get_app_config",
                   return_value={"TMP_BASE_FOLDER": "/tmp"}),
         ):
@@ -478,7 +477,6 @@ class TestFileSnapshotting:
         mock_sync = AsyncMock(return_value=[])
 
         with (
-            patch.object(svc, "_validate_agent_access", new=AsyncMock()),
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
@@ -524,7 +522,6 @@ class TestFileSnapshotting:
         mock_sync = AsyncMock(return_value=[mock_file_ref])
 
         with (
-            patch.object(svc, "_validate_agent_access", new=AsyncMock()),
             patch.object(svc, "_prepare_message_with_files", return_value=("hello", [])),
             patch.object(svc, "_execute_agent_async", new=AsyncMock(return_value="ok")),
             patch.object(svc, "_update_request_count"),
@@ -769,7 +766,6 @@ class TestResetAgentConversationSandboxOwnership:
         mock_sss = MagicMock()
 
         with (
-            patch.object(svc, "_validate_agent_access", new=AsyncMock()),
             patch(
                 "services.conversation_service.ConversationService.get_conversation",
                 return_value=None,
@@ -800,7 +796,6 @@ class TestResetAgentConversationSandboxOwnership:
         db = MagicMock()
 
         with (
-            patch.object(svc, "_validate_agent_access", new=AsyncMock()),
             patch(
                 "services.conversation_service.ConversationService.get_conversation",
                 return_value=owned_conversation,
