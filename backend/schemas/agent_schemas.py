@@ -1,9 +1,149 @@
+import unicodedata
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from models.agent import DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
 
 _VALID_RAG_SEARCH_TYPES = {"similarity", "mmr", "similarity_score_threshold"}
+
+_A2A_NAME_MAX_LEN = 255
+_A2A_DESCRIPTION_MAX_LEN = 1000
+_A2A_MAX_TAGS = 20
+_A2A_TAG_MAX_LEN = 50
+_A2A_MAX_EXAMPLES = 20
+_A2A_EXAMPLE_MAX_LEN = 500
+# Raw-list caps applied before dedupe/trim, so a caller can't force an expensive
+# per-item normalization pass with an oversized payload. The user-facing cap
+# (post-dedupe) stays 20; this is only a cheap upfront guard.
+_A2A_RAW_LIST_MAX_LEN = 100
+_VALID_A2A_CARD_VISIBILITY = {"public", "api_key"}
+
+# Unicode categories rejected by clean_a2a_text: Cc (control) and Cf (format,
+# e.g. zero-width/bidi-override characters). NUL (U+0000) is category Cc and is
+# always rejected. \n and \t are Cc too, so they're allowed explicitly where the
+# caller opts in via allow_newline/allow_tab.
+_REJECTED_UNICODE_CATEGORIES = {"Cc", "Cf"}
+
+
+def clean_a2a_text(value: str, *, allow_newline: bool = False, allow_tab: bool = False) -> str:
+    """Reject NUL and other Unicode control/format characters from free text.
+
+    Shared by every A2A text field (name/description overrides, each skill tag,
+    each example) so the hygiene rule is defined exactly once. Exported for
+    step_010's export/import validators to reuse rather than duplicate.
+
+    Args:
+        value: The already-stripped string to check.
+        allow_newline: When True, ``\\n`` is not rejected (used by descriptions
+            and examples, never by the single-line name override or tags).
+        allow_tab: When True, ``\\t`` is not rejected.
+
+    Returns:
+        The input string, unchanged, if it contains no disallowed character.
+
+    Raises:
+        ValueError: If the string contains NUL or another Cc/Cf character not
+            explicitly allowed.
+    """
+    for ch in value:
+        if ch == "\n" and allow_newline:
+            continue
+        if ch == "\t" and allow_tab:
+            continue
+        if unicodedata.category(ch) in _REJECTED_UNICODE_CATEGORIES:
+            raise ValueError("must not contain control or non-printable characters")
+    return value
+
+
+class A2AAgentFieldsMixin(BaseModel):
+    """Shared A2A (Agent2Agent protocol) per-agent fields + validators (step_009, FR-3).
+
+    Mixed into the agent create/update and read schemas so the field set, caps and
+    normalization are defined exactly once. Not exposed on the public API schemas
+    (``PublicAgentSchema``, ``PublicAgentDetailSchema``): A2A config is edited only
+    through the internal agent API.
+
+    ``a2a_enabled`` and ``a2a_card_visibility`` are intentionally **not** ``Optional``:
+    there is no "unset" meaning for either (FR-3 defines them as bool / a 2-value
+    enum with a default), so an explicit JSON ``null`` must be a 422, never silently
+    coerced to the default. Omitting the key entirely (vs. sending it) is handled by
+    the router via ``model_fields_set``, so a partial update that never mentions A2A
+    fields leaves the persisted values untouched instead of resetting them.
+    """
+    a2a_enabled: bool = False
+    a2a_card_visibility: Literal["public", "api_key"] = "public"
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: Optional[List[str]] = Field(default_factory=list, max_length=_A2A_RAW_LIST_MAX_LEN)
+    a2a_examples: Optional[List[str]] = Field(default_factory=list, max_length=_A2A_RAW_LIST_MAX_LEN)
+
+    @field_validator("a2a_name_override")
+    @classmethod
+    def _validate_a2a_name_override(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > _A2A_NAME_MAX_LEN:
+            raise ValueError(f"a2a_name_override must be at most {_A2A_NAME_MAX_LEN} characters")
+        return clean_a2a_text(v)
+
+    @field_validator("a2a_description_override")
+    @classmethod
+    def _validate_a2a_description_override(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > _A2A_DESCRIPTION_MAX_LEN:
+            raise ValueError(
+                f"a2a_description_override must be at most {_A2A_DESCRIPTION_MAX_LEN} characters"
+            )
+        return clean_a2a_text(v, allow_newline=True, allow_tab=True)
+
+    @field_validator("a2a_skill_tags")
+    @classmethod
+    def _validate_a2a_skill_tags(cls, v: Optional[List[str]]) -> List[str]:
+        if not v:
+            return []
+        seen: set = set()
+        result: List[str] = []
+        for raw in v:
+            tag = (raw or "").strip()
+            if not tag:
+                continue
+            key = tag.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(clean_a2a_text(tag))
+        if len(result) > _A2A_MAX_TAGS:
+            raise ValueError(f"a2a_skill_tags must have at most {_A2A_MAX_TAGS} items")
+        for tag in result:
+            if len(tag) > _A2A_TAG_MAX_LEN:
+                raise ValueError(f"each a2a_skill_tags item must be at most {_A2A_TAG_MAX_LEN} characters")
+        return result
+
+    @field_validator("a2a_examples")
+    @classmethod
+    def _validate_a2a_examples(cls, v: Optional[List[str]]) -> List[str]:
+        if not v:
+            return []
+        result = [
+            clean_a2a_text(ex.strip(), allow_newline=True, allow_tab=True)
+            for ex in v if ex and ex.strip()
+        ]
+        if len(result) > _A2A_MAX_EXAMPLES:
+            raise ValueError(f"a2a_examples must have at most {_A2A_MAX_EXAMPLES} items")
+        for example in result:
+            if len(example) > _A2A_EXAMPLE_MAX_LEN:
+                raise ValueError(
+                    f"each a2a_examples item must be at most {_A2A_EXAMPLE_MAX_LEN} characters"
+                )
+        return result
 
 
 class RagConfigFieldsMixin(BaseModel):
@@ -113,6 +253,7 @@ class AgentListItemSchema(BaseModel):
     ai_service: Optional[Dict[str, Any]] = None  # AI service details
     marketplace_visibility: Optional[str] = None
     is_frozen: bool = False
+    a2a_enabled: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -176,11 +317,20 @@ class AgentDetailSchema(BaseModel):
     rag_score_threshold: Optional[float] = None
     rag_max_retrieval_calls: Optional[int] = None
     rag_fixed_filters: Optional[List[dict]] = None
+    # A2A (Agent2Agent protocol) configuration (step_009, FR-3)
+    a2a_enabled: bool = False
+    a2a_card_visibility: Literal["public", "api_key"] = "public"
+    a2a_name_override: Optional[str] = None
+    a2a_description_override: Optional[str] = None
+    a2a_skill_tags: List[str] = []
+    a2a_examples: List[str] = []
+    a2a_card_url: Optional[str] = None
+    a2a_rpc_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateAgentSchema(RagConfigFieldsMixin):
+class CreateUpdateAgentSchema(RagConfigFieldsMixin, A2AAgentFieldsMixin):
     """Schema for creating or updating an agent"""
     name: str
     description: Optional[str] = ""

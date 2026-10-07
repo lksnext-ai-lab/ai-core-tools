@@ -415,6 +415,19 @@ async def create_or_update_agent(
         'media_chunk_overlap': agent_data.media_chunk_overlap,
     }
 
+    # A2A (Agent2Agent protocol) configuration (step_009, FR-3). Only include a key
+    # the caller actually sent: today's frontend doesn't send any A2A field yet, and
+    # since every field has a default, including them unconditionally would silently
+    # disable A2A / reset visibility to 'public' on every unrelated agent edit.
+    # ``model_fields_set`` distinguishes "omitted" from "explicitly sent" even when
+    # the sent value equals the field's default.
+    for a2a_field in (
+        'a2a_enabled', 'a2a_card_visibility', 'a2a_name_override',
+        'a2a_description_override', 'a2a_skill_tags', 'a2a_examples',
+    ):
+        if a2a_field in agent_data.model_fields_set:
+            agent_dict[a2a_field] = getattr(agent_data, a2a_field)
+
     # Avoid logging full prompt bodies / filter values at INFO; log identity + shape only.
     logger.info(
         "Creating/updating agent id=%s app=%s type=%s name=%r silo_id=%s",
