@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
+import { Bot } from 'lucide-react';
 
 import { CardDetailEntidad } from './CardDetailEntidad';
+import { Badge, ProviderBadge, StatusBadge } from './Badge';
 
 const meta = {
   title: 'UI/CardDetailEntidad',
@@ -28,6 +30,8 @@ const ownerBadge = (
 export const RecentAppCard: Story = {
   args: {
     badgeText: 'SD',
+    titleCab: '',
+    subTitleCab: undefined,
     title: 'Soporte Documental',
     description: 'Consulta y gestiona la documentación de tu organización.',
     metadata: '3 agentes · 8 miembros',
@@ -38,6 +42,8 @@ export const RecentAppCard: Story = {
 export const MarketCard: Story = {
   args: {
     badgeText: 'LI',
+    titleCab: '',
+    subTitleCab: '',
     title: 'LKS Next INFO',
     description: 'Agente especializado en información corporativa.',
     metadata: 'Productividad · 4.8 ★',
@@ -50,6 +56,8 @@ export const MarketCard: Story = {
 export const MyAppCard: Story = {
   args: {
     badgeText: 'RH',
+    titleCab: '',
+    subTitleCab: '',
     topRight: ownerBadge,
     title: 'RR.HH. Interno',
     description: 'Agentes y fuentes de datos para la gestión interna.',
@@ -60,21 +68,12 @@ export const MyAppCard: Story = {
 
 export const WithImage: Story = {
   args: {
-    imageSrc: 'https://placehold.co/68x68/202020/ffffff?text=AI',
-    imageAlt: 'AI',
-    title: 'Card con imagen',
-    description: 'La zona superior izquierda puede mostrar una imagen.',
-    metadata: 'Imagen · Variante visual',
-    onClick: fn(),
-  },
-};
-
-export const WithTextBadge: Story = {
-  args: {
-    badgeText: 'TX',
-    title: 'Card con texto',
-    description: 'La zona superior izquierda también puede mostrar texto.',
-    metadata: 'Texto · Variante visual',
+    imageFallback: <Bot className="h-5 w-5 text-fg dark:text-fg-dark" aria-hidden="true" />,
+    titleCab: 'Asistente IA',
+    subTitleCab: 'Icono de agente',
+    title: '',
+    description: 'El icono aparece cuando no se proporciona una imagen.',
+    metadata: 'Icono · Variante visual',
     onClick: fn(),
   },
 };
@@ -82,12 +81,14 @@ export const WithTextBadge: Story = {
 export const WithBadges: Story = {
   args: {
     badgeText: 'BG',
+    titleCab: '',
+    subTitleCab: '',
     title: 'Card con etiquetas',
     description: 'Las etiquetas se muestran debajo de la descripción.',
     badges: [
-      { text: 'Activo', color: '#22c55e' },
-      { text: 'Premium', color: '#3b82f6' },
-      { text: 'Nuevo', color: '#f97316' },
+      <Badge key="active" label="Activo" variant="success" />,
+      <ProviderBadge key="provider" provider="OpenAI" />,
+      <StatusBadge key="status" status="pending" />,
     ],
     metadata: '3 etiquetas · Variante visual',
     onClick: fn(),
@@ -97,6 +98,8 @@ export const WithBadges: Story = {
 export const WithTable: Story = {
   args: {
     badgeText: 'TB',
+    titleCab: '',
+    subTitleCab: '',
     title: 'Card con tabla',
     description: 'Las métricas se muestran en una tabla compacta.',
     table: [

@@ -2,14 +2,17 @@ import type { ReactNode } from 'react';
 
 export type ButtonAppVariant = 'primary' | 'secondary' | 'table' | 'muted' | 'danger';
 export type ButtonAppSize = 'compact' | 'small' | 'control' | 'medium' | 'spacious' | 'large';
+export type ButtonAppType = 'button' | 'submit' | 'reset';
 
 export interface ButtonAppProps {
   readonly label: string;
+  readonly type?: ButtonAppType;
   readonly onClick?: () => void;
   readonly variant?: ButtonAppVariant;
   readonly size?: ButtonAppSize;
   readonly icon?: ReactNode;
   readonly disabled?: boolean;
+  readonly loading?: boolean;
   readonly ariaPressed?: boolean;
   readonly className?: string;
 }
@@ -34,11 +37,13 @@ const variantClasses: Record<ButtonAppVariant, string> = {
 /** Button variants based on the actions used throughout the Mattin app template. */
 export function ButtonApp({
   label,
+  type = 'button',
   onClick,
   variant = 'primary',
   size = 'medium',
   icon,
   disabled = false,
+  loading = false,
   ariaPressed,
   className = '',
 }: ButtonAppProps) {
@@ -46,13 +51,19 @@ export function ButtonApp({
 
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || loading}
       aria-pressed={ariaPressed}
+      aria-busy={loading}
       className={`${baseClasses} ${sizeClasses[size]} rounded-md ${variantClasses[variant]} ${className}`}
     >
-      {icon}
+      {loading ? (
+        <span
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"
+          aria-hidden="true"
+        />
+      ) : icon}
       {label}
     </button>
   );

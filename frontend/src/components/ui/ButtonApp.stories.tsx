@@ -39,6 +39,15 @@ export const Primary: Story = {
   },
 };
 
+export const Saving: Story = {
+  args: {
+    label: 'Saving...',
+    variant: 'primary',
+    size: 'control',
+    loading: true,
+  },
+};
+
 export const Table: Story = {
   args: {
     label: 'Abrir',

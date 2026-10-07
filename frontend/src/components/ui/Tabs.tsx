@@ -95,7 +95,7 @@ export function Tabs({
       <div
         ref={tabListRef}
         role="tablist"
-        className="flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide "
+        className="flex flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Tab navigation"
       >
         {tabs.map((tab, index) => {
@@ -114,17 +114,11 @@ export function Tabs({
               tabIndex={isActive ? 0 : -1}
               onClick={() => onChange(tab.id)}
               onKeyDown={(e) => handleKeyDown(e, index)}
-              className={`
-                px-4 py-3 text-sm font-medium whitespace-nowrap
-                transition-colors duration-200
-                -mb-px border-b-2
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus dark:focus-visible:ring-focus-dark
-                ${
-                  isActive
-                    ? 'border-accent text-fg dark:border-accent-dark dark:text-fg-dark'
-                    : 'border-transparent text-fg-tertiary hover:text-fg dark:text-fg-tertiary-dark dark:hover:text-fg-dark'
-                }
-              `}
+              className={`-mb-px inline shrink-0 cursor-pointer whitespace-nowrap border-b-2 px-4 py-2 font-display text-[14.5px] font-medium text-fg-primary transition-colors ${
+              isActive
+                ? 'border-fg text-fg dark:text-fg-dark dark:border-fg-dark'
+                : 'border-transparent text-fg-tertiary hover:text-fg-primary dark:text-fg-tertiary-dark dark:hover:text-fg-primary-dark'
+            }`}
             >
               {tab.icon && <span className="mr-2">{tab.icon}</span>}
               {tab.label}

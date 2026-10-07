@@ -40,7 +40,7 @@ export function FormField({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-fg dark:text-fg-dark mb-2"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
       >
         {label}
         {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
@@ -57,10 +57,10 @@ export function FormField({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:ring-1 transition-colors ${
+        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark  ${
           error
             ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
-            : 'border-line-strong focus:ring-ink focus:border-ink dark:border-line-strong-dark dark:focus:ring-ink-dark dark:focus:border-ink-dark'
+            : 'focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${inputClassName}`}
@@ -117,7 +117,7 @@ export function FormTextArea({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-fg dark:text-fg-dark mb-2"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
       >
         {label}
         {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
@@ -192,7 +192,7 @@ export function FormSelect({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-fg dark:text-fg-dark mb-2"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
       >
         {label}
         {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
@@ -207,10 +207,10 @@ export function FormSelect({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:ring-1 transition-colors ${
+        className={`w-full px-3 py-2 marketplace-filter-select border border-gray-300 dark:border-btCard-border-dark dark:bg-surface-dark focus:outline-none focus:border-accent rounded-lg text-sm ${
           error
             ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
-            : 'border-line-strong focus:ring-ink focus:border-ink dark:border-line-strong-dark dark:focus:ring-ink-dark dark:focus:border-ink-dark'
+            : 'border-gray-300  focus:border-accent dark:border-btCard-border-dark dark:focus:border-accent '
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${selectClassName}`}
@@ -221,6 +221,9 @@ export function FormSelect({
           </option>
         ))}
       </select>
+
+
+      
 
       {helpText && !error && (
         <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>

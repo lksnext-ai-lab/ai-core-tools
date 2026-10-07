@@ -8,6 +8,7 @@ import Alert from '../components/ui/Alert';
 import AppImportStepper from '../components/import/AppImportStepper';
 import Title from '../components/ui/Title';
 import CardDetailEntidad from '../components/ui/CardDetailEntidad';
+import { Badge } from '../components/ui/Badge';
 import ButtonApp from '../components/ui/ButtonApp';
 
 interface App {
@@ -145,14 +146,15 @@ function AppsPage() {
           return (
             <CardDetailEntidad
               key={app.app_id}
-              title={app.name}
+              titleCab={app.name}
               description={((app) => app.created_at ? new Date(app.created_at).toLocaleDateString() : '-')(app)}
-              badges={[{
-                text: app.langsmith_configured ? 'Configured' : 'Not configured',
-                className: app.langsmith_configured
-                  ? 'bg-[#eaf5ef] text-[#1f7a4d]'
-                  : 'bg-[#fbf1ef] text-[#b23b2e]'
-              }]}
+              badges={[
+                <Badge
+                  key="langsmith-configuration"
+                  label={app.langsmith_configured ? 'Configured' : 'Not configured'}
+                  variant={app.langsmith_configured ? 'success' : 'error'}
+                />,
+              ]}
               table={[
                 { label: 'AGENTS', value: app.agent_count },
                 { label: 'REPOS', value: app.repository_count },

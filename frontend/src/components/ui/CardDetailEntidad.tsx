@@ -1,13 +1,11 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 
 export interface CardDetailEntidadProps {
-  readonly title: string;
+  readonly title?: string;
   readonly description?: string;
-  readonly badges?: ReadonlyArray<{
-    readonly text: string;
-    readonly color?: string;
-    readonly className?: string;
-  }>;
+  readonly titleCab: string;
+  readonly subTitleCab?: string;
+  readonly badges?: ReadonlyArray<ReactNode>;
   readonly table?: ReadonlyArray<{
     readonly label: string;
     readonly value: ReactNode;
@@ -16,11 +14,13 @@ export interface CardDetailEntidadProps {
   readonly topRight?: ReactNode;
   readonly imageSrc?: string;
   readonly imageAlt?: string;
+  readonly imageFallback?: ReactNode;
   readonly badgeText?: string;
   readonly onClick?: () => void;
   readonly actionLabel?: string;
   readonly onActionClick?: () => void;
   readonly actionDisabled?: boolean;
+  readonly actionAriaLabel?: string;
   readonly className?: string;
 }
 
@@ -41,16 +41,20 @@ export function CardDetailEntidad({
   title,
   description,
   badges = [],
+  titleCab,
+  subTitleCab,
   table,
   metadata,  /*texto por debajo de la linea*/
   topRight, /*elemento en la esquina superior derecha, Acepta cualquier ReactNode, por ejemplo una etiqueta de ro*/
   imageSrc, /*imagen dentro del recuadro*/
   imageAlt = '',
+  imageFallback, /* fallback image if imageSrc is not provided */
   badgeText, /*texto dentro del recuadro*/
   onClick,
   actionLabel,
   onActionClick,
   actionDisabled = false,
+  actionAriaLabel,
   className = '',
 }: CardDetailEntidadProps) {
   const isClickable = Boolean(onClick);
@@ -66,12 +70,18 @@ export function CardDetailEntidad({
       onKeyDown={(event) => handleCardKeyDown(event, onClick)}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-md border-[0.8px] border-[#FF682C] text-sm font-medium ">
-          {imageSrc ? (
-            <img src={imageSrc} alt={imageAlt} className="h-full w-full object-cover" />
-          ) : (
-            badgeText
-          )}
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-md border-[0.8px] border-[#FF682C] text-sm font-medium ">
+            {imageSrc ? (
+              <img src={imageSrc} alt={imageAlt} className="h-full w-full object-cover" />
+            ) : (
+              imageFallback ?? badgeText
+            )}
+          </div>
+          <div className="min-w-0 text-[18px] leading-tight">
+            {titleCab && <span className="block">{titleCab}</span>}
+            {subTitleCab && <span className="block text-[12.5px] text-fg-secondary dark:text-fg-secondary-dark">{subTitleCab}</span>}
+          </div>
         </div>
         {topRight && <div className="min-w-0">{topRight}</div>}
       </div>
@@ -80,24 +90,14 @@ export function CardDetailEntidad({
         {title}
       </h3>
       {description && (
-        <p className="mb-4 text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
+        <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
           {description}
         </p>
       )}
 
       {badges.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-2">
-          {badges.map((badge) => (
-            <span
-              key={badge.text}
-              className={`rounded-full px-2.5 py-1 text-xs font-medium ${badge.className ?? ''}`}
-              style={{
-                ...(badge.color ? { backgroundColor: badge.color, color: '#ffffff' } : {}),
-              }}
-            >
-              {badge.text}
-            </span>
-          ))}
+          {badges}
         </div>
       )}
 
@@ -140,6 +140,7 @@ export function CardDetailEntidad({
           {actionLabel && (
             <button
               type="button"
+              aria-label={actionAriaLabel}
               onClick={(event) => handleActionClick(event, onActionClick)}
               onKeyDown={(event) => event.stopPropagation()}
               disabled={actionDisabled}

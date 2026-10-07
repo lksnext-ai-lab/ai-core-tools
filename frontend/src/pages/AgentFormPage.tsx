@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
+import { FormField, FormSelect } from '../components/ui/FormField';
 import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
 import type { RagConfigValue, RagFixedFilter, RagSearchType } from '../components/forms/RagConfigSection';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
@@ -19,6 +20,7 @@ import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
 import { randomId } from '../utils/randomId';
 import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
 
 // Define the Agent types
 interface Agent {
@@ -184,7 +186,16 @@ function getPageDescription(type: string, isNewAgent: boolean, agentName?: strin
 function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: number }) {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
-  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-gray-900">Scheduled tasks using this agent</h3><p className="text-sm text-gray-500">Scheduling is managed independently from the agent.</p></div><button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button></div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-gray-500">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
+  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-fg">Scheduled tasks using this agent</h3><p className="text-sm text-fg-secondary">Scheduling is managed independently from the agent.</p></div>
+    {/*<button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button>*/}
+    <ButtonApp
+      type="button"
+      onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)}
+      variant="primary"
+      label="Create scheduled task"
+    ></ButtonApp>
+    
+    </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-gray-500">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
 }
 
 function AgentFormPage() {
@@ -662,6 +673,14 @@ function AgentFormPage() {
 
   const pageTitle = getPageTitle(formData.type, isNewAgent);
   const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
+  let submitButtonLabel: string;
+  if (saving) {
+    submitButtonLabel = 'Saving...';
+  } else if (isNewAgent) {
+    submitButtonLabel = 'Create Agent';
+  } else {
+    submitButtonLabel = 'Save Changes';
+  }
 
   const tabs: TabItem[] = [
     { id: 'basic', label: 'Basic' },
@@ -724,60 +743,52 @@ function AgentFormPage() {
 
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-              <div className="flex items-center mb-6">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                  <FileText className="w-5 h-5 text-blue-600" />
+            <section className="">
+              {/*<div className="mb-7 flex items-center gap-3 border-b border-line pb-5 dark:border-line-dark">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-hover dark:bg-surface-hover-dark">
+                  <FileText className="h-5 w-5 text-ink dark:text-ink-dark" aria-hidden="true" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    required
-                    placeholder="Name..."
-                  />
+                  <h3 className="font-display text-lg font-medium text-ink dark:text-ink-dark">Basic Information</h3>
+                  <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">Agent identity and type</p>
                 </div>
+              </div>*/}
 
-                <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent Type
-                  </label>
-                  <select
-                    id="type"
-                    value={formData.type}
-                    onChange={(e) => handleInputChange('type', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  >
-                    <option value="agent">AI Agent</option>
-                    <option value="ocr_agent">OCR Agent</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 gap-y-5">
+                <div className="w-full">
+                <FormField
+                  label="Name"
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  required
+                  placeholder="Name..."
+                  className="mb-4"
+                />
 
-                <div className="md:col-span-2">
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <input
-                    type="text"
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    placeholder="Description..."
-                  />
-                </div>
+                <FormSelect
+                  label="Agent Type"
+                  id="type"
+                  value={formData.type}
+                  onChange={(e) => handleInputChange('type', e.target.value)}
+                  options={[
+                    { value: 'agent', label: 'AI Agent' },
+                    { value: 'ocr_agent', label: 'OCR Agent' },
+                  ]}
+                  className="mb-4"
+                />
+
+                <FormField
+                  label="Description"
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  placeholder="Description..."
+                  className="md:col-span-2"
+                />
               </div>
-            </div>
+              </div>
+            </section>
           )}
 
           {/* TAB 2: PROMPTS */}
@@ -1081,6 +1092,8 @@ function AgentFormPage() {
                               >
                                 Cancel
                               </button>
+
+                              
                             </div>
                           </div>
                         </div>
@@ -1990,16 +2003,33 @@ function AgentFormPage() {
           )}
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
-            <button
+          <div className="flex justify-end space-x-4 mt-8 pt-6 ">
+            {/*<button
               type="button"
               onClick={() => navigate(`/apps/${appId}/agents`)}
               className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-medium transition-all duration-200"
               disabled={saving}
             >
               Cancel
-            </button>
-            <button
+            </button>*/}
+
+            <ButtonApp
+              label="Cancel"
+              variant="secondary"
+              size="control"
+              onClick={() => navigate(`/apps/${appId}/agents`)}
+              disabled={saving}
+            />
+            <ButtonApp
+              label={submitButtonLabel}
+              variant="primary"
+              size="control"
+              type="submit"
+              loading={saving}
+              disabled={saving}
+            />
+
+            {/*<button
               type="submit"
               className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
               disabled={saving}
@@ -2015,7 +2045,7 @@ function AgentFormPage() {
                 }
                 return isNewAgent ? 'Create Agent' : 'Save Changes';
               })()}
-            </button>
+            </button>*/}
           </div>
         </form>
       </div>
