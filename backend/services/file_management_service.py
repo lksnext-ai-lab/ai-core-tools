@@ -29,6 +29,33 @@ STORAGE_STRATEGY_EPHEMERAL = "ephemeral"
 STORAGE_STRATEGY_PERSISTENT = "persistent"
 
 
+class UnsupportedFileTypeError(Exception):
+    """Raised by ``_process_file_content(strict=True)`` for a file type that would
+    otherwise fall back to a placeholder ("not implemented"/"type: unknown") sentence
+    instead of real extracted content. Callers with ``strict=False`` (the default,
+    used by every existing caller) never see this: they keep getting the placeholder.
+
+    Carries ``temp_path`` (the already-spooled upload on disk, if one was
+    created before the rejection) so ``upload_file``'s existing ``finally``
+    cleanup can remove it; otherwise that spool file would leak."""
+
+    def __init__(self, message: str, *, temp_path: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.temp_path = temp_path
+
+
+class FileProcessingError(Exception):
+    """Raised by ``_process_file_content(strict=True)`` when extraction for an
+    otherwise-supported type fails. ``strict=False`` callers keep getting the
+    "Error processing file: ..." placeholder string instead.
+
+    Carries ``temp_path`` for the same reason as :class:`UnsupportedFileTypeError`."""
+
+    def __init__(self, message: str, *, temp_path: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.temp_path = temp_path
+
+
 class FileReference:
     """Represents a file reference for agent consumption with visual feedback data"""
     
@@ -186,6 +213,7 @@ class FileManagementService:
         user_context: Dict = None,
         conversation_id: Optional[int] = None,
         has_memory: bool = False,
+        strict: bool = False,
     ) -> FileReference:
         """
         Upload file for agent consumption.
@@ -213,6 +241,16 @@ class FileManagementService:
                 Callers MUST pass this so the storage strategy is correct;
                 defaulting to ``False`` keeps backward compatibility with
                 callers that have not been migrated yet.
+            strict: When ``True``, never substitute placeholder content.
+                An unsupported/unrecognized file type (anything that would
+                otherwise fall back to a "not implemented"/"type: unknown"
+                sentence) raises ``HTTPException(415)``; a genuine extraction
+                failure (e.g. a corrupt PDF, instead of the "Error processing
+                file: ..." placeholder, which would otherwise leak the raw
+                exception text to the LLM) raises ``HTTPException(422)``.
+                Defaults to ``False``, so every existing caller (public/
+                internal chat) keeps today's placeholder behaviour unchanged;
+                only the A2A input pipeline (FR-18: never a placeholder) opts in.
 
         Returns:
             FileReference object. The instance is decorated with two
@@ -230,7 +268,7 @@ class FileManagementService:
             file_type = self._get_file_type(file.filename)
 
             # Process file based on type (also returns file size)
-            content, temp_path, file_size = await self._process_file_content(file, file_type)
+            content, temp_path, file_size = await self._process_file_content(file, file_type, strict=strict)
 
             storage_strategy = self._resolve_storage_strategy(has_memory, conversation_id)
 
@@ -279,6 +317,17 @@ class FileManagementService:
 
         except HTTPException:
             raise
+        except UnsupportedFileTypeError as e:
+            # Recover the spooled temp file (if any) so the `finally` below
+            # removes it — _process_file_content raised before returning it,
+            # so this function's own `temp_path` local was never assigned.
+            temp_path = e.temp_path
+            logger.info("Rejected unsupported file type for %s: %s", file.filename, e)
+            raise HTTPException(status_code=415, detail="Unsupported file type") from e
+        except FileProcessingError as e:
+            temp_path = e.temp_path
+            logger.warning("File processing failed for %s: %s", file.filename, e)
+            raise HTTPException(status_code=422, detail="File processing failed") from e
         except Exception as e:
             logger.error(f"Error uploading file: {str(e)}")
             raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
@@ -523,37 +572,46 @@ class FileManagementService:
         """Get file type from file path"""
         return self._get_file_type(os.path.basename(file_path))
     
-    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str, int]:
+    async def _process_file_content(
+        self, file: UploadFile, file_type: str, *, strict: bool = False
+    ) -> tuple[str, str, int]:
         """
         Process file content based on file type
-        
+
         Args:
             file: Uploaded file
             file_type: Type of file
-            
+            strict: When True, never return a placeholder/"not implemented"
+                content string: raise UnsupportedFileTypeError for an
+                unsupported type, or FileProcessingError if extraction fails
+                for an otherwise-supported type. See upload_file's docstring.
+
         Returns:
             Tuple of (processed_content, temp_file_path, file_size_bytes)
         """
         try:
             # Save file temporarily and get size
             temp_path, file_size = await self._save_uploaded_file_with_size(file)
-            
+
             try:
                 if file_type == "pdf":
                     # Use existing PDF tools
                     content = extract_text_from_pdf(temp_path)
                     return content, temp_path, file_size
-                
+
                 elif file_type == "text":
                     # Read text files
                     content = await read_text(temp_path)
                     return content, temp_path, file_size
-                
+
                 elif file_type == "image":
-                    # For images, return basic info (in production, use OCR)
+                    # For images, return basic info (in production, use OCR).
+                    # Not a lie under strict=True: images are genuinely usable —
+                    # AgentExecutionService sends them to a vision model via
+                    # file_path/base64, never via this content string.
                     content = f"Image file: {file.filename} (OCR processing not implemented)"
                     return content, temp_path, file_size
-                
+
                 elif file_type == "document" and file.filename.lower().endswith(".docx"):
                     import docx2txt
                     content = docx2txt.process(temp_path) or ""
@@ -561,20 +619,38 @@ class FileManagementService:
 
                 elif file_type == "document":
                     # .doc / spreadsheets / presentations: no text extraction yet
+                    if strict:
+                        raise UnsupportedFileTypeError(
+                            f"Document type not supported in strict mode: {file.filename}",
+                            temp_path=temp_path,
+                        )
                     content = f"Document file: {file.filename} (Document processing not implemented)"
                     return content, temp_path, file_size
-                
+
                 else:
-                    # For unknown types, return basic info
+                    # Unrecognized extension.
+                    if strict:
+                        raise UnsupportedFileTypeError(
+                            f"Unrecognized file type: {file.filename}", temp_path=temp_path
+                        )
                     content = f"File: {file.filename} (type: {file_type})"
                     return content, temp_path, file_size
-                    
+
+            except UnsupportedFileTypeError:
+                raise
             except Exception as e:
                 logger.error(f"Error processing file content: {str(e)}")
+                if strict:
+                    raise FileProcessingError(str(e), temp_path=temp_path) from e
                 return f"Error processing file: {str(e)}", temp_path, file_size
-                    
+
+        except (UnsupportedFileTypeError, FileProcessingError):
+            raise
         except Exception as e:
             logger.error(f"Error processing file content: {str(e)}")
+            if strict:
+                # _save_uploaded_file_with_size itself failed: no temp_path exists yet.
+                raise FileProcessingError(str(e), temp_path=None) from e
             return f"Error processing file: {str(e)}", None, 0
     
     async def _save_uploaded_file_with_size(self, file: UploadFile) -> tuple[str, int]:

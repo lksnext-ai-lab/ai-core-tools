@@ -158,6 +158,8 @@ class A2AConfig:
     purge_grace_seconds: int
     status_updates: bool
     sdk_debug: bool
+    max_parts: int
+    max_file_parts: int
 
 
 @lru_cache(maxsize=1)
@@ -201,6 +203,10 @@ def get_a2a_config() -> A2AConfig:
         purge_grace_seconds=_get_int("A2A_PURGE_GRACE_SECONDS", 5),
         status_updates=_get_bool("A2A_STATUS_UPDATES", False),
         sdk_debug=_get_bool("A2A_SDK_DEBUG", False),
+        # Input-processing caps (FR-18/NFR-5): bound how much work a single
+        # inbound Message can make the server do before any fetch/upload runs.
+        max_parts=_get_int("A2A_MAX_PARTS", 64, min_value=1),
+        max_file_parts=_get_int("A2A_MAX_FILE_PARTS", 10, min_value=1),
     )
 
 
