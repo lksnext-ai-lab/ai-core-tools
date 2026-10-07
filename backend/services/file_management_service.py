@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shutil
@@ -205,7 +206,18 @@ class FileManagementService:
         os.makedirs(os.path.join(self._tmp_base_folder, "images"), exist_ok=True)
         
         # Files will be loaded on-demand per session
-    
+
+    @property
+    def tmp_base_folder(self) -> str:
+        """Public read-only accessor for ``TMP_BASE_FOLDER``.
+
+        Lets external callers (e.g. the A2A output mapper's file resolver)
+        join a ``FileReference.file_path`` into an absolute path through
+        ``utils.path_safety.resolve_within`` without reaching into the
+        ``_tmp_base_folder`` private attribute.
+        """
+        return self._tmp_base_folder
+
     async def upload_file(
         self,
         file: UploadFile,
@@ -387,7 +399,66 @@ class FileManagementService:
             FileReference or None if not found
         """
         return self._files.get(file_id)
-    
+
+    async def get_session_file(
+        self,
+        agent_id: int,
+        user_context: Optional[Dict],
+        conversation_id: Optional[str],
+        file_id: str,
+    ) -> Optional[FileReference]:
+        """Look up ``file_id`` strictly within one ``(agent, user, conversation)`` session.
+
+        Unlike :meth:`get_file_reference` (which indexes the in-memory,
+        per-instance ``self._files`` mapping directly by ``file_id`` and
+        therefore only ever succeeds inside the exact instance that
+        registered the file), this recomputes the session key and
+        rehydrates it from the on-disk sidecars first -- the same pattern
+        :meth:`list_attached_files` already relies on to see files a
+        *different* ``FileManagementService`` instance registered earlier
+        in the same turn (e.g. the one ``_finalize_turn`` builds and
+        discards internally for ``sync_output_files``).
+
+        The lookup is strictly scoped to the session key derived from
+        ``agent_id``/``user_context``/``conversation_id``: a file
+        registered under a different agent, user, app or conversation is
+        invisible here even if its ``file_id`` is known. The resolved
+        ``file_path`` is also verified to still resolve inside
+        ``TMP_BASE_FOLDER`` (catching both a tampered/traversal sidecar and
+        a symlink that points outside it) before the reference is
+        returned; a reference whose path fails that check is treated as
+        not found rather than raised.
+
+        Args:
+            agent_id: ID of the agent the file was produced for.
+            user_context: Caller context used to derive the session key.
+            conversation_id: Conversation scope, or ``None`` for a
+                conversation-less (global agent) session.
+            file_id: The file's id.
+
+        Returns:
+            The :class:`FileReference`, or ``None`` if it does not exist in
+            this exact session or its path fails the containment check.
+        """
+        session_key = self._get_session_key(agent_id, user_context, conversation_id)
+        await asyncio.to_thread(self._load_session_files, session_key)
+
+        ref = self._files.get(session_key, {}).get(file_id)
+        if ref is None or not ref.file_path:
+            return None
+
+        try:
+            resolve_within(self._tmp_base_folder, ref.file_path)
+        except UnsafePathError:
+            logger.warning(
+                "get_session_file: file_path for file_id=%s escapes TMP_BASE_FOLDER "
+                "(tampered sidecar or symlink); treating as not found",
+                file_id,
+            )
+            return None
+
+        return ref
+
     async def list_attached_files(
         self, 
         agent_id: int, 
