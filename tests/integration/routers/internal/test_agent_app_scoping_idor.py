@@ -205,3 +205,76 @@ class TestUpdateAgentCrossAppScoping:
         body = response.json()
         assert body["name"] == "Brand New Agent"
         assert body["agent_id"] != 0
+
+
+@pytest.fixture
+def other_ocr_agent(db, other_app):
+    """An OCRAgent (type='ocr_agent') belonging to App B."""
+    configure_factories(db)
+    from models.ocr_agent import OCRAgent
+
+    ai_service = AIServiceFactory(app=other_app)
+    agent = OCRAgent(
+        name="Other App's OCR Agent",
+        description="",
+        app_id=other_app.app_id,
+        service_id=ai_service.service_id,
+        system_prompt="TOP SECRET OCR system prompt belonging to App B",
+        has_memory=False,
+        temperature=0.7,
+    )
+    db.add(agent)
+    db.flush()
+    return agent
+
+
+class TestOcrAgentCrossAppScoping:
+    """The same GET/POST app-scoping fix must also cover OCR-type agents (STI)."""
+
+    def test_get_other_apps_ocr_agent_returns_404(
+        self, client, fake_app, other_ocr_agent, owner_headers, db
+    ):
+        db.flush()
+        response = client.get(
+            f"/internal/apps/{fake_app.app_id}/agents/{other_ocr_agent.agent_id}",
+            headers=owner_headers,
+        )
+        assert response.status_code == 404
+
+    def test_update_other_apps_ocr_agent_returns_404(
+        self, client, fake_app, other_ocr_agent, fake_user, owner_headers, db
+    ):
+        headers = _editor_headers(fake_user, owner_headers)
+        db.flush()
+        response = client.post(
+            f"/internal/apps/{fake_app.app_id}/agents/{other_ocr_agent.agent_id}",
+            json={
+                "name": "Hijacked OCR Agent",
+                "description": "",
+                "system_prompt": "",
+                "prompt_template": "",
+                "type": "ocr_agent",
+                "is_tool": False,
+                "has_memory": False,
+                "service_id": None,
+                "silo_id": None,
+                "output_parser_id": None,
+                "temperature": 0.7,
+                "tool_ids": [],
+                "mcp_config_ids": [],
+                "skill_ids": [],
+                "vision_service_id": None,
+                "vision_system_prompt": "",
+                "text_system_prompt": "",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 404
+
+    def test_get_unknown_agent_id_returns_404(self, client, fake_app, owner_headers, db):
+        db.flush()
+        response = client.get(
+            f"/internal/apps/{fake_app.app_id}/agents/9999999",
+            headers=owner_headers,
+        )
+        assert response.status_code == 404
