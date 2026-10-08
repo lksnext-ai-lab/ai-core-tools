@@ -9,14 +9,21 @@ Covers:
   - an EDITOR/OWNER update persists the A2A fields and GET returns them with URLs;
   - VIEWER on the same app gets 403 on update (AC-40);
   - values beyond the caps are rejected with 422 (AC-40);
-  - the list endpoint surfaces a2a_enabled.
+  - the list endpoint surfaces a2a_enabled;
+  - another app's agent cannot be moved into the caller's app and exposed over A2A.
 """
 
 import pytest
 from datetime import datetime
 
 from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
-from tests.factories import configure_factories, UserFactory
+from tests.factories import (
+    AgentFactory,
+    AIServiceFactory,
+    AppFactory,
+    configure_factories,
+    UserFactory,
+)
 
 
 def agent_payload(**overrides) -> dict:
@@ -267,3 +274,37 @@ class TestListAgentsA2AFlag:
         agent = next((a for a in agents if a["agent_id"] == fake_agent.agent_id), None)
         assert agent is not None
         assert agent["a2a_enabled"] is True
+
+
+class TestCrossAppA2AEnable:
+    """An agent of another app can't be pulled into the caller's app with A2A switched on."""
+
+    def test_enabling_a2a_on_another_apps_agent_returns_404_and_leaves_it_unchanged(
+        self, client, fake_app, fake_user, owner_headers, db
+    ):
+        configure_factories(db)
+        # Same owner on both apps, so app-level RBAC on fake_app passes and only the
+        # agent-ownership check can reject the request.
+        other_app = AppFactory(owner_id=fake_user.user_id)
+        other_agent = AgentFactory(app=other_app, ai_service=AIServiceFactory(app=other_app))
+        fake_user.platform_role = 'editor'
+        db.flush()
+        other_agent_id = other_agent.agent_id
+
+        response = client.post(
+            f"/internal/apps/{fake_app.app_id}/agents/{other_agent_id}",
+            json=agent_payload(
+                service_id=other_agent.service_id,
+                a2a_enabled=True,
+                a2a_card_visibility="public",
+            ),
+            headers=owner_headers,
+        )
+        assert response.status_code == 404
+
+        from models.agent import Agent as AgentModel
+
+        db.expire_all()
+        persisted = db.query(AgentModel).filter(AgentModel.agent_id == other_agent_id).one()
+        assert persisted.app_id == other_app.app_id
+        assert persisted.a2a_enabled is False
