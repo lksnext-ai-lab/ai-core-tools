@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, ChevronRight, ChevronLeft, ChevronDown, Terminal, Trash2, Wrench } from 'lucide-react';
+import { Activity, Ban, ChevronRight, ChevronLeft, ChevronDown, Clock, Pencil, Terminal, Trash2, Wrench } from 'lucide-react';
 import type { ToolExecutionRecord } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
 
@@ -92,7 +92,7 @@ function ToolEntryRow({
   record: ToolExecutionRecord;
   hideSubagentName?: boolean;
 }>) {
-  const [expanded, setExpanded] = useState(record.status === 'running');
+  const [expanded, setExpanded] = useState(record.status === 'running' || record.status === 'awaiting_approval');
   const previousStatusRef = useRef(record.status);
   const stdoutScrollRef = useRef<HTMLPreElement>(null);
   const isCode = isCodeTool(record.toolName);
@@ -114,9 +114,9 @@ function ToolEntryRow({
 
   useEffect(() => {
     const previousStatus = previousStatusRef.current;
-    if (record.status === 'running') {
+    if (record.status === 'running' || record.status === 'awaiting_approval') {
       setExpanded(true);
-    } else if (previousStatus === 'running') {
+    } else if (previousStatus === 'running' || previousStatus === 'awaiting_approval') {
       setExpanded(false);
     }
     previousStatusRef.current = record.status;
@@ -154,12 +154,31 @@ function ToolEntryRow({
         <span className="flex-1 text-[11px] font-medium text-neutral-700 dark:text-neutral-300 truncate">
           {displayName}
         </span>
-        {record.status === 'running' ? (
+        {record.edited && (
+          <span className="flex items-center gap-0.5 text-[10px] text-violet-600 dark:text-violet-400 shrink-0">
+            <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
+            edited
+          </span>
+        )}
+        {record.status === 'running' && (
           <span className="flex items-center gap-1 text-[10px] text-blue-500 shrink-0">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
             running
           </span>
-        ) : (
+        )}
+        {record.status === 'awaiting_approval' && (
+          <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
+            <Clock className="h-3 w-3" aria-hidden="true" />
+            awaiting approval
+          </span>
+        )}
+        {record.status === 'rejected' && (
+          <span className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 shrink-0">
+            <Ban className="h-3 w-3" aria-hidden="true" />
+            rejected
+          </span>
+        )}
+        {record.status === 'complete' && (
           <span className="text-[10px] text-neutral-400 shrink-0 tabular-nums">
             {formatDuration((record.endedAt ?? Date.now()) - record.startedAt, {
               showMillisecondsBelowSecond: true,
@@ -205,13 +224,19 @@ function ToolEntryRow({
 
           {/* Output / result */}
           {outputDisplay && (
-            <CodeBlock label="output" text={outputDisplay} />
+            <CodeBlock label={record.status === 'rejected' ? 'reason' : 'output'} text={outputDisplay} />
           )}
 
           {/* Running: show placeholder when no output yet */}
           {record.status === 'running' && !hasStdout && !outputDisplay && (
             <div className="mx-2 mb-2 text-[10px] text-neutral-400 italic px-0.5">
               waiting for result…
+            </div>
+          )}
+
+          {record.status === 'awaiting_approval' && (
+            <div className="mx-2 mb-2 text-[10px] text-neutral-400 italic px-0.5">
+              waiting for your approval…
             </div>
           )}
         </div>

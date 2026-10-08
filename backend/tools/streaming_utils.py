@@ -243,13 +243,42 @@ def _map_messages_chunk(chunk: Any) -> list[dict] | None:
     return [{"type": SSE_TOKEN, "data": {"content": text}}]
 
 
+# State key HumanInTheLoopMiddleware writes with the reviewer's edits ({tool_call_id: action}).
+_HITL_EDITED_TOOL_CALLS_KEY = "hitl_edited_tool_calls"
+
+
+def _map_edited_tool_calls(state_delta: dict) -> list[dict]:
+    """Re-announce tool calls a reviewer edited, with the arguments that will actually run."""
+    edited = state_delta.get(_HITL_EDITED_TOOL_CALLS_KEY)
+    if not isinstance(edited, dict):
+        return []
+    events: list[dict] = []
+    for tool_call_id, action in edited.items():
+        if not isinstance(action, dict) or not action.get("name"):
+            continue
+        args = action.get("args") or {}
+        events.append({
+            "type": SSE_TOOL_START,
+            "data": {
+                "tool_name": action["name"],
+                "tool_call_id": tool_call_id,
+                "args": args,
+                "tool_input": json.dumps(args, ensure_ascii=False) if args else None,
+                "edited": True,
+            },
+        })
+    return events
+
+
 def _map_updates_chunk(chunk: Any) -> list[dict] | None:
     """Handle a single ``updates``-mode chunk from LangGraph astream.
 
     LangGraph emits ``updates`` as a dict of ``{node_name: state_delta}``.
     We inspect the state delta for:
-    - Messages with ``tool_calls`` → emit ``tool_start`` + ``thinking`` events.
-    - Messages of type ``ToolMessage`` in a "tools" node → emit ``tool_end``.
+    - Messages with ``tool_calls`` from a non-middleware node → emit ``tool_start`` + ``thinking``.
+    - Reviewer-edited tool calls → emit ``tool_start`` with ``edited: True`` and the new args.
+    - ``ToolMessage`` in a "tools" or middleware node → emit ``tool_end``; a middleware's
+      error ToolMessage (human-approval rejection) carries ``outcome: "rejected"``.
 
     Args:
         chunk: A dict mapping node names to their state delta dicts.
@@ -270,6 +299,11 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
         if not isinstance(state_delta, dict):
             continue
 
+        # Middleware hook nodes ("PIIMiddleware[email].after_model", ...) re-emit the
+        # model's AIMessage; its tool calls were already announced by the model node.
+        is_middleware_node = "." in node_name
+        events.extend(_map_edited_tool_calls(state_delta))
+
         messages = state_delta.get("messages", [])
         if not isinstance(messages, list):
             # State delta may store a single message
@@ -280,7 +314,7 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
                 continue
 
             # --- tool_start: AI message contains tool_calls ---
-            tool_calls = getattr(msg, "tool_calls", None) or []
+            tool_calls = [] if is_middleware_node else (getattr(msg, "tool_calls", None) or [])
             for tc in tool_calls:
                 try:
                     tool_name: str = (
@@ -322,12 +356,13 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
                         exc_info=True,
                     )
 
-            # --- tool_end: ToolMessage in the "tools" node ---
+            # --- tool_end: ToolMessage from the "tools" node, or one a middleware wrote in
+            # place of running the tool (e.g. a human-approval rejection) ---
             msg_type = type(msg).__name__
             is_tool_message = msg_type in ("ToolMessage",) or (
                 hasattr(msg, "type") and getattr(msg, "type", "") == "tool"
             )
-            if is_tool_message and "tool" in node_name.lower():
+            if is_tool_message and ("tool" in node_name.lower() or is_middleware_node):
                 try:
                     tool_call_id = getattr(msg, "tool_call_id", "") or ""
                     tool_name_end = getattr(msg, "name", "") or ""
@@ -338,14 +373,14 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
                             raw_output if isinstance(raw_output, str)
                             else json.dumps(raw_output, ensure_ascii=False)
                         )
-                    events.append({
-                        "type": SSE_TOOL_END,
-                        "data": {
-                            "tool_name": tool_name_end,
-                            "tool_call_id": tool_call_id,
-                            "tool_output": tool_output,
-                        },
-                    })
+                    end_data: dict = {
+                        "tool_name": tool_name_end,
+                        "tool_call_id": tool_call_id,
+                        "tool_output": tool_output,
+                    }
+                    if is_middleware_node and getattr(msg, "status", None) == "error":
+                        end_data["outcome"] = "rejected"
+                    events.append({"type": SSE_TOOL_END, "data": end_data})
                 except Exception:
                     logger.warning(
                         "Could not extract ToolMessage info for tool_end event",

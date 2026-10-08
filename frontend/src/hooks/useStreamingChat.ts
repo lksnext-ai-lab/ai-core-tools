@@ -12,6 +12,8 @@ export interface ToolOutputLine {
   readonly line: string;
 }
 
+export type ToolExecutionStatus = 'awaiting_approval' | 'running' | 'complete' | 'rejected';
+
 export interface ToolExecutionRecord {
   readonly id: string;
   readonly toolCallId?: string;
@@ -22,9 +24,10 @@ export interface ToolExecutionRecord {
   readonly subagentId?: number;
   readonly startedAt: number;
   readonly endedAt?: number;
-  readonly status: 'running' | 'complete';
+  readonly status: ToolExecutionStatus;
   readonly outputLines: ToolOutputLine[];
   readonly toolInput?: string;     // serialised args from tool_start
+  readonly edited?: boolean;       // a reviewer changed the args before it ran
   readonly toolOutput?: string;    // result from tool_end
 }
 
@@ -126,18 +129,30 @@ function markToolComplete(toolName: string, toolCallId?: string) {
     );
 }
 
+function isOpenRecord(record: ToolExecutionRecord): boolean {
+  return record.status === 'running' || record.status === 'awaiting_approval';
+}
+
+function setRecordStatus(from: ToolExecutionStatus, to: ToolExecutionStatus) {
+  return (prev: ToolExecutionRecord[]): ToolExecutionRecord[] =>
+    prev.some((record) => record.status === from)
+      ? prev.map((record) => (record.status === from ? { ...record, status: to } : record))
+      : prev;
+}
+
 function completeMatchingToolRecords(
   prev: ToolExecutionRecord[],
   toolName: string,
   toolCallId?: string,
   toolOutput?: string,
+  rejected = false,
 ): ToolExecutionRecord[] {
   const endedAt = Date.now();
   let changed = false;
 
   const updated = prev.map((record) => {
     const matches =
-      record.status === 'running' &&
+      isOpenRecord(record) &&
       (
         (toolCallId && record.toolCallId === toolCallId) ||
         (!toolCallId && record.toolName === toolName)
@@ -145,7 +160,7 @@ function completeMatchingToolRecords(
 
     if (!matches) return record;
     changed = true;
-    return { ...record, status: 'complete' as const, endedAt, toolOutput };
+    return { ...record, status: rejected ? 'rejected' as const : 'complete' as const, endedAt, toolOutput };
   });
 
   return changed ? updated : prev;
@@ -239,6 +254,9 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       flushRequestedRef.current = false;
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
+      if (options?.resumeDecisions) {
+        setToolExecutionHistory(setRecordStatus('awaiting_approval', 'running'));
+      }
 
       const scheduleFlush = () => {
         if (!flushRequestedRef.current) {
@@ -323,6 +341,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   setIsCodeRunning(true);
                 }
                 const toolInput = (event.data as { tool_input?: string }).tool_input ?? undefined;
+                const edited = (event.data as { edited?: boolean }).edited === true;
                 const newRecord: ToolExecutionRecord = {
                   id: buildToolRecordId(toolName, toolCallId),
                   toolCallId,
@@ -339,9 +358,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 setToolExecutionHistory((prev) => {
                   if (!toolCallId) return [...prev, newRecord];
 
-                  const existingIdx = prev.findIndex(
-                    (record) => record.toolCallId === toolCallId && record.status === 'running',
-                  );
+                  // Tool call ids are unique, so a repeated id (e.g. an edited call) updates its row.
+                  const existingIdx = prev.findIndex((record) => record.toolCallId === toolCallId);
                   if (existingIdx === -1) return [...prev, newRecord];
 
                   const updated = [...prev];
@@ -352,7 +370,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                     parentToolName: updated[existingIdx].parentToolName ?? parentToolName,
                     subagentName: updated[existingIdx].subagentName ?? subagentName,
                     subagentId: updated[existingIdx].subagentId ?? subagentId,
-                    toolInput: updated[existingIdx].toolInput ?? toolInput,
+                    toolInput: edited ? toolInput : updated[existingIdx].toolInput ?? toolInput,
+                    edited: updated[existingIdx].edited || edited,
                   };
                   return updated;
                 });
@@ -363,12 +382,13 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 const toolName = (event.data as { tool_name?: string }).tool_name || '';
                 const toolCallId = (event.data as { tool_call_id?: string }).tool_call_id || undefined;
                 const toolOutput = (event.data as { tool_output?: string }).tool_output ?? undefined;
+                const rejected = (event.data as { outcome?: string }).outcome === 'rejected';
                 setActiveTools(markToolComplete(toolName, toolCallId));
                 if (isCodeTool(toolName)) {
                   setIsCodeRunning(false);
                 }
                 setToolExecutionHistory((prev) =>
-                  completeMatchingToolRecords(prev, toolName, toolCallId, toolOutput),
+                  completeMatchingToolRecords(prev, toolName, toolCallId, toolOutput, rejected),
                 );
                 break;
               }
@@ -456,6 +476,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
               case 'hitl_interrupt': {
                 approval = event.data as unknown as HitlPendingApproval;
                 setPendingApproval(approval);
+                setToolExecutionHistory(setRecordStatus('running', 'awaiting_approval'));
                 break;
               }
             }
