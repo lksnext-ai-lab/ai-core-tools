@@ -12,15 +12,29 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
+def _env_positive_int(name: str, default: int) -> int:
+    """Parse a positive int env var; a malformed or non-positive value falls back to ``default``."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        logger.warning("Invalid integer for %s=%r; using default %s", name, raw, default)
+        return default
+    if value <= 0:
+        logger.warning("%s=%s must be positive; using default %s", name, value, default)
+        return default
+    return value
+
 # Hard cap on the number of distinct keys tracked by the key-namespace limiter
 # (check_and_consume_key), e.g. one entry per distinct client IP hitting a
 # discovery endpoint. Without a cap, an attacker rotating IPs could grow this
 # dict without bound. Once the cap is reached, *new* keys share a single
 # overflow bucket (still rate-limited, just coarser) instead of being tracked
 # individually. Env override lets ops tune it without a code change.
-DEFAULT_KEY_NAMESPACE_MAX_TRACKED_KEYS = int(
-    os.getenv("A2A_DISCOVERY_MAX_TRACKED_KEYS", "100000")
-)
+DEFAULT_KEY_NAMESPACE_MAX_TRACKED_KEYS = _env_positive_int("A2A_DISCOVERY_MAX_TRACKED_KEYS", 100000)
 
 # The shared overflow bucket (see above) gets its own, wider budget instead of
 # reusing a single caller's `max_per_minute` as-is: `max_per_minute * multiplier`.
@@ -30,9 +44,7 @@ DEFAULT_KEY_NAMESPACE_MAX_TRACKED_KEYS = int(
 # Multiplying gives the overflow bucket room proportional to how many callers it
 # is expected to absorb, while still being bounded (fail-closed by design, not
 # unlimited). Env override lets ops tune it without a code change.
-DEFAULT_KEY_NAMESPACE_OVERFLOW_MULTIPLIER = int(
-    os.getenv("A2A_DISCOVERY_OVERFLOW_MULTIPLIER", "100")
-)
+DEFAULT_KEY_NAMESPACE_OVERFLOW_MULTIPLIER = _env_positive_int("A2A_DISCOVERY_OVERFLOW_MULTIPLIER", 100)
 
 # Sentinel key used once the per-key-namespace tracked-key cap is reached.
 _OVERFLOW_KEY = "__overflow__"

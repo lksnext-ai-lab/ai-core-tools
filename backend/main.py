@@ -133,6 +133,9 @@ async def lifespan(app: FastAPI):
         # even when A2A_ENABLED=false, since the kill switch is per request
         # (routers/a2a_server/router.py) and the maintenance worker (step_018)
         # needs a handler to drive cancellation through.
+        # Imported before the try so the except path can always consult it.
+        from utils.a2a_config import get_a2a_config
+
         try:
             from services.a2a_server.executor import MattinAgentExecutor
             from services.a2a_server.runtime import (
@@ -140,7 +143,6 @@ async def lifespan(app: FastAPI):
                 configure_sdk_logging,
                 set_runtime,
             )
-            from utils.a2a_config import get_a2a_config
 
             configure_sdk_logging()
             # get_a2a_config() itself logs a warning if A2A_ROOT_AGENT is set

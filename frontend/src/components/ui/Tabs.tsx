@@ -84,12 +84,12 @@ export function Tabs({
       }
       if (tabs[nextIndex]?.disabled) return;
 
-      const nextTabId = tabs[nextIndex].id;
-      onChange(nextTabId);
+      const targetIndex = nextIndex;
+      onChange(tabs[targetIndex].id);
 
       // Focus the newly selected tab for keyboard navigation UX
       setTimeout(() => {
-        tabRefs.current[nextIndex]?.focus();
+        tabRefs.current[targetIndex]?.focus();
       }, 0);
     }
   };

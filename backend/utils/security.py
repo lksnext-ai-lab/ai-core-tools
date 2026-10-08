@@ -16,7 +16,14 @@ _DEFAULT_MAX_TTL_SECONDS = 86400
 
 def _max_ttl_seconds() -> int:
     """Return the configured ceiling (seconds) for expiring static signature TTLs."""
-    return int(os.getenv("A2A_FILE_URL_MAX_TTL_SECONDS", str(_DEFAULT_MAX_TTL_SECONDS)))
+    raw = os.getenv("A2A_FILE_URL_MAX_TTL_SECONDS")
+    if raw is None:
+        return _DEFAULT_MAX_TTL_SECONDS
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return _DEFAULT_MAX_TTL_SECONDS
+    return value if value > 0 else _DEFAULT_MAX_TTL_SECONDS
 
 
 def _normalize_path(path: str) -> str:
