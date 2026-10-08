@@ -7,6 +7,10 @@ export interface TabItem {
   id: string;
   label: string;
   icon?: string;
+  /** When true, the tab is shown but cannot be activated (e.g. "save first"). */
+  disabled?: boolean;
+  /** Tooltip/accessible hint shown when the tab is disabled. */
+  disabledReason?: string;
 }
 
 /**
@@ -69,7 +73,17 @@ export function Tabs({
       e.preventDefault();
     }
 
+    // Skip disabled tabs so arrow-key navigation never lands on one.
     if (nextIndex !== null) {
+      let attempts = 0;
+      while (tabs[nextIndex]?.disabled && attempts < tabs.length) {
+        nextIndex = e.key === 'ArrowLeft'
+          ? (nextIndex - 1 + tabs.length) % tabs.length
+          : (nextIndex + 1) % tabs.length;
+        attempts += 1;
+      }
+      if (tabs[nextIndex]?.disabled) return;
+
       const nextTabId = tabs[nextIndex].id;
       onChange(nextTabId);
 
@@ -91,7 +105,7 @@ export function Tabs({
   }, [activeTab, tabs]);
 
   return (
-    <div className={`border-b border-gray-200 ${className}`}>
+    <div className={`border-b border-gray-200 dark:border-gray-700 ${className}`}>
       <div
         ref={tabListRef}
         role="tablist"
@@ -100,34 +114,49 @@ export function Tabs({
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeTab;
+          const isDisabled = !!tab.disabled;
+          const disabledReasonId = `${tab.id}-disabled-reason`;
 
           return (
-            <button
-              key={tab.id}
-              type="button"
-              ref={(el) => {
-                tabRefs.current[index] = el;
-              }}
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={`${tab.id}-panel`}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => onChange(tab.id)}
-              onKeyDown={(e) => handleKeyDown(e, index)}
-              className={`
-                px-4 py-3 text-sm font-medium whitespace-nowrap
-                transition-colors duration-200
-                focus:outline-none
-                ${
-                  isActive
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }
-              `}
-            >
-              {tab.icon && <span className="mr-2">{tab.icon}</span>}
-              {tab.label}
-            </button>
+            <React.Fragment key={tab.id}>
+              <button
+                type="button"
+                ref={(el) => {
+                  tabRefs.current[index] = el;
+                }}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`${tab.id}-panel`}
+                aria-disabled={isDisabled}
+                aria-describedby={isDisabled && tab.disabledReason ? disabledReasonId : undefined}
+                title={isDisabled ? tab.disabledReason : undefined}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => {
+                  if (!isDisabled) onChange(tab.id);
+                }}
+                onKeyDown={(e) => handleKeyDown(e, index)}
+                className={`
+                  px-4 py-3 text-sm font-medium whitespace-nowrap
+                  transition-colors duration-200
+                  focus:outline-none
+                  ${
+                    isDisabled
+                      ? 'cursor-not-allowed text-gray-400 dark:text-gray-600'
+                      : isActive
+                        ? 'border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                        : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100'
+                  }
+                `}
+              >
+                {tab.icon && <span className="mr-2">{tab.icon}</span>}
+                {tab.label}
+              </button>
+              {isDisabled && tab.disabledReason && (
+                <span id={disabledReasonId} className="sr-only">
+                  {tab.disabledReason}
+                </span>
+              )}
+            </React.Fragment>
           );
         })}
       </div>

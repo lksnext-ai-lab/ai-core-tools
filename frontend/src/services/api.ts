@@ -5,7 +5,8 @@ import type { StreamEvent } from '../types/streaming';
 
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  /** Raw `detail` from the JSON error body (e.g. FastAPI's 422 validation array), when present. */
+  constructor(message: string, readonly status: number, readonly detail?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -128,6 +129,13 @@ export interface Agent {
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
   a2a_enabled?: boolean;
+  a2a_card_visibility?: 'public' | 'api_key';
+  a2a_name_override?: string | null;
+  a2a_description_override?: string | null;
+  a2a_skill_tags?: string[];
+  a2a_examples?: string[];
+  a2a_card_url?: string | null;
+  a2a_rpc_url?: string | null;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -651,12 +659,16 @@ class ApiService {
 
   private async handleResponseError(response: Response): Promise<never> {
     let message = `API Error: ${response.status} ${response.statusText}`;
+    let detail: unknown;
 
     try {
       const errorData: unknown = await response.json();
       const extracted = this.extractErrorMessage(errorData);
       if (extracted) {
         message = extracted;
+      }
+      if (errorData && typeof errorData === 'object' && 'detail' in (errorData as Record<string, unknown>)) {
+        detail = (errorData as Record<string, unknown>)['detail'];
       }
     } catch (error) {
       console.debug('Failed to parse error response JSON:', error);
@@ -665,7 +677,7 @@ class ApiService {
       }
     }
 
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, detail);
   }
 
   async request<T = unknown>(
