@@ -520,19 +520,20 @@ class MattinAgentExecutor(AgentExecutor):
                 pending.cancel()
             await self._await_pending_to_completion(pending, task_id=updater.task_id)
 
-    async def _await_pending_to_completion(self, pending: "asyncio.Task", *, task_id: str) -> None:
+    async def _await_pending_to_completion(
+        self, pending: "asyncio.Task", *, task_id: str, deadline: Optional[float] = None
+    ) -> None:
         """Waits for `pending` to actually finish, no matter how many times
         this wait itself is cancelled in the meantime (fix round 1, item 6).
 
-        `asyncio.shield` only protects `pending` from being cancelled by a
-        cancellation directed at *this* await; it never swallows `pending`'s
-        own outcome (including its own `CancelledError`, from the `cancel()`
-        call in `_drain`'s `finally`). Looping until `pending.done()` means a
-        second (or third...) external cancellation landing while we are
-        already tearing down only ever interrupts *this* wait, never
-        abandons `pending` mid-flight -- which is what would let
+        `asyncio.wait` never raises `pending`'s own outcome (including its own
+        `CancelledError`, from the `cancel()` call in `_drain`'s `finally`), so
+        a `CancelledError` here is always a cancellation of *this* wait. It
+        never abandons `pending` mid-flight -- which is what would let
         `execute()`'s `contextlib.aclosing` call `aclose()` on a generator
-        that is still actually running a frame.
+        that is still actually running a frame: the wait carries on (through
+        further cancellations too, by recursing) and the cancellation is
+        re-raised once `pending` is done.
 
         Bounded by `_TEARDOWN_BUDGET_SECONDS` (fix round 2, item 1): if the
         generator's own cancellation handling itself hangs (a bug in
@@ -542,28 +543,23 @@ class MattinAgentExecutor(AgentExecutor):
         never message/exception text), and returns, leaving `pending`
         abandoned rather than blocking this turn's teardown forever.
         """
-        deadline = time.monotonic() + _TEARDOWN_BUDGET_SECONDS
-        cancelled = False
+        if deadline is None:
+            deadline = time.monotonic() + _TEARDOWN_BUDGET_SECONDS
         while not pending.done():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 logger.error("a2a.executor.drain_teardown_timeout task_id=%s", task_id)
-                break
+                return
             try:
-                await asyncio.wait_for(asyncio.shield(pending), timeout=remaining)
-            except asyncio.TimeoutError:
-                continue
+                await asyncio.wait({pending}, timeout=remaining)
             except asyncio.CancelledError:
-                # Keep waiting for `pending`, then propagate the cancellation.
-                cancelled = True
-                continue
-            except StopAsyncIteration:
-                break
-            except Exception:
-                logger.exception("a2a.executor.drain_cleanup_error task_id=%s", task_id)
-                break
-        if cancelled:
-            raise asyncio.CancelledError()
+                await self._await_pending_to_completion(pending, task_id=task_id, deadline=deadline)
+                raise
+        if pending.cancelled():
+            return
+        exc = pending.exception()
+        if exc is not None and not isinstance(exc, StopAsyncIteration):
+            logger.error("a2a.executor.drain_cleanup_error task_id=%s", task_id, exc_info=exc)
 
     async def _apply_action(
         self, updater: TaskUpdater, action: MapperAction, turn_state: "_TurnState"

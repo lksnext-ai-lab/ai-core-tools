@@ -202,3 +202,21 @@ class TestBoundedTeardownWait:
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(wait_task, timeout=2.0)
         assert pending.done() and not pending.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_pending_ending_cancelled_does_not_propagate_a_cancellation(self):
+        """`_drain`'s `finally` cancels an in-flight `pending`; that is
+        `pending`'s own outcome, not a cancellation of the wait, so the wait
+        returns normally (the turn's real exception, if any, is kept)."""
+
+        async def _pending_work():
+            await asyncio.sleep(10)
+
+        pending = asyncio.ensure_future(_pending_work())
+        await asyncio.sleep(0)
+        pending.cancel()
+
+        await asyncio.wait_for(
+            MattinAgentExecutor()._await_pending_to_completion(pending, task_id="task-1"), timeout=2.0
+        )
+        assert pending.cancelled()
