@@ -21,9 +21,13 @@ def _config(*, enabled=True, root_agent=None):
     return SimpleNamespace(enabled=enabled, root_agent=root_agent)
 
 
-def _app(*, app_id=1, slug="acme", is_frozen=False, max_file_size_mb=0, name="Acme", owner=None):
+def _app(
+    *, app_id=1, slug="acme", is_frozen=False, max_file_size_mb=0, name="Acme", owner=None,
+    agent_cors_origins=None,
+):
     return SimpleNamespace(
-        app_id=app_id, slug=slug, is_frozen=is_frozen, max_file_size_mb=max_file_size_mb, name=name, owner=owner
+        app_id=app_id, slug=slug, is_frozen=is_frozen, max_file_size_mb=max_file_size_mb, name=name, owner=owner,
+        agent_cors_origins=agent_cors_origins,
     )
 
 

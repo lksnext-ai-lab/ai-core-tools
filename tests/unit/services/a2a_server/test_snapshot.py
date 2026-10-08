@@ -20,7 +20,7 @@ def _agent(**overrides):
     defaults = dict(
         agent_id=9,
         app_id=1,
-        app=SimpleNamespace(slug="acme", is_frozen=False, max_file_size_mb=0, name="Acme"),
+        app=SimpleNamespace(slug="acme", is_frozen=False, max_file_size_mb=0, name="Acme", agent_cors_origins=None),
         name="Support Bot",
         description="Public description",
         is_frozen=False,
@@ -128,7 +128,7 @@ class TestSnapshotRequiredAttributesForInputService:
     def test_exposes_agent_id_app_max_file_size_mb_has_memory(self):
         agent = _agent(
             agent_id=42,
-            app=SimpleNamespace(slug="acme", is_frozen=False, max_file_size_mb=25, name="Acme"),
+            app=SimpleNamespace(slug="acme", is_frozen=False, max_file_size_mb=25, name="Acme", agent_cors_origins=None),
             has_memory=True,
         )
         snap = build_snapshot(agent)

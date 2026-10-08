@@ -126,8 +126,11 @@ class TestA2ARequestLog:
         logger = logging.getLogger("test.a2a.request_log")
         with caplog.at_level(logging.INFO, logger="test.a2a.request_log"):
             log.emit(logger, app_id=7, agent_id=8, api_key_id=9)
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
+        # Only this logger's records: unrelated asyncio GC warnings from
+        # earlier tests can land in caplog at any time.
+        records = [r for r in caplog.records if r.name == "test.a2a.request_log"]
+        assert len(records) == 1
+        record = records[0]
         message = record.getMessage()
         for expected in ("SendMessage", "task-1", "ctx-1", "99", "success", "app_id=7", "agent_id=8", "api_key_id=9"):
             assert expected in message
@@ -144,7 +147,8 @@ class TestA2ARequestLog:
         secret_hash = "f" * 64
         with caplog.at_level(logging.INFO, logger="test.a2a.request_log.no_secrets"):
             log.emit(logger, app_id=1, agent_id=2, api_key_id=3)
-        message = caplog.records[0].getMessage()
+        records = [r for r in caplog.records if r.name == "test.a2a.request_log.no_secrets"]
+        message = records[0].getMessage()
         assert secret_hash not in message
         assert "raw" not in message.lower()
         assert "hash" not in message.lower()

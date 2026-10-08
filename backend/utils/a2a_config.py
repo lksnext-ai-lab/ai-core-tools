@@ -168,6 +168,13 @@ class A2AConfig:
     sdk_debug: bool
     max_parts: int
     max_file_parts: int
+    stream_max_seconds: int
+    stream_liveness_seconds: float
+    max_concurrent_streams_per_app: int
+    max_concurrent_streams_per_key: int
+    max_concurrent_streams_worker: int
+    rpc_preauth_rate_limit_per_minute: int
+    non_send_max_body_bytes: int
 
 
 @lru_cache(maxsize=1)
@@ -226,7 +233,80 @@ def get_a2a_config() -> A2AConfig:
         # inbound Message can make the server do before any fetch/upload runs.
         max_parts=_get_int("A2A_MAX_PARTS", 64, min_value=1),
         max_file_parts=_get_int("A2A_MAX_FILE_PARTS", 10, min_value=1),
+        # RB-2 (step_017 router): a hard wall-clock cap on how long the router
+        # keeps a SubscribeToTask/SendStreamingMessage SSE response open, plus
+        # how often it re-checks task liveness via `store.get` while waiting
+        # for the next event -- independent of `turn_max_seconds` (the
+        # bridge's own cap on *producing* events) because a remote tail
+        # (another worker owns the task) has no bridge of its own driving it
+        # and would otherwise poll forever once the owning worker is gone.
+        stream_max_seconds=_get_int("A2A_STREAM_MAX_SECONDS", 1800, min_value=1),
+        stream_liveness_seconds=_get_float(
+            "A2A_STREAM_LIVENESS_SECONDS", 5.0, min_value=0, exclusive=True
+        ),
+        # RB-3 (step_017 router): bulkhead caps on concurrent SSE streams.
+        # 0 means unlimited for the per-app/per-key counters, mirroring the
+        # convention used by the other limiters in routers/controls/. The
+        # per-*worker* cap has no "unlimited" value -- it bounds a plain
+        # `asyncio.BoundedSemaphore` sized once at process start -- and its
+        # default (40) is deliberately well under uvicorn's own
+        # `--limit-concurrency` default (100, see `UVICORN_LIMIT_CONCURRENCY`
+        # below): every A2A stream also holds one of uvicorn's own concurrent
+        # connection slots, and a worker-level cap at or above that figure
+        # could never actually bind -- uvicorn would already be rejecting new
+        # connections first. `_clamp_worker_cap` enforces this at resolution
+        # time (fix round 1, HIGH-3), not just in the default.
+        max_concurrent_streams_per_app=_get_int(
+            "A2A_MAX_CONCURRENT_STREAMS_PER_APP", 10, min_value=0
+        ),
+        max_concurrent_streams_per_key=_get_int(
+            "A2A_MAX_CONCURRENT_STREAMS_PER_KEY", 5, min_value=0
+        ),
+        max_concurrent_streams_worker=_clamp_worker_cap(
+            _get_int("A2A_MAX_CONCURRENT_STREAMS_WORKER", 40, min_value=1)
+        ),
+        # MEDIUM-7 (fix round 1): a target-independent, per-IP limiter that
+        # runs before any DB/auth work on the RPC route -- generous on
+        # purpose (it is not meant to replace the per-app `agent_rate_limit`
+        # budget, only to bound raw request volume from one caller).
+        rpc_preauth_rate_limit_per_minute=_get_int(
+            "A2A_RPC_PREAUTH_RATE_LIMIT_PER_MINUTE", 300
+        ),
+        # MEDIUM-8 (fix round 1): methods other than SendMessage/
+        # SendStreamingMessage carry no message payload worth megabytes --
+        # GetTask/CancelTask/SubscribeToTask/GetExtendedAgentCard/etc. need at
+        # most a short id. 64 KiB leaves generous room for a pathological but
+        # legitimate `params` dict without allowing a non-send call to pay the
+        # full `A2A_MAX_REQUEST_MB` cost.
+        non_send_max_body_bytes=_get_int(
+            "A2A_NON_SEND_MAX_BODY_BYTES", 65536, min_value=1
+        ),
     )
+
+
+def _clamp_worker_cap(configured: int) -> int:
+    """Clamps the per-worker stream cap below uvicorn's `--limit-concurrency` (HIGH-3).
+
+    Every concurrent A2A SSE stream also occupies one of uvicorn's own
+    concurrent-connection slots (`--limit-concurrency`, default 100, read here
+    from `UVICORN_LIMIT_CONCURRENCY` -- uvicorn itself has no env var for this
+    flag, so the deployment's entrypoint/compose file must export it to match
+    whatever `--limit-concurrency` it actually passes). A worker-level stream
+    cap at or above that figure can never actually bind: uvicorn would already
+    be refusing new connections before this bulkhead ever saw them, and in the
+    meantime it silently starves every *other* route this worker serves.
+    """
+    limit_concurrency = _get_int("UVICORN_LIMIT_CONCURRENCY", 100, min_value=1)
+    if configured >= limit_concurrency:
+        clamped = max(1, limit_concurrency - 1)
+        logger.warning(
+            "A2A_MAX_CONCURRENT_STREAMS_WORKER=%s is >= UVICORN_LIMIT_CONCURRENCY=%s; "
+            "clamping to %s. Streams share uvicorn's own connection-concurrency budget "
+            "with every other route.",
+            configured, limit_concurrency, clamped,
+        )
+        return clamped
+    return configured
 
 
 def public_base_url(request_base_url: Optional[str] = None) -> Optional[str]:

@@ -49,6 +49,10 @@ class A2AAgentSnapshot:
     app_frozen: bool
     app_max_file_size_mb: Optional[int]
     app_name: str
+    # Fix round 1 (MEDIUM-11): carried here so the RPC route can call
+    # `check_allowed_origin` directly off the snapshot, without a second
+    # `App` query -- `resolve()` already loaded this app's row once.
+    app_agent_cors_origins: Optional[str]
 
     agent_id: int
     agent_name: str
@@ -157,6 +161,7 @@ def build_snapshot(agent: "Agent") -> A2AAgentSnapshot:
         app_frozen=bool(app.is_frozen) if app else False,
         app_max_file_size_mb=app.max_file_size_mb if app else None,
         app_name=app.name if app else "",
+        app_agent_cors_origins=app.agent_cors_origins if app else None,
         agent_id=agent.agent_id,
         agent_name=_safe_clean_text(agent.name, max_len=_NAME_MAX_LEN),
         agent_description=_safe_clean_text(

@@ -8,7 +8,6 @@ No DB: `configure_sdk_logging`/the capability cards are pure functions, and
 from __future__ import annotations
 
 import logging
-import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -17,6 +16,7 @@ from a2a.server.context import ServerCallContext
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.errors import ExtendedAgentCardNotConfiguredError, PushNotificationNotSupportedError
 
+import services.a2a_server.runtime as runtime
 from services.a2a_server.runtime import (
     A2ARuntime,
     _extended_modifier,
@@ -75,11 +75,12 @@ class TestExtendedModifier:
             await _extended_modifier(build_placeholder_extended_card(), ctx)
 
     async def test_builds_the_real_card_from_the_scope_snapshot(self, monkeypatch):
-        """`_extended_modifier` imports `services.a2a_server.card_service` lazily
-        (step_011); mock it out so this test does not depend on that module
-        existing yet."""
-        fake_card_service = SimpleNamespace(build_extended_card=MagicMock(return_value="the-real-card"))
-        monkeypatch.setitem(sys.modules, "services.a2a_server.card_service", fake_card_service)
+        """`_extended_modifier` calls `card_service.build_extended_card` via a
+        top-level import (step_017, RB-13: card_service is a top-level import
+        in runtime.py now that step_011 has landed) -- patch the name bound
+        into `runtime`'s own namespace, not `card_service`'s module."""
+        fake_build_extended_card = MagicMock(return_value="the-real-card")
+        monkeypatch.setattr(runtime, "build_extended_card", fake_build_extended_card)
 
         scope = SimpleNamespace(snapshot="snap", base_url="https://example.test")
         ctx = ServerCallContext(state={"a2a": scope})
@@ -87,7 +88,7 @@ class TestExtendedModifier:
         result = await _extended_modifier(build_placeholder_extended_card(), ctx)
 
         assert result == "the-real-card"
-        fake_card_service.build_extended_card.assert_called_once_with("snap", "https://example.test")
+        fake_build_extended_card.assert_called_once_with("snap", "https://example.test")
 
 
 class TestPushNotificationsAreUnsupported:

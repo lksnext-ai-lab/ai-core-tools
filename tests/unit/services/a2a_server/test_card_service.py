@@ -27,6 +27,7 @@ def _snapshot(**overrides) -> A2AAgentSnapshot:
         app_frozen=False,
         app_max_file_size_mb=None,
         app_name="Acme",
+        app_agent_cors_origins=None,
         agent_id=9,
         agent_name="Support Bot",
         agent_description="Helps with support questions.",
@@ -211,7 +212,7 @@ def _real_shaped_agent(**overrides) -> SimpleNamespace:
     defaults = dict(
         agent_id=9,
         app_id=1,
-        app=SimpleNamespace(slug="acme", is_frozen=False, max_file_size_mb=0, name="Acme"),
+        app=SimpleNamespace(slug="acme", is_frozen=False, max_file_size_mb=0, name="Acme", agent_cors_origins=None),
         name="Support Bot",
         description="Public facing description",
         system_prompt="SECRET-PROMPT",

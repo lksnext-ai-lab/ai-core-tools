@@ -60,6 +60,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from services.a2a_server.card_service import build_extended_card
 from services.a2a_server.context_builders import (
     A2AServerCallContextBuilder,
     A2ARequestContextBuilder,
@@ -148,11 +149,9 @@ async def _extended_modifier(card: AgentCard, ctx: ServerCallContext) -> AgentCa
     """Builds the real, per-agent extended card (AD-1) from `ctx.state["a2a"].snapshot`.
 
     No DB access here -- the snapshot was already resolved by the router
-    before dispatch (AD-4). `services.a2a_server.card_service` (step_011) is
-    imported lazily, at call time rather than at module import time, so that
-    `runtime.py` stays importable (and every other GetExtendedAgentCard-free
-    code path in this module keeps working) independently of that module's
-    landing order.
+    before dispatch (AD-4). `services.a2a_server.card_service` (step_011) is a
+    top-level import in this module (RB-13; step_011 has landed), not a
+    lazy/call-time one.
     """
     scope = ctx.state.get("a2a") if ctx.state else None
     if scope is None:
@@ -160,8 +159,6 @@ async def _extended_modifier(card: AgentCard, ctx: ServerCallContext) -> AgentCa
             "no A2A call scope on this context; the router must set request.state.a2a_scope "
             "before dispatch (AD-4)"
         )
-    from services.a2a_server.card_service import build_extended_card  # step_011
-
     return build_extended_card(scope.snapshot, scope.base_url)
 
 
