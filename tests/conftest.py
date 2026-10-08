@@ -150,7 +150,7 @@ def test_engine():
     engine.dispose()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def db(test_engine):
     """
     Per-test database session with automatic rollback after each test.
@@ -178,7 +178,7 @@ def db(test_engine):
     connection.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def client(db, monkeypatch):
     """
     FastAPI TestClient with the get_db dependency overridden to use the test session.
@@ -221,7 +221,7 @@ def client(db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_user(db):
     """A persisted (but not committed to real DB) test User."""
     from models.user import User
@@ -237,7 +237,7 @@ def fake_user(db):
     return user
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_app(db, fake_user):
     """A test App owned by fake_user."""
     from models.app import App
@@ -254,7 +254,7 @@ def fake_app(db, fake_user):
     return app_obj
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_ai_service(db, fake_app):
     """A test AIService (OpenAI provider) linked to fake_app."""
     from models.ai_service import AIService
@@ -270,7 +270,7 @@ def fake_ai_service(db, fake_app):
     return svc
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_agent(db, fake_app, fake_ai_service):
     """A minimal test Agent in fake_app."""
     from models.agent import Agent
@@ -289,7 +289,7 @@ def fake_agent(db, fake_app, fake_ai_service):
     return agent
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_api_key(db, fake_app, fake_user):
     """An active APIKey for fake_app."""
     from models.api_key import APIKey
@@ -313,7 +313,7 @@ def fake_api_key(db, fake_app, fake_user):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def auth_headers(fake_user, db):
     """
     Bearer token headers for fake_user minted directly via mint_access_token (LOCAL issuer).
@@ -332,7 +332,7 @@ def auth_headers(fake_user, db):
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def owner_headers(fake_user, fake_app, db):
     """
     Auth headers for fake_user who is the owner of fake_app.
@@ -363,7 +363,7 @@ def owner_headers(fake_user, fake_app, db):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_silo(db, fake_app):
     """A test Silo linked to fake_app (for domain tests)."""
     from models.silo import Silo
@@ -379,7 +379,7 @@ def fake_silo(db, fake_app):
     return silo
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_domain(db, fake_app, fake_silo):
     """A test Domain with an associated CrawlPolicy (inactive default)."""
     from models.domain import Domain

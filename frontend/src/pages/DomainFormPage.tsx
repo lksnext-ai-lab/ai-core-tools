@@ -59,7 +59,7 @@ function DomainFormPage() {
   const vectorDbSelectValue = vectorDbOptions.length === 0 ? '' : formData.vector_db_type;
 
   useEffect(() => {
-    loadDomainData();
+    void loadDomainData();
   }, [appId, domainId]);
 
   async function loadDomainData() {

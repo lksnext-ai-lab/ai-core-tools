@@ -26,7 +26,7 @@ function MCPServersPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadServers();
+    void loadServers();
   }, [appId]);
 
   async function loadServers() {
@@ -73,9 +73,14 @@ function MCPServersPage() {
   }
 
   function copyToClipboard(text: string, serverId: number) {
-    navigator.clipboard.writeText(text);
-    setCopiedId(serverId);
-    setTimeout(() => setCopiedId(null), 2000);
+    // Only show "copied" once the clipboard write actually succeeded (it can be
+    // rejected, e.g. without clipboard permission or when the page lacks focus).
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(serverId);
+      setTimeout(() => setCopiedId(null), 2000);
+    }).catch(() => {
+      // ignore: nothing was copied, so no confirmation is shown
+    });
   }
 
   if (loading) {

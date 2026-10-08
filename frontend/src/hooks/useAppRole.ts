@@ -33,7 +33,7 @@ export function useAppRole(appId: string | undefined) {
       }
     }
 
-    fetchAppRole();
+    void fetchAppRole();
   }, [appId]);
 
   return {

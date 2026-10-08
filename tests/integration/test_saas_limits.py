@@ -18,7 +18,7 @@ from fastapi import HTTPException
 # Fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def saas_env(monkeypatch):
     """Switch deployment mode to SaaS for the duration of the test."""
     monkeypatch.setenv("AICT_DEPLOYMENT_MODE", "saas")
@@ -45,7 +45,7 @@ def saas_env(monkeypatch):
     importlib.reload(tes)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def saas_user(db):
     """A User with a Free subscription and tier config seeded."""
     from models.user import User
@@ -92,7 +92,7 @@ def saas_user(db):
     return user
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def saas_app(db, saas_user):
     """An App owned by saas_user."""
     from models.app import App

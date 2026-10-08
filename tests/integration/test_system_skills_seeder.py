@@ -56,7 +56,7 @@ def _delete_system_skill(name: str) -> None:
         db.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def unique_name():
     return f"seedtest-{uuid.uuid4().hex[:10]}"
 

@@ -37,7 +37,7 @@ const VerifyEmailPage: React.FC = () => {
       }
     };
 
-    verify();
+    void verify();
   }, [token]);
 
   return (

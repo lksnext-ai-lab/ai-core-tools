@@ -69,6 +69,8 @@ function MarkdownCode({ className, children, ...props }: any) {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // ignore: nothing was copied, so no confirmation is shown
     });
   };
 

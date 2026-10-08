@@ -5,7 +5,8 @@ from services.crawl.content_hasher import compute_hash, normalize_text_for_hash
 
 def test_stable_hash():
     text = "Hello, world! This is some content."
-    assert compute_hash(text) == compute_hash(text)
+    # Pinned so a change of algorithm (which would re-crawl everything) is caught.
+    assert compute_hash(text) == "56a4670c3682ab3b71aa4a4c800d3854526d0aea9b01a1aafaf260dc1d634665"
 
 
 def test_whitespace_normalized():

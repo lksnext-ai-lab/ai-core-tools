@@ -18,6 +18,7 @@ import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
+import { randomId } from '../utils/randomId';
 
 // Define the Agent types
 interface Agent {
@@ -282,7 +283,7 @@ function AgentFormPage() {
   // Load agent data when component mounts
   useEffect(() => {
     if (appId && agentId) {
-      loadAgentData();
+      void loadAgentData();
     } else {
       setLoading(false);
     }
@@ -382,7 +383,7 @@ function AgentFormPage() {
         rag_max_retrieval_calls: response.rag_max_retrieval_calls ?? 4,
         rag_fixed_filters: (response.rag_fixed_filters ?? []).map((f) => ({
           ...f,
-          _key: Math.random().toString(36).slice(2),
+          _key: randomId(),
         })),
         // Media processing configuration
         transcription_service_id: response.transcription_service_id || undefined,
@@ -550,8 +551,6 @@ function AgentFormPage() {
 
     if (!appId || !agentId) return;
 
-    handleSaveMarketplaceProfile(); // Save marketplace profile first
-
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
 
@@ -628,6 +627,10 @@ function AgentFormPage() {
     };
 
     const isNew = Number.parseInt(agentId) === 0;
+
+    // Save the marketplace profile first, but only once the form is valid, and
+    // wait for it so it never races with the agent save below.
+    await handleSaveMarketplaceProfile();
 
     setError(null);
     setSaving(true);

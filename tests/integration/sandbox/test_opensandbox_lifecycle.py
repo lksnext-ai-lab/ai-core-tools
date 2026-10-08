@@ -21,7 +21,7 @@ from tools.sandbox.opensandbox_provider import OpenSandboxProvider, _META_SANDBO
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def provider():
     """OpenSandboxProvider with SandboxSync replaced by a controllable mock.
 

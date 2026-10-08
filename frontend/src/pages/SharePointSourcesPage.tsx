@@ -48,7 +48,7 @@ function SharePointSourcesPage() {
   const [syncingIds, setSyncingIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    loadSources();
+    void loadSources();
   }, [appId]);
 
   async function loadSources() {
