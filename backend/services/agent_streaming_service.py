@@ -142,10 +142,16 @@ class AgentStreamingService:
               LLM I/O) but never closes it. The caller still owns opening and
               closing the session it passed in.
             - Exactly one terminal event (``done`` or ``error``) is yielded
-              per successful or failed turn; on cancellation
-              (``CancelledError``/``GeneratorExit``) neither is yielded —
-              the generator re-raises instead, after recording the turn as
-              ``"Cancelled"``.
+              per successful or failed turn; on a cancellation that arrives
+              *before* that terminal event (``CancelledError``/
+              ``GeneratorExit``), neither is yielded — the generator
+              re-raises instead, after recording the turn as ``"Cancelled"``.
+              A ``GeneratorExit`` that instead arrives *after* the terminal
+              event (e.g. ``contextlib.aclosing``/the consumer's own
+              ``aclose()`` tearing down this now-finished generator right
+              after reading its ``done``/``error``) is re-raised too, but
+              does **not** overwrite the outcome already recorded for that
+              event — it is generator teardown, not a mid-turn cancellation.
             - The retry loop (missing-tool-output recovery) never yields a
               ``token`` before deciding whether to retry or fail, so
               ``data["response"]`` on the final ``done`` is always the
@@ -184,6 +190,18 @@ class AgentStreamingService:
         metrics_status, metrics_error_code, metrics_error_message = "SUCCESS", None, None
         metrics_collector = AgentMetricsCollector()
         first_token_at = None
+        # Set to True immediately before every terminal (done/error) yield
+        # below. A consumer that stops iterating right after receiving that
+        # event (e.g. `contextlib.aclosing.__aexit__` -> `aclose()`, which is
+        # exactly what every documented consumer -- `stream_agent_chat`, the
+        # A2A executor bridge -- does once it has what it needs) throws
+        # `GeneratorExit` back into this generator at that very `yield`,
+        # which is otherwise indistinguishable from a real mid-turn
+        # cancellation to the `except (CancelledError, GeneratorExit)` below.
+        # Without this flag, every successful (or already-reported-error)
+        # turn would be mis-recorded as `"Cancelled"` purely because of how
+        # its own caller closes the generator afterwards.
+        terminal_event_yielded = False
 
         try:
             # ----------------------------------------------------------------
@@ -393,6 +411,7 @@ class AgentStreamingService:
                             metrics_status = "ERROR"
                             metrics_error_code = type(stream_exc).__name__
                             metrics_error_message = str(stream_exc)[:2000]
+                            terminal_event_yielded = True
                             yield AgentStreamEvent(
                                 "error",
                                 {"message": "Your last message could not be completed. Please resend it."},
@@ -441,6 +460,7 @@ class AgentStreamingService:
             # get misreported as a cancellation instead of a real error, and
             # no SSE error event would ever reach the client.
             _assert_json_serializable(done_data, event_type="done")
+            terminal_event_yielded = True
             yield AgentStreamEvent(
                 "done",
                 done_data,
@@ -467,14 +487,21 @@ class AgentStreamingService:
             )
             metrics_status, metrics_error_code = "ERROR", type(exc).__name__
             metrics_error_message = "Connection error, please retry."
+            terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
                 {"message": "Connection error, please retry."},
                 extra={"error_code": metrics_error_code, "error_kind": "connection"},
             )
         except (asyncio.CancelledError, GeneratorExit):
-            # Client went away mid-stream.
-            metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
+            # Client went away mid-stream -- UNLESS `terminal_event_yielded`
+            # is already True, in which case this is `aclosing`/the
+            # consumer's own `aclose()` tearing down an already-finished
+            # generator right after its terminal event, not a real
+            # cancellation; the outcome recorded above (SUCCESS or a specific
+            # ERROR) must stand.
+            if not terminal_event_yielded:
+                metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
             raise
         except _AgentStreamSerializationError as exc:
             logger.error(
@@ -484,6 +511,7 @@ class AgentStreamingService:
             )
             metrics_status, metrics_error_code = "ERROR", "SerializationError"
             metrics_error_message = str(exc)[:2000]
+            terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
                 {"message": "Agent execution failed"},
@@ -499,6 +527,7 @@ class AgentStreamingService:
             metrics_error_message = (
                 str(exc.detail)[:2000] if exc.status_code < 500 else "Internal error"
             )
+            terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
                 {"message": "Agent execution failed"},
@@ -513,6 +542,7 @@ class AgentStreamingService:
             logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
             metrics_status, metrics_error_code = "ERROR", type(exc).__name__
             metrics_error_message = str(exc)[:2000]
+            terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
                 {"message": "Agent execution failed"},

@@ -35,6 +35,7 @@ def _clear_cache_and_env(monkeypatch):
         "A2A_URI_FETCH_TIMEOUT_SECONDS",
         "A2A_TASK_RETENTION_DAYS",
         "A2A_TASK_TIMEOUT_SECONDS",
+        "A2A_TURN_MAX_SECONDS",
         "A2A_SWEEP_INTERVAL_SECONDS",
         "A2A_EVENT_POLL_SECONDS",
         "A2A_STREAM_COALESCE_MS",
@@ -65,6 +66,7 @@ class TestDefaults:
         assert config.uri_fetch_timeout_seconds == 15
         assert config.task_retention_days == 30
         assert config.task_timeout_seconds == 900
+        assert config.turn_max_seconds == 900
         assert config.sweep_interval_seconds == 600
         assert config.event_poll_seconds == 0.5
         assert config.stream_coalesce_ms == 250
@@ -192,6 +194,7 @@ class TestIntMinValue:
             ("A2A_URI_FETCH_TIMEOUT_SECONDS", "uri_fetch_timeout_seconds", 15),
             ("A2A_TASK_RETENTION_DAYS", "task_retention_days", 30),
             ("A2A_TASK_TIMEOUT_SECONDS", "task_timeout_seconds", 900),
+            ("A2A_TURN_MAX_SECONDS", "turn_max_seconds", 900),
             ("A2A_SWEEP_INTERVAL_SECONDS", "sweep_interval_seconds", 600),
         ],
     )
@@ -229,6 +232,25 @@ class TestIntMinValue:
         monkeypatch.setenv("A2A_DISCOVERY_RATE_LIMIT_PER_MINUTE", "0")
         a2a_config.get_a2a_config.cache_clear()
         assert a2a_config.get_a2a_config().discovery_rate_limit_per_minute == 0
+
+
+class TestIntMaxValue:
+    """A2A_FILE_URL_TTL_SECONDS is capped at 86400 (fix round 1, item 10)."""
+
+    def test_within_cap_is_honored(self, monkeypatch):
+        monkeypatch.setenv("A2A_FILE_URL_TTL_SECONDS", "7200")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().file_url_ttl_seconds == 7200
+
+    def test_exactly_at_cap_is_honored(self, monkeypatch):
+        monkeypatch.setenv("A2A_FILE_URL_TTL_SECONDS", "86400")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().file_url_ttl_seconds == 86400
+
+    def test_above_cap_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("A2A_FILE_URL_TTL_SECONDS", "86401")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().file_url_ttl_seconds == 3600
 
 
 class TestFloatMinValue:

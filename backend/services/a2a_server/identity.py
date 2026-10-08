@@ -52,11 +52,18 @@ _OWNER_PATTERN = re.compile(r"^a2a:(\d+):(\d+):([0-9a-f]{64})$")
 
 
 def _require_owner_shape(owner: str) -> str:
-    """Raises `ValueError` unless `owner` matches the exact AD-3 shape."""
+    """Raises `ValueError` unless `owner` matches the exact AD-3 shape.
+
+    The message never includes the offending `owner` value itself (fix
+    round 1, item 8): it embeds the caller's `api_key_hash`, a stable
+    per-key identifier, and this `ValueError` can propagate to a log line
+    (or, in theory, an exception message surfaced by a layer above this
+    one) in a way a plain length/shape description cannot.
+    """
     if not _OWNER_PATTERN.match(owner):
         raise ValueError(
-            f"owner {owner!r} does not match the AD-3 shape "
-            "f'a2a:{app_id}:{agent_id}:{64-hex-char key hash}'"
+            f"owner string (length {len(owner)}) does not match the AD-3 shape "
+            "'a2a:{app_id}:{agent_id}:{64-hex-char key hash}'"
         )
     return owner
 

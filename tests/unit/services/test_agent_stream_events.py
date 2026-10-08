@@ -598,6 +598,61 @@ class TestAgentStreamEventsTyped:
         service.execution_service._finalize_turn.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_consumer_aclose_right_after_done_records_success_not_cancelled(self):
+        """A completed turn's own consumer stopping iteration right after
+        ``done`` (exactly what ``contextlib.aclosing.__aexit__`` -> ``aclose()``
+        does once it has read the terminal event — the pattern every
+        documented consumer uses, including ``stream_agent_chat`` and the A2A
+        execution bridge's ``_drain``) must still record ``SUCCESS``.
+
+        Before this fix, ``aclose()`` throws ``GeneratorExit`` back into this
+        generator at the still-suspended ``yield`` of ``done`` -- indistinguishable,
+        to a bare ``except (CancelledError, GeneratorExit)``, from a real
+        mid-turn cancellation -- so every successful A2A turn (and every
+        successful SSE turn whose consumer closes promptly) was being
+        mis-recorded as ``"Cancelled"``.
+        """
+        chain = _make_chain([("messages", (AIMessageChunk(content="hi"), {}))])
+        create_agent = AsyncMock(return_value=(chain, None))
+
+        ctx = _make_ctx()
+        harness = _StreamHarness()
+        service = _build_service(ctx)
+        db = MagicMock()
+
+        from contextlib import ExitStack
+
+        events = []
+        with ExitStack() as stack:
+            for p in _patches(create_agent, harness):
+                stack.enter_context(p)
+
+            gen = service.stream_agent_events(
+                agent_id=1,
+                message="hello",
+                file_references=[],
+                user_context={"user_id": "u1"},
+                conversation_id=297,
+                db=db,
+            )
+            try:
+                while True:
+                    event = await gen.__anext__()
+                    events.append(event)
+                    if event.type == "done":
+                        break
+            finally:
+                # Exactly what `contextlib.aclosing`'s `__aexit__` does once a
+                # consumer has what it needs -- the reproduction for the bug
+                # this test guards against.
+                await asyncio.wait_for(gen.aclose(), timeout=1)
+
+        assert [ev.type for ev in events] == ["metadata", "token", "done"]
+        assert harness.recorded_kwargs["status"] == "SUCCESS"
+        assert harness.recorded_kwargs.get("error_code") is None
+        assert harness.recorded_kwargs.get("error_message") is None
+
+    @pytest.mark.asyncio
     async def test_cancelling_consumer_task_blocked_in_anext_stops_inner_sleep(self):
         """Cancelling the *task* that is awaiting ``gen.__anext__()`` while
         the inner fake astream is suspended inside an ``asyncio.sleep`` must

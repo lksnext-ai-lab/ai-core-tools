@@ -46,8 +46,10 @@ def _get_bool(name: str, default: bool) -> bool:
     return default
 
 
-def _get_int(name: str, default: int, *, min_value: Optional[int] = None) -> int:
-    """Parse an int env var; malformed or below-``min_value`` values fall back to ``default``."""
+def _get_int(
+    name: str, default: int, *, min_value: Optional[int] = None, max_value: Optional[int] = None
+) -> int:
+    """Parse an int env var; malformed or out-of-[``min_value``, ``max_value``] values fall back to ``default``."""
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -59,6 +61,11 @@ def _get_int(name: str, default: int, *, min_value: Optional[int] = None) -> int
     if min_value is not None and value < min_value:
         logger.warning(
             "%s=%s is below the minimum %s; using default %s", name, value, min_value, default
+        )
+        return default
+    if max_value is not None and value > max_value:
+        logger.warning(
+            "%s=%s is above the maximum %s; using default %s", name, value, max_value, default
         )
         return default
     return value
@@ -151,6 +158,7 @@ class A2AConfig:
     uri_fetch_timeout_seconds: int
     task_retention_days: int
     task_timeout_seconds: int
+    turn_max_seconds: int
     sweep_interval_seconds: int
     event_poll_seconds: float
     stream_coalesce_ms: int
@@ -190,10 +198,21 @@ def get_a2a_config() -> A2AConfig:
         max_request_mb=_get_int("A2A_MAX_REQUEST_MB", 32, min_value=1),
         max_file_mb=_get_int("A2A_MAX_FILE_MB", 10, min_value=1),
         inline_file_max_bytes=_get_int("A2A_INLINE_FILE_MAX_BYTES", 5242880, min_value=1),
-        file_url_ttl_seconds=_get_int("A2A_FILE_URL_TTL_SECONDS", 3600, min_value=1),
+        # Capped at 24h (fix round 1, item 10): an unbounded TTL would let a
+        # single signed output-file URL (AD-12) stay valid indefinitely if an
+        # operator fat-fingers this env var, defeating the whole point of an
+        # *expiring* signature.
+        file_url_ttl_seconds=_get_int("A2A_FILE_URL_TTL_SECONDS", 3600, min_value=1, max_value=86400),
         uri_fetch_timeout_seconds=_get_int("A2A_URI_FETCH_TIMEOUT_SECONDS", 15, min_value=1),
         task_retention_days=_get_int("A2A_TASK_RETENTION_DAYS", 30, min_value=1),
         task_timeout_seconds=_get_int("A2A_TASK_TIMEOUT_SECONDS", 900, min_value=1),
+        # Fix round 1, item 2 (RB-2 bridge side): a hard wall-clock cap on one
+        # A2A turn's streaming section, independent of `task_timeout_seconds`
+        # (which is the *sweep*'s staleness threshold for a worker-crash/
+        # restart scenario, step_018 -- a different failure mode with a
+        # different owner). Same default as a reasonable starting point; the
+        # two are intentionally separately configurable.
+        turn_max_seconds=_get_int("A2A_TURN_MAX_SECONDS", 900, min_value=1),
         sweep_interval_seconds=_get_int("A2A_SWEEP_INTERVAL_SECONDS", 600, min_value=1),
         event_poll_seconds=_get_float("A2A_EVENT_POLL_SECONDS", 0.5, min_value=0, exclusive=True),
         # 0ms is a legitimate "coalescing disabled" value.

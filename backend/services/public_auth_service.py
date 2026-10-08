@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 from typing import Optional
 
@@ -105,3 +106,43 @@ class PublicAuthService:
             account is deactivated.
         """
         return self._lookup_active_key(db, app_id, api_key)
+
+
+def create_api_key_user_context(
+    app_id: int,
+    api_key: str,
+    conversation_id: str = None,
+    user_token: str = None,
+) -> dict:
+    """
+    Create user context for API key authentication.
+    Uses a hash of the API key as user identifier to maintain session isolation.
+
+    Moved here (step_016) from ``routers.public.v1.auth`` so that a
+    service -- the A2A executor bridge, ``services/a2a_server/executor.py`` --
+    can build the same public-API-style user context without a service
+    importing a router module (layering: router -> service -> repository ->
+    model). ``routers.public.v1.auth`` re-exports this name unchanged, so
+    every existing caller (``.auth import create_api_key_user_context``)
+    keeps working with no behavior change.
+
+    Args:
+        app_id: Application ID
+        api_key: API key for authentication
+        conversation_id: Optional conversation ID
+        user_token: Optional end-user JWT to forward to MCP servers. When set,
+                    MCPClientManager will inject it as ``Authorization: Bearer``
+                    on every MCP tool call made during this agent execution.
+    """
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    context = {
+        "user_id": f"apikey_{api_key_hash}",
+        "app_id": app_id,
+        "oauth": False,
+        "api_key": api_key,
+    }
+    if conversation_id is not None:
+        context["conversation_id"] = conversation_id
+    if user_token:
+        context["token"] = user_token
+    return context
