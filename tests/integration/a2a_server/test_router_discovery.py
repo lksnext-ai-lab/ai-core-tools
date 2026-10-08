@@ -12,6 +12,9 @@ from __future__ import annotations
 import pytest
 
 from fastapi.testclient import TestClient
+
+from db.database import SessionLocal
+from models.app import App
 from services.rate_limit_service import rate_limit_service
 from utils.a2a_config import get_a2a_config
 
@@ -156,6 +159,110 @@ def test_a2a_disabled_globally_404s_every_discovery_route(client, a2a_committed_
     finally:
         monkeypatch.setenv("A2A_ENABLED", "true")
         get_a2a_config.cache_clear()
+
+
+def _card_url(world, agent_id) -> str:
+    return f"/a2a/v1/apps/{world.app_slug}/agents/{agent_id}/.well-known/agent-card.json"
+
+
+_NOT_FOUND_BODY = {"detail": "Not Found"}
+
+
+def test_nonexistent_agent_id_card_is_the_same_uniform_404(client, a2a_committed_world):
+    """AC-3(b): an agent id that does not exist anywhere (not even under a
+    different app) 404s exactly like every other AC-3 case."""
+    world = a2a_committed_world
+    missing_agent_id = max(
+        world.agent_public_id, world.agent_api_key_id, world.agent_disabled_id,
+        world.agent_frozen_id, world.other_agent_id,
+    ) + 1_000_000
+    resp = client.get(_card_url(world, missing_agent_id))
+    assert resp.status_code == 404
+    assert resp.json() == _NOT_FOUND_BODY
+
+
+def test_frozen_app_card_is_the_same_uniform_404(client, a2a_committed_world):
+    """AC-3(f): the app itself is frozen (its agent is otherwise public and enabled)."""
+    world = a2a_committed_world
+    session = SessionLocal()
+    try:
+        app = session.get(App, world.app_id)
+        app.is_frozen = True
+        session.commit()
+    finally:
+        session.close()
+
+    resp = client.get(_card_url(world, world.agent_public_id))
+    assert resp.status_code == 404
+    assert resp.json() == _NOT_FOUND_BODY
+
+
+def test_api_key_agent_card_with_another_apps_key_is_the_same_uniform_404(client, a2a_committed_world):
+    """AC-3(h): a key that is valid, but for a different app, counts as no key."""
+    world = a2a_committed_world
+    url = _card_url(world, world.agent_api_key_id)
+    resp = client.get(url, headers={"X-API-KEY": world.other_key_raw})
+    assert resp.status_code == 404
+    assert resp.json() == _NOT_FOUND_BODY
+
+
+class TestAC3Uniform404Matrix:
+    """AC-3: every one of the nine cases returns an HTTP response that is
+    byte-identical (same status, same body bytes, no distinguishing header)
+    to every other -- not merely "also a 404 with the same dict content"."""
+
+    def test_all_nine_cases_are_byte_identical(self, client, a2a_committed_world, monkeypatch):
+        world = a2a_committed_world
+
+        session = SessionLocal()
+        try:
+            app = session.get(App, world.app_id)
+            app.is_frozen = True
+            session.commit()
+        finally:
+            session.close()
+
+        missing_agent_id = max(
+            world.agent_public_id, world.agent_api_key_id, world.agent_disabled_id,
+            world.agent_frozen_id, world.other_agent_id,
+        ) + 1_000_000
+
+        # (f) requires the app frozen above; build the rest of the cases
+        # against that same (now-frozen) world so every case genuinely
+        # returns through `resolve()`'s uniform 404, not a side effect of a
+        # case ordering quirk.
+        cases = {
+            "a_missing_app_slug": lambda: client.get(
+                f"/a2a/v1/apps/does-not-exist-{world.app_id}/agents/{world.agent_public_id}/.well-known/agent-card.json"
+            ),
+            "b_missing_agent_id": lambda: client.get(_card_url(world, missing_agent_id)),
+            "c_agent_of_app_b_under_app_a": lambda: client.get(_card_url(world, world.other_agent_id)),
+            "d_a2a_enabled_false": lambda: client.get(_card_url(world, world.agent_disabled_id)),
+            "e_agent_frozen": lambda: client.get(_card_url(world, world.agent_frozen_id)),
+            "f_app_frozen": lambda: client.get(_card_url(world, world.agent_public_id)),
+            "g_api_key_visibility_no_key": lambda: client.get(_card_url(world, world.agent_api_key_id)),
+            "h_api_key_visibility_other_apps_key": lambda: client.get(
+                _card_url(world, world.agent_api_key_id), headers={"X-API-KEY": world.other_key_raw}
+            ),
+        }
+
+        responses = {name: fn() for name, fn in cases.items()}
+
+        monkeypatch.setenv("A2A_ENABLED", "false")
+        get_a2a_config.cache_clear()
+        try:
+            responses["i_a2a_enabled_false_globally"] = client.get(_card_url(world, world.agent_public_id))
+        finally:
+            monkeypatch.setenv("A2A_ENABLED", "true")
+            get_a2a_config.cache_clear()
+
+        reference = responses["a_missing_app_slug"]
+        assert reference.status_code == 404
+        assert reference.content == b'{"detail":"Not Found"}'
+
+        for name, resp in responses.items():
+            assert resp.status_code == reference.status_code, f"case {name} had a different status code"
+            assert resp.content == reference.content, f"case {name} had a different body"
 
 
 def test_discovery_rate_limit_returns_429_with_retry_after_and_never_touches_the_app_budget(

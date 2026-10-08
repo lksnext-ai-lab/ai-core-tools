@@ -9,6 +9,7 @@ can run as a pure `tests/unit` test.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -156,3 +157,23 @@ class TestBoundedTeardownWait:
             args and "a2a.executor.drain_teardown_timeout" in args[0] and _FakeUpdater.task_id in args
             for args in error_calls
         ), f"expected a drain_teardown_timeout ERROR log naming the task_id; got {error_calls!r}"
+
+        # `_await_pending_to_completion` gave up on `pending` (the task
+        # driving `agen.__anext__()`) after the (patched) teardown budget,
+        # while the fake generator's own `except CancelledError` clause was
+        # still mid-`asyncio.sleep(5)` -- so that task is left abandoned,
+        # not-done, and never referenced by this test again. Left alone, it
+        # would only finish (and be garbage-collected) well after this test
+        # returns, which is exactly the "Task was destroyed but it is
+        # pending" warning this regression test guards against. Cancelling
+        # it again interrupts that `asyncio.sleep(5)` immediately (a second
+        # `cancel()` delivers `CancelledError` at the task's current
+        # suspension point right away, it does not wait out the sleep), so
+        # awaiting it here is fast and leaves no pending task at loop close.
+        current = asyncio.current_task()
+        leftover = [t for t in asyncio.all_tasks() if t is not current and not t.done()]
+        for task in leftover:
+            task.cancel()
+        for task in leftover:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
