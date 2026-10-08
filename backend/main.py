@@ -298,10 +298,10 @@ async def get_static_file(
     # os.path.join ignores the base when the suffix starts with '/' — strip it.
     file_path = file_path.lstrip("/\\")
 
-    full_path = os.path.abspath(os.path.join(tmp_base_folder, file_path))
     base_path = os.path.abspath(tmp_base_folder)
+    full_path = os.path.normpath(os.path.join(base_path, file_path))
 
-    if not full_path.startswith(base_path + os.sep) and full_path != base_path:
+    if not full_path.startswith(base_path + os.sep):
         raise HTTPException(status_code=403, detail="Invalid path")
 
     if not os.path.exists(full_path):
