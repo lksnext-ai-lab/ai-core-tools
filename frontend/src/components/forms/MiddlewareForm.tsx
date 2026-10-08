@@ -447,7 +447,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-gray-900 truncate">{cfg.name}</span>
                     {!Array.isArray(tools) && (
-                      <button type="button" onClick={() => loadMcpTools(cfg)} disabled={loadingMcp !== null}
+                      <button type="button" onClick={() => void loadMcpTools(cfg)} disabled={loadingMcp !== null}
                         className="shrink-0 text-xs px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                         {loadingMcp === cfg.config_id ? 'Loading…' : 'Show tools'}
                       </button>

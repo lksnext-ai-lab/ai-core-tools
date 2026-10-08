@@ -1144,7 +1144,7 @@ function ChatInterface({
                   />
                 )}
                 {pendingApproval && !isStreaming && (
-                  <HitlApprovalCard approval={pendingApproval} onDecide={handleApprovalDecision} />
+                  <HitlApprovalCard approval={pendingApproval} onDecide={(decisions) => void handleApprovalDecision(decisions)} />
                 )}
               </>
             )}
