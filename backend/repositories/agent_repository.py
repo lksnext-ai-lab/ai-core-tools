@@ -187,11 +187,16 @@ class AgentRepository:
         db.commit()
     
     @staticmethod
-    def get_valid_tool_ids(db: Session, tool_ids: List[int]) -> List[int]:
-        """Get valid tool IDs (agents that are marked as tools)"""
+    def get_valid_tool_ids(db: Session, tool_ids: List[int], app_id: int) -> List[int]:
+        """Get valid tool IDs: agents marked as tools AND belonging to ``app_id``.
+
+        The ``app_id`` filter is mandatory — without it, a caller could attach another
+        tenant's tool-agent to their own agent (cross-tenant tool invocation / IDOR).
+        """
         tools_query = db.query(Agent.agent_id).filter(
             Agent.agent_id.in_(tool_ids),
-            Agent.is_tool == True
+            Agent.is_tool == True,
+            Agent.app_id == app_id
         )
         return [id for (id,) in tools_query]
     

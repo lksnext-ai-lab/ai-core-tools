@@ -83,9 +83,10 @@ class AgentService:
 
     def get_agent_detail(self, db: Session, app_id: int, agent_id: int) -> Optional[AgentDetailSchema]:
         """Get detailed agent information with form data for editing"""
-        
-        # Get agent details
-        agent = self._get_agent_for_detail(db, agent_id)
+
+        # Get agent details, scoped to this app (defense in depth: the router already
+        # checks app ownership, but the service must never leak another tenant's agent).
+        agent = self._get_agent_for_detail(db, agent_id, app_id)
         if agent_id != 0 and not agent:
             return None
         
@@ -180,8 +181,12 @@ class AgentService:
             rag_fixed_filters=getattr(agent, 'rag_fixed_filters', None) if isinstance(getattr(agent, 'rag_fixed_filters', None), (list, type(None))) else None,
         )
 
-    def _get_agent_for_detail(self, db: Session, agent_id: int):
-        """Get agent for detail view"""
+    def _get_agent_for_detail(self, db: Session, agent_id: int, app_id: Optional[int] = None):
+        """Get agent for detail view, optionally scoped to ``app_id``.
+
+        When ``app_id`` is provided, an agent that exists but belongs to a different
+        app is treated as not found (returns ``None``) rather than leaking it.
+        """
         if agent_id == 0:
             # New agent
             return type('Agent', (), {
@@ -194,7 +199,9 @@ class AgentService:
             agent = self.get_agent(db, agent_id)
             if not agent:
                 return None
-            
+            if app_id is not None and agent.app_id != app_id:
+                return None
+
             # If it's an OCR agent, get the OCR-specific data
             if agent.type == 'ocr_agent':
                 agent = self.get_agent(db, agent_id, 'ocr')
@@ -236,6 +243,18 @@ class AgentService:
 
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
 
+        # Defense in depth: never let an update move an existing agent into a different
+        # app (the router already verifies ownership, but the service must not silently
+        # allow a cross-tenant takeover if ever called without that check upstream).
+        # A NULL agent.app_id is also treated as a mismatch (no such thing as a
+        # "system" Agent row to legitimately fall through here).
+        if agent and agent.app_id != agent_data.get('app_id'):
+            raise ValueError(
+                f"Agent {agent_id} does not belong to app {agent_data.get('app_id')}"
+            )
+
+        is_new_agent = agent is None
+
         if not agent:
             # Enforce per-app agent limit before creation (SaaS mode only)
             app_id = agent_data.get('app_id')
@@ -248,6 +267,12 @@ class AgentService:
                 agent = OCRAgent()
             else:
                 agent = Agent()
+
+        # Reject any referenced resource id (AI service, silo, output parser, media
+        # services) that doesn't belong to this app (or isn't a system-wide resource
+        # where that's allowed) before persisting anything — otherwise a caller could
+        # point an agent at another tenant's resource (IDOR).
+        self._validate_referenced_resource_ids(db, agent_data)
 
         # Validate rag_fixed_filters fields against the silo's metadata_definition.
         # Fixed filters are only meaningful with a silo; reject them otherwise so a
@@ -278,7 +303,7 @@ class AgentService:
                 )
 
         update_method = self._update_normal_agent
-        update_method(db, agent, agent_data)
+        update_method(db, agent, agent_data, is_new_agent=is_new_agent)
 
         # Threshold search needs a threshold value, else it degrades to plain similarity at
         # retrieval. Checked on the merged state (the schema can't see the stored value on a
@@ -302,8 +327,69 @@ class AgentService:
         # Return the agent ID
         return agent.agent_id
 
+    @staticmethod
+    def _validate_owned_resource(resource, app_id: int, field_name: str, allow_system: bool) -> None:
+        """Raise ``ValueError`` unless ``resource`` exists and belongs to ``app_id``.
 
-    
+        When ``allow_system`` is true, a resource with ``app_id is None`` (a
+        platform/system-wide resource, e.g. AIService or EmbeddingService) is also
+        accepted for any app. The error message is intentionally generic — it never
+        reveals whether the id exists under a different app.
+        """
+        if resource is None:
+            raise ValueError(f"{field_name} does not exist or does not belong to this app")
+        if resource.app_id == app_id:
+            return
+        if allow_system and resource.app_id is None:
+            return
+        raise ValueError(f"{field_name} does not exist or does not belong to this app")
+
+    def _validate_referenced_resource_ids(self, db: Session, data: dict) -> None:
+        """Ensure every foreign-key id referenced by an agent create/update payload
+        belongs to ``data['app_id']`` (or is a system-wide resource, where allowed).
+
+        Without this check, an editor of one app could point their agent at another
+        tenant's AI service, silo, output parser, or media-processing service (IDOR).
+        ``sandbox_service_id`` is validated separately in ``_update_normal_agent``, and
+        ``tool_ids`` / ``mcp_config_ids`` are validated in ``update_agent_tools`` /
+        ``update_agent_mcps`` respectively (they're only known after this call).
+        """
+        app_id = data['app_id']
+
+        service_id = data.get('service_id') or None
+        if service_id:
+            from repositories.ai_service_repository import AIServiceRepository
+            service = AIServiceRepository.get_by_id(db, service_id)
+            self._validate_owned_resource(service, app_id, 'service_id', allow_system=True)
+
+        silo_id = data.get('silo_id') or None
+        if silo_id:
+            from repositories.silo_repository import SiloRepository
+            silo = SiloRepository.get_by_id(silo_id, db)
+            self._validate_owned_resource(silo, app_id, 'silo_id', allow_system=False)
+
+        output_parser_id = data.get('output_parser_id') or None
+        if output_parser_id:
+            from repositories.output_parser_repository import OutputParserRepository
+            parser = OutputParserRepository().get_by_id(db, output_parser_id)
+            self._validate_owned_resource(parser, app_id, 'output_parser_id', allow_system=False)
+
+        # AI-service-backed fields (vision/transcription/video): system-wide services allowed.
+        for field_name in ('vision_service_id', 'transcription_service_id', 'video_ai_service_id'):
+            value = data.get(field_name) or None
+            if value:
+                from repositories.ai_service_repository import AIServiceRepository
+                service = AIServiceRepository.get_by_id(db, value)
+                self._validate_owned_resource(service, app_id, field_name, allow_system=True)
+
+        media_embedding_service_id = data.get('media_embedding_service_id') or None
+        if media_embedding_service_id:
+            from repositories.embedding_service_repository import EmbeddingServiceRepository
+            embedding_service = EmbeddingServiceRepository.get_by_id(db, media_embedding_service_id)
+            self._validate_owned_resource(
+                embedding_service, app_id, 'media_embedding_service_id', allow_system=True
+            )
+
     @staticmethod
     def _resolve_prompt_template(new_value: Optional[str], current_value: Optional[str]) -> str:
         """Never persist an empty prompt template: it would drop the user's message.
@@ -317,8 +403,14 @@ class AgentService:
             return DEFAULT_PROMPT_TEMPLATE
         return new_value
 
-    def _update_normal_agent(self, db: Session, agent: Agent, data: dict):
-        """Update agent fields"""
+    def _update_normal_agent(self, db: Session, agent: Agent, data: dict, is_new_agent: bool = False):
+        """Update agent fields.
+
+        ``is_new_agent`` gates ``app_id`` assignment: it is only ever set at creation
+        time. An update must never move an existing agent to a different app's
+        ``app_id`` (that would allow a cross-tenant takeover of the agent and the
+        AI service/silo it references).
+        """
         agent.name = data['name']
         agent.description = data.get('description', '')  # Ensure it's not None
         agent.system_prompt = data.get('system_prompt')
@@ -344,7 +436,8 @@ class AgentService:
                     "belong to this app"
                 )
         agent.sandbox_service_id = sandbox_service_id
-        agent.app_id = data['app_id']
+        if is_new_agent:
+            agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
         has_memory_value = data.get('has_memory')
@@ -442,9 +535,12 @@ class AgentService:
         
         # Get existing tool associations
         existing_tools = {assoc.tool_id: assoc for assoc in AgentRepository.get_agent_tool_associations(db, agent_id)}
-        
-        # Convert tool_ids to set of integers and filter out non-tool agents
-        valid_tool_ids = set(AgentRepository.get_valid_tool_ids(db, [int(id) for id in tool_ids if id]))
+
+        # Convert tool_ids to set of integers and filter out non-tool agents and agents
+        # belonging to a different app (cross-tenant tool attachment / IDOR).
+        valid_tool_ids = set(
+            AgentRepository.get_valid_tool_ids(db, [int(id) for id in tool_ids if id], agent.app_id)
+        )
         
         # Remove associations that are no longer needed
         for tool_id in existing_tools.keys():
@@ -480,9 +576,14 @@ class AgentService:
 
         # Get existing MCP associations
         existing_mcps = {assoc.config_id: assoc for assoc in AgentRepository.get_agent_mcp_associations(db, agent_id)}
-        
-        # Convert mcp_ids to set of integers
-        valid_mcp_ids = {int(id) for id in mcp_ids if id}
+
+        # Convert mcp_ids to set of integers, filtered to configs that exist and belong to
+        # this agent's app (cross-tenant MCP config attachment / IDOR otherwise).
+        from repositories.mcp_config_repository import MCPConfigRepository
+        requested_mcp_ids = [int(id) for id in mcp_ids if id]
+        valid_mcp_ids = set(
+            MCPConfigRepository.get_valid_config_ids_for_app(db, requested_mcp_ids, agent.app_id)
+        )
         
         # Remove associations that are no longer needed
         for mcp_id in existing_mcps.keys():

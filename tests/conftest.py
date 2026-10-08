@@ -137,9 +137,12 @@ def test_engine():
     )
 
     # Runtime safety check: verify we connected to the test DB, not dev/prod.
+    # Accepts the shared `test_db`/`mattin_test_temp` names plus any `test_db_*` variant
+    # (e.g. `test_db_hotfix`) used to isolate a branch's test run from concurrent CI/dev
+    # runs against the shared test DB server on :5433.
     with engine.connect() as conn:
         db_name = conn.execute(text("SELECT current_database()")).scalar()
-        assert db_name in ("test_db", "mattin_test_temp"), (
+        assert db_name in ("test_db", "mattin_test_temp") or db_name.startswith("test_db_"), (
             f"SAFETY: test_engine connected to '{db_name}' instead of test database. "
             f"Aborting to prevent data loss."
         )
