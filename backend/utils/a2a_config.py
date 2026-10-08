@@ -160,6 +160,7 @@ class A2AConfig:
     task_timeout_seconds: int
     turn_max_seconds: int
     sweep_interval_seconds: int
+    event_retention_minutes: int
     event_poll_seconds: float
     stream_coalesce_ms: int
     keepalive_seconds: float
@@ -194,6 +195,10 @@ def get_a2a_config() -> A2AConfig:
             "cards if that header isn't trustworthy behind your reverse proxy."
         )
 
+    # 0ms is a legitimate "coalescing disabled" value.
+    stream_coalesce_ms = _get_int("A2A_STREAM_COALESCE_MS", 250)
+    keepalive_seconds = _get_float("A2A_KEEPALIVE_SECONDS", 1.0, min_value=0, exclusive=True)
+
     return A2AConfig(
         enabled=_get_bool("A2A_ENABLED", True),
         enable_v0_3_compat=_get_bool("A2A_ENABLE_V0_3_COMPAT", True),
@@ -221,12 +226,22 @@ def get_a2a_config() -> A2AConfig:
         # two are intentionally separately configurable.
         turn_max_seconds=_get_int("A2A_TURN_MAX_SECONDS", 900, min_value=1),
         sweep_interval_seconds=_get_int("A2A_SWEEP_INTERVAL_SECONDS", 600, min_value=1),
+        # RB-6 (step_002 reliability, carried to step_018): purges
+        # `a2a_task_events` of terminal tasks after a short grace period,
+        # separately from `task_retention_days`'s much longer full-task
+        # retention -- a terminal task's events are pure history (no caller
+        # is still polling/subscribing for them) and are the single
+        # highest-churn write in the whole A2A system (every in-flight turn
+        # writes at least one per `A2A_KEEPALIVE_SECONDS`).
+        event_retention_minutes=_get_int("A2A_EVENT_RETENTION_MINUTES", 15, min_value=1),
         event_poll_seconds=_get_float("A2A_EVENT_POLL_SECONDS", 0.5, min_value=0, exclusive=True),
-        # 0ms is a legitimate "coalescing disabled" value.
-        stream_coalesce_ms=_get_int("A2A_STREAM_COALESCE_MS", 250),
-        keepalive_seconds=_get_float("A2A_KEEPALIVE_SECONDS", 1.0, min_value=0, exclusive=True),
-        # 0s is a legitimate "no grace period" value.
-        purge_grace_seconds=_get_int("A2A_PURGE_GRACE_SECONDS", 5),
+        stream_coalesce_ms=stream_coalesce_ms,
+        keepalive_seconds=keepalive_seconds,
+        # AD-10: must exceed keepalive + coalesce, or a remote producer's next save can recreate a
+        # purged task (SDK 1.2.2 `ensure_task_id`); `_clamp_purge_grace` enforces that floor.
+        purge_grace_seconds=_clamp_purge_grace(
+            _get_int("A2A_PURGE_GRACE_SECONDS", 5, min_value=0), keepalive_seconds, stream_coalesce_ms
+        ),
         status_updates=_get_bool("A2A_STATUS_UPDATES", False),
         sdk_debug=_get_bool("A2A_SDK_DEBUG", False),
         # Input-processing caps (FR-18/NFR-5): bound how much work a single
@@ -306,6 +321,22 @@ def _clamp_worker_cap(configured: int) -> int:
             configured, limit_concurrency, clamped,
         )
         return clamped
+    return configured
+
+
+def _clamp_purge_grace(configured: int, keepalive_seconds: float, stream_coalesce_ms: int) -> int:
+    """Raises the purge grace to at least `ceil(keepalive + coalesce) + 1` seconds (AD-10).
+
+    A grace at or below one keepalive/coalesce window lets a remote producer that is still
+    mid-turn save after the purge, which the SDK turns into a freshly recreated task row.
+    """
+    floor = math.ceil(keepalive_seconds + max(0, stream_coalesce_ms) / 1000.0) + 1
+    if configured < floor:
+        logger.warning(
+            "A2A_PURGE_GRACE_SECONDS=%s is below keepalive (%ss) + coalesce (%sms) + 1s; clamping to %s.",
+            configured, keepalive_seconds, stream_coalesce_ms, floor,
+        )
+        return floor
     return configured
 
 

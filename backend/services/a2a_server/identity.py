@@ -157,9 +157,16 @@ class A2ARequestLog:
     conversation_id: Optional[int] = None
     outcome: Optional[str] = None
     started_monotonic: float = field(default_factory=time.monotonic)
+    _emitted: bool = field(default=False, repr=False)
 
     def emit(self, logger, *, app_id: int, agent_id: int, api_key_id: int) -> None:
         """Logs exactly one structured line for this RPC.
+
+        Idempotent (step_018 fix round): a stream now has two independent
+        emit paths (`bounded_sse_iterator`'s own `finally`, and the router's
+        `resp.background` fallback for a stream that never actually starts
+        iterating) -- `_emitted` guarantees at most one line is ever logged
+        regardless of how many of those paths actually run.
 
         `app_id`/`agent_id`/`api_key_id` identify the caller (from the
         enclosing `A2ACallScope`, which the call site already holds);
@@ -167,6 +174,9 @@ class A2ARequestLog:
         into the human-readable message and passed via `extra=` for
         structured-log consumers.
         """
+        if self._emitted:
+            return
+        self._emitted = True
         latency_ms = round((time.monotonic() - self.started_monotonic) * 1000.0, 1)
         fields = {
             "app_id": app_id,

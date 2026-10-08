@@ -32,31 +32,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from dataclasses import dataclass, field
 from typing import Optional, Set, Tuple
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.cluster.database_event_stream import DatabaseTaskEventStream
-from a2a.server.cluster.task_store import (
-    ConcurrentTaskModificationError,
-    VersionedTaskStore,
-)
+from a2a.server.cluster.task_store import VersionedTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.default_request_handler_v2 import (
     DefaultRequestHandlerV2,
 )
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
-from a2a.types.a2a_pb2 import (
-    AgentCapabilities,
-    AgentCard,
-    Message,
-    Part,
-    Task,
-    TaskState,
-    TaskStatus,
-    TaskStatusUpdateEvent,
-)
+from a2a.types.a2a_pb2 import AgentCapabilities, AgentCard
 from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -65,25 +52,13 @@ from services.a2a_server.context_builders import (
     A2AServerCallContextBuilder,
     A2ARequestContextBuilder,
 )
-from services.a2a_server.identity import context_for_owner, resolve_a2a_owner
+from services.a2a_server.identity import resolve_a2a_owner
 from services.a2a_server.storage import build_bound_storage
+from services.a2a_server.task_states import fail_task_cas
 from utils.a2a_config import get_a2a_config
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-# AD-1/active_task: the terminal states. Duplicated here (rather than imported
-# from a2a.server.agent_execution.active_task) because that module's constant
-# is not part of the SDK's public API surface the rest of this package commits
-# to importing from; four literals are simpler than a private import.
-_TERMINAL_TASK_STATES = frozenset(
-    {
-        TaskState.TASK_STATE_COMPLETED,
-        TaskState.TASK_STATE_CANCELED,
-        TaskState.TASK_STATE_FAILED,
-        TaskState.TASK_STATE_REJECTED,
-    }
-)
 
 _SHUTDOWN_MESSAGE_TEXT = "worker shutdown"
 
@@ -229,49 +204,24 @@ def get_runtime() -> Optional[A2ARuntime]:
     return _runtime
 
 
-def _shutdown_status_event(task: Task) -> Tuple[Task, TaskStatusUpdateEvent]:
-    """Builds the FAILED `Task`/`TaskStatusUpdateEvent` pair for one in-flight task (RB-1)."""
-    shutdown_message = Message(
-        message_id=str(uuid.uuid4()),
-        context_id=task.context_id,
-        task_id=task.id,
-        parts=[Part(text=_SHUTDOWN_MESSAGE_TEXT)],
-    )
-    updated = Task()
-    updated.CopyFrom(task)
-    updated.status.state = TaskState.TASK_STATE_FAILED
-    updated.status.message.CopyFrom(shutdown_message)
-    event = TaskStatusUpdateEvent(
-        task_id=task.id, context_id=task.context_id, status=updated.status
-    )
-    return updated, event
-
-
 async def _fail_in_flight_tasks(rt: A2ARuntime, *, timeout_s: float) -> None:
     """Writes a FAILED status for every task in `rt.in_flight` (RB-1).
 
-    Best-effort and bounded: a task that is already terminal, that no longer
-    exists, or that loses a concurrent-write race (`ConcurrentTaskModificationError`
-    -- another worker is already handling it) is simply skipped, never
-    retried. Every exception is caught and logged; this function itself never
-    raises, so `close_runtime`'s `finally` always reaches `handler.aclose()`.
+    Best-effort and bounded: delegates the reload-check-CAS-write sequence to
+    `task_states.fail_task_cas` (architecture M2: the single place that does
+    this, shared with the maintenance worker's stale-task sweep), which
+    itself swallows a missing/already-terminal task and a lost
+    `ConcurrentTaskModificationError` race. Every exception is caught and
+    logged; this function itself never raises, so `close_runtime`'s `finally`
+    always reaches `handler.aclose()`.
     """
     if not rt.in_flight:
         return
 
     async def _fail_one(owner: str, task_id: str) -> None:
         try:
-            ctx = context_for_owner(owner)
-            stored = await rt.store.get(task_id, ctx)
-            if stored is None or stored.task.status.state in _TERMINAL_TASK_STATES:
-                return
-            updated, event = _shutdown_status_event(stored.task)
-            await rt.store.save(
-                updated, event=event, prev=stored.task, prev_version=stored.version, context=ctx
-            )
-            logger.info("a2a.runtime.shutdown_failed_task task_id=%s", task_id)
-        except ConcurrentTaskModificationError:
-            logger.info("a2a.runtime.shutdown_task_raced task_id=%s", task_id)
+            if await fail_task_cas(rt.store, task_id, owner, _SHUTDOWN_MESSAGE_TEXT):
+                logger.info("a2a.runtime.shutdown_failed_task task_id=%s", task_id)
         except Exception:
             logger.exception("a2a.runtime.shutdown_fail_task_error task_id=%s", task_id)
 

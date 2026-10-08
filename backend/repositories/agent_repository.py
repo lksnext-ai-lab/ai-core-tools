@@ -30,6 +30,25 @@ class AgentRepository:
     def get_ocr_agent_by_id(db: Session, agent_id: int) -> Optional[OCRAgent]:
         """Get OCR agent by ID from OCRAgent table"""
         return db.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
+
+    @staticmethod
+    def existing_ids(db: Session, candidate_ids: list[int]) -> set[int]:
+        """Returns the subset of `candidate_ids` that still exist in `Agent`.
+
+        `OCRAgent` is single-table-inheritance-joined on `Agent.agent_id`
+        (every `OCRAgent` row has a matching `Agent` row), so a plain
+        `Agent.agent_id` lookup covers both. Used by the A2A maintenance
+        worker's orphan sweep (step_018) via `asyncio.to_thread`.
+        """
+        if not candidate_ids:
+            return set()
+        rows = db.query(Agent.agent_id).filter(Agent.agent_id.in_(candidate_ids)).all()
+        return {row[0] for row in rows}
+
+    @staticmethod
+    def any_exists(db: Session) -> bool:
+        """True if at least one agent row exists (A2A orphan-sweep sanity guard)."""
+        return db.query(Agent.agent_id).limit(1).first() is not None
     
     @staticmethod
     def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Agent | OCRAgent:

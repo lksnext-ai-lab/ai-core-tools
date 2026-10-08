@@ -6,6 +6,7 @@ from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
 from repositories.app_repository import AppRepository
+from services.a2a_server.lifecycle_service import schedule_owner_purge
 from utils import a2a_config
 from utils.logger import get_logger
 
@@ -735,6 +736,9 @@ class AgentService:
 
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
+        # AD-10: capture app_id before deletion (OCRAgent is STI, so get_by_id covers it).
+        agent = AgentRepository.get_by_id(db, agent_id)
+        a2a_app_id = agent.app_id if agent else None
         # Scheduled tasks own conversations, files, temp silos and DBOS schedules
         # that a plain FK cascade would leave behind.
         try:
@@ -774,7 +778,10 @@ class AgentService:
                 "Could not clear sandbox DB state for agent %s conversations: %s",
                 agent_id, exc
             )
-        return AgentRepository.delete_by_id(db, agent_id)
+        deleted = AgentRepository.delete_by_id(db, agent_id)
+        if deleted and a2a_app_id is not None:
+            schedule_owner_purge(a2a_app_id, agent_id=agent_id)  # FR-22: sync, never raises
+        return deleted
 
     def _remove_tool_references(self, db: Session, tool_id: int):
         """Remove all tool associations where this agent is used as a tool"""

@@ -20,7 +20,7 @@ testability without an HTTP round trip.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
@@ -46,34 +46,10 @@ def sanitize_error_payload(payload: Any) -> bool:
     return True
 
 
-def sanitize_json_response(resp: Response) -> Response:
-    """Applies `sanitize_error_payload` to a plain (non-streaming) response.
-
-    CRITICAL-2 (fix round 1): the sanitized response is built **without**
-    copying any of the original response's headers -- in particular
-    `Content-Length`, which would otherwise describe the *original* (longer)
-    body and desync from the rewritten one, producing a framing error an
-    HTTP/1.1 client (h11, curl) rejects outright ("Too little data for
-    declared Content-Length"). `JSONResponse.__init__` computes a fresh,
-    correct `Content-Length`/`Content-Type` for the new body on its own.
-    """
-    if not isinstance(resp, JSONResponse):
-        return resp
-    try:
-        payload = json.loads(bytes(resp.body))
-    except (TypeError, ValueError):
-        return resp
-    if not sanitize_error_payload(payload):
-        return resp
-    sanitized = JSONResponse(payload, status_code=resp.status_code)
-    sanitized.background = resp.background
-    return sanitized
-
-
 def sanitize_sse_item(item: Dict[str, Any]) -> Dict[str, Any]:
     """Sanitizes one in-flight SSE item's JSON-RPC `data` payload, if needed.
 
-    Unlike `sanitize_json_response`, there is no HTTP framing concern here:
+    Unlike `sanitize_and_derive_outcome`, there is no HTTP framing concern here:
     SSE frames are newline-delimited, not length-prefixed, so rewriting
     `data` to a same-or-different length is always safe.
     """
@@ -91,18 +67,35 @@ def sanitize_sse_item(item: Dict[str, Any]) -> Dict[str, Any]:
     return sanitized_item
 
 
-def derive_outcome(resp: Response) -> str:
-    """A best-effort outcome label for `A2ARequestLog`, derived from a
-    non-streaming response's own status/JSON-RPC error code."""
+def sanitize_and_derive_outcome(resp: Response) -> Tuple[Response, str]:
+    """Sanitizes a non-streaming response and derives its outcome label from one JSON parse.
+
+    `b'"error"'` is a cheap substring probe, so the common success path (`{"result": ...}`)
+    never parses at all. The rewrite itself is delegated to `sanitize_error_payload`. A
+    rewritten body gets a fresh `JSONResponse` (so `Content-Length` matches the new body)
+    that keeps the original `background` task.
+
+    Returns:
+        The (possibly rewritten) response and the outcome label of the *original* payload.
+    """
     if not isinstance(resp, JSONResponse):
-        return f"http_{resp.status_code}"
+        return resp, f"http_{resp.status_code}"
+    raw = bytes(resp.body)
+    if b'"error"' not in raw:
+        return resp, "ok"
     try:
-        payload = json.loads(bytes(resp.body))
+        payload = json.loads(raw)
     except (TypeError, ValueError):
-        return f"http_{resp.status_code}"
-    if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-        return f"jsonrpc_error_{payload['error'].get('code', 'unknown')}"
-    return "ok"
+        return resp, f"http_{resp.status_code}"
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return resp, "ok"
+    outcome = f"jsonrpc_error_{error.get('code', 'unknown')}"
+    if not sanitize_error_payload(payload):
+        return resp, outcome
+    sanitized = JSONResponse(payload, status_code=resp.status_code)
+    sanitized.background = resp.background
+    return sanitized, outcome
 
 
 def extract_task_id_from_sse_item(item: Dict[str, Any]) -> Optional[str]:
@@ -131,8 +124,7 @@ __all__ = [
     "INTERNAL_ERROR_CODE",
     "RETRYABLE_ERROR_MESSAGE",
     "sanitize_error_payload",
-    "sanitize_json_response",
     "sanitize_sse_item",
-    "derive_outcome",
+    "sanitize_and_derive_outcome",
     "extract_task_id_from_sse_item",
 ]

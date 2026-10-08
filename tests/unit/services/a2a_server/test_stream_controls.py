@@ -182,6 +182,7 @@ class TestBoundedSseIteratorWallClockAndLiveness:
                 event_poll_seconds=0.1,
                 bulkhead=_Bulkhead(),
                 request_log=request_log,
+                emit_log=lambda: None,
             )
         )
         assert items == []
@@ -211,6 +212,7 @@ class TestBoundedSseIteratorWallClockAndLiveness:
                 event_poll_seconds=0.01,
                 bulkhead=None,
                 request_log=request_log,
+                emit_log=lambda: None,
             )
         )
         assert len(items) == 1
@@ -234,6 +236,7 @@ class TestBoundedSseIteratorWallClockAndLiveness:
                 event_poll_seconds=0.01,
                 bulkhead=None,
                 request_log=request_log,
+                emit_log=lambda: None,
             )
         )
         assert items == []
@@ -259,6 +262,7 @@ class TestBoundedSseIteratorWallClockAndLiveness:
             event_poll_seconds=0.1,
             bulkhead=_Bulkhead(),
             request_log=request_log,
+                emit_log=lambda: None,
         )
         started = asyncio.ensure_future(gen.__anext__())
         await asyncio.sleep(0.02)
@@ -269,6 +273,59 @@ class TestBoundedSseIteratorWallClockAndLiveness:
 
         assert released["count"] == 1
         assert request_log.outcome in {"client_disconnect", "stream_ended"}
+
+    async def test_emit_log_is_called_from_finally_after_the_bulkhead_release(self):
+        """LOW-2 (step_017 reliability-auditor, step_018): the request-log
+        emission must happen from `bounded_sse_iterator`'s own `finally`,
+        never rely on `resp.background` alone."""
+        calls: List[str] = []
+
+        class _Bulkhead:
+            def release(self) -> None:
+                calls.append("bulkhead_released")
+
+        rt = SimpleNamespace(store=_FakeStore())
+        request_log = A2ARequestLog(method="SendStreamingMessage")
+
+        await _collect(
+            bounded_sse_iterator(
+                _forever_pending(),
+                rt=rt,
+                owner="a2a:1:1:" + "0" * 64,
+                task_id="t1",
+                stream_max_seconds=0.05,
+                liveness_interval_seconds=10,
+                event_poll_seconds=0.1,
+                bulkhead=_Bulkhead(),
+                request_log=request_log,
+                emit_log=lambda: calls.append("log_emitted"),
+            )
+        )
+        assert calls == ["bulkhead_released", "log_emitted"]
+
+    async def test_a_raising_emit_log_never_breaks_teardown(self):
+        rt = SimpleNamespace(store=_FakeStore())
+        request_log = A2ARequestLog(method="SendStreamingMessage")
+
+        def _boom() -> None:
+            raise RuntimeError("emit_log blew up")
+
+        items = await _collect(
+            bounded_sse_iterator(
+                _forever_pending(),
+                rt=rt,
+                owner="a2a:1:1:" + "0" * 64,
+                task_id="t1",
+                stream_max_seconds=0.05,
+                liveness_interval_seconds=10,
+                event_poll_seconds=0.1,
+                bulkhead=None,
+                request_log=request_log,
+                emit_log=_boom,
+            )
+        )
+        assert items == []
+        assert request_log.outcome == "stream_wall_clock_cap"
 
     async def test_an_unexpected_inner_exception_still_releases_the_bulkhead_once(self):
         released = {"count": 0}
@@ -297,6 +354,7 @@ class TestBoundedSseIteratorWallClockAndLiveness:
             event_poll_seconds=0.1,
             bulkhead=_Bulkhead(),
             request_log=request_log,
+                emit_log=lambda: None,
         )
         got = await gen.__anext__()
         assert got["event"] == "message"

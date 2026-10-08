@@ -41,6 +41,7 @@ def _clear_cache_and_env(monkeypatch):
         "A2A_STREAM_COALESCE_MS",
         "A2A_KEEPALIVE_SECONDS",
         "A2A_PURGE_GRACE_SECONDS",
+        "A2A_EVENT_RETENTION_MINUTES",
         "A2A_STATUS_UPDATES",
         "A2A_SDK_DEBUG",
         "FRONTEND_URL",
@@ -72,6 +73,7 @@ class TestDefaults:
         assert config.stream_coalesce_ms == 250
         assert config.keepalive_seconds == 1.0
         assert config.purge_grace_seconds == 5
+        assert config.event_retention_minutes == 15
         assert config.status_updates is False
         assert config.sdk_debug is False
 
@@ -221,11 +223,15 @@ class TestIntMinValue:
         a2a_config.get_a2a_config.cache_clear()
         assert a2a_config.get_a2a_config().stream_coalesce_ms == 0
 
-    def test_zero_is_allowed_for_purge_grace_seconds(self, monkeypatch):
-        """0s is a legitimate 'no grace period' value, not a parse failure."""
-        monkeypatch.setenv("A2A_PURGE_GRACE_SECONDS", "0")
+    def test_event_retention_minutes_env_override(self, monkeypatch):
+        monkeypatch.setenv("A2A_EVENT_RETENTION_MINUTES", "42")
         a2a_config.get_a2a_config.cache_clear()
-        assert a2a_config.get_a2a_config().purge_grace_seconds == 0
+        assert a2a_config.get_a2a_config().event_retention_minutes == 42
+
+    def test_event_retention_minutes_zero_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("A2A_EVENT_RETENTION_MINUTES", "0")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().event_retention_minutes == 15
 
     def test_zero_is_allowed_for_discovery_rate_limit(self, monkeypatch):
         """0 means 'unlimited' for the discovery limiter, not a parse failure."""
@@ -346,3 +352,38 @@ class TestEffectiveMaxFileBytes:
         monkeypatch.setenv("A2A_MAX_FILE_MB", "20")
         a2a_config.get_a2a_config.cache_clear()
         assert a2a_config.effective_max_file_bytes(None) == 20 * 1024 * 1024
+
+
+class TestPurgeGraceClamp:
+    """AD-10: the purge grace must exceed keepalive + coalesce, clamped at resolve time."""
+
+    def test_zero_is_clamped_to_the_keepalive_plus_coalesce_floor(self, monkeypatch):
+        # Defaults: keepalive 1.0s + coalesce 250ms -> ceil(1.25) + 1 = 3.
+        monkeypatch.setenv("A2A_PURGE_GRACE_SECONDS", "0")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().purge_grace_seconds == 3
+
+    def test_floor_follows_keepalive_and_coalesce(self, monkeypatch):
+        monkeypatch.setenv("A2A_PURGE_GRACE_SECONDS", "1")
+        monkeypatch.setenv("A2A_KEEPALIVE_SECONDS", "4.5")
+        monkeypatch.setenv("A2A_STREAM_COALESCE_MS", "600")
+        a2a_config.get_a2a_config.cache_clear()
+        # ceil(4.5 + 0.6) + 1 = 7
+        assert a2a_config.get_a2a_config().purge_grace_seconds == 7
+
+    def test_value_above_the_floor_is_kept(self, monkeypatch):
+        monkeypatch.setenv("A2A_PURGE_GRACE_SECONDS", "30")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().purge_grace_seconds == 30
+
+    def test_negative_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("A2A_PURGE_GRACE_SECONDS", "-1")
+        a2a_config.get_a2a_config.cache_clear()
+        assert a2a_config.get_a2a_config().purge_grace_seconds == 5
+
+    def test_clamp_logs_a_warning(self, monkeypatch, mocker):
+        warning = mocker.patch.object(a2a_config.logger, "warning")
+        monkeypatch.setenv("A2A_PURGE_GRACE_SECONDS", "0")
+        a2a_config.get_a2a_config.cache_clear()
+        a2a_config.get_a2a_config()
+        assert any("A2A_PURGE_GRACE_SECONDS" in str(call.args[0]) for call in warning.call_args_list)

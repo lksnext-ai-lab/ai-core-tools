@@ -168,6 +168,12 @@ async def lifespan(app: FastAPI):
         from services.file_cleanup_worker import start_file_cleanup_worker
         app.state.file_cleanup_task = start_file_cleanup_worker()
 
+        # A2A maintenance worker (step_018, AD-10): always runs, even when
+        # A2A_ENABLED=false, so retention keeps happening regardless of the
+        # per-request kill switch.
+        from services.a2a_server.maintenance_worker import start_a2a_maintenance_worker
+        app.state.a2a_maintenance_task = start_a2a_maintenance_worker()
+
         from services.sharepoint.worker import start_sharepoint_worker
         app.state.sharepoint_tasks = await start_sharepoint_worker()
 
@@ -213,6 +219,14 @@ async def lifespan(app: FastAPI):
                 await stop_sharepoint_worker(sharepoint_tasks)
         except Exception as exc:
             logger.warning("SharePoint worker shutdown failed: %s", exc, exc_info=True)
+
+        try:
+            a2a_maintenance_task = getattr(app.state, 'a2a_maintenance_task', None)
+            if a2a_maintenance_task is not None:
+                from services.a2a_server.maintenance_worker import stop_a2a_maintenance_worker
+                await stop_a2a_maintenance_worker(a2a_maintenance_task)
+        except Exception as exc:
+            logger.warning("A2A maintenance worker shutdown failed: %s", exc, exc_info=True)
 
         try:
             from services.a2a_server.runtime import close_runtime

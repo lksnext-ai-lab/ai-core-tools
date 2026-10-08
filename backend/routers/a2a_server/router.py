@@ -59,13 +59,10 @@ from routers.controls.rate_limit import apply_app_rate_limit
 from routers.public.v1.auth import api_key_header
 from services.a2a_server.card_service import build_public_card, card_to_json, catalog_entry
 from services.a2a_server.identity import A2ACallScope, A2ARequestLog, context_for_owner, owner_for
-from services.a2a_server.response_sanitizer import derive_outcome, sanitize_json_response
+from services.a2a_server.response_sanitizer import sanitize_and_derive_outcome
 from services.a2a_server.runtime import get_runtime
-from services.a2a_server.stream_controls import (
-    TERMINAL_TASK_STATES,
-    bounded_sse_iterator,
-    try_acquire_stream_bulkhead,
-)
+from services.a2a_server.stream_controls import bounded_sse_iterator, try_acquire_stream_bulkhead
+from services.a2a_server.task_states import TERMINAL_TASK_STATES
 from services.a2a_server.visibility_service import Outcome, Resolution, list_visible, resolve, resolve_root
 from utils.a2a_config import get_a2a_config
 from utils.a2a_config import public_base_url as resolve_public_base_url
@@ -382,10 +379,6 @@ def _peek_ids(method: Optional[str], params: Dict[str, Any]) -> Tuple[Optional[s
     return task_id, context_id
 
 
-def _derive_outcome(resp: Response) -> str:
-    return derive_outcome(resp)
-
-
 def _chain_background(resp: Response, task: BackgroundTask) -> None:
     """Sets `resp.background`, running any task the dispatcher already set first."""
     existing = resp.background
@@ -608,12 +601,23 @@ async def rpc_endpoint(app_slug: str, agent_id: str, request: Request) -> Respon
             bulkhead.release()
         resp = _error_json_response(request_id, InternalError(message=_RETRYABLE_ERROR_MESSAGE, data={"retryable": True}))
 
-    if isinstance(resp, EventSourceResponse):
+    def _emit_request_log() -> None:
+        request_log.emit(
+            logger, app_id=snapshot.app_id, agent_id=snapshot.agent_id, api_key_id=resolution.key.key_id
+        )
+
+    is_stream = isinstance(resp, EventSourceResponse)
+    if is_stream:
         # A client that keeps the socket open but stops reading would block
         # `send()` forever, so the wall-clock cap would never fire and the
         # bulkhead slot would never be released.
         resp.send_timeout = _SSE_SEND_TIMEOUT_SECONDS
         if hasattr(resp, "body_iterator"):
+            # LOW-2 (step_017 reliability-auditor, step_018): the request-log
+            # line for a stream is emitted from `bounded_sse_iterator`'s own
+            # `finally`, right after it releases the bulkhead; the idempotent
+            # `resp.background` fallback below only covers a stream that never
+            # starts iterating.
             resp.body_iterator = bounded_sse_iterator(
                 resp.body_iterator,
                 rt=rt,
@@ -624,6 +628,7 @@ async def rpc_endpoint(app_slug: str, agent_id: str, request: Request) -> Respon
                 event_poll_seconds=cfg.event_poll_seconds,
                 bulkhead=bulkhead,
                 request_log=request_log,
+                emit_log=_emit_request_log,
             )
         else:
             # MEDIUM-14 (fix round 1): the SDK's `EventSourceResponse` has
@@ -641,19 +646,19 @@ async def rpc_endpoint(app_slug: str, agent_id: str, request: Request) -> Respon
                 bulkhead.release()
             if request_log.outcome is None:
                 request_log.outcome = "sse_contract_broken"
+            # `bounded_sse_iterator` never ran, so emit this stream's
+            # request-log line synchronously here (emit is idempotent; this
+            # contract-break branch is not a hot path).
+            _emit_request_log()
     else:
-        resp = sanitize_json_response(resp)
+        resp, outcome = sanitize_and_derive_outcome(resp)
         if bulkhead is not None:
             bulkhead.release()
         if request_log.outcome is None:
-            request_log.outcome = _derive_outcome(resp)
+            request_log.outcome = outcome
 
     resp = _attach_rate_limit_headers(resp, response_headers)
 
-    emit_task = BackgroundTask(
-        request_log.emit, logger, app_id=snapshot.app_id, agent_id=snapshot.agent_id,
-        api_key_id=resolution.key.key_id,
-    )
     if bulkhead is not None:
         # MEDIUM-9 (fix round 1): idempotent defense-in-depth. The stream
         # wrapper's own `finally` already releases `bulkhead` as the first
@@ -666,7 +671,14 @@ async def rpc_endpoint(app_slug: str, agent_id: str, request: Request) -> Respon
             background_bulkhead.release()
 
         _chain_background(resp, BackgroundTask(_release_bulkhead_too))
-    _chain_background(resp, emit_task)
+    # LOW-2: for a non-stream response, `resp.background` is the normal,
+    # reliable emit path. For a stream, `bounded_sse_iterator`'s own
+    # `finally` is the normal path -- but chaining the same (now idempotent,
+    # `A2ARequestLog._emitted`) emit onto `resp.background` too is a cheap
+    # fallback for a stream whose `body_iterator` is set but never actually
+    # gets iterated (e.g. the client disconnects before `sse_starlette`
+    # starts pulling from it), which would otherwise never log anything.
+    _chain_background(resp, BackgroundTask(_emit_request_log))
     return resp
 
 

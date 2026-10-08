@@ -153,6 +153,16 @@ class TestA2ARequestLog:
         assert "raw" not in message.lower()
         assert "hash" not in message.lower()
 
+    def test_emit_is_idempotent(self, caplog):
+        """A stream has two emit paths (iterator `finally` + background fallback); only one line is logged."""
+        log = A2ARequestLog(method="SendStreamingMessage", outcome="stream_ended")
+        logger = logging.getLogger("test.a2a.request_log.idempotent")
+        with caplog.at_level(logging.INFO, logger="test.a2a.request_log.idempotent"):
+            log.emit(logger, app_id=1, agent_id=2, api_key_id=3)
+            log.emit(logger, app_id=1, agent_id=2, api_key_id=3)
+        records = [r for r in caplog.records if r.name == "test.a2a.request_log.idempotent"]
+        assert len(records) == 1
+
 
 class TestA2ACallScopeSecretRedaction:
     def test_repr_never_leaks_the_raw_api_key(self):

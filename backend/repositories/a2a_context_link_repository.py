@@ -153,18 +153,23 @@ class A2AContextLinkRepository:
 
     @staticmethod
     def delete_older_than(db: Session, cutoff: datetime, batch: int = 1000) -> int:
-        """Delete link rows whose `updated_at` predates `cutoff` (step_018 retention).
+        """Delete one batch of link rows whose `updated_at` predates `cutoff`; returns rows deleted.
 
-        Two-step batched delete: select up to `batch` candidate ids with
-        `FOR UPDATE SKIP LOCKED` (so a concurrent sweeper -- or the next
-        batch of this same sweep -- never blocks on, or re-selects, a row
-        another worker already has locked), then delete by those ids while
-        **re-checking `updated_at < cutoff` in the DELETE's own WHERE**. That
-        second check closes the gap between the SELECT and the DELETE: if
-        some other request `touch()`-ed the row in between (because it is
-        still alive and was just reused), its `updated_at` is no longer
-        older than `cutoff` and the DELETE silently skips it instead of
-        purging a link that is actually still in use.
+        See `delete_older_than_batch` for the locking/re-check contract.
+        """
+        return A2AContextLinkRepository.delete_older_than_batch(db, cutoff, batch)[1]
+
+    @staticmethod
+    def delete_older_than_batch(db: Session, cutoff: datetime, batch: int = 1000) -> tuple[int, int]:
+        """Delete one batch of link rows whose `updated_at` predates `cutoff` (step_018 retention).
+
+        Selects up to `batch` candidate ids (ordered, `FOR UPDATE SKIP LOCKED`), then deletes them
+        while re-checking `updated_at < cutoff`, so a link `touch()`-ed in between is kept.
+
+        Returns:
+            `(candidates, deleted)`. Callers looping over batches must stop on `candidates == 0`,
+            not on `deleted == 0` (a batch whose candidates were all touched deletes nothing but
+            does not mean no older rows remain).
         """
         candidate_ids = db.execute(
             select(A2AContextLink.id)
@@ -174,7 +179,7 @@ class A2AContextLinkRepository:
             .with_for_update(skip_locked=True)
         ).scalars().all()
         if not candidate_ids:
-            return 0
+            return 0, 0
         result = db.execute(
             delete(A2AContextLink)
             .where(
@@ -184,4 +189,4 @@ class A2AContextLinkRepository:
             .returning(A2AContextLink.id)
         )
         db.flush()
-        return len(result.fetchall())
+        return len(candidate_ids), len(result.fetchall())

@@ -15,28 +15,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, Optional
 
 import anyio
 
-from a2a.types.a2a_pb2 import TaskState
 from services.a2a_server.identity import A2ARequestLog, context_for_owner
 from services.a2a_server.response_sanitizer import extract_task_id_from_sse_item, sanitize_sse_item
+from services.a2a_server.task_states import TERMINAL_TASK_STATES
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-# The terminal task states (RB-5/RB-2). Duplicated rather than imported from
-# the SDK's private `active_task` module -- see `services/a2a_server/
-# runtime.py`'s identical comment for the same rationale.
-TERMINAL_TASK_STATES = frozenset(
-    {
-        TaskState.TASK_STATE_COMPLETED,
-        TaskState.TASK_STATE_CANCELED,
-        TaskState.TASK_STATE_FAILED,
-        TaskState.TASK_STATE_REJECTED,
-    }
-)
 
 # Bounds the cancel-safe teardown phase in `bounded_sse_iterator`'s `finally`
 # (fix round 1, MEDIUM-9): a hung downstream `aclose()` must never block this
@@ -178,6 +166,7 @@ async def bounded_sse_iterator(
     event_poll_seconds: float,
     bulkhead: Optional[StreamBulkhead],
     request_log: A2ARequestLog,
+    emit_log: Callable[[], None],
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Wraps the SDK's own SSE body iterator (RB-2/RB-3/RB-4).
 
@@ -194,6 +183,11 @@ async def bounded_sse_iterator(
       including a client disconnect (`GeneratorExit`).
     - RB-4: sanitizes any in-flight `-32603` error event before it reaches
       the caller.
+    - LOW-2: `emit_log` (required) is called synchronously from `finally`,
+      right after the bulkhead release -- never relying on `resp.background`
+      alone, which `sse_starlette` skips on a `SendTimeoutError`, an inner
+      exception, or a shutdown cancel. Best-effort: any exception it raises
+      is caught and logged, never allowed to interrupt teardown.
 
     MEDIUM-9 (fix round 1): the outcome is finalized and `bulkhead` released
     synchronously, as the *first* thing `finally` does -- before any
@@ -301,6 +295,10 @@ async def bounded_sse_iterator(
             bulkhead.release()
         if request_log.outcome is None:
             request_log.outcome = outcome
+        try:
+            emit_log()
+        except Exception:
+            logger.exception("a2a.stream.emit_log_error task_id=%s", task_id)
 
         with anyio.CancelScope(shield=True):
             with anyio.move_on_after(_TEARDOWN_BUDGET_SECONDS):
@@ -315,7 +313,6 @@ async def bounded_sse_iterator(
 
 
 __all__ = [
-    "TERMINAL_TASK_STATES",
     "StreamBulkhead",
     "try_acquire_stream_bulkhead",
     "bounded_sse_iterator",
