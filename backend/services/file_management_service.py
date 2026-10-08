@@ -334,11 +334,17 @@ class FileManagementService:
             # removes it — _process_file_content raised before returning it,
             # so this function's own `temp_path` local was never assigned.
             temp_path = e.temp_path
-            logger.info("Rejected unsupported file type for %s: %s", file.filename, e)
+            logger.info(
+                "Rejected unsupported file type for %s: %s",
+                sanitize_for_log(file.filename), sanitize_for_log(str(e)),
+            )
             raise HTTPException(status_code=415, detail="Unsupported file type") from e
         except FileProcessingError as e:
             temp_path = e.temp_path
-            logger.warning("File processing failed for %s: %s", file.filename, e)
+            logger.warning(
+                "File processing failed for %s: %s",
+                sanitize_for_log(file.filename), sanitize_for_log(str(e)),
+            )
             raise HTTPException(status_code=422, detail="File processing failed") from e
         except Exception as e:
             logger.error(f"Error uploading file: {str(e)}")

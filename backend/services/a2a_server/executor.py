@@ -543,22 +543,27 @@ class MattinAgentExecutor(AgentExecutor):
         abandoned rather than blocking this turn's teardown forever.
         """
         deadline = time.monotonic() + _TEARDOWN_BUDGET_SECONDS
+        cancelled = False
         while not pending.done():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 logger.error("a2a.executor.drain_teardown_timeout task_id=%s", task_id)
-                return
+                break
             try:
                 await asyncio.wait_for(asyncio.shield(pending), timeout=remaining)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
+                # Keep waiting for `pending`, then propagate the cancellation.
+                cancelled = True
                 continue
             except StopAsyncIteration:
-                return
+                break
             except Exception:
                 logger.exception("a2a.executor.drain_cleanup_error task_id=%s", task_id)
-                return
+                break
+        if cancelled:
+            raise asyncio.CancelledError()
 
     async def _apply_action(
         self, updater: TaskUpdater, action: MapperAction, turn_state: "_TurnState"

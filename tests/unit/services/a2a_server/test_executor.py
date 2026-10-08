@@ -177,3 +177,28 @@ class TestBoundedTeardownWait:
         for task in leftover:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_during_the_wait_is_reraised_after_pending_finishes(self):
+        """Cancelling the wait itself never abandons `pending`, but the
+        cancellation is not swallowed either: it propagates once `pending`
+        has finished."""
+        release = asyncio.Event()
+
+        async def _pending_work():
+            await release.wait()
+
+        pending = asyncio.ensure_future(_pending_work())
+        executor = MattinAgentExecutor()
+        wait_task = asyncio.ensure_future(
+            executor._await_pending_to_completion(pending, task_id="task-1")
+        )
+        await asyncio.sleep(0.01)
+        wait_task.cancel()
+        await asyncio.sleep(0.01)
+        assert not wait_task.done()  # still waiting for `pending`
+
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(wait_task, timeout=2.0)
+        assert pending.done() and not pending.cancelled()
