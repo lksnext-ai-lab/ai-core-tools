@@ -3,6 +3,7 @@ from typing import List, Tuple, Optional, Annotated
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 import json
+import os
 from pydantic import ValidationError
 
 from db.database import get_db
