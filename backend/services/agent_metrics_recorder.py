@@ -22,11 +22,15 @@ _pending_writes: set[asyncio.Task] = set()
 def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
                            finished_at, duration_ms, status, error_code,
                            error_message, result, image_files, message,
-                           collector=None, time_to_first_token_ms=None) -> None:
+                           collector=None, time_to_first_token_ms=None,
+                           event_overrides=None, system_one_answers=None) -> None:
     """Build the metrics payload and persist it in the background. Never raises.
 
     ``collector`` (an AgentMetricsCollector attached to the run) is the source of
     token usage and tool calls; without it they are derived from ``result``.
+    ``event_overrides`` replaces derived event fields (agents that do not run an LLM chain,
+    like System One, supply their own usage) and ``system_one_answers`` are the per-question
+    rows stored with the event.
     """
     try:
         loop = asyncio.get_running_loop()
@@ -50,6 +54,8 @@ def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
             message=message,
             collector=collector,
             time_to_first_token_ms=time_to_first_token_ms,
+            event_overrides=event_overrides,
+            system_one_answers=system_one_answers,
         )
         task = loop.create_task(persist_metrics_payload(payload))
         _pending_writes.add(task)
@@ -111,7 +117,8 @@ def _usage_from_messages(messages: list) -> tuple[Optional[int], Optional[int], 
 def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
                           finished_at, duration_ms, status, error_code,
                           error_message, result, image_files, message,
-                          collector=None, time_to_first_token_ms=None) -> dict[str, Any]:
+                          collector=None, time_to_first_token_ms=None,
+                          event_overrides=None, system_one_answers=None) -> dict[str, Any]:
     """Build the {"event": ..., "tool_calls": [...]} payload from the execution context."""
     ctx = user_context or {}
     caller_type = _detect_caller_type(ctx)
@@ -171,10 +178,16 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
         "response_chars": response_chars,
     }
 
-    return {
+    if event_overrides:
+        event_payload.update(event_overrides)
+
+    payload = {
         "event": event_payload,
         "tool_calls": tool_calls,
     }
+    if system_one_answers:
+        payload["system_one_answers"] = system_one_answers
+    return payload
 
 
 def _parse_dt(value: Optional[Any]) -> Optional[datetime]:
@@ -187,6 +200,7 @@ async def persist_metrics_payload(payload: dict[str, Any]) -> None:
     """Persist a metrics payload on its own DB session. Best-effort, never raises."""
     from db.database import SessionLocal
     from models.agent_execution_event import AgentExecutionEvent
+    from models.agent_system_one_answer import AgentSystemOneAnswer
     from models.agent_tool_call import AgentToolCall
 
     db = SessionLocal()
@@ -243,6 +257,9 @@ async def persist_metrics_payload(payload: dict[str, Any]) -> None:
                 error_message=tc.get('error_message'),
                 started_at=_parse_dt(tc['started_at']),
             ))
+
+        for answer in payload.get('system_one_answers', []):
+            db.add(AgentSystemOneAnswer(event_id=event.event_id, **answer))
 
         db.commit()
     except Exception:

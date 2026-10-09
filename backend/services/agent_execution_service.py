@@ -19,9 +19,11 @@ from sqlalchemy.orm import Session
 
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
+from models.system_one_agent import SystemOneAgent
 from services.agent_execution_context import AgentExecutionContext
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
+from schemas.system_one_schemas import SystemOneResult
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
     convert_image_to_base64,
@@ -34,6 +36,7 @@ from tools.ocrAgentTools import (
 from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
+from services.system_one_evaluator import SystemOneEvaluator
 from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
@@ -817,6 +820,15 @@ class GraphResume:
             return None
         from langgraph.types import Command
         return cls(Command(resume={"decisions": decisions}), approval.interrupt_id)
+
+
+_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.svg')
+
+
+def _is_image_upload(file: UploadFile) -> bool:
+    """An uploaded image, by declared content type or by extension."""
+    name = (file.filename or '').lower()
+    return (file.content_type or '').lower().startswith('image/') or name.endswith(_IMAGE_EXTENSIONS)
 
 
 class AgentExecutionService:
@@ -1736,6 +1748,45 @@ class AgentExecutionService:
             logger.error(f"Error executing OCR agent: {str(e)}")
             raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
     
+    async def execute_agent_system_one(
+        self,
+        agent_id: int,
+        text: str,
+        files: Optional[List[UploadFile]],
+        user_context: Dict,
+        db: Session,
+        app_id: Optional[int] = None,
+    ) -> SystemOneResult:
+        """Evaluate a text (plus the text of attachments) with a System One agent.
+
+        Used by the playground and the public API. ``app_id`` is the app the caller is authorized for:
+        an agent of another app is a 404. There is no conversation or memory: every call is independent.
+        v1 is text only, so images and attachments whose text cannot be read are rejected explicitly
+        (silently skipping them would evaluate a partial input without telling the caller).
+        """
+        agent = self.agent_service.get_agent(db, agent_id, agent_type='system_one_agent')
+        if not agent or not isinstance(agent, SystemOneAgent) or (app_id is not None and agent.app_id != app_id):
+            raise HTTPException(status_code=404, detail="System One agent not found")
+        await self._validate_agent_access(agent, user_context)
+
+        files = files or []
+        images = [f.filename for f in files if _is_image_upload(f)]
+        if images:
+            raise HTTPException(
+                status_code=400,
+                detail=f"System One evaluates text only: images are not supported ({', '.join(images)})",
+            )
+        processed = await self._process_files_for_agent(files, agent) if files else []
+        readable = {p["filename"] for p in processed}
+        unreadable = [f.filename for f in files if f.filename not in readable]
+        if unreadable:
+            raise HTTPException(status_code=400, detail=f"Could not read text from: {', '.join(unreadable)}")
+
+        snapshot = SystemOneEvaluator.snapshot(agent)
+        result = await SystemOneEvaluator().evaluate(snapshot, text or "", processed, user_context)
+        self._update_request_count(agent, db)
+        return result
+
     async def reset_agent_conversation(
         self, 
         agent_id: int,
