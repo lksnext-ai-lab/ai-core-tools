@@ -72,8 +72,9 @@ def build_request_body(model: str, state: str, questions: List[Question]) -> Dic
     for q in questions:
         item: Dict[str, Any] = {"type": q.type, "instructions": q.instructions}
         if isinstance(q, NoulQuestion):
-            if q.criteria is not None:
-                item["criteria"] = {"true": q.criteria.true, "false": q.criteria.false}
+            meanings = {k: v for k, v in (("true", q.criteria.true), ("false", q.criteria.false)) if v} if q.criteria else {}
+            if meanings:
+                item["criteria"] = meanings
         elif isinstance(q, ChoiceQuestion):
             item["criteria"] = {o.key: o.description for o in q.criteria}
         else:

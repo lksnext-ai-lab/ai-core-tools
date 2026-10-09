@@ -70,7 +70,9 @@ The server measures **8192 tokens per question prompt** (the text plus that one 
 - does not fit, no LLM → truncated at a word boundary (`"truncated"`);
 - the server still rejects it as too long → shrunk proportionally and retried once.
 
-The result always says which happened, with the original and evaluated sizes, so a decision is never silently based on part of a document.
+The result always says which happened, with the original and evaluated sizes, so a decision is never silently based on part of a document. When the text was summarized or truncated it also carries the text that was actually evaluated (`evaluated_text`); in the playground, click the amber notice to read it. While a long text is being summarized the playground says so (the LLM can take up to a minute).
+
+The summarizing LLM is asked for a text of about 85 % of the room available, never more, and to keep the original wording, names, numbers and order; it also receives the questions, so it keeps what they need. It reads at most the first 120,000 characters. Attachments are read as plain text: an HTML file is evaluated with its markup (tags, CSS, scripts), which uses up the room quickly.
 
 Attachments: text and PDF text are extracted and appended to the text with their file names. A scanned PDF without extractable text, or only empty text, is a `400`. Images and files whose text cannot be read are rejected explicitly (never skipped).
 

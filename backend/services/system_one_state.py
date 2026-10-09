@@ -48,7 +48,7 @@ def question_overhead_chars(questions: List[Question]) -> int:
         total = len(q.instructions)
         if isinstance(q, NoulQuestion):
             if q.criteria:
-                total += len(q.criteria.true) + len(q.criteria.false)
+                total += len(q.criteria.true or "") + len(q.criteria.false or "")
         elif isinstance(q, ChoiceQuestion):
             total += sum(len(o.key) + len(o.description or "") for o in q.criteria)
         else:

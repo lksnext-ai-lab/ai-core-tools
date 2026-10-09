@@ -20,8 +20,9 @@ class _QuestionBase(BaseModel):
 
 class NoulCriteria(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    true: ShortText
-    false: ShortText
+    # Independent and optional, like the server's: the one left out keeps its default ("Yes" / "No").
+    true: Optional[ShortText] = None
+    false: Optional[ShortText] = None
 
 
 class NoulQuestion(_QuestionBase):
@@ -129,6 +130,8 @@ class SystemOneResult(BaseModel):
     state_chars: int
     model: str
     usage: Optional[Usage] = None
+    # The text the server actually evaluated, only when it was summarized or truncated (so it can be read).
+    evaluated_text: Optional[str] = None
 
 
 class SystemOneToolInput(BaseModel):

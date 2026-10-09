@@ -44,7 +44,8 @@ export interface NoulQuestion {
   key: string;
   type: 'noul';
   instructions: string;
-  criteria?: { true: string; false: string } | null;
+  /** Each meaning is independent and optional: the one left out keeps the server's default ("Yes" / "No"). */
+  criteria?: { true?: string | null; false?: string | null } | null;
   threshold?: number;
 }
 
@@ -113,4 +114,6 @@ export interface SystemOneResult {
   state_chars: number;
   model: string;
   usage?: { input_tokens: number; output_tokens: number } | null;
+  /** The text the server evaluated, only when it was summarized or truncated. */
+  evaluated_text?: string | null;
 }

@@ -185,6 +185,9 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                            value={question.threshold ?? ''} onChange={(e) => update(index, { ...question, threshold: parseNumber(e.target.value) })} />
                     <p className="mt-1 text-xs text-gray-500">Empty = 0.5. "Yes" when the probability reaches it.</p>
                   </div>
+                  <p className="text-xs text-gray-500 md:col-span-3">
+                    Yes / No means: what each answer stands for. Fill one, both or none; a missing one stays plain "Yes" / "No".
+                  </p>
                 </div>
               )}
 

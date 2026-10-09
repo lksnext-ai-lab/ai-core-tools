@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
-import { AlertTriangle, FileText, Gauge, Loader2, Play, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, ChevronRight, FileText, Gauge, Loader2, Play, X } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { promptBudget, type EditorQuestion } from '../../utils/systemOneQuestions';
 import type {
   SystemOneAnswer,
   SystemOneQuestion,
@@ -13,6 +14,9 @@ interface SystemOneInterfaceProps {
   readonly agentName: string;
   /** The agent's questions, to show them in their defined order with their instructions. */
   readonly questions: SystemOneQuestion[];
+  /** The agent's per-prompt budget in characters, and whether a summarizing LLM is set (to say what is going on). */
+  readonly maxStateChars: number;
+  readonly summarizes: boolean;
 }
 
 interface Evaluation {
@@ -86,19 +90,37 @@ function AnswerCard({ questionKey, instructions, answer }: { readonly questionKe
 
 function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
   if (result.state_reduction === 'none') return null;
-  const verb = result.state_reduction === 'summarized' ? 'summarized' : 'truncated';
+  const summarized = result.state_reduction === 'summarized';
+  const message = (
+    <>
+      The text was {summarized ? 'summarized' : 'truncated'} before evaluating ({result.original_chars.toLocaleString()} →{' '}
+      {result.state_chars.toLocaleString()} characters), so the decisions are based on {summarized ? 'its summary' : 'its first part'}.
+    </>
+  );
+  // Without the text there is nothing to open (an older response): keep the plain notice.
+  if (!result.evaluated_text) {
+    return (
+      <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800" role="status">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <p>{message}</p>
+      </div>
+    );
+  }
   return (
-    <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800" role="status">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <p>
-        The text was {verb} before evaluating ({result.original_chars.toLocaleString()} → {result.state_chars.toLocaleString()} characters),
-        so the decisions are based on {result.state_reduction === 'summarized' ? 'its summary' : 'its first part'}.
-      </p>
-    </div>
+    <details className="group mb-3 rounded-lg bg-amber-50 text-sm text-amber-800">
+      <summary className="flex cursor-pointer list-none items-start gap-2 p-3 [&::-webkit-details-marker]:hidden">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <p className="flex-1">
+          {message} <span className="font-medium underline">{summarized ? 'View the summary' : 'View the text that was evaluated'}</span>
+        </p>
+        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+      </summary>
+      <pre className="mx-3 mb-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-gray-800">{result.evaluated_text}</pre>
+    </details>
   );
 }
 
-export const SystemOneInterface = ({ appId, agentId, agentName, questions }: SystemOneInterfaceProps) => {
+export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxStateChars, summarizes }: SystemOneInterfaceProps) => {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [running, setRunning] = useState(false);
@@ -108,6 +130,15 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions }: Sys
   const fileInput = useRef<HTMLInputElement>(null);
 
   const questionByKey = new Map(questions.map((q) => [q.key, q]));
+  // Say what is happening while it runs: a long text goes through the agent's LLM first, which takes seconds.
+  const estimatedChars = text.trim().length + files.reduce((sum, f) => sum + f.size, 0);
+  const willSummarize = summarizes && estimatedChars > promptBudget(questions as EditorQuestion[], maxStateChars);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!running) { setSlow(false); return; }
+    const timer = window.setTimeout(() => setSlow(true), 6000);
+    return () => window.clearTimeout(timer);
+  }, [running]);
   const canRun = !running && (text.trim() !== '' || files.length > 0);
 
   function addFiles(selected: FileList | null) {
@@ -175,10 +206,28 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions }: Sys
           <button type="button" onClick={() => void handleEvaluate()} disabled={!canRun}
                   className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
             {running ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-            {running ? 'Evaluating...' : 'Evaluate'}
+            {running ? (willSummarize ? 'Summarizing...' : 'Evaluating...') : 'Evaluate'}
           </button>
         </div>
       </div>
+
+      {running && (
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900" role="status">
+          <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin" aria-hidden="true" />
+          <div>
+            <p className="font-medium">
+              {willSummarize ? 'Summarizing the text before evaluating it...' : 'Evaluating...'}
+            </p>
+            <p className="text-emerald-800">
+              {willSummarize
+                ? "The text is longer than the room each question leaves, so the agent's LLM condenses it first. This can take up to a minute."
+                : slow && summarizes
+                  ? "This is taking longer than usual: long texts are condensed with the agent's LLM first."
+                  : 'Asking the System One server.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div aria-live="polite">
         {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</div>}

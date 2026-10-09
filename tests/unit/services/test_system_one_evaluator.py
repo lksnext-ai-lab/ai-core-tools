@@ -120,6 +120,19 @@ async def test_failing_summarizer_falls_back_to_truncation(mocks):
     assert result.state_reduction == "truncated"
 
 
+async def test_the_text_that_was_really_evaluated_is_returned_when_it_was_reduced(mocks):
+    # So the user can read what the decision was based on (the summary, or the cut text).
+    summarized = await run(snapshot(summarize=AsyncMock(return_value="short summary"), max_state_chars=1000), "word " * 5000)
+    assert summarized.evaluated_text == "short summary"
+    truncated = await run(snapshot(max_state_chars=1000), "word " * 5000)
+    assert truncated.evaluated_text == mocks.evaluate.await_args.args[1]
+
+
+async def test_nothing_extra_is_returned_when_the_text_went_in_as_it_was(mocks):
+    result = await run(snapshot(), "short text")
+    assert result.state_reduction == "none" and result.evaluated_text is None
+
+
 # ------------------------------------------------------- budget error + retry
 
 async def test_budget_422_retries_once_with_a_proportionally_smaller_state(mocks):
@@ -297,3 +310,14 @@ def test_snapshot_survives_an_llm_that_cannot_be_built():
     with patch.object(module, "create_llm_from_service", side_effect=RuntimeError("no key")):
         snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
     assert snap.summarize is None
+
+
+async def test_the_summary_is_asked_to_use_the_room_there_is_not_just_to_stay_under_it():
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=SimpleNamespace(content="the summary"))
+    with patch.object(module, "create_llm_from_service", return_value=llm):
+        snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
+    await snap.summarize("long " * 10, QUESTIONS, 1000)
+    prompt = llm.ainvoke.await_args.args[0]
+    assert "about 850 characters" in prompt and "never more than 1000" in prompt
+    assert "shorter than needed" in prompt.lower() or "do not make it shorter" in prompt.lower()

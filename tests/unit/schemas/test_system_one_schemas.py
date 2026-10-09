@@ -59,3 +59,11 @@ def test_the_upper_limits_belong_to_the_server_not_to_the_schema():
     assert len(ql.validate_python([{**NOUL, "key": f"q{i}"} for i in range(200)])) == 200
     assert len(q.validate_python({**CHOICE, "criteria": [{"key": f"o{i}"} for i in range(40)]}).criteria) == 40
     assert len(q.validate_python({**SCORE, "criteria": [f"l{i}" for i in range(40)]}).criteria) == 40
+
+
+def test_yes_and_no_meanings_are_independent_and_optional_like_the_servers():
+    # The server defaults them to "Yes" / "No" separately: giving only one is valid.
+    only_yes = q.validate_python({**NOUL, "criteria": {"true": "Needs an answer today"}})
+    assert only_yes.criteria.true == "Needs an answer today" and only_yes.criteria.false is None
+    only_no = q.validate_python({**NOUL, "criteria": {"false": "Can wait"}})
+    assert only_no.criteria.true is None and only_no.criteria.false == "Can wait"
