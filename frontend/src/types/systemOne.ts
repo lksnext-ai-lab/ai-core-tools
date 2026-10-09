@@ -1,5 +1,8 @@
-// System One (Nimble): connections, question definitions and evaluation results.
+// System One: connections, question definitions and evaluation results.
 // v1 evaluates TEXT only.
+
+/** Endpoint prefilled when adding a service. Empty until the hosted API's URL is decided. */
+export const SYSTEM_ONE_DEFAULT_ENDPOINT = '';
 
 export interface SystemOneService {
   service_id: number;
@@ -7,6 +10,8 @@ export interface SystemOneService {
   endpoint: string;
   model: string;
   max_concurrency: number;
+  /** Agents that would be left without a service if this one were deleted. */
+  agent_count?: number;
   created_at?: string | null;
 }
 

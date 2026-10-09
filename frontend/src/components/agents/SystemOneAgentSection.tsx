@@ -68,6 +68,11 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
               <option value="">Select a service...</option>
               {systemOneServices.map((s) => <option key={s.service_id} value={s.service_id}>{s.name}</option>)}
             </select>
+            {props.serviceId == null && systemOneServices.length > 0 && (
+              <p className="mt-1 text-xs text-amber-700">
+                No service selected (it may have been deleted): this agent cannot evaluate anything until you choose one.
+              </p>
+            )}
           </div>
 
           <div>

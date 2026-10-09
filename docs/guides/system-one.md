@@ -2,7 +2,7 @@
 
 > Part of [Mattin AI Documentation](../README.md)
 
-System One (Nimble, by Bespoke Labs) is a **decision model**: it reads a text and answers a fixed list of closed questions with probabilities, without generating text. Mattin AI lets you connect a System One server and build **System One agents** that classify, route, judge or decide over a text, from the playground, the public API, or as a **tool** of other agents.
+System One is a **decision model**: it reads a text and answers a fixed list of closed questions with probabilities, without generating text. Mattin AI lets you connect a System One server and build **System One agents** that classify, route, judge or decide over a text, from the playground, the public API, or as a **tool** of other agents.
 
 > **Text only.** This version evaluates text. Attached documents are converted to text; images are rejected. See [Future: multimodal](#future-multimodal).
 
@@ -22,17 +22,11 @@ A System One agent has no LLM, memory, prompt, RAG, MCP or skills. Each evaluati
 
 ## Setting up a service
 
-Settings → System One Services → **Add System One Service**.
+Settings → System One Services → **Add System One Service**. It is a three-step wizard, like the AI service one:
 
-| Field | Notes |
-|---|---|
-| Name | Free text. |
-| Server URL | `http://` or `https://`, e.g. `http://172.16.59.1:8100`. Private addresses are allowed on purpose: a self-hosted server normally lives on a private network. Only administrators can create or test services. |
-| Token | Optional Bearer token, if the server requires one. Stored masked; leave the masked value to keep it, empty it to remove it. The token belongs to the URL it was stored for: if you change the URL you must type it again (or clear it), and *Test connection* never sends the stored token to a different URL. |
-| Model | `nimble-latest` always uses the newest published model, which can change probabilities. **Test connection** lists the models the server offers so you can pin a specific version. If the test fails the field stays free text and you can still save. |
-| Maximum concurrent requests | Per **backend process**. |
-
-**Test connection** calls the server's `/health`, `/v1/models` and `/v1/limits` and shows the limits it reports.
+1. **Connection**: the server URL (`http://` or `https://`; private addresses are allowed on purpose, since a self-hosted server normally lives on a private network) and an optional Bearer token. The token is stored masked: when editing, leave the masked value to keep it or empty it to remove it. It belongs to the URL it was stored for, so changing the URL clears it and you type it again; *Test connection* never sends the stored token to a different URL. Only administrators can create or test services.
+2. **Model**: the wizard asks the server which models it offers (`/v1/models`) and you pick one. There is no default model. If the server cannot be reached or lists none, you can type the identifier by hand.
+3. **Test**: a name (suggested from the model), the maximum concurrent requests (per **backend process**, prefilled from the server's limit) and **Test connection**, which calls `/health`, `/v1/models` and `/v1/limits`, checks that the chosen model is offered, and shows the limits the server reports.
 
 ### Concurrency
 
@@ -40,9 +34,7 @@ The server accepts a limited number of simultaneous requests (4 by default) and 
 
 ### Deleting a service
 
-A service cannot be deleted while agents use it: the API answers `409` and names them. Switch those agents to another service, or delete them, first.
-
----
+A service can be deleted even if agents use it, like an AI service. The agents are **not** deleted: they keep their questions but cannot run (evaluating them answers `409`, and as a tool they tell the calling LLM that their service is gone) until you choose another service in their settings. The UI warns before deleting and says how many agents are affected.
 
 ## Defining questions
 
@@ -157,7 +149,7 @@ Like every other write, evaluating from the playground is a `POST`: users whose 
 | Service CRUD | `backend/routers/internal/system_one_services.py` |
 | Evaluate endpoints | `backend/routers/internal/system_one.py`, `backend/routers/public/v1/system_one.py` |
 
-`SystemOneAgent.system_one_service_id` is `NOT NULL` with `ON DELETE RESTRICT`, so "an agent needs exactly one System One service" and "a service in use cannot be deleted" are guaranteed by the database. The type of an agent cannot be changed after creation.
+`SystemOneAgent.system_one_service_id` is nullable with `ON DELETE SET NULL`, the same as `Agent.service_id` for AI services: deleting a service leaves its agents in place and inoperative.
 
 ---
 

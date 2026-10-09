@@ -30,6 +30,17 @@ class SystemOneServiceDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SystemOneConnectionConfigSchema(BaseModel):
+    """What listing the models / testing a connection needs: the wizard asks before a model or a name exist."""
+    endpoint: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    api_key: Optional[str] = ""
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _strip_credentials(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
 class CreateUpdateSystemOneServiceSchema(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     endpoint: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]

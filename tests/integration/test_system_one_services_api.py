@@ -140,6 +140,13 @@ class TestConnection:
         assert body["status"] == "success" and body["models"] == ["nimble-latest"]
         assert body["limits"]["max_concurrent_requests"] == 4 and "secret-token" not in r.text
 
+    def test_the_model_list_can_be_requested_with_only_the_url_and_the_token(self, client, fake_app, owner_headers):
+        # Step 2 of the wizard lists the models before any model, name or cap exists.
+        with patch("services.system_one_service_service.system_one_client.probe", AsyncMock(return_value=self.PROBE_OK)):
+            r = client.post(url(fake_app, "test-connection"),
+                            json={"endpoint": "http://so.test", "api_key": "tok"}, headers=owner_headers)
+        assert r.status_code == 200 and r.json()["models"] == ["nimble-latest"]
+
     def test_edit_mode_recovers_the_stored_token(self, client, fake_app, owner_headers):
         sid = _create(client, fake_app, owner_headers, api_key="stored-token-9999")["service_id"]
         probe = AsyncMock(return_value=self.PROBE_OK)

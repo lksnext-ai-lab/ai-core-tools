@@ -1496,7 +1496,7 @@ class ApiService {
 
   async testSystemOneServiceWithConfig(
     appId: number,
-    data: SystemOneServicePayload,
+    data: Pick<SystemOneServicePayload, 'endpoint' | 'api_key'>,
     serviceId?: number,
   ): Promise<SystemOneConnectionResult> {
     const qs = serviceId != null ? `?service_id=${serviceId}` : '';

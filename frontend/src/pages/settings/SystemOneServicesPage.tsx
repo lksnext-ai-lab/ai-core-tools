@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pencil, ClipboardCopy, Trash2, Loader2, Plug, Gauge } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import ActionDropdown from '../../components/ui/ActionDropdown';
-import SystemOneServiceModal from '../../components/services/SystemOneServiceModal';
+import SystemOneServiceWizard from '../../components/services/SystemOneServiceWizard';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
@@ -42,7 +42,15 @@ function SystemOneServicesPage() {
     services, loading, error, isModalOpen, editingService,
     handleClose, handleCreate, handleDelete, handleEdit, handleCopy, handleSave,
     setIsModalOpen, setEditingService,
-  } = useServicesManager<SystemOneService>(appId, api, noCache, { entity: 'System One service' });
+  } = useServicesManager<SystemOneService>(appId, api, noCache, {
+    entity: 'System One service',
+    deleteWarning: (service: SystemOneService) => {
+      const n = service?.agent_count ?? 0;
+      return n > 0
+        ? `${n} agent${n === 1 ? '' : 's'} use${n === 1 ? 's' : ''} this service and will stop working until you assign ${n === 1 ? 'it' : 'them'} another one.`
+        : null;
+    },
+  });
 
   const [testResult, setTestResult] = useState<SystemOneConnectionResult | null>(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -85,7 +93,7 @@ function SystemOneServicesPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">System One Services</h2>
-          <p className="text-gray-600">Connections to System One (Nimble) servers used by System One agents</p>
+          <p className="text-gray-600">Connections to System One servers used by System One agents</p>
         </div>
         {canEdit && (
           <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
@@ -114,6 +122,7 @@ function SystemOneServicesPage() {
           },
           { header: 'Server', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.endpoint}</span> },
           { header: 'Model', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.model}</span> },
+          { header: 'Agents', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.agent_count ?? 0}</span> },
           { header: 'Concurrency', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.max_concurrency}</span> },
           { header: 'Created', render: (service: SystemOneService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           {
@@ -157,19 +166,20 @@ function SystemOneServicesPage() {
             <h3 className="text-sm font-medium text-blue-800">About System One</h3>
             <p className="mt-2 text-sm text-blue-700">
               System One answers closed questions about a text (yes/no, pick a category, score on a scale) with probabilities, without
-              generating text. In this version it evaluates text only: images are not supported. A service cannot be deleted while
-              agents use it.
+              generating text. In this version it evaluates text only: images are not supported. Deleting a service does not delete its
+              agents: they stay, but cannot run until you assign them another service.
             </p>
           </div>
         </div>
       </div>
 
       {isModalOpen && appId && (
-        <SystemOneServiceModal
+        <SystemOneServiceWizard
           key={editingService?.service_id ?? 'new'}
           isOpen
           appId={Number.parseInt(appId)}
           service={editingService}
+          existingNames={services.map((s) => s.name)}
           onClose={handleClose}
           onSave={handleSave}
         />
