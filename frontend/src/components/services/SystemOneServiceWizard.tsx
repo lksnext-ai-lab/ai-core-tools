@@ -13,8 +13,6 @@ import type {
   SystemOneServicePayload,
 } from '../../types/systemOne';
 
-const MAX_CONCURRENCY = 64;
-
 // Same three-step shape as the AI service wizard: credentials -> model (listed from the API) -> confirm and test.
 const STEPS: StepDefinition[] = [
   { id: 'connection', label: 'Connection' },
@@ -121,8 +119,8 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
 
   const parsedConcurrency = concurrency.trim() === '' ? null : Number(concurrency);
   const concurrencyError =
-    parsedConcurrency !== null && (!Number.isInteger(parsedConcurrency) || parsedConcurrency < 1 || parsedConcurrency > MAX_CONCURRENCY)
-      ? `Enter a whole number between 1 and ${MAX_CONCURRENCY}, or leave it empty`
+    parsedConcurrency !== null && (!Number.isInteger(parsedConcurrency) || parsedConcurrency < 1)
+      ? 'Enter a whole number of at least 1, or leave it empty'
       : null;
   const suggestedName = ensureUnique(model.trim() ? `System One - ${model.trim()}` : 'System One', existingNames);
   const finalName = name.trim() || suggestedName;
