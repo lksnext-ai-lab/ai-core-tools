@@ -31,7 +31,6 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_SUMMARY_TARGET_FRACTION = 0.85    # of the room: higher keeps more detail but the LLM writes (and takes) proportionally longer
 _SUMMARY_INPUT_CAP_CHARS = 120_000      # what we hand to the summarizing LLM at most
 _PROVIDER = "system_one"
 _HTTP_STATUS = {
@@ -78,14 +77,12 @@ def _question_lines(questions: List[Question]) -> str:
 
 def _make_summarizer(llm: Any) -> Summarizer:
     async def summarize(text: str, questions: List[Question], budget: int) -> str:
-        # The server reads at most `budget` characters per prompt; an LLM told only "at most" writes far less
-        # (one test gave 16% of the room), so it is asked for a size close to it and to keep the original wording.
-        target = int(budget * _SUMMARY_TARGET_FRACTION)
+        # "At most": asking for a size close to the budget made the LLM write ~5x more and take ~10x longer in a
+        # real test (110 s vs 11 s), so the summary is allowed to be short.
         prompt = (
-            f"Condense the text below to about {target} characters (never more than {budget}). "
-            "Do not make it shorter than needed: keep as much of the original wording, names, numbers and order "
-            f"as fits, and every detail needed to answer these questions about it:\n{_question_lines(questions)}\n\n"
-            f"Reply with the condensed text only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
+            f"Summarize the text below in at most {budget} characters. Keep every detail needed to answer "
+            f"these questions about it:\n{_question_lines(questions)}\n\n"
+            f"Reply with the summary only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
         )
         reply = await llm.ainvoke(prompt)
         return _text_of(getattr(reply, "content", reply))
