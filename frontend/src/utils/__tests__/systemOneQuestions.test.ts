@@ -4,6 +4,7 @@ import {
   newQuestion,
   toEditorQuestions,
   toPayload,
+  checkQuestions,
   validateMaxStateChars,
   validateQuestions,
   type EditorQuestion,
@@ -64,7 +65,7 @@ describe('validateQuestions', () => {
 
   it('checks score levels and the minimum probability', () => {
     expect(validateQuestions([score({ criteria: ['only'] })]).some((p) => p.includes('between 2 and 26'))).toBe(true);
-    expect(validateQuestions([score({ criteria: ['a', ' '] })]).some((p) => p.includes('every level'))).toBe(true);
+    expect(validateQuestions([score({ criteria: ['a', ' '] })]).some((p) => p.toLowerCase().includes('every level'))).toBe(true);
     expect(validateQuestions([score({ min_probability: 2 })]).some((p) => p.includes('minimum probability'))).toBe(true);
     expect(validateQuestions([choice({ min_probability: -0.1 })]).some((p) => p.includes('minimum probability'))).toBe(true);
   });
@@ -156,5 +157,33 @@ describe('validateMaxStateChars', () => {
     for (const bad of [Number.NaN, 0, 499, 20001, 600.5]) {
       expect(validateMaxStateChars(bad)).toMatch(/500.*20000/);
     }
+  });
+});
+
+describe('checkQuestions (problems grouped by the question they belong to)', () => {
+  it('puts each problem under its own question and nothing in the general list', () => {
+    const result = checkQuestions([noul(), noul({ key: 'Bad Key', _id: 'z' }), choice({ criteria: [{ key: '', description: '' }, { key: 'b', description: '' }] } as Partial<EditorQuestion>)]);
+    expect(result.general).toEqual([]);
+    expect(result.byQuestion[0]).toEqual([]);
+    expect(result.byQuestion[1].some((p) => p.includes('key'))).toBe(true);
+    expect(result.byQuestion[2].some((p) => p.toLowerCase().includes('option'))).toBe(true);
+  });
+
+  it('keeps list-wide problems out of the questions', () => {
+    expect(checkQuestions([]).general).toEqual(['Add at least one question']);
+    const many = Array.from({ length: 65 }, (_, i) => noul({ key: `q${i}` }));
+    expect(checkQuestions(many).general.some((p) => p.includes('at most 64'))).toBe(true);
+  });
+
+  it('starts each message with a capital so it reads on its own above the question', () => {
+    const [first] = checkQuestions([noul({ instructions: '' })]).byQuestion[0];
+    expect(first[0]).toBe(first[0].toUpperCase());
+    expect(first).not.toMatch(/^Question \d/);
+  });
+
+  it('flags a repeated key on the second question only', () => {
+    const { byQuestion } = checkQuestions([noul(), noul({ _id: 'x' })]);
+    expect(byQuestion[0]).toEqual([]);
+    expect(byQuestion[1].some((p) => p.includes('used by another question'))).toBe(true);
   });
 });

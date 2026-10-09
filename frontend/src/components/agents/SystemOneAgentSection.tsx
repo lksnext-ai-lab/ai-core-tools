@@ -26,7 +26,8 @@ interface SystemOneAgentSectionProps {
   readonly onIsToolChange: (value: boolean) => void;
   readonly questions: EditorQuestion[];
   readonly onQuestionsChange: (questions: EditorQuestion[]) => void;
-  readonly problems: string[];
+  readonly generalProblems: string[];
+  readonly problemsByQuestion: string[][];
 }
 
 const toId = (raw: string): number | undefined => (raw === '' ? undefined : Number(raw));
@@ -121,7 +122,8 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <SystemOneQuestionsEditor questions={props.questions} onChange={props.onQuestionsChange} problems={props.problems} />
+        <SystemOneQuestionsEditor questions={props.questions} onChange={props.onQuestionsChange} generalProblems={props.generalProblems}
+                                  problemsByQuestion={props.problemsByQuestion} />
       </div>
     </div>
   );
