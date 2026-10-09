@@ -47,12 +47,12 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime
 from typing import List
 
 from filelock import FileLock, Timeout
 
 from utils.logger import get_logger
+from utils.clock import utcnow_naive
 
 logger = get_logger(__name__)
 
@@ -77,7 +77,7 @@ def _protected_output_paths(tmp_base: str) -> set[str]:
             ScheduledTaskRun.output_deliveries.any(
                 (OutputDelivery.status != "cancelled") & or_(
                     OutputDelivery.expires_at.is_(None),
-                    OutputDelivery.expires_at > datetime.utcnow(),
+                    OutputDelivery.expires_at > utcnow_naive(),
                 )
             )
         ).all()

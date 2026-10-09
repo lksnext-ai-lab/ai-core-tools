@@ -65,12 +65,15 @@ def validate_webhook_config(config: dict[str, Any] | None, credentials: dict[str
 
 
 async def _file_stream(path: str) -> AsyncIterator[bytes]:
-    with open(path, "rb") as source:
+    source = await asyncio.to_thread(open, path, "rb")
+    try:
         while True:
             chunk = await asyncio.to_thread(source.read, 64 * 1024)
             if not chunk:
                 break
             yield chunk
+    finally:
+        await asyncio.to_thread(source.close)
 
 
 def _signature(key: bytes, event_id: str, timestamp: str, content_type: str, body: bytes | None, path: str | None) -> str:

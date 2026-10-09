@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session
 
 from models.output_delivery import OutputArtifact, OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
-from output.registry import get_output_provider
+from output.registry import get_output_provider, get_webhook_provider
 from output.teams_workflow import DeliveryError, build_adaptive_card
+from utils.clock import utcnow_naive
 
 MAX_ATTEMPTS = 5
 LEASE_SECONDS = 120
@@ -31,7 +32,7 @@ def _delivery_expiry() -> datetime:
     # retention window so a card cannot be retried after its links have expired.
     persistent_ttl_days = max(1, int(os.getenv("TMP_PERSISTENT_TTL_DAYS", "7")))
     persistent_ttl_seconds = persistent_ttl_days * 86400
-    return datetime.utcnow() + timedelta(seconds=min(30 * 86400, persistent_ttl_seconds - 3600))
+    return utcnow_naive() + timedelta(seconds=min(30 * 86400, persistent_ttl_seconds - 3600))
 
 
 def _base_url() -> str:
@@ -70,7 +71,7 @@ def create_destination(
         raise ValueError("Unsupported output content mode")
     config = dict(public_config or {})
     if provider_key == "webhook":
-        webhook_url, config = provider.validate_destination(webhook_url, config, credentials)
+        webhook_url, config = get_webhook_provider().validate_destination(webhook_url, config, credentials)
     else:
         webhook_url = provider.validate_secret(webhook_url)
         if config or credentials:
@@ -112,7 +113,7 @@ def update_destination(db: Session, destination: OutputDestination, changes: dic
     if changes.get("credentials") is not None:
         new_credentials = dict(changes["credentials"])
     if destination.provider_key == "webhook":
-        new_url, new_config = provider.validate_destination(new_url, new_config, new_credentials)
+        new_url, new_config = get_webhook_provider().validate_destination(new_url, new_config, new_credentials)
         if "webhook_url" in changes and changes["webhook_url"]:
             old = urlparse(destination.webhook_url)
             new = urlparse(new_url)
@@ -477,6 +478,14 @@ def _file_contains(path: Path, needle: bytes) -> bool:
     return False
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(256 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _write_multipart(path: Path, payload: dict[str, Any], attachments: list[dict[str, Any]]) -> tuple[str, int, str]:
     event = _json_body(payload)
     root = _spool_root()
@@ -685,7 +694,7 @@ async def test_destination(destination: OutputDestination) -> dict[str, Any]:
             content_type, size, digest = _write_multipart(path, payload, [artifact])
             body = None
         try:
-            return await get_output_provider(destination.provider_key).send(
+            return await get_webhook_provider().send(
                 destination.webhook_url, payload, config=config, credentials=destination.credentials or {},
                 event_id=event_id, attempt_number=1, content_type=content_type,
                 body=body, body_path=str(path) if path else None,
@@ -706,7 +715,7 @@ async def test_destination(destination: OutputDestination) -> dict[str, Any]:
 def request_retry(db: Session, delivery: OutputDelivery) -> None:
     if delivery.status not in {"failed", "unknown"}:
         raise ValueError("Only failed or uncertain deliveries can be retried manually")
-    if delivery.expires_at and delivery.expires_at <= datetime.utcnow():
+    if delivery.expires_at and delivery.expires_at <= utcnow_naive():
         raise ValueError("This delivery expired and can no longer be retried")
     delivery.dispatch_generation += 1
     delivery.status = "pending"
@@ -729,7 +738,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         delivery = db.query(OutputDelivery).filter(OutputDelivery.id == delivery_id).with_for_update().one_or_none()
         if delivery is None or delivery.dispatch_generation != generation:
             return
-        now = datetime.utcnow()
+        now = utcnow_naive()
         if delivery.status == "sending":
             if delivery.lease_until and delivery.lease_until > now:
                 return
@@ -791,7 +800,6 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         db = None
 
         try:
-            provider = get_output_provider(provider_key)
             if provider_key == "webhook":
                 body = request_body
                 body_path = None
@@ -799,15 +807,11 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
                     path = _safe_spool_file(request_body_key)
                     if not path.is_file() or path.stat().st_size != request_body_size:
                         raise DeliveryError("Prepared webhook request body is missing or incomplete", kind="permanent")
-                    digest = hashlib.sha256()
-                    with path.open("rb") as source:
-                        for chunk in iter(lambda: source.read(256 * 1024), b""):
-                            digest.update(chunk)
-                    if digest.hexdigest() != request_body_sha256:
+                    if await asyncio.to_thread(_file_sha256, path) != request_body_sha256:
                         raise DeliveryError("Prepared webhook request body failed integrity validation", kind="permanent")
                     body_path = str(path)
                     body = None
-                receipt = await provider.send(
+                receipt = await get_webhook_provider().send(
                     webhook_url, payload, config={key: value for key, value in snapshot.items()
                         if key in {"schema_version", "auth_mode", "receiver_deduplicates", "include_attachments"}},
                     credentials=credentials, event_id=payload["event_id"],
@@ -816,7 +820,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
                     body=body, body_path=body_path,
                 )
             else:
-                receipt = await provider.send(webhook_url, payload)
+                receipt = await get_output_provider(provider_key).send(webhook_url, payload)
             outcome = ("accepted", receipt, None, None, None)
         except DeliveryError as exc:
             outcome = (exc.kind, None, exc.http_status, str(exc), exc.retry_after)
@@ -831,7 +835,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         if delivery.dispatch_generation != generation or delivery.status != "sending" or attempt.status != "sending":
             return
         kind, receipt, http_status, message, retry_after = outcome
-        now = datetime.utcnow()
+        now = utcnow_naive()
         attempt.finished_at = now
         attempt.http_status = http_status or (receipt or {}).get("http_status")
         delivery.lease_until = None

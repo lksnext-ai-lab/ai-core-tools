@@ -1,11 +1,11 @@
 """Application-scoped output destinations and their durable delivery outbox."""
 
-from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+from utils.clock import utcnow_naive
 
 
 class OutputDestination(Base):
@@ -23,8 +23,8 @@ class OutputDestination(Base):
     credentials = Column(JSON, nullable=True)
     enabled = Column(Boolean, nullable=False, default=True, server_default="true")
     created_by = Column(Integer, ForeignKey("User.user_id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default="now()")
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default="now()")
+    created_at = Column(DateTime, nullable=False, default=utcnow_naive, server_default="now()")
+    updated_at = Column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive, server_default="now()")
 
     bindings = relationship("ScheduledTaskOutputBinding", back_populates="destination", cascade="all, delete-orphan")
 
@@ -38,7 +38,7 @@ class ScheduledTaskOutputBinding(Base):
     destination_id = Column(Integer, ForeignKey("output_destination.id", ondelete="CASCADE"), nullable=False, index=True)
     enabled = Column(Boolean, nullable=False, default=True, server_default="true")
     event_types = Column(JSON, nullable=False, default=lambda: ["succeeded"], server_default='["succeeded"]')
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default="now()")
+    created_at = Column(DateTime, nullable=False, default=utcnow_naive, server_default="now()")
 
     task = relationship("ScheduledTask", back_populates="output_bindings")
     destination = relationship("OutputDestination", back_populates="bindings")
@@ -72,8 +72,8 @@ class OutputDelivery(Base):
     lease_until = Column(DateTime, nullable=True)
     receipt = Column(JSON, nullable=True)
     error_summary = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default="now()")
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default="now()")
+    created_at = Column(DateTime, nullable=False, default=utcnow_naive, server_default="now()")
+    updated_at = Column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive, server_default="now()")
 
     run = relationship("ScheduledTaskRun", back_populates="output_deliveries")
     binding = relationship("ScheduledTaskOutputBinding", back_populates="deliveries")
@@ -93,7 +93,7 @@ class OutputArtifact(Base):
     size_bytes = Column(Integer, nullable=False)
     sha256 = Column(String(64), nullable=False)
     object_key = Column(Text, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default="now()")
+    created_at = Column(DateTime, nullable=False, default=utcnow_naive, server_default="now()")
 
 
 class OutputDeliveryAttempt(Base):
@@ -103,7 +103,7 @@ class OutputDeliveryAttempt(Base):
     delivery_id = Column(Integer, ForeignKey("output_delivery.id", ondelete="CASCADE"), nullable=False, index=True)
     attempt_number = Column(Integer, nullable=False)
     status = Column(String(20), nullable=False, default="sending", server_default="sending")
-    started_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default="now()")
+    started_at = Column(DateTime, nullable=False, default=utcnow_naive, server_default="now()")
     finished_at = Column(DateTime, nullable=True)
     http_status = Column(Integer, nullable=True)
     error_summary = Column(Text, nullable=True)

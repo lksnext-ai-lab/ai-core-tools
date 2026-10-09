@@ -82,7 +82,7 @@ class OutputDeliveryResponseSchema(BaseModel):
     event_type: str
     status: str
     attempt_count: int
-    next_attempt_at: Optional[datetime]
+    next_attempt_at: Optional[datetime] = None
     receipt: Optional[dict[str, Any]] = None
     error_summary: Optional[str] = None
     created_at: datetime

@@ -113,7 +113,7 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
                 </button>)}
               </div>
               {destination && <p className="text-xs text-gray-500">El tipo de canal se conserva. Para usar otro tipo, crea un nuevo canal.</p>}
-              <label className="block text-sm font-medium text-gray-700">Nombre del canal
+              <label className="block text-sm font-medium text-gray-700"><span>Nombre del canal</span>
                 <input value={form.name} onChange={(event) => update({ name: event.target.value })} maxLength={255} className={inputClass} placeholder="Por ejemplo: Alertas" autoComplete="off" />
               </label>
             </>}
@@ -125,14 +125,14 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
                   ? destination ? 'Permite renovar la URL secreta del mismo Workflow. Para cambiar de Workflow o canal, crea un nuevo canal.' : 'La URL se guarda como credencial y no vuelve a mostrarse. Usa un trigger que acepte llamadas mediante URL.'
                   : 'El endpoint debe usar HTTPS y resolver únicamente a direcciones IP públicas.'}</span>
               </label> : <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">URL del endpoint guardada. Para cambiar el endpoint, crea un nuevo canal.</div>}
-              <label className="block text-sm font-medium text-gray-700">Contenido de la notificación
+              <label className="block text-sm font-medium text-gray-700"><span>Contenido de la notificación</span>
                 <select value={form.contentMode} onChange={(event) => update({ contentMode: event.target.value as OutputContentMode })} className={inputClass}>
                   {Object.entries(contentModeLabels(form.provider)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
                 <span className="mt-2 block text-xs font-normal text-gray-500">Se aplica a todas las tareas vinculadas a este canal.</span>
               </label>
               {form.provider === 'webhook' && <>
-                <label className="block text-sm font-medium text-gray-700">Autenticación
+                <label className="block text-sm font-medium text-gray-700"><span>Autenticación</span>
                   <select value={form.authMode} onChange={(event) => update({ authMode: event.target.value as AuthMode, credential: '' })} className={inputClass}>
                     {Object.entries(authLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>

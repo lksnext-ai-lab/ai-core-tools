@@ -10,6 +10,7 @@ from db.database import SessionLocal
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from output.service import cleanup_spool_files, create_deliveries_for_run, process_delivery
+from utils.clock import utcnow_naive
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ async def _reconcile_pending_deliveries() -> int:
     db = SessionLocal()
     enqueue: list[tuple[int, int]] = []
     try:
-        now = datetime.utcnow()
+        now = utcnow_naive()
         # Repair the exceptional case where a completed durable agent step was
         # persisted after an outbox transaction failure.
         missing_outbox_runs = (
