@@ -13,6 +13,11 @@ export const MAX_QUESTIONS = 64;
 export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 26;
 export const MAX_KEY_LENGTH = 40;
+export const MAX_INSTRUCTIONS_LENGTH = 4000;
+export const MAX_CRITERIA_LENGTH = 500;
+export const MAX_OPTION_NAME_LENGTH = 100;
+export const MIN_STATE_CHARS = 500;
+export const MAX_STATE_CHARS = 20000;
 const KEY_PATTERN = /^[a-z0-9_]{1,40}$/;
 
 /** A question as edited in the form: `_id` is a client-only React key, never sent. */
@@ -35,6 +40,18 @@ function isProbability(value: unknown): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
+/** Message for an invalid "maximum text length", or null when it is fine. */
+export function validateMaxStateChars(value: number): string | null {
+  if (!Number.isInteger(value) || value < MIN_STATE_CHARS || value > MAX_STATE_CHARS) {
+    return `The maximum text length must be a whole number between ${MIN_STATE_CHARS} and ${MAX_STATE_CHARS}`;
+  }
+  return null;
+}
+
+function tooLong(text: string | undefined | null, max: number): boolean {
+  return (text?.trim().length ?? 0) > max;
+}
+
 function label(question: EditorQuestion, index: number): string {
   return question.key.trim() ? `Question ${index + 1} (${question.key.trim()})` : `Question ${index + 1}`;
 }
@@ -47,6 +64,9 @@ function validateNoul(question: NoulQuestion, name: string): string[] {
   const yes = question.criteria?.true?.trim() ?? '';
   const no = question.criteria?.false?.trim() ?? '';
   if ((yes === '') !== (no === '')) problems.push(`${name}: fill both meanings (yes and no) or leave both empty`);
+  if (tooLong(yes, MAX_CRITERIA_LENGTH) || tooLong(no, MAX_CRITERIA_LENGTH)) {
+    problems.push(`${name}: each meaning can have at most ${MAX_CRITERIA_LENGTH} characters`);
+  }
   return problems;
 }
 
@@ -62,6 +82,10 @@ function validateChoice(question: ChoiceQuestion, name: string): string[] {
     if (!key) {
       problems.push(`${name}: every option needs a name`);
       continue;
+    }
+    if (key.length > MAX_OPTION_NAME_LENGTH) problems.push(`${name}: the option "${key.slice(0, 20)}…" is over ${MAX_OPTION_NAME_LENGTH} characters`);
+    if (tooLong(option.description, MAX_CRITERIA_LENGTH)) {
+      problems.push(`${name}: the description of "${key}" can have at most ${MAX_CRITERIA_LENGTH} characters`);
     }
     const folded = key.toLowerCase();
     if (seen.has(folded)) problems.push(`${name}: the option "${key}" is repeated (names are compared ignoring case)`);
@@ -80,6 +104,9 @@ function validateScore(question: ScoreQuestion, name: string): string[] {
     problems.push(`${name}: it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} levels`);
   }
   if (levels.some((level) => !level.trim())) problems.push(`${name}: every level needs a description`);
+  if (levels.some((level) => tooLong(level, MAX_CRITERIA_LENGTH))) {
+    problems.push(`${name}: each level can have at most ${MAX_CRITERIA_LENGTH} characters`);
+  }
   if (question.min_probability != null && !isProbability(question.min_probability)) {
     problems.push(`${name}: the minimum probability must be a number between 0 and 1`);
   }
@@ -103,6 +130,9 @@ export function validateQuestions(questions: EditorQuestion[]): string[] {
     }
     seenKeys.add(key);
     if (!question.instructions.trim()) problems.push(`${name}: the instructions are required`);
+    if (tooLong(question.instructions, MAX_INSTRUCTIONS_LENGTH)) {
+      problems.push(`${name}: the instructions can have at most ${MAX_INSTRUCTIONS_LENGTH} characters`);
+    }
 
     if (question.type === 'noul') problems.push(...validateNoul(question, name));
     else if (question.type === 'choice') problems.push(...validateChoice(question, name));

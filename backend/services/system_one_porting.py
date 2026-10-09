@@ -65,7 +65,10 @@ def _unique_name(session: Session, model, name: str, app_id: int) -> str:
 def import_system_one_service(session: Session, item: ExportSystemOneServiceSchema, app_id: int,
                               api_key: Optional[str] = None) -> Tuple[int, List[str]]:
     """Create a service from a full-app export; the token is only set when the user supplied one."""
-    endpoint = system_one_client.check_base_url(item.endpoint or "")
+    try:
+        endpoint = system_one_client.check_base_url(item.endpoint or "")
+    except ValueError as exc:
+        raise ValueError(f"System One service '{item.name}': {exc}") from exc
     service = SystemOneService(
         app_id=app_id,
         name=_unique_name(session, SystemOneService, item.name, app_id),

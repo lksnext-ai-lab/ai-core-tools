@@ -461,10 +461,12 @@ async def create_or_update_agent(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     
-    # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting)
-    agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
-    agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
-    agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+    # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting).
+    # A System One agent has no LLM to use them: whatever was sent is dropped, not stored.
+    no_llm = agent_data.type == 'system_one_agent'
+    agent_service.update_agent_tools(db, created_agent_id, [] if no_llm else agent_data.tool_ids, {})
+    agent_service.update_agent_mcps(db, created_agent_id, [] if no_llm else agent_data.mcp_config_ids, {})
+    agent_service.update_agent_skills(db, created_agent_id, [] if no_llm else agent_data.skill_ids, {})
     if middleware_ids is not None:
         agent_service.update_agent_middlewares(db, created_agent_id, middleware_ids)
 

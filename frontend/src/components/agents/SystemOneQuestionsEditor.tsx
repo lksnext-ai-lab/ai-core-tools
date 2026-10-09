@@ -59,7 +59,7 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
       </div>
 
       {problems.length > 0 && (
-        <ul className="mb-4 list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-7 text-sm text-red-700" role="alert">
+        <ul id="so-question-problems" className="mb-4 list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-7 text-sm text-red-700" role="alert">
           {problems.map((p) => <li key={p}>{p}</li>)}
         </ul>
       )}
@@ -74,7 +74,7 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_12rem_auto]">
                 <div>
                   <label htmlFor={`${id}-key`} className="mb-1 block text-xs font-medium text-gray-600">Key</label>
-                  <input id={`${id}-key`} className={inputClass} value={question.key} placeholder="is_urgent"
+                  <input id={`${id}-key`} aria-describedby={problems.length > 0 ? 'so-question-problems' : undefined} className={inputClass} value={question.key} placeholder="is_urgent"
                          onChange={(e) => update(index, { ...question, key: e.target.value })} />
                 </div>
                 <div>
@@ -100,6 +100,7 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
               <div className="mt-3">
                 <label htmlFor={`${id}-instructions`} className="mb-1 block text-xs font-medium text-gray-600">Instructions</label>
                 <input id={`${id}-instructions`} className={inputClass} value={question.instructions}
+                       aria-describedby={problems.length > 0 ? 'so-question-problems' : undefined}
                        placeholder={INSTRUCTION_EXAMPLE[question.type]}
                        onChange={(e) => update(index, { ...question, instructions: e.target.value })} />
               </div>

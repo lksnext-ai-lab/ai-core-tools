@@ -141,7 +141,25 @@ async def test_other_invalid_requests_are_not_retried(mocks):
     mocks.evaluate.side_effect = SystemOneError("invalid_request", "Unknown model: nope", 422)
     with pytest.raises(HTTPException) as e:
         await run(snapshot())
-    assert e.value.status_code == 422 and "Unknown model" in e.value.detail and mocks.evaluate.await_count == 1
+    assert e.value.status_code == 422 and mocks.evaluate.await_count == 1
+
+
+@pytest.mark.parametrize("kind,status", [("invalid_request", 422), ("unavailable", 503), ("unauthorized", 401),
+                                         ("invalid_response", 200), ("overloaded", 529)])
+async def test_server_response_bodies_never_reach_the_caller(mocks, kind, status):
+    # Viewers and API-key callers can trigger this path: whatever the server (or whatever answers at the
+    # configured URL) put in its body must not be echoed back to them.
+    mocks.evaluate.side_effect = SystemOneError(kind, "INTERNAL-HOST-10.0.0.5 stack trace", status)
+    with pytest.raises(HTTPException) as e:
+        await run(snapshot())
+    assert "INTERNAL-HOST" not in e.value.detail and e.value.detail
+
+
+async def test_messages_we_wrote_ourselves_are_kept(mocks):
+    mocks.evaluate.side_effect = SystemOneError("timeout", "System One did not answer in time")
+    with pytest.raises(HTTPException) as e:
+        await run(snapshot())
+    assert e.value.detail == "System One did not answer in time"
 
 
 # --------------------------------------------------------------------- errors

@@ -11,6 +11,14 @@ import type {
   ServiceLifecycleWarning,
   ServiceUsage,
 } from '../types/services';
+import type {
+  SystemOneConnectionResult,
+  SystemOneQuestion,
+  SystemOneResult,
+  SystemOneService,
+  SystemOneServiceDetail,
+  SystemOneServicePayload,
+} from '../types/systemOne';
 
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
@@ -115,15 +123,6 @@ export interface App {
 }
 
 /** RAG retrieval-time filter applied on top of an agent's fixed silo. Mirrors RagConfigSection's RagFixedFilter shape. */
-import type {
-  SystemOneConnectionResult,
-  SystemOneQuestion,
-  SystemOneResult,
-  SystemOneService,
-  SystemOneServiceDetail,
-  SystemOneServicePayload,
-} from '../types/systemOne';
-
 export interface AgentRagFixedFilter {
   field: string;
   op: '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte' | '$in';

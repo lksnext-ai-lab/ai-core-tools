@@ -28,7 +28,8 @@ logger = get_logger(__name__)
 
 ErrorKind = Literal["unavailable", "overloaded", "timeout", "unauthorized", "invalid_request", "invalid_response"]
 
-_TIMEOUT_S = 30.0
+_TIMEOUT_S = 30.0       # per httpx phase (connect/read/write/pool)
+_DEADLINE_S = 120.0     # the whole call: waiting for a slot + every attempt + the pauses between them
 _PROBE_TIMEOUT_S = 10.0
 _ATTEMPTS = 3
 _RETRY_STATUSES = {429, 502, 503, 529}  # overloaded or briefly unavailable; 4xx are our bug
@@ -97,6 +98,8 @@ def _slot(endpoint: Endpoint) -> asyncio.Semaphore:
     per_loop = _slots_by_loop.setdefault(asyncio.get_running_loop(), {})
     key = (endpoint.service_id, endpoint.max_concurrency)
     if key not in per_loop:
+        for stale in [k for k in per_loop if k[0] == endpoint.service_id]:
+            del per_loop[stale]  # calls still holding it keep their reference and finish under the old cap
         per_loop[key] = asyncio.Semaphore(max(1, endpoint.max_concurrency))
     return per_loop[key]
 
@@ -204,23 +207,29 @@ async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
     headers = {"Authorization": f"Bearer {endpoint.api_key}"} if endpoint.api_key else {}
     body = build_request_body(endpoint.model, state, questions)
 
-    async with _slot(endpoint):  # held across retries: under overload the others wait too
-        async with httpx.AsyncClient(timeout=_TIMEOUT_S, transport=transport) as http:
-            for attempt in range(1, _ATTEMPTS + 1):
-                try:
-                    response = await http.post(url, json=body, headers=headers)
-                except httpx.TimeoutException:
-                    raise SystemOneError("timeout", "System One did not answer in time")
-                except httpx.TransportError:
-                    raise SystemOneError("unavailable", "Cannot connect to the System One server")
-                if response.status_code == 200:
-                    return _validate(response, questions)
-                if response.status_code in _RETRY_STATUSES and attempt < _ATTEMPTS:
-                    logger.info("[system_one] HTTP %s, retry %d/%d", response.status_code, attempt, _ATTEMPTS - 1)
-                    await _sleep(_retry_delay(response, attempt))
-                    continue
-                raise _error_for(response)
-    raise AssertionError("unreachable")
+    async def attempts() -> Dict[str, Any]:
+        async with _slot(endpoint):  # held across retries: under overload the others wait too
+            async with httpx.AsyncClient(timeout=_TIMEOUT_S, transport=transport) as http:
+                for attempt in range(1, _ATTEMPTS + 1):
+                    try:
+                        response = await http.post(url, json=body, headers=headers)
+                    except httpx.TimeoutException:
+                        raise SystemOneError("timeout", "System One did not answer in time")
+                    except httpx.TransportError:
+                        raise SystemOneError("unavailable", "Cannot connect to the System One server")
+                    if response.status_code == 200:
+                        return _validate(response, questions)
+                    if response.status_code in _RETRY_STATUSES and attempt < _ATTEMPTS:
+                        logger.info("[system_one] HTTP %s, retry %d/%d", response.status_code, attempt, _ATTEMPTS - 1)
+                        await _sleep(_retry_delay(response, attempt))
+                        continue
+                    raise _error_for(response)
+        raise AssertionError("unreachable")
+
+    try:
+        return await asyncio.wait_for(attempts(), timeout=_DEADLINE_S)
+    except asyncio.TimeoutError:
+        raise SystemOneError("timeout", "System One did not answer in time") from None
 
 
 def check_base_url(base_url: str) -> str:

@@ -44,6 +44,20 @@ function SystemOneServiceModal({ isOpen, appId, service, onClose, onSave }: Syst
   const [saving, setSaving] = useState(false);
   const [touched, setTouched] = useState(false);
 
+  const [tokenReset, setTokenReset] = useState(false);
+  const originalEndpoint = service?.endpoint ?? '';
+
+  // The stored token belongs to the server it was typed for: pointing the service somewhere else empties
+  // the masked value (the backend refuses to carry it over) and the user types it again if needed.
+  function changeEndpoint(value: string) {
+    setEndpoint(value);
+    const moved = isEdit && value.trim().replace(/\/+$/, '').toLowerCase() !== originalEndpoint.replace(/\/+$/, '').toLowerCase();
+    if (moved && apiKey.startsWith('****')) {
+      setApiKey('');
+      setTokenReset(true);
+    }
+  }
+
   const models = testResult?.status === 'success' ? testResult.models : [];
   const limits = limitsSummary(testResult?.limits ?? null);
 
@@ -125,7 +139,7 @@ function SystemOneServiceModal({ isOpen, appId, service, onClose, onSave }: Syst
 
         <div>
           <label htmlFor="so-endpoint" className="mb-1 block text-sm font-medium text-gray-700">Server URL</label>
-          <input id="so-endpoint" className={inputClass} value={endpoint} onChange={(e) => setEndpoint(e.target.value)}
+          <input id="so-endpoint" className={inputClass} value={endpoint} onChange={(e) => changeEndpoint(e.target.value)}
                  placeholder="http://172.16.59.1:8100" aria-invalid={Boolean(showError('endpoint'))} />
           {showError('endpoint') && <p className="mt-1 text-xs text-red-600">{showError('endpoint')}</p>}
         </div>
@@ -136,7 +150,8 @@ function SystemOneServiceModal({ isOpen, appId, service, onClose, onSave }: Syst
           </label>
           <input id="so-token" type="password" autoComplete="off" className={inputClass} value={apiKey}
                  onChange={(e) => setApiKey(e.target.value)} placeholder="Bearer token, if the server requires one" />
-          {isEdit && <p className="mt-1 text-xs text-gray-500">Leave the masked value to keep the stored token; empty it to remove it.</p>}
+          {isEdit && !tokenReset && <p className="mt-1 text-xs text-gray-500">Leave the masked value to keep the stored token; empty it to remove it.</p>}
+          {tokenReset && <p className="mt-1 text-xs text-amber-700" role="status">The URL changed, so the stored token was cleared: type it again if the new server needs one.</p>}
         </div>
 
         <div>

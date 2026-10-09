@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Gauge } from 'lucide-react';
 import SystemOneQuestionsEditor from './SystemOneQuestionsEditor';
-import type { EditorQuestion } from '../../utils/systemOneQuestions';
+import { validateMaxStateChars, type EditorQuestion } from '../../utils/systemOneQuestions';
 
 const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200';
@@ -31,6 +31,7 @@ interface SystemOneAgentSectionProps {
 const toId = (raw: string): number | undefined => (raw === '' ? undefined : Number(raw));
 
 function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
+  const maxCharsProblem = validateMaxStateChars(props.maxStateChars);
   const { appId, systemOneServices, aiServices } = props;
 
   return (
@@ -84,8 +85,11 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
           <div>
             <label htmlFor="so-max-chars" className="block text-sm font-medium text-gray-700 mb-2">Maximum text length (characters)</label>
             <input id="so-max-chars" type="number" min={500} max={20000} step={100} className={inputClass} value={props.maxStateChars}
+                   aria-invalid={maxCharsProblem !== null} aria-describedby={maxCharsProblem ? 'so-max-chars-error' : 'so-max-chars-hint'}
                    onChange={(e) => props.onMaxStateCharsChange(Number(e.target.value))} />
-            <p className="mt-1 text-xs text-gray-500">Between 500 and 20000. The model works best with shorter texts (around 6000).</p>
+            {maxCharsProblem
+              ? <p id="so-max-chars-error" role="alert" className="mt-1 text-xs text-red-600">{maxCharsProblem}</p>
+              : <p id="so-max-chars-hint" className="mt-1 text-xs text-gray-500">Between 500 and 20000. The model works best with shorter texts (around 6000).</p>}
           </div>
 
           <div className="flex items-start">

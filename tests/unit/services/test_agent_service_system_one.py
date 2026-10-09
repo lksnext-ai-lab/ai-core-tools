@@ -153,3 +153,4 @@ def test_the_type_of_an_existing_agent_cannot_be_changed(repos, existing_type, r
         run(repos, data(agent_id=5), agent_type=requested)
     repos.create.assert_not_called()
     repos.update.assert_not_called()
+

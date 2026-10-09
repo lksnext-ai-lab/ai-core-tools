@@ -124,6 +124,29 @@ def _answer_rows(result: SystemOneResult) -> List[Dict[str, Any]]:
     ]
 
 
+_GENERIC = {
+    "invalid_request": "System One rejected the request. Check the agent's questions and the size of the text.",
+    "unavailable": "System One is unavailable",
+    "overloaded": "System One is busy, try again shortly",
+    "timeout": "System One did not answer in time",
+    "unauthorized": "System One rejected the service credentials",
+    "invalid_response": "System One returned an unexpected response",
+}
+
+
+def _public_detail(exc: SystemOneError) -> str:
+    """What callers (viewers, API keys) may read about a failure.
+
+    Anything built from an HTTP response (``status`` set) carries text the server — or whatever answers at
+    the configured URL — chose, so it is logged for the administrator but not echoed. The one exception is
+    the token-budget message, which tells the caller their text is too long.
+    """
+    if exc.status is None or parse_budget_error(exc.message) is not None:
+        return exc.message
+    logger.warning("[system_one] %s (HTTP %s): %s", exc.kind, exc.status, exc.message[:200])
+    return _GENERIC[exc.kind]
+
+
 class SystemOneEvaluator:
 
     @staticmethod
@@ -204,7 +227,7 @@ class SystemOneEvaluator:
             return result
         except SystemOneError as exc:
             failure = exc
-            raise HTTPException(status_code=_HTTP_STATUS[exc.kind], detail=exc.message) from exc
+            raise HTTPException(status_code=_HTTP_STATUS[exc.kind], detail=_public_detail(exc)) from exc
         except Exception as exc:
             failure = exc
             raise

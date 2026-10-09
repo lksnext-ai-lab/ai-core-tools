@@ -4,6 +4,7 @@ import {
   newQuestion,
   toEditorQuestions,
   toPayload,
+  validateMaxStateChars,
   validateQuestions,
   type EditorQuestion,
 } from '../systemOneQuestions';
@@ -124,5 +125,36 @@ describe('changeQuestionType / newQuestion / toEditorQuestions', () => {
     const editor = toEditorQuestions([{ key: 'a', type: 'noul', instructions: 'q' }], () => `id${++n}`);
     expect(editor[0]._id).toBe('id1');
     expect(toEditorQuestions(null, () => 'x')).toEqual([]);
+  });
+});
+
+describe('text length limits (mirror the backend)', () => {
+  it('rejects instructions over 4000 characters, accepts exactly 4000', () => {
+    expect(validateQuestions([noul({ instructions: 'x'.repeat(4000) })])).toEqual([]);
+    expect(validateQuestions([noul({ instructions: 'x'.repeat(4001) })]).some((p) => p.includes('4000'))).toBe(true);
+  });
+
+  it('rejects criteria text over 500 characters', () => {
+    const long = 'x'.repeat(501);
+    expect(validateQuestions([score({ criteria: [long, 'High'] } as Partial<EditorQuestion>)]).some((p) => p.includes('500'))).toBe(true);
+    expect(validateQuestions([noul({ criteria: { true: long, false: 'no' } } as Partial<EditorQuestion>)]).some((p) => p.includes('500'))).toBe(true);
+    expect(validateQuestions([choice({ criteria: [{ key: 'a', description: long }, { key: 'b', description: '' }] } as Partial<EditorQuestion>)]).some((p) => p.includes('500'))).toBe(true);
+  });
+
+  it('rejects an option name over 100 characters', () => {
+    const q = choice({ criteria: [{ key: 'a'.repeat(101), description: '' }, { key: 'b', description: '' }] } as Partial<EditorQuestion>);
+    expect(validateQuestions([q]).some((p) => p.includes('100'))).toBe(true);
+  });
+});
+
+describe('validateMaxStateChars', () => {
+  it('accepts 500 to 20000 whole numbers', () => {
+    expect([500, 6000, 20000].map(validateMaxStateChars)).toEqual([null, null, null]);
+  });
+
+  it('rejects empty/zero, fractions and out-of-range values with a readable message', () => {
+    for (const bad of [Number.NaN, 0, 499, 20001, 600.5]) {
+      expect(validateMaxStateChars(bad)).toMatch(/500.*20000/);
+    }
   });
 });
