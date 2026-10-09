@@ -142,6 +142,10 @@ The primary endpoint for agent execution.
 
 Execute agent chat with message and optional file attachments.
 
+If the agent has a human-approval middleware, the response can be `status: "requires_approval"`
+with a `pending_approval` to answer via `/approvals/{approval_id}/decisions` — see
+[Human approval in the public API](../guides/human-approval.md).
+
 **Request**:
 
 ```http
@@ -542,3 +546,4 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
 - [Backend Architecture](../architecture/backend.md) — Router implementation
 - [Agent System](../ai/agent-system.md) — Agent execution details
 - [Authentication Guide](../guides/authentication.md) — API key management
+- [Human approval in the public API](../guides/human-approval.md) — Answering tool-approval requests

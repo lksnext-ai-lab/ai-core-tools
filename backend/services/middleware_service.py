@@ -4,7 +4,8 @@ from typing import List, Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from models.middleware import Middleware
+from models.middleware import Middleware, MiddlewareType
+from services import hitl_approval_service as approvals
 from repositories.middleware_repository import MiddlewareRepository
 from schemas.middleware_schemas import (
     CreateUpdateMiddlewareSchema,
@@ -76,6 +77,14 @@ class MiddlewareService:
             if set(service_ids) - found:
                 raise MiddlewareValidationError("The selected AI service does not exist in this app")
 
+        if (
+            middleware_id
+            and data.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP
+            and middleware.config != data.config
+        ):
+            approvals.cancel_pending_for_agents(
+                db, [a.agent_id for a in middleware.agent_associations], reason="approval_rules_changed"
+            )
         middleware.name = data.name
         middleware.description = data.description or ""
         middleware.middleware_type = data.middleware_type
@@ -95,6 +104,10 @@ class MiddlewareService:
         middleware = MiddlewareRepository.get_by_id_and_app_id(db, middleware_id, app_id)
         if not middleware:
             return False
+        if middleware.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP:
+            approvals.cancel_pending_for_agents(
+                db, [a.agent_id for a in middleware.agent_associations], reason="approval_rules_changed"
+            )
         MiddlewareRepository.delete(db, middleware)
         db.commit()
         return True

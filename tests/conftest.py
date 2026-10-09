@@ -69,6 +69,8 @@ os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 # transaction completes, which can't happen until the test body (blocked on `client`
 # setup) runs.
 os.environ.setdefault("AUTH_BOOTSTRAP_OMNIADMINS", "false")
+# Same for the HITL expiry sweeper: it reads and resolves approvals with its own sessions.
+os.environ.setdefault("HITL_EXPIRY_SWEEPER_ENABLED", "false")
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -596,6 +596,13 @@ class AgentService:
             assoc.middleware_id: assoc
             for assoc in db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()
         }
+        hitl_before = {
+            mid for mid, assoc in existing.items()
+            if assoc.middleware and assoc.middleware.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP
+        }
+        if hitl_before and not hitl_before.issubset(ordered_ids):
+            from services import hitl_approval_service as approvals
+            approvals.cancel_pending_for_agents(db, [agent_id], reason="approval_rules_changed")
         for mid, assoc in existing.items():
             if mid not in ordered_ids:
                 db.delete(assoc)

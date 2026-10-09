@@ -172,10 +172,10 @@ function ToolEntryRow({
             awaiting approval
           </span>
         )}
-        {record.status === 'rejected' && (
+        {(record.status === 'rejected' || record.status === 'expired' || record.status === 'cancelled') && (
           <span className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 shrink-0">
             <Ban className="h-3 w-3" aria-hidden="true" />
-            rejected
+            {record.status === 'rejected' ? 'rejected' : `${record.status} · not run`}
           </span>
         )}
         {record.status === 'complete' && (

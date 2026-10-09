@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { StreamEvent, ActiveTool, HitlDecision, HitlPendingApproval } from '../types/streaming';
+import type { StreamEvent, ActiveTool, HitlPendingApproval, HitlResume } from '../types/streaming';
 import { getStreamingMessage } from '../i18n/streaming';
 import { randomId } from '../utils/randomId';
 
@@ -12,7 +12,8 @@ export interface ToolOutputLine {
   readonly line: string;
 }
 
-export type ToolExecutionStatus = 'awaiting_approval' | 'running' | 'complete' | 'rejected';
+export type ToolExecutionStatus =
+  | 'awaiting_approval' | 'running' | 'complete' | 'rejected' | 'expired' | 'cancelled';
 
 export interface ToolExecutionRecord {
   readonly id: string;
@@ -65,7 +66,7 @@ export interface StreamFnOptions {
   readonly searchParams?: any;
   readonly conversationId?: number | null;
   /** Answer a pending human-in-the-loop approval instead of sending a message. */
-  readonly resumeDecisions?: HitlDecision[];
+  readonly resume?: HitlResume;
   readonly onEvent: (event: StreamEvent) => void;
   readonly signal?: AbortSignal;
 }
@@ -76,7 +77,7 @@ interface SendOptions {
   readonly files?: File[];
   readonly conversationId?: number | null;
   readonly searchParams?: any;
-  readonly resumeDecisions?: HitlDecision[];
+  readonly resume?: HitlResume;
 }
 
 interface UseStreamingChatReturn {
@@ -93,6 +94,8 @@ interface UseStreamingChatReturn {
   readonly isCodeRunning: boolean;
   readonly toolExecutionHistory: ToolExecutionRecord[];
   readonly clearToolHistory: () => void;
+  /** Close tool rows still waiting for approval (the approval was cancelled or expired). */
+  readonly settleAwaitingTools: (status: 'cancelled' | 'expired') => void;
   readonly sendMessage: (message: string, options?: SendOptions) => Promise<StreamResult>;
   readonly abortStream: () => void;
 }
@@ -151,8 +154,10 @@ function completeMatchingToolRecords(
   let changed = false;
 
   const updated = prev.map((record) => {
+    // A rejection is shown as soon as it is sent; its tool_end only adds the reason.
+    const awaitsReason = rejected && record.status === 'rejected' && record.toolOutput === undefined;
     const matches =
-      isOpenRecord(record) &&
+      (isOpenRecord(record) || awaitsReason) &&
       (
         (toolCallId && record.toolCallId === toolCallId) ||
         (!toolCallId && record.toolName === toolName)
@@ -204,6 +209,10 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
   const [toolExecutionHistory, setToolExecutionHistory] = useState<ToolExecutionRecord[]>([]);
 
   const clearToolHistory = useCallback(() => setToolExecutionHistory([]), []);
+  const settleAwaitingTools = useCallback(
+    (status: 'cancelled' | 'expired') => setToolExecutionHistory(setRecordStatus('awaiting_approval', status)),
+    [],
+  );
 
   const streamFnRef = useRef(streamFn);
   useEffect(() => {
@@ -254,8 +263,20 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       flushRequestedRef.current = false;
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
-      if (options?.resumeDecisions) {
-        setToolExecutionHistory(setRecordStatus('awaiting_approval', 'running'));
+      if (options?.resume) {
+        // Approved/edited calls start running now; rejected ones never run.
+        const rejected = new Set(
+          options.resume.decisions.filter((d) => d.type === 'reject').map((d) => d.action_id),
+        );
+        setToolExecutionHistory((prev) =>
+          prev.map((record) => {
+            if (record.status !== 'awaiting_approval') return record;
+            const isRejected = record.toolCallId !== undefined && rejected.has(record.toolCallId);
+            return isRejected
+              ? { ...record, status: 'rejected' as const, endedAt: Date.now() }
+              : { ...record, status: 'running' as const };
+          }),
+        );
       }
 
       const scheduleFlush = () => {
@@ -290,7 +311,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
           files: options?.files,
           searchParams: options?.searchParams,
           conversationId: options?.conversationId,
-          resumeDecisions: options?.resumeDecisions,
+          resume: options?.resume,
           signal: abortController.signal,
           onEvent: (event: StreamEvent) => {
             switch (event.type) {
@@ -538,6 +559,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
     isCodeRunning,
     toolExecutionHistory,
     clearToolHistory,
+    settleAwaitingTools,
     sendMessage,
     abortStream,
   };

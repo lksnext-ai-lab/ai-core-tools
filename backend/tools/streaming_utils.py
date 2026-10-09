@@ -270,6 +270,23 @@ def _map_edited_tool_calls(state_delta: dict) -> list[dict]:
     return events
 
 
+def _tc_id(tool_call: Any) -> str:
+    return (tool_call.get("id") if isinstance(tool_call, dict) else getattr(tool_call, "id", "")) or ""
+
+
+def _hitl_unannounced_ids(node_name: str, state_delta: dict, messages: list) -> set[str] | None:
+    """For the human-approval node answering a pause: ids of calls that will not run as-is.
+
+    Rejected calls already have their ToolMessage in the update and edited ones are
+    announced with their new arguments. Returns None for any other node.
+    """
+    if not node_name.startswith("HumanInTheLoopMiddleware") or _HITL_EDITED_TOOL_CALLS_KEY not in state_delta:
+        return None
+    answered = {getattr(m, "tool_call_id", "") for m in messages if getattr(m, "type", "") == "tool"}
+    edited = set((state_delta.get(_HITL_EDITED_TOOL_CALLS_KEY) or {}).keys())
+    return answered | edited
+
+
 def _map_updates_chunk(chunk: Any) -> list[dict] | None:
     """Handle a single ``updates``-mode chunk from LangGraph astream.
 
@@ -301,6 +318,8 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
 
         # Middleware hook nodes ("PIIMiddleware[email].after_model", ...) re-emit the
         # model's AIMessage; its tool calls were already announced by the model node.
+        # The exception is the human-approval node answering a pause: a resumed run
+        # announces the calls that will now run (approved as-is; edited ones below).
         is_middleware_node = "." in node_name
         events.extend(_map_edited_tool_calls(state_delta))
 
@@ -309,12 +328,19 @@ def _map_updates_chunk(chunk: Any) -> list[dict] | None:
             # State delta may store a single message
             messages = [messages]
 
+        not_running = _hitl_unannounced_ids(node_name, state_delta, messages)
+
         for msg in messages:
             if msg is None:
                 continue
 
             # --- tool_start: AI message contains tool_calls ---
-            tool_calls = [] if is_middleware_node else (getattr(msg, "tool_calls", None) or [])
+            if not is_middleware_node:
+                tool_calls = getattr(msg, "tool_calls", None) or []
+            elif not_running is not None:
+                tool_calls = [tc for tc in (getattr(msg, "tool_calls", None) or []) if _tc_id(tc) not in not_running]
+            else:
+                tool_calls = []
             for tc in tool_calls:
                 try:
                     tool_name: str = (

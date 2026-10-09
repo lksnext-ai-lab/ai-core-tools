@@ -224,13 +224,13 @@ async def test_streaming_keeps_checkpoint_when_hitl_interrupt_is_pending():
 
 
 @pytest.mark.asyncio
-async def test_pending_approval_falls_back_to_none_on_unreadable_state():
-    from services.agent_streaming_service import _pending_approval
+async def test_read_pause_falls_back_to_none_on_unreadable_state():
+    from services.agent_streaming_service import _read_pause
 
     chain = MagicMock()
     chain.aget_state = AsyncMock(side_effect=RuntimeError("checkpointer down"))
 
-    assert await _pending_approval(chain, {"configurable": {}}) is None
+    assert await _read_pause(chain, {"configurable": {}}) is None
 
 
 @pytest.mark.asyncio
@@ -298,21 +298,40 @@ async def test_streaming_fails_cleanly_when_no_checkpoint_to_roll_back_to():
 # Human-in-the-loop pause / resume
 # ---------------------------------------------------------------------------
 
-def _paused_state():
-    return SimpleNamespace(tasks=[SimpleNamespace(interrupts=[SimpleNamespace(value={
-        "action_requests": [{"name": "search", "args": {"q": "x"}, "description": "Needs approval"}],
-        "review_configs": [{"action_name": "search", "allowed_decisions": ["approve", "reject"]}],
-    })])])
+def _paused_state(interrupt_id="i1"):
+    from langchain_core.messages import AIMessage
+
+    return SimpleNamespace(
+        tasks=[SimpleNamespace(interrupts=[SimpleNamespace(id=interrupt_id, value={
+            "action_requests": [{"name": "search", "args": {"q": "x"}, "description": "Needs approval"}],
+            "review_configs": [{"action_name": "search", "allowed_decisions": ["approve", "reject"]}],
+        })])],
+        values={"messages": [AIMessage(content="", tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}])]},
+    )
 
 
 def _hitl_ctx():
     return SimpleNamespace(
-        effective_conv_id=7, conversation=None,
+        effective_conv_id=7, conversation=SimpleNamespace(conversation_id=7, session_id="conv_1_7"),
         agent=SimpleNamespace(name="Agent", has_memory=True),
-        fresh_agent=SimpleNamespace(agent_id=1, has_memory=True),
-        search_params={}, session_id_for_cache="7", user_context={"user_id": "u1"},
+        fresh_agent=SimpleNamespace(agent_id=1, app_id=3, has_memory=True),
+        search_params={}, session_id_for_cache="7", user_context={"user_id": 5},
         working_dir="/tmp/work", sandbox_handle=None, sandbox_provider=None, sandbox_session_key=None,
         enhanced_message="hello", image_files=[], processed_files=[],
+    )
+
+
+def _approval(interrupt_id="i1"):
+    from datetime import datetime, timedelta, timezone
+    from models.hitl_approval import HITLApproval
+
+    now = datetime.now(timezone.utc)
+    return HITLApproval(
+        id="appr-1", app_id=3, agent_id=1, conversation_id=7, thread_id="thread_1_conv_1_7",
+        interrupt_id=interrupt_id, channel="playground", status="pending",
+        actions=[{"action_id": "call_1", "name": "search", "args": {"q": "x"},
+                  "description": "Needs approval", "allowed_decisions": ["approve", "reject"]}],
+        requested_by_user_id=5, created_at=now, expires_at=now + timedelta(hours=1),
     )
 
 
@@ -321,85 +340,135 @@ async def _empty_stream(*args, **kwargs):
         yield None
 
 
-async def _run_hitl(chain, **kwargs):
+async def _run_hitl(chain, *, approvals_overrides=None, **kwargs):
     from services.agent_streaming_service import AgentStreamingService
 
     execution_service = MagicMock()
     execution_service._prepare_turn = AsyncMock(return_value=_hitl_ctx())
     execution_service._finalize_turn = AsyncMock(return_value={
         "parsed_response": "ok", "effective_conv_id": 7, "files_data": []})
+    execution_service._reject_in_place = AsyncMock()
     service = AgentStreamingService()
     service.execution_service = execution_service
+    fakes = {
+        "check_conversation_free": MagicMock(return_value=None),
+        "open_approval": AsyncMock(return_value=_approval()),
+        "finish": MagicMock(),
+        "release": MagicMock(),
+        **(approvals_overrides or {}),
+    }
+    kwargs.setdefault("message", "hi")
     with (
         patch("services.agent_streaming_service.human_in_the_loop_config", return_value=MagicMock()),
         patch("services.agent_streaming_service.create_agent", AsyncMock(return_value=(chain, None, None))),
         patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
         patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="hi")),
+        patch.multiple("services.agent_streaming_service.approvals", **fakes),
     ):
         events = [e async for e in service.stream_agent_chat(
-            agent_id=1, message="hi", user_context={"user_id": "u1"}, conversation_id=7, db=MagicMock(), **kwargs)]
-    return events, execution_service
+            agent_id=1, user_context={"user_id": 5}, conversation_id=7, db=MagicMock(), **kwargs)]
+    return events, execution_service, fakes
+
+
+def _resume(interrupt_id="i1"):
+    from models.hitl_approval import ApprovalStatus
+    from services.hitl_approval_service import ResumeRequest
+
+    return ResumeRequest(_approval(interrupt_id), [{"type": "approve"}], ApprovalStatus.APPROVED)
 
 
 @pytest.mark.asyncio
-async def test_pause_emits_interrupt_and_skips_finalize():
+async def test_pause_records_approval_and_emits_interrupt():
+    from models.hitl_approval import ApprovalChannel
+
     chain = MagicMock()
     chain.astream.side_effect = _empty_stream
     chain.aget_state = AsyncMock(return_value=_paused_state())
 
-    events, execution_service = await _run_hitl(chain)
+    events, execution_service, fakes = await _run_hitl(chain)
 
-    assert any('"hitl_interrupt"' in e and '"search"' in e for e in events)
-    assert any('"hitl_paused": true' in e for e in events)
+    assert fakes["open_approval"].await_args.kwargs["channel"] == ApprovalChannel.PLAYGROUND
+    assert fakes["open_approval"].await_args.kwargs["answerable"] is True
+    assert any('"hitl_interrupt"' in e and '"approval_id": "appr-1"' in e and '"call_1"' in e for e in events)
+    assert any('"requires_approval"' in e and '"hitl_paused": true' in e for e in events)
     execution_service._finalize_turn.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_pause_without_approval_ui_is_an_error():
+async def test_pause_in_non_interactive_channel_is_rejected_in_place():
+    from models.hitl_approval import ApprovalChannel
+
     chain = MagicMock()
     chain.astream.side_effect = _empty_stream
     chain.aget_state = AsyncMock(return_value=_paused_state())
 
-    events, _ = await _run_hitl(chain, approval_ui=False)
+    events, execution_service, fakes = await _run_hitl(chain, channel=ApprovalChannel.PLATFORM_CHATBOT)
 
-    assert any('"error"' in e and "needs human approval" in e for e in events)
+    # Recorded already claimed: a reload must never show a pause nobody can answer.
+    assert fakes["open_approval"].await_args.kwargs["answerable"] is False
+    execution_service._reject_in_place.assert_awaited_once()
+    assert any('"error"' in e and "approval_not_supported_in_channel" in e for e in events)
     assert not any('"hitl_interrupt"' in e for e in events)
 
 
 @pytest.mark.asyncio
-async def test_resume_with_disallowed_decision_never_reaches_the_graph():
+async def test_new_message_on_a_paused_conversation_is_refused():
+    from services.hitl_approval_service import ApprovalPendingError
+
     chain = MagicMock()
-    chain.aget_state = AsyncMock(return_value=_paused_state())
+    refused = MagicMock(side_effect=ApprovalPendingError("waiting", approval_id="appr-1"))
 
-    events, _ = await _run_hitl(chain, resume_decisions=[
-        {"type": "edit", "edited_action": {"name": "search", "args": {}}}])
+    events, _, _ = await _run_hitl(chain, approvals_overrides={"check_conversation_free": refused})
 
-    assert any('"error"' in e and "not allowed" in e for e in events)
+    assert any('"error"' in e and "approval_pending" in e for e in events)
     chain.astream.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_resume_without_pending_approval_is_rejected():
+async def test_resume_on_a_stale_pause_is_cancelled_without_running():
+    from models.hitl_approval import ApprovalStatus
+
     chain = MagicMock()
-    chain.aget_state = AsyncMock(return_value=SimpleNamespace(tasks=[]))
+    chain.aget_state = AsyncMock(return_value=_paused_state(interrupt_id="another"))
 
-    events, _ = await _run_hitl(chain, resume_decisions=[{"type": "approve"}])
+    events, _, fakes = await _run_hitl(chain, message="", resume=_resume())
 
-    assert any("no pending approval" in e for e in events)
     chain.astream.assert_not_called()
+    assert fakes["finish"].call_args.args[2] == ApprovalStatus.CANCELLED
+    assert any("approval_stale" in e for e in events)
 
 
 @pytest.mark.asyncio
-async def test_resume_sends_command_with_decisions():
+async def test_resume_sends_command_and_records_outcome():
     from langgraph.types import Command
+    from models.hitl_approval import ApprovalStatus
 
     chain = MagicMock()
     chain.astream.side_effect = _empty_stream
-    chain.aget_state = AsyncMock(side_effect=[_paused_state(), SimpleNamespace(tasks=[])])
+    chain.aget_state = AsyncMock(side_effect=[_paused_state(), SimpleNamespace(tasks=[], values={})])
 
-    events, execution_service = await _run_hitl(chain, resume_decisions=[{"type": "approve"}])
+    events, execution_service, fakes = await _run_hitl(chain, message="", resume=_resume())
 
     sent = chain.astream.call_args.args[0]
     assert isinstance(sent, Command) and sent.resume == {"decisions": [{"type": "approve"}]}
+    assert fakes["finish"].call_args.args[2] == ApprovalStatus.APPROVED
+    fakes["release"].assert_not_called()
     execution_service._finalize_turn.assert_awaited_once()
-    assert any('"done"' in e for e in events)
+    assert any('"done"' in e and '"completed"' in e for e in events)
+
+
+@pytest.mark.asyncio
+async def test_failed_resume_gives_the_claim_back():
+    async def broken_stream(*args, **kwargs):
+        raise RuntimeError("provider down")
+        yield None
+
+    chain = MagicMock()
+    chain.astream.side_effect = broken_stream
+    chain.aget_state = AsyncMock(return_value=_paused_state())
+
+    events, _, fakes = await _run_hitl(chain, message="", resume=_resume())
+
+    fakes["release"].assert_called_once()
+    fakes["finish"].assert_not_called()
+    assert any('"error"' in e for e in events)

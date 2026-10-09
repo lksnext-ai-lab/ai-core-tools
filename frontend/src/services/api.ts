@@ -1,7 +1,7 @@
 import { configService } from '../core/ConfigService';
 import { authService } from './auth';
 import { getCsrfToken } from './cookies';
-import type { HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
+import type { HitlCancelResult, HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
 
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
@@ -645,9 +645,13 @@ class ApiService {
 
     if (typeof data['error'] === 'string') return data['error'];
     if (data['detail'] !== undefined) {
-      return typeof data['detail'] === 'string'
-        ? data['detail']
-        : JSON.stringify(data['detail']);
+      const detail = data['detail'];
+      if (typeof detail === 'string') return detail;
+      // Structured errors ({code, message}) carry a human-readable message.
+      if (detail && typeof detail === 'object' && typeof (detail as Record<string, unknown>)['message'] === 'string') {
+        return (detail as Record<string, unknown>)['message'] as string;
+      }
+      return JSON.stringify(detail);
     }
     if (typeof data['message'] === 'string') return data['message'];
     return null;
@@ -2231,18 +2235,19 @@ class ApiService {
     );
   }
 
-  /** POST a form and consume the SSE response (same auth/cookies/CSRF as every other call). */
+  /** POST a form or JSON body and consume the SSE response (same auth/cookies/CSRF as every other call). */
   private async postSSE(
     endpoint: string,
-    formData: FormData,
+    body: FormData | Record<string, unknown>,
     onEvent: (event: StreamEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
+    const isFormData = body instanceof FormData;
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
       credentials: 'include',
-      headers: this.buildAuthHeaders('POST', true),
-      body: formData,
+      headers: this.buildAuthHeaders('POST', isFormData),
+      body: isFormData ? body : JSON.stringify(body),
       signal,
     });
 
@@ -2276,22 +2281,27 @@ class ApiService {
   }
 
   /** Answer a pending human-in-the-loop approval; streams the rest of the turn. */
-  async resumeAgentChat(
-    appId: number,
-    agentId: number,
-    decisions: HitlDecision[],
+  async decideApprovalStream(
+    approvalId: string,
+    decisions: readonly HitlDecision[],
     options: {
-      conversationId: number;
       onEvent: (event: StreamEvent) => void;
       signal?: AbortSignal;
     }
   ): Promise<void> {
-    const formData = new FormData();
-    formData.append('decisions', JSON.stringify(decisions));
-    formData.append('conversation_id', options.conversationId.toString());
     await this.postSSE(
-      `/internal/apps/${appId}/agents/${agentId}/chat/resume`, formData, options.onEvent, options.signal,
+      `/internal/approvals/${encodeURIComponent(approvalId)}/decisions/stream`,
+      { decisions },
+      options.onEvent,
+      options.signal,
     );
+  }
+
+  /** Reject every action of a pending approval; returns the agent's answer. */
+  async cancelApproval(approvalId: string): Promise<HitlCancelResult> {
+    return this.request<HitlCancelResult>(`/internal/approvals/${encodeURIComponent(approvalId)}/cancel`, {
+      method: 'POST',
+    });
   }
 
   async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null): Promise<{ file_id: string }> {

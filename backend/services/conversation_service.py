@@ -457,27 +457,18 @@ class ConversationService:
     async def get_pending_approval(db: Session, conversation_id: int, user_context: Dict) -> Optional[Dict]:
         """The human-in-the-loop approval this conversation is waiting for, if any.
 
-        Lets the chat UI restore the approval card after a reload.
+        Lets the chat UI restore the approval card after a reload (an approval past its
+        deadline is returned with ``status="expired"`` until the server resolves it).
         """
         conversation = ConversationService.get_conversation(db, conversation_id, user_context)
-        if not conversation or not conversation.agent:
+        if not conversation:
             return None
-        from services.hitl_service import pending_approval_from_tool_calls
-        from tools.middleware.factory import human_in_the_loop_config
+        from services import hitl_approval_service as approvals
 
-        hitl_config = human_in_the_loop_config(conversation.agent)
-        if hitl_config is None:
+        approval = approvals.get_pending_for_conversation(db, conversation.conversation_id)
+        if approval is None or not approvals.Requester.from_user_context(user_context).owns(approval):
             return None
-        # Same canonical-then-suffix thread lookup as get_conversation_history.
-        tool_calls = await CheckpointerCacheService.get_pending_tool_calls_async(
-            conversation.agent_id, conversation.session_id
-        )
-        prefix = f"conv_{conversation.agent_id}_"
-        if not tool_calls and conversation.session_id.startswith(prefix):
-            tool_calls = await CheckpointerCacheService.get_pending_tool_calls_async(
-                conversation.agent_id, conversation.session_id.replace(prefix, "", 1)
-            )
-        return pending_approval_from_tool_calls(hitl_config, tool_calls)
+        return approvals.sse_payload(approval)
 
     @staticmethod
     def _clean_attached_files_content(text: str) -> str:
@@ -571,6 +562,10 @@ class ConversationService:
         Returns:
             True if user has access, False otherwise
         """
+        # Server-side resolution of an expired approval: access to that one conversation only.
+        if isinstance(user_context, dict) and user_context.get('hitl_conversation_id') is not None:
+            return user_context['hitl_conversation_id'] == conversation.conversation_id
+
         # Scheduled-task executions own their conversations; users never do.
         if conversation.scheduled_task_id is not None:
             return (

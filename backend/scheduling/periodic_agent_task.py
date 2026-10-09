@@ -28,7 +28,10 @@ async def _invoke_agent(
     user_context: dict[str, Any],
 ) -> dict[str, Any]:
     """Run the agent once and return only what the run keeps: its answer and produced files."""
+    from fastapi import HTTPException
+    from models.hitl_approval import ApprovalChannel
     from services.agent_execution_service import AgentExecutionService
+    from services.hitl_approval_service import ApprovalNotSupportedError
 
     context = input_context or {}
     message = context.get("message") or json.dumps(context, ensure_ascii=False, default=str)
@@ -40,7 +43,14 @@ async def _invoke_agent(
             user_context=dict(user_context),
             conversation_id=conversation_id,
             db=db,
+            channel=ApprovalChannel.SCHEDULED,
         )
+    except HTTPException as exc:
+        # Nobody can approve a tool during a scheduled run; the pause was already
+        # rejected, so record why instead of retrying a run that would pause again.
+        if isinstance(exc.detail, dict) and exc.detail.get("code") == ApprovalNotSupportedError.code:
+            return {"response": exc.detail["message"], "files": []}
+        raise
     finally:
         db.close()
     return {

@@ -16,6 +16,7 @@ from .conversation_starter import ConversationStarter
 from .agent_marketplace_rating import AgentMarketplaceRating
 from .ocr_agent import OCRAgent
 from .conversation import Conversation
+from .hitl_approval import HITLApproval
 from .repository import Repository
 from .resource import Resource
 from .folder import Folder
@@ -41,7 +42,7 @@ from .scheduled_task import ScheduledTask, ScheduledTaskRun
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo', 'Skill', 'SkillFile',
-    'Agent', 'AgentMarketplaceProfile', 'ConversationStarter', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation',
+    'Agent', 'AgentMarketplaceProfile', 'ConversationStarter', 'AgentMarketplaceRating', 'OCRAgent', 'Conversation', 'HITLApproval',
     'Repository', 'Resource', 'Folder', 'Domain',
     'DomainUrl', 'CrawlPolicy', 'CrawlJob', 'SharePointSource', 'SharePointFile',
     'AIService', 'EmbeddingService', 'OutputParser', 'MCPConfig', 'Silo',

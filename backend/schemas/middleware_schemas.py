@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from models.middleware import MiddlewareType
+from utils.config import Config
 
 # ==================== PER-TYPE CONFIG ====================
 #
@@ -15,6 +16,10 @@ AI_SERVICE_PATTERN = r"^(agent_llm|ai_service:\d+)$"
 # Detectors built into langchain's PIIMiddleware (no custom detector needed).
 BuiltinPIIType = Literal["email", "credit_card", "ip", "mac_address", "url"]
 HITLDecision = Literal["approve", "edit", "reject"]
+DEFAULT_APPROVAL_TIMEOUT_SECONDS = 3600
+MIN_APPROVAL_TIMEOUT_SECONDS = 60
+# Upper bound for any middleware's approval timeout (env, default 7 days).
+MAX_APPROVAL_TIMEOUT_SECONDS: int = Config.get_int_env_var("HITL_MAX_APPROVAL_TTL_SECONDS", default=604_800)
 
 
 class _StrictConfig(BaseModel):
@@ -74,6 +79,15 @@ class HITLToolConfig(_StrictConfig):
 class HITLConfig(_StrictConfig):
     interrupt_on: Dict[str, HITLToolConfig] = Field(..., min_length=1)
     description_prefix: str = Field("Tool execution requires approval", max_length=500)
+    # An unanswered approval is rejected after this long (never approved).
+    approval_timeout_seconds: int = Field(DEFAULT_APPROVAL_TIMEOUT_SECONDS, ge=MIN_APPROVAL_TIMEOUT_SECONDS)
+
+    @field_validator("approval_timeout_seconds")
+    @classmethod
+    def _cap_timeout(cls, v: int) -> int:
+        if v > MAX_APPROVAL_TIMEOUT_SECONDS:
+            raise ValueError(f"approval_timeout_seconds must be at most {MAX_APPROVAL_TIMEOUT_SECONDS}")
+        return v
 
     @field_validator("interrupt_on")
     @classmethod
@@ -182,30 +196,3 @@ class CreateUpdateMiddlewareSchema(BaseModel):
             raise ValueError(f"invalid config for {self.middleware_type.value} ({loc}): {first['msg']}") from None
         self.config = parsed.model_dump()
         return self
-
-
-# ==================== HUMAN-IN-THE-LOOP ====================
-
-class HITLEditedAction(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    args: Dict[str, Any] = Field(default_factory=dict)
-
-
-class HITLDecisionSchema(BaseModel):
-    """One reviewer decision, in LangChain's HumanInTheLoopMiddleware format."""
-    model_config = ConfigDict(extra="forbid")
-
-    type: HITLDecision
-    edited_action: Optional[HITLEditedAction] = None
-    message: Optional[str] = Field(None, max_length=2000)
-
-    @model_validator(mode="after")
-    def _edit_needs_action(self) -> "HITLDecisionSchema":
-        if self.type == "edit" and self.edited_action is None:
-            raise ValueError("an 'edit' decision needs edited_action")
-        if self.type != "edit" and self.edited_action is not None:
-            raise ValueError("edited_action is only valid for 'edit' decisions")
-        return self
-
-    def to_langchain(self) -> Dict[str, Any]:
-        return self.model_dump(exclude_none=True)

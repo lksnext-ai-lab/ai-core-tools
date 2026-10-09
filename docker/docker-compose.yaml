@@ -90,6 +90,11 @@ services:
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
 
+      # Agent turns and human approvals (see docker/.env.example)
+      AICT_AGENT_RUN_TIMEOUT_SECONDS: ${AICT_AGENT_RUN_TIMEOUT_SECONDS:-600}
+      HITL_MAX_APPROVAL_TTL_SECONDS: ${HITL_MAX_APPROVAL_TTL_SECONDS:-604800}
+      HITL_EXPIRY_SWEEP_SECONDS: ${HITL_EXPIRY_SWEEP_SECONDS:-60}
+
       # Sandbox provider (IT-2). Default must be a provider actually registered
       # in backend/tools/sandbox/factory.py (opensandbox/daytona/e2b) — 'subprocess'
       # was removed and is no longer a valid provider name.

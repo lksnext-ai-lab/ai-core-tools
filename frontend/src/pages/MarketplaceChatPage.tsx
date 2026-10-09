@@ -10,6 +10,9 @@ import type { PanelFile } from '../components/playground/AttachedFilesPanel';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
+import { useApprovalExpiryWatch } from '../hooks/useApprovalExpiryWatch';
+import HitlApprovalCard from '../components/playground/HitlApprovalCard';
+import type { HitlDecision } from '../types/streaming';
 import { formatDuration } from '../utils/duration';
 import { errorMessage } from '../constants/messages';
 
@@ -77,18 +80,45 @@ export default function MarketplaceChatPage() {
     quotaInfo.call_count >= quotaInfo.quota;
 
   const marketplaceStream = useCallback(
-    (message: string, opts: StreamFnOptions) =>
-      apiService.chatMarketplaceStream(numericId, message, {
+    (message: string, opts: StreamFnOptions) => {
+      if (opts.resume) {
+        return apiService.decideApprovalStream(opts.resume.approvalId, opts.resume.decisions, {
+          onEvent: opts.onEvent,
+          signal: opts.signal,
+        });
+      }
+      return apiService.chatMarketplaceStream(numericId, message, {
         files: opts.files,
         fileReferences: persistentFiles.length > 0 ? persistentFiles.map((f) => f.file_id) : undefined,
         onEvent: opts.onEvent,
         signal: opts.signal,
-      }),
+      });
+    },
     [numericId, persistentFiles],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream } =
-    useStreamingChat(marketplaceStream);
+  const {
+    streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream,
+    pendingApproval, setPendingApproval, settleAwaitingTools,
+  } = useStreamingChat(marketplaceStream);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [expiredApprovalId, setExpiredApprovalId] = useState<string | null>(null);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  // While a person can still answer, a new message would discard the paused turn.
+  const approvalBlocksInput =
+    pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
+
+  useApprovalExpiryWatch(
+    expiredApprovalId,
+    useCallback(async () => {
+      const data = await apiService.getMarketplaceConversationHistory(numericId);
+      return (data.pending_approval?.approval_id as string | undefined) ?? null;
+    }, [numericId]),
+    useCallback(() => {
+      setExpiredApprovalId(null);
+      setHistoryReloadKey((k) => k + 1);
+    }, []),
+  );
 
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
   const showStreaming = isStreaming || holdStreamingContent;
@@ -187,6 +217,8 @@ export default function MarketplaceChatPage() {
         const data = await apiService.getMarketplaceConversationHistory(numericId);
         if (!isMounted) return;
         setAgentId(data.agent_id);
+        // Restore an approval the conversation is still waiting for (e.g. after a reload).
+        setPendingApproval(data.pending_approval ?? null);
         setConversationTitle(data.title);
 
         try {
@@ -222,7 +254,7 @@ export default function MarketplaceChatPage() {
     return () => {
       isMounted = false;
     };
-  }, [numericId]);
+  }, [numericId, historyReloadKey, setPendingApproval]);
 
   useEffect(() => {
     if (!numericId || Number.isNaN(numericId)) return;
@@ -265,11 +297,80 @@ export default function MarketplaceChatPage() {
     }
   }, []);
 
+  /** Commit a finished turn as an agent message (nothing to commit while it awaits approval). */
+  const commitAgentResponse = useCallback(
+    (rawResponse: string | Record<string, unknown>, elapsedMs: number, awaitingApproval: boolean) => {
+      const responseContent: string =
+        typeof rawResponse === 'object' ? JSON.stringify(rawResponse, null, 2) : rawResponse || '';
+      if (awaitingApproval && !responseContent.trim()) {
+        setHoldStreamingContent(false);
+        return;
+      }
+      const agentMsgId = (Date.now() + 1).toString();
+      lastStreamedMsgIdRef.current = agentMsgId;
+      setMessages((prev) => [
+        ...prev,
+        { id: agentMsgId, type: 'agent', content: responseContent, timestamp: new Date(), elapsedMs },
+      ]);
+      setHoldStreamingContent(false);
+    },
+    [],
+  );
+
+  const pushError = useCallback((content: string) => {
+    setMessages((prev) => [...prev, { id: (Date.now() + 1).toString(), type: 'error', content, timestamp: new Date() }]);
+  }, []);
+
+  const handleApprovalDecision = useCallback(async (decisions: HitlDecision[]) => {
+    const approval = pendingApproval;
+    if (!approval) return;
+    resetScrollLock();
+    try {
+      setHoldStreamingContent(true);
+      const result = await sendMessage('', {
+        conversationId: numericId,
+        resume: { approvalId: approval.approval_id, decisions },
+      });
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
+    } catch (err) {
+      setHoldStreamingContent(false);
+      // The decision was not applied: keep the request on screen so it can be answered again.
+      setPendingApproval(approval);
+      pushError(errorMessage(err, 'The approval could not be sent'));
+    }
+  }, [pendingApproval, resetScrollLock, sendMessage, numericId, commitAgentResponse, setPendingApproval, pushError]);
+
+  const handleApprovalCancel = useCallback(async () => {
+    const approval = pendingApproval;
+    if (!approval) return;
+    setApprovalBusy(true);
+    try {
+      const result = await apiService.cancelApproval(approval.approval_id);
+      settleAwaitingTools('cancelled');
+      setPendingApproval(result.pending_approval);
+      commitAgentResponse(result.response, 0, result.pending_approval !== null);
+    } catch (err) {
+      pushError(errorMessage(err, 'The request could not be cancelled'));
+    } finally {
+      setApprovalBusy(false);
+    }
+  }, [pendingApproval, settleAwaitingTools, setPendingApproval, commitAgentResponse, pushError]);
+
+  const handleApprovalExpire = useCallback(() => {
+    if (!pendingApproval) return;
+    settleAwaitingTools('expired');
+    setExpiredApprovalId(pendingApproval.approval_id);
+  }, [pendingApproval, settleAwaitingTools]);
+
   const handleSendMessage = useCallback(async () => {
     const trimmed = inputMessage.trim();
     if (!trimmed && persistentFiles.length === 0) return;
     if (isStreaming) return;
     if (isQuotaExceeded) return;
+    if (approvalBlocksInput) return;
+    // The server resolves an expired approval within this turn; reloading the history
+    // mid-turn would drop the message being sent.
+    setExpiredApprovalId(null);
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -292,25 +393,7 @@ export default function MarketplaceChatPage() {
         conversationId: numericId,
       });
 
-      const rawResponse = result.response || '';
-      const responseContent: string =
-        typeof rawResponse === 'object'
-          ? JSON.stringify(rawResponse, null, 2)
-          : rawResponse;
-
-      const agentMsgId = (Date.now() + 1).toString();
-      lastStreamedMsgIdRef.current = agentMsgId;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: agentMsgId,
-          type: 'agent',
-          content: responseContent,
-          timestamp: new Date(),
-          elapsedMs: result.elapsedMs,
-        },
-      ]);
-      setHoldStreamingContent(false);
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
 
       void refreshFileList();
       void fetchQuotaInfo();
@@ -341,12 +424,14 @@ export default function MarketplaceChatPage() {
     persistentFiles.length,
     isStreaming,
     isQuotaExceeded,
+    approvalBlocksInput,
     sendMessage,
     numericId,
     resetScrollLock,
     scrollToBottom,
     refreshFileList,
     fetchQuotaInfo,
+    commitAgentResponse,
   ]);
 
   const handleKeyDown = useCallback(
@@ -456,7 +541,8 @@ export default function MarketplaceChatPage() {
   }));
 
   const canSend =
-    !isStreaming && !isQuotaExceeded && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+    !isStreaming && !isQuotaExceeded && !approvalBlocksInput
+    && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   return (
     <div className="flex gap-4 items-stretch h-full min-h-0">
@@ -642,6 +728,16 @@ export default function MarketplaceChatPage() {
             />
           )}
 
+          {pendingApproval && !isStreaming && (
+            <HitlApprovalCard
+              approval={pendingApproval}
+              disabled={approvalBusy}
+              onDecide={(decisions) => void handleApprovalDecision(decisions)}
+              onCancel={() => void handleApprovalCancel()}
+              onExpire={handleApprovalExpire}
+            />
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -716,8 +812,8 @@ export default function MarketplaceChatPage() {
                value={inputMessage}
                onChange={(e) => setInputMessage(e.target.value)}
                onKeyDown={handleKeyDown}
-               placeholder={`Message ${agentName}…`}
-               disabled={isStreaming || isQuotaExceeded}
+               placeholder={approvalBlocksInput ? 'Answer the approval request to continue' : `Message ${agentName}…`}
+               disabled={isStreaming || isQuotaExceeded || approvalBlocksInput}
                rows={1}
                className="flex-1 py-2 bg-transparent border-none outline-none resize-none
                           text-sm text-gray-800 dark:text-gray-100

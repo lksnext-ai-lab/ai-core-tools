@@ -29,8 +29,9 @@ from tools.streaming_utils import (
     SSE_TOKEN,
     SSE_HITL_INTERRUPT,
 )
-from services.agent_execution_service import AgentExecutionService
-from services.hitl_service import HITLDecisionError, pending_approval_from_state, validate_decisions
+from services.agent_execution_service import AgentExecutionService, RunPausedForApproval
+from services import hitl_approval_service as approvals
+from models.hitl_approval import ApprovalChannel
 from langchain.agents.middleware import PIIDetectionError
 from services.agent_execution_service import pii_blocked_message
 from tools.middleware.factory import human_in_the_loop_config, redacts_output
@@ -45,10 +46,10 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def _pending_approval(agent_chain, config) -> dict | None:
-    """The HITL request the graph is paused on, or None."""
+async def _read_pause(agent_chain, config) -> "approvals.GraphPause | None":
+    """The human-in-the-loop interrupt the graph is paused on, or None."""
     try:
-        return pending_approval_from_state(await agent_chain.aget_state(config))
+        return await approvals.read_pause(agent_chain, config)
     except Exception as exc:
         # Unreadable state falls back to "no interrupt" so the normal recovery path stays reachable.
         logger.warning("Could not read graph state for pending interrupts: %s", exc)
@@ -84,16 +85,16 @@ class AgentStreamingService:
         user_context: dict | None = None,
         conversation_id: int | None = None,
         db: Session | None = None,
-        resume_decisions: list[dict] | None = None,
-        approval_ui: bool = True,
+        channel: ApprovalChannel = ApprovalChannel.PLAYGROUND,
+        resume: "approvals.ResumeRequest | None" = None,
     ) -> AsyncGenerator[str, None]:
         """Stream an agent chat turn as SSE events.
 
-        With ``resume_decisions`` the turn resumes a human-in-the-loop pause instead of
-        sending a new message: the decisions are validated against the pending approval
-        and passed to the graph as ``Command(resume={"decisions": ...})``.
-        Callers whose UI cannot collect a decision pass ``approval_ui=False`` and get an
-        ``error`` event instead of a pause they could never resume.
+        With ``resume`` the turn answers a human-in-the-loop approval (already claimed
+        by the caller) instead of sending a new message, and records its outcome.
+        When the run pauses, interactive channels get a ``hitl_interrupt`` event with the
+        recorded approval; other channels have the pause rejected on the spot and get an
+        ``error`` event, so the conversation is never left paused.
 
         Yields ``format_sse_event`` strings for each event in the following
         sequence:
@@ -140,6 +141,7 @@ class AgentStreamingService:
         metrics_status, metrics_error_code, metrics_error_message = "SUCCESS", None, None
         metrics_collector = AgentMetricsCollector()
         first_token_at = None
+        resume_settled = resume is None
 
         try:
             # ----------------------------------------------------------------
@@ -154,6 +156,20 @@ class AgentStreamingService:
                 conversation_id=conversation_id,
                 db=effective_db,
             )
+            if (
+                resume is None
+                and effective_db is not None
+                and ctx.conversation is not None
+                and human_in_the_loop_config(ctx.fresh_agent) is not None
+            ):
+                try:
+                    expired = approvals.check_conversation_free(effective_db, ctx.conversation.conversation_id)
+                except approvals.ApprovalPendingError as exc:
+                    metrics_status, metrics_error_code, metrics_error_message = "ERROR", exc.code, str(exc)
+                    yield format_sse_event("error", exc.to_dict())
+                    return
+                if expired is not None:
+                    await self.execution_service.expire_approval(effective_db, expired.id)
             sandbox_turn_active = self.execution_service._begin_sandbox_turn(
                 ctx,
                 db=effective_db,
@@ -245,18 +261,24 @@ class AgentStreamingService:
                 # ------------------------------------------------------------
                 # 4. Build the HumanMessage payload (handles multimodal images)
                 # ------------------------------------------------------------
-                if resume_decisions is None:
+                if resume is None:
                     stream_input = {"messages": [build_human_message(
                         ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
                     )]}
                 else:
-                    try:
-                        validate_decisions(await _pending_approval(agent_chain, config), resume_decisions)
-                    except HITLDecisionError as exc:
-                        metrics_status, metrics_error_code, metrics_error_message = "ERROR", "HITLDecisionError", str(exc)
-                        yield format_sse_event("error", {"message": str(exc)})
+                    pause = await _read_pause(agent_chain, config)
+                    if pause is None or pause.interrupt_id != resume.approval.interrupt_id:
+                        approvals.finish(
+                            effective_db, resume.approval.id, approvals.ApprovalStatus.CANCELLED, reason="stale"
+                        )
+                        resume_settled = True
+                        exc = approvals.ApprovalStaleError(
+                            "This approval request no longer matches the conversation; it was not applied."
+                        )
+                        metrics_status, metrics_error_code, metrics_error_message = "ERROR", exc.code, str(exc)
+                        yield format_sse_event("error", exc.to_dict())
                         return
-                    stream_input = Command(resume={"decisions": resume_decisions})
+                    stream_input = Command(resume={"decisions": resume.decisions})
 
                 # ------------------------------------------------------------
                 # 5. Attach LangSmith tracer + metadata when configured
@@ -332,7 +354,8 @@ class AgentStreamingService:
                         # A HITL pause leaves the same unanswered tool_call a corrupt
                         # checkpoint does. Deleting it would silently discard the
                         # pending approval and the whole thread's memory.
-                        and not (hitl_enabled and await _pending_approval(agent_chain, config))
+                        and resume is None
+                        and not (hitl_enabled and await _read_pause(agent_chain, config))
                     ):
                         # Recover by forking from the last known-good checkpoint
                         # instead of deleting the whole thread — see the mirrored
@@ -375,24 +398,57 @@ class AgentStreamingService:
                 if structured_response is not None
                 else accumulated_content
             )
-            pending = await _pending_approval(agent_chain, config) if hitl_enabled else None
-            if pending and not approval_ui:
-                tools = ", ".join(a["name"] for a in pending["action_requests"])
-                metrics_status, metrics_error_code = "ERROR", "HumanApprovalRequired"
-                metrics_error_message = f"Approval required for {tools}"
-                yield format_sse_event("error", {
-                    "message": f"This agent needs human approval before running {tools}, "
-                               "which is not available in this chat.",
-                })
-                return
-            if pending:
-                # Paused by HumanInTheLoopMiddleware: nothing to finalize until the
-                # reviewer answers through the resume endpoint.
-                yield format_sse_event(SSE_HITL_INTERRUPT, pending)
-                yield format_sse_event(
-                    "done",
-                    {"response": "", "conversation_id": ctx.effective_conv_id, "files": [], "hitl_paused": True},
+            if resume is not None:
+                approvals.finish(
+                    effective_db, resume.approval.id, resume.final_status,
+                    reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
                 )
+                resume_settled = True
+
+            pause = await _read_pause(agent_chain, config) if hitl_enabled else None
+            if pause is not None:
+                # Paused by HumanInTheLoopMiddleware: nothing to finalize until someone answers.
+                requester = approvals.Requester.from_user_context(ctx.user_context)
+                answerable = approvals.is_interactive(channel) and (
+                    requester.user_id is not None or bool(requester.api_key_hash)
+                )
+                approval = await approvals.open_approval(
+                    effective_db,
+                    agent_chain=agent_chain,
+                    config=config,
+                    conversation_id=ctx.conversation.conversation_id,
+                    agent_id=agent_id,
+                    app_id=ctx.fresh_agent.app_id,
+                    channel=channel,
+                    requester=requester,
+                    hitl_config=human_in_the_loop_config(ctx.fresh_agent),
+                    answerable=answerable,
+                )
+                if answerable:
+                    yield format_sse_event(SSE_HITL_INTERRUPT, approvals.sse_payload(approval))
+                    yield format_sse_event(
+                        "done",
+                        {
+                            "response": "",
+                            "conversation_id": ctx.effective_conv_id,
+                            "files": [],
+                            "hitl_paused": True,
+                            "status": "requires_approval",
+                            "approval_id": approval.id,
+                        },
+                    )
+                    return
+                await self.execution_service._reject_in_place(
+                    RunPausedForApproval(agent_chain, config), approval, effective_db
+                )
+                tools = ", ".join(a["name"] for a in approval.actions)
+                exc = approvals.ApprovalNotSupportedError(
+                    f"This agent needs human approval before running {tools}, which this chat cannot provide. "
+                    "The tool was not executed.",
+                    approval_id=approval.id,
+                )
+                metrics_status, metrics_error_code, metrics_error_message = "ERROR", exc.code, str(exc)
+                yield format_sse_event("error", exc.to_dict())
                 return
 
             if buffer_output and structured_response is None:
@@ -414,6 +470,7 @@ class AgentStreamingService:
                     "response": result["parsed_response"],
                     "conversation_id": result["effective_conv_id"],
                     "files": result["files_data"],
+                    "status": "completed",
                 },
             )
 
@@ -448,6 +505,11 @@ class AgentStreamingService:
             yield format_sse_event("error", {"message": "Agent execution failed"})
 
         finally:
+            if not resume_settled and effective_db is not None:
+                # The run failed or was cancelled after the approval was claimed. If it never
+                # consumed the pause the approval is answerable again; otherwise the next
+                # attempt finds it stale.
+                approvals.release(effective_db, resume.approval.id, metrics_error_message or "Run did not finish")
             if ctx is not None and sandbox_turn_active:
                 self.execution_service._end_sandbox_turn(ctx, db=effective_db)
             if mcp_client:

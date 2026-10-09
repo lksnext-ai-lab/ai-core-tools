@@ -276,8 +276,16 @@ class TestMapUpdatesChunkHumanApproval:
             },
         }]
 
-    def test_approval_does_not_restart_the_tool(self):
-        assert map_stream_event("updates", self._hitl_update(AIMessage(content="", tool_calls=[self._TOOL_CALL]))) is None
+    def test_approval_announces_the_call_that_will_run(self):
+        events = map_stream_event("updates", self._hitl_update(AIMessage(content="", tool_calls=[self._TOOL_CALL])))
+
+        assert [e["type"] for e in events] == [SSE_TOOL_START, SSE_THINKING]
+        assert events[0]["data"]["tool_call_id"] == "call_1"
+
+    def test_other_middleware_nodes_do_not_reannounce_tool_calls(self):
+        update = {"PIIMiddleware[email].after_model": {"messages": [AIMessage(content="", tool_calls=[self._TOOL_CALL])]}}
+
+        assert map_stream_event("updates", update) is None
 
     def test_edit_reannounces_the_tool_with_the_edited_args(self):
         edited = {"call_1": {"name": "search_docs", "args": {"q": "EBS"}}}

@@ -45,7 +45,9 @@ const DEFAULT_CONFIG: Record<MiddlewareType, Record<string, any>> = {
     apply_to_tool_results: true,
     llm_detector: { enabled: false, ai_service: 'agent_llm', extra_entities: [] },
   },
-  human_in_the_loop: { interrupt_on: {}, description_prefix: 'Tool execution requires approval' },
+  human_in_the_loop: {
+    interrupt_on: {}, description_prefix: 'Tool execution requires approval', approval_timeout_seconds: 3600,
+  },
   model_call_limit: { max_calls: 25 },
   tool_call_limit: { max_calls: 50 },
   summarization: { summarization_model: 'agent_llm', trigger_tokens: 4000, keep_messages: 20, trim_tokens: 4000 },
@@ -91,7 +93,10 @@ function validate(type: MiddlewareType, name: string, config: Record<string, any
       const tools = Object.entries(config.interrupt_on ?? {}) as Array<[string, { allowed_decisions: Decision[] }]>;
       if (tools.length === 0) return 'Select at least one tool that needs approval.';
       const empty = tools.find(([, rule]) => rule.allowed_decisions.length === 0);
-      return empty ? `Allow at least one decision for "${empty[0]}".` : null;
+      if (empty) return `Allow at least one decision for "${empty[0]}".`;
+      return inRange(config.approval_timeout_seconds ?? 3600, 60, 604800)
+        ? null
+        : 'The approval time limit must be between 1 minute and 7 days.';
     }
     case 'guardrails':
       return (config.custom_prompt ?? '').length > 4000 ? 'Additional rules must be at most 4,000 characters.' : null;
@@ -423,9 +428,28 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
       {type === 'human_in_the_loop' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-700">
-            Choose the tools that need a person's approval. Agents using this middleware keep conversation memory on,
-            and approvals are given from the playground chat.
+            Choose the tools that need a person's approval. Agents using this middleware keep conversation memory on.
+            Approvals are given from the chat, or by the application calling the agent through the API.
           </p>
+          <div>
+            <label htmlFor="mw-approval-timeout" className={labelClass}>Time to answer (minutes)</label>
+            <input
+              id="mw-approval-timeout" type="number" min={1} max={10080} step={1}
+              value={
+                typeof config.approval_timeout_seconds === 'number'
+                  ? Math.round(config.approval_timeout_seconds / 60)
+                  : 60
+              }
+              onChange={(e) => {
+                const minutes = numberValue(e.target.value);
+                patch({ approval_timeout_seconds: minutes === '' ? '' : minutes * 60 });
+              }}
+              className={inputClass} disabled={isSubmitting} aria-describedby="mw-approval-timeout-help"
+            />
+            <p id="mw-approval-timeout-help" className="mt-1 text-xs text-gray-500">
+              Requests nobody answers in time are rejected: the tool is not executed and the agent answers without it.
+            </p>
+          </div>
           <fieldset className="space-y-2">
             <legend className={labelClass}>Agents used as tools</legend>
             {agentTools.length === 0 && <p className="text-xs text-gray-500">No agents in this app are marked as tools.</p>}

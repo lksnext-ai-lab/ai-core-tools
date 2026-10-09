@@ -139,6 +139,9 @@ async def lifespan(app: FastAPI):
         from services.sharepoint.worker import start_sharepoint_worker
         app.state.sharepoint_tasks = await start_sharepoint_worker()
 
+        from services.hitl_expiry_worker import start_hitl_expiry_worker
+        app.state.hitl_expiry_task = start_hitl_expiry_worker()
+
         print("✅ Application startup complete")
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
@@ -165,6 +168,9 @@ async def lifespan(app: FastAPI):
         if sharepoint_tasks:
             from services.sharepoint.worker import stop_sharepoint_worker
             await stop_sharepoint_worker(sharepoint_tasks)
+
+        from services.hitl_expiry_worker import stop_hitl_expiry_worker
+        await stop_hitl_expiry_worker(getattr(app.state, 'hitl_expiry_task', None))
 
         from services.agent_cache_service import CheckpointerCacheService
         await CheckpointerCacheService.close_pool()

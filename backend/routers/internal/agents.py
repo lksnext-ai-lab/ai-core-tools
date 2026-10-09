@@ -18,8 +18,6 @@ from services.user_service import UserService
 from db.database import get_db
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema, CreateUpdateAgentSchema, UpdatePromptSchema
 from schemas.chat_schemas import ChatResponseSchema, ResetResponseSchema, ConversationHistorySchema
-from schemas.middleware_schemas import HITLDecisionSchema
-from pydantic import TypeAdapter, ValidationError
 from schemas.import_schemas import (
     ConflictMode,
     ImportResponseSchema,
@@ -33,6 +31,7 @@ from schemas.marketplace_schemas import (
 )
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from tools.stream_guard import guard_agent_stream
 from services.file_management_service import FileManagementService, FileReference
 from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from routers.internal.auth_utils import get_current_user_oauth
@@ -804,7 +803,7 @@ async def chat_with_agent_stream(
         # streaming, not when the endpoint returns its StreamingResponse.
         async def generator() -> AsyncGenerator[str, None]:
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release the request DB session: get_db teardown runs too late
@@ -828,69 +827,6 @@ async def chat_with_agent_stream(
     except Exception as e:
         logger.error(f"Error in streaming chat endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR)
-
-
-@agents_router.post(
-    "/{agent_id}/chat/resume",
-    summary="Resume a chat paused for human approval",
-    tags=["Agents"],
-    responses={
-        404: {"description": "Agent or conversation not found"},
-        422: {"description": "Malformed decisions"},
-    },
-)
-async def resume_agent_chat(
-    app_id: int,
-    agent_id: int,
-    request: Request,
-    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
-    db: Annotated[Session, Depends(get_db)],
-    decisions: Annotated[str, Form(description="JSON array of HITL decisions, one per pending action, in order")],
-    conversation_id: Annotated[int, Form()],
-):
-    """Answer a pending human-in-the-loop approval and stream the rest of the turn.
-
-    Same SSE contract as ``/chat/stream``. Decisions are checked against the pending
-    approval (count, order and allowed types) before execution resumes.
-    """
-    _get_agent_or_404(db, agent_id, app_id)
-    try:
-        parsed = TypeAdapter(List[HITLDecisionSchema]).validate_json(decisions)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid decisions: {exc.errors()[0]['msg']}")
-    if not parsed:
-        raise HTTPException(status_code=422, detail="At least one decision is required")
-
-    user_context = {
-        "user_id": int(auth_context.identity.id),
-        "email": auth_context.identity.email,
-        "oauth": True,
-        "app_id": app_id,
-        "token": _extract_jwt_token(request),
-    }
-    base_generator = AgentStreamingService(db).stream_agent_chat(
-        agent_id=agent_id,
-        message="",
-        user_context=user_context,
-        conversation_id=conversation_id,
-        db=db,
-        resume_decisions=[d.to_langchain() for d in parsed],
-    )
-
-    async def generator() -> AsyncGenerator[str, None]:
-        try:
-            async for chunk in base_generator:
-                yield chunk
-        finally:
-            # get_db teardown runs too late for a StreamingResponse.
-            db.close()
-
-    return StreamingResponse(
-        generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
 
 
 @agents_router.post(

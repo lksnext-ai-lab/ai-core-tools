@@ -26,6 +26,8 @@ from db.database import get_db
 
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from models.hitl_approval import ApprovalChannel
+from tools.stream_guard import guard_agent_stream
 from services.conversation_service import ConversationService
 from services.file_management_service import FileManagementService
 
@@ -154,12 +156,15 @@ async def call_agent(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            channel=ApprovalChannel.PUBLIC_API,
         )
 
         response_data = AgentResponseSchema(
+            status=result.get("status", "completed"),
             response=result["response"],
             conversation_id=result.get("conversation_id"),
             usage=result["metadata"],
+            pending_approval=result.get("pending_approval"),
         )
 
         logger.info(f"Public API chat request processed for agent {agent_id}, conversation: {result.get('conversation_id')}")
@@ -215,8 +220,12 @@ async def call_agent_stream(
     - **tool_start**: A tool invocation has started
     - **tool_end**: A tool invocation has finished
     - **thinking**: Human-readable status message
-    - **done**: Stream complete with full response and generated files
-    - **error**: An error occurred
+    - **hitl_interrupt**: The agent paused for human approval (approval_id, expires_at, actions)
+    - **done**: Stream complete with full response and generated files; ``status`` is
+      ``completed`` or ``requires_approval`` (then answer via ``/approvals/{approval_id}/decisions``)
+    - **error**: An error occurred (``code`` + ``message``)
+
+    While the agent works, SSE comment lines (``: ping``) keep the connection alive.
 
     Supports the same file handling and conversation features as the
     non-streaming `/call` endpoint.
@@ -249,13 +258,14 @@ async def call_agent_stream(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            channel=ApprovalChannel.PUBLIC_API,
         )
 
         # Wrap the upstream generator so ephemeral files uploaded for this
         # turn are removed once the consumer finishes reading (or disconnects).
         async def generator() -> AsyncGenerator[str, None]:
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release the request DB session here: for a StreamingResponse the

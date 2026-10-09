@@ -18,6 +18,8 @@ from db.database import get_db
 from models.app import App
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from models.hitl_approval import ApprovalChannel
+from tools.stream_guard import guard_agent_stream
 from services.agent_service import AgentService
 from services.file_management_service import FileManagementService
 from utils.logger import get_logger
@@ -394,7 +396,7 @@ async def chat_completions(
 
     if request.stream:
         streaming_service = AgentStreamingService(db)
-        generator = streaming_service.stream_agent_chat(
+        generator = guard_agent_stream(streaming_service.stream_agent_chat(
             agent_id=agent_id,
             message=formatted_message,
             file_references=file_references,
@@ -402,7 +404,8 @@ async def chat_completions(
             user_context=user_context,
             conversation_id=None,
             db=db,
-        )
+            channel=ApprovalChannel.OPENAI_COMPAT,
+        ))
         
         async def openai_sse_generator():
             completion_id = f"chatcmpl-{uuid.uuid4()}"
@@ -472,6 +475,7 @@ async def chat_completions(
             user_context=user_context,
             conversation_id=None,
             db=db,
+            channel=ApprovalChannel.OPENAI_COMPAT,
         )
         
         response_text = result.get("response", "")

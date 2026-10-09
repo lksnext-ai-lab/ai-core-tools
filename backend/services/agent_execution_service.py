@@ -38,6 +38,10 @@ from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
 from utils.config import get_app_config
 from utils.async_files import write_bytes, write_temp_file
+from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
+from models.hitl_approval import ApprovalChannel, ApprovalStatus, HITLApproval
+from services import hitl_approval_service as approvals
+from repositories.hitl_approval_repository import HITLApprovalRepository
 
 logger = get_logger(__name__)
 
@@ -761,28 +765,25 @@ def pii_blocked_message(exc) -> str:
     return f"The message was blocked because it contains personal data ({kind})."
 
 
-def _raise_if_awaiting_approval(result) -> None:
-    """Fail clearly when a non-interactive run stops at a human-in-the-loop interrupt.
+def _may_be_paused(ctx: AgentExecutionContext) -> bool:
+    """Only conversations of agents with human approval can be waiting for one."""
+    from tools.middleware.factory import human_in_the_loop_config
 
-    Only the interactive streaming chat can collect a reviewer's decision. Elsewhere
-    (public API, MCP, scheduled tasks) the run cannot continue, and the last message in
-    the state would be the user's own input, so answering with it would be wrong.
-    """
-    interrupts = result.get("__interrupt__") if isinstance(result, dict) else None
-    if not interrupts:
-        return
-    tools = [
-        req.get("name", "?")
-        for intr in interrupts
-        for req in ((getattr(intr, "value", None) or {}).get("action_requests", []))
-    ]
-    raise HTTPException(
-        status_code=409,
-        detail=(
-            f"This agent needs human approval before running {', '.join(tools) or 'a tool'}. "
-            "Approvals can only be given from the interactive chat."
-        ),
-    )
+    return ctx.conversation is not None and human_in_the_loop_config(ctx.fresh_agent) is not None
+
+
+class RunPausedForApproval(Exception):
+    """The run stopped at a human-in-the-loop interrupt; carries what is needed to record it."""
+
+    def __init__(self, agent_chain: Any, config: Dict[str, Any]) -> None:
+        super().__init__("Agent run paused for human approval")
+        self.agent_chain = agent_chain
+        self.config = config
+
+
+def approval_http_exception(exc) -> HTTPException:
+    """Map an ApprovalError to an HTTP error with a stable machine-readable code."""
+    return HTTPException(status_code=exc.status_code, detail=exc.to_dict())
 
 
 class AgentExecutionService:
@@ -805,8 +806,19 @@ class AgentExecutionService:
         user_context: Dict = None,
         conversation_id: int = None,
         db: Session = None,
+        channel: ApprovalChannel = ApprovalChannel.INTERNAL_SYNC,
+        resume_approval: Optional[HITLApproval] = None,
+        resume_decisions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Execute agent chat with persistent file references.
+
+        With ``resume_approval`` + ``resume_decisions`` the turn answers that approval
+        (already claimed by the caller) instead of sending ``message``.
+
+        When the run pauses for human approval, interactive channels get
+        ``status="requires_approval"`` and the recorded approval; other channels reject
+        the pause on the spot (so the conversation is not left paused) and get an
+        ``ApprovalNotSupportedError`` as HTTP 409.
 
         Returns:
             Dict containing agent response and metadata.
@@ -823,6 +835,10 @@ class AgentExecutionService:
                 conversation_id=conversation_id,
                 db=db,
             )
+            if resume_approval is None and _may_be_paused(ctx) and db is not None:
+                expired = approvals.check_conversation_free(db, ctx.conversation.conversation_id)
+                if expired is not None:
+                    await self.expire_approval(db, expired.id)
             sandbox_turn_active = self._begin_sandbox_turn(ctx, db=db)
 
             # Release the sync connection to the pool during the LLM call; the
@@ -845,23 +861,36 @@ class AgentExecutionService:
                 except Exception as e:
                     logger.warning(f"Could not resolve temp silos: {e}")
 
-            response = await self._execute_agent_async(
-                ctx.fresh_agent,
-                ctx.enhanced_message,
-                ctx.search_params,
-                ctx.session_id_for_cache,
-                ctx.user_context,
-                ctx.image_files,
-                processed_files=ctx.processed_files,
-                working_dir=ctx.working_dir,
-                sandbox_handle=ctx.sandbox_handle,
-                sandbox_provider=ctx.sandbox_provider,
-                sandbox_session_key=ctx.sandbox_session_key,
-                temp_silo_ids=temp_silo_ids or None,
-            )
+            from langgraph.types import Command
 
-            return await self._finalize_turn(ctx, response, db)
+            try:
+                response = await self._execute_agent_async(
+                    ctx.fresh_agent,
+                    ctx.enhanced_message,
+                    ctx.search_params,
+                    ctx.session_id_for_cache,
+                    ctx.user_context,
+                    ctx.image_files,
+                    processed_files=ctx.processed_files,
+                    working_dir=ctx.working_dir,
+                    sandbox_handle=ctx.sandbox_handle,
+                    sandbox_provider=ctx.sandbox_provider,
+                    sandbox_session_key=ctx.sandbox_session_key,
+                    temp_silo_ids=temp_silo_ids or None,
+                    graph_input=(
+                        Command(resume={"decisions": resume_decisions}) if resume_approval is not None else None
+                    ),
+                    expected_interrupt_id=resume_approval.interrupt_id if resume_approval is not None else None,
+                )
+            except RunPausedForApproval as paused:
+                return await self._handle_pause(ctx, paused, db, channel)
 
+            result = await self._finalize_turn(ctx, response, db)
+            result["status"] = "completed"
+            return result
+
+        except approvals.ApprovalError as exc:
+            raise approval_http_exception(exc) from exc
         except HTTPException:
             raise
         except Exception as e:
@@ -870,6 +899,144 @@ class AgentExecutionService:
         finally:
             if ctx is not None and sandbox_turn_active:
                 self._end_sandbox_turn(ctx, db=db)
+
+    # ------------------------------------------------------------------
+    # Human-in-the-loop approvals
+    # ------------------------------------------------------------------
+
+    async def resume_approval(
+        self,
+        db: Session,
+        resume: "approvals.ResumeRequest",
+        user_context: Dict[str, Any],
+        channel: ApprovalChannel,
+    ) -> Dict[str, Any]:
+        """Run the rest of a turn for a claimed approval and record its outcome."""
+        approval_id = resume.approval.id
+        try:
+            result = await self.execute_agent_chat_with_file_refs(
+                agent_id=resume.approval.agent_id,
+                message="",
+                user_context=user_context,
+                conversation_id=resume.approval.conversation_id,
+                db=db,
+                channel=channel,
+                resume_approval=resume.approval,
+                resume_decisions=resume.decisions,
+            )
+        except HTTPException as exc:
+            code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+            if code == approvals.ApprovalStaleError.code:
+                approvals.finish(db, approval_id, ApprovalStatus.CANCELLED, reason="stale")
+            elif code == approvals.ApprovalNotSupportedError.code:
+                # Resumed fine, then paused again where nobody can answer (already rejected).
+                approvals.finish(
+                    db, approval_id, resume.final_status,
+                    reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
+                )
+            else:
+                # Still answerable if the run failed before consuming the pause; a pause that
+                # was consumed is detected as stale on the next attempt.
+                approvals.release(db, approval_id, f"{exc.status_code}: {exc.detail}")
+            raise
+        approvals.finish(
+            db, approval_id, resume.final_status,
+            reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
+        )
+        return result
+
+    async def expire_approval(self, db: Session, approval_id: str) -> bool:
+        """Resolve an expired approval as rejected. False if it was not (or no longer) expirable."""
+        if not approvals.claim_for_expiry(db, approval_id):
+            return False
+        approval = HITLApprovalRepository.get(db, approval_id)
+        resume = approvals.ResumeRequest(
+            approval, approvals.reject_all(approval, approvals.EXPIRED_MESSAGE), ApprovalStatus.EXPIRED,
+            reason="timeout",
+        )
+        try:
+            await self.resume_approval(
+                db, resume, approvals.system_user_context(approval), ApprovalChannel.INTERNAL_SYNC
+            )
+        except HTTPException as exc:
+            # The agent asked for another approval after the rejection; that one was rejected too.
+            if not (isinstance(exc.detail, dict) and exc.detail.get("code") == approvals.ApprovalNotSupportedError.code):
+                raise
+        return True
+
+    async def _handle_pause(
+        self, ctx: AgentExecutionContext, paused: RunPausedForApproval, db: Session, channel: ApprovalChannel,
+    ) -> Dict[str, Any]:
+        """Record the pause; return it to interactive callers, reject it for everyone else."""
+        from tools.middleware.factory import human_in_the_loop_config
+
+        requester = approvals.Requester.from_user_context(ctx.user_context)
+        conversation_id = ctx.conversation.conversation_id if ctx.conversation else None
+        if conversation_id is None or db is None:
+            raise HTTPException(status_code=500, detail="Agent execution failed")
+        answerable = approvals.is_interactive(channel) and (requester.user_id is not None or requester.api_key_hash)
+        approval = await approvals.open_approval(
+            db,
+            agent_chain=paused.agent_chain,
+            config=paused.config,
+            conversation_id=conversation_id,
+            agent_id=ctx.agent_id,
+            app_id=ctx.fresh_agent.app_id,
+            channel=channel,
+            requester=requester,
+            hitl_config=human_in_the_loop_config(ctx.fresh_agent),
+            answerable=bool(answerable),
+        )
+        if approval is None:
+            raise HTTPException(status_code=500, detail="Agent execution failed")
+
+        if answerable:
+            return {
+                "status": "requires_approval",
+                "response": "",
+                "agent_id": ctx.agent_id,
+                "conversation_id": conversation_id,
+                "metadata": {
+                    "agent_name": ctx.agent.name,
+                    "agent_type": ctx.agent.type,
+                    "files_processed": len(ctx.processed_files),
+                    "has_memory": ctx.agent.has_memory,
+                },
+                "pending_approval": approvals.pending_schema(approval),
+                "parsed_response": "",
+                "effective_conv_id": ctx.effective_conv_id,
+                "files_data": [],
+            }
+
+        await self._reject_in_place(paused, approval, db)
+        tools = ", ".join(a["name"] for a in approval.actions)
+        raise approvals.ApprovalNotSupportedError(
+            f"This agent needs human approval before running {tools}, which this channel cannot provide. "
+            "The tool was not executed.",
+            approval_id=approval.id,
+        )
+
+    async def _reject_in_place(self, paused: RunPausedForApproval, approval: HITLApproval, db: Session) -> None:
+        """Reject a pause nobody can answer so the conversation is not left paused."""
+        from langgraph.types import Command
+
+        config = {**paused.config, "configurable": dict(paused.config.get("configurable", {}))}
+        config["configurable"].pop("checkpoint_id", None)
+        decisions = approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE)
+        async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
+            # The agent may ask for another approved tool after a rejection; bound the loop.
+            for _ in range(3):
+                await paused.agent_chain.ainvoke(Command(resume={"decisions": decisions}), config=config)
+                pause = await approvals.read_pause(paused.agent_chain, config)
+                if pause is None:
+                    break
+                decisions = [
+                    {"type": "reject", "message": approvals.NOT_INTERACTIVE_MESSAGE} for _ in pause.action_requests
+                ]
+        approvals.finish(
+            db, approval.id, ApprovalStatus.CANCELLED, reason="channel_not_interactive",
+            decisions=approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE),
+        )
 
     async def _prepare_turn(
         self,
@@ -2190,8 +2357,13 @@ class AgentExecutionService:
         sandbox_session_key: Optional[str] = None,
         processed_files: List[Dict] = None,
         temp_silo_ids: Optional[List[int]] = None,
+        graph_input: Any = None,
+        expected_interrupt_id: Optional[str] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
+
+        ``graph_input`` replaces the user message (a ``Command`` resuming an approval);
+        ``expected_interrupt_id`` makes sure the thread is still paused on that approval.
 
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
@@ -2260,9 +2432,22 @@ class AgentExecutionService:
             started_at = datetime.utcnow()
             status, error_code, error_message, result = "SUCCESS", None, None, None
             try:
-                result = await self._ainvoke_with_checkpoint_recovery(
-                    agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
-                )
+                if expected_interrupt_id is not None:
+                    pause = await approvals.read_pause(agent_chain, config)
+                    if pause is None or pause.interrupt_id != expected_interrupt_id:
+                        raise approvals.ApprovalStaleError(
+                            "This approval request no longer matches the conversation; it was not applied."
+                        )
+                async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
+                    result = await self._ainvoke_with_checkpoint_recovery(
+                        agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
+                        graph_input=graph_input,
+                    )
+            except RunPausedForApproval:
+                raise
+            except approvals.ApprovalError as exc:
+                status, error_code, error_message = "ERROR", exc.code, str(exc)
+                raise
             except asyncio.TimeoutError:
                 status, error_code, error_message = "TIMEOUT", "TIMEOUT", "Execution timed out"
                 raise
@@ -2325,16 +2510,23 @@ class AgentExecutionService:
                 logger.info("MCP client will be cleaned up automatically")
     
     async def _ainvoke_with_checkpoint_recovery(
-        self, agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
+        self, agent_chain, message_payload, config, fresh_agent, session_id_for_cache, graph_input=None,
     ):
-        """Invoke the agent, retrying once from the prior checkpoint on an incomplete tool-call turn."""
+        """Invoke the agent, retrying once from the prior checkpoint on an incomplete tool-call turn.
+
+        Raises ``RunPausedForApproval`` when the run stops at a human-in-the-loop interrupt.
+        """
         from langchain.agents.middleware import PIIDetectionError
 
         try:
-            result = await agent_chain.ainvoke(
-                {"messages": [message_payload]},
-                config=config,
-            )
+            if graph_input is not None:
+                # Resuming an approval: the pause itself is the expected state, never "corrupt".
+                result = await agent_chain.ainvoke(graph_input, config=config)
+            else:
+                result = await agent_chain.ainvoke(
+                    {"messages": [message_payload]},
+                    config=config,
+                )
         except PIIDetectionError as pii_exc:
             raise HTTPException(status_code=422, detail=pii_blocked_message(pii_exc)) from pii_exc
         except Exception as invoke_exc:
@@ -2344,7 +2536,8 @@ class AgentExecutionService:
             )
 
             if (
-                fresh_agent.has_memory
+                graph_input is None
+                and fresh_agent.has_memory
                 and session_id_for_cache
                 and is_missing_tool_output_error(invoke_exc)
             ):
@@ -2388,7 +2581,8 @@ class AgentExecutionService:
                 )
             else:
                 raise
-        _raise_if_awaiting_approval(result)
+        if isinstance(result, dict) and result.get("__interrupt__"):
+            raise RunPausedForApproval(agent_chain, config)
         return result
 
     async def _save_uploaded_file(self, file: UploadFile) -> str:
