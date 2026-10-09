@@ -48,6 +48,8 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_AGENT_EXECUTION_FAILED = "Agent execution failed"
+
 
 class _AgentStreamSerializationError(RuntimeError):
     """Raised internally when an outgoing event payload is not JSON-safe.
@@ -504,17 +506,16 @@ class AgentStreamingService:
                 metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
             raise
         except _AgentStreamSerializationError as exc:
-            logger.error(
+            logger.exception(
                 "Non-serializable event payload in streaming agent chat: %s",
                 str(exc),
-                exc_info=True,
             )
             metrics_status, metrics_error_code = "ERROR", "SerializationError"
             metrics_error_message = str(exc)[:2000]
             terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
-                {"message": "Agent execution failed"},
+                {"message": _AGENT_EXECUTION_FAILED},
                 extra={"error_code": metrics_error_code, "error_kind": "serialization"},
             )
         except HTTPException as exc:
@@ -530,7 +531,7 @@ class AgentStreamingService:
             terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
-                {"message": "Agent execution failed"},
+                {"message": _AGENT_EXECUTION_FAILED},
                 extra={
                     "error_code": "HTTPException",
                     "error_kind": "http",
@@ -545,7 +546,7 @@ class AgentStreamingService:
             terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
-                {"message": "Agent execution failed"},
+                {"message": _AGENT_EXECUTION_FAILED},
                 extra={"error_code": metrics_error_code, "error_kind": "agent_failure"},
             )
 

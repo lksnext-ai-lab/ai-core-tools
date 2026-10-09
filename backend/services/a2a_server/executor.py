@@ -323,22 +323,21 @@ class MattinAgentExecutor(AgentExecutor):
                 # `CancelledError`-based mechanism `_drain`'s own `finally`
                 # already handles), so the streamed generator is still torn
                 # down correctly -- this is not a second, parallel cancel path.
-                async with timeout_cm:
-                    async with contextlib.aclosing(
-                        streaming_service.stream_agent_events(
-                            agent_id=scope.agent_id,
-                            message=inputs.text,
-                            file_references=inputs.file_refs,
-                            user_context=user_context,
-                            conversation_id=binding.conversation_id,
-                            db=db,
-                        )
-                    ) as events:
-                        turn_state = _TurnState()
-                        terminal = await self._drain(
-                            events, updater, mapper, cfg.keepalive_seconds,
-                            cfg.stream_coalesce_ms / 1000.0, turn_state,
-                        )
+                async with timeout_cm, contextlib.aclosing(
+                    streaming_service.stream_agent_events(
+                        agent_id=scope.agent_id,
+                        message=inputs.text,
+                        file_references=inputs.file_refs,
+                        user_context=user_context,
+                        conversation_id=binding.conversation_id,
+                        db=db,
+                    )
+                ) as events:
+                    turn_state = _TurnState()
+                    terminal = await self._drain(
+                        events, updater, mapper, cfg.keepalive_seconds,
+                        cfg.stream_coalesce_ms / 1000.0, turn_state,
+                    )
             except TimeoutError:
                 if not timeout_cm.expired():
                     # Not our deadline -- some other builtin TimeoutError

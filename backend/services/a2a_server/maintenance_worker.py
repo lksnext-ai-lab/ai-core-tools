@@ -46,6 +46,7 @@ from services.a2a_server import identity
 from services.a2a_server.runtime import get_runtime
 from services.a2a_server.task_states import fail_task_cas
 from utils.a2a_config import get_a2a_config
+from utils.clock import utcnow_naive
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -310,7 +311,7 @@ async def _sweep_stale_tasks() -> None:
     if rt is None:
         logger.warning("a2a.maintenance.sweep_stale_no_runtime")
         return
-    cutoff = datetime.utcnow() - timedelta(seconds=get_a2a_config().task_timeout_seconds)
+    cutoff = utcnow_naive() - timedelta(seconds=get_a2a_config().task_timeout_seconds)
     stale = await A2ATaskRepository.list_stale_nonterminal(cutoff, limit=_STALE_SWEEP_BATCH)
     for task_id, owner in stale:
         try:
@@ -322,7 +323,7 @@ async def _sweep_stale_tasks() -> None:
 
 async def _sweep_terminal_events() -> None:
     """(b1) RB-6: purges events of terminal tasks after `A2A_EVENT_RETENTION_MINUTES`."""
-    cutoff = datetime.utcnow() - timedelta(minutes=get_a2a_config().event_retention_minutes)
+    cutoff = utcnow_naive() - timedelta(minutes=get_a2a_config().event_retention_minutes)
     purged = await A2ATaskRepository.purge_terminal_events_older_than(cutoff)
     if purged:
         logger.info("a2a.maintenance.terminal_events_purged count=%s", purged)
@@ -330,7 +331,7 @@ async def _sweep_terminal_events() -> None:
 
 async def _sweep_expired_tasks() -> None:
     """(b2) Purges tasks (with events/versions) older than `A2A_TASK_RETENTION_DAYS`."""
-    cutoff = datetime.utcnow() - timedelta(days=get_a2a_config().task_retention_days)
+    cutoff = utcnow_naive() - timedelta(days=get_a2a_config().task_retention_days)
     purged = await A2ATaskRepository.purge_older_than(cutoff)
     if purged:
         logger.info("a2a.maintenance.tasks_purged count=%s", purged)
@@ -359,7 +360,7 @@ def _delete_old_links_sync(cutoff: datetime) -> int:
 
 async def _sweep_expired_links() -> None:
     """(b3) Purges `a2a_context_link` rows not used for `A2A_TASK_RETENTION_DAYS`."""
-    cutoff = datetime.utcnow() - timedelta(days=get_a2a_config().task_retention_days)
+    cutoff = utcnow_naive() - timedelta(days=get_a2a_config().task_retention_days)
     purged = await asyncio.to_thread(_delete_old_links_sync, cutoff)
     if purged:
         logger.info("a2a.maintenance.links_purged count=%s", purged)

@@ -23,7 +23,7 @@ A thin SSE bridge then renders each ``AgentStreamEvent`` as
 
 import json
 from dataclasses import dataclass
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict
 
 from utils.logger import get_logger
 
@@ -84,7 +84,7 @@ class AgentStreamEvent:
 
     type: str
     data: dict
-    extra: Optional[Union[DoneExtra, ErrorExtra]] = None
+    extra: DoneExtra | ErrorExtra | None = None
 
 
 # ---------------------------------------------------------------------------

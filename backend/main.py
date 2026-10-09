@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
             set_runtime(build_a2a_runtime(MattinAgentExecutor()))
             logger.info("A2A runtime initialized (enabled=%s)", a2a_cfg.enabled)
         except Exception:
-            logger.error("Failed to initialize the A2A runtime at startup", exc_info=True)
+            logger.exception("Failed to initialize the A2A runtime at startup")
             # LOW (fix round 1): A2A is opt-in; a build failure while it is
             # globally disabled (A2A_ENABLED=false) must never take the rest
             # of the application down with it. `get_runtime()` stays `None`

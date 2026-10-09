@@ -41,6 +41,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from models.a2a_context_link import A2AContextLink
+from utils.clock import utcnow_naive
 
 
 class A2AContextLinkRepository:
@@ -79,7 +80,7 @@ class A2AContextLinkRepository:
         Returns True if this call inserted the row, False if a concurrent
         writer already won the race for the same tuple (AD-9 step 3/4).
         """
-        now = datetime.utcnow()
+        now = utcnow_naive()
         stmt = (
             pg_insert(A2AContextLink)
             .values(
@@ -116,7 +117,7 @@ class A2AContextLinkRepository:
                 A2AContextLink.id == link_id,
                 A2AContextLink.conversation_id == expected_conversation_id,
             )
-            .values(updated_at=datetime.utcnow())
+            .values(updated_at=utcnow_naive())
             .returning(A2AContextLink.id)
         )
         db.flush()
@@ -139,7 +140,7 @@ class A2AContextLinkRepository:
                 A2AContextLink.id == link_id,
                 A2AContextLink.conversation_id.is_(None),
             )
-            .values(conversation_id=conversation_id, updated_at=datetime.utcnow())
+            .values(conversation_id=conversation_id, updated_at=utcnow_naive())
             .returning(A2AContextLink.id)
         )
         db.flush()

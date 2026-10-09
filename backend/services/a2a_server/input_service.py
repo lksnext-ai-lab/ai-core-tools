@@ -80,6 +80,9 @@ from utils.ssrf_guard import (
 
 logger = get_logger(__name__)
 
+_FILE_FETCH_FAILED = "file fetch failed"
+_TOTAL_SIZE_EXCEEDED = "total attached file size exceeds the maximum allowed"
+
 _ALLOWED_URI_SCHEMES = ("http", "https")
 
 # Filename hardening (review round 1, item 3): cap at ~200 UTF-8 bytes
@@ -284,10 +287,10 @@ def _fetch_error_reason(exc: FetchError) -> str:
     if isinstance(exc, FetchInvalidURLError):
         return "file URI is invalid"
     if isinstance(exc, FetchStatusError):
-        return "file fetch failed"
+        return _FILE_FETCH_FAILED
     if isinstance(exc, FetchTransportError):
         return "file fetch failed due to a network or TLS error"
-    return "file fetch failed"  # the FetchError base class itself (e.g. a bad Content-Encoding)
+    return _FILE_FETCH_FAILED  # the FetchError base class itself (e.g. a bad Content-Encoding)
 
 
 async def _upload_part(
@@ -448,7 +451,7 @@ async def build_turn_inputs(
                 remaining_total_bytes = total_cap_bytes - total_file_bytes
                 if remaining_total_bytes <= 0:
                     raise A2AInputError(
-                        part_index, "total attached file size exceeds the maximum allowed", filename=filename
+                        part_index, _TOTAL_SIZE_EXCEEDED, filename=filename
                     )
 
                 data = bytes(part.raw)
@@ -493,7 +496,7 @@ async def build_turn_inputs(
                 remaining_total_bytes = total_cap_bytes - total_file_bytes
                 if remaining_total_bytes <= 0:
                     raise A2AInputError(
-                        part_index, "total attached file size exceeds the maximum allowed", filename=display_filename
+                        part_index, _TOTAL_SIZE_EXCEEDED, filename=display_filename
                     )
                 if remaining_fetch_budget_s <= 0:
                     raise A2AInputError(part_index, "file fetch time budget exhausted", filename=display_filename)
@@ -527,7 +530,7 @@ async def build_turn_inputs(
                     logger.info(
                         "a2a.input.fetch_failed_unexpected index=%s error=%s", part_index, type(exc).__name__
                     )
-                    raise A2AInputError(part_index, "file fetch failed", filename=display_filename) from None
+                    raise A2AInputError(part_index, _FILE_FETCH_FAILED, filename=display_filename) from None
                 finally:
                     remaining_fetch_budget_s -= time.monotonic() - fetch_started_at
 
@@ -538,7 +541,7 @@ async def build_turn_inputs(
                 )
                 if total_file_bytes > total_cap_bytes:
                     raise A2AInputError(
-                        part_index, "total attached file size exceeds the maximum allowed", filename=filename
+                        part_index, _TOTAL_SIZE_EXCEEDED, filename=filename
                     )
 
                 logger.info(
