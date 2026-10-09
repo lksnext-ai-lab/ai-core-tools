@@ -134,7 +134,7 @@ describe('a question must leave room for the text in the prompt budget (mirrors 
   it('accepts a long question when the budget is big enough and refuses it when it is not', () => {
     const long = noul({ instructions: 'x'.repeat(5600) });
     expect(checkQuestions([long], { maxStateChars: 12000 }).byQuestion[0]).toEqual([]);
-    expect(checkQuestions([long], { maxStateChars: 6000 }).byQuestion[0].some((p) => p.includes('leave at least 500'))).toBe(true);
+    expect(checkQuestions([long], { maxStateChars: 6000 }).byQuestion[0].some((p) => p.includes('needs at least 500') && p.includes('definition'))).toBe(true);
   });
 
   it('counts options and levels, not only the instructions', () => {

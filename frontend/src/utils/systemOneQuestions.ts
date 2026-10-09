@@ -150,7 +150,9 @@ export function checkQuestions(questions: EditorQuestion[], context: QuestionCon
     const size = questionSize(question);
     if (context.maxStateChars !== undefined && Number.isFinite(context.maxStateChars) && context.maxStateChars - size < MIN_TEXT_ROOM_CHARS) {
       problems.push(
-        `it takes about ${size} of the ${context.maxStateChars} characters of each prompt and must leave at least ${MIN_TEXT_ROOM_CHARS} for the text: shorten it or raise the maximum text length`,
+        `this question's definition (instructions plus options/levels) is about ${size} characters long. ` +
+          `Each prompt has ${context.maxStateChars} characters in total, shared with the text to evaluate, and the text needs at least ${MIN_TEXT_ROOM_CHARS} ` +
+          `("Maximum text length" in this form): shorten the question or raise that limit`,
       );
     }
     if (question.type === 'noul') problems.push(...validateNoul(question));
