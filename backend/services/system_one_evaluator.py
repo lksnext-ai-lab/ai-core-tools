@@ -89,6 +89,17 @@ def _make_summarizer(llm: Any) -> Summarizer:
     return summarize
 
 
+def _parse_usage(raw: Dict[str, Any]) -> Optional[Usage]:
+    """Token usage as reported by the server; a malformed value must not lose an otherwise good evaluation."""
+    usage = raw.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    try:
+        return Usage(input_tokens=int(usage["input_tokens"]), output_tokens=int(usage["output_tokens"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def _serialize_decision(decision: Any) -> Optional[str]:
     if decision is None:
         return None
@@ -182,15 +193,13 @@ class SystemOneEvaluator:
             reduced = await reduce_state(state, snapshot.questions, snapshot.max_state_chars, snapshot.summarize)
             summarized = reduced.mode == "summarized"
             raw, reduced = await self._call(snapshot, reduced)
-            usage = raw.get("usage") if isinstance(raw.get("usage"), dict) else None
             result = SystemOneResult(
                 answers=decide_all(snapshot.questions, raw["answers"]),
                 state_reduction=reduced.mode,
                 original_chars=reduced.original_chars,
                 state_chars=len(reduced.text),
                 model=str(raw.get("model") or snapshot.endpoint.model),
-                usage=Usage(input_tokens=int(usage.get("input_tokens", 0)),
-                            output_tokens=int(usage.get("output_tokens", 0))) if usage else None,
+                usage=_parse_usage(raw),
             )
             return result
         except SystemOneError as exc:

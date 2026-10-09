@@ -115,6 +115,22 @@ async def test_retry_after_is_capped(sleeps):
     assert sleeps and max(sleeps) <= 10
 
 
+@pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf", "-5", "soon", ""])
+async def test_a_retry_after_that_is_not_a_usable_number_falls_back_to_the_backoff(sleeps, value):
+    """asyncio.sleep(nan) never returns: one such header would hold the service's slot forever."""
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(529, headers={"Retry-After": value}, json={"error": {"message": "busy"}})
+
+    with pytest.raises(SystemOneError):
+        await client.evaluate(endpoint(), "t", [NOUL], transport=transport(handler))
+    assert len(calls) == 3 and len(sleeps) == 2
+    assert all(0 <= x <= 10 and x == x for x in sleeps)          # finite (x == x is false for nan), within the cap
+    assert sleeps == [0.5, 1.0]
+
+
 async def test_529_without_retry_after_backs_off_growing_then_gives_up(sleeps):
     calls = []
 

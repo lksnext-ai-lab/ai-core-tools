@@ -60,8 +60,16 @@ def upgrade():
 
 
 def downgrade():
+    # Older code cannot load an Agent row with a type it does not know (the model is polymorphic on `type`):
+    # one leftover row would break every agent query. So the System One agents are removed with their rows
+    # (metrics events and answers go with them through their ON DELETE CASCADE foreign keys).
+    system_one = "SELECT agent_id FROM \"Agent\" WHERE type = 'system_one_agent'"
+    op.execute(f"DELETE FROM agent_tools WHERE agent_id IN ({system_one}) OR tool_id IN ({system_one})")
+    op.execute(f"DELETE FROM agent_mcps WHERE agent_id IN ({system_one})")
+    op.execute(f"DELETE FROM agent_skills WHERE agent_id IN ({system_one})")
     op.drop_index("ix_agent_system_one_answer_event_id", table_name="agent_system_one_answer")
     op.drop_table("agent_system_one_answer")
     op.drop_table("SystemOneAgent")
+    op.execute("DELETE FROM \"Agent\" WHERE type = 'system_one_agent'")
     op.drop_index("ix_SystemOneService_service_id", table_name="SystemOneService")
     op.drop_table("SystemOneService")

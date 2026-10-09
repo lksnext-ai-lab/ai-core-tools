@@ -188,3 +188,14 @@ async def test_the_tool_is_tagged_as_an_agent_with_its_sub_agent_id():
     tool = await make_tool()
     _tag_untyped_tools([tool])
     assert tool.metadata[METRICS_TOOL_TYPE_KEY] == "AGENT" and tool.metadata[METRICS_SUB_AGENT_ID_KEY] == 3
+
+
+async def test_an_unexpected_error_is_logged_without_its_message_or_traceback():
+    """exc_info would write the exception message, which can carry request details (credentials)."""
+    tool = await make_tool()
+    with patch.object(SystemOneEvaluator, "evaluate", AsyncMock(side_effect=RuntimeError("secret internals"))), \
+         patch.object(module, "logger") as log:
+        await tool._arun(text="hi")
+    assert log.error.called
+    assert not log.error.call_args.kwargs.get("exc_info")
+    assert "secret internals" not in str(log.error.call_args)

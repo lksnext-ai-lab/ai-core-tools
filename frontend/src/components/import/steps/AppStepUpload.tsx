@@ -34,6 +34,11 @@ function AppStepUpload({
           count: preview.component_counts.ai_services ?? 0,
         },
         {
+          icon: COMPONENT_TYPE_ICONS.system_one_service,
+          label: 'System One Services',
+          count: preview.component_counts.system_one_services ?? 0,
+        },
+        {
           icon: COMPONENT_TYPE_ICONS.embedding_service,
           label: 'Embedding Services',
           count:

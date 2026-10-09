@@ -831,10 +831,11 @@ class AgentService:
         if 'summarization_service_id' in data:
             summarization_id = data['summarization_service_id'] or None
             if summarization_id is not None:
-                visible = {s.service_id for s in AgentRepository.get_ai_services_by_app_id(db, app_id)}
-                if summarization_id not in visible:
+                # App-level services only: a platform-level LLM would run unmetered (the chat path meters it).
+                own = {s.service_id for s in AgentRepository.get_ai_services_by_app_id(db, app_id) if s.app_id == app_id}
+                if summarization_id not in own:
                     raise ValueError(
-                        f"summarization_service_id {summarization_id} does not exist or is not available to this app"
+                        f"summarization_service_id {summarization_id} does not exist or does not belong to this app"
                     )
             agent.summarization_service_id = summarization_id
 

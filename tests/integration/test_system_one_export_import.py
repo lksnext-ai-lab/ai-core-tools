@@ -186,3 +186,14 @@ def test_preview_lists_the_system_one_services(db, fake_user, world, fake_app):
     preview = FullAppImportService(db).preview_import(export, fake_user.user_id)
     assert [(i.component_name, i.component_type.value) for i in preview.system_one_services] == [("Nimble", "system_one_service")]
     assert preview.component_counts["system_one_services"] == 1
+
+
+def test_a_selection_with_the_service_and_the_agent_imports_both_linked(db, fake_user, world, fake_app):
+    """What the import wizard sends when everything is selected (it now lists System One services)."""
+    export = FullAppExportService(db).export_full_app(fake_app.app_id)
+    summary = FullAppImportService(db).import_full_app(
+        export, fake_user.user_id, ConflictMode.RENAME, new_name="Wizard import",
+        component_selection={"system_one_service": ["Nimble"], "agent": ["Triage"]})
+    assert not summary.total_errors and summary.components_imported["system_one_services"] == 1
+    agent = db.query(SystemOneAgent).filter(SystemOneAgent.app_id == summary.app_id).one()
+    assert agent.system_one_service.name == "Nimble"

@@ -65,7 +65,7 @@ Practical rules:
 
 ## Long texts
 
-The server measures **8192 tokens per question prompt** (the text plus that one question) and was trained on prompts up to 2048 tokens. Each agent has a **maximum text length** in characters (default 6000, 500 to 20000) and an optional **summarization LLM**:
+The server measures **8192 tokens per question prompt** (the text plus that one question) and was trained on prompts up to 2048 tokens. Each agent has a **maximum text length** in characters (default 6000, 500 to 20000) and an optional **summarization LLM** (one of the app's own AI services; platform-level ones are not offered, because they would run unmetered):
 
 - text fits → evaluated as is (`state_reduction: "none"`);
 - does not fit, summarization LLM set → summarized first (`"summarized"`); if the summary fails, is empty or still too long → truncated;

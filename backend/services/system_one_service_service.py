@@ -168,11 +168,18 @@ class SystemOneServiceService:
 
     @staticmethod
     def _probe_result(result: Dict[str, Any]) -> Dict[str, Any]:
+        limits = result["limits"]
+        server_limit = limits.get("max_concurrent_requests") if isinstance(limits, dict) else None
         return {
             "status": "success" if result["ok"] else "error",
             "message": result["message"],
             "models": result["models"],
-            "limits": result["limits"],
+            "limits": limits,
+            # The cap is per backend process and every process shares the server's limit (NFR-2).
+            "suggested_max_concurrency": (
+                system_one_client.default_max_concurrency(server_limit, _workers())
+                if result["ok"] and isinstance(server_limit, int) else None
+            ),
         }
 
     @staticmethod
@@ -192,7 +199,7 @@ class SystemOneServiceService:
         try:
             result = await system_one_client.probe(endpoint, api_key or None)
         except ValueError as exc:
-            return {"status": "error", "message": str(exc), "models": [], "limits": None}
+            return {"status": "error", "message": str(exc), "models": [], "limits": None, "suggested_max_concurrency": None}
         return SystemOneServiceService._probe_result(result)
 
     @staticmethod
@@ -203,5 +210,5 @@ class SystemOneServiceService:
         try:
             result = await system_one_client.probe(service.endpoint or "", service.api_key)
         except ValueError as exc:
-            return {"status": "error", "message": str(exc), "models": [], "limits": None}
+            return {"status": "error", "message": str(exc), "models": [], "limits": None, "suggested_max_concurrency": None}
         return SystemOneServiceService._probe_result(result)

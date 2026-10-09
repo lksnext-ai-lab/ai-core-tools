@@ -355,6 +355,7 @@ class AgentRepository:
                 "supports_video": s.supports_video,
                 "end_of_service_at": to_utc(s.end_of_service_at),
                 "deprecation_notice": s.deprecation_notice,
+                "is_system": s.app_id is None,
             }
             for s in ai_services
         ]

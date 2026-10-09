@@ -79,6 +79,10 @@ function SystemOneServiceModal({ isOpen, appId, service, onClose, onSave }: Syst
         isEdit ? service.service_id : undefined,
       );
       setTestResult(result);
+      // Prefill the cap on a new service (never overwrite what the user typed or what an existing service has)
+      if (result.suggested_max_concurrency != null && concurrency.trim() === '') {
+        setConcurrency(String(result.suggested_max_concurrency));
+      }
     } catch (err) {
       setTestResult({
         status: 'error',
@@ -163,6 +167,9 @@ function SystemOneServiceModal({ isOpen, appId, service, onClose, onSave }: Syst
           <p className="mt-1 text-xs text-gray-500">
             The server accepts a limited number of requests at once and answers 529 above it. The backend runs several
             processes, so use the server limit divided by the number of processes.
+            {testResult?.suggested_max_concurrency != null && (
+              <> Suggested for this server: <strong>{testResult.suggested_max_concurrency}</strong>.</>
+            )}
           </p>
           {showError('concurrency') && <p className="mt-1 text-xs text-red-600">{showError('concurrency')}</p>}
         </div>
