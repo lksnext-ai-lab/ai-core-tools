@@ -16,6 +16,7 @@ from services.output_parser_export_service import OutputParserExportService
 from services.mcp_config_export_service import MCPConfigExportService
 from services.middleware_export_service import MiddlewareExportService
 from repositories.agent_repository import AgentRepository
+from services.system_one_porting import system_one_export_fields
 import logging
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,10 @@ class AgentExportService(BaseExportService):
             agent = AgentRepository.get_ocr_agent_by_id(self.session, agent_id)
             if not agent:
                 raise ValueError(f"OCR Agent with ID {agent_id} not found")
+        elif agent.type == 'system_one_agent':
+            agent = AgentRepository.get_system_one_agent_by_id(self.session, agent_id)
+            if not agent:
+                raise ValueError(f"System One Agent with ID {agent_id} not found")
 
         # Permission check
         if agent.app_id != app_id:
@@ -162,6 +167,8 @@ class AgentExportService(BaseExportService):
             a2a_description_override=agent.a2a_description_override,
             a2a_skill_tags=list(agent.a2a_skill_tags or []),
             a2a_examples=list(agent.a2a_examples or []),
+            # System One-specific fields ({} for other agent types)
+            **system_one_export_fields(agent),
         )
 
         # Create metadata

@@ -9,6 +9,7 @@ from schemas.export_schemas import (
     ExportMetadataSchema,
     ExportAppSchema,
     ExportAIServiceSchema,
+    ExportSystemOneServiceSchema,
     ExportEmbeddingServiceSchema,
     ExportOutputParserSchema,
     ExportMCPConfigSchema,
@@ -19,6 +20,7 @@ from schemas.export_schemas import (
 )
 from services.base_export_service import BaseExportService
 from services.ai_service_export_service import AIServiceExportService
+from services.system_one_porting import export_system_one_service
 from services.embedding_service_export_service import EmbeddingServiceExportService
 from services.output_parser_export_service import OutputParserExportService
 from services.mcp_config_export_service import MCPConfigExportService
@@ -93,6 +95,7 @@ class FullAppExportService(BaseExportService):
 
         # Export all components in dependency order
         ai_services = self._export_all_ai_services(app_id)
+        system_one_services = self._export_all_system_one_services(app_id)
         embedding_services = self._export_all_embedding_services(app_id)
         output_parsers = self._export_all_output_parsers(app_id)
         mcp_configs = self._export_all_mcp_configs(app_id)
@@ -117,6 +120,7 @@ class FullAppExportService(BaseExportService):
             metadata=metadata,
             app=app_schema,
             ai_services=ai_services,
+            system_one_services=system_one_services,
             embedding_services=embedding_services,
             output_parsers=output_parsers,
             mcp_configs=mcp_configs,
@@ -167,6 +171,10 @@ class FullAppExportService(BaseExportService):
                 )
         logger.info(f"Successfully exported {len(exported)}/{len(services)} AI services")
         return exported
+
+    def _export_all_system_one_services(self, app_id: int) -> List[ExportSystemOneServiceSchema]:
+        """Export all System One services of the app (never their tokens)."""
+        return [export_system_one_service(s) for s in self.app_repo.get_system_one_services_by_app_id(app_id)]
 
     def _export_all_embedding_services(
         self, app_id: int
@@ -362,8 +370,8 @@ class FullAppExportService(BaseExportService):
         agents = self.app_repo.get_agents_by_app_id(app_id)
         logger.info(f"Found {len(agents)} agents for app {app_id}")
         
-        # Filter out agents without AI service (data inconsistency)
-        valid_agents = [a for a in agents if a.service_id is not None]
+        # Filter out agents without AI service (data inconsistency); System One agents have none by design
+        valid_agents = [a for a in agents if a.service_id is not None or a.type == 'system_one_agent']
         if len(valid_agents) < len(agents):
             skipped = len(agents) - len(valid_agents)
             logger.warning(
