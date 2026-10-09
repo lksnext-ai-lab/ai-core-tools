@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.middleware import AgentMiddleware
 from models.ocr_agent import OCRAgent
+from models.system_one_agent import SystemOneAgent
 from models.ai_service import AIService
 from models.sandbox_service import SandboxService
 from models.silo import Silo
@@ -12,6 +13,7 @@ from models.mcp_config import MCPConfig
 from models.skill import Skill
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.sandbox_service_repository import SandboxServiceRepository
+from repositories.system_one_service_repository import SystemOneServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
@@ -58,10 +60,17 @@ class AgentRepository:
         return db.query(Agent.agent_id).limit(1).first() is not None
     
     @staticmethod
-    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Agent | OCRAgent:
+    def get_system_one_agent_by_id(db: Session, agent_id: int) -> Optional[SystemOneAgent]:
+        """Get System One agent by ID from SystemOneAgent table"""
+        return db.query(SystemOneAgent).filter(SystemOneAgent.agent_id == agent_id).first()
+
+    @staticmethod
+    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Agent | OCRAgent | SystemOneAgent:
         """Get agent by ID and type"""
         if agent_type == 'ocr' or agent_type == 'ocr_agent':
             return AgentRepository.get_ocr_agent_by_id(db, agent_id)
+        elif agent_type == 'system_one' or agent_type == 'system_one_agent':
+            return AgentRepository.get_system_one_agent_by_id(db, agent_id)
         elif agent_type == 'basic' or agent_type == 'agent':
             return AgentRepository.get_by_id(db, agent_id)
         else:
@@ -114,12 +123,13 @@ class AgentRepository:
     
     @staticmethod
     def delete_by_id(db: Session, agent_id: int) -> bool:
-        """Delete an agent by its ID (checks both Agent and OCRAgent tables)"""
+        """Delete an agent by its ID (checks the Agent, OCRAgent and SystemOneAgent tables)"""
         try:
-            # Check both Agent and OCRAgent tables
             agent = AgentRepository.get_by_id(db, agent_id)
             if not agent:
                 agent = AgentRepository.get_ocr_agent_by_id(db, agent_id)
+            if not agent:
+                agent = AgentRepository.get_system_one_agent_by_id(db, agent_id)
             
             if agent:
                 return AgentRepository._delete_agent_with_associations(db, agent)
@@ -398,9 +408,16 @@ class AgentRepository:
             for m in middlewares
         ]
 
+        # System One services (per app only)
+        system_one_services_list = [
+            {"service_id": s.service_id, "name": s.name}
+            for s in SystemOneServiceRepository.get_by_app_id(db, app_id)
+        ]
+
         return {
             'ai_services': ai_services_list,
             'sandbox_services': sandbox_services_list,
+            'system_one_services': system_one_services_list,
             'silos': silos_list,
             'output_parsers': output_parsers_list,
             'tools': tools_list,

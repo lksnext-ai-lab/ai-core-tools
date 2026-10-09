@@ -402,6 +402,14 @@ async def create_or_update_agent(
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
         'text_system_prompt': agent_data.text_system_prompt,
+        # System One-specific fields
+        'system_one_service_id': agent_data.system_one_service_id,
+        'questions': (
+            [q.model_dump(mode='json') for q in agent_data.questions]
+            if agent_data.questions is not None else None
+        ),
+        'summarization_service_id': agent_data.summarization_service_id,
+        'max_state_chars': agent_data.max_state_chars,
         # RAG retrieval config (step_008)
         'rag_k': agent_data.rag_k,
         'rag_search_type': agent_data.rag_search_type,

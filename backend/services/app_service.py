@@ -97,6 +97,7 @@ class AppService:
         from .silo_service import SiloService
         from .embedding_service_service import EmbeddingServiceService
         from .sandbox_service_service import SandboxServiceService
+        from .system_one_service_service import SystemOneServiceService
         from .api_key_service import APIKeyService
         from .mcp_config_service import MCPConfigService
         from .middleware_service import MiddlewareService
@@ -123,6 +124,7 @@ class AppService:
             silo_service = SiloService()
             embedding_service_service = EmbeddingServiceService()
             sandbox_service_service = SandboxServiceService()
+            system_one_service_service = SystemOneServiceService()
             api_key_service = APIKeyService()
             mcp_config_service = MCPConfigService()
             resource_service = ResourceService()
@@ -227,6 +229,12 @@ class AppService:
             for service in sandbox_services:
                 logger.info(f"Deleting sandbox service {service.service_id}: {service.name}")
                 sandbox_service_service.delete_sandbox_service(self.db, app_id, service.service_id)
+
+            # 13c. Delete System One services (their agents were deleted earlier: the agent FK is RESTRICT)
+            system_one_services = self.app_repo.get_system_one_services_by_app_id(app_id)
+            for service in system_one_services:
+                logger.info(f"Deleting System One service {service.service_id}: {service.name}")
+                system_one_service_service.delete_system_one_service(self.db, app_id, service.service_id)
 
             # 14. Delete collaborations
             collaborations = self.collaboration_repo.get_collaborations_by_app(app_id)

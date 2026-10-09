@@ -1,7 +1,9 @@
 from typing import Union, List, Dict, Any, Optional
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
 from models.ocr_agent import OCRAgent
+from models.system_one_agent import SystemOneAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
@@ -11,6 +13,8 @@ from repositories.app_repository import AppRepository
 from services.a2a_server.lifecycle_service import schedule_owner_purge
 from services.service_lifecycle_service import ServiceLifecycleService
 from utils import a2a_config
+from repositories.system_one_service_repository import SystemOneServiceRepository
+from schemas.system_one_schemas import QuestionList
 from utils.logger import get_logger
 from types import SimpleNamespace
 
@@ -214,6 +218,10 @@ class AgentService:
             request_count=getattr(agent, 'request_count', 0) or 0,
             # OCR-specific fields
             vision_service_id=getattr(agent, 'vision_service_id', None),
+            system_one_service_id=getattr(agent, 'system_one_service_id', None),
+            questions=getattr(agent, 'questions', None),
+            summarization_service_id=getattr(agent, 'summarization_service_id', None),
+            max_state_chars=getattr(agent, 'max_state_chars', None),
             vision_system_prompt=getattr(agent, 'vision_system_prompt', None),
             text_system_prompt=getattr(agent, 'text_system_prompt', None),
             # Media processing configuration
@@ -230,6 +238,7 @@ class AgentService:
             # Form data
             ai_services=ai_service_options,
             sandbox_services=sandbox_service_options,
+            system_one_services=form_data.get('system_one_services', []),
             silos=form_data['silos'],
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
@@ -287,6 +296,8 @@ class AgentService:
             # If it's an OCR agent, get the OCR-specific data
             if agent.type == 'ocr_agent':
                 agent = self.get_agent(db, agent_id, 'ocr')
+            elif agent.type == 'system_one_agent':
+                agent = self.get_agent(db, agent_id, 'system_one_agent')
             return agent
 
     def _get_form_data(self, db: Session, app_id: int, agent_id: int) -> Dict[str, List]:
@@ -323,6 +334,9 @@ class AgentService:
         if agent_id == 0:
             agent_id = None
 
+        if agent_id:
+            self._reject_system_one_type_change(db, agent_id, agent_type)
+
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
         previous_name = agent.name if agent else None
 
@@ -348,6 +362,8 @@ class AgentService:
             # Create the appropriate agent instance based on type
             if agent_type == 'ocr_agent':
                 agent = OCRAgent()
+            elif agent_type == 'system_one_agent':
+                agent = SystemOneAgent()
             else:
                 agent = Agent()
 
@@ -387,6 +403,8 @@ class AgentService:
 
         update_method = self._update_normal_agent
         update_method(db, agent, agent_data, is_new_agent=is_new_agent)
+        if isinstance(agent, SystemOneAgent):
+            self._apply_system_one_fields(db, agent, agent_data)
 
         # Threshold search needs a threshold value, else it degrades to plain similarity at
         # retrieval. Checked on the merged state (the schema can't see the stored value on a
@@ -507,6 +525,78 @@ class AgentService:
                 embedding_service, _current('media_embedding_service_id'),
                 'media_embedding_service_id', SERVICE_KIND_EMBEDDING,
             )
+
+    @staticmethod
+    def _normalized_type(agent_type: Optional[str]) -> str:
+        return {'basic': 'agent', 'ocr': 'ocr_agent', 'system_one': 'system_one_agent'}.get(agent_type, agent_type)
+
+    def _reject_system_one_type_change(self, db: Session, agent_id: int, agent_type: str) -> None:
+        """A System One agent has its own table: it can neither become another type nor be turned into one."""
+        existing = AgentRepository.get_by_id(db, agent_id)
+        if existing is None:
+            return
+        current, requested = existing.type, self._normalized_type(agent_type)
+        if 'system_one_agent' in (current, requested) and current != requested:
+            raise ValueError("An agent's type cannot be changed once it is created")
+
+    @staticmethod
+    def _question_error(exc: ValidationError) -> str:
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        return f"questions{'.' + where if where else ''}: {first['msg']}"
+
+    def _apply_system_one_fields(self, db: Session, agent: SystemOneAgent, data: dict) -> None:
+        """System One fields (service, questions, summarization LLM, size) and neutral values for the rest."""
+        app_id = data['app_id']
+        creating = agent.system_one_service_id is None
+
+        service_id = data.get('system_one_service_id')
+        if service_id is not None:
+            if SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id) is None:
+                raise ValueError(
+                    f"System One service {service_id} does not exist or does not belong to this app"
+                )
+            agent.system_one_service_id = service_id
+        elif creating:
+            raise ValueError("system_one_service_id is required for System One agents")
+
+        raw_questions = data.get('questions')
+        if raw_questions is not None:
+            try:
+                questions = TypeAdapter(QuestionList).validate_python(raw_questions)
+            except ValidationError as exc:
+                raise ValueError(self._question_error(exc))
+            agent.questions = [q.model_dump(mode='json', exclude_none=True) for q in questions]
+        elif creating:
+            raise ValueError("questions are required for System One agents")
+
+        if 'summarization_service_id' in data:
+            summarization_id = data['summarization_service_id'] or None
+            if summarization_id is not None:
+                visible = {s.service_id for s in AgentRepository.get_ai_services_by_app_id(db, app_id)}
+                if summarization_id not in visible:
+                    raise ValueError(
+                        f"summarization_service_id {summarization_id} does not exist or is not available to this app"
+                    )
+            agent.summarization_service_id = summarization_id
+
+        max_chars = data.get('max_state_chars')
+        if max_chars is not None:
+            if not 500 <= max_chars <= 20000:
+                raise ValueError("max_state_chars must be between 500 and 20000")
+            agent.max_state_chars = max_chars
+        elif creating:
+            agent.max_state_chars = 6000
+
+        # Nothing here uses an LLM, memory, a silo, tools or a sandbox: keep those columns neutral.
+        agent.service_id = None
+        agent.has_memory = False
+        agent.silo_id = None
+        agent.output_parser_id = None
+        agent.enable_code_interpreter = False
+        agent.sandbox_service_id = None
+        agent.skill_router_enabled = False
+        agent.server_tools = []
 
     @staticmethod
     def _resolve_prompt_template(new_value: Optional[str], current_value: Optional[str]) -> str:
