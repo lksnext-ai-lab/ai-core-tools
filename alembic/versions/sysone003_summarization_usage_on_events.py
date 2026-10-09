@@ -19,8 +19,13 @@ COLUMNS = ("summarization_calls", "summarization_input_tokens", "summarization_o
 def upgrade():
     for name in COLUMNS:
         op.add_column(TABLE, sa.Column(name, sa.Integer(), nullable=False, server_default=sa.text("0")))
+    # Until now a System One execution counted its summarization as llm_calls = 1 (its tokens were not kept): move
+    # those to their own column so the history reads the same as the new rows.
+    op.execute(f"UPDATE {TABLE} SET summarization_calls = llm_calls, llm_calls = 0 "
+               "WHERE provider = 'system_one' AND llm_calls > 0")
 
 
 def downgrade():
+    op.execute(f"UPDATE {TABLE} SET llm_calls = summarization_calls WHERE provider = 'system_one' AND summarization_calls > 0")
     for name in reversed(COLUMNS):
         op.drop_column(TABLE, name)
