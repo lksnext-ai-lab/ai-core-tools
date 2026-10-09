@@ -817,3 +817,20 @@ class TestResetAgentConversationSandboxOwnership:
         assert owned_conversation.sandbox_session_id is None
         assert owned_conversation.sandbox_state is None
         db.commit.assert_called()
+
+
+class TestWorkspaceDir:
+    """The turn workspace is built from caller identity and must stay under TMP_BASE_FOLDER."""
+
+    def test_keeps_the_relative_layout(self):
+        from services.agent_execution_service import _workspace_dir
+
+        assert _workspace_dir("data/tmp/", "conversations", "6") == os.path.join("data", "tmp", "conversations", "6")
+
+    @pytest.mark.parametrize("part", ["../../etc", "x/../../../outside", os.sep + "abs"])
+    def test_rejects_a_path_outside_the_base(self, part):
+        from services.agent_execution_service import _workspace_dir
+
+        with pytest.raises(HTTPException) as exc:
+            _workspace_dir("data/tmp", "persistent", part)
+        assert exc.value.status_code == 400

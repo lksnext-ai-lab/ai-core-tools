@@ -23,9 +23,12 @@ from typing import AsyncGenerator, Dict, List, Any
 
 import psycopg.errors
 from fastapi import HTTPException
+from langchain.agents.middleware import PIIDetectionError
+from langchain_core.messages import AIMessage
+from langgraph.types import Command
 from sqlalchemy.orm import Session
 
-from tools.agentTools import create_agent, prepare_agent_config, build_human_message
+from tools.agentTools import create_agent, prepare_agent_config, build_human_message, compute_thread_id
 from tools.langsmith_config import (
     apply_tracing_to_config,
     build_tracing_config,
@@ -36,8 +39,12 @@ from tools.streaming_utils import (
     format_sse_event,
     map_stream_event,
     SSE_TOKEN,
+    SSE_HITL_INTERRUPT,
 )
-from services.agent_execution_service import AgentExecutionService
+from services.agent_execution_service import AgentExecutionService, RunPausedForApproval, pii_blocked_message
+from services import hitl_approval_service as approvals
+from models.hitl_approval import ApprovalChannel
+from tools.middleware.factory import human_in_the_loop_config, redacts_output
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
 from services.agent_cache_service import (
@@ -80,6 +87,25 @@ def _assert_json_serializable(data: dict, *, event_type: str) -> None:
         ) from exc
 
 
+async def _read_pause(agent_chain, config) -> "approvals.GraphPause | None":
+    """The human-in-the-loop interrupt the graph is paused on, or None."""
+    try:
+        return await approvals.read_pause(agent_chain, config)
+    except Exception as exc:
+        # Unreadable state falls back to "no interrupt" so the normal recovery path stays reachable.
+        logger.warning("Could not read graph state for pending interrupts: %s", exc)
+        return None
+
+
+async def _final_answer_text(agent_chain, config) -> str:
+    """Text of the last AI message in the checkpoint (after after_model middlewares ran)."""
+    state = await agent_chain.aget_state(config)
+    for msg in reversed((state.values or {}).get("messages", [])):
+        if isinstance(msg, AIMessage):
+            return msg.text
+    return ""
+
+
 class AgentStreamingService:
     """Service for streaming agent responses via Server-Sent Events."""
 
@@ -100,8 +126,17 @@ class AgentStreamingService:
         user_context: dict | None = None,
         conversation_id: int | None = None,
         db: Session | None = None,
+        channel: ApprovalChannel = ApprovalChannel.PLAYGROUND,
+        resume: "approvals.ResumeRequest | None" = None,
     ) -> AsyncGenerator[AgentStreamEvent, None]:
         """Run one agent chat turn and yield typed stream events.
+
+        With ``resume`` the turn answers a human-in-the-loop approval (already claimed
+        by the caller) instead of sending a new message, and records its outcome.
+        When the run pauses, interactive channels get a ``hitl_interrupt`` event with the
+        recorded approval followed by ``done`` (``status: "requires_approval"``); other
+        channels have the pause rejected on the spot and get an ``error`` event, so the
+        conversation is never left paused.
 
         This is the **canonical streaming seam** (AD-5): it runs exactly the
         setup, astream loop, retry, metrics and cleanup logic a chat turn
@@ -129,7 +164,8 @@ class AgentStreamingService:
            occurs; ``extra["error_code"]`` carries the metrics error code and
            ``extra["error_kind"]`` a stable, small vocabulary (``"connection"``,
            ``"incomplete_turn"``, ``"http"``, ``"serialization"``,
-           ``"agent_failure"``) a non-SSE consumer can switch on.
+           ``"agent_failure"``, ``"approval"``, ``"pii_blocked"``) a non-SSE
+           consumer can switch on.
 
         Consumer contract:
             - Always iterate this generator through
@@ -177,6 +213,9 @@ class AgentStreamingService:
                 created automatically.
             db: SQLAlchemy session.  If omitted the instance-level ``self.db``
                 is used.
+            channel: Where the turn comes from; decides whether a human-approval
+                pause can be answered (see ``hitl_approval_service.is_interactive``).
+            resume: Claimed approval to answer instead of sending ``message``.
 
         Yields:
             :class:`~tools.streaming_utils.AgentStreamEvent` instances.
@@ -204,6 +243,7 @@ class AgentStreamingService:
         # turn would be mis-recorded as `"Cancelled"` purely because of how
         # its own caller closes the generator afterwards.
         terminal_event_yielded = False
+        resume_settled = resume is None
 
         try:
             # ----------------------------------------------------------------
@@ -218,6 +258,23 @@ class AgentStreamingService:
                 conversation_id=conversation_id,
                 db=effective_db,
             )
+            if (
+                resume is None
+                and effective_db is not None
+                and ctx.conversation is not None
+                and human_in_the_loop_config(ctx.fresh_agent) is not None
+            ):
+                try:
+                    expired = approvals.check_conversation_free(effective_db, ctx.conversation.conversation_id)
+                except approvals.ApprovalPendingError as exc:
+                    metrics_status, metrics_error_code, metrics_error_message = "ERROR", exc.code, str(exc)
+                    terminal_event_yielded = True
+                    yield AgentStreamEvent(
+                        "error", exc.to_dict(), extra={"error_code": exc.code, "error_kind": "approval"}
+                    )
+                    return
+                if expired is not None:
+                    await self.execution_service.expire_approval(effective_db, expired.id)
             sandbox_turn_active = self.execution_service._begin_sandbox_turn(
                 ctx,
                 db=effective_db,
@@ -291,18 +348,14 @@ class AgentStreamingService:
                 agent_chain, mcp_client = create_agent_result[:2]
 
                 config = prepare_agent_config(ctx.fresh_agent)
+                config["configurable"]["thread_id"] = compute_thread_id(
+                    ctx.fresh_agent, ctx.session_id_for_cache
+                )
 
                 if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
-                    config["configurable"]["thread_id"] = (
-                        f"thread_{ctx.fresh_agent.agent_id}_{ctx.session_id_for_cache}"
-                    )
                     logger.info(
                         "Using session-aware thread_id: %s",
                         config["configurable"]["thread_id"],
-                    )
-                else:
-                    config["configurable"]["thread_id"] = (
-                        f"thread_{ctx.fresh_agent.agent_id}"
                     )
 
                 config["configurable"]["question"] = ctx.enhanced_message
@@ -313,9 +366,27 @@ class AgentStreamingService:
                 # ------------------------------------------------------------
                 # 4. Build the HumanMessage payload (handles multimodal images)
                 # ------------------------------------------------------------
-                message_payload = build_human_message(
-                    ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
-                )
+                if resume is None:
+                    stream_input = {"messages": [build_human_message(
+                        ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
+                    )]}
+                else:
+                    pause = await _read_pause(agent_chain, config)
+                    if pause is None or pause.interrupt_id != resume.approval.interrupt_id:
+                        approvals.finish(
+                            effective_db, resume.approval.id, approvals.ApprovalStatus.CANCELLED, reason="stale"
+                        )
+                        resume_settled = True
+                        exc = approvals.ApprovalStaleError(
+                            "This approval request no longer matches the conversation; it was not applied."
+                        )
+                        metrics_status, metrics_error_code, metrics_error_message = "ERROR", exc.code, str(exc)
+                        terminal_event_yielded = True
+                        yield AgentStreamEvent(
+                            "error", exc.to_dict(), extra={"error_code": exc.code, "error_kind": "approval"}
+                        )
+                        return
+                    stream_input = Command(resume={"decisions": resume.decisions})
 
                 # ------------------------------------------------------------
                 # 5. Attach LangSmith tracer + metadata when configured
@@ -348,6 +419,10 @@ class AgentStreamingService:
 
                 accumulated_content = ""
                 structured_response = None
+                # PIIMiddleware(apply_to_output) redacts the AI message in after_model, i.e.
+                # after its tokens were streamed; hold tokens back so PII never reaches the UI.
+                buffer_output = redacts_output(ctx.fresh_agent)
+                hitl_enabled = human_in_the_loop_config(ctx.fresh_agent) is not None
 
                 try:
                     # ``aclosing`` guarantees the LangGraph astream generator
@@ -361,7 +436,7 @@ class AgentStreamingService:
                     # the turn was already recorded as "Cancelled".
                     async with contextlib.aclosing(
                         agent_chain.astream(
-                            {"messages": [message_payload]},
+                            stream_input,
                             config=config,
                             stream_mode=["messages", "updates", "custom"],
                         )
@@ -384,6 +459,10 @@ class AgentStreamingService:
                                         if first_token_at is None:
                                             first_token_at = datetime.utcnow()
                                         accumulated_content += event["data"].get("content", "")
+                                        if buffer_output:
+                                            # Raw tokens are not PII-redacted yet; send the
+                                            # redacted final message instead (see below).
+                                            continue
                                     yield AgentStreamEvent(event["type"], event["data"])
                     break
                 except Exception as stream_exc:
@@ -392,6 +471,11 @@ class AgentStreamingService:
                         and ctx.fresh_agent.has_memory
                         and ctx.session_id_for_cache
                         and is_missing_tool_output_error(stream_exc)
+                        # A HITL pause leaves the same unanswered tool_call a corrupt
+                        # checkpoint does. Deleting it would silently discard the
+                        # pending approval and the whole thread's memory.
+                        and resume is None
+                        and not (hitl_enabled and await _read_pause(agent_chain, config))
                     ):
                         # Recover by forking from the last known-good checkpoint
                         # instead of deleting the whole thread — see the mirrored
@@ -434,15 +518,75 @@ class AgentStreamingService:
                         continue
                     raise
 
-            # ----------------------------------------------------------------
-            # 7. Post-processing phase — delegates to AgentExecutionService
-            # ----------------------------------------------------------------
-
             raw_response = (
                 structured_response
                 if structured_response is not None
                 else accumulated_content
             )
+            if resume is not None:
+                approvals.finish(
+                    effective_db, resume.approval.id, resume.final_status,
+                    reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
+                )
+                resume_settled = True
+
+            pause = await _read_pause(agent_chain, config) if hitl_enabled else None
+            if pause is not None:
+                # Paused by HumanInTheLoopMiddleware: nothing to finalize until someone answers.
+                requester = approvals.Requester.from_user_context(ctx.user_context)
+                answerable = approvals.is_interactive(channel) and (
+                    requester.user_id is not None or bool(requester.api_key_hash)
+                )
+                approval = await approvals.open_approval(
+                    effective_db,
+                    agent_chain=agent_chain,
+                    config=config,
+                    conversation_id=ctx.conversation.conversation_id,
+                    agent_id=agent_id,
+                    app_id=ctx.fresh_agent.app_id,
+                    channel=channel,
+                    requester=requester,
+                    hitl_config=human_in_the_loop_config(ctx.fresh_agent),
+                    answerable=answerable,
+                )
+                if answerable:
+                    yield AgentStreamEvent(SSE_HITL_INTERRUPT, approvals.sse_payload(approval))
+                    terminal_event_yielded = True
+                    yield AgentStreamEvent(
+                        "done",
+                        {
+                            "response": "",
+                            "conversation_id": ctx.effective_conv_id,
+                            "files": [],
+                            "hitl_paused": True,
+                            "status": "requires_approval",
+                            "approval_id": approval.id,
+                        },
+                        extra={"conversation_id": ctx.effective_conv_id, "approval_id": approval.id},
+                    )
+                    return
+                await self.execution_service._reject_in_place(
+                    RunPausedForApproval(agent_chain, config), approval, effective_db
+                )
+                tools = ", ".join(a["name"] for a in approval.actions)
+                exc = approvals.ApprovalNotSupportedError(
+                    f"This agent needs human approval before running {tools}, which this chat cannot provide. "
+                    "The tool was not executed.",
+                    approval_id=approval.id,
+                )
+                metrics_status, metrics_error_code, metrics_error_message = "ERROR", exc.code, str(exc)
+                terminal_event_yielded = True
+                yield AgentStreamEvent(
+                    "error", exc.to_dict(), extra={"error_code": exc.code, "error_kind": "approval"}
+                )
+                return
+
+            if buffer_output and structured_response is None:
+                raw_response = await _final_answer_text(agent_chain, config)
+
+            # ----------------------------------------------------------------
+            # 7. Post-processing phase — delegates to AgentExecutionService
+            # ----------------------------------------------------------------
 
             result = await self.execution_service._finalize_turn(
                 ctx, raw_response, effective_db
@@ -455,6 +599,7 @@ class AgentStreamingService:
                 "response": result["parsed_response"],
                 "conversation_id": result["effective_conv_id"],
                 "files": result["files_data"],
+                "status": "completed",
             }
             # Validate up front rather than let format_sse_event's json.dumps
             # raise inside the SSE bridge: a failure there would surface
@@ -505,6 +650,15 @@ class AgentStreamingService:
             if not terminal_event_yielded:
                 metrics_status, metrics_error_code, metrics_error_message = "ERROR", "Cancelled", "Stream cancelled"
             raise
+        except PIIDetectionError as exc:
+            # PIIMiddleware(strategy="block"): expected outcome, not a server error.
+            metrics_status, metrics_error_code, metrics_error_message = "ERROR", "PIIDetectionError", str(exc)
+            terminal_event_yielded = True
+            yield AgentStreamEvent(
+                "error",
+                {"message": pii_blocked_message(exc)},
+                extra={"error_code": metrics_error_code, "error_kind": "pii_blocked"},
+            )
         except _AgentStreamSerializationError as exc:
             logger.exception(
                 "Non-serializable event payload in streaming agent chat: %s",
@@ -551,6 +705,11 @@ class AgentStreamingService:
             )
 
         finally:
+            if not resume_settled and effective_db is not None:
+                # The run failed or was cancelled after the approval was claimed. If it never
+                # consumed the pause the approval is answerable again; otherwise the next
+                # attempt finds it stale.
+                approvals.release(effective_db, resume.approval.id, metrics_error_message or "Run did not finish")
             if ctx is not None and sandbox_turn_active:
                 self.execution_service._end_sandbox_turn(ctx, db=effective_db)
             if mcp_client:
@@ -586,6 +745,8 @@ class AgentStreamingService:
         user_context: dict | None = None,
         conversation_id: int | None = None,
         db: Session | None = None,
+        channel: ApprovalChannel = ApprovalChannel.PLAYGROUND,
+        resume: "approvals.ResumeRequest | None" = None,
     ) -> AsyncGenerator[str, None]:
         """Stream an agent chat turn as SSE events.
 
@@ -614,6 +775,8 @@ class AgentStreamingService:
                 created automatically.
             db: SQLAlchemy session.  If omitted the instance-level ``self.db``
                 is used.
+            channel: Where the turn comes from (see :meth:`stream_agent_events`).
+            resume: Claimed approval to answer instead of sending ``message``.
 
         Yields:
             SSE-formatted strings (``"data: {...}\\n\\n"``).
@@ -627,6 +790,8 @@ class AgentStreamingService:
                 user_context=user_context,
                 conversation_id=conversation_id,
                 db=db,
+                channel=channel,
+                resume=resume,
             )
         ) as events:
             async for ev in events:

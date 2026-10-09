@@ -1,7 +1,7 @@
 import { configService } from '../core/ConfigService';
 import { authService } from './auth';
 import { getCsrfToken } from './cookies';
-import type { StreamEvent } from '../types/streaming';
+import type { HitlCancelResult, HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
 
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
@@ -42,6 +42,9 @@ import type {
   AgentMCPUsage,
   AppSlugInfo,
   ClaudePluginImportResult,
+  Middleware,
+  MiddlewarePayload,
+  MiddlewareType,
 } from '../core/types';
 import type {
   ImportResponse,
@@ -125,6 +128,7 @@ export interface Agent {
   tool_ids?: number[];
   mcp_config_ids?: number[];
   skill_ids?: number[];
+  middleware_ids?: number[];
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
@@ -174,6 +178,7 @@ export interface Agent {
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
+  middlewares?: Array<{ middleware_id: number; name: string; description?: string; middleware_type: MiddlewareType }>;
 }
 
 export type ScheduledTaskVisibility = 'unpublished' | 'private' | 'public';
@@ -649,9 +654,13 @@ class ApiService {
 
     if (typeof data['error'] === 'string') return data['error'];
     if (data['detail'] !== undefined) {
-      return typeof data['detail'] === 'string'
-        ? data['detail']
-        : JSON.stringify(data['detail']);
+      const detail = data['detail'];
+      if (typeof detail === 'string') return detail;
+      // Structured errors ({code, message}) carry a human-readable message.
+      if (detail && typeof detail === 'object' && typeof (detail as Record<string, unknown>)['message'] === 'string') {
+        return (detail as Record<string, unknown>)['message'] as string;
+      }
+      return JSON.stringify(detail);
     }
     if (typeof data['message'] === 'string') return data['message'];
     return null;
@@ -1377,6 +1386,70 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
       method: 'DELETE',
     });
+  }
+
+  async getMiddlewares(appId: number): Promise<Middleware[]> {
+    return this.request(`/internal/apps/${appId}/middlewares/`);
+  }
+
+  async getMiddleware(appId: number, middlewareId: number): Promise<Middleware> {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`);
+  }
+
+  async createMiddleware(appId: number, data: MiddlewarePayload): Promise<Middleware> {
+    return this.request(`/internal/apps/${appId}/middlewares/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMiddleware(appId: number, middlewareId: number, data: MiddlewarePayload): Promise<Middleware> {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMiddleware(appId: number, middlewareId: number) {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async exportMiddleware(appId: number, middlewareId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/middlewares/${middlewareId}/export`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: this.buildAuthHeaders('POST', false),
+    });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.blob();
+  }
+
+  async importMiddleware(
+    appId: number,
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string,
+  ): Promise<ImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    let url = `${this.baseURL}/internal/apps/${appId}/middlewares/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: this.buildAuthHeaders('POST', true),
+      body: formData,
+    });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.json();
   }
 
   async importSkill(appId: number, file: File): Promise<Skill> {
@@ -2206,15 +2279,25 @@ class ApiService {
       options.files.forEach((file) => formData.append('files', file));
     }
 
-    const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;
-    const headers = this.buildAuthHeaders('POST', true);
+    await this.postSSE(
+      `/internal/apps/${appId}/agents/${agentId}/chat/stream`, formData, options.onEvent, options.signal,
+    );
+  }
 
-    const response = await fetch(url, {
+  /** POST a form or JSON body and consume the SSE response (same auth/cookies/CSRF as every other call). */
+  private async postSSE(
+    endpoint: string,
+    body: FormData | Record<string, unknown>,
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const isFormData = body instanceof FormData;
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
       credentials: 'include',
-      headers,
-      body: formData,
-      signal: options.signal,
+      headers: this.buildAuthHeaders('POST', isFormData),
+      body: isFormData ? body : JSON.stringify(body),
+      signal,
     });
 
     if (!response.ok) {
@@ -2239,11 +2322,35 @@ class ApiService {
         const lines = buffer.split('\n\n');
         buffer = lines.pop() || '';
 
-        this.parseSSELines(lines, options.onEvent);
+        this.parseSSELines(lines, onEvent);
       }
     } finally {
       reader.releaseLock();
     }
+  }
+
+  /** Answer a pending human-in-the-loop approval; streams the rest of the turn. */
+  async decideApprovalStream(
+    approvalId: string,
+    decisions: readonly HitlDecision[],
+    options: {
+      onEvent: (event: StreamEvent) => void;
+      signal?: AbortSignal;
+    }
+  ): Promise<void> {
+    await this.postSSE(
+      `/internal/approvals/${encodeURIComponent(approvalId)}/decisions/stream`,
+      { decisions },
+      options.onEvent,
+      options.signal,
+    );
+  }
+
+  /** Reject every action of a pending approval; returns the agent's answer. */
+  async cancelApproval(approvalId: string): Promise<HitlCancelResult> {
+    return this.request<HitlCancelResult>(`/internal/approvals/${encodeURIComponent(approvalId)}/cancel`, {
+      method: 'POST',
+    });
   }
 
   async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null): Promise<{ file_id: string }> {
@@ -2517,7 +2624,11 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`);
   }
 
-  async getConversationWithHistory(conversationId: number): Promise<{ session_id?: string | null; messages: Array<{ role: string; content: string }> }> {
+  async getConversationWithHistory(conversationId: number): Promise<{
+    session_id?: string | null;
+    messages: Array<{ role: string; content: string }>;
+    pending_approval?: HitlPendingApproval | null;
+  }> {
     return this.request(`/internal/conversations/${conversationId}/history`);
   }
 

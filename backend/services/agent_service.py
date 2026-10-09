@@ -5,6 +5,8 @@ from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
+from repositories.middleware_repository import MiddlewareRepository
+from models.middleware import AgentMiddleware, MiddlewareType
 from repositories.app_repository import AppRepository
 from services.a2a_server.lifecycle_service import schedule_owner_purge
 from utils import a2a_config
@@ -179,6 +181,7 @@ class AgentService:
             tool_ids=associations['tool_ids'],
             mcp_config_ids=associations['mcp_ids'],
             skill_ids=associations['skill_ids'],
+            middleware_ids=associations['middleware_ids'],
             created_at=agent.create_date,
             request_count=getattr(agent, 'request_count', 0) or 0,
             # OCR-specific fields
@@ -204,6 +207,7 @@ class AgentService:
             tools=form_data['tools'],
             mcp_configs=form_data['mcp_configs'],
             skills=form_data['skills'],
+            middlewares=form_data.get('middlewares', []),
             # Marketplace
             marketplace_visibility=(
                 agent.marketplace_visibility.value
@@ -291,6 +295,7 @@ class AgentService:
             agent_id = None
 
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        previous_name = agent.name if agent else None
 
         # Defense in depth: never let an update move an existing agent into a different
         # app (the router already verifies ownership, but the service must not silently
@@ -372,8 +377,15 @@ class AgentService:
             agent = AgentRepository.update(db, agent)
         else:
             agent = AgentRepository.create(db, agent)
-        
-        # Return the agent ID
+
+        if previous_name and previous_name != agent.name:
+            # Approval rules name an agent used as a tool by its tool name.
+            from services.middleware_service import MiddlewareService
+            from utils.schema_utils import sanitize_identifier
+            MiddlewareService.rename_tool_in_approval_rules(
+                db, agent.app_id, sanitize_identifier(previous_name), sanitize_identifier(agent.name)
+            )
+
         return agent.agent_id
 
     @staticmethod
@@ -734,6 +746,58 @@ class AgentService:
 
         db.commit()
 
+    @staticmethod
+    def validate_middleware_selection(db: Session, app_id: int, middleware_ids: list, has_memory: bool) -> list:
+        """Validate an agent's middleware selection and return the ids in chain order.
+
+        Raises ValueError when the selection references middlewares outside the app,
+        repeats a middleware type (LangChain rejects duplicate middleware instances),
+        or uses human-in-the-loop without conversation memory (HITL needs the checkpointer
+        to pause and resume).
+        """
+        ordered_ids = list(dict.fromkeys(int(mid) for mid in middleware_ids))
+        middlewares = {m.middleware_id: m for m in MiddlewareRepository.get_by_ids_and_app_id(db, ordered_ids, app_id)}
+        if len(middlewares) != len(ordered_ids):
+            raise ValueError("One or more selected middlewares do not exist in this app")
+        seen_types = set()
+        for mid in ordered_ids:
+            mw_type = middlewares[mid].middleware_type
+            if mw_type in seen_types:
+                raise ValueError(f"Only one {mw_type.value} middleware can be attached to an agent")
+            seen_types.add(mw_type)
+        if MiddlewareType.HUMAN_IN_THE_LOOP in seen_types and not has_memory:
+            raise ValueError("Human-in-the-loop middlewares require conversation memory to be enabled")
+        return ordered_ids
+
+    @staticmethod
+    def validate_current_middlewares(db: Session, app_id: int, agent_id: int, has_memory: bool) -> None:
+        """Validate the agent's attached middlewares against new settings (e.g. memory turned off)."""
+        current_ids = AgentRepository.get_agent_associations_dict(db, agent_id)['middleware_ids']
+        AgentService.validate_middleware_selection(db, app_id, current_ids, has_memory)
+
+    def update_agent_middlewares(self, db: Session, agent_id: int, ordered_ids: list):
+        """Replace the agent's middleware chain; list position is the execution order."""
+        existing = {
+            assoc.middleware_id: assoc
+            for assoc in db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()
+        }
+        hitl_before = {
+            mid for mid, assoc in existing.items()
+            if assoc.middleware and assoc.middleware.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP
+        }
+        if hitl_before and not hitl_before.issubset(ordered_ids):
+            from services import hitl_approval_service as approvals
+            approvals.cancel_pending_for_agents(db, [agent_id], reason="approval_rules_changed")
+        for mid, assoc in existing.items():
+            if mid not in ordered_ids:
+                db.delete(assoc)
+        for position, mid in enumerate(ordered_ids):
+            if mid in existing:
+                existing[mid].order = position
+            else:
+                db.add(AgentMiddleware(agent_id=agent_id, middleware_id=mid, order=position))
+        db.commit()
+
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
         # AD-10: capture app_id before deletion (OCRAgent is STI, so get_by_id covers it).
@@ -778,10 +842,23 @@ class AgentService:
                 "Could not clear sandbox DB state for agent %s conversations: %s",
                 agent_id, exc
             )
-        deleted = AgentRepository.delete_by_id(db, agent_id)
-        if deleted and a2a_app_id is not None:
+        from models.conversation import Conversation
+        from services.conversation_service import ConversationService
+        from services.file_management_service import FileManagementService
+
+        conversation_ids = [
+            row.conversation_id
+            for row in db.query(Conversation.conversation_id).filter(Conversation.agent_id == agent_id)
+        ]
+        threads = ConversationService.release_agent_conversations(db, agent_id)
+        if not AgentRepository.delete_by_id(db, agent_id):
+            return False
+        if a2a_app_id is not None:
             schedule_owner_purge(a2a_app_id, agent_id=agent_id)  # FR-22: sync, never raises
-        return deleted
+        # Only once the rows are gone: checkpoints and files are not transactional.
+        ConversationService.delete_thread_histories_in_background(threads)
+        FileManagementService().delete_agent_storage(agent_id, conversation_ids)
+        return True
 
     def _remove_tool_references(self, db: Session, tool_id: int):
         """Remove all tool associations where this agent is used as a tool"""

@@ -19,6 +19,18 @@ from langchain_core.runnables import RunnableConfig
 
 logger = get_logger(__name__)
 
+class AIServiceInUseError(Exception):
+    """The AI service is referenced by middlewares and cannot be deleted."""
+
+    def __init__(self, middleware_names: List[str]):
+        self.middleware_names = middleware_names
+        super().__init__(
+            "This AI service is used by the middleware(s) "
+            + ", ".join(f"'{name}'" for name in middleware_names)
+            + ". Choose another model in them before deleting it."
+        )
+
+
 class AIServiceService:
 
     @staticmethod
@@ -180,12 +192,21 @@ class AIServiceService:
 
     @staticmethod
     def delete_ai_service(db: Session, app_id: int, service_id: int) -> bool:
-        """Delete an AI service"""
+        """Delete an AI service.
+
+        Raises AIServiceInUseError while a middleware references it: dropping it would
+        silently switch that middleware (e.g. the PII detector) to the agent's model.
+        """
         service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
         
         if not service:
             return False
-        
+
+        from services.middleware_service import MiddlewareService
+        middleware_names = MiddlewareService.names_using_ai_service(db, app_id, service_id)
+        if middleware_names:
+            raise AIServiceInUseError(middleware_names)
+
         AIServiceRepository.delete(db, service)
         
         return True

@@ -31,6 +31,7 @@ from schemas.marketplace_schemas import (
 )
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from tools.stream_guard import guard_agent_stream
 from services.file_management_service import FileManagementService, FileReference
 from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from routers.internal.auth_utils import get_current_user_oauth
@@ -435,6 +436,16 @@ async def create_or_update_agent(
     )
 
     try:
+        # Validate before writing anything so a bad selection leaves the agent untouched.
+        middleware_ids = None
+        if agent_data.middleware_ids is not None:
+            middleware_ids = AgentService.validate_middleware_selection(
+                db, app_id, agent_data.middleware_ids, bool(agent_data.has_memory)
+            )
+        elif agent_id:
+            # Chain not sent: it stays as is, but must still fit the agent's new settings
+            # (e.g. memory cannot be turned off under a human-approval middleware).
+            AgentService.validate_current_middlewares(db, app_id, agent_id, bool(agent_data.has_memory))
         # Create or update agent
         created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
     except ValueError as exc:
@@ -444,6 +455,8 @@ async def create_or_update_agent(
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
     agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+    if middleware_ids is not None:
+        agent_service.update_agent_middlewares(db, created_agent_id, middleware_ids)
 
     # Return updated agent (reuse the GET logic)
     return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
@@ -813,7 +826,7 @@ async def chat_with_agent_stream(
         # streaming, not when the endpoint returns its StreamingResponse.
         async def generator() -> AsyncGenerator[str, None]:
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release the request DB session: get_db teardown runs too late

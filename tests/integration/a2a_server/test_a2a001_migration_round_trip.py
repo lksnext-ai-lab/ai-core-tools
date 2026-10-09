@@ -188,12 +188,15 @@ def test_a2a001_upgrade_seed_downgrade_upgrade_round_trip(ephemeral_db):
         ).scalar_one()
         assert caller_type == "A2A"
 
-    # 2. Downgrade one revision: a2a001 -> apikeyhash001.
-    result = _run_alembic("downgrade", "-1")
-    assert result.returncode == 0, (
-        f"alembic downgrade -1 failed (rc={result.returncode}).\n"
-        f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
-    )
+    # 2. Downgrade a2a001 only: a2a001 -> apikeyhash001. Head is the merge point mw007
+    #    (middlewares + A2A), where "-1" is ambiguous: undo the merge, then step the
+    #    a2a001 branch back.
+    for target in ("mw006", "a2a001_agent_server@-1"):
+        result = _run_alembic("downgrade", target)
+        assert result.returncode == 0, (
+            f"alembic downgrade {target} failed (rc={result.returncode}).\n"
+            f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
+        )
 
     with ephemeral_db.connect() as conn:
         # The seeded Conversation/event rows survive (only the enum label changes

@@ -66,7 +66,7 @@ def _slow_fake(state: dict, *, chunks: int = 6, delay_s: float = 0.2):
 
     async def _stream(
         self, agent_id, message, file_references=None, search_params=None,
-        user_context=None, conversation_id=None, db=None,
+        user_context=None, conversation_id=None, db=None, channel=None, resume=None,
     ):
         try:
             for i in range(chunks):

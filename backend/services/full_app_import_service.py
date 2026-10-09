@@ -47,6 +47,7 @@ class FullAppImportService:
         "silos",
         "repositories",
         "domains",
+        "middlewares",
         "agents",
     ]
 
@@ -124,6 +125,7 @@ class FullAppImportService:
             "silos": len(export_data.silos),
             "repositories": len(export_data.repositories),
             "domains": len(export_data.domains),
+            "middlewares": len(export_data.middlewares),
             "agents": len(export_data.agents),
         }
 
@@ -310,6 +312,18 @@ class FullAppImportService:
                         for ag in export_data.agents
                     ),
                 ))
+            for middleware_name in a.middleware_names:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="middleware",
+                    depends_on_name=middleware_name,
+                    mandatory=False,
+                    bundled=any(
+                        m.name == middleware_name
+                        for m in export_data.middlewares
+                    ),
+                ))
 
         return AppImportPreviewSchema(
             valid=True,
@@ -389,6 +403,15 @@ class FullAppImportService:
                     # Type absent from selection = user deselected
                     # all items of this type
                     filtered[field_name] = []
+            # Middlewares follow the selected agents unless chosen explicitly.
+            selected_middlewares = component_selection.get("middleware")
+            if selected_middlewares is None:
+                selected_middlewares = {
+                    name for agent in filtered["agents"] for name in agent.middleware_names
+                }
+            filtered["middlewares"] = [
+                m for m in export_data.middlewares if m.name in set(selected_middlewares)
+            ]
             if filtered:
                 export_data = export_data.model_copy(
                     update=filtered
@@ -420,6 +443,7 @@ class FullAppImportService:
             "embedding_services": {},  # name -> new service_id
             "output_parsers": {},  # name -> new parser_id
             "silos": {},  # name -> new silo_id
+            "middlewares": {},  # name -> new middleware_id
         }
 
         # Import ALL components in dependency order (wrapped in try-except for rollback)
@@ -805,8 +829,22 @@ class FullAppImportService:
                 warnings.extend(result.warnings)
                 count += 1
 
-        elif component_type == "agents":
+        elif component_type == "middlewares":
+            from services.middleware_import_service import MiddlewareImportService
+
+            middleware_import = MiddlewareImportService(self.session)
             for item in component_data:
+                result = middleware_import.import_item(
+                    item, app_id, conflict_mode,
+                    ai_service_id_map=component_id_mappings["ai_services"],
+                )
+                warnings.extend(result.warnings)
+                new_mappings[item.name] = result.component_id
+                count += 1
+
+        elif component_type == "agents":
+            # Tool agents first, so the agents using them can resolve them by name.
+            for item in _agents_in_dependency_order(component_data):
                 from schemas.export_schemas import AgentExportFileSchema
 
                 item_export = AgentExportFileSchema(
@@ -819,6 +857,7 @@ class FullAppImportService:
                         app_id=app_id,
                         conflict_mode=conflict_mode,
                         ai_service_id_map=component_id_mappings["ai_services"],
+                        middleware_id_map=component_id_mappings["middlewares"],
                     )
                     warnings.extend(result.warnings)
                     count += 1
@@ -831,3 +870,25 @@ class FullAppImportService:
                     warnings.append(f"Agent '{item.name}' import failed: {str(e)}")
 
         return count, warnings, new_mappings
+
+
+def _agents_in_dependency_order(agents: list) -> list:
+    """Order agents so each comes after the agents it uses as tools (cycles keep export order)."""
+    by_name = {agent.name: agent for agent in agents}
+    ordered, visiting, done = [], set(), set()
+
+    def visit(agent) -> None:
+        if agent.name in done or agent.name in visiting:
+            return
+        visiting.add(agent.name)
+        for ref in agent.agent_tool_refs:
+            dependency = by_name.get(ref.tool_agent_name)
+            if dependency is not None:
+                visit(dependency)
+        visiting.discard(agent.name)
+        done.add(agent.name)
+        ordered.append(agent)
+
+    for agent in agents:
+        visit(agent)
+    return ordered

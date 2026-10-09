@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
-import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
+import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
+import AgentMiddlewaresCard, { type AgentMiddlewareOption } from '../components/forms/AgentMiddlewaresCard';
 import { Badge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
@@ -35,9 +36,6 @@ interface Agent {
   has_memory: boolean;
   enable_code_interpreter: boolean;
   skill_router_enabled?: boolean;
-  memory_max_messages: number;
-  memory_max_tokens: number;
-  memory_summarize_threshold: number;
   service_id?: number;
   sandbox_service_id?: number;
   silo_id?: number;
@@ -83,6 +81,7 @@ interface Agent {
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean; is_system?: boolean }>;
+  middlewares?: AgentMiddlewareOption[];
 }
 
 interface AgentFormData {
@@ -96,9 +95,6 @@ interface AgentFormData {
   enable_code_interpreter: boolean;
   skill_router_enabled: boolean;
   server_tools: string[];
-  memory_max_messages: number;
-  memory_max_tokens: number;
-  memory_summarize_threshold: number;
   service_id?: number;
   sandbox_service_id?: number;
   silo_id?: number;
@@ -107,6 +103,7 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  middleware_ids: number[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -289,13 +286,11 @@ function AgentFormPage() {
     enable_code_interpreter: false,
     skill_router_enabled: false,
     server_tools: [],
-    memory_max_messages: 20,
-    memory_max_tokens: 4000,
-    memory_summarize_threshold: DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
     skill_ids: [],
+    middleware_ids: [],
     rag_k: 10,
     rag_search_type: 'similarity',
     rag_score_threshold: null,
@@ -411,9 +406,6 @@ function AgentFormPage() {
         enable_code_interpreter: response.enable_code_interpreter || false,
         skill_router_enabled: response.skill_router_enabled || false,
         server_tools: response.server_tools || [],
-        memory_max_messages: response.memory_max_messages || 20,
-        memory_max_tokens: response.memory_max_tokens || 4000,
-        memory_summarize_threshold: response.memory_summarize_threshold || DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
         service_id: response.service_id || undefined,
         sandbox_service_id: response.sandbox_service_id || undefined,
         silo_id: response.silo_id || undefined,
@@ -422,6 +414,7 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        middleware_ids: response.middleware_ids || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -670,9 +663,6 @@ function AgentFormPage() {
       enable_code_interpreter: formData.enable_code_interpreter,
       skill_router_enabled: formData.skill_router_enabled,
       server_tools: formData.server_tools,
-      memory_max_messages: formData.memory_max_messages,
-      memory_max_tokens: formData.memory_max_tokens,
-      memory_summarize_threshold: formData.memory_summarize_threshold,
       service_id: formData.service_id,
       sandbox_service_id: formData.enable_code_interpreter ? formData.sandbox_service_id : undefined,
       silo_id: formData.silo_id,
@@ -681,6 +671,7 @@ function AgentFormPage() {
       tool_ids: formData.tool_ids,
       mcp_config_ids: formData.mcp_config_ids,
       skill_ids: formData.skill_ids,
+      middleware_ids: formData.middleware_ids,
       // OCR-specific fields
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
@@ -916,109 +907,6 @@ function AgentFormPage() {
                   />
                   <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
-
-                {/* Memory Management - Conditional */}
-                {formData.has_memory && (
-                  <div className="border-t border-gray-200 pt-6">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-                        <Brain className="w-5 h-5 text-indigo-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configure the agent's memory management strategy</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
-                      <div className="flex items-start">
-                        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
-                        <div>
-                          <p className="text-sm text-indigo-800 font-medium">Automatic Hybrid Strategy</p>
-                          <p className="text-xs text-indigo-700 mt-1">
-                            The agent automatically applies a hybrid strategy that removes tool messages, trims the history,
-                            and manages token limits to optimize performance and costs.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-6">
-                      <div>
-                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                          Maximum Messages
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_messages"
-                          min="1"
-                          max="100"
-                          value={formData.memory_max_messages}
-                          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Maximum number of messages to keep in the conversation history (recommended: 20)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                          Token Limit
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_tokens"
-                          min="100"
-                          max="32000"
-                          step="100"
-                          value={formData.memory_max_tokens}
-                          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Maximum number of tokens for the conversation history (recommended: 4000)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                          Summarization Threshold
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_summarize_threshold"
-                          min="1"
-                          max="50"
-                          value={formData.memory_summarize_threshold}
-                          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Number of old messages at which summarization is considered (future implementation, recommended: 10)
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Messages:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Tokens:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Threshold:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1780,6 +1668,18 @@ function AgentFormPage() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Middlewares Card - Only for regular agents */}
+              {agent?.middlewares && formData.type !== 'ocr_agent' && (
+                <AgentMiddlewaresCard
+                  middlewares={agent.middlewares}
+                  selectedIds={formData.middleware_ids}
+                  hasMemory={formData.has_memory}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, middleware_ids: ids }))}
+                  onRequireMemory={() => setFormData((prev) => ({ ...prev, has_memory: true }))}
+                  onManage={() => navigate(`/apps/${appId}/middlewares`)}
+                />
               )}
 
               {/* Skills Card - Only for regular agents */}

@@ -130,6 +130,11 @@ _ERROR_KIND_MESSAGES: dict[str, str] = {
     "incomplete_turn": _GENERIC_ERROR_MESSAGE,
     "serialization": _GENERIC_ERROR_MESSAGE,
     "agent_failure": _GENERIC_ERROR_MESSAGE,
+    "approval": (
+        "This agent needs human approval before running one of its tools, which A2A "
+        "cannot provide. The tool was not executed."
+    ),
+    "pii_blocked": "The message was blocked because it contains personal data.",
     # "http" is handled separately below -- its message depends on the
     # status code, not a fixed string.
 }

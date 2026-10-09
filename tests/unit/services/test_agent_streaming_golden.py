@@ -10,6 +10,9 @@ the **current**, unrefactored code once and freezing the output as literals —
 they are not recomputed via ``format_sse_event`` in the assertions, so a
 accidental change to event ordering, key ordering or payload shape is caught.
 
+The successful ``done`` payload carries ``"status": "completed"`` since human approvals
+added ``"requires_approval"`` as the other outcome a client must distinguish.
+
 No DB is used — everything ``stream_agent_chat`` would normally fetch via
 ``AgentExecutionService`` is monkeypatched at the ``services.agent_streaming_service``
 import site.
@@ -193,7 +196,7 @@ class TestAgentStreamingGolden:
             'data: {"type": "metadata", "data": {"conversation_id": 297, "session_id": null, "agent_id": 1, "agent_name": "TestAgent", "has_memory": false}}\n\n',
             'data: {"type": "token", "data": {"content": "Hello"}}\n\n',
             'data: {"type": "token", "data": {"content": " world"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
         assert harness.recorded_kwargs["error_code"] is None
@@ -223,7 +226,7 @@ class TestAgentStreamingGolden:
             'data: {"type": "tool_start", "data": {"tool_name": "web_search", "tool_call_id": "call_1", "args": {"q": "x"}, "tool_input": "{\\"q\\": \\"x\\"}"}}\n\n',
             'data: {"type": "thinking", "data": {"message": "Searching the web...", "tool_name": "web_search"}}\n\n',
             'data: {"type": "tool_end", "data": {"tool_name": "web_search", "tool_call_id": "call_1", "tool_output": "result-content"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
         # No "token" events were emitted in this scenario, so no first-token
@@ -264,7 +267,7 @@ class TestAgentStreamingGolden:
             'data: {"type": "thinking", "data": {"message": "Running code...", "tool_name": "python_repl"}}\n\n',
             'data: {"type": "tool_end", "data": {"tool_name": "web_search", "tool_call_id": "call_1", "tool_output": "search-result"}}\n\n',
             'data: {"type": "tool_end", "data": {"tool_name": "python_repl", "tool_call_id": "call_2", "tool_output": "2"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
 
@@ -297,7 +300,7 @@ class TestAgentStreamingGolden:
         assert events == [
             'data: {"type": "metadata", "data": {"conversation_id": 297, "session_id": null, "agent_id": 1, "agent_name": "TestAgent", "has_memory": false}}\n\n',
             'data: {"type": "code_output", "data": {"line": "hello\\n", "stream": "stdout", "tool_name": "python_repl", "parent_tool_name": "agent_tool", "subagent_name": "sub1", "subagent_id": "sid1"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
 
@@ -335,7 +338,7 @@ class TestAgentStreamingGolden:
             'data: {"type": "tool_start", "data": {"tool_name": "custom_tool", "tool_call_id": "c1"}}\n\n',
             'data: {"type": "tool_end", "data": {"tool_name": "custom_tool", "tool_call_id": "c1", "tool_output": "ok"}}\n\n',
             'data: {"type": "thinking", "data": {"message": "Custom thinking"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
 
@@ -358,7 +361,7 @@ class TestAgentStreamingGolden:
             'data: {"type": "metadata", "data": {"conversation_id": 297, "session_id": null, "agent_id": 1, "agent_name": "TestAgent", "has_memory": false}}\n\n',
             'data: {"type": "thinking", "data": {"message": "Plain string status"}}\n\n',
             'data: {"type": "thinking", "data": {"foo": "bar"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
 
@@ -385,7 +388,7 @@ class TestAgentStreamingGolden:
         assert events == [
             'data: {"type": "metadata", "data": {"conversation_id": 297, "session_id": null, "agent_id": 1, "agent_name": "TestAgent", "has_memory": false}}\n\n',
             'data: {"type": "token", "data": {"content": "partial"}}\n\n',
-            'data: {"type": "done", "data": {"response": {"answer": 42}, "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": {"answer": 42}, "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
 
@@ -407,7 +410,7 @@ class TestAgentStreamingGolden:
         assert events == [
             'data: {"type": "metadata", "data": {"conversation_id": 297, "session_id": null, "agent_id": 1, "agent_name": "TestAgent", "has_memory": false}}\n\n',
             'data: {"type": "token", "data": {"content": "hi"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hi", "conversation_id": 297, "files": [{"filename": "out.txt", "file_id": 5}]}}\n\n',
+            'data: {"type": "done", "data": {"response": "hi", "conversation_id": 297, "files": [{"filename": "out.txt", "file_id": 5}], "status": "completed"}}\n\n',
         ]
         assert harness.recorded_kwargs["status"] == "SUCCESS"
 
@@ -493,7 +496,7 @@ class TestAgentStreamingGolden:
         assert events == [
             'data: {"type": "metadata", "data": {"conversation_id": 297, "session_id": "conv_1_297", "agent_id": 1, "agent_name": "TestAgent", "has_memory": true}}\n\n',
             'data: {"type": "token", "data": {"content": "recovered"}}\n\n',
-            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": []}}\n\n',
+            'data: {"type": "done", "data": {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"}}\n\n',
         ]
         assert create_agent.call_count == 2
         assert (

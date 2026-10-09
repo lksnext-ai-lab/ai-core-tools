@@ -15,6 +15,8 @@ from services.marketplace_service import MarketplaceService
 from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from models.hitl_approval import ApprovalChannel
+from tools.stream_guard import guard_agent_stream
 from services.agent_service import AgentService
 from services.user_service import UserService
 from services.file_management_service import FileManagementService, FileReference
@@ -293,9 +295,11 @@ async def get_marketplace_conversation(
             conversation_id=conversation_id,
             user_context=user_context,
         )
+        pending_approval = await ConversationService.get_pending_approval(db, conversation_id, user_context)
         return ConversationWithHistoryResponse(
             **conversation.to_dict(),
             messages=history or [],
+            pending_approval=pending_approval,
         )
     except Exception as e:
         logger.error(f"Error retrieving marketplace conversation history: {e}")
@@ -750,12 +754,13 @@ async def marketplace_chat_stream(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            channel=ApprovalChannel.MARKETPLACE,
         )
 
         async def generator() -> AsyncGenerator[str, None]:
             stream_completed = False
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     if '"type": "done"' in chunk or '"type":"done"' in chunk:
                         stream_completed = True
                     yield chunk

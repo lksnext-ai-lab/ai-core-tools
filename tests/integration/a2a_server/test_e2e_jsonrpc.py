@@ -64,7 +64,7 @@ def _happy_path_fake(calls: list):
 
     async def _stream(
         self, agent_id, message, file_references=None, search_params=None,
-        user_context=None, conversation_id=None, db=None,
+        user_context=None, conversation_id=None, db=None, channel=None, resume=None,
     ):
         calls.append({"conversation_id": conversation_id})
         yield AgentStreamEvent("metadata", {"conversation_id": conversation_id})
@@ -190,7 +190,7 @@ class TestSendStreamingMessageHttpRoundTrip:
         def _fake_factory():
             async def _stream(
                 self, agent_id, message, file_references=None, search_params=None,
-                user_context=None, conversation_id=None, db=None,
+                user_context=None, conversation_id=None, db=None, channel=None, resume=None,
             ):
                 conversation_ids.append(conversation_id)
                 yield AgentStreamEvent("metadata", {"conversation_id": conversation_id})

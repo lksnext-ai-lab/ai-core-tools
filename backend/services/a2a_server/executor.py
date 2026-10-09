@@ -84,6 +84,7 @@ from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types.a2a_pb2 import Part, TaskState
 
 from db.database import SessionLocal
+from models.hitl_approval import ApprovalChannel
 from services.a2a_server.context_binding_service import (
     A2AContextBindingError,
     A2AInvalidContextIdError,
@@ -331,6 +332,9 @@ class MattinAgentExecutor(AgentExecutor):
                         user_context=user_context,
                         conversation_id=binding.conversation_id,
                         db=db,
+                        # The A2A bridge never enters input_required: a human-approval
+                        # pause is rejected on the spot and the turn fails.
+                        channel=ApprovalChannel.A2A,
                     )
                 ) as events:
                     turn_state = _TurnState()

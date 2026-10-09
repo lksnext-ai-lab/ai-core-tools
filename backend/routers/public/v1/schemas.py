@@ -1,6 +1,8 @@
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Literal, Optional, Dict, Any, Union
 from datetime import datetime
+
+from schemas.hitl_approval_schemas import PendingApprovalSchema
 
 # ==================== BASE SCHEMAS ====================
 
@@ -18,10 +20,17 @@ class CountResponseSchema(BaseModel):
 # Parameters: message, files, file_references, search_params, conversation_id
 
 class AgentResponseSchema(BaseModel):
-    """Agent response - supports both string responses and structured JSON from output parsers"""
+    """Agent response - supports both string responses and structured JSON from output parsers.
+
+    ``status="requires_approval"`` means the agent paused before running a tool that needs
+    human approval: ``response`` is empty and ``pending_approval`` says what to answer via
+    ``POST /approvals/{approval_id}/decisions`` before ``expires_at``.
+    """
+    status: Literal["completed", "requires_approval"] = "completed"
     response: Union[str, Dict[str, Any]]
     conversation_id: Optional[int] = None
     usage: Optional[Dict[str, Any]] = None
+    pending_approval: Optional[PendingApprovalSchema] = None
 
 # ==================== FILE OPERATION SCHEMAS ====================
 

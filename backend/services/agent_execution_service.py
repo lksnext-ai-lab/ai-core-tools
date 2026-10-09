@@ -1,5 +1,6 @@
 import os
 import asyncio
+from dataclasses import dataclass
 import ast
 import functools
 import json
@@ -38,6 +39,10 @@ from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
 from utils.config import get_app_config
 from utils.async_files import write_bytes, write_temp_file
+from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
+from models.hitl_approval import ApprovalChannel, ApprovalStatus, HITLApproval
+from services import hitl_approval_service as approvals
+from repositories.hitl_approval_repository import HITLApprovalRepository
 
 logger = get_logger(__name__)
 
@@ -663,6 +668,19 @@ def _workspace_layout_paths(working_dir: str) -> dict[str, str]:
     }
 
 
+def _workspace_dir(tmp_base: str, *parts: str) -> str:
+    """Directory under ``tmp_base`` for a turn's workspace.
+
+    ``parts`` include caller identity (user/app/conversation ids), so the normalised path
+    must stay inside ``tmp_base``; anything else is rejected instead of being created.
+    """
+    base = os.path.normpath(tmp_base)
+    path = os.path.normpath(os.path.join(base, *parts))
+    if not path.startswith(base + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+    return path
+
+
 def _ensure_local_workspace_layout(working_dir: str) -> dict[str, str]:
     paths = _workspace_layout_paths(working_dir)
     os.makedirs(working_dir, exist_ok=True)
@@ -755,6 +773,50 @@ def _inject_file_markers(text: str, files: list) -> str:
     return text
 
 
+def pii_blocked_message(exc) -> str:
+    """User-facing text for a PII middleware configured to block (never echoes the data)."""
+    kind = str(getattr(exc, "pii_type", "personal data")).replace("_", " ")
+    return f"The message was blocked because it contains personal data ({kind})."
+
+
+def _may_be_paused(ctx: AgentExecutionContext) -> bool:
+    """Only conversations of agents with human approval can be waiting for one."""
+    from tools.middleware.factory import human_in_the_loop_config
+
+    return ctx.conversation is not None and human_in_the_loop_config(ctx.fresh_agent) is not None
+
+
+class RunPausedForApproval(Exception):
+    """The run stopped at a human-in-the-loop interrupt; carries what is needed to record it."""
+
+    def __init__(self, agent_chain: Any, config: Dict[str, Any]) -> None:
+        super().__init__("Agent run paused for human approval")
+        self.agent_chain = agent_chain
+        self.config = config
+
+
+def approval_http_exception(exc) -> HTTPException:
+    """Map an ApprovalError to an HTTP error with a stable machine-readable code."""
+    return HTTPException(status_code=exc.status_code, detail=exc.to_dict())
+
+
+@dataclass(frozen=True)
+class GraphResume:
+    """Answer to a paused approval: the ``Command`` to send and the interrupt it must answer."""
+
+    command: Any
+    interrupt_id: str
+
+    @classmethod
+    def for_approval(
+        cls, approval: Optional[HITLApproval], decisions: Optional[List[Dict[str, Any]]]
+    ) -> "GraphResume | None":
+        if approval is None:
+            return None
+        from langgraph.types import Command
+        return cls(Command(resume={"decisions": decisions}), approval.interrupt_id)
+
+
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
@@ -775,8 +837,19 @@ class AgentExecutionService:
         user_context: Dict = None,
         conversation_id: int = None,
         db: Session = None,
+        channel: ApprovalChannel = ApprovalChannel.INTERNAL_SYNC,
+        resume_approval: Optional[HITLApproval] = None,
+        resume_decisions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Execute agent chat with persistent file references.
+
+        With ``resume_approval`` + ``resume_decisions`` the turn answers that approval
+        (already claimed by the caller) instead of sending ``message``.
+
+        When the run pauses for human approval, interactive channels get
+        ``status="requires_approval"`` and the recorded approval; other channels reject
+        the pause on the spot (so the conversation is not left paused) and get an
+        ``ApprovalNotSupportedError`` as HTTP 409.
 
         Returns:
             Dict containing agent response and metadata.
@@ -793,6 +866,10 @@ class AgentExecutionService:
                 conversation_id=conversation_id,
                 db=db,
             )
+            if resume_approval is None and _may_be_paused(ctx) and db is not None:
+                expired = approvals.check_conversation_free(db, ctx.conversation.conversation_id)
+                if expired is not None:
+                    await self.expire_approval(db, expired.id)
             sandbox_turn_active = self._begin_sandbox_turn(ctx, db=db)
 
             # Release the sync connection to the pool during the LLM call; the
@@ -801,37 +878,32 @@ class AgentExecutionService:
             if db is not None:
                 db.commit()
 
-            # Resolve temporary playground media/file silos for this session
-            temp_silo_ids = None
-            session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
-            if session_id_for_media and db:
-                try:
-                    from services.playground_media_service import PlaygroundMediaService
-                    app_id = ctx.user_context.get("app_id") if ctx.user_context else None
-                    if app_id:
-                        temp_silo_ids = PlaygroundMediaService.get_temp_silo_ids_for_agent(
-                            app_id, agent_id, session_id_for_media, db
-                        )
-                except Exception as e:
-                    logger.warning(f"Could not resolve temp silos: {e}")
+            temp_silo_ids = self._resolve_temp_silo_ids(ctx, agent_id, db)
+            try:
+                response = await self._execute_agent_async(
+                    ctx.fresh_agent,
+                    ctx.enhanced_message,
+                    ctx.search_params,
+                    ctx.session_id_for_cache,
+                    ctx.user_context,
+                    ctx.image_files,
+                    processed_files=ctx.processed_files,
+                    working_dir=ctx.working_dir,
+                    sandbox_handle=ctx.sandbox_handle,
+                    sandbox_provider=ctx.sandbox_provider,
+                    sandbox_session_key=ctx.sandbox_session_key,
+                    temp_silo_ids=temp_silo_ids or None,
+                    resume=GraphResume.for_approval(resume_approval, resume_decisions),
+                )
+            except RunPausedForApproval as paused:
+                return await self._handle_pause(ctx, paused, db, channel)
 
-            response = await self._execute_agent_async(
-                ctx.fresh_agent,
-                ctx.enhanced_message,
-                ctx.search_params,
-                ctx.session_id_for_cache,
-                ctx.user_context,
-                ctx.image_files,
-                processed_files=ctx.processed_files,
-                working_dir=ctx.working_dir,
-                sandbox_handle=ctx.sandbox_handle,
-                sandbox_provider=ctx.sandbox_provider,
-                sandbox_session_key=ctx.sandbox_session_key,
-                temp_silo_ids=temp_silo_ids or None,
-            )
+            result = await self._finalize_turn(ctx, response, db)
+            result["status"] = "completed"
+            return result
 
-            return await self._finalize_turn(ctx, response, db)
-
+        except approvals.ApprovalError as exc:
+            raise approval_http_exception(exc) from exc
         except HTTPException:
             raise
         except Exception as e:
@@ -840,6 +912,158 @@ class AgentExecutionService:
         finally:
             if ctx is not None and sandbox_turn_active:
                 self._end_sandbox_turn(ctx, db=db)
+
+    @staticmethod
+    def _resolve_temp_silo_ids(ctx, agent_id: int, db: Optional[Session]) -> Optional[List[int]]:
+        """Temporary playground media/file silos of this conversation's session."""
+        session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
+        app_id = ctx.user_context.get("app_id") if ctx.user_context else None
+        if not (session_id_for_media and db and app_id):
+            return None
+        try:
+            from services.playground_media_service import PlaygroundMediaService
+            return PlaygroundMediaService.get_temp_silo_ids_for_agent(app_id, agent_id, session_id_for_media, db)
+        except Exception as e:
+            logger.warning(f"Could not resolve temp silos: {e}")
+            return None
+
+    # ------------------------------------------------------------------
+    # Human-in-the-loop approvals
+    # ------------------------------------------------------------------
+
+    async def resume_approval(
+        self,
+        db: Session,
+        resume: "approvals.ResumeRequest",
+        user_context: Dict[str, Any],
+        channel: ApprovalChannel,
+    ) -> Dict[str, Any]:
+        """Run the rest of a turn for a claimed approval and record its outcome."""
+        approval_id = resume.approval.id
+        try:
+            result = await self.execute_agent_chat_with_file_refs(
+                agent_id=resume.approval.agent_id,
+                message="",
+                user_context=user_context,
+                conversation_id=resume.approval.conversation_id,
+                db=db,
+                channel=channel,
+                resume_approval=resume.approval,
+                resume_decisions=resume.decisions,
+            )
+        except HTTPException as exc:
+            code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+            if code == approvals.ApprovalStaleError.code:
+                approvals.finish(db, approval_id, ApprovalStatus.CANCELLED, reason="stale")
+            elif code == approvals.ApprovalNotSupportedError.code:
+                # Resumed fine, then paused again where nobody can answer (already rejected).
+                approvals.finish(
+                    db, approval_id, resume.final_status,
+                    reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
+                )
+            else:
+                # Still answerable if the run failed before consuming the pause; a pause that
+                # was consumed is detected as stale on the next attempt.
+                approvals.release(db, approval_id, f"{exc.status_code}: {exc.detail}")
+            raise
+        approvals.finish(
+            db, approval_id, resume.final_status,
+            reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
+        )
+        return result
+
+    async def expire_approval(self, db: Session, approval_id: str) -> bool:
+        """Resolve an expired approval as rejected. False if it was not (or no longer) expirable."""
+        if not approvals.claim_for_expiry(db, approval_id):
+            return False
+        approval = HITLApprovalRepository.get(db, approval_id)
+        resume = approvals.ResumeRequest(
+            approval, approvals.reject_all(approval, approvals.EXPIRED_MESSAGE), ApprovalStatus.EXPIRED,
+            reason="timeout",
+        )
+        try:
+            await self.resume_approval(
+                db, resume, approvals.system_user_context(approval), ApprovalChannel.INTERNAL_SYNC
+            )
+        except HTTPException as exc:
+            # The agent asked for another approval after the rejection; that one was rejected too.
+            if not (isinstance(exc.detail, dict) and exc.detail.get("code") == approvals.ApprovalNotSupportedError.code):
+                raise
+        return True
+
+    async def _handle_pause(
+        self, ctx: AgentExecutionContext, paused: RunPausedForApproval, db: Session, channel: ApprovalChannel,
+    ) -> Dict[str, Any]:
+        """Record the pause; return it to interactive callers, reject it for everyone else."""
+        from tools.middleware.factory import human_in_the_loop_config
+
+        requester = approvals.Requester.from_user_context(ctx.user_context)
+        conversation_id = ctx.conversation.conversation_id if ctx.conversation else None
+        if conversation_id is None or db is None:
+            raise HTTPException(status_code=500, detail="Agent execution failed")
+        answerable = approvals.is_interactive(channel) and (requester.user_id is not None or requester.api_key_hash)
+        approval = await approvals.open_approval(
+            db,
+            agent_chain=paused.agent_chain,
+            config=paused.config,
+            conversation_id=conversation_id,
+            agent_id=ctx.agent_id,
+            app_id=ctx.fresh_agent.app_id,
+            channel=channel,
+            requester=requester,
+            hitl_config=human_in_the_loop_config(ctx.fresh_agent),
+            answerable=bool(answerable),
+        )
+        if approval is None:
+            raise HTTPException(status_code=500, detail="Agent execution failed")
+
+        if answerable:
+            return {
+                "status": "requires_approval",
+                "response": "",
+                "agent_id": ctx.agent_id,
+                "conversation_id": conversation_id,
+                "metadata": {
+                    "agent_name": ctx.agent.name,
+                    "agent_type": ctx.agent.type,
+                    "files_processed": len(ctx.processed_files),
+                    "has_memory": ctx.agent.has_memory,
+                },
+                "pending_approval": approvals.pending_schema(approval),
+                "parsed_response": "",
+                "effective_conv_id": ctx.effective_conv_id,
+                "files_data": [],
+            }
+
+        await self._reject_in_place(paused, approval, db)
+        tools = ", ".join(a["name"] for a in approval.actions)
+        raise approvals.ApprovalNotSupportedError(
+            f"This agent needs human approval before running {tools}, which this channel cannot provide. "
+            "The tool was not executed.",
+            approval_id=approval.id,
+        )
+
+    async def _reject_in_place(self, paused: RunPausedForApproval, approval: HITLApproval, db: Session) -> None:
+        """Reject a pause nobody can answer so the conversation is not left paused."""
+        from langgraph.types import Command
+
+        config = {**paused.config, "configurable": dict(paused.config.get("configurable", {}))}
+        config["configurable"].pop("checkpoint_id", None)
+        decisions = approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE)
+        async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
+            # The agent may ask for another approved tool after a rejection; bound the loop.
+            for _ in range(3):
+                await paused.agent_chain.ainvoke(Command(resume={"decisions": decisions}), config=config)
+                pause = await approvals.read_pause(paused.agent_chain, config)
+                if pause is None:
+                    break
+                decisions = [
+                    {"type": "reject", "message": approvals.NOT_INTERACTIVE_MESSAGE} for _ in pause.action_requests
+                ]
+        approvals.finish(
+            db, approval.id, ApprovalStatus.CANCELLED, reason="channel_not_interactive",
+            decisions=approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE),
+        )
 
     async def _prepare_turn(
         self,
@@ -990,10 +1214,10 @@ class AgentExecutionService:
         app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
         identity_session_id = f"user_{user_id}_app_{app_id_ctx}"
         if effective_conv_id:
-            working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
+            working_dir = _workspace_dir(tmp_base, "conversations", str(effective_conv_id))
         else:
             session_key = f"agent_{agent_id}_{identity_session_id}"
-            working_dir = os.path.join(tmp_base, "persistent", session_key)
+            working_dir = _workspace_dir(tmp_base, "persistent", session_key)
 
         workspace_paths = _ensure_local_workspace_layout(working_dir)
         output_dir = workspace_paths["output"]
@@ -2156,13 +2380,17 @@ class AgentExecutionService:
         sandbox_session_key: Optional[str] = None,
         processed_files: List[Dict] = None,
         temp_silo_ids: Optional[List[int]] = None,
+        resume: "GraphResume | None" = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
+
+        ``resume`` answers a paused approval instead of sending ``message``; the thread
+        must still be paused on that approval's interrupt.
 
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
         """
-        from tools.agentTools import create_agent, prepare_agent_config, build_human_message
+        from tools.agentTools import create_agent, prepare_agent_config, build_human_message, compute_thread_id
         from tools.langsmith_config import (
             apply_tracing_to_config,
             build_tracing_config,
@@ -2194,11 +2422,9 @@ class AgentExecutionService:
             config = prepare_agent_config(fresh_agent)
 
             # Add session-specific configuration if memory is enabled
+            config["configurable"]["thread_id"] = compute_thread_id(fresh_agent, session_id_for_cache)
             if fresh_agent.has_memory and session_id_for_cache:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}_{session_id_for_cache}"
                 logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
-            else:
-                config["configurable"]["thread_id"] = f"thread_{fresh_agent.agent_id}"
 
             # Add the question to config
             config["configurable"]["question"] = message
@@ -2228,9 +2454,22 @@ class AgentExecutionService:
             started_at = datetime.utcnow()
             status, error_code, error_message, result = "SUCCESS", None, None, None
             try:
-                result = await self._ainvoke_with_checkpoint_recovery(
-                    agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
-                )
+                if resume is not None:
+                    pause = await approvals.read_pause(agent_chain, config)
+                    if pause is None or pause.interrupt_id != resume.interrupt_id:
+                        raise approvals.ApprovalStaleError(
+                            "This approval request no longer matches the conversation; it was not applied."
+                        )
+                async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
+                    result = await self._ainvoke_with_checkpoint_recovery(
+                        agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
+                        graph_input=resume.command if resume is not None else None,
+                    )
+            except RunPausedForApproval:
+                raise
+            except approvals.ApprovalError as exc:
+                status, error_code, error_message = "ERROR", exc.code, str(exc)
+                raise
             except asyncio.TimeoutError:
                 status, error_code, error_message = "TIMEOUT", "TIMEOUT", "Execution timed out"
                 raise
@@ -2293,14 +2532,25 @@ class AgentExecutionService:
                 logger.info("MCP client will be cleaned up automatically")
     
     async def _ainvoke_with_checkpoint_recovery(
-        self, agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
+        self, agent_chain, message_payload, config, fresh_agent, session_id_for_cache, graph_input=None,
     ):
-        """Invoke the agent, retrying once from the prior checkpoint on an incomplete tool-call turn."""
+        """Invoke the agent, retrying once from the prior checkpoint on an incomplete tool-call turn.
+
+        Raises ``RunPausedForApproval`` when the run stops at a human-in-the-loop interrupt.
+        """
+        from langchain.agents.middleware import PIIDetectionError
+
         try:
-            result = await agent_chain.ainvoke(
-                {"messages": [message_payload]},
-                config=config,
-            )
+            if graph_input is not None:
+                # Resuming an approval: the pause itself is the expected state, never "corrupt".
+                result = await agent_chain.ainvoke(graph_input, config=config)
+            else:
+                result = await agent_chain.ainvoke(
+                    {"messages": [message_payload]},
+                    config=config,
+                )
+        except PIIDetectionError as pii_exc:
+            raise HTTPException(status_code=422, detail=pii_blocked_message(pii_exc)) from pii_exc
         except Exception as invoke_exc:
             from services.agent_cache_service import (
                 CheckpointerCacheService,
@@ -2308,7 +2558,8 @@ class AgentExecutionService:
             )
 
             if (
-                fresh_agent.has_memory
+                graph_input is None
+                and fresh_agent.has_memory
                 and session_id_for_cache
                 and is_missing_tool_output_error(invoke_exc)
             ):
@@ -2352,6 +2603,8 @@ class AgentExecutionService:
                 )
             else:
                 raise
+        if isinstance(result, dict) and result.get("__interrupt__"):
+            raise RunPausedForApproval(agent_chain, config)
         return result
 
     async def _save_uploaded_file(self, file: UploadFile) -> str:

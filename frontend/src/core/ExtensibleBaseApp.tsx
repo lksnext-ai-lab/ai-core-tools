@@ -47,6 +47,7 @@ import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
+import MiddlewaresPage from '../pages/settings/MiddlewaresPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
@@ -358,6 +359,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/skills" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SkillsPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/middlewares" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                    <MiddlewaresPage />
                   </EditorLayoutRoute>
                 } />
 

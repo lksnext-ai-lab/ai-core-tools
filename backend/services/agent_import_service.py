@@ -27,11 +27,13 @@ from services.ai_service_import_service import AIServiceImportService
 from services.silo_import_service import SiloImportService
 from services.output_parser_import_service import OutputParserImportService
 from services.mcp_config_import_service import MCPConfigImportService
+from services.middleware_import_service import MiddlewareImportService
 from repositories.agent_repository import AgentRepository
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
+from utils.schema_utils import sanitize_identifier
 import logging
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,7 @@ class AgentImportService:
         self.silo_import = SiloImportService(session)
         self.parser_import = OutputParserImportService(session)
         self.mcp_import = MCPConfigImportService(session)
+        self.middleware_import = MiddlewareImportService(session)
 
     def get_by_name_and_app(
         self, name: str, app_id: int
@@ -417,6 +420,7 @@ class AgentImportService:
         import_bundled_output_parser: bool = True,
         import_bundled_mcp_configs: bool = True,
         import_bundled_agent_tools: bool = True,
+        middleware_id_map: Optional[Dict[str, int]] = None,
     ) -> ImportSummarySchema:
         """Import Agent configuration.
 
@@ -718,6 +722,7 @@ class AgentImportService:
 
         # Step 5: Import bundled agent tools
         imported_tool_ids = {}
+        tool_renames: Dict[str, str] = {}
         _tool_list = export_data.agent_tools if import_bundled_agent_tools else []
         for tool_agent in _tool_list:
             try:
@@ -731,6 +736,7 @@ class AgentImportService:
                     metadata=export_data.metadata,
                     agent=tool_agent,
                     ai_service=export_data.ai_service,  # Share AI service
+                    middlewares=export_data.middlewares,
                 )
                 tool_import_result = self.import_agent(
                     tool_export_data,
@@ -750,10 +756,17 @@ class AgentImportService:
                     imported_tool_ids[tool_agent.name] = (
                         imported_tool.agent_id
                     )
+                    tool_renames[sanitize_identifier(tool_agent.name)] = sanitize_identifier(imported_tool.name)
                     warnings.extend(tool_import_result.warnings)
             except Exception as e:
                 logger.warning(f"Failed to import tool agent: {e}")
                 warnings.append(f"Failed to import tool agent: {e}")
+
+        # Step 5b: Middlewares (imported with the full app, or bundled with the agent).
+        # Approval rules follow tool agents that were renamed on import.
+        middleware_ids = self._resolve_middlewares(
+            export_data, app_id, middleware_id_map, ai_service_id_map, tool_renames, warnings
+        )
 
         # Step 6: Handle existing agent (name already resolved in Step 0)
         if existing_agent and conflict_mode == ConflictMode.RENAME:
@@ -774,6 +787,7 @@ class AgentImportService:
                 existing_agent.silo_id = silo_id
                 existing_agent.output_parser_id = parser_id
                 existing_agent.has_memory = export_data.agent.has_memory
+                existing_agent.is_tool = bool(export_data.agent.is_tool)
                 existing_agent.skill_router_enabled = bool(
                     export_data.agent.skill_router_enabled
                 )
@@ -826,6 +840,8 @@ class AgentImportService:
                     app_id,
                 )
 
+                if export_data.agent.middleware_names:
+                    self._attach_middlewares(existing_agent, middleware_ids, warnings)
                 self.session.commit()
                 warnings.append(
                     "Existing agent configuration updated. "
@@ -891,7 +907,7 @@ class AgentImportService:
                 text_system_prompt=export_data.agent.text_system_prompt,
                 create_date=datetime.now(),
                 request_count=0,
-                is_tool=False,
+                is_tool=bool(export_data.agent.is_tool),
                 # A2A fields restored (FR-24, AC-39) via the shared helper;
                 # a2a_enabled is always forced to False there.
                 **_a2a_import_fields(export_data.agent),
@@ -916,7 +932,7 @@ class AgentImportService:
                 temperature=export_data.agent.temperature,
                 create_date=datetime.now(),
                 request_count=0,
-                is_tool=False,
+                is_tool=bool(export_data.agent.is_tool),
                 type="agent",
                 # A2A fields restored (FR-24, AC-39) via the shared helper;
                 # a2a_enabled is always forced to False there.
@@ -942,6 +958,9 @@ class AgentImportService:
             app_id,
         )
 
+        # Step 10: Middlewares
+        if middleware_ids:
+            self._attach_middlewares(new_agent, middleware_ids, warnings)
         self.session.commit()
 
         return ImportSummarySchema(
@@ -956,6 +975,56 @@ class AgentImportService:
                 "Configure AI service API key if needed",
             ],
         )
+
+    def _resolve_middlewares(
+        self,
+        export_data: AgentExportFileSchema,
+        app_id: int,
+        middleware_id_map: Optional[Dict[str, int]],
+        ai_service_id_map: Optional[dict],
+        tool_renames: Dict[str, str],
+        warnings: List[str],
+    ) -> List[int]:
+        """Ids of the agent's middlewares in the target app, in the agent's order."""
+        names = export_data.agent.middleware_names
+        if not names:
+            return []
+        if middleware_id_map is not None:
+            ids = [middleware_id_map[name] for name in names if name in middleware_id_map]
+            warnings.extend(
+                f"Middleware '{name}' was not imported; agent '{export_data.agent.name}' runs without it"
+                for name in names if name not in middleware_id_map
+            )
+            return ids
+        ids, middleware_warnings = self.middleware_import.import_for_agent(
+            export_data.middlewares, names, app_id, ai_service_id_map, tool_renames
+        )
+        warnings.extend(middleware_warnings)
+        return ids
+
+    def _attach_middlewares(self, agent: Agent, middleware_ids: List[int], warnings: List[str]) -> None:
+        """Attach middlewares, skipping those the agent cannot take (repeated type, approval without memory)."""
+        from models.middleware import Middleware, MiddlewareType
+        from services.agent_service import AgentService
+
+        middlewares = {
+            m.middleware_id: m
+            for m in self.session.query(Middleware).filter(Middleware.middleware_id.in_(middleware_ids))
+        }
+        accepted, seen_types = [], set()
+        for middleware_id in dict.fromkeys(middleware_ids):
+            middleware = middlewares.get(middleware_id)
+            if middleware is None:
+                continue
+            if middleware.middleware_type in seen_types:
+                warnings.append(f"Middleware '{middleware.name}' skipped: the agent already has one of its type")
+                continue
+            if middleware.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP and not agent.has_memory:
+                warnings.append(f"Middleware '{middleware.name}' skipped: human approval needs conversation memory")
+                continue
+            seen_types.add(middleware.middleware_type)
+            accepted.append(middleware_id)
+        AgentService().update_agent_middlewares(self.session, agent.agent_id, accepted)
 
     def _update_agent_tools(
         self,

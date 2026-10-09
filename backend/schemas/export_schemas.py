@@ -141,6 +141,23 @@ class ExportRepositorySchema(BaseModel):
     # Exclude: resources, files (heavy data)
 
 
+# ==================== MIDDLEWARE ====================
+
+
+class ExportMiddlewareSchema(BaseModel):
+    """Middleware export schema.
+
+    The AI service a config may reference (summarization model, PII detector) travels by
+    name in ``ai_service_name``; inside ``config`` it is exported as ``agent_llm``.
+    """
+
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    middleware_type: str
+    config: Dict[str, Any] = {}
+    ai_service_name: Optional[str] = None
+
+
 # ==================== AGENT ====================
 
 
@@ -176,6 +193,8 @@ class ExportAgentSchema(A2AAgentFieldsMixin):
     output_parser_name: Optional[str] = None  # Reference by name
     agent_tool_refs: List[ExportAgentToolRefSchema] = []
     agent_mcp_refs: List[ExportAgentMCPRefSchema] = []
+    middleware_names: List[str] = []  # Execution order; definitions travel alongside
+    is_tool: Optional[bool] = False  # Can be used as a tool by other agents
     has_memory: Optional[bool] = False
     skill_router_enabled: Optional[bool] = False
     memory_max_messages: Optional[int] = 20
@@ -260,6 +279,13 @@ class DomainExportFileSchema(BaseModel):
     output_parser: Optional[ExportOutputParserSchema] = None
 
 
+class MiddlewareExportFileSchema(BaseModel):
+    """Middleware export file"""
+
+    metadata: ExportMetadataSchema
+    middleware: ExportMiddlewareSchema
+
+
 class AgentExportFileSchema(BaseModel):
     """Agent export file with dependencies"""
 
@@ -271,6 +297,7 @@ class AgentExportFileSchema(BaseModel):
     silo_output_parser: Optional[ExportOutputParserSchema] = None  # Silo's metadata definition (may differ from agent's parser)
     output_parser: Optional[ExportOutputParserSchema] = None
     mcp_configs: List[ExportMCPConfigSchema] = []
+    middlewares: List[ExportMiddlewareSchema] = []  # The agent's middlewares
     agent_tools: List[ExportAgentSchema] = []  # Referenced agents
 
 
@@ -289,4 +316,5 @@ class AppExportFileSchema(BaseModel):
     silos: List[ExportSiloSchema] = []
     repositories: List[ExportRepositorySchema] = []
     domains: List[ExportDomainSchema] = []
+    middlewares: List[ExportMiddlewareSchema] = []
     agents: List[ExportAgentSchema] = []

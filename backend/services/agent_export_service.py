@@ -14,6 +14,7 @@ from services.ai_service_export_service import AIServiceExportService
 from services.silo_export_service import SiloExportService
 from services.output_parser_export_service import OutputParserExportService
 from services.mcp_config_export_service import MCPConfigExportService
+from services.middleware_export_service import MiddlewareExportService
 from repositories.agent_repository import AgentRepository
 import logging
 
@@ -41,6 +42,7 @@ class AgentExportService(BaseExportService):
         include_output_parser: bool = True,
         include_mcp_configs: bool = True,
         include_agent_tools: bool = True,
+        include_middlewares: bool = True,
     ) -> AgentExportFileSchema:
         """Export Agent to JSON structure.
 
@@ -139,6 +141,10 @@ class AgentExportService(BaseExportService):
             output_parser_name=output_parser_name,
             agent_tool_refs=agent_tool_refs,
             agent_mcp_refs=agent_mcp_refs,
+            middleware_names=[
+                assoc.middleware.name for assoc in (agent.middleware_associations or []) if assoc.middleware
+            ],
+            is_tool=bool(agent.is_tool),
             has_memory=agent.has_memory,
             skill_router_enabled=getattr(agent, 'skill_router_enabled', False) or False,
             memory_max_messages=agent.memory_max_messages,
@@ -167,6 +173,9 @@ class AgentExportService(BaseExportService):
         bundled_output_parser = None
         bundled_mcp_configs = []
         bundled_agent_tools = []
+        bundled_middlewares = (
+            MiddlewareExportService(self.session).export_for_agent(agent) if include_middlewares else []
+        )
 
         # Bundle AI Service
         if include_ai_service and agent.service_id:
@@ -249,8 +258,14 @@ class AgentExportService(BaseExportService):
                             include_output_parser=True,
                             include_mcp_configs=False,
                             include_agent_tools=False,  # Prevent recursion
+                            include_middlewares=include_middlewares,
                         )
                         bundled_agent_tools.append(tool_agent_export.agent)
+                        # Tool agents run their own middlewares too.
+                        known = {m.name for m in bundled_middlewares}
+                        bundled_middlewares.extend(
+                            m for m in tool_agent_export.middlewares if m.name not in known
+                        )
                     except Exception as e:
                         logger.warning(
                             f"Failed to bundle agent tool "
@@ -266,5 +281,6 @@ class AgentExportService(BaseExportService):
             silo_output_parser=bundled_silo_output_parser,
             output_parser=bundled_output_parser,
             mcp_configs=bundled_mcp_configs,
+            middlewares=bundled_middlewares,
             agent_tools=bundled_agent_tools,
         )

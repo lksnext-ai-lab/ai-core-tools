@@ -151,9 +151,15 @@ async def get_conversation_with_history(
             user_context=user_context
         )
         
+        pending_approval = await ConversationService.get_pending_approval(
+            db=db,
+            conversation_id=conversation_id,
+            user_context=user_context,
+        )
         return ConversationWithHistoryResponse(
             **conversation.to_dict(),
-            messages=history or []
+            messages=history or [],
+            pending_approval=pending_approval,
         )
     except Exception as e:
         logger.error(f"Error retrieving conversation history: {e}")

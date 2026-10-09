@@ -90,6 +90,11 @@ services:
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
 
+      # Agent turns and human approvals (see docker/.env.example)
+      AICT_AGENT_RUN_TIMEOUT_SECONDS: ${AICT_AGENT_RUN_TIMEOUT_SECONDS:-600}
+      HITL_MAX_APPROVAL_TTL_SECONDS: ${HITL_MAX_APPROVAL_TTL_SECONDS:-604800}
+      HITL_EXPIRY_SWEEP_SECONDS: ${HITL_EXPIRY_SWEEP_SECONDS:-60}
+
       # ----------------------------------------------------------------------
       # Pool de procesos uvicorn (ver docker/.env.example para la explicación
       # completa de cada una; backend/Dockerfile las consume en el CMD).
