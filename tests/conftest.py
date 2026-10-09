@@ -139,15 +139,36 @@ def test_engine():
     )
 
     # Runtime safety check: verify we connected to the test DB, not dev/prod.
+    # Accepts the shared `test_db`/`mattin_test_temp` names plus any `test_db_*` variant
+    # (e.g. `test_db_hotfix`) used to isolate a branch's test run from concurrent CI/dev
+    # runs against the shared test DB server on :5433.
     with engine.connect() as conn:
         db_name = conn.execute(text("SELECT current_database()")).scalar()
-        assert db_name in ("test_db", "mattin_test_temp"), (
+        assert db_name in ("test_db", "mattin_test_temp") or db_name.startswith("test_db_"), (
             f"SAFETY: test_engine connected to '{db_name}' instead of test database. "
             f"Aborting to prevent data loss."
         )
 
     Base.metadata.create_all(bind=engine)
+
+    # a2a-sdk tables (a2a_tasks/a2a_task_events/a2a_task_versions) are NOT part of
+    # Mattin's Base.metadata (AD-2) -- the a2a001 Alembic migration creates them for
+    # real, but this fixture builds the schema via create_all, not Alembic, so they
+    # need their own create_all against the registry that is the schema source of
+    # truth. get_sdk_metadata() also guarantees the three model classes have been
+    # declared (they are memoized, so this is safe to call once per session).
+    # The Mattin-owned ix_a2a_tasks_last_updated index (not part of the SDK mixins;
+    # see a2a001's upgrade()) is declared ON the registry's `a2a_tasks` model itself
+    # (sdk_models.get_sdk_models()), so create_all below creates it too -- no
+    # second, ad-hoc declaration here.
+    from services.a2a_server.sdk_models import get_sdk_metadata
+
+    sdk_metadata = get_sdk_metadata()
+    sdk_metadata.create_all(bind=engine)
+
     yield engine
+
+    sdk_metadata.drop_all(bind=engine)
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
 

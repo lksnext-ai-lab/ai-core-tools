@@ -95,6 +95,75 @@ services:
       HITL_MAX_APPROVAL_TTL_SECONDS: ${HITL_MAX_APPROVAL_TTL_SECONDS:-604800}
       HITL_EXPIRY_SWEEP_SECONDS: ${HITL_EXPIRY_SWEEP_SECONDS:-60}
 
+      # ----------------------------------------------------------------------
+      # Pool de procesos uvicorn (ver docker/.env.example para la explicación
+      # completa de cada una; backend/Dockerfile las consume en el CMD).
+      # These were previously documented-only (.env.example) but never
+      # actually reached the container — docker-compose.yaml has no
+      # `env_file:` for backend, only this explicit `environment:` list, so a
+      # var only takes effect once it is listed here (step_021).
+      # ----------------------------------------------------------------------
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      UVICORN_LIMIT_CONCURRENCY: ${UVICORN_LIMIT_CONCURRENCY:-100}
+      # RB-15: ventana de apagado ordenado tras SIGTERM (debe quedar por
+      # debajo de `stop_grace_period` menos el timeout interno de
+      # close_runtime, ver ese comentario más abajo en este mismo servicio).
+      UVICORN_GRACEFUL_SHUTDOWN_SECONDS: ${UVICORN_GRACEFUL_SHUTDOWN_SECONDS:-20}
+      # RB-9/RB-16: NUNCA '*'. Por defecto, el rango RFC1918 completo — ver el
+      # comentario junto al CMD en backend/Dockerfile para el modelo de
+      # confianza completo (backend:8000 nunca se publica al host; solo
+      # Caddy, en la práctica, usa esta red para llegar a él) y por qué ya no
+      # fijamos una subred concreta (chocaba con multi-entorno local y con
+      # cualquier daemon Docker cuyo pool por defecto cae en 172.16/12).
+      UVICORN_FORWARDED_ALLOW_IPS: ${UVICORN_FORWARDED_ALLOW_IPS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+
+      # ----------------------------------------------------------------------
+      # A2A (Agent2Agent protocol) server — ver docker/.env.example para la
+      # tabla completa con comentarios; fuente de verdad del código (y de
+      # estos mismos defaults, que la reflejan, no al revés):
+      # backend/utils/a2a_config.py (AD-15), backend/services/rate_limit_service.py
+      # (limitador de descubrimiento) y backend/utils/security.py (TTL de URLs
+      # firmadas). Todas opcionales: sin definir, el backend usa los defaults
+      # de ese módulo.
+      # ----------------------------------------------------------------------
+      A2A_ENABLED: ${A2A_ENABLED:-true}
+      A2A_ENABLE_V0_3_COMPAT: ${A2A_ENABLE_V0_3_COMPAT:-true}
+      A2A_ROOT_AGENT: ${A2A_ROOT_AGENT:-}
+      # Vacío por defecto: cae a FRONTEND_URL (arriba) y, si tampoco está,
+      # al Host header de la petición entrante (inseguro para tarjetas
+      # cacheadas detrás de un proxy no confiable — fijar esto en producción).
+      A2A_PUBLIC_BASE_URL: ${A2A_PUBLIC_BASE_URL:-}
+      A2A_DISCOVERY_RATE_LIMIT_PER_MINUTE: ${A2A_DISCOVERY_RATE_LIMIT_PER_MINUTE:-60}
+      A2A_DISCOVERY_MAX_TRACKED_KEYS: ${A2A_DISCOVERY_MAX_TRACKED_KEYS:-100000}
+      A2A_DISCOVERY_OVERFLOW_MULTIPLIER: ${A2A_DISCOVERY_OVERFLOW_MULTIPLIER:-100}
+      A2A_RPC_PREAUTH_RATE_LIMIT_PER_MINUTE: ${A2A_RPC_PREAUTH_RATE_LIMIT_PER_MINUTE:-300}
+      A2A_MAX_REQUEST_MB: ${A2A_MAX_REQUEST_MB:-32}
+      A2A_NON_SEND_MAX_BODY_BYTES: ${A2A_NON_SEND_MAX_BODY_BYTES:-65536}
+      A2A_MAX_FILE_MB: ${A2A_MAX_FILE_MB:-10}
+      A2A_INLINE_FILE_MAX_BYTES: ${A2A_INLINE_FILE_MAX_BYTES:-5242880}
+      A2A_FILE_URL_TTL_SECONDS: ${A2A_FILE_URL_TTL_SECONDS:-3600}
+      A2A_FILE_URL_MAX_TTL_SECONDS: ${A2A_FILE_URL_MAX_TTL_SECONDS:-86400}
+      A2A_URI_FETCH_TIMEOUT_SECONDS: ${A2A_URI_FETCH_TIMEOUT_SECONDS:-15}
+      A2A_MAX_PARTS: ${A2A_MAX_PARTS:-64}
+      A2A_MAX_FILE_PARTS: ${A2A_MAX_FILE_PARTS:-10}
+      A2A_TASK_RETENTION_DAYS: ${A2A_TASK_RETENTION_DAYS:-30}
+      A2A_TASK_TIMEOUT_SECONDS: ${A2A_TASK_TIMEOUT_SECONDS:-900}
+      A2A_TURN_MAX_SECONDS: ${A2A_TURN_MAX_SECONDS:-900}
+      A2A_SWEEP_INTERVAL_SECONDS: ${A2A_SWEEP_INTERVAL_SECONDS:-600}
+      A2A_EVENT_RETENTION_MINUTES: ${A2A_EVENT_RETENTION_MINUTES:-15}
+      A2A_EVENT_POLL_SECONDS: ${A2A_EVENT_POLL_SECONDS:-0.5}
+      A2A_STREAM_COALESCE_MS: ${A2A_STREAM_COALESCE_MS:-250}
+      A2A_KEEPALIVE_SECONDS: ${A2A_KEEPALIVE_SECONDS:-1.0}
+      A2A_PURGE_GRACE_SECONDS: ${A2A_PURGE_GRACE_SECONDS:-5}
+      A2A_STREAM_MAX_SECONDS: ${A2A_STREAM_MAX_SECONDS:-1800}
+      A2A_STREAM_LIVENESS_SECONDS: ${A2A_STREAM_LIVENESS_SECONDS:-5.0}
+      A2A_MAX_CONCURRENT_STREAMS_PER_APP: ${A2A_MAX_CONCURRENT_STREAMS_PER_APP:-10}
+      A2A_MAX_CONCURRENT_STREAMS_PER_KEY: ${A2A_MAX_CONCURRENT_STREAMS_PER_KEY:-5}
+      A2A_MAX_CONCURRENT_STREAMS_WORKER: ${A2A_MAX_CONCURRENT_STREAMS_WORKER:-40}
+      A2A_STATUS_UPDATES: ${A2A_STATUS_UPDATES:-false}
+      A2A_SDK_DEBUG: ${A2A_SDK_DEBUG:-false}
+      ALEMBIC_LOCK_TIMEOUT: ${ALEMBIC_LOCK_TIMEOUT:-5s}
+
       # Sandbox provider (IT-2). Default must be a provider actually registered
       # in backend/tools/sandbox/factory.py (opensandbox/daytona/e2b) — 'subprocess'
       # was removed and is no longer a valid provider name.
@@ -148,6 +217,24 @@ services:
     networks:
       - mattin-network
     restart: unless-stopped
+    # fix round 1, LOW: the exec'd uvicorn (backend/Dockerfile) is PID 1 and
+    # receives SIGTERM directly (RB-15), but a plain process that is PID 1
+    # does not reap zombie processes the way an init system would, and
+    # uvicorn's own multi-worker supervisor forks child worker processes.
+    # `init: true` runs Docker's built-in tini as the real PID 1, which
+    # forwards signals (including SIGTERM) to uvicorn and reaps zombies —
+    # verified in the step_021 smoke test that `docker stop` still runs the
+    # full FastAPI lifespan shutdown with this enabled.
+    init: true
+    # RB-15: debe superar UVICORN_GRACEFUL_SHUTDOWN_SECONDS (default 20s) más
+    # el timeout interno de close_runtime (10s fijo,
+    # backend/services/a2a_server/runtime.py) más margen para el resto de
+    # pasos del lifespan (DBOS, crawl/file-cleanup/SharePoint workers,
+    # checkpointer, LangSmith flush — ver backend/main.py). Si Docker mata
+    # con SIGKILL antes de que uvicorn complete su propio apagado, el
+    # lifespan `shutdown` nunca corre y las tareas A2A en curso de este
+    # worker quedan sin marcarse como FAILED (RB-1).
+    stop_grace_period: 45s
 
   frontend:
     image: ghcr.io/lksnext-ai-lab/mattinai-frontend:${IMAGE_TAG:-develop}
@@ -271,6 +358,30 @@ services:
     image: caddy:2-alpine
     ports:
       - "${HTTP_PORT:-80}:80"
+    environment:
+      # RB-9/RB-16 (step_021): the A2A route's own request-body ceiling. See
+      # docker/Caddyfile for how it's used (`{$VAR:default}` interpolation) —
+      # this compose default mirrors the Caddyfile's own fallback, so the
+      # container always receives a concrete, non-empty value even when
+      # unset in .env (an empty-but-set env var would NOT fall back to the
+      # Caddyfile's inline default, it would make `max_size` empty and
+      # invalid). There is deliberately no read-body *timeout* variable here
+      # (fix round 1, C1) — see docker/Caddyfile's comment on the @a2a block.
+      # Headroom above A2A_MAX_REQUEST_MB (backend default 32MB) for the
+      # base64 encoding of inline FileParts plus the JSON-RPC envelope; keep
+      # this in sync if you raise A2A_MAX_REQUEST_MB. The backend's own cap
+      # (read_body_capped, utils/a2a_config.py) is the authoritative,
+      # precise one — this is only a blunt perimeter guard.
+      A2A_CADDY_MAX_REQUEST_BODY: ${A2A_CADDY_MAX_REQUEST_BODY:-40MB}
+      # Optional: trusted reverse-proxy/LB CIDR(s) in FRONT of Caddy
+      # (space-separated), only needed if this Caddy instance is itself
+      # behind another proxy/load balancer — NOT the default single-host
+      # deployment. See docker/Caddyfile's top comment and
+      # docker/.env.example for the full write-up. Empty by default, which
+      # keeps Caddy's default behaviour (replace client X-Forwarded-For with
+      # the real peer address) — verified with `caddy validate` to parse
+      # identically to omitting the directive.
+      CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -284,6 +395,14 @@ services:
 
 networks:
   mattin-network:
+    # fix round 1 (H1/M1): no fixed `ipam.config` subnet here on purpose —
+    # pinning one forced Compose to recreate this network (and therefore
+    # restart every attached container) on any config change, collided with
+    # running more than one Mattin stack on the same host at once, and could
+    # collide with a host whose Docker daemon's own default address pool
+    # already uses part of 172.16/12. uvicorn's `--forwarded-allow-ips`
+    # (backend/Dockerfile) instead trusts the whole RFC1918 range by default,
+    # which doesn't need this network's subnet to be deterministic.
     driver: bridge
   # Isolated network for spawned OpenSandbox sandbox containers (the ones that
   # actually run LLM-generated code). It carries no route to backend,

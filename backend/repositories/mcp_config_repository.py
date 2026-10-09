@@ -20,6 +20,21 @@ class MCPConfigRepository:
         ).first()
 
     @staticmethod
+    def get_valid_config_ids_for_app(db: Session, config_ids: List[int], app_id: int) -> List[int]:
+        """Filter ``config_ids`` down to those that exist and belong to ``app_id``.
+
+        Used to scope agent-to-MCPConfig associations: without this filter, a caller
+        could attach another tenant's MCP config to their own agent (IDOR).
+        """
+        if not config_ids:
+            return []
+        query = db.query(MCPConfig.config_id).filter(
+            MCPConfig.config_id.in_(config_ids),
+            MCPConfig.app_id == app_id
+        )
+        return [id for (id,) in query]
+
+    @staticmethod
     def create(db: Session, config: MCPConfig) -> MCPConfig:
         """Create a new MCP config"""
         db.add(config)

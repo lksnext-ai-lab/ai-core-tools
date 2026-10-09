@@ -10,6 +10,7 @@ from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
 from schemas.export_schemas import (
     AgentExportFileSchema,
+    ExportAgentSchema,
     MCPConfigExportFileSchema,
 )
 from schemas.import_schemas import (
@@ -36,6 +37,34 @@ from utils.schema_utils import sanitize_identifier
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _a2a_import_fields(agent_schema: ExportAgentSchema) -> Dict[str, object]:
+    """Build the A2A (Agent2Agent protocol) field kwargs for an imported agent.
+
+    Single source of truth for FR-24 / AC-39: every A2A field is restored from
+    the export file as-is, **except** ``a2a_enabled``, which is always forced
+    to ``False``. An imported agent must be re-enabled for A2A explicitly by
+    its new owner; it must never come back enabled just because it was enabled
+    in the source app. Used identically by both ``Agent``/``OCRAgent``
+    construction (as ``**kwargs``) and the ``OVERRIDE`` conflict-mode update
+    path (via ``setattr``), so the two paths cannot silently drift apart.
+
+    Args:
+        agent_schema: The ``ExportAgentSchema`` parsed from the import file.
+
+    Returns:
+        Dict[str, object]: Keyword arguments / attribute names matching the
+        ``Agent`` model's ``a2a_*`` columns.
+    """
+    return {
+        "a2a_enabled": False,
+        "a2a_card_visibility": agent_schema.a2a_card_visibility,
+        "a2a_name_override": agent_schema.a2a_name_override,
+        "a2a_description_override": agent_schema.a2a_description_override,
+        "a2a_skill_tags": list(agent_schema.a2a_skill_tags or []),
+        "a2a_examples": list(agent_schema.a2a_examples or []),
+    }
 
 
 class AgentImportService:
@@ -772,7 +801,19 @@ class AgentImportService:
                     export_data.agent.memory_summarize_threshold
                 )
                 existing_agent.temperature = export_data.agent.temperature
-                
+
+                # Restore A2A fields (FR-24, AC-39) via the shared helper, so
+                # this path and the create paths below can never drift apart
+                # on the "always force a2a_enabled=False" rule.
+                was_a2a_enabled = existing_agent.a2a_enabled
+                for field_name, value in _a2a_import_fields(export_data.agent).items():
+                    setattr(existing_agent, field_name, value)
+                if was_a2a_enabled:
+                    warnings.append(
+                        "A2A exposure disabled by import; re-enable it in the "
+                        "agent settings."
+                    )
+
                 # Update OCR-specific fields if present
                 if hasattr(existing_agent, 'vision_system_prompt'):
                     existing_agent.vision_system_prompt = (
@@ -867,6 +908,9 @@ class AgentImportService:
                 create_date=datetime.now(),
                 request_count=0,
                 is_tool=bool(export_data.agent.is_tool),
+                # A2A fields restored (FR-24, AC-39) via the shared helper;
+                # a2a_enabled is always forced to False there.
+                **_a2a_import_fields(export_data.agent),
             )
         else:
             new_agent = Agent(
@@ -890,6 +934,9 @@ class AgentImportService:
                 request_count=0,
                 is_tool=bool(export_data.agent.is_tool),
                 type="agent",
+                # A2A fields restored (FR-24, AC-39) via the shared helper;
+                # a2a_enabled is always forced to False there.
+                **_a2a_import_fields(export_data.agent),
             )
 
         self.session.add(new_agent)

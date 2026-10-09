@@ -517,6 +517,214 @@ class TestSandboxServiceIdValidation:
 
 
 # ---------------------------------------------------------------------------
+# Cross-tenant referenced-resource-id validation (IDOR fix, Fix A)
+# ---------------------------------------------------------------------------
+
+class TestReferencedResourceIdValidation:
+    """Test that create_or_update_agent rejects ids owned by a different app."""
+
+    def _base_agent_data(self, **overrides) -> dict:
+        data = {
+            'agent_id': 0,
+            'app_id': 1,
+            'name': 'Agent',
+            'description': 'Test',
+            'system_prompt': 'Test prompt',
+            'prompt_template': None,
+            'status': None,
+            'service_id': None,
+            'silo_id': None,
+            'output_parser_id': None,
+            'has_memory': False,
+            'temperature': 0.7,
+            'is_tool': False,
+            'vision_service_id': None,
+            'vision_system_prompt': None,
+            'text_system_prompt': None,
+        }
+        data.update(overrides)
+        return data
+
+    def test_rejects_service_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(service_id=5)
+
+        other_app_service = MagicMock()
+        other_app_service.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=other_app_service,
+        )
+
+        with pytest.raises(ValueError, match="service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_system_wide_service_id(self, mocker):
+        """A service_id with app_id=None (system-scoped AI service) is allowed for any app."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(service_id=5)
+
+        system_service = MagicMock()
+        system_service.app_id = None
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=system_service,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 20
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+        assert result == 20
+
+    def test_rejects_nonexistent_service_id(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(service_id=999)
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=None,
+        )
+
+        with pytest.raises(ValueError, match="service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_rejects_silo_id_from_a_different_app(self, mocker):
+        """silo_id has no system-wide exception: it must strictly match app_id."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(silo_id=7)
+
+        other_app_silo = MagicMock()
+        other_app_silo.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.silo_repository.SiloRepository.get_by_id',
+            return_value=other_app_silo,
+        )
+
+        with pytest.raises(ValueError, match="silo_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_silo_id_from_the_same_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(silo_id=7)
+
+        same_app_silo = MagicMock()
+        same_app_silo.app_id = 1
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.silo_repository.SiloRepository.get_by_id',
+            return_value=same_app_silo,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 21
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+        assert result == 21
+
+    def test_rejects_output_parser_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(output_parser_id=9)
+
+        other_app_parser = MagicMock()
+        other_app_parser.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.output_parser_repository.OutputParserRepository.get_by_id',
+            return_value=other_app_parser,
+        )
+
+        with pytest.raises(ValueError, match="output_parser_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_rejects_media_embedding_service_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(media_embedding_service_id=11)
+
+        other_app_embedding = MagicMock()
+        other_app_embedding.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.embedding_service_repository.EmbeddingServiceRepository.get_by_id',
+            return_value=other_app_embedding,
+        )
+
+        with pytest.raises(ValueError, match="media_embedding_service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_system_wide_media_embedding_service_id(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(media_embedding_service_id=11)
+
+        system_embedding = MagicMock()
+        system_embedding.app_id = None
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.embedding_service_repository.EmbeddingServiceRepository.get_by_id',
+            return_value=system_embedding,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 22
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+        assert result == 22
+
+    def test_rejects_vision_service_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(vision_service_id=13)
+
+        other_app_service = MagicMock()
+        other_app_service.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=other_app_service,
+        )
+
+        with pytest.raises(ValueError, match="vision_service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_update_rejects_existing_agent_with_null_app_id(self, mocker):
+        """LOW fix: a NULL agent.app_id on the existing row is also a mismatch, not a bypass."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(agent_id=5, app_id=1)
+
+        existing_agent = make_agent(agent_id=5)
+        existing_agent.app_id = None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_agent_by_id_and_type',
+            return_value=existing_agent,
+        )
+
+        with pytest.raises(ValueError, match="does not belong to app"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+
+# ---------------------------------------------------------------------------
 # update_agent_tools
 # ---------------------------------------------------------------------------
 
@@ -556,8 +764,26 @@ class TestUpdateAgentTools:
         mocker.patch('services.agent_service.AgentRepository.delete_agent_tool_association')
         
         service.update_agent_tools(db, agent_id=1, tool_ids=[])
-        
+
         # Should delete the old association
+
+    def test_scopes_valid_tool_lookup_to_the_agents_app(self, mocker):
+        """update_agent_tools must pass the agent's app_id down to the repository filter
+        (cross-tenant tool-agent attachment / IDOR guard)."""
+        db = MagicMock()
+        service = AgentService()
+        agent = make_agent(agent_id=1, app_id=7)
+
+        mocker.patch('services.agent_service.AgentRepository.get_by_id', return_value=agent)
+        mocker.patch('services.agent_service.AgentRepository.get_agent_tool_associations', return_value=[])
+        mock_get_valid = mocker.patch(
+            'services.agent_service.AgentRepository.get_valid_tool_ids', return_value=[2]
+        )
+        mocker.patch('services.agent_service.AgentRepository.create_agent_tool_association')
+
+        service.update_agent_tools(db, agent_id=1, tool_ids=[2, 99])
+
+        mock_get_valid.assert_called_once_with(db, [2, 99], 7)
 
 
 # ---------------------------------------------------------------------------
@@ -571,15 +797,39 @@ class TestUpdateAgentMCPs:
         """Adding MCPs creates new associations."""
         db = MagicMock()
         service = AgentService()
-        agent = make_agent(agent_id=1)
-        
+        agent = make_agent(agent_id=1, app_id=1)
+
         mocker.patch('services.agent_service.AgentRepository.get_by_id', return_value=agent)
         mocker.patch('services.agent_service.AgentRepository.get_agent_mcp_associations', return_value=[])
-        mocker.patch('services.agent_service.AgentRepository.create_agent_mcp_association')
-        
+        mocker.patch(
+            'repositories.mcp_config_repository.MCPConfigRepository.get_valid_config_ids_for_app',
+            return_value=[2, 3],
+        )
+        mock_create = mocker.patch('services.agent_service.AgentRepository.create_agent_mcp_association')
+
         service.update_agent_mcps(db, agent_id=1, mcp_ids=[2, 3])
-        
-        # Should create associations
+
+        # Should create an association per valid MCP id
+        assert mock_create.call_count == 2
+
+    def test_drops_mcp_ids_from_a_different_app(self, mocker):
+        """MCP ids that don't belong to the agent's app are silently dropped (IDOR guard)."""
+        db = MagicMock()
+        service = AgentService()
+        agent = make_agent(agent_id=1, app_id=1)
+
+        mocker.patch('services.agent_service.AgentRepository.get_by_id', return_value=agent)
+        mocker.patch('services.agent_service.AgentRepository.get_agent_mcp_associations', return_value=[])
+        # Repository filter rejects every requested id (none belong to app 1).
+        mocker.patch(
+            'repositories.mcp_config_repository.MCPConfigRepository.get_valid_config_ids_for_app',
+            return_value=[],
+        )
+        mock_create = mocker.patch('services.agent_service.AgentRepository.create_agent_mcp_association')
+
+        service.update_agent_mcps(db, agent_id=1, mcp_ids=[99])
+
+        mock_create.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

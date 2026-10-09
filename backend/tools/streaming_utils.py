@@ -1,10 +1,12 @@
 """
 SSE (Server-Sent Events) utilities for streaming LangGraph agent responses.
 
-Provides event type constants, formatting helpers, and a mapping function that
-translates raw LangGraph astream chunks into our normalized SSE event dicts.
+Provides event type constants, formatting helpers, a typed event dataclass
+(``AgentStreamEvent``), and a mapping function that translates raw LangGraph
+astream chunks into our normalized SSE event dicts.
 
-Usage example:
+Usage example (the canonical streaming seam, ``AgentStreamingService.
+stream_agent_events``):
     async for mode, chunk in agent_chain.astream(
         {"messages": messages},
         config=config,
@@ -13,15 +15,77 @@ Usage example:
         events = map_stream_event(mode, chunk)
         if events:
             for event in events:
-                yield format_sse_event(event["type"], event["data"])
+                yield AgentStreamEvent(event["type"], event["data"])
+
+A thin SSE bridge then renders each ``AgentStreamEvent`` as
+``format_sse_event(ev.type, ev.data)`` for HTTP/SSE clients.
 """
 
 import json
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Optional, TypedDict
 
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Typed stream event (AD-5 streaming seam)
+# ---------------------------------------------------------------------------
+
+
+class DoneExtra(TypedDict):
+    """``extra`` payload shape for a ``done`` :class:`AgentStreamEvent`."""
+
+    structured: bool
+    parsed_response: Any
+    files_data: list
+    conversation_id: Optional[int]
+
+
+class ErrorExtra(TypedDict, total=False):
+    """``extra`` payload shape for an ``error`` :class:`AgentStreamEvent`.
+
+    ``error_kind`` is a stable, small, closed vocabulary a non-SSE consumer
+    can switch on without string-matching ``error_code`` (which mirrors the
+    raw exception class name or a specific internal code and is not meant to
+    be exhaustive). ``status_code``/``detail`` are only present when
+    ``error_kind == "http"``.
+    """
+
+    error_code: Optional[str]
+    error_kind: str
+    status_code: int
+    detail: Optional[str]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentStreamEvent:
+    """A single typed event yielded by ``AgentStreamingService.stream_agent_events``.
+
+    This is the canonical, non-SSE representation of one streamed agent
+    update; a thin presentation-layer bridge renders each instance as a
+    ``format_sse_event(ev.type, ev.data)`` string for HTTP/SSE clients, and
+    other, non-SSE consumers can read this dataclass directly instead.
+
+    Attributes:
+        type: One of the ``SSE_*`` constants in this module (``metadata``,
+            ``token``, ``thinking``, ``tool_start``, ``tool_end``,
+            ``code_output``, ``done``, ``error``).
+        data: The exact payload that would be serialized under the SSE
+            event's ``"data"`` key. Payload fields a consumer would also see
+            over SSE always live here.
+        extra: Side-channel data a non-SSE bridge needs but that is never
+            serialized to SSE — see :class:`DoneExtra` and :class:`ErrorExtra`
+            for the two shapes it takes. ``None`` for every intermediate
+            event (``metadata``/``token``/``thinking``/``tool_start``/
+            ``tool_end``/``code_output``).
+    """
+
+    type: str
+    data: dict
+    extra: DoneExtra | ErrorExtra | None = None
+
 
 # ---------------------------------------------------------------------------
 # SSE Event Type constants

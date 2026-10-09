@@ -1,10 +1,7 @@
 import base64
 import hashlib
-import httpx
 import io
-import ipaddress
 import mimetypes
-import socket
 import time
 import uuid
 import json
@@ -23,6 +20,8 @@ from tools.stream_guard import guard_agent_stream
 from services.agent_service import AgentService
 from services.file_management_service import FileManagementService
 from utils.logger import get_logger
+from utils import ssrf_guard
+from utils.ssrf_guard import FetchError, FetchTooLargeError, FetchUnresolvableError, SsrfBlockedError, fetch_bytes
 
 from .auth import get_openai_api_key_auth, validate_api_key_for_app, create_api_key_user_context
 from .schemas_openai import (
@@ -75,13 +74,29 @@ def _response_format_instruction(response_format: dict | None) -> str | None:
 _MAX_IMAGE_DOWNLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
-def _validate_image_url(url: str) -> None:
-    """Raise HTTPException(400) for URLs that could be used for SSRF.
+def _sanitized_url_for_log(url: str) -> str:
+    """Return only the scheme and host of *url*, for safe logging.
 
-    Checks performed:
-    - Scheme must be http or https (blocks file://, ftp://, gopher://, etc.).
-    - Hostname must resolve and must not be a private, loopback, link-local,
-      multicast, or otherwise reserved address (RFC 1918 / RFC 4193 / etc.).
+    Drops userinfo, port, path, query and fragment, any of which could carry
+    sensitive data (e.g. a pre-signed query string) that must not be logged.
+    """
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else "<invalid-url>"
+
+
+def _validate_image_url(url: str) -> None:
+    """Raise HTTPException(400) for a structurally invalid image URL.
+
+    This is a fast, non-resolving pre-check only: scheme and hostname
+    presence (``ssrf_guard.check_scheme_and_host`` never performs DNS
+    resolution, so it's safe to call inline here, outside any deadline). It
+    does **not** check whether the host resolves to a blocked address — that
+    requires a resolver call, which must happen inside ``fetch_bytes``'s
+    single timeout budget, not here. The actual download in
+    ``chat_completions`` goes through ``utils.ssrf_guard.fetch_bytes``, which
+    resolves, validates and pins every connection (including every redirect
+    hop) at fetch time; its ``SsrfBlockedError``/``FetchUnresolvableError``
+    are mapped to the equivalent 400 responses at the call site below.
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -94,28 +109,9 @@ def _validate_image_url(url: str) -> None:
     if not hostname:
         raise HTTPException(status_code=400, detail="Image URL has no hostname.")
 
-    try:
-        # Resolve to an IP address (IPv4 or IPv6).
-        addr_str = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)[0][4][0]
-        addr = ipaddress.ip_address(addr_str)
-    except (socket.gaierror, ValueError) as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Image URL hostname could not be resolved: {exc}",
-        )
-
-    if (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_multicast
-        or addr.is_reserved
-        or addr.is_unspecified
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Image URL resolves to a private or reserved IP address and is not allowed.",
-        )
+    result = ssrf_guard.check_scheme_and_host(url, allowed_schemes=("http", "https"))
+    if result is not None:
+        raise HTTPException(status_code=400, detail=result.message)
 
 def get_app_by_identifier(db: Session, app_identifier: str) -> App:
     if app_identifier.isdigit():
@@ -273,36 +269,41 @@ async def chat_completions(
                             logger.error(f"Failed to parse base64 image: {e}")
                             continue
                     elif url.startswith("http"):
+                        byte_cap = (
+                            max_image_size_mb * 1024 * 1024
+                            if max_image_size_mb > 0
+                            else _MAX_IMAGE_DOWNLOAD_BYTES
+                        )
                         try:
                             _validate_image_url(url)
-                            byte_cap = (
-                                max_image_size_mb * 1024 * 1024
-                                if max_image_size_mb > 0
-                                else _MAX_IMAGE_DOWNLOAD_BYTES
-                            )
-                            chunks: list[bytes] = []
-                            total = 0
-                            async with httpx.AsyncClient() as client:
-                                async with client.stream("GET", url, timeout=10.0) as resp:
-                                    resp.raise_for_status()
-                                    content_type = resp.headers.get("content-type", "image/jpeg")
-                                    ext = mimetypes.guess_extension(content_type) or ".jpg"
-                                    async for chunk in resp.aiter_bytes(chunk_size=65536):
-                                        total += len(chunk)
-                                        if total > byte_cap:
-                                            raise HTTPException(
-                                                status_code=413,
-                                                detail=(
-                                                    f"Remote image exceeds the maximum allowed size "
-                                                    f"({byte_cap // (1024 * 1024)}MB)."
-                                                ),
-                                            )
-                                        chunks.append(chunk)
-                            img_data = b"".join(chunks)
+                            fetched = await fetch_bytes(url, max_bytes=byte_cap, timeout_s=10.0)
+                            content_type = fetched.media_type or "image/jpeg"
+                            ext = mimetypes.guess_extension(content_type) or ".jpg"
+                            img_data = fetched.content
                         except HTTPException:
                             raise
-                        except Exception as e:
-                            logger.error(f"Failed to download image URL {url}: {e}")
+                        except FetchUnresolvableError as e:
+                            logger.error(f"Could not resolve image URL host {_sanitized_url_for_log(url)}: {e}")
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Image URL hostname could not be resolved: {e}",
+                            )
+                        except SsrfBlockedError as e:
+                            logger.error(f"Refused to download image URL {_sanitized_url_for_log(url)}: {e}")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Image URL resolves to a private or reserved IP address and is not allowed.",
+                            )
+                        except FetchTooLargeError:
+                            raise HTTPException(
+                                status_code=413,
+                                detail=(
+                                    f"Remote image exceeds the maximum allowed size "
+                                    f"({byte_cap // (1024 * 1024)}MB)."
+                                ),
+                            )
+                        except FetchError as e:
+                            logger.error(f"Failed to download image URL {_sanitized_url_for_log(url)}: {e}")
                             continue
 
                     if img_data:

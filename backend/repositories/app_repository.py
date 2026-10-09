@@ -16,6 +16,20 @@ class AppRepository:
         """Get a specific app by ID"""
         return self.db.query(App).filter(App.app_id == app_id).first()
 
+    def get_slug_by_id(self, app_id: int) -> Optional[str]:
+        """Return only the app's slug, without loading the full App row.
+
+        Used where only the slug is needed (e.g. building A2A URLs): a
+        ``with_entities`` projection avoids fetching every App column.
+        """
+        row = (
+            self.db.query(App)
+            .with_entities(App.slug)
+            .filter(App.app_id == app_id)
+            .first()
+        )
+        return row[0] if row else None
+
     def get_all(self) -> List[App]:
         """Get all apps."""
         return self.db.query(App).all()

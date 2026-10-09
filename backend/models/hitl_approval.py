@@ -31,6 +31,7 @@ class ApprovalChannel(str, enum.Enum):
     OPENAI_COMPAT = "openai_compat"
     MCP = "mcp"
     SCHEDULED = "scheduled"
+    A2A = "a2a"
 
 
 INTERACTIVE_CHANNELS = (ApprovalChannel.PLAYGROUND, ApprovalChannel.MARKETPLACE, ApprovalChannel.PUBLIC_API)

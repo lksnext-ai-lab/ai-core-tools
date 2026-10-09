@@ -4,6 +4,7 @@ from models.app import App
 from repositories.app_repository import AppRepository
 from repositories.app_collaboration_repository import AppCollaborationRepository
 from datetime import datetime
+from services.a2a_server.lifecycle_service import schedule_owner_purge
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -227,10 +228,11 @@ class AppService:
                 return False
 
             success = self.app_repo.delete(app)
-            
+
             if success:
                 logger.info(f"Successfully deleted app {app_id} and all related data")
-            
+                schedule_owner_purge(app_id)  # FR-22/AD-10: app-wide A2A purge; sync, never raises
+
             return success
                 
         except Exception as e:

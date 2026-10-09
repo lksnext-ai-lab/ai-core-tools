@@ -1062,8 +1062,10 @@ class AgentExecutionService:
         if not agent:
             raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
 
-        # 2. Access validation
-        await self._validate_agent_access(agent, user_context)
+        # 2. Access to this agent (app/tenant ownership, API key scope, etc.) is
+        # verified by the caller (router) before this service is ever invoked —
+        # see e.g. `_get_agent_or_404` in routers/internal/agents.py or
+        # `validate_agent_ownership` in routers/public/v1 — so no redundant check here.
 
         # 3. Frozen-state guard (SaaS mode)
         if getattr(agent, 'is_frozen', False):
@@ -1614,9 +1616,9 @@ class AgentExecutionService:
             if not agent or not isinstance(agent, OCRAgent):
                 raise HTTPException(status_code=404, detail="OCR Agent not found")
             
-            # Validate user has access to this agent
-            await self._validate_agent_access(agent, user_context)
-            
+            # Access to this agent is verified by the caller (router) before this
+            # service is invoked.
+
             # Validate PDF file
             if not pdf_file.filename.lower().endswith('.pdf'):
                 raise HTTPException(status_code=400, detail="Only PDF files are allowed")
@@ -1686,8 +1688,8 @@ class AgentExecutionService:
             if not agent:
                 raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
             
-            # Validate user has access to this agent
-            await self._validate_agent_access(agent, user_context)
+            # Access to this agent is verified by the caller (router) before this
+            # service is invoked.
 
             from services.conversation_service import ConversationService
 
@@ -1833,9 +1835,9 @@ class AgentExecutionService:
             if not agent:
                 raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
             
-            # Validate user has access to this agent
-            await self._validate_agent_access(agent, user_context)
-            
+            # Access to this agent is verified by the caller (router) before this
+            # service is invoked.
+
             # Get conversation history if memory enabled
             if agent.has_memory:
                 # Get the session to find the session_id
@@ -1912,12 +1914,6 @@ class AgentExecutionService:
         except Exception as e:
             logger.error(f"Error getting conversation history: {str(e)}")
             return []
-    
-    async def _validate_agent_access(self, agent: Agent, user_context: Dict):
-        """Validate user has access to the agent"""
-        # TODO: Implement proper access validation
-        # For now, just log the validation
-        logger.info(f"Validating access for agent {agent.agent_id} with context {user_context}")
     
     async def _process_files_for_agent(self, files: List[UploadFile], agent: Agent) -> List[Dict]:
         """Process files for agent consumption using existing PDF tools"""

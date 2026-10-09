@@ -416,13 +416,13 @@ class TestUpdateAgent:
     def test_update_agent_returns_404_for_missing_agent(
         self, client, fake_app, owner_headers
     ):
-        """Posting to non-existent agent_id performs upsert (creates new agent)."""
+        """Posting to an agent_id that does not exist in the app returns 404 (no upsert, #269)."""
         response = client.post(
             f"/internal/apps/{fake_app.app_id}/agents/99999",
             json=agent_payload(),
             headers=owner_headers,
         )
-        assert response.status_code == 200  # upsert: agent is created
+        assert response.status_code == 404
 
     def test_update_agent_requires_authentication(
         self, client, fake_app, fake_agent, db

@@ -11,6 +11,7 @@ class ConversationSource(enum.Enum):
     MARKETPLACE = "marketplace"
     API = "api"
     SCHEDULED_TASK = "scheduled_task"
+    A2A = "a2a"
 
 
 class Conversation(Base):

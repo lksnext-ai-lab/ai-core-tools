@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
-import { apiService, type ScheduledTask } from '../services/api';
+import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
@@ -18,6 +18,10 @@ import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
+import { AgentA2ASettings } from '../components/forms/AgentA2ASettings';
+import type { A2ACardVisibility, AgentA2AFieldErrors, AgentA2AValue } from '../components/forms/AgentA2ASettings';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
 import { randomId } from '../utils/randomId';
 
 // Define the Agent types
@@ -43,6 +47,15 @@ interface Agent {
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
+  // A2A (Agent2Agent protocol) exposure
+  a2a_enabled?: boolean;
+  a2a_card_visibility?: A2ACardVisibility;
+  a2a_name_override?: string | null;
+  a2a_description_override?: string | null;
+  a2a_skill_tags?: string[];
+  a2a_examples?: string[];
+  a2a_card_url?: string | null;
+  a2a_rpc_url?: string | null;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -109,6 +122,13 @@ interface AgentFormData {
   media_chunk_min_duration: number;
   media_chunk_max_duration: number;
   media_chunk_overlap: number;
+  // A2A (Agent2Agent protocol) exposure
+  a2a_enabled: boolean;
+  a2a_card_visibility: A2ACardVisibility;
+  a2a_name_override: string | null;
+  a2a_description_override: string | null;
+  a2a_skill_tags: string[];
+  a2a_examples: string[];
 }
 
 // Output Parser Field Component
@@ -165,6 +185,30 @@ const OutputParserField = ({
   </div>
 );
 
+/**
+ * Pull per-field messages for a2a_* keys out of a FastAPI 422 `detail` array
+ * (each item's `loc` looks like `["body", "a2a_name_override"]`). Returns null
+ * when the error isn't a 422 with any a2a_* location, so callers can fall back
+ * to the generic top-level banner.
+ */
+function extractA2AFieldErrors(err: unknown): AgentA2AFieldErrors | null {
+  if (!(err instanceof ApiError) || err.status !== 422 || !Array.isArray(err.detail)) {
+    return null;
+  }
+  const errors: AgentA2AFieldErrors = {};
+  for (const item of err.detail) {
+    if (!item || typeof item !== 'object') continue;
+    const loc = (item as { loc?: unknown }).loc;
+    const msg = (item as { msg?: unknown }).msg;
+    if (!Array.isArray(loc) || typeof msg !== 'string') continue;
+    const field = loc.find((segment) => typeof segment === 'string' && segment.startsWith('a2a_'));
+    if (typeof field !== 'string') continue;
+    const key = field as keyof AgentA2AFieldErrors;
+    if (!errors[key]) errors[key] = msg;
+  }
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
 function getPageTitle(type: string, isNewAgent: boolean): string {
   if (type === 'ocr_agent') return 'Agente OCR';
   if (isNewAgent) return 'Create Agent';
@@ -187,7 +231,12 @@ function AgentFormPage() {
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
   const mutate = useApiMutation();
+  const { hasMinRole } = useAppRole(appId);
+  const canEditA2A = hasMinRole(AppRole.EDITOR);
   const [agent, setAgent] = useState<Agent | null>(null);
+  const [a2aCardUrl, setA2aCardUrl] = useState<string | null>(null);
+  const [a2aRpcUrl, setA2aRpcUrl] = useState<string | null>(null);
+  const [a2aFieldErrors, setA2aFieldErrors] = useState<AgentA2AFieldErrors>({});
   const [loading, setLoading] = useState(true);
   const [mcpUsage, setMcpUsage] = useState<AgentMCPUsage | null>(null);
   const [showMcpWarning, setShowMcpWarning] = useState(false);
@@ -250,7 +299,13 @@ function AgentFormPage() {
     media_embedding_service_id: undefined,
     media_chunk_min_duration: 30,
     media_chunk_max_duration: 120,
-    media_chunk_overlap: 5
+    media_chunk_overlap: 5,
+    a2a_enabled: false,
+    a2a_card_visibility: 'public',
+    a2a_name_override: null,
+    a2a_description_override: null,
+    a2a_skill_tags: [],
+    a2a_examples: [],
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
@@ -380,8 +435,17 @@ function AgentFormPage() {
         media_forced_language: response.media_forced_language || '',
         media_chunk_min_duration: response.media_chunk_min_duration ?? 30,
         media_chunk_max_duration: response.media_chunk_max_duration ?? 120,
-        media_chunk_overlap: response.media_chunk_overlap ?? 5
+        media_chunk_overlap: response.media_chunk_overlap ?? 5,
+        // A2A (Agent2Agent protocol) exposure
+        a2a_enabled: response.a2a_enabled ?? false,
+        a2a_card_visibility: response.a2a_card_visibility ?? 'public',
+        a2a_name_override: response.a2a_name_override ?? null,
+        a2a_description_override: response.a2a_description_override ?? null,
+        a2a_skill_tags: response.a2a_skill_tags ?? [],
+        a2a_examples: response.a2a_examples ?? [],
       });
+      setA2aCardUrl(response.a2a_card_url ?? null);
+      setA2aRpcUrl(response.a2a_rpc_url ?? null);
 
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
@@ -459,6 +523,10 @@ function AgentFormPage() {
         : [...prev.skill_ids, skillId]
     }));
   };
+
+  const handleA2AChange = useCallback((patch: Partial<AgentA2AValue>) => {
+    setFormData(prev => ({ ...prev, ...patch }));
+  }, []);
 
   // Marketplace handlers
   const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
@@ -570,6 +638,20 @@ function AgentFormPage() {
       .filter((f) => f.field && (Array.isArray(f.value) ? f.value.length > 0 : String(f.value ?? '').trim() !== ''))
       .map(({ _key, ...rest }) => rest);
 
+    // The A2A tab is disabled for new agents, so only existing agents send these
+    // fields; a2a_card_visibility must never be sent as null (422 on the backend).
+    const isExistingAgent = Number.parseInt(agentId) !== 0;
+    const a2aFields = isExistingAgent
+      ? {
+          a2a_enabled: formData.a2a_enabled,
+          a2a_card_visibility: formData.a2a_card_visibility,
+          a2a_name_override: formData.a2a_name_override,
+          a2a_description_override: formData.a2a_description_override,
+          a2a_skill_tags: formData.a2a_skill_tags,
+          a2a_examples: formData.a2a_examples.map((example) => example.trim()).filter((example) => example.length > 0),
+        }
+      : {};
+
     const submitData = {
       name: formData.name,
       description: formData.description,
@@ -609,6 +691,7 @@ function AgentFormPage() {
       media_chunk_max_duration: formData.media_chunk_max_duration,
       media_chunk_overlap: formData.media_chunk_overlap,
       app_id: Number.parseInt(appId),
+      ...a2aFields,
     };
 
     const isNew = Number.parseInt(agentId) === 0;
@@ -618,22 +701,37 @@ function AgentFormPage() {
     await handleSaveMarketplaceProfile();
 
     setError(null);
+    setA2aFieldErrors({});
     setSaving(true);
-    const result = await mutate(
-      () =>
-        isNew
-          ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
-          : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData),
-      {
-        loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
-        success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
-      },
-    );
+
+    // Created once so both the toast (via `mutate`) and our own error inspection
+    // below observe the same settled promise instead of issuing the request twice.
+    const submitPromise = isNew
+      ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
+      : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData);
+
+    const result = await mutate(() => submitPromise, {
+      loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
+      success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
+      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
+    });
     setSaving(false);
 
     if (result !== undefined) {
       navigate(`/apps/${appId}/agents`);
+      return;
+    }
+
+    try {
+      await submitPromise;
+    } catch (err) {
+      const a2aErrors = extractA2AFieldErrors(err);
+      if (a2aErrors) {
+        setActiveTab('a2a');
+        setA2aFieldErrors(a2aErrors);
+      }
+      // Keep the existing top-level banner in addition to the per-field messages.
+      setError(errorMessage(err, MESSAGES.SAVE_FAILED('agent')));
     }
   };
 
@@ -659,6 +757,12 @@ function AgentFormPage() {
     { id: 'configuration', label: 'Configuration' },
     { id: 'advanced', label: 'Advanced' },
     { id: 'marketplace', label: 'Marketplace' },
+    {
+      id: 'a2a',
+      label: 'A2A',
+      disabled: isNewAgent,
+      disabledReason: isNewAgent ? 'Save the agent first to configure A2A settings' : undefined,
+    },
     ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
   ];
 
@@ -1871,6 +1975,25 @@ function AgentFormPage() {
               </>
               )}
             </div>
+          )}
+
+          {activeTab === 'a2a' && !isNewAgent && (
+            <AgentA2ASettings
+              appId={Number.parseInt(appId ?? '0')}
+              value={{
+                a2a_enabled: formData.a2a_enabled,
+                a2a_card_visibility: formData.a2a_card_visibility,
+                a2a_name_override: formData.a2a_name_override,
+                a2a_description_override: formData.a2a_description_override,
+                a2a_skill_tags: formData.a2a_skill_tags,
+                a2a_examples: formData.a2a_examples,
+              }}
+              onChange={handleA2AChange}
+              cardUrl={a2aCardUrl}
+              rpcUrl={a2aRpcUrl}
+              disabled={!canEditA2A}
+              fieldErrors={a2aFieldErrors}
+            />
           )}
 
           {activeTab === 'metrics' && !isNewAgent && (

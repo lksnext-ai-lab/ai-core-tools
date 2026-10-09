@@ -1,9 +1,6 @@
-import ipaddress
 import os
-import socket
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 from models.sandbox_service import SandboxService, SandboxProviderEnum
@@ -15,6 +12,7 @@ from schemas.sandbox_service_schemas import (
 )
 from core.export_constants import PLACEHOLDER_API_KEY
 from utils.secret_utils import mask_api_key, is_masked_key
+from utils.ssrf_guard import endpoint_is_disallowed as _shared_endpoint_is_disallowed
 from tools.sandbox_service_utils import build_extra_config, parse_extra_config
 from datetime import datetime
 from typing import List, Optional
@@ -55,74 +53,18 @@ def _test_connection_timeout_s() -> int:
         return _DEFAULT_TEST_CONNECTION_TIMEOUT_S
 
 
-# RFC 6598 shared/CGNAT address space (100.64.0.0/10) — used by some cloud
-# providers' metadata services (e.g. Alibaba Cloud's 100.100.100.200) and by
-# carrier-grade NAT. Not covered by ipaddress.is_private/is_reserved in
-# Python's stdlib, so it must be checked explicitly.
-_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
-
-
-def _is_blocked_ip(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
-    return (
-        ip.is_loopback
-        or ip.is_link_local
-        or ip.is_private
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-        or (ip.version == 4 and ip in _CGNAT_NETWORK)
-    )
-
-
-def _extract_hostname(endpoint: str) -> Optional[str]:
-    """Best-effort hostname extraction from a ``host:port`` or full URL string."""
-    endpoint = (endpoint or "").strip()
-    if not endpoint:
-        return None
-    # urlsplit needs a "//" prefix to parse a bare "host:port" into netloc
-    # instead of mistaking "host" for a URL scheme.
-    candidate = endpoint if "//" in endpoint else f"//{endpoint}"
-    try:
-        return urlsplit(candidate).hostname
-    except ValueError:
-        return None
-
-
 def _endpoint_is_disallowed(endpoint: Optional[str]) -> bool:
     """Return True if *endpoint* resolves to a loopback/link-local/private address.
 
-    Uses ``ipaddress``'s own range checks (``is_loopback``/``is_link_local``/
-    ``is_private``) rather than hand-rolled CIDR comparisons. Unresolvable
-    hostnames are allowed through here — a DNS failure isn't itself an SSRF
-    signal, and the provider call will fail naturally afterwards.
+    Delegates to the shared SSRF guard (``utils.ssrf_guard``), which is the only
+    such implementation in the codebase. Unresolvable hostnames are allowed
+    through here — a DNS failure isn't itself an SSRF signal, and the provider
+    call will fail naturally afterwards — and the module-level test-target
+    bypass is kept local to this module.
     """
     if not endpoint or _allow_private_test_targets():
         return False
-
-    hostname = _extract_hostname(endpoint)
-    if not hostname:
-        return False
-
-    try:
-        ip = ipaddress.ip_address(hostname)
-        return _is_blocked_ip(ip)
-    except ValueError:
-        pass  # Not a literal IP — resolve it below.
-
-    try:
-        infos = socket.getaddrinfo(hostname, None)
-    except (socket.gaierror, socket.timeout, UnicodeError):
-        return False
-
-    for info in infos:
-        raw_ip = info[4][0]
-        try:
-            ip = ipaddress.ip_address(raw_ip)
-        except ValueError:
-            continue
-        if _is_blocked_ip(ip):
-            return True
-    return False
+    return _shared_endpoint_is_disallowed(endpoint, allow_unresolvable=True)
 
 
 class SandboxServiceService:
