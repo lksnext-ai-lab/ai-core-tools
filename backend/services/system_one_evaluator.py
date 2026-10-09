@@ -18,7 +18,6 @@ from pydantic import TypeAdapter
 
 from models.system_one_agent import SystemOneAgent
 from schemas.system_one_schemas import Question, QuestionList, SystemOneResult, Usage
-from schemas.system_one_service_schemas import DEFAULT_MODEL
 from services.agent_metrics_recorder import record_agent_execution
 from services.system_one_service_service import max_concurrency_of
 from services.system_one_state import (
@@ -153,9 +152,19 @@ class SystemOneEvaluator:
     def snapshot(agent: SystemOneAgent) -> SystemOneSnapshot:
         """Copy what an evaluation needs out of the ORM agent (call while its session is alive)."""
         service = agent.system_one_service
+        if service is None:
+            raise HTTPException(
+                status_code=409,
+                detail="This agent has no System One service (it was deleted): choose another one in the agent's settings",
+            )
+        if not service.description:
+            raise HTTPException(
+                status_code=409,
+                detail="The agent's System One service has no model: edit the service and choose one",
+            )
         endpoint = Endpoint(
             base_url=service.endpoint or "",
-            model=service.description or DEFAULT_MODEL,
+            model=service.description,
             api_key=service.api_key,
             max_concurrency=max_concurrency_of(service),
             service_id=service.service_id,

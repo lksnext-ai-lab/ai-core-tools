@@ -10,9 +10,9 @@ class SystemOneAgent(Agent):
     __table_args__ = {'extend_existing': True}
 
     agent_id = Column(Integer, ForeignKey('Agent.agent_id'), primary_key=True)
-    # RESTRICT: a service in use cannot be deleted (the API answers 409 with the agents using it).
+    # SET NULL, like AIService: deleting the service leaves the agent in place but inoperative until a new one is chosen.
     system_one_service_id = Column(
-        Integer, ForeignKey('SystemOneService.service_id', ondelete='RESTRICT'), nullable=False)
+        Integer, ForeignKey('SystemOneService.service_id', ondelete='SET NULL'), nullable=True)
     # List of question dicts, validated by schemas.system_one_schemas.QuestionList.
     questions = Column(JSON, nullable=False)
     summarization_service_id = Column(

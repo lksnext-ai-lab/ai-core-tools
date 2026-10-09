@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from schemas.system_one_service_schemas import CreateUpdateSystemOneServiceSchema
 from services import system_one_service_service as module
-from services.system_one_service_service import ServiceInUseError, SystemOneServiceService
+from services.system_one_service_service import SystemOneServiceService
 
 
 def _service(service_id=1, app_id=10, name="Nimble", endpoint="http://so.test", api_key="secret-token-1234",
@@ -112,7 +112,7 @@ def test_detail_masks_token_and_reads_extra_config(repo):
 
 def test_detail_of_new_service_has_defaults():
     d = SystemOneServiceService.get_system_one_service_detail(MagicMock(), 10, 0)
-    assert d.service_id == 0 and d.model == "nimble-latest" and d.api_key == "" and d.max_concurrency == 1
+    assert d.service_id == 0 and d.model == "" and d.api_key == "" and d.max_concurrency == 1
 
 
 def test_detail_tolerates_broken_extra_config(repo):
@@ -145,24 +145,23 @@ def test_copy_of_unknown_service_returns_none(repo):
 
 # ----------------------------------------------------------------- delete
 
-def test_delete_in_use_raises_with_the_agents_and_deletes_nothing(repo):
+def test_delete_reports_the_agents_it_leaves_without_a_service(repo):
     repo.get_by_id_and_app_id.return_value = _service()
     a1, a2 = MagicMock(agent_id=5), MagicMock(agent_id=6)
     a1.name, a2.name = "Triage", "Validator"
     repo.get_agents_using.return_value = [a1, a2]
-    with pytest.raises(ServiceInUseError) as e:
-        SystemOneServiceService.delete_system_one_service(MagicMock(), 10, 1)
-    assert e.value.agents == [{"agent_id": 5, "name": "Triage"}, {"agent_id": 6, "name": "Validator"}]
-    repo.delete.assert_not_called()
+    assert SystemOneServiceService.delete_system_one_service(MagicMock(), 10, 1) == [
+        {"agent_id": 5, "name": "Triage"}, {"agent_id": 6, "name": "Validator"}]
+    repo.delete.assert_called_once()
 
 
 def test_delete_free_service_and_missing_service(repo):
     repo.get_by_id_and_app_id.return_value = _service()
     repo.get_agents_using.return_value = []
-    assert SystemOneServiceService.delete_system_one_service(MagicMock(), 10, 1) is True
+    assert SystemOneServiceService.delete_system_one_service(MagicMock(), 10, 1) == []
     repo.delete.assert_called_once()
     repo.get_by_id_and_app_id.return_value = None
-    assert SystemOneServiceService.delete_system_one_service(MagicMock(), 10, 2) is False
+    assert SystemOneServiceService.delete_system_one_service(MagicMock(), 10, 2) is None
 
 
 # ------------------------------------------------------- connection tests
@@ -295,3 +294,15 @@ async def test_without_uvicorn_workers_the_dockerfile_default_of_two_is_assumed(
     with patch.object(module.system_one_client, "probe", probe):
         out = await SystemOneServiceService.test_connection_with_config(MagicMock(), 10, {"endpoint": "http://so.test"})
     assert out["suggested_max_concurrency"] == 2
+
+
+def test_a_model_has_no_default_it_must_be_chosen():
+    with pytest.raises(ValidationError):
+        CreateUpdateSystemOneServiceSchema(name="x", endpoint="http://so.test")
+
+
+def test_the_list_says_how_many_agents_would_lose_their_service(repo):
+    repo.get_by_app_id.return_value = [_service(service_id=1), _service(service_id=2)]
+    repo.get_agents_using.side_effect = lambda db, sid: [MagicMock(), MagicMock()] if sid == 1 else []
+    items = SystemOneServiceService.get_system_one_services_by_app_id(MagicMock(), 10)
+    assert [i.agent_count for i in items] == [2, 0]

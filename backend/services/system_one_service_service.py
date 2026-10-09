@@ -1,17 +1,15 @@
-"""Business logic of System One services (per-app connections to a Nimble server)."""
+"""Business logic of System One services (per-app connections to a System One server)."""
 import json
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.export_constants import PLACEHOLDER_API_KEY
 from models.system_one_service import SystemOneService
 from repositories.system_one_service_repository import SystemOneServiceRepository
 from schemas.system_one_service_schemas import (
-    DEFAULT_MODEL,
     CreateUpdateSystemOneServiceSchema,
     SystemOneServiceDetailSchema,
     SystemOneServiceListItemSchema,
@@ -21,14 +19,6 @@ from utils.logger import get_logger
 from utils.secret_utils import is_masked_key, mask_api_key
 
 logger = get_logger(__name__)
-
-
-class ServiceInUseError(Exception):
-    """The service cannot be deleted: agents still use it (``SystemOneAgent.system_one_service_id`` is RESTRICT)."""
-
-    def __init__(self, agents: List[Dict[str, Any]]):
-        super().__init__("System One service is in use")
-        self.agents = agents
 
 
 def _workers() -> int:
@@ -61,12 +51,13 @@ def max_concurrency_of(service: SystemOneService) -> int:
 class SystemOneServiceService:
 
     @staticmethod
-    def _to_list_item(service: SystemOneService) -> SystemOneServiceListItemSchema:
+    def _to_list_item(service: SystemOneService, agent_count: int = 0) -> SystemOneServiceListItemSchema:
         return SystemOneServiceListItemSchema(
+            agent_count=agent_count,
             service_id=service.service_id,
             name=service.name,
             endpoint=service.endpoint or "",
-            model=service.description or DEFAULT_MODEL,
+            model=service.description or "",
             max_concurrency=max_concurrency_of(service),
             created_at=service.create_date,
         )
@@ -78,19 +69,22 @@ class SystemOneServiceService:
             name=service.name,
             endpoint=service.endpoint or "",
             api_key=mask_api_key(service.api_key),
-            model=service.description or DEFAULT_MODEL,
+            model=service.description or "",
             max_concurrency=max_concurrency_of(service),
             created_at=service.create_date,
         )
 
     @staticmethod
     def get_system_one_services_by_app_id(db: Session, app_id: int) -> List[SystemOneServiceListItemSchema]:
-        return [SystemOneServiceService._to_list_item(s) for s in SystemOneServiceRepository.get_by_app_id(db, app_id)]
+        return [
+            SystemOneServiceService._to_list_item(s, len(SystemOneServiceRepository.get_agents_using(db, s.service_id)))
+            for s in SystemOneServiceRepository.get_by_app_id(db, app_id)
+        ]
 
     @staticmethod
     def get_system_one_service_detail(db: Session, app_id: int, service_id: int) -> Optional[SystemOneServiceDetailSchema]:
         if service_id == 0:
-            return SystemOneServiceDetailSchema(service_id=0, name="", endpoint="", api_key="", model=DEFAULT_MODEL,
+            return SystemOneServiceDetailSchema(service_id=0, name="", endpoint="", api_key="", model="",
                                                 max_concurrency=1)
         service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
         return SystemOneServiceService._to_detail(service) if service else None
@@ -99,7 +93,7 @@ class SystemOneServiceService:
     def create_or_update_system_one_service(
         db: Session, app_id: int, service_id: int, data: CreateUpdateSystemOneServiceSchema
     ) -> Optional[SystemOneServiceDetailSchema]:
-        # No private-address blocking on purpose: a self-hosted Nimble normally sits on a private network.
+        # No private-address blocking on purpose: a self-hosted server normally sits on a private network.
         # Only the scheme/host are checked; only administrators can reach this code.
         endpoint = system_one_client.check_base_url(data.endpoint)
 
@@ -159,20 +153,14 @@ class SystemOneServiceService:
         return [{"agent_id": a.agent_id, "name": a.name} for a in SystemOneServiceRepository.get_agents_using(db, service_id)]
 
     @staticmethod
-    def delete_system_one_service(db: Session, app_id: int, service_id: int) -> bool:
+    def delete_system_one_service(db: Session, app_id: int, service_id: int) -> Optional[List[Dict[str, Any]]]:
+        """Delete the service; returns the agents it leaves without one (they stay, inoperative), None if not found."""
         service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
         if not service:
-            return False
-        agents = SystemOneServiceService._agents_using(db, service_id)
-        if agents:
-            raise ServiceInUseError(agents)
-        try:
-            SystemOneServiceRepository.delete(db, service)
-        except IntegrityError:
-            # An agent was created between the check and the delete: the RESTRICT FK still protects us.
-            db.rollback()
-            raise ServiceInUseError(SystemOneServiceService._agents_using(db, service_id))
-        return True
+            return None
+        detached = SystemOneServiceService._agents_using(db, service_id)
+        SystemOneServiceRepository.delete(db, service)   # the FK is ON DELETE SET NULL
+        return detached
 
     # ------------------------------------------------------------ connection tests
 

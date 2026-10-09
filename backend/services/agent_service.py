@@ -806,7 +806,7 @@ class AgentService:
     def _apply_system_one_fields(self, db: Session, agent: SystemOneAgent, data: dict) -> None:
         """System One fields (service, questions, summarization LLM, size) and neutral values for the rest."""
         app_id = data['app_id']
-        creating = agent.system_one_service_id is None
+        creating = agent.agent_id is None
 
         service_id = data.get('system_one_service_id')
         if service_id is not None:

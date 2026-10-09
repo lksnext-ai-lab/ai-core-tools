@@ -261,9 +261,15 @@ def test_snapshot_copies_everything_the_evaluation_needs():
     assert snap.metrics_subject.agent_id == 3 and snap.metrics_subject.service_id is None
 
 
-def test_snapshot_defaults_model_and_concurrency():
-    snap = SystemOneEvaluator.snapshot(_agent(extra=None, description=None))
-    assert snap.endpoint.model == "nimble-latest" and snap.endpoint.max_concurrency == 1
+def test_snapshot_defaults_the_concurrency_to_one():
+    snap = SystemOneEvaluator.snapshot(_agent(extra=None))
+    assert snap.endpoint.max_concurrency == 1
+
+
+def test_a_service_without_a_model_is_a_409_not_a_call_with_an_empty_model():
+    with pytest.raises(HTTPException) as e:
+        SystemOneEvaluator.snapshot(_agent(description=None))
+    assert e.value.status_code == 409 and "model" in e.value.detail.lower()
 
 
 async def test_snapshot_builds_a_summarizer_from_the_llm_service():

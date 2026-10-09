@@ -95,13 +95,24 @@ class IACTSystemOneTool(BaseTool):
     args_schema: Type[BaseModel] = SystemOneToolInput
     response_format: Literal["content", "content_and_artifact"] = "content_and_artifact"
     snapshot: Any = None
+    unavailable: Optional[str] = None
     user_context: Optional[Dict[str, Any]] = None
     attached_files: Optional[List[Dict]] = None
 
     @classmethod
     async def create(cls, agent, user_context: Optional[Dict] = None, attached_files: Optional[List[Dict]] = None,
                      user_message: Optional[str] = None) -> "IACTSystemOneTool":
-        snapshot = SystemOneEvaluator.snapshot(agent)
+        try:
+            snapshot = SystemOneEvaluator.snapshot(agent)
+        except HTTPException as exc:
+            # Its service was deleted. The calling agent still gets the tool so that its LLM can tell the user
+            # why it cannot be used, instead of the whole turn failing while the tools are built.
+            return cls(
+                name=sanitize_identifier(agent.name),
+                description=f"{agent.description or agent.name} (currently unavailable: {exc.detail})",
+                unavailable=str(exc.detail),
+                user_context=user_context,
+            )
         return cls(
             name=sanitize_identifier(agent.name),
             description=build_tool_description(snapshot),
@@ -114,6 +125,8 @@ class IACTSystemOneTool(BaseTool):
         raise NotImplementedError("System One tools are async only")
 
     async def _arun(self, text: str, run_manager: Any = None, **kwargs: Any) -> Tuple[str, Optional[SystemOneResult]]:
+        if self.snapshot is None:
+            return f"System One could not evaluate the text: {self.unavailable}", None
         context = self.user_context or {}
         evaluation_context = {
             **context,

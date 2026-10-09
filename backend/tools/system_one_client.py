@@ -1,4 +1,4 @@
-"""HTTP client for a System One (Nimble) server.
+"""HTTP client for a System One server.
 
 System One answers closed questions about a text with probabilities (no text generation).
 One ``evaluate`` call sends ALL the questions of an agent in a single ``POST /v1/systemone``.
