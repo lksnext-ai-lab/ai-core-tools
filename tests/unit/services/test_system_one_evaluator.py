@@ -312,12 +312,10 @@ def test_snapshot_survives_an_llm_that_cannot_be_built():
     assert snap.summarize is None
 
 
-async def test_the_summary_is_asked_to_use_the_room_there_is_not_just_to_stay_under_it():
+async def test_the_summary_is_asked_for_at_most_the_room_there_is():
     llm = MagicMock()
     llm.ainvoke = AsyncMock(return_value=SimpleNamespace(content="the summary"))
     with patch.object(module, "create_llm_from_service", return_value=llm):
         snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
     await snap.summarize("long " * 10, QUESTIONS, 1000)
-    prompt = llm.ainvoke.await_args.args[0]
-    assert "about 850 characters" in prompt and "never more than 1000" in prompt
-    assert "shorter than needed" in prompt.lower() or "do not make it shorter" in prompt.lower()
+    assert "at most 1000 characters" in llm.ainvoke.await_args.args[0]
