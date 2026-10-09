@@ -13,7 +13,7 @@ that an agent runs around every model and tool call. They are created under
 | `human_in_the_loop` | `HumanInTheLoopMiddleware` | `interrupt_on: {tool_name: {allowed_decisions: [approve, edit, reject]}}`, `description_prefix`, `approval_timeout_seconds` (60 – `HITL_MAX_APPROVAL_TTL_SECONDS`, default 3600) |
 | `model_call_limit` | `ModelCallLimitMiddleware(run_limit=max_calls)` | `max_calls` 1–10000 |
 | `tool_call_limit` | `ToolCallLimitMiddleware(run_limit=max_calls)` | `max_calls` 1–10000 |
-| `summarization` | `SummarizationMiddleware` (replaces the memory-based one) | `summarization_model` (`agent_llm` or `ai_service:<id>` of the same app), `trigger_tokens`, `keep_messages`, `trim_tokens` |
+| `summarization` | `SummarizationMiddleware` (replaces the default one of agents with memory) | `summarization_model` (`agent_llm` or `ai_service:<id>` of the same app), `trigger_tokens` (empty = 85% of the model window, max 150k; 32k without a model profile), `keep_messages` (default 20), `trim_tokens` (empty = no limit) |
 
 The chain is built in `backend/tools/middleware/factory.py`. Summarization always runs first; the
 rest follow the agent's order (`agent_middlewares.order`).

@@ -183,7 +183,7 @@ User message + optional files
   → agent_chain.ainvoke() → apply OutputParser → persist conversation → return response
 ```
 
-**Memory**: `AsyncPostgresSaver` in PostgreSQL. Config per agent: `has_memory`, `memory_max_messages` (default 20), `memory_max_tokens` (default 4000), `memory_summarize_threshold` (default 10).
+**Memory**: `AsyncPostgresSaver` in PostgreSQL, on when `has_memory`. History is summarized by `SummarizationMiddleware` (`backend/tools/middleware/factory.py`): an attached summarization middleware, or the defaults — trigger at 85% of the model's input window capped at 150k tokens (32k if the model has no profile), keep the last 20 messages, summarize the whole older history. The legacy `memory_max_messages` / `memory_max_tokens` / `memory_summarize_threshold` columns are kept for export/import but no longer used.
 
 ### Frontend (`frontend/src/`)
 

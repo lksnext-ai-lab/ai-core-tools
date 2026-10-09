@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Approvals in the marketplace chat**, with countdown, cancel and a locked composer while waiting; channels that cannot ask a person (MCP, scheduled tasks, OpenAI-compatible API, platform chatbot) reject the pause and return `409 approval_not_supported_in_channel`.
 - **Agent stream heartbeats and run timeout**: SSE `: ping` comments every 15 s and `AICT_AGENT_RUN_TIMEOUT_SECONDS` (default 600) per turn.
 
+### Changed
+
+- **Conversation summarization defaults**: agents with memory now summarize at 85% of the model's input window (at most 150,000 tokens; 32,000 for models without a profile), keep the last 20 messages and summarize the whole older history. The summarization middleware uses the same values when its trigger or token limit is left empty. The agent form no longer shows the memory management fields.
+
+### Fixed
+
+- **Summaries lost older context**: the default summarization trimmed the history it summarized to 20 tokens (`memory_summarize_threshold`), so each summary only saw the latest message and dropped the previous summary.
+
 ## [0.5.0] - 2026-10-01
 
 ### Breaking Changes

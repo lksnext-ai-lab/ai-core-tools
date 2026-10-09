@@ -50,7 +50,7 @@ const DEFAULT_CONFIG: Record<MiddlewareType, Record<string, any>> = {
   },
   model_call_limit: { max_calls: 25 },
   tool_call_limit: { max_calls: 50 },
-  summarization: { summarization_model: 'agent_llm', trigger_tokens: 4000, keep_messages: 20, trim_tokens: 4000 },
+  summarization: { summarization_model: 'agent_llm', trigger_tokens: null, keep_messages: 20, trim_tokens: null },
 };
 
 interface ToolOption {
@@ -79,9 +79,13 @@ function validate(type: MiddlewareType, name: string, config: Record<string, any
     case 'tool_call_limit':
       return inRange(config.max_calls, 1, 10000) ? null : 'The limit must be a whole number between 1 and 10,000.';
     case 'summarization':
-      if (!inRange(config.trigger_tokens, 500, 1000000)) return 'Trigger must be between 500 and 1,000,000 tokens.';
+      if (config.trigger_tokens != null && !inRange(config.trigger_tokens, 500, 1000000)) {
+        return 'Trigger must be between 500 and 1,000,000 tokens, or empty for automatic.';
+      }
       if (!inRange(config.keep_messages, 1, 500)) return 'Messages to keep must be between 1 and 500.';
-      if (!inRange(config.trim_tokens, 500, 1000000)) return 'Tokens to summarize must be between 500 and 1,000,000.';
+      if (config.trim_tokens != null && !inRange(config.trim_tokens, 500, 1000000)) {
+        return 'Tokens to summarize must be between 500 and 1,000,000, or empty for no limit.';
+      }
       return null;
     case 'pii':
       if (!config.pii_types?.length) return 'Select at least one type of personal data.';
@@ -153,6 +157,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
   const patchGroup = (group: string, changes: Record<string, any>) =>
     setConfig((prev) => ({ ...prev, [group]: { ...(prev[group] ?? {}), ...changes } }));
   const numberValue = (raw: string) => (raw === '' ? '' : Number(raw));
+  const optionalNumberValue = (raw: string) => (raw === '' ? null : Number(raw));
 
   const loadMcpTools = async (cfg: MCPConfig) => {
     setLoadingMcp(cfg.config_id);
@@ -333,8 +338,9 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label htmlFor="mw-trigger" className={labelClass}>Summarize after (tokens)</label>
-              <input id="mw-trigger" type="number" min={500} step={500} value={config.trigger_tokens}
-                onChange={(e) => patch({ trigger_tokens: numberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
+              <input id="mw-trigger" type="number" min={500} step={500} value={config.trigger_tokens ?? ''} placeholder="Automatic"
+                aria-describedby="mw-sum-help"
+                onChange={(e) => patch({ trigger_tokens: optionalNumberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
             </div>
             <div>
               <label htmlFor="mw-keep" className={labelClass}>Recent messages to keep</label>
@@ -343,11 +349,16 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
             </div>
             <div>
               <label htmlFor="mw-trim" className={labelClass}>Max tokens to summarize</label>
-              <input id="mw-trim" type="number" min={500} step={500} value={config.trim_tokens}
-                onChange={(e) => patch({ trim_tokens: numberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
+              <input id="mw-trim" type="number" min={500} step={500} value={config.trim_tokens ?? ''} placeholder="No limit"
+                aria-describedby="mw-sum-help"
+                onChange={(e) => patch({ trim_tokens: optionalNumberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
             </div>
           </div>
-          <p className="text-xs text-gray-500">Replaces the agent's own memory summarization settings.</p>
+          <p id="mw-sum-help" className="text-xs text-gray-500">
+            Leave the trigger empty to summarize at 85% of the model's context window (at most 150,000 tokens),
+            and the last field empty to summarize the whole older history. Agents with memory and no summarization
+            middleware use these same defaults.
+          </p>
         </div>
       )}
 

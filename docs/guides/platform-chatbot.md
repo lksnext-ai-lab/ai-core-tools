@@ -85,7 +85,7 @@ The platform chatbot agent supports all standard agent features:
 - Conversations survive page reloads and navigation.
 - The user can click **New conversation** in the widget header to start a fresh session.
 - Conversation history for the current session is stored in browser `localStorage`.
-- The agent's memory settings (`memory_max_messages`, `memory_max_tokens`, `memory_summarize_threshold`) apply as configured on the agent.
+- The agent's memory applies as configured: its summarization middleware if it has one, otherwise the default summarization (see [Agent system](../ai/agent-system.md#conversation-memory)).
 
 ---
 

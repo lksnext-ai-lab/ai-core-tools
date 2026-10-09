@@ -15,7 +15,6 @@ from langchain.agents.middleware import (
 )
 from pydantic import ValidationError
 
-from models.agent import DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
 from models.middleware import MiddlewareType
 from schemas.middleware_schemas import HITLConfig, PIIConfig, SummarizationConfig, parse_middleware_config
 from tools.middleware.guardrails import GuardrailsMiddleware
@@ -23,6 +22,13 @@ from tools.middleware.llm_pii import LLMPIIMiddleware
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Summarize at 85% of the model's input window (Deep Agents default), capped at
+# 150k tokens (Anthropic compaction default) so long-context models do not degrade.
+# Models without a profile (custom endpoints, Ollama) use a conservative fixed trigger.
+SUMMARY_TRIGGER_WINDOW_FRACTION = 0.85
+SUMMARY_TRIGGER_MAX_TOKENS = 150_000
+SUMMARY_TRIGGER_FALLBACK_TOKENS = 32_000
 
 
 def _resolve_llm(agent, ref: str, default_llm):
@@ -40,23 +46,26 @@ def _resolve_llm(agent, ref: str, default_llm):
     return create_llm_from_service(service, temperature=0)
 
 
+def default_trigger_tokens(llm) -> int:
+    """Token count that triggers summarization for the agent's model."""
+    max_input = (getattr(llm, "profile", None) or {}).get("max_input_tokens")
+    if isinstance(max_input, int) and max_input > 0:
+        return min(int(max_input * SUMMARY_TRIGGER_WINDOW_FRACTION), SUMMARY_TRIGGER_MAX_TOKENS)
+    return SUMMARY_TRIGGER_FALLBACK_TOKENS
+
+
 def _summarization(agent, llm, cfg: Optional[SummarizationConfig]) -> Optional[SummarizationMiddleware]:
-    """Summarization from an attached middleware, or from the agent's memory settings."""
-    if cfg is not None:
-        return SummarizationMiddleware(
-            model=_resolve_llm(agent, cfg.summarization_model, llm),
-            trigger=("tokens", cfg.trigger_tokens),
-            keep=("messages", cfg.keep_messages),
-            trim_tokens_to_summarize=cfg.trim_tokens,
-        )
-    if agent.has_memory:
-        return SummarizationMiddleware(
-            model=llm,
-            trigger=("tokens", agent.memory_max_tokens or 4000),
-            keep=("messages", agent.memory_max_messages or 20),
-            trim_tokens_to_summarize=agent.memory_summarize_threshold or DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
-        )
-    return None
+    """Summarization from an attached middleware, or with the defaults for agents with memory."""
+    if cfg is None:
+        if not agent.has_memory:
+            return None
+        cfg = SummarizationConfig()
+    return SummarizationMiddleware(
+        model=_resolve_llm(agent, cfg.summarization_model, llm),
+        trigger=("tokens", cfg.trigger_tokens or default_trigger_tokens(llm)),
+        keep=("messages", cfg.keep_messages),
+        trim_tokens_to_summarize=cfg.trim_tokens,
+    )
 
 
 def _pii(agent, llm, cfg: PIIConfig) -> List[Any]:

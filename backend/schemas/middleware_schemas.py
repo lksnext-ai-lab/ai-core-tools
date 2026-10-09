@@ -28,9 +28,11 @@ class _StrictConfig(BaseModel):
 
 class SummarizationConfig(_StrictConfig):
     summarization_model: str = Field("agent_llm", pattern=AI_SERVICE_PATTERN)
-    trigger_tokens: int = Field(4000, ge=500, le=1_000_000)
+    # None = derived from the agent model's context window (see tools/middleware/factory.py).
+    trigger_tokens: Optional[int] = Field(None, ge=500, le=1_000_000)
     keep_messages: int = Field(20, ge=1, le=500)
-    trim_tokens: int = Field(4000, ge=500, le=1_000_000)
+    # None = summarize the whole older history (bounded by the trigger), as Deep Agents does.
+    trim_tokens: Optional[int] = Field(None, ge=500, le=1_000_000)
 
 
 class CallLimitConfig(_StrictConfig):

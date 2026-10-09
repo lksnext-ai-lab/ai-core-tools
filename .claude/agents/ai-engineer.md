@@ -17,7 +17,7 @@ The project's real dependencies (`pyproject.toml`): **`langchain â‰¥1.2`, `l
 
 - **Never assume deprecated 0.x APIs.** Before using any LangChain/LangGraph API, verify it against the LangChain Docs MCP (if configured) or Context7. Invoke the `langchain-*`, `langgraph-*`, and `deep-agents-*` skills (via the Skill tool) for grounded patterns; consult `framework-selection` first to pick the right layer.
 - Use `init_chat_model()` for provider-agnostic init; `create_agent()` (not the deprecated `AgentExecutor`); LCEL pipe syntax for chains; `model.with_structured_output(PydanticModel)` for typed output.
-- Memory: `AsyncPostgresSaver` (LangGraph PostgreSQL checkpointer). Thread IDs: `thread_{agent_id}_{session_id}`. Trim/summarize per agent config (`memory_max_messages`, `memory_max_tokens`, `memory_summarize_threshold`).
+- Memory: `AsyncPostgresSaver` (LangGraph PostgreSQL checkpointer). Thread IDs: `thread_{agent_id}_{session_id}`. History is summarized by `SummarizationMiddleware` built in `tools/middleware/factory.py` (attached summarization middleware or the defaults there).
 - RAG: `RecursiveCharacterTextSplitter` â†’ embeddings â†’ vector store. Per-silo backend (PGVector or Qdrant), collections `silo_{id}`, HNSW indexes.
 - MCP: `langchain-mcp-adapters` `MultiServerMCPClient`; Mattin acts as both MCP server and client.
 - **Deep Agents** patterns (on LangGraph 1.x) are available via the `deep-agents-*` skills even though the package isn't yet a repo dependency â€” use them only if a step calls for it.
