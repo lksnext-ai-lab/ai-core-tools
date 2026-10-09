@@ -28,6 +28,9 @@ rest follow the agent's order (`agent_middlewares.order`).
   same app (`404`/`400`/`422` otherwise).
 - **Stored configs are re-validated** when the chain is built: an invalid row is skipped with a
   warning instead of breaking the chat.
+- **Deletion:** deleting a middleware detaches it from its agents; deleting an agent removes its
+  associations, conversations (with their checkpoints, media, sandboxes and files) and approvals but
+  keeps the middlewares; deleting an app removes everything.
 - **PII output redaction and streaming:** with `apply_to_output`, tokens are not streamed; the
   redacted answer arrives in the `done` event. `strategy="block"` ends the turn with
   "The message was blocked because it contains personal data (…)" (SSE `error` / HTTP 422).
@@ -88,7 +91,8 @@ using it, with memory on.
 4. **Limits** — model call limit 1 on an agent that needs a tool: the run stops after one call.
 5. **Ordering / duplicates** — select two guardrails: the second is disabled. Reorder with the
    arrows, save, reopen: order kept.
-6. **Deletion** — delete a middleware in use (agents lose it), an agent with middlewares, and the app.
+6. **Deletion** — delete a middleware in use (agents lose it), an agent with middlewares and
+   conversations, and the app (no agent is left behind).
 
 ## Automated tests
 
@@ -98,6 +102,7 @@ using it, with memory on.
 | LLM PII detector | `tests/unit/tools/test_llm_pii_middleware.py` |
 | Chain building from DB rows (order, invalid config skipped, one per type) | `tests/integration/tools/test_agent_middleware_chain_integration.py` |
 | CRUD, config validation, tenant isolation, agent selection rules, cascades | `tests/integration/routers/internal/test_middlewares.py` |
+| Agent/app deletion | `tests/integration/routers/internal/test_middleware_relations.py` |
 | Approval ownership, action ids, decision validation, expiry status | `tests/unit/services/test_hitl_approval_service.py` |
 | Claim compare-and-set, one pending approval per conversation, cascade | `tests/integration/repositories/test_hitl_approval_repository.py` |
 | Streaming pause / resume / stale / non-interactive channel / busy conversation | `tests/unit/services/test_agent_streaming_service.py` |

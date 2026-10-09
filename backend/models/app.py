@@ -16,8 +16,11 @@ class App(Base):
     langsmith_api_key = Column(String(255))
     repositories = relationship('Repository', lazy=True)
     domains = relationship('Domain', back_populates='app', lazy=True)
-    agents = relationship('Agent', lazy=True)
-    ocr_agents = relationship('OCRAgent', lazy=True, overlaps="agents")
+    # passive_deletes='all': never let the ORM UPDATE Agent.app_id=NULL on app deletion, which
+    # would leave invisible agents (and their conversations) behind. AppService.delete_app deletes
+    # every agent first; a leftover one hits Agent.app_id's NO ACTION FK and aborts the deletion.
+    agents = relationship('Agent', lazy=True, passive_deletes='all')
+    ocr_agents = relationship('OCRAgent', lazy=True, overlaps="agents", passive_deletes='all')
     output_parsers = relationship('OutputParser', 
                                 back_populates='app',
                                 lazy=True)

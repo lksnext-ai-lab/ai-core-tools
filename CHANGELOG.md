@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deleting an agent with conversations failed** (`Conversation.agent_id` had no ON DELETE action) and **app deletion left invisible agents behind** with their conversations: conversations now cascade (migration `agentdel001`), their checkpoints, media, sandboxes and files are removed, and an app deletion aborts instead of orphaning an agent.
 - **Summaries lost older context**: the default summarization trimmed the history it summarized to 20 tokens (`memory_summarize_threshold`), so each summary only saw the latest message and dropped the previous summary.
 
 ## [0.5.0] - 2026-10-01

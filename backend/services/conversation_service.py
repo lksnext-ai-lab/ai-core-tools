@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import ast
 import json
@@ -18,6 +19,9 @@ from utils.security import hash_api_key
 from lks_idprovider import AuthContext
 
 logger = get_logger(__name__)
+
+# Keeps background checkpoint deletions referenced until they finish.
+_background_cleanups: set = set()
 
 
 async def _resolve_image_placeholders(
@@ -299,6 +303,37 @@ class ConversationService:
             conversation.sandbox_state = None
         except Exception as e:
             logger.error(f"Error destroying sandbox on conversation delete: {e}")
+
+    @staticmethod
+    def release_agent_conversations(db: Session, agent_id: int) -> List[tuple]:
+        """Free the media and sandboxes of every conversation of an agent.
+
+        Returns their ``(agent_id, session_id)`` checkpointer threads; the rows themselves
+        go with the agent (``Conversation.agent_id`` is ON DELETE CASCADE).
+        """
+        conversations = db.query(Conversation).filter(Conversation.agent_id == agent_id).all()
+        for conversation in conversations:
+            ConversationService.release_conversation_resources(db, conversation)
+        return [(conversation.agent_id, conversation.session_id) for conversation in conversations]
+
+    @staticmethod
+    def delete_thread_histories_in_background(threads: List[tuple]) -> None:
+        """Delete the checkpoints of ``(agent_id, session_id)`` threads without blocking a sync caller."""
+        if not threads:
+            return
+
+        async def _delete_all() -> None:
+            for agent_id, session_id in threads:
+                await ConversationService.delete_thread_history(agent_id, session_id)
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_delete_all())
+            return
+        task = loop.create_task(_delete_all())
+        _background_cleanups.add(task)
+        task.add_done_callback(_background_cleanups.discard)
 
     @staticmethod
     async def delete_conversation_history(conversation: Conversation) -> None:

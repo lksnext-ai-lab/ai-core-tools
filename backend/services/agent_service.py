@@ -654,7 +654,21 @@ class AgentService:
                 "Could not clear sandbox DB state for agent %s conversations: %s",
                 agent_id, exc
             )
-        return AgentRepository.delete_by_id(db, agent_id)
+        from models.conversation import Conversation
+        from services.conversation_service import ConversationService
+        from services.file_management_service import FileManagementService
+
+        conversation_ids = [
+            row.conversation_id
+            for row in db.query(Conversation.conversation_id).filter(Conversation.agent_id == agent_id)
+        ]
+        threads = ConversationService.release_agent_conversations(db, agent_id)
+        if not AgentRepository.delete_by_id(db, agent_id):
+            return False
+        # Only once the rows are gone: checkpoints and files are not transactional.
+        ConversationService.delete_thread_histories_in_background(threads)
+        FileManagementService().delete_agent_storage(agent_id, conversation_ids)
+        return True
 
     def _remove_tool_references(self, db: Session, tool_id: int):
         """Remove all tool associations where this agent is used as a tool"""

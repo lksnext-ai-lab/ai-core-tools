@@ -102,7 +102,8 @@ class AppService:
             agents = self.app_repo.get_agents_by_app_id(app_id)
             for agent in agents:
                 logger.info(f"Deleting agent {agent.agent_id}: {agent.name}")
-                agent_service.delete_agent(self.db, agent.agent_id)
+                if not agent_service.delete_agent(self.db, agent.agent_id):
+                    raise RuntimeError(f"agent {agent.agent_id} could not be deleted")
 
             # 2. Delete skills (after agents, since agents may reference skills)
             skills = self.app_repo.get_skills_by_app_id(app_id)

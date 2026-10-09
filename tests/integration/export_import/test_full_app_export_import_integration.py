@@ -33,6 +33,18 @@ from schemas.export_schemas import AppExportFileSchema
 from schemas.import_schemas import ConflictMode
 
 
+# ==================== HELPERS ====================
+
+
+def _delete_app(db_session: Session, app: App) -> None:
+    """Delete an app and its agents (App.agents never nulls Agent.app_id, so agents go first)."""
+    from repositories.agent_repository import AgentRepository
+
+    for agent in db_session.query(Agent).filter(Agent.app_id == app.app_id).all():
+        assert AgentRepository.delete_by_id(db_session, agent.agent_id)
+    db_session.delete(app)
+
+
 # ==================== FIXTURES ====================
 
 
@@ -57,7 +69,7 @@ def test_app(db_session: Session):
 
     # Cleanup (cascading deletes should handle related entities)
     try:
-        db_session.delete(app)
+        _delete_app(db_session, app)
         db_session.flush()
         db_session.delete(owner)
         db_session.commit()
@@ -315,7 +327,7 @@ class TestFullAppImportIntegration:
             assert len(new_ai_services) == 2
         finally:
             if imported_app:
-                db_session.delete(imported_app)
+                _delete_app(db_session, imported_app)
                 db_session.commit()
 
     def test_import_as_new_app(self, db_session: Session, populated_app: dict):
@@ -347,7 +359,7 @@ class TestFullAppImportIntegration:
             assert len(summary.total_errors) == 0
         finally:
             if imported_app:
-                db_session.delete(imported_app)
+                _delete_app(db_session, imported_app)
                 db_session.commit()
 
     def test_import_selective_components(
@@ -390,7 +402,7 @@ class TestFullAppImportIntegration:
             assert summary.components_imported.get("agents", 0) == 0
         finally:
             if imported_app:
-                db_session.delete(imported_app)
+                _delete_app(db_session, imported_app)
                 db_session.commit()
 
     def test_import_conflict_rename_mode(
@@ -428,7 +440,7 @@ class TestFullAppImportIntegration:
         for app_id in [first_summary.app_id, second_summary.app_id]:
             app = db_session.query(App).filter(App.app_id == app_id).first()
             if app:
-                db_session.delete(app)
+                _delete_app(db_session, app)
         db_session.commit()
 
     def test_import_rollback_on_error(
@@ -471,5 +483,5 @@ class TestFullAppImportIntegration:
             assert len(all_with_name) == 1
         finally:
             if created_app:
-                db_session.delete(created_app)
+                _delete_app(db_session, created_app)
                 db_session.commit()

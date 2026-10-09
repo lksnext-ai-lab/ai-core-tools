@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Any
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.middleware import AgentMiddleware
@@ -16,6 +17,9 @@ from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
 from repositories.skill_repository import SkillRepository
 from repositories.middleware_repository import MiddlewareRepository
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class AgentRepository:
@@ -100,8 +104,9 @@ class AgentRepository:
             if agent:
                 return AgentRepository._delete_agent_with_associations(db, agent)
             return False
-        except Exception:
+        except SQLAlchemyError:
             db.rollback()
+            logger.exception("Could not delete agent %s", agent_id)
             return False
 
     @staticmethod
