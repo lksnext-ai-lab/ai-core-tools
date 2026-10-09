@@ -184,3 +184,13 @@ async def test_an_unexpected_error_is_logged_without_its_message_or_traceback():
     assert log.error.called
     assert not log.error.call_args.kwargs.get("exc_info")
     assert "secret internals" not in str(log.error.call_args)
+
+
+# ------------------------------------- the service was deleted: the agent is there but cannot work
+
+async def test_a_tool_of_an_agent_without_service_exists_and_says_why_it_cannot_work():
+    agent = SimpleNamespace(agent_id=3, name="Triage Bot", description="Classifies tickets", system_one_service=None)
+    tool = await IACTSystemOneTool.create(agent)
+    assert "unavailable" in tool.description.lower()
+    content, artifact = await tool._arun(text="hello")
+    assert "service" in content.lower() and artifact is None

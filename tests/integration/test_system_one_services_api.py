@@ -50,7 +50,7 @@ class TestCrud:
 
     def test_new_service_template(self, client, fake_app, owner_headers):
         r = client.get(url(fake_app, "0"), headers=owner_headers)
-        assert r.status_code == 200 and r.json()["model"] == "nimble-latest" and r.json()["service_id"] == 0
+        assert r.status_code == 200 and r.json()["model"] == "" and r.json()["service_id"] == 0
 
     def test_bad_endpoint_is_400(self, client, fake_app, owner_headers):
         r = client.post(url(fake_app, "0"), json=payload(endpoint="ftp://x"), headers=owner_headers)
@@ -104,21 +104,28 @@ class TestDeleteInUse:
         db.flush()
         return agent
 
-    def test_delete_in_use_is_409_with_the_agents_and_keeps_the_service(self, client, db, fake_app, owner_headers):
+    def test_deleting_a_service_in_use_detaches_its_agents_instead_of_refusing(self, client, db, fake_app, owner_headers):
+        sid = _create(client, fake_app, owner_headers)["service_id"]
+        agent = self._agent_using(db, fake_app, sid, "Triage")
+        r = client.delete(url(fake_app, str(sid)), headers=owner_headers)
+        assert r.status_code == 200
+        assert r.json()["detached_agents"] == [{"agent_id": agent.agent_id, "name": "Triage"}]
+        assert client.get(url(fake_app, str(sid)), headers=owner_headers).status_code == 404
+        db.expire_all()
+        db.refresh(agent)
+        assert agent.system_one_service_id is None and agent.questions       # still there, just without a service
+
+    def test_the_list_warns_how_many_agents_use_each_service(self, client, db, fake_app, owner_headers):
         sid = _create(client, fake_app, owner_headers)["service_id"]
         self._agent_using(db, fake_app, sid, "Triage")
-        r = client.delete(url(fake_app, str(sid)), headers=owner_headers)
-        assert r.status_code == 409
-        detail = r.json()["detail"]
-        assert [a["name"] for a in detail["agents"]] == ["Triage"] and "Triage" in detail["message"]
-        assert client.get(url(fake_app, str(sid)), headers=owner_headers).status_code == 200
+        self._agent_using(db, fake_app, sid, "Validator")
+        (item,) = client.get(url(fake_app), headers=owner_headers).json()
+        assert item["agent_count"] == 2
 
-    def test_delete_succeeds_once_the_agent_is_gone(self, client, db, fake_app, owner_headers):
+    def test_deleting_a_free_service_detaches_nothing(self, client, fake_app, owner_headers):
         sid = _create(client, fake_app, owner_headers)["service_id"]
-        agent = self._agent_using(db, fake_app, sid)
-        db.delete(agent)
-        db.flush()
-        assert client.delete(url(fake_app, str(sid)), headers=owner_headers).status_code == 200
+        r = client.delete(url(fake_app, str(sid)), headers=owner_headers)
+        assert r.status_code == 200 and r.json()["detached_agents"] == []
 
 
 class TestConnection:

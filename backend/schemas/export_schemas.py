@@ -50,7 +50,7 @@ class ExportSystemOneServiceSchema(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     api_key: Optional[str] = None  # Always None (security)
     endpoint: Optional[str] = None
-    model_name: str = "nimble-latest"
+    model_name: str = ""
     max_concurrency: int = 1
 
 

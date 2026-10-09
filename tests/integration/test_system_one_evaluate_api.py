@@ -70,6 +70,14 @@ class TestInternalEvaluate:
         assert body["state_reduction"] == "none" and body["model"] == "nimble-latest"
         assert body["usage"] == {"input_tokens": 50, "output_tokens": 4}
 
+    def test_an_agent_whose_service_was_deleted_answers_409_and_never_calls_the_server(
+            self, client, db, fake_app, agent, owner_headers, server):
+        agent.system_one_service_id = None
+        db.flush()
+        r = client.post(internal(fake_app, agent.agent_id), headers=owner_headers, data={"text": "hello"})
+        assert r.status_code == 409 and "service" in r.json()["detail"].lower()
+        server[0].assert_not_called()
+
     def test_app_viewer_can_evaluate(self, client, fake_app, agent, viewer_headers, server):
         r = client.post(internal(fake_app, agent.agent_id), data={"text": "hello"}, headers=viewer_headers)
         assert r.status_code == 200

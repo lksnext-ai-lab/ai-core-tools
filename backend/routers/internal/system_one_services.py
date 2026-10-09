@@ -1,4 +1,4 @@
-"""System One services of an app (connections to a Nimble server). Mounted under /{app_id}/system-one-services."""
+"""System One services of an app (connections to a System One server). Mounted under /{app_id}/system-one-services."""
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,7 +12,7 @@ from schemas.system_one_service_schemas import (
     SystemOneServiceDetailSchema,
     SystemOneServiceListItemSchema,
 )
-from services.system_one_service_service import ServiceInUseError, SystemOneServiceService
+from services.system_one_service_service import SystemOneServiceService
 from utils.logger import get_logger
 
 from .auth_utils import get_current_user_oauth
@@ -129,20 +129,12 @@ async def delete_system_one_service(
     db: Annotated[Session, Depends(get_db)],
 ):
     try:
-        deleted = SystemOneServiceService.delete_system_one_service(db, app_id, service_id)
-    except ServiceInUseError as exc:
-        names = ", ".join(a["name"] for a in exc.agents)
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": f"The service is used by these agents: {names}. "
-                               "Switch them to another service or delete them first.",
-                    "agents": exc.agents},
-        )
+        detached = SystemOneServiceService.delete_system_one_service(db, app_id, service_id)
     except Exception as exc:
         raise _server_error("deleting the System One service", exc, app_id=app_id, service_id=service_id)
-    if not deleted:
+    if detached is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND)
-    return {"message": "System One service deleted successfully"}
+    return {"message": "System One service deleted successfully", "detached_agents": detached}
 
 
 @system_one_services_router.post("/{service_id}/test", summary="Test a saved System One service", tags=TAG)
