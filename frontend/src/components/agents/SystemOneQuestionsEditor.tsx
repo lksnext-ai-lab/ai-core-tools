@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { randomId } from '../../utils/randomId';
 import {
@@ -27,22 +28,40 @@ const TYPE_LABEL: Record<SystemOneQuestionType, string> = { noul: 'Yes / No', ch
 interface SystemOneQuestionsEditorProps {
   readonly questions: EditorQuestion[];
   readonly onChange: (questions: EditorQuestion[]) => void;
-  readonly problems: string[];
+  /** About the list as a whole. */
+  readonly generalProblems: string[];
+  /** Per question, same order: shown right above the question they belong to. */
+  readonly problemsByQuestion: string[][];
 }
 
 function parseNumber(raw: string): number | undefined {
   return raw.trim() === '' ? undefined : Number(raw);
 }
 
-function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQuestionsEditorProps) {
+function SystemOneQuestionsEditor({ questions, onChange, generalProblems, problemsByQuestion }: SystemOneQuestionsEditorProps) {
+  const [announcement, setAnnouncement] = useState('');
   const update = (index: number, next: EditorQuestion) => onChange(questions.map((q, i) => (i === index ? next : q)));
   const remove = (index: number) => onChange(questions.filter((_, i) => i !== index));
-  const move = (index: number, delta: -1 | 1) => {
+  // After a move the control that had the focus is re-created in its new place (or becomes disabled at an end):
+  // put the focus back so the keyboard can keep moving the same question.
+  const move = (index: number, delta: -1 | 1, focusId?: string) => {
     const target = index + delta;
     if (target < 0 || target >= questions.length) return;
     const next = [...questions];
     [next[index], next[target]] = [next[target], next[index]];
     onChange(next);
+    setAnnouncement(`Question moved to position ${target + 1} of ${questions.length}`);
+    const questionId = questions[index]._id ?? String(index);
+    window.setTimeout(() => {
+      const wanted = focusId ? document.getElementById(focusId) : null;
+      const fallback = document.getElementById(`${questionId}-${delta < 0 ? 'down' : 'up'}`);
+      ((wanted as HTMLButtonElement | null)?.disabled ? fallback : wanted ?? fallback)?.focus();
+    }, 0);
+  };
+  const moveWithKeyboard = (event: React.KeyboardEvent, index: number) => {
+    if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+    event.preventDefault();
+    move(index, event.key === 'ArrowUp' ? -1 : 1, (event.target as HTMLElement).id || undefined);
   };
   const add = (type: SystemOneQuestionType) => onChange([...questions, newQuestion(type, randomId())]);
 
@@ -53,28 +72,41 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
           <h4 className="text-base font-semibold text-gray-900">Questions</h4>
           <p className="text-sm text-gray-600">
             The agent answers all of them for every text. Keys and option names are part of what the model reads: make them descriptive.
+            The order only decides how they are listed; each question is answered on its own. With the cursor inside a question,
+            Alt+↑ / Alt+↓ moves it.
           </p>
         </div>
         <span className="text-sm text-gray-500" aria-live="polite">{questions.length} / {MAX_QUESTIONS}</span>
       </div>
 
-      {problems.length > 0 && (
-        <ul id="so-question-problems" className="mb-4 list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-7 text-sm text-red-700" role="alert">
-          {problems.map((p) => <li key={p}>{p}</li>)}
+      <p className="sr-only" aria-live="polite">{announcement}</p>
+
+      {generalProblems.length > 0 && (
+        <ul className="mb-4 list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-7 text-sm text-red-700" role="alert">
+          {generalProblems.map((p) => <li key={p}>{p}</li>)}
         </ul>
       )}
 
       <div className="space-y-4">
         {questions.map((question, index) => {
           const id = question._id ?? String(index);
+          const own = problemsByQuestion[index] ?? [];
+          const describedBy = own.length > 0 ? `${id}-problems` : undefined;
           return (
-            <fieldset key={id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <fieldset key={id} onKeyDown={(e) => moveWithKeyboard(e, index)}
+                      className={`rounded-xl border bg-gray-50 p-4 ${own.length > 0 ? 'border-red-300' : 'border-gray-200'}`}>
               <legend className="px-2 text-sm font-medium text-gray-700">Question {index + 1}</legend>
+
+              {own.length > 0 && (
+                <ul id={`${id}-problems`} data-question-problem className="mb-3 list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-7 text-sm text-red-700" role="alert">
+                  {own.map((p) => <li key={p}>{p}</li>)}
+                </ul>
+              )}
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_12rem_auto]">
                 <div>
                   <label htmlFor={`${id}-key`} className="mb-1 block text-xs font-medium text-gray-600">Key</label>
-                  <input id={`${id}-key`} aria-describedby={problems.length > 0 ? 'so-question-problems' : undefined} className={inputClass} value={question.key} placeholder="is_urgent"
+                  <input id={`${id}-key`} aria-describedby={describedBy} className={inputClass} value={question.key} placeholder="is_urgent"
                          onChange={(e) => update(index, { ...question, key: e.target.value })} />
                 </div>
                 <div>
@@ -85,10 +117,10 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
                   </select>
                 </div>
                 <div className="flex items-end gap-1">
-                  <button type="button" className={smallButton} aria-label={`Move question ${index + 1} up`} disabled={index === 0} onClick={() => move(index, -1)}>
+                  <button type="button" id={`${id}-up`} className={smallButton} aria-label={`Move question ${index + 1} up`} disabled={index === 0} onClick={() => move(index, -1, `${id}-up`)}>
                     <ArrowUp className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <button type="button" className={smallButton} aria-label={`Move question ${index + 1} down`} disabled={index === questions.length - 1} onClick={() => move(index, 1)}>
+                  <button type="button" id={`${id}-down`} className={smallButton} aria-label={`Move question ${index + 1} down`} disabled={index === questions.length - 1} onClick={() => move(index, 1, `${id}-down`)}>
                     <ArrowDown className="h-4 w-4" aria-hidden="true" />
                   </button>
                   <button type="button" className={`${smallButton} hover:text-red-600`} aria-label={`Remove question ${index + 1}`} onClick={() => remove(index)}>
@@ -100,7 +132,7 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
               <div className="mt-3">
                 <label htmlFor={`${id}-instructions`} className="mb-1 block text-xs font-medium text-gray-600">Instructions</label>
                 <input id={`${id}-instructions`} className={inputClass} value={question.instructions}
-                       aria-describedby={problems.length > 0 ? 'so-question-problems' : undefined}
+                       aria-describedby={describedBy}
                        placeholder={INSTRUCTION_EXAMPLE[question.type]}
                        onChange={(e) => update(index, { ...question, instructions: e.target.value })} />
               </div>

@@ -56,89 +56,106 @@ function label(question: EditorQuestion, index: number): string {
   return question.key.trim() ? `Question ${index + 1} (${question.key.trim()})` : `Question ${index + 1}`;
 }
 
-function validateNoul(question: NoulQuestion, name: string): string[] {
+function validateNoul(question: NoulQuestion): string[] {
   const problems: string[] = [];
   if (question.threshold !== undefined && !isProbability(question.threshold)) {
-    problems.push(`${name}: the threshold must be a number between 0 and 1`);
+    problems.push(`the threshold must be a number between 0 and 1`);
   }
   const yes = question.criteria?.true?.trim() ?? '';
   const no = question.criteria?.false?.trim() ?? '';
-  if ((yes === '') !== (no === '')) problems.push(`${name}: fill both meanings (yes and no) or leave both empty`);
+  if ((yes === '') !== (no === '')) problems.push(`fill both meanings (yes and no) or leave both empty`);
   if (tooLong(yes, MAX_CRITERIA_LENGTH) || tooLong(no, MAX_CRITERIA_LENGTH)) {
-    problems.push(`${name}: each meaning can have at most ${MAX_CRITERIA_LENGTH} characters`);
+    problems.push(`each meaning can have at most ${MAX_CRITERIA_LENGTH} characters`);
   }
   return problems;
 }
 
-function validateChoice(question: ChoiceQuestion, name: string): string[] {
+function validateChoice(question: ChoiceQuestion): string[] {
   const problems: string[] = [];
   const options = question.criteria;
   if (options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) {
-    problems.push(`${name}: it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} options`);
+    problems.push(`it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} options`);
   }
   const seen = new Set<string>();
   for (const option of options) {
     const key = option.key.trim();
     if (!key) {
-      problems.push(`${name}: every option needs a name`);
+      problems.push(`every option needs a name`);
       continue;
     }
-    if (key.length > MAX_OPTION_NAME_LENGTH) problems.push(`${name}: the option "${key.slice(0, 20)}…" is over ${MAX_OPTION_NAME_LENGTH} characters`);
+    if (key.length > MAX_OPTION_NAME_LENGTH) problems.push(`the option "${key.slice(0, 20)}…" is over ${MAX_OPTION_NAME_LENGTH} characters`);
     if (tooLong(option.description, MAX_CRITERIA_LENGTH)) {
-      problems.push(`${name}: the description of "${key}" can have at most ${MAX_CRITERIA_LENGTH} characters`);
+      problems.push(`the description of "${key}" can have at most ${MAX_CRITERIA_LENGTH} characters`);
     }
     const folded = key.toLowerCase();
-    if (seen.has(folded)) problems.push(`${name}: the option "${key}" is repeated (names are compared ignoring case)`);
+    if (seen.has(folded)) problems.push(`the option "${key}" is repeated (names are compared ignoring case)`);
     seen.add(folded);
   }
   if (question.min_probability != null && !isProbability(question.min_probability)) {
-    problems.push(`${name}: the minimum probability must be a number between 0 and 1`);
+    problems.push(`the minimum probability must be a number between 0 and 1`);
   }
   return problems;
 }
 
-function validateScore(question: ScoreQuestion, name: string): string[] {
+function validateScore(question: ScoreQuestion): string[] {
   const problems: string[] = [];
   const levels = question.criteria;
   if (levels.length < MIN_OPTIONS || levels.length > MAX_OPTIONS) {
-    problems.push(`${name}: it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} levels`);
+    problems.push(`it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} levels`);
   }
-  if (levels.some((level) => !level.trim())) problems.push(`${name}: every level needs a description`);
+  if (levels.some((level) => !level.trim())) problems.push(`every level needs a description`);
   if (levels.some((level) => tooLong(level, MAX_CRITERIA_LENGTH))) {
-    problems.push(`${name}: each level can have at most ${MAX_CRITERIA_LENGTH} characters`);
+    problems.push(`each level can have at most ${MAX_CRITERIA_LENGTH} characters`);
   }
   if (question.min_probability != null && !isProbability(question.min_probability)) {
-    problems.push(`${name}: the minimum probability must be a number between 0 and 1`);
+    problems.push(`the minimum probability must be a number between 0 and 1`);
   }
   return problems;
 }
 
-/** Human-readable problems, in question order. Empty array = valid. */
-export function validateQuestions(questions: EditorQuestion[]): string[] {
-  if (questions.length === 0) return ['Add at least one question'];
-  const problems: string[] = [];
-  if (questions.length > MAX_QUESTIONS) problems.push(`A System One agent supports at most ${MAX_QUESTIONS} questions`);
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+export interface QuestionProblems {
+  /** About the list as a whole (none, too many). */
+  general: string[];
+  /** One list per question, same order; each message reads on its own, shown right above that question. */
+  byQuestion: string[][];
+}
+
+export function checkQuestions(questions: EditorQuestion[]): QuestionProblems {
+  const general: string[] = [];
+  if (questions.length === 0) general.push('Add at least one question');
+  if (questions.length > MAX_QUESTIONS) general.push(`A System One agent supports at most ${MAX_QUESTIONS} questions`);
 
   const seenKeys = new Set<string>();
-  questions.forEach((question, index) => {
-    const name = label(question, index);
+  const byQuestion = questions.map((question) => {
+    const problems: string[] = [];
     const key = question.key.trim();
     if (!KEY_PATTERN.test(key)) {
-      problems.push(`${name}: the key must be 1-${MAX_KEY_LENGTH} characters of lowercase letters, digits or underscores (e.g. is_urgent)`);
+      problems.push(`the key must be 1-${MAX_KEY_LENGTH} characters of lowercase letters, digits or underscores (e.g. is_urgent)`);
     } else if (seenKeys.has(key)) {
-      problems.push(`${name}: the key "${key}" is used by another question`);
+      problems.push(`the key "${key}" is used by another question`);
     }
     seenKeys.add(key);
-    if (!question.instructions.trim()) problems.push(`${name}: the instructions are required`);
+    if (!question.instructions.trim()) problems.push('the instructions are required');
     if (tooLong(question.instructions, MAX_INSTRUCTIONS_LENGTH)) {
-      problems.push(`${name}: the instructions can have at most ${MAX_INSTRUCTIONS_LENGTH} characters`);
+      problems.push(`the instructions can have at most ${MAX_INSTRUCTIONS_LENGTH} characters`);
     }
-
-    if (question.type === 'noul') problems.push(...validateNoul(question, name));
-    else if (question.type === 'choice') problems.push(...validateChoice(question, name));
-    else problems.push(...validateScore(question, name));
+    if (question.type === 'noul') problems.push(...validateNoul(question));
+    else if (question.type === 'choice') problems.push(...validateChoice(question));
+    else problems.push(...validateScore(question));
+    return problems.map(capitalize);
   });
-  return problems;
+  return { general, byQuestion };
+}
+
+/** Human-readable problems, in question order, each naming its question. Empty array = valid. */
+export function validateQuestions(questions: EditorQuestion[]): string[] {
+  const { general, byQuestion } = checkQuestions(questions);
+  return [
+    ...general,
+    ...byQuestion.flatMap((problems, index) => problems.map((p) => `${label(questions[index], index)}: ${p}`)),
+  ];
 }
 
 function optionalProbability(value: number | null | undefined): number | undefined {

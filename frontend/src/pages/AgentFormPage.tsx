@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
+import { toast } from 'sonner';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
@@ -28,7 +29,7 @@ import { randomId } from '../utils/randomId';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import SystemOneAgentSection from '../components/agents/SystemOneAgentSection';
-import { toEditorQuestions, toPayload, validateMaxStateChars, validateQuestions, type EditorQuestion } from '../utils/systemOneQuestions';
+import { toEditorQuestions, toPayload, checkQuestions, validateMaxStateChars, validateQuestions, type EditorQuestion } from '../utils/systemOneQuestions';
 import type { SystemOneQuestion } from '../types/systemOne';
 
 // Define the Agent types
@@ -650,6 +651,7 @@ function AgentFormPage() {
     if (!formData.name.trim()) {
       setActiveTab('basic');
       setError('The name is required');
+      toast.error('The name is required');
       return;
     }
     const problems = validateQuestions(formData.questions);
@@ -660,6 +662,9 @@ function AgentFormPage() {
       setShowQuestionProblems(true);
       setActiveTab('system_one');
       setError(problems[0]);
+      // The banner can be scrolled out of sight: say it where the user is looking, then go to the first problem.
+      toast.error(problems.length === 1 ? problems[0] : `${problems[0]} (and ${problems.length - 1} more problem${problems.length === 2 ? '' : 's'})`);
+      window.setTimeout(() => document.querySelector('[data-question-problem]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
       return;
     }
 
@@ -1005,7 +1010,8 @@ function AgentFormPage() {
               onIsToolChange={(value) => handleInputChange('is_tool', value)}
               questions={formData.questions}
               onQuestionsChange={(questions) => handleInputChange('questions', questions)}
-              problems={showQuestionProblems ? validateQuestions(formData.questions) : []}
+              generalProblems={showQuestionProblems ? checkQuestions(formData.questions).general : []}
+              problemsByQuestion={showQuestionProblems ? checkQuestions(formData.questions).byQuestion : []}
             />
           )}
 
