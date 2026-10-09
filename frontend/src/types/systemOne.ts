@@ -1,0 +1,109 @@
+// System One (Nimble): connections, question definitions and evaluation results.
+// v1 evaluates TEXT only.
+
+export interface SystemOneService {
+  service_id: number;
+  name: string;
+  endpoint: string;
+  model: string;
+  max_concurrency: number;
+  created_at?: string | null;
+}
+
+export interface SystemOneServiceDetail extends SystemOneService {
+  /** Always masked ("****1234") or empty on read. */
+  api_key: string;
+}
+
+export interface SystemOneServicePayload {
+  name: string;
+  endpoint: string;
+  /** "" = no token; "****…" = keep the stored one. */
+  api_key: string;
+  model: string;
+  max_concurrency: number | null;
+}
+
+export interface SystemOneConnectionResult {
+  status: 'success' | 'error';
+  message: string;
+  models: string[];
+  limits: Record<string, number> | null;
+}
+
+// ----------------------------------------------------------------- questions
+
+export interface NoulQuestion {
+  key: string;
+  type: 'noul';
+  instructions: string;
+  criteria?: { true: string; false: string } | null;
+  threshold?: number;
+}
+
+export interface ChoiceOption {
+  key: string;
+  description?: string | null;
+}
+
+export interface ChoiceQuestion {
+  key: string;
+  type: 'choice';
+  instructions: string;
+  criteria: ChoiceOption[];
+  min_probability?: number | null;
+}
+
+export interface ScoreQuestion {
+  key: string;
+  type: 'score';
+  instructions: string;
+  criteria: string[];
+  min_probability?: number | null;
+}
+
+export type SystemOneQuestion = NoulQuestion | ChoiceQuestion | ScoreQuestion;
+export type SystemOneQuestionType = SystemOneQuestion['type'];
+
+// ------------------------------------------------------------------- results
+
+export interface NoulAnswer {
+  type: 'noul';
+  decision: boolean;
+  probability: number;
+  threshold: number;
+}
+
+export interface ChoiceAnswer {
+  type: 'choice';
+  /** null = below the question's minimum probability. */
+  decision: string | null;
+  choice: string;
+  probability: number;
+  probabilities: Record<string, number>;
+  confidence: number;
+  min_probability?: number | null;
+}
+
+export interface ScoreAnswer {
+  type: 'score';
+  decision: string | null;
+  level_index: number;
+  probability: number;
+  expected_score: number;
+  legend: Record<string, string>;
+  probabilities: Record<string, number>;
+  confidence: number;
+  min_probability?: number | null;
+}
+
+export type SystemOneAnswer = NoulAnswer | ChoiceAnswer | ScoreAnswer;
+
+export interface SystemOneResult {
+  answers: Record<string, SystemOneAnswer>;
+  state_reduction: 'none' | 'summarized' | 'truncated';
+  original_chars: number;
+  state_chars: number;
+  model: string;
+  usage?: { input_tokens: number; output_tokens: number } | null;
+}
