@@ -8,6 +8,7 @@ from .ocr import ocr_router
 from .repositories import repositories_router
 from .resources import resources_router
 from .silos import silos_router
+from .system_one import system_one_router
 from .openai import openai_router
 from .approvals import approvals_router
 from routers.controls import enforce_allowed_origins, enforce_file_size_limit
@@ -22,6 +23,7 @@ public_v1_router.include_router(agents_router, prefix="/app/{app_id}/agents", de
 public_v1_router.include_router(chat_router, prefix="/app/{app_id}/chat", dependencies=[Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(files_router, prefix="/app/{app_id}/files", dependencies=[Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(ocr_router, prefix="/app/{app_id}/ocr", dependencies=[Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
+public_v1_router.include_router(system_one_router, prefix="/app/{app_id}/system-one", dependencies=[Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(repositories_router, prefix="/app/{app_id}/repositories", dependencies=[Depends(enforce_allowed_origins)])
 public_v1_router.include_router(resources_router, prefix="/app/{app_id}/resources", dependencies=[Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(silos_router, prefix="/app/{app_id}/silos", dependencies=[Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
