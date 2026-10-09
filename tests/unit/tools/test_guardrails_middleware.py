@@ -47,7 +47,8 @@ class TestComposePolicy:
     def test_all_rules_enabled_by_default(self):
         policy = compose_guardrail_policy(GuardrailsConfig())
         assert policy.startswith("<guardrails>")
-        assert "jailbreak" in policy and "personally identifiable" in policy
+        assert "jailbreak" in policy
+        assert "personally identifiable" in policy
 
     def test_nothing_enabled_returns_none(self):
         cfg = GuardrailsConfig(

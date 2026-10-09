@@ -1115,8 +1115,8 @@ class FileManagementService:
             try:
                 if os.path.isdir(path):
                     shutil.rmtree(path)
-            except OSError as e:
-                logger.error(f"Error deleting agent storage {path}: {e}")
+            except OSError:
+                logger.exception("Error deleting agent storage %s", path)
 
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""

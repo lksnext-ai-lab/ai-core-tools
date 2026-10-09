@@ -71,7 +71,7 @@ class MiddlewareService:
 
         # Referenced AI services must belong to this app (tenant isolation).
         config = parse_middleware_config(data.middleware_type, data.config)
-        service_ids = referenced_ai_service_ids(data.middleware_type, config)
+        service_ids = referenced_ai_service_ids(config)
         if service_ids:
             found = MiddlewareRepository.get_existing_ai_service_ids_for_app(db, service_ids, app_id)
             if set(service_ids) - found:
@@ -109,7 +109,7 @@ class MiddlewareService:
                 config = parse_middleware_config(middleware.middleware_type, middleware.config)
             except ValidationError:
                 continue
-            if service_id in referenced_ai_service_ids(middleware.middleware_type, config):
+            if service_id in referenced_ai_service_ids(config):
                 names.append(middleware.name)
         return sorted(names)
 

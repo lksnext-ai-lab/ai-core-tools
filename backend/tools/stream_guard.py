@@ -22,6 +22,24 @@ RUN_TIMEOUT_MESSAGE = "The agent took too long to answer and was stopped. Please
 _END = object()
 
 
+async def _pump(source: AsyncIterator[str], queue: asyncio.Queue) -> None:
+    """Move every chunk of ``source`` (or the exception it raised) into ``queue``, then ``_END``."""
+    try:
+        async for chunk in source:
+            queue.put_nowait(chunk)
+    except Exception as exc:
+        queue.put_nowait(exc)
+    finally:
+        queue.put_nowait(_END)
+
+
+async def _stop(producer: asyncio.Task) -> None:
+    if not producer.done():
+        producer.cancel()
+        with suppress(asyncio.CancelledError):
+            await producer
+
+
 async def guarded_stream(
     source: AsyncIterator[str],
     *,
@@ -31,28 +49,11 @@ async def guarded_stream(
 ) -> AsyncIterator[str]:
     """Yield ``source``'s chunks with heartbeats; on timeout stop it and yield ``on_timeout()``."""
     queue: asyncio.Queue = asyncio.Queue()
-
-    async def pump() -> None:
-        try:
-            async for chunk in source:
-                queue.put_nowait(chunk)
-        except Exception as exc:
-            queue.put_nowait(exc)
-        finally:
-            queue.put_nowait(_END)
-
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout_seconds
-    producer = asyncio.create_task(pump())
+    producer = asyncio.create_task(_pump(source, queue))
     try:
-        while True:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                producer.cancel()
-                with suppress(asyncio.CancelledError):
-                    await producer
-                yield on_timeout()
-                return
+        while (remaining := deadline - loop.time()) > 0:
             try:
                 item = await asyncio.wait_for(queue.get(), timeout=min(heartbeat_seconds, remaining))
             except asyncio.TimeoutError:
@@ -64,11 +65,10 @@ async def guarded_stream(
             if isinstance(item, Exception):
                 raise item
             yield item
+        await _stop(producer)
+        yield on_timeout()
     finally:
-        if not producer.done():
-            producer.cancel()
-            with suppress(asyncio.CancelledError):
-                await producer
+        await _stop(producer)
 
 
 def guard_agent_stream(source: AsyncIterator[str]) -> AsyncIterator[str]:

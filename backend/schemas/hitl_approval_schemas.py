@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -63,6 +63,6 @@ class ApprovalStatusSchema(PendingApprovalSchema):
 class ApprovalResultSchema(BaseModel):
     """Outcome of answering an approval: the turn's answer, or a new approval request."""
     status: Literal["completed", "requires_approval"]
-    response: Union[str, Dict[str, Any]] = ""
+    response: str | Dict[str, Any] = ""
     conversation_id: Optional[int] = None
     pending_approval: Optional[PendingApprovalSchema] = None

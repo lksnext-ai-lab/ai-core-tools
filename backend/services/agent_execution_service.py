@@ -1,5 +1,6 @@
 import os
 import asyncio
+from dataclasses import dataclass
 import ast
 import functools
 import json
@@ -667,6 +668,19 @@ def _workspace_layout_paths(working_dir: str) -> dict[str, str]:
     }
 
 
+def _workspace_dir(tmp_base: str, *parts: str) -> str:
+    """Directory under ``tmp_base`` for a turn's workspace.
+
+    ``parts`` include caller identity (user/app/conversation ids), so the normalised path
+    must stay inside ``tmp_base``; anything else is rejected instead of being created.
+    """
+    base = os.path.normpath(tmp_base)
+    path = os.path.normpath(os.path.join(base, *parts))
+    if not path.startswith(base + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+    return path
+
+
 def _ensure_local_workspace_layout(working_dir: str) -> dict[str, str]:
     paths = _workspace_layout_paths(working_dir)
     os.makedirs(working_dir, exist_ok=True)
@@ -786,6 +800,23 @@ def approval_http_exception(exc) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=exc.to_dict())
 
 
+@dataclass(frozen=True)
+class GraphResume:
+    """Answer to a paused approval: the ``Command`` to send and the interrupt it must answer."""
+
+    command: Any
+    interrupt_id: str
+
+    @classmethod
+    def for_approval(
+        cls, approval: Optional[HITLApproval], decisions: Optional[List[Dict[str, Any]]]
+    ) -> "GraphResume | None":
+        if approval is None:
+            return None
+        from langgraph.types import Command
+        return cls(Command(resume={"decisions": decisions}), approval.interrupt_id)
+
+
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
@@ -847,22 +878,7 @@ class AgentExecutionService:
             if db is not None:
                 db.commit()
 
-            # Resolve temporary playground media/file silos for this session
-            temp_silo_ids = None
-            session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
-            if session_id_for_media and db:
-                try:
-                    from services.playground_media_service import PlaygroundMediaService
-                    app_id = ctx.user_context.get("app_id") if ctx.user_context else None
-                    if app_id:
-                        temp_silo_ids = PlaygroundMediaService.get_temp_silo_ids_for_agent(
-                            app_id, agent_id, session_id_for_media, db
-                        )
-                except Exception as e:
-                    logger.warning(f"Could not resolve temp silos: {e}")
-
-            from langgraph.types import Command
-
+            temp_silo_ids = self._resolve_temp_silo_ids(ctx, agent_id, db)
             try:
                 response = await self._execute_agent_async(
                     ctx.fresh_agent,
@@ -877,10 +893,7 @@ class AgentExecutionService:
                     sandbox_provider=ctx.sandbox_provider,
                     sandbox_session_key=ctx.sandbox_session_key,
                     temp_silo_ids=temp_silo_ids or None,
-                    graph_input=(
-                        Command(resume={"decisions": resume_decisions}) if resume_approval is not None else None
-                    ),
-                    expected_interrupt_id=resume_approval.interrupt_id if resume_approval is not None else None,
+                    resume=GraphResume.for_approval(resume_approval, resume_decisions),
                 )
             except RunPausedForApproval as paused:
                 return await self._handle_pause(ctx, paused, db, channel)
@@ -899,6 +912,20 @@ class AgentExecutionService:
         finally:
             if ctx is not None and sandbox_turn_active:
                 self._end_sandbox_turn(ctx, db=db)
+
+    @staticmethod
+    def _resolve_temp_silo_ids(ctx, agent_id: int, db: Optional[Session]) -> Optional[List[int]]:
+        """Temporary playground media/file silos of this conversation's session."""
+        session_id_for_media = ctx.conversation.session_id if ctx.conversation else None
+        app_id = ctx.user_context.get("app_id") if ctx.user_context else None
+        if not (session_id_for_media and db and app_id):
+            return None
+        try:
+            from services.playground_media_service import PlaygroundMediaService
+            return PlaygroundMediaService.get_temp_silo_ids_for_agent(app_id, agent_id, session_id_for_media, db)
+        except Exception as e:
+            logger.warning(f"Could not resolve temp silos: {e}")
+            return None
 
     # ------------------------------------------------------------------
     # Human-in-the-loop approvals
@@ -1187,10 +1214,10 @@ class AgentExecutionService:
         app_id_ctx = user_context.get('app_id', 'default') if user_context else 'default'
         identity_session_id = f"user_{user_id}_app_{app_id_ctx}"
         if effective_conv_id:
-            working_dir = os.path.join(tmp_base, "conversations", str(effective_conv_id))
+            working_dir = _workspace_dir(tmp_base, "conversations", str(effective_conv_id))
         else:
             session_key = f"agent_{agent_id}_{identity_session_id}"
-            working_dir = os.path.join(tmp_base, "persistent", session_key)
+            working_dir = _workspace_dir(tmp_base, "persistent", session_key)
 
         workspace_paths = _ensure_local_workspace_layout(working_dir)
         output_dir = workspace_paths["output"]
@@ -2353,13 +2380,12 @@ class AgentExecutionService:
         sandbox_session_key: Optional[str] = None,
         processed_files: List[Dict] = None,
         temp_silo_ids: Optional[List[int]] = None,
-        graph_input: Any = None,
-        expected_interrupt_id: Optional[str] = None,
+        resume: "GraphResume | None" = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
-        ``graph_input`` replaces the user message (a ``Command`` resuming an approval);
-        ``expected_interrupt_id`` makes sure the thread is still paused on that approval.
+        ``resume`` answers a paused approval instead of sending ``message``; the thread
+        must still be paused on that approval's interrupt.
 
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
@@ -2428,16 +2454,16 @@ class AgentExecutionService:
             started_at = datetime.utcnow()
             status, error_code, error_message, result = "SUCCESS", None, None, None
             try:
-                if expected_interrupt_id is not None:
+                if resume is not None:
                     pause = await approvals.read_pause(agent_chain, config)
-                    if pause is None or pause.interrupt_id != expected_interrupt_id:
+                    if pause is None or pause.interrupt_id != resume.interrupt_id:
                         raise approvals.ApprovalStaleError(
                             "This approval request no longer matches the conversation; it was not applied."
                         )
                 async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
                     result = await self._ainvoke_with_checkpoint_recovery(
                         agent_chain, message_payload, config, fresh_agent, session_id_for_cache,
-                        graph_input=graph_input,
+                        graph_input=resume.command if resume is not None else None,
                     )
             except RunPausedForApproval:
                 raise

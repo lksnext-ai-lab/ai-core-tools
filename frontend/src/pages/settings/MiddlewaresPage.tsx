@@ -33,7 +33,7 @@ function MiddlewaresPage() {
     const [exportingId, setExportingId] = useState<number | null>(null);
 
     useEffect(() => {
-        loadMiddlewares();
+        void loadMiddlewares();
     }, [appId]);
 
     async function loadMiddlewares() {

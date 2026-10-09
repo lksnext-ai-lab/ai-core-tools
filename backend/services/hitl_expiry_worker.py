@@ -99,7 +99,7 @@ async def _loop() -> None:
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.error("HITL expiry sweep failed", exc_info=True)
+            logger.exception("HITL expiry sweep failed")
         await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
 
 

@@ -132,7 +132,7 @@ def parse_middleware_config(middleware_type: MiddlewareType, config: Optional[Di
     return CONFIG_MODELS[middleware_type].model_validate(config or {})
 
 
-def referenced_ai_service_ids(middleware_type: MiddlewareType, config: BaseModel) -> List[int]:
+def referenced_ai_service_ids(config: BaseModel) -> List[int]:
     """AIService ids referenced by a validated config (``ai_service:<id>`` values)."""
     refs: List[str] = []
     if isinstance(config, SummarizationConfig):

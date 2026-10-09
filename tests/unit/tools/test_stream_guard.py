@@ -49,7 +49,8 @@ async def test_stops_the_source_when_the_turn_takes_too_long():
         guarded_stream(source(), timeout_seconds=0.2, on_timeout=lambda: "timeout", heartbeat_seconds=0.05)
     )
 
-    assert chunks[0] == "first" and chunks[-1] == "timeout"
+    assert chunks[0] == "first"
+    assert chunks[-1] == "timeout"
     assert "never" not in chunks
     assert cancelled.is_set()
 
@@ -79,5 +80,6 @@ async def test_source_errors_reach_the_consumer():
         yield "a"
         raise ValueError("boom")
 
+    stream = guarded_stream(source(), timeout_seconds=5, on_timeout=lambda: "timeout")
     with pytest.raises(ValueError, match="boom"):
-        await _collect(guarded_stream(source(), timeout_seconds=5, on_timeout=lambda: "timeout"))
+        await _collect(stream)

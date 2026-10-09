@@ -81,9 +81,10 @@ async def test_block_strategy_raises_on_match():
     llm = _FakeLLM([_PIIFinding(type="person", value="John Smith")])
     mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="block")
     state = {"messages": [HumanMessage(content="My name is John Smith.")]}
+    runtime = _FakeRuntime()
 
     with pytest.raises(PIIDetectionError):
-        await mw.abefore_agent(state, _FakeRuntime())
+        await mw.abefore_agent(state, runtime)
 
 
 @pytest.mark.asyncio
@@ -184,4 +185,5 @@ async def test_output_redaction_keeps_message_metadata():
     result = await mw.aafter_model({"messages": [ai]}, _FakeRuntime())
 
     out = result["messages"][0]
-    assert out.id == "a1" and out.usage_metadata["total_tokens"] == 7
+    assert out.id == "a1"
+    assert out.usage_metadata["total_tokens"] == 7

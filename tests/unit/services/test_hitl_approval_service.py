@@ -105,14 +105,16 @@ class TestPrepareDecisions:
         ([("c2", "approve"), ("c2", "reject")], "More than one decision"),
     ])
     def test_rejects_incomplete_or_unknown_decisions(self, decisions, fragment):
+        approval, answers = _approval(), [_decision(a, t) for a, t in decisions]
         with pytest.raises(approvals.ApprovalDecisionError, match=fragment):
-            approvals.prepare_decisions(_approval(), [_decision(a, t) for a, t in decisions])
+            approvals.prepare_decisions(approval, answers)
 
     def test_rejects_a_decision_type_the_tool_does_not_allow(self):
         approval = _approval()
         approval.actions[0]["allowed_decisions"] = ["approve", "reject"]
+        answers = [_decision("c2", "edit", args={}), _decision("c3", "approve")]
         with pytest.raises(approvals.ApprovalDecisionError, match="not allowed"):
-            approvals.prepare_decisions(approval, [_decision("c2", "edit", args={}), _decision("c3", "approve")])
+            approvals.prepare_decisions(approval, answers)
 
     def test_validates_edited_args_against_args_schema(self):
         approval = _approval()
@@ -120,17 +122,18 @@ class TestPrepareDecisions:
             "type": "object", "properties": {"to": {"type": "string"}}, "required": ["to"],
             "additionalProperties": False,
         }
+        answers = [_decision("c2", "edit", args={"to": "x", "bcc": "attacker"}), _decision("c3", "approve")]
         with pytest.raises(approvals.ApprovalDecisionError, match="Invalid arguments"):
-            approvals.prepare_decisions(approval, [
-                _decision("c2", "edit", args={"to": "x", "bcc": "attacker"}), _decision("c3", "approve"),
-            ])
+            approvals.prepare_decisions(approval, answers)
 
     def test_rejects_oversized_edited_args(self):
+        approval = _approval()
+        answers = [
+            _decision("c2", "edit", args={"body": "x" * (approvals.MAX_EDITED_ARGS_BYTES + 1)}),
+            _decision("c3", "approve"),
+        ]
         with pytest.raises(approvals.ApprovalDecisionError, match="too large"):
-            approvals.prepare_decisions(_approval(), [
-                _decision("c2", "edit", args={"body": "x" * (approvals.MAX_EDITED_ARGS_BYTES + 1)}),
-                _decision("c3", "approve"),
-            ])
+            approvals.prepare_decisions(approval, answers)
 
     def test_decision_payload_must_match_its_type(self):
         with pytest.raises(ValueError):

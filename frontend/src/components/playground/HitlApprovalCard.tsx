@@ -97,8 +97,13 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
     })));
   };
 
+  const toolsLabel = actions.length === 1 ? 'this tool' : 'these tools';
+  const statusText = expired
+    ? 'This request expired and the tool was not executed. The agent’s answer will appear shortly.'
+    : `The agent wants to run ${toolsLabel}. Nothing runs until you decide.`;
+
   return (
-    <div className="flex justify-start mb-4" role="region" aria-label="Approval required">
+    <section className="flex justify-start mb-4" aria-label="Approval required">
       <div className="w-full max-w-[85%] min-w-0">
         <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 text-sm font-medium">
@@ -114,9 +119,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
             </span>
           </div>
           <p className="text-xs text-amber-900/80 dark:text-amber-100/80" aria-live="polite">
-            {expired
-              ? 'This request expired and the tool was not executed. The agent’s answer will appear shortly.'
-              : `The agent wants to run ${actions.length === 1 ? 'this tool' : 'these tools'}. Nothing runs until you decide.`}
+            {statusText}
           </p>
 
           {actions.map((action, idx) => {
@@ -185,7 +188,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

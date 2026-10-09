@@ -71,9 +71,10 @@ class TestClaim:
 class TestOnePausePerConversation:
     def test_second_pending_approval_is_rejected(self, db, conversation):
         HITLApprovalRepository.add(db, _approval(conversation))
+        second = _approval(conversation)
 
         with pytest.raises(IntegrityError):
-            HITLApprovalRepository.add(db, _approval(conversation))
+            HITLApprovalRepository.add(db, second)
         db.rollback()
 
     def test_a_resolving_approval_does_not_block_the_next_pause(self, db, conversation):

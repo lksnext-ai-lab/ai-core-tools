@@ -321,38 +321,48 @@ def _validate_edited_args(action: Dict[str, Any], args: Dict[str, Any]) -> None:
         logger.warning("Ignoring an invalid args_schema for tool %s", action["name"])
 
 
-def prepare_decisions(approval: HITLApproval, decisions: List[ApprovalDecisionSchema]) -> List[Dict[str, Any]]:
-    """Check id-keyed decisions against the approval and return LangChain's ordered list."""
+def _decisions_by_action(
+    approval: HITLApproval, decisions: List[ApprovalDecisionSchema]
+) -> Dict[str, ApprovalDecisionSchema]:
+    """Index decisions by action_id; each must name a known action, at most once."""
     by_id: Dict[str, ApprovalDecisionSchema] = {}
     for decision in decisions:
         if decision.action_id in by_id:
             raise ApprovalDecisionError(f"More than one decision for action '{decision.action_id}'.")
         by_id[decision.action_id] = decision
-    known = {a["action_id"] for a in approval.actions}
-    unknown = sorted(set(by_id) - known)
+    unknown = sorted(set(by_id) - {a["action_id"] for a in approval.actions})
     if unknown:
         raise ApprovalDecisionError(f"Unknown action_id: {', '.join(unknown)}.")
+    return by_id
 
+
+def _langchain_decision(action: Dict[str, Any], decision: ApprovalDecisionSchema) -> Dict[str, Any]:
+    """HumanInTheLoopMiddleware's decision for one action, after checking it is allowed."""
+    if decision.type not in action["allowed_decisions"]:
+        raise ApprovalDecisionError(
+            f"'{decision.type}' is not allowed for '{action['name']}'. "
+            f"Allowed: {', '.join(action['allowed_decisions'])}."
+        )
+    if decision.type == "approve":
+        return {"type": "approve"}
+    if decision.type == "edit":
+        _validate_edited_args(action, decision.args or {})
+        return {"type": "edit", "edited_action": {"name": action["name"], "args": decision.args}}
+    entry: Dict[str, Any] = {"type": "reject"}
+    if decision.message:
+        entry["message"] = decision.message
+    return entry
+
+
+def prepare_decisions(approval: HITLApproval, decisions: List[ApprovalDecisionSchema]) -> List[Dict[str, Any]]:
+    """Check id-keyed decisions against the approval and return LangChain's ordered list."""
+    by_id = _decisions_by_action(approval, decisions)
     ordered: List[Dict[str, Any]] = []
     for action in approval.actions:
         decision = by_id.get(action["action_id"])
         if decision is None:
             raise ApprovalDecisionError(f"Missing a decision for action '{action['action_id']}' ({action['name']}).")
-        if decision.type not in action["allowed_decisions"]:
-            raise ApprovalDecisionError(
-                f"'{decision.type}' is not allowed for '{action['name']}'. "
-                f"Allowed: {', '.join(action['allowed_decisions'])}."
-            )
-        if decision.type == "approve":
-            ordered.append({"type": "approve"})
-        elif decision.type == "edit":
-            _validate_edited_args(action, decision.args or {})
-            ordered.append({"type": "edit", "edited_action": {"name": action["name"], "args": decision.args}})
-        else:
-            entry: Dict[str, Any] = {"type": "reject"}
-            if decision.message:
-                entry["message"] = decision.message
-            ordered.append(entry)
+        ordered.append(_langchain_decision(action, decision))
     return ordered
 
 

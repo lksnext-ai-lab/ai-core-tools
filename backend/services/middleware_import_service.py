@@ -67,37 +67,18 @@ class MiddlewareImportService:
         with the same name, type and config instead of creating a copy (bundled dependencies).
         ``tool_renames`` moves approval rules to the new names of tool agents renamed on import.
         """
-        try:
-            middleware_type = MiddlewareType(item.middleware_type)
-        except ValueError:
-            raise ValueError(f"Middleware '{item.name}' has an unknown type '{item.middleware_type}'") from None
+        middleware_type = self._middleware_type(item)
         config, warnings = self._resolve_config(item, middleware_type, app_id, ai_service_id_map or {})
-        if middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP and tool_renames:
-            config["interrupt_on"] = {
-                tool_renames.get(tool, tool): rule for tool, rule in (config.get("interrupt_on") or {}).items()
-            }
-        try:
-            config = parse_middleware_config(middleware_type, config).model_dump()
-        except ValidationError as exc:
-            raise ValueError(f"Middleware '{item.name}' is not valid: {exc.errors()[0]['msg']}") from None
+        config = self._validated_config(item, middleware_type, config, tool_renames)
 
-        final_name = item.name
-        existing = self.get_by_name_and_app(final_name, app_id)
-        target_id = 0
+        final_name, target_id = item.name, 0
+        existing = self.get_by_name_and_app(item.name, app_id)
         if existing:
             if reuse_identical and existing.middleware_type == middleware_type and existing.config == config:
                 return self._summary(existing.middleware_id, existing.name, conflict_mode, False, True, warnings)
-            if conflict_mode == ConflictMode.FAIL:
-                raise ValueError(f"Middleware '{final_name}' already exists in app {app_id}")
-            if conflict_mode == ConflictMode.OVERRIDE:
-                if existing.middleware_type != middleware_type:
-                    raise ValueError(
-                        f"Middleware '{final_name}' already exists with type "
-                        f"'{existing.middleware_type.value}' and cannot be overridden by a '{middleware_type.value}'"
-                    )
-                target_id = existing.middleware_id
-            else:
-                final_name = new_name or self._unique_name(item.name, app_id)
+            final_name, target_id = self._resolve_conflict(
+                item, existing, middleware_type, app_id, conflict_mode, new_name
+            )
 
         data = CreateUpdateMiddlewareSchema(
             name=final_name, description=item.description or "", middleware_type=middleware_type, config=config
@@ -105,6 +86,51 @@ class MiddlewareImportService:
         detail = MiddlewareService.create_or_update_middleware(self.session, app_id, target_id, data)
         logger.info(f"Imported middleware '{detail.name}' (ID: {detail.middleware_id}) into app {app_id}")
         return self._summary(detail.middleware_id, detail.name, conflict_mode, target_id == 0, existing is not None, warnings)
+
+    @staticmethod
+    def _middleware_type(item: ExportMiddlewareSchema) -> MiddlewareType:
+        try:
+            return MiddlewareType(item.middleware_type)
+        except ValueError:
+            raise ValueError(f"Middleware '{item.name}' has an unknown type '{item.middleware_type}'") from None
+
+    @staticmethod
+    def _validated_config(
+        item: ExportMiddlewareSchema,
+        middleware_type: MiddlewareType,
+        config: dict,
+        tool_renames: Optional[Dict[str, str]],
+    ) -> dict:
+        """Apply tool renames to approval rules and return the normalised, validated config."""
+        if middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP and tool_renames:
+            config["interrupt_on"] = {
+                tool_renames.get(tool, tool): rule for tool, rule in (config.get("interrupt_on") or {}).items()
+            }
+        try:
+            return parse_middleware_config(middleware_type, config).model_dump()
+        except ValidationError as exc:
+            raise ValueError(f"Middleware '{item.name}' is not valid: {exc.errors()[0]['msg']}") from None
+
+    def _resolve_conflict(
+        self,
+        item: ExportMiddlewareSchema,
+        existing: Middleware,
+        middleware_type: MiddlewareType,
+        app_id: int,
+        conflict_mode: ConflictMode,
+        new_name: Optional[str],
+    ) -> Tuple[str, int]:
+        """Name and target id (0 = create) for an import whose name is already taken."""
+        if conflict_mode == ConflictMode.FAIL:
+            raise ValueError(f"Middleware '{item.name}' already exists in app {app_id}")
+        if conflict_mode == ConflictMode.OVERRIDE:
+            if existing.middleware_type != middleware_type:
+                raise ValueError(
+                    f"Middleware '{item.name}' already exists with type "
+                    f"'{existing.middleware_type.value}' and cannot be overridden by a '{middleware_type.value}'"
+                )
+            return item.name, existing.middleware_id
+        return new_name or self._unique_name(item.name, app_id), 0
 
     def import_for_agent(
         self,

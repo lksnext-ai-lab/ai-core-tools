@@ -450,7 +450,8 @@ async def test_resume_sends_command_and_records_outcome():
     events, execution_service, fakes = await _run_hitl(chain, message="", resume=_resume())
 
     sent = chain.astream.call_args.args[0]
-    assert isinstance(sent, Command) and sent.resume == {"decisions": [{"type": "approve"}]}
+    assert isinstance(sent, Command)
+    assert sent.resume == {"decisions": [{"type": "approve"}]}
     assert fakes["finish"].call_args.args[2] == ApprovalStatus.APPROVED
     fakes["release"].assert_not_called()
     execution_service._finalize_turn.assert_awaited_once()

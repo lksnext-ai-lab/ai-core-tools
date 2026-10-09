@@ -80,16 +80,13 @@ function AgentMiddlewaresCard({
               // LangChain allows one middleware of each type per agent.
               const blocked = !isSelected && selectedTypes.has(mw.middleware_type);
               const hintId = `mw-hint-${mw.middleware_id}`;
+              let stateClass = 'border-gray-200 bg-gray-50 hover:border-gray-300 cursor-pointer';
+              if (blocked) stateClass = 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed';
+              else if (isSelected) stateClass = 'border-indigo-500 bg-indigo-50 cursor-pointer';
               return (
                 <label
                   key={mw.middleware_id}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${
-                    blocked
-                      ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
-                      : isSelected
-                        ? 'border-indigo-500 bg-indigo-50 cursor-pointer'
-                        : 'border-gray-200 bg-gray-50 hover:border-gray-300 cursor-pointer'
-                  }`}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${stateClass}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center min-w-0">

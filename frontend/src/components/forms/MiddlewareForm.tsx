@@ -70,41 +70,59 @@ const inputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 
+const inRange = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
+const inOptionalRange = (v: unknown, min: number, max: number) => v == null || inRange(v, min, max);
+
+function validateCallLimit(config: Record<string, any>): string | null {
+  return inRange(config.max_calls, 1, 10000) ? null : 'The limit must be a whole number between 1 and 10,000.';
+}
+
+function validateSummarization(config: Record<string, any>): string | null {
+  if (!inOptionalRange(config.trigger_tokens, 500, 1000000)) {
+    return 'Trigger must be between 500 and 1,000,000 tokens, or empty for automatic.';
+  }
+  if (!inRange(config.keep_messages, 1, 500)) return 'Messages to keep must be between 1 and 500.';
+  if (!inOptionalRange(config.trim_tokens, 500, 1000000)) {
+    return 'Tokens to summarize must be between 500 and 1,000,000, or empty for no limit.';
+  }
+  return null;
+}
+
+function validatePii(config: Record<string, any>): string | null {
+  if (!config.pii_types?.length) return 'Select at least one type of personal data.';
+  if (!config.apply_to_input && !config.apply_to_output && !config.apply_to_tool_results) {
+    return 'Apply the protection to at least one of: user messages, tool results or answers.';
+  }
+  return null;
+}
+
+function validateHumanApproval(config: Record<string, any>): string | null {
+  const tools = Object.entries(config.interrupt_on ?? {}) as Array<[string, { allowed_decisions: Decision[] }]>;
+  if (tools.length === 0) return 'Select at least one tool that needs approval.';
+  const empty = tools.find(([, rule]) => rule.allowed_decisions.length === 0);
+  if (empty) return `Allow at least one decision for "${empty[0]}".`;
+  return inRange(config.approval_timeout_seconds ?? 3600, 60, 604800)
+    ? null
+    : 'The approval time limit must be between 1 minute and 7 days.';
+}
+
+function validateGuardrails(config: Record<string, any>): string | null {
+  return (config.custom_prompt ?? '').length > 4000 ? 'Additional rules must be at most 4,000 characters.' : null;
+}
+
+const CONFIG_VALIDATORS: Record<MiddlewareType, (config: Record<string, any>) => string | null> = {
+  model_call_limit: validateCallLimit,
+  tool_call_limit: validateCallLimit,
+  summarization: validateSummarization,
+  pii: validatePii,
+  human_in_the_loop: validateHumanApproval,
+  guardrails: validateGuardrails,
+};
+
 function validate(type: MiddlewareType, name: string, config: Record<string, any>): string | null {
   if (!name.trim()) return 'Name is required.';
   if (name.trim().length > 100) return 'Name must be at most 100 characters.';
-  const inRange = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
-  switch (type) {
-    case 'model_call_limit':
-    case 'tool_call_limit':
-      return inRange(config.max_calls, 1, 10000) ? null : 'The limit must be a whole number between 1 and 10,000.';
-    case 'summarization':
-      if (config.trigger_tokens != null && !inRange(config.trigger_tokens, 500, 1000000)) {
-        return 'Trigger must be between 500 and 1,000,000 tokens, or empty for automatic.';
-      }
-      if (!inRange(config.keep_messages, 1, 500)) return 'Messages to keep must be between 1 and 500.';
-      if (config.trim_tokens != null && !inRange(config.trim_tokens, 500, 1000000)) {
-        return 'Tokens to summarize must be between 500 and 1,000,000, or empty for no limit.';
-      }
-      return null;
-    case 'pii':
-      if (!config.pii_types?.length) return 'Select at least one type of personal data.';
-      if (!config.apply_to_input && !config.apply_to_output && !config.apply_to_tool_results) {
-        return 'Apply the protection to at least one of: user messages, tool results or answers.';
-      }
-      return null;
-    case 'human_in_the_loop': {
-      const tools = Object.entries(config.interrupt_on ?? {}) as Array<[string, { allowed_decisions: Decision[] }]>;
-      if (tools.length === 0) return 'Select at least one tool that needs approval.';
-      const empty = tools.find(([, rule]) => rule.allowed_decisions.length === 0);
-      if (empty) return `Allow at least one decision for "${empty[0]}".`;
-      return inRange(config.approval_timeout_seconds ?? 3600, 60, 604800)
-        ? null
-        : 'The approval time limit must be between 1 minute and 7 days.';
-    }
-    case 'guardrails':
-      return (config.custom_prompt ?? '').length > 4000 ? 'Additional rules must be at most 4,000 characters.' : null;
-  }
+  return CONFIG_VALIDATORS[type](config);
 }
 
 function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<MiddlewareFormProps>) {
@@ -114,7 +132,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
   const [nameTouched, setNameTouched] = useState(isEditing);
   const [description, setDescription] = useState(middleware?.description ?? '');
   const [config, setConfig] = useState<Record<string, any>>(
-    middleware ? { ...DEFAULT_CONFIG[middleware.middleware_type], ...(middleware.config ?? {}) } : DEFAULT_CONFIG.guardrails,
+    middleware ? { ...DEFAULT_CONFIG[middleware.middleware_type], ...middleware.config } : DEFAULT_CONFIG.guardrails,
   );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -155,7 +173,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
 
   const patch = (changes: Record<string, any>) => setConfig((prev) => ({ ...prev, ...changes }));
   const patchGroup = (group: string, changes: Record<string, any>) =>
-    setConfig((prev) => ({ ...prev, [group]: { ...(prev[group] ?? {}), ...changes } }));
+    setConfig((prev) => ({ ...prev, [group]: { ...prev[group], ...changes } }));
   const numberValue = (raw: string) => (raw === '' ? '' : Number(raw));
   const optionalNumberValue = (raw: string) => (raw === '' ? null : Number(raw));
 
@@ -270,9 +288,9 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
                   onChange={() => selectType(value)}
                   className="mt-1 text-indigo-600 focus:ring-indigo-500"
                 />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-gray-900">{MIDDLEWARE_TYPE_INFO[value].label}</span>
-                  <span className="block text-xs text-gray-500">{MIDDLEWARE_TYPE_INFO[value].description}</span>
+                <span className="min-w-0 text-sm font-medium text-gray-900">
+                  {MIDDLEWARE_TYPE_INFO[value].label}
+                  <span className="block text-xs font-normal text-gray-500">{MIDDLEWARE_TYPE_INFO[value].description}</span>
                 </span>
               </label>
             ))}
@@ -413,7 +431,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
               <input type="checkbox" checked={!!config.llm_detector?.enabled} disabled={isSubmitting}
                 onChange={(e) => patchGroup('llm_detector', { enabled: e.target.checked })}
                 className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-              Also detect names, addresses and other data with an LLM
+              <span>Also detect names, addresses and other data with an LLM</span>
             </label>
             {config.llm_detector?.enabled && (
               <>
