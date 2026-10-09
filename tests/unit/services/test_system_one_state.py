@@ -111,3 +111,10 @@ def test_overhead_counts_the_longest_question_including_options():
              "criteria": [{"key": "k" * 100, "description": "d" * 100}, {"key": "z"}]})
     assert question_overhead_chars([short, big]) >= 204
     assert question_overhead_chars([short]) < question_overhead_chars([short, big])
+
+
+def test_a_question_with_only_one_meaning_still_counts_its_size():
+    from schemas.system_one_schemas import NoulQuestion
+    from services.system_one_state import question_overhead_chars
+    q = NoulQuestion(key="u", type="noul", instructions="x" * 10, criteria={"true": "y" * 5})
+    assert question_overhead_chars([q]) >= 15

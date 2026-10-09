@@ -77,10 +77,14 @@ def _question_lines(questions: List[Question]) -> str:
 
 def _make_summarizer(llm: Any) -> Summarizer:
     async def summarize(text: str, questions: List[Question], budget: int) -> str:
+        # The server reads at most `budget` characters per prompt; an LLM told only "at most" writes far less
+        # (one test gave 16% of the room), so it is asked for a size close to it and to keep the original wording.
+        target = int(budget * 0.85)
         prompt = (
-            f"Summarize the text below in at most {budget} characters. Keep every detail needed to answer "
-            f"these questions about it:\n{_question_lines(questions)}\n\n"
-            f"Reply with the summary only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
+            f"Condense the text below to about {target} characters (never more than {budget}). "
+            "Do not make it shorter than needed: keep as much of the original wording, names, numbers and order "
+            f"as fits, and every detail needed to answer these questions about it:\n{_question_lines(questions)}\n\n"
+            f"Reply with the condensed text only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
         )
         reply = await llm.ainvoke(prompt)
         return _text_of(getattr(reply, "content", reply))
@@ -230,6 +234,7 @@ class SystemOneEvaluator:
                 state_reduction=reduced.mode,
                 original_chars=reduced.original_chars,
                 state_chars=len(reduced.text),
+                evaluated_text=reduced.text if reduced.mode != "none" else None,
                 model=str(raw.get("model") or snapshot.endpoint.model),
                 usage=_parse_usage(raw),
             )

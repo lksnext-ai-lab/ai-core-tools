@@ -415,3 +415,11 @@ async def test_probe_is_fine_without_a_limits_endpoint():
 
     out = await client.probe("http://so.test", "tok", transport=transport(handler))
     assert out["ok"] is True and out["models"] == ["some-model"] and out["limits"] is None
+
+
+def test_only_the_meanings_that_were_given_are_sent():
+    only_yes = QA({"key": "u", "type": "noul", "instructions": "Urgent?", "criteria": {"true": "Today"}})
+    both = QA({"key": "v", "type": "noul", "instructions": "Reply?", "criteria": {"true": "Today", "false": "Later"}})
+    body = client.build_request_body("m", "text", [only_yes, both])["questions"]
+    assert body["u"]["criteria"] == {"true": "Today"}
+    assert body["v"]["criteria"] == {"true": "Today", "false": "Later"}

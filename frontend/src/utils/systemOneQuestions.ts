@@ -73,9 +73,6 @@ function validateNoul(question: NoulQuestion): string[] {
   if (question.threshold !== undefined && !isProbability(question.threshold)) {
     problems.push(`the threshold must be a number between 0 and 1`);
   }
-  const yes = question.criteria?.true?.trim() ?? '';
-  const no = question.criteria?.false?.trim() ?? '';
-  if ((yes === '') !== (no === '')) problems.push(`fill both meanings (yes and no) or leave both empty`);
   return problems;
 }
 
@@ -187,7 +184,7 @@ export function toPayload(questions: EditorQuestion[]): SystemOneQuestion[] {
       return {
         ...common,
         type: 'noul',
-        ...(yes && no ? { criteria: { true: yes, false: no } } : {}),
+        ...(yes || no ? { criteria: { ...(yes ? { true: yes } : {}), ...(no ? { false: no } : {}) } } : {}),
         ...(threshold !== undefined ? { threshold } : {}),
       };
     }
@@ -216,4 +213,10 @@ export function reorder<T>(items: T[], from: number, to: number): T[] {
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved);
   return next;
+}
+
+/** Characters of text that fit in a prompt next to the longest question (what the backend calls the state budget). */
+export function promptBudget(questions: EditorQuestion[], maxStateChars: number): number {
+  const longest = questions.reduce((max, q) => Math.max(max, questionSize(q)), 0);
+  return Math.max(maxStateChars - longest, MIN_TEXT_ROOM_CHARS);
 }

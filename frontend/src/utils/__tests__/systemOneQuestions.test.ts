@@ -5,6 +5,8 @@ import {
   toEditorQuestions,
   toPayload,
   checkQuestions,
+  questionSize,
+  promptBudget,
   reorder,
   validateMaxStateChars,
   validateQuestions,
@@ -45,10 +47,9 @@ describe('validateQuestions', () => {
     expect(validateQuestions([noul({ instructions: '  ' })]).some((p) => p.includes('instructions'))).toBe(true);
   });
 
-  it('checks the noul threshold and the two meanings together', () => {
+  it('checks the noul threshold', () => {
     expect(validateQuestions([noul({ threshold: 1.5 })]).some((p) => p.includes('threshold'))).toBe(true);
     expect(validateQuestions([noul({ threshold: 0 })])).toEqual([]);
-    expect(validateQuestions([noul({ criteria: { true: 'Today', false: '' } })]).some((p) => p.includes('both meanings'))).toBe(true);
     expect(validateQuestions([noul({ criteria: { true: 'Today', false: 'Later' } })])).toEqual([]);
   });
 
@@ -200,5 +201,32 @@ describe('checkQuestions (problems grouped by the question they belong to)', () 
     const { byQuestion } = checkQuestions([noul(), noul({ _id: 'x' })]);
     expect(byQuestion[0]).toEqual([]);
     expect(byQuestion[1].some((p) => p.includes('used by another question'))).toBe(true);
+  });
+});
+
+describe('yes / no meanings are independent and optional', () => {
+  it('accepts only one of them, or none', () => {
+    expect(checkQuestions([noul({ criteria: { true: 'Needs an answer today', false: '' } } as Partial<EditorQuestion>)]).byQuestion[0]).toEqual([]);
+    expect(checkQuestions([noul({ criteria: { true: '', false: 'Can wait' } } as Partial<EditorQuestion>)]).byQuestion[0]).toEqual([]);
+    expect(checkQuestions([noul()]).byQuestion[0]).toEqual([]);
+  });
+
+  it('sends only the meanings that were filled', () => {
+    const [only] = toPayload([noul({ criteria: { true: ' Today ', false: '' } } as Partial<EditorQuestion>)]);
+    expect(only).toMatchObject({ criteria: { true: 'Today' } });
+    expect((only as { criteria: Record<string, string> }).criteria.false).toBeUndefined();
+    const [none] = toPayload([noul({ criteria: { true: '', false: '' } } as Partial<EditorQuestion>)]);
+    expect((none as { criteria?: unknown }).criteria).toBeUndefined();
+  });
+});
+
+describe('promptBudget', () => {
+  it('is what is left of the per-prompt budget after the longest question', () => {
+    const q = noul({ instructions: 'x'.repeat(100) });
+    expect(promptBudget([q, noul({ instructions: 'short' })], 6000)).toBe(6000 - questionSize(q));
+  });
+
+  it('never goes below the room a question must leave', () => {
+    expect(promptBudget([noul({ instructions: 'x'.repeat(9000) })], 6000)).toBe(500);
   });
 });
