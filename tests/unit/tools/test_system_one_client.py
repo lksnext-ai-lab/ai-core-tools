@@ -389,5 +389,5 @@ async def test_a_changed_cap_drops_the_previous_semaphore_of_that_service():
     client._slot(endpoint(service_id=73, max_concurrency=2))
     client._slot(endpoint(service_id=74, max_concurrency=2))
     client._slot(endpoint(service_id=73, max_concurrency=5))
-    keys = set(client._slots_by_loop[loop])
-    assert (73, 5) in keys and (73, 2) not in keys and (74, 2) in keys
+    held = client._slots_by_loop[loop]
+    assert held[73][0] == 5 and held[74][0] == 2 and len(held) == 2

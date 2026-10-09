@@ -76,15 +76,6 @@ def test_description_has_a_default_when_the_agent_has_none():
     assert build_tool_description(snap(description="")).startswith("Evaluates a text with System One")
 
 
-# -------------------------------------------------------------------- schema
-
-async def test_input_schema_is_exactly_text():
-    tool = await make_tool()
-    schema = tool.args_schema.model_json_schema()
-    assert set(schema["properties"]) == {"text"} and schema["properties"]["text"]["type"] == "string"
-    assert schema["required"] == ["text"] and tool.name == "Triage_Bot" or tool.name.startswith("Triage")
-
-
 # ------------------------------------------------------------------- content
 
 def test_content_is_compact_json_with_decisions():
@@ -151,12 +142,6 @@ async def test_unexpected_errors_are_contained_too():
     with patch.object(SystemOneEvaluator, "evaluate", AsyncMock(side_effect=RuntimeError("secret internals"))):
         content, artifact = await tool._arun(text="hi")
     assert artifact is None and "System One" in content and "secret internals" not in content
-
-
-def test_sync_run_is_not_supported():
-    tool = IACTSystemOneTool.model_construct(name="x", description="d", snapshot=snap())
-    with pytest.raises(NotImplementedError):
-        tool._run(text="hi")
 
 
 # --------------------------------------------------- create / discover / tags

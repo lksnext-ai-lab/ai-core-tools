@@ -84,24 +84,23 @@ def build_request_body(model: str, state: str, questions: List[Question]) -> Dic
 
 # -------------------------------------------------------------- concurrency
 
-_slots_by_loop: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, Dict[Tuple[int, int], asyncio.Semaphore]]" = (
+_slots_by_loop: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, Dict[int, Tuple[int, asyncio.Semaphore]]]" = (
     weakref.WeakKeyDictionary()
 )
 
 
 def _slot(endpoint: Endpoint) -> asyncio.Semaphore:
-    """One semaphore per (service, cap) and event loop (a semaphore binds to its loop).
+    """One semaphore per service and event loop (a semaphore binds to its loop).
 
-    Keying by the cap makes a changed ``max_concurrency`` apply to the next call without a
-    restart; calls still in flight under the old cap finish under it.
+    A changed ``max_concurrency`` replaces it, so the new cap applies to the next call without a
+    restart; calls still in flight keep the old semaphore and finish under the old cap.
     """
     per_loop = _slots_by_loop.setdefault(asyncio.get_running_loop(), {})
-    key = (endpoint.service_id, endpoint.max_concurrency)
-    if key not in per_loop:
-        for stale in [k for k in per_loop if k[0] == endpoint.service_id]:
-            del per_loop[stale]  # calls still holding it keep their reference and finish under the old cap
-        per_loop[key] = asyncio.Semaphore(max(1, endpoint.max_concurrency))
-    return per_loop[key]
+    cap = max(1, endpoint.max_concurrency)
+    held = per_loop.get(endpoint.service_id)
+    if held is None or held[0] != cap:
+        held = per_loop[endpoint.service_id] = (cap, asyncio.Semaphore(cap))
+    return held[1]
 
 
 # ------------------------------------------------------------------- errors
