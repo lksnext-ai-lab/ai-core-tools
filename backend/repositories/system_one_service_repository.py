@@ -26,12 +26,7 @@ class SystemOneServiceRepository:
         db.refresh(service)
         return service
 
-    @staticmethod
-    def update(db: Session, service: SystemOneService) -> SystemOneService:
-        db.add(service)
-        db.commit()
-        db.refresh(service)
-        return service
+    update = create  # same steps: add (a no-op for a persistent row), commit, refresh
 
     @staticmethod
     def delete(db: Session, service: SystemOneService) -> None:
