@@ -31,6 +31,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_SUMMARY_TARGET_FRACTION = 0.85    # of the room: higher keeps more detail but the LLM writes (and takes) proportionally longer
 _SUMMARY_INPUT_CAP_CHARS = 120_000      # what we hand to the summarizing LLM at most
 _PROVIDER = "system_one"
 _HTTP_STATUS = {
@@ -79,7 +80,7 @@ def _make_summarizer(llm: Any) -> Summarizer:
     async def summarize(text: str, questions: List[Question], budget: int) -> str:
         # The server reads at most `budget` characters per prompt; an LLM told only "at most" writes far less
         # (one test gave 16% of the room), so it is asked for a size close to it and to keep the original wording.
-        target = int(budget * 0.85)
+        target = int(budget * _SUMMARY_TARGET_FRACTION)
         prompt = (
             f"Condense the text below to about {target} characters (never more than {budget}). "
             "Do not make it shorter than needed: keep as much of the original wording, names, numbers and order "
