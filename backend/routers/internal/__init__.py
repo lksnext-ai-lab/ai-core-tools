@@ -15,6 +15,7 @@ from .marketplace import marketplace_router
 from .config import router as config_router
 from .platform_chatbot import platform_chatbot_router
 from .scheduled_tasks import router as scheduled_tasks_router
+from .output_providers import router as output_providers_router
 from .marketplace_scheduled_tasks import router as marketplace_scheduled_tasks_router
 from .sharepoint import router as sharepoint_router
 from .metrics import router as metrics_router
@@ -43,6 +44,7 @@ internal_router.include_router(marketplace_router)
 internal_router.include_router(config_router)
 internal_router.include_router(platform_chatbot_router, prefix="/platform-chatbot")
 internal_router.include_router(scheduled_tasks_router)
+internal_router.include_router(output_providers_router)
 internal_router.include_router(
     sharepoint_router,
     dependencies=[Depends(require_editor_for_writes)],

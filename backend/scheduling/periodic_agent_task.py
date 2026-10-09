@@ -114,31 +114,84 @@ def _conversation_for_run(db, task: ScheduledTask, scheduled_time: datetime) -> 
 async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
     db = SessionLocal()
     run = None
+    agent_completed = False
     try:
         task = db.query(ScheduledTask).filter(ScheduledTask.id == task_id).one_or_none()
         if task is None:
             logger.info("Scheduled task %s no longer exists; skipping run", task_id)
             return None
-        conversation_id = _conversation_for_run(db, task, scheduled_time)
-        run_id = getattr(DBOS, "workflow_id", None) or f"task-{task_id}-{scheduled_time.isoformat()}"
-        run = ScheduledTaskRun(
-            scheduled_task_id=task.id, conversation_id=conversation_id,
-            orchestrator_run_id=str(run_id), scheduled_time=scheduled_time,
-            started_at=datetime.now(timezone.utc), status="running", attempt_count=1,
-        )
-        db.add(run)
-        db.commit()
+        run_id = str(getattr(DBOS, "workflow_id", None) or f"task-{task_id}-{scheduled_time.isoformat()}")
+        run = db.query(ScheduledTaskRun).filter(
+            ScheduledTaskRun.scheduled_task_id == task.id,
+            ScheduledTaskRun.orchestrator_run_id == run_id,
+        ).one_or_none()
+        if run is None:
+            conversation_id = _conversation_for_run(db, task, scheduled_time)
+            run = ScheduledTaskRun(
+                scheduled_task_id=task.id, conversation_id=conversation_id,
+                orchestrator_run_id=run_id, scheduled_time=scheduled_time,
+                started_at=datetime.now(timezone.utc), status="running", attempt_count=1,
+            )
+            db.add(run)
+            db.commit()
+        else:
+            # DBOS may re-enter the same workflow after recovery. Reuse its one logical run.
+            run.status = "running"
+            run.started_at = run.started_at or datetime.now(timezone.utc)
+            run.attempt_count = (run.attempt_count or 0) + 1
+            db.commit()
+
         context = task.input if isinstance(task.input, dict) else {"input": task.input}
-        result = await invoke_agent_step(task.agent_id, context, conversation_id, task_user_context(task))
-        run.status = "succeeded"
-        run.finished_at = datetime.now(timezone.utc)
-        run.output_text = (result or {}).get("response")
-        run.output_files = (result or {}).get("files") or []
-        db.commit()
+        result = await invoke_agent_step(task.agent_id, context, run.conversation_id, task_user_context(task))
+        agent_completed = True
+        completed_output = {
+            "response": (result or {}).get("response"),
+            "files": (result or {}).get("files") or [],
+        }
+        try:
+            # The application result and its outbox records commit together.
+            run.status = "succeeded"
+            run.finished_at = datetime.now(timezone.utc)
+            run.output_text = completed_output["response"]
+            run.output_files = completed_output["files"]
+            run.outputs_reconciled = True
+            from output.service import create_deliveries_for_run, prepare_run_attachments
+            artifacts, attachment_error = await prepare_run_attachments(db, task=task, run=run)
+            deliveries = create_deliveries_for_run(
+                db, task=task, run=run, artifacts=artifacts, attachment_error=attachment_error,
+            )
+            db.commit()
+        except Exception:
+            # A completed durable agent step remains a successful run even if outbox
+            # persistence fails. The DBOS reconciler repairs missing deliveries later.
+            db.rollback()
+            logger.exception("Could not persist output deliveries for scheduled task run %s", run_id)
+            run = db.query(ScheduledTaskRun).filter(
+                ScheduledTaskRun.scheduled_task_id == task.id,
+                ScheduledTaskRun.orchestrator_run_id == run_id,
+            ).one()
+            run.status = "succeeded"
+            run.finished_at = datetime.now(timezone.utc)
+            run.output_text = completed_output["response"]
+            run.output_files = completed_output["files"]
+            run.outputs_reconciled = False
+            db.commit()
+            deliveries = []
+
+        # Fast path after the application transaction commits. A periodic reconciler
+        # repairs the narrow commit/enqueue crash window.
+        from scheduling.output_delivery import queue_delivery_after_commit
+        for delivery in deliveries:
+            queue_delivery_after_commit(delivery.id, delivery.dispatch_generation)
         await _prune(db, task)
         return result
     except Exception as exc:
         db.rollback()
+        if agent_completed:
+            # Let DBOS recover the already-completed durable agent step and retry
+            # result/outbox persistence; do not relabel a successful agent run as failed.
+            logger.exception("Could not finalize completed scheduled task run %s", getattr(run, "orchestrator_run_id", task_id))
+            raise
         if run is not None:
             try:
                 run.status = "failed"
@@ -152,7 +205,6 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
         raise
     finally:
         db.close()
-
 
 async def _prune(db, task: ScheduledTask) -> None:
     try:
@@ -222,6 +274,21 @@ async def initialize_dbos() -> bool:
         "periodic-agents",
         global_concurrency=int(os.getenv("AICT_SCHEDULE_CONCURRENCY", "10")),
     )
+    await DBOS.register_queue_async(
+        "output-deliveries",
+        global_concurrency=int(os.getenv("AICT_OUTPUT_DELIVERY_CONCURRENCY", "10")),
+    )
+    await DBOS.register_queue_async("output-delivery-reconciler", global_concurrency=1)
+    from scheduling.output_delivery import output_delivery_reconciler
+    DBOS.apply_schedules([{
+        "schedule_name": "output-delivery-reconciler",
+        "workflow_fn": output_delivery_reconciler,
+        "schedule": "* * * * *",
+        "cron_timezone": "UTC",
+        "context": None,
+        "queue_name": "output-delivery-reconciler",
+    }])
+    DBOS.resume_schedule("output-delivery-reconciler")
     # Reconcile application-active schedules with DBOS after a restart. DBOS
     # persists a paused state, while the application row can still be active.
     db = SessionLocal()

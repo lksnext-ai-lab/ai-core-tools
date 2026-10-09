@@ -52,6 +52,20 @@ import type {
 
 type ConflictMode = 'fail' | 'rename' | 'override';
 
+/** Fields accepted by the admin skill create/update endpoints. Null clears nullable fields. */
+export interface SystemSkillWriteData {
+  name: string;
+  description?: string | null;
+  content: string;
+  display_name?: string | null;
+  when_to_use?: string | null;
+  allowed_tools?: string[] | null;
+  runtime?: string | null;
+  bootstrap_script_path?: string | null;
+  runtime_options?: Record<string, unknown> | null;
+  is_enabled?: boolean | null;
+}
+
 /** Rate-limit usage snapshot for a single app (also the per-item shape returned by getUsageStats()). */
 export interface UsageStats {
   usage_percentage: number;
@@ -200,8 +214,56 @@ export interface ScheduledTask {
   next_run_at?: string | null;
 }
 
+export type OutputContentMode = 'result' | 'excerpt' | 'link_only';
+
+export interface OutputDestination {
+  id: number;
+  app_id: number;
+  name: string;
+  provider_key: 'teams_workflow' | 'webhook' | string;
+  enabled: boolean;
+  has_secret: boolean;
+  content_mode: OutputContentMode;
+  public_config: Record<string, unknown>;
+  has_credentials: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledTaskOutputBinding {
+  destination_id: number;
+  enabled: boolean;
+  destination_name?: string | null;
+  provider_key?: string | null;
+  include_attachments?: boolean;
+}
+
+export interface OutputDeliveryAttempt {
+  attempt_number: number;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  http_status?: number | null;
+  error_summary?: string | null;
+}
+
+export interface OutputDelivery {
+  id: number;
+  destination_name: string;
+  provider_key: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  next_attempt_at?: string | null;
+  receipt?: Record<string, unknown> | null;
+  error_summary?: string | null;
+  created_at: string;
+  attempts: OutputDeliveryAttempt[];
+}
+
 export type ScheduledTaskCreate = Pick<ScheduledTask, 'name' | 'agent_id' | 'input' | 'cron_expression' | 'timezone' | 'conversation_mode' | 'max_concurrent_runs'>
-  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>;
+  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>
+  & { output_bindings?: Omit<ScheduledTaskOutputBinding, 'destination_name'>[] };
 
 export type ScheduledTaskUpdate = Partial<Pick<ScheduledTask,
   'name' | 'description' | 'input' | 'cron_expression' | 'timezone' | 'max_concurrent_runs' | 'status'
@@ -860,6 +922,42 @@ class ApiService {
 
   async deleteScheduledTask(appId: number, taskId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}`, { method: 'DELETE' });
+  }
+
+  async getOutputDestinations(appId: number): Promise<OutputDestination[]> {
+    return this.request(`/internal/apps/${appId}/output-destinations`);
+  }
+
+  async createOutputDestination(appId: number, data: { name: string; provider_key: 'teams_workflow' | 'webhook'; webhook_url: string; content_mode?: OutputContentMode; public_config?: Record<string, unknown>; credentials?: Record<string, string> }): Promise<OutputDestination> {
+    return this.request(`/internal/apps/${appId}/output-destinations`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateOutputDestination(appId: number, destinationId: number, data: { webhook_url?: string; enabled?: boolean; name?: string; content_mode?: OutputContentMode; public_config?: Record<string, unknown>; credentials?: Record<string, string>; clear_credentials?: boolean }): Promise<OutputDestination> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  async deleteOutputDestination(appId: number, destinationId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'DELETE' });
+  }
+
+  async testOutputDestination(appId: number, destinationId: number): Promise<{ accepted: boolean; http_status: number; event_id?: string | null }> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}/test`, { method: 'POST' });
+  }
+
+  async getScheduledTaskOutputs(appId: number, taskId: number): Promise<{ bindings: ScheduledTaskOutputBinding[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/outputs`);
+  }
+
+  async setScheduledTaskOutputs(appId: number, taskId: number, bindings: ScheduledTaskOutputBinding[]): Promise<{ bindings: ScheduledTaskOutputBinding[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/outputs`, { method: 'PUT', body: JSON.stringify({ bindings }) });
+  }
+
+  async getScheduledTaskRunDeliveries(appId: number, taskId: number, runId: number): Promise<{ deliveries: OutputDelivery[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/deliveries`);
+  }
+
+  async retryScheduledTaskDelivery(appId: number, taskId: number, runId: number, deliveryId: number): Promise<{ workflow_id: string }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/deliveries/${deliveryId}/retry`, { method: 'POST' });
   }
 
   async getScheduledTaskRuns(appId: number, taskId: number, page = 1, perPage = 50): Promise<ScheduledTaskRunList> {
@@ -3046,36 +3144,14 @@ class ApiService {
     return this.request(`/internal/admin/system-skills/${skillId}`);
   }
 
-  async createSystemSkill(data: {
-    name: string;
-    description?: string;
-    content: string;
-    display_name?: string;
-    when_to_use?: string;
-    allowed_tools?: string[];
-    runtime?: string;
-    bootstrap_script_path?: string;
-    runtime_options?: Record<string, unknown>;
-    is_enabled?: boolean;
-  }): Promise<Skill> {
+  async createSystemSkill(data: SystemSkillWriteData): Promise<Skill> {
     return this.request('/internal/admin/system-skills', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSystemSkill(skillId: number, data: {
-    name: string;
-    description?: string;
-    content: string;
-    display_name?: string;
-    when_to_use?: string;
-    allowed_tools?: string[];
-    runtime?: string;
-    bootstrap_script_path?: string;
-    runtime_options?: Record<string, unknown>;
-    is_enabled?: boolean;
-  }): Promise<Skill> {
+  async updateSystemSkill(skillId: number, data: SystemSkillWriteData): Promise<Skill> {
     return this.request(`/internal/admin/system-skills/${skillId}`, {
       method: 'PUT',
       body: JSON.stringify(data),

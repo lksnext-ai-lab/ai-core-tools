@@ -188,10 +188,11 @@ def test_a2a001_upgrade_seed_downgrade_upgrade_round_trip(ephemeral_db):
         ).scalar_one()
         assert caller_type == "A2A"
 
-    # 2. Downgrade one revision: a2a001 -> apikeyhash001.
-    result = _run_alembic("downgrade", "-1")
+    # 2. Downgrade to a2a001's parent. An explicit target, not "-1": head is
+    #    not necessarily a2a001 (later or merge revisions sit on top of it).
+    result = _run_alembic("downgrade", "apikeyhash001")
     assert result.returncode == 0, (
-        f"alembic downgrade -1 failed (rc={result.returncode}).\n"
+        f"alembic downgrade apikeyhash001 failed (rc={result.returncode}).\n"
         f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
     )
 
