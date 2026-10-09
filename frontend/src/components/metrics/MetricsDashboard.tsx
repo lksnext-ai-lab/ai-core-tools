@@ -24,9 +24,11 @@ interface Props {
   description?: string;
   /** System view: show app names and the active-apps KPI. */
   systemScope?: boolean;
+  /** What `llm_calls` counts for this view: LLM calls by default; a System One agent only calls an LLM to summarize. */
+  callsLabel?: string;
 }
 
-export function MetricsDashboard({ api, dimensions, title, description, systemScope = false }: Props) {
+export function MetricsDashboard({ api, dimensions, title, description, systemScope = false, callsLabel = 'LLM calls' }: Props) {
   const [range, setRange] = useState<TimeRange>('7d');
   const [dimension, setDimension] = useState<BreakdownDimension>(dimensions[0]);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
@@ -80,7 +82,7 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
         hint: `${formatCount(c.input_tokens)} in · ${formatCount(c.output_tokens)} out` },
       { label: 'Tokens / execution', value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
         change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
-        hint: `${formatCount(c.llm_calls)} LLM calls` },
+        hint: `${formatCount(c.llm_calls)} ${callsLabel}` },
       { label: 'Tool calls', value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
         hint: c.tool_errors ? `${formatCount(c.tool_errors)} failed` : undefined },
       systemScope
@@ -89,7 +91,7 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
         : { label: 'Active users', value: formatCount(c.active_users), change: relativeChange(c.active_users, p.active_users),
             hint: `${formatCount(c.active_agents)} agents` },
     ];
-  }, [summary, systemScope]);
+  }, [summary, systemScope, callsLabel]);
 
   return (
     <div className="space-y-6">

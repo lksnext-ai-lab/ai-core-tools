@@ -2153,6 +2153,7 @@ function AgentFormPage() {
               <AgentMetricsTab
                 appId={Number(appId)}
                 agentId={Number(agentId)}
+                agentType={formData.type}
               />
             </div>
           )}
