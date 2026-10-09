@@ -1,0 +1,207 @@
+"""Business logic of System One services (per-app connections to a Nimble server)."""
+import json
+import os
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from core.export_constants import PLACEHOLDER_API_KEY
+from models.system_one_service import SystemOneService
+from repositories.system_one_service_repository import SystemOneServiceRepository
+from schemas.system_one_service_schemas import (
+    DEFAULT_MODEL,
+    CreateUpdateSystemOneServiceSchema,
+    SystemOneServiceDetailSchema,
+    SystemOneServiceListItemSchema,
+)
+from tools import system_one_client
+from utils.logger import get_logger
+from utils.secret_utils import is_masked_key, mask_api_key
+
+logger = get_logger(__name__)
+
+
+class ServiceInUseError(Exception):
+    """The service cannot be deleted: agents still use it (``SystemOneAgent.system_one_service_id`` is RESTRICT)."""
+
+    def __init__(self, agents: List[Dict[str, Any]]):
+        super().__init__("System One service is in use")
+        self.agents = agents
+
+
+def _workers() -> int:
+    try:
+        return max(1, int(os.getenv("UVICORN_WORKERS", "1")))
+    except ValueError:
+        return 1
+
+
+def _read_extra(raw: Optional[str]) -> Dict[str, Any]:
+    try:
+        data = json.loads(raw) if raw else {}
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def max_concurrency_of(service: SystemOneService) -> int:
+    """Per-process cap stored in ``extra_config`` (1 when missing or broken)."""
+    value = _read_extra(service.extra_config).get("max_concurrency")
+    return value if isinstance(value, int) and value >= 1 else 1
+
+
+class SystemOneServiceService:
+
+    @staticmethod
+    def _to_list_item(service: SystemOneService) -> SystemOneServiceListItemSchema:
+        return SystemOneServiceListItemSchema(
+            service_id=service.service_id,
+            name=service.name,
+            endpoint=service.endpoint or "",
+            model=service.description or DEFAULT_MODEL,
+            max_concurrency=max_concurrency_of(service),
+            created_at=service.create_date,
+        )
+
+    @staticmethod
+    def _to_detail(service: SystemOneService) -> SystemOneServiceDetailSchema:
+        return SystemOneServiceDetailSchema(
+            service_id=service.service_id,
+            name=service.name,
+            endpoint=service.endpoint or "",
+            api_key=mask_api_key(service.api_key),
+            model=service.description or DEFAULT_MODEL,
+            max_concurrency=max_concurrency_of(service),
+            created_at=service.create_date,
+        )
+
+    @staticmethod
+    def get_system_one_services_by_app_id(db: Session, app_id: int) -> List[SystemOneServiceListItemSchema]:
+        return [SystemOneServiceService._to_list_item(s) for s in SystemOneServiceRepository.get_by_app_id(db, app_id)]
+
+    @staticmethod
+    def get_system_one_service_detail(db: Session, app_id: int, service_id: int) -> Optional[SystemOneServiceDetailSchema]:
+        if service_id == 0:
+            return SystemOneServiceDetailSchema(service_id=0, name="", endpoint="", api_key="", model=DEFAULT_MODEL,
+                                                max_concurrency=1)
+        service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        return SystemOneServiceService._to_detail(service) if service else None
+
+    @staticmethod
+    def create_or_update_system_one_service(
+        db: Session, app_id: int, service_id: int, data: CreateUpdateSystemOneServiceSchema
+    ) -> Optional[SystemOneServiceDetailSchema]:
+        # No private-address blocking on purpose: a self-hosted Nimble normally sits on a private network.
+        # Only the scheme/host are checked; only administrators can reach this code.
+        endpoint = system_one_client.check_base_url(data.endpoint)
+
+        if service_id == 0:
+            service = SystemOneService()
+            service.app_id = app_id
+            service.create_date = datetime.now()
+        else:
+            service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+            if not service:
+                return None
+
+        service.name = data.name
+        service.endpoint = endpoint
+        service.description = data.model
+        # "****abcd" is the masked echo of the stored token: never overwrite a real secret with it.
+        token = data.api_key or ""
+        if not is_masked_key(token):
+            service.api_key = token or None
+        concurrency = data.max_concurrency or system_one_client.default_max_concurrency(None, _workers())
+        service.extra_config = json.dumps({"max_concurrency": concurrency})
+
+        if service_id == 0:
+            service = SystemOneServiceRepository.create(db, service)
+        else:
+            service = SystemOneServiceRepository.update(db, service)
+        return SystemOneServiceService._to_detail(service)
+
+    @staticmethod
+    def copy_system_one_service(db: Session, app_id: int, service_id: int) -> Optional[SystemOneServiceDetailSchema]:
+        service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        if not service:
+            return None
+        existing = {s.name for s in SystemOneServiceRepository.get_by_app_id(db, app_id)}
+        base_name = (service.name or "").strip() or "System One Service"
+        new_name, counter = f"{base_name} Copy", 2
+        while new_name in existing:
+            new_name = f"{base_name} Copy {counter}"
+            counter += 1
+        copy = SystemOneService(
+            app_id=app_id,
+            name=new_name,
+            endpoint=service.endpoint,
+            api_key=service.api_key,           # same convention as AI/Sandbox services: the copy keeps the token
+            description=service.description,
+            extra_config=service.extra_config,
+            create_date=datetime.now(),
+        )
+        return SystemOneServiceService._to_detail(SystemOneServiceRepository.create(db, copy))
+
+    @staticmethod
+    def _agents_using(db: Session, service_id: int) -> List[Dict[str, Any]]:
+        return [{"agent_id": a.agent_id, "name": a.name} for a in SystemOneServiceRepository.get_agents_using(db, service_id)]
+
+    @staticmethod
+    def delete_system_one_service(db: Session, app_id: int, service_id: int) -> bool:
+        service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        if not service:
+            return False
+        agents = SystemOneServiceService._agents_using(db, service_id)
+        if agents:
+            raise ServiceInUseError(agents)
+        try:
+            SystemOneServiceRepository.delete(db, service)
+        except IntegrityError:
+            # An agent was created between the check and the delete: the RESTRICT FK still protects us.
+            db.rollback()
+            raise ServiceInUseError(SystemOneServiceService._agents_using(db, service_id))
+        return True
+
+    # ------------------------------------------------------------ connection tests
+
+    @staticmethod
+    def _probe_result(result: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "success" if result["ok"] else "error",
+            "message": result["message"],
+            "models": result["models"],
+            "limits": result["limits"],
+        }
+
+    @staticmethod
+    async def test_connection_with_config(
+        db: Session, app_id: int, config: Dict[str, Any], service_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Probe the server with the form's values (nothing is saved).
+
+        With ``service_id`` and no retyped token (empty or masked) the stored token is used, so editing
+        a service never forces re-typing the secret just to test it.
+        """
+        endpoint = (config.get("endpoint") or "").strip()
+        api_key = config.get("api_key") or ""
+        if service_id is not None and (not api_key or is_masked_key(api_key) or api_key == PLACEHOLDER_API_KEY):
+            stored = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+            api_key = (stored.api_key if stored else None) or ""
+        try:
+            result = await system_one_client.probe(endpoint, api_key or None)
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc), "models": [], "limits": None}
+        return SystemOneServiceService._probe_result(result)
+
+    @staticmethod
+    async def test_connection(db: Session, app_id: int, service_id: int) -> Optional[Dict[str, Any]]:
+        service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+        if not service:
+            return None
+        try:
+            result = await system_one_client.probe(service.endpoint or "", service.api_key)
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc), "models": [], "limits": None}
+        return SystemOneServiceService._probe_result(result)

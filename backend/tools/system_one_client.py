@@ -218,7 +218,7 @@ async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
     raise AssertionError("unreachable")
 
 
-def _check_base_url(base_url: str) -> str:
+def check_base_url(base_url: str) -> str:
     parsed = urlparse(base_url or "")
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("The URL must start with http:// or https:// and include a host")
@@ -228,7 +228,7 @@ def _check_base_url(base_url: str) -> str:
 async def probe(base_url: str, api_key: Optional[str],
                 *, transport: Optional[httpx.AsyncBaseTransport] = None) -> Dict[str, Any]:
     """Check ``/health``, list ``/v1/models`` and read ``/v1/limits``. Never raises for server problems."""
-    root = _check_base_url(base_url)
+    root = check_base_url(base_url)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None}
 
