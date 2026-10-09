@@ -1,7 +1,7 @@
 """Question definitions (input) and evaluation results (output) of System One agents."""
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
 
 QuestionKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,40}$")]
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -71,6 +71,13 @@ def _unique_keys(questions):
 QuestionList = Annotated[
     List[Question], Field(min_length=1, max_length=MAX_QUESTIONS), AfterValidator(_unique_keys)
 ]
+
+
+def questions_error_message(exc: ValidationError) -> str:
+    """One readable line for the first problem of a question list, e.g. ``questions.0.key: String should match ...``."""
+    first = exc.errors()[0]
+    where = ".".join(str(part) for part in first["loc"])
+    return f"questions{'.' + where if where else ''}: {first['msg']}"
 
 
 # ----------------------------- results -----------------------------

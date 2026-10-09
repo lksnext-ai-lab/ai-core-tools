@@ -15,7 +15,7 @@ from services.a2a_server.lifecycle_service import schedule_owner_purge
 from services.service_lifecycle_service import ServiceLifecycleService
 from utils import a2a_config
 from repositories.system_one_service_repository import SystemOneServiceRepository
-from schemas.system_one_schemas import QuestionList
+from schemas.system_one_schemas import QuestionList, questions_error_message
 from utils.logger import get_logger
 from types import SimpleNamespace
 
@@ -803,12 +803,6 @@ class AgentService:
         if 'system_one_agent' in (current, requested) and current != requested:
             raise ValueError("An agent's type cannot be changed once it is created")
 
-    @staticmethod
-    def _question_error(exc: ValidationError) -> str:
-        first = exc.errors()[0]
-        where = ".".join(str(part) for part in first["loc"])
-        return f"questions{'.' + where if where else ''}: {first['msg']}"
-
     def _apply_system_one_fields(self, db: Session, agent: SystemOneAgent, data: dict) -> None:
         """System One fields (service, questions, summarization LLM, size) and neutral values for the rest."""
         app_id = data['app_id']
@@ -829,7 +823,7 @@ class AgentService:
             try:
                 questions = TypeAdapter(QuestionList).validate_python(raw_questions)
             except ValidationError as exc:
-                raise ValueError(self._question_error(exc))
+                raise ValueError(questions_error_message(exc))
             agent.questions = [q.model_dump(mode='json', exclude_none=True) for q in questions]
         elif creating:
             raise ValueError("questions are required for System One agents")

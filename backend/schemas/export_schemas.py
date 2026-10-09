@@ -41,6 +41,19 @@ class ExportAIServiceSchema(ServiceLifecycleFieldsMixin):
     api_version: Optional[str] = None
 
 
+# ==================== SYSTEM ONE SERVICE ====================
+
+
+class ExportSystemOneServiceSchema(BaseModel):
+    """System One service export schema (full-app export only)"""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    api_key: Optional[str] = None  # Always None (security)
+    endpoint: Optional[str] = None
+    model_name: str = "nimble-latest"
+    max_concurrency: int = 1
+
+
 # ==================== EMBEDDING SERVICE ====================
 
 
@@ -206,6 +219,12 @@ class ExportAgentSchema(A2AAgentFieldsMixin):
     vision_service_name: Optional[str] = None  # Reference by name (OCR agents only)
     vision_system_prompt: Optional[str] = None  # OCR agents only
     text_system_prompt: Optional[str] = None  # OCR agents only
+    # System One-specific fields (None in files exported before System One existed)
+    type: Optional[str] = None  # "system_one_agent"
+    questions: Optional[List[Dict[str, Any]]] = None
+    max_state_chars: Optional[int] = None
+    system_one_service_name: Optional[str] = None  # Reference by name
+    summarization_service_name: Optional[str] = None  # Reference by name
     # Exclude: conversation history, request_count, usage stats
 
 
@@ -311,6 +330,7 @@ class AppExportFileSchema(BaseModel):
     metadata: ExportMetadataSchema
     app: ExportAppSchema
     ai_services: List[ExportAIServiceSchema] = []
+    system_one_services: List[ExportSystemOneServiceSchema] = []
     embedding_services: List[ExportEmbeddingServiceSchema] = []
     output_parsers: List[ExportOutputParserSchema] = []
     mcp_configs: List[ExportMCPConfigSchema] = []

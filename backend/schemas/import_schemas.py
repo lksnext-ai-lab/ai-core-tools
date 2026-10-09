@@ -21,6 +21,7 @@ class ComponentType(str, Enum):
 
     AI_SERVICE = "ai_service"
     EMBEDDING_SERVICE = "embedding_service"
+    SYSTEM_ONE_SERVICE = "system_one_service"
     OUTPUT_PARSER = "output_parser"
     MCP_CONFIG = "mcp_config"
     MIDDLEWARE = "middleware"
@@ -171,6 +172,7 @@ class AppImportPreviewSchema(BaseModel):
     export_version: str
     app_name: str
     ai_services: List[ComponentPreviewItem] = []
+    system_one_services: List[ComponentPreviewItem] = []
     embedding_services: List[ComponentPreviewItem] = []
     output_parsers: List[ComponentPreviewItem] = []
     mcp_configs: List[ComponentPreviewItem] = []

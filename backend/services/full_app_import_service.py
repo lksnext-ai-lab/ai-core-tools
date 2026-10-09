@@ -15,6 +15,7 @@ from schemas.import_schemas import (
     ComponentType,
 )
 from services.ai_service_import_service import AIServiceImportService
+from services.system_one_porting import import_system_one_service
 from services.embedding_service_import_service import (
     EmbeddingServiceImportService,
 )
@@ -41,6 +42,7 @@ class FullAppImportService:
     # Import order (respects dependencies)
     IMPORT_ORDER = [
         "ai_services",
+        "system_one_services",
         "embedding_services",
         "output_parsers",
         "mcp_configs",
@@ -117,6 +119,7 @@ class FullAppImportService:
         # Component counts
         component_counts = {
             "ai_services": len(export_data.ai_services),
+            "system_one_services": len(export_data.system_one_services),
             "embedding_services": len(
                 export_data.embedding_services
             ),
@@ -139,6 +142,17 @@ class FullAppImportService:
                 needs_api_key=True,
                 provider=svc.provider,
             ))
+
+        # Preview System One services (the token is optional: a server may not require one)
+        system_one_previews = [
+            ComponentPreviewItem(
+                component_type=ComponentType.SYSTEM_ONE_SERVICE,
+                component_name=svc.name,
+                bundled=True,
+                needs_api_key=False,
+            )
+            for svc in export_data.system_one_services
+        ]
 
         # Preview embedding services
         embedding_previews = []
@@ -325,6 +339,20 @@ class FullAppImportService:
                     ),
                 ))
 
+        for a in export_data.agents:
+            if a.type == "system_one_agent" and a.system_one_service_name:
+                dependencies.append(DependencyInfo(
+                    source_type="agent",
+                    source_name=a.name,
+                    depends_on_type="system_one_service",
+                    depends_on_name=a.system_one_service_name,
+                    mandatory=True,
+                    bundled=any(
+                        svc.name == a.system_one_service_name
+                        for svc in export_data.system_one_services
+                    ),
+                ))
+
         return AppImportPreviewSchema(
             valid=True,
             export_version=(
@@ -332,6 +360,7 @@ class FullAppImportService:
             ),
             app_name=export_data.app.name,
             ai_services=ai_service_previews,
+            system_one_services=system_one_previews,
             embedding_services=embedding_previews,
             output_parsers=parser_previews,
             mcp_configs=mcp_previews,
@@ -362,7 +391,7 @@ class FullAppImportService:
             new_name: Optional custom name for the imported app
             component_selection: Optional dict mapping singular type names to
                 lists of component names to import. If omitted, all components
-                are imported.  Keys: ``ai_service``, ``embedding_service``,
+                are imported.  Keys: ``ai_service``, ``system_one_service``, ``embedding_service``,
                 ``output_parser``, ``mcp_config``, ``silo``, ``repository``,
                 ``domain``, ``agent``.
             api_keys: Optional dict mapping original service names to API keys
@@ -380,6 +409,7 @@ class FullAppImportService:
         if component_selection is not None:
             _TYPE_TO_FIELD: Dict[str, str] = {
                 "ai_service": "ai_services",
+                "system_one_service": "system_one_services",
                 "embedding_service": "embedding_services",
                 "output_parser": "output_parsers",
                 "mcp_config": "mcp_configs",
@@ -440,6 +470,7 @@ class FullAppImportService:
         # Track component name -> new ID mappings for dependency resolution
         component_id_mappings = {
             "ai_services": {},  # name -> new service_id
+            "system_one_services": {},  # name -> new service_id
             "embedding_services": {},  # name -> new service_id
             "output_parsers": {},  # name -> new parser_id
             "silos": {},  # name -> new silo_id
@@ -664,6 +695,15 @@ class FullAppImportService:
                         )
                 count += 1
 
+        elif component_type == "system_one_services":
+            for item in component_data:
+                service_id, item_warnings = import_system_one_service(
+                    self.session, item, app_id, api_key=(api_keys or {}).get(item.name),
+                )
+                warnings.extend(item_warnings)
+                new_mappings[item.name] = service_id
+                count += 1
+
         elif component_type == "embedding_services":
             for item in component_data:
                 from schemas.export_schemas import (
@@ -858,6 +898,7 @@ class FullAppImportService:
                         conflict_mode=conflict_mode,
                         ai_service_id_map=component_id_mappings["ai_services"],
                         middleware_id_map=component_id_mappings["middlewares"],
+                        system_one_service_id_map=component_id_mappings["system_one_services"],
                     )
                     warnings.extend(result.warnings)
                     count += 1

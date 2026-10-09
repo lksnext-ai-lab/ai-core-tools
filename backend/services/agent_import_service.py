@@ -29,6 +29,7 @@ from services.output_parser_import_service import OutputParserImportService
 from services.mcp_config_import_service import MCPConfigImportService
 from services.middleware_import_service import MiddlewareImportService
 from repositories.agent_repository import AgentRepository
+from services.system_one_porting import import_system_one_agent
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
@@ -458,6 +459,7 @@ class AgentImportService:
         import_bundled_mcp_configs: bool = True,
         import_bundled_agent_tools: bool = True,
         middleware_id_map: Optional[Dict[str, int]] = None,
+        system_one_service_id_map: Optional[dict] = None,
     ) -> ImportSummarySchema:
         """Import Agent configuration.
 
@@ -492,6 +494,13 @@ class AgentImportService:
 
         # Validate version
         validate_export_version(export_data.metadata.export_version)
+
+        # System One agents have no LLM service: they follow their own, shorter flow.
+        if export_data.agent.type == "system_one_agent":
+            return import_system_one_agent(
+                self.session, export_data, app_id, conflict_mode, new_name,
+                service_id_map=system_one_service_id_map,
+            )
 
         # Step 0: Determine agent's final name (needed for dependency naming)
         agent_name = export_data.agent.name
