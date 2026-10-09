@@ -159,7 +159,7 @@ def test_the_type_of_an_existing_agent_cannot_be_changed(repos, existing_type, r
 def test_a_question_must_leave_room_for_the_text_in_the_prompt_budget(repos):
     # The server counts the text PLUS one question per prompt; max_state_chars is that per-prompt budget.
     long_question = {"key": "u", "type": "noul", "instructions": "x" * 5600}
-    with pytest.raises(ValueError, match="room for the text"):
+    with pytest.raises(ValueError, match="needs at least 500"):
         run(repos, data(questions=[long_question], max_state_chars=6000))
 
 
@@ -173,5 +173,5 @@ def test_raising_the_questions_on_update_is_checked_against_the_stored_budget(re
                               questions=QUESTIONS, is_tool=True)
     repos.by_type.return_value = existing
     long_question = {"key": "u", "type": "noul", "instructions": "x" * 5600}
-    with pytest.raises(ValueError, match="room for the text"):
+    with pytest.raises(ValueError, match="needs at least 500"):
         run(repos, data(agent_id=42, questions=[long_question], max_state_chars=None))

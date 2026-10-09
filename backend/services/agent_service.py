@@ -589,9 +589,9 @@ class AgentService:
         overhead = question_overhead_chars(TypeAdapter(QuestionList).validate_python(agent.questions))
         if agent.max_state_chars - overhead < MIN_TEXT_ROOM_CHARS:
             raise ValueError(
-                f"The longest question takes about {overhead} of the {agent.max_state_chars} characters of each prompt; "
-                f"it must leave at least {MIN_TEXT_ROOM_CHARS} of room for the text. "
-                "Shorten the question or raise the maximum text length"
+                f"The longest question's definition (instructions plus options/levels) is about {overhead} characters. "
+                f"Each prompt has {agent.max_state_chars} characters in total, shared with the text to evaluate, and the text "
+                f"needs at least {MIN_TEXT_ROOM_CHARS}: shorten the question or raise the maximum text length"
             )
 
         # Nothing here uses an LLM, memory, a silo, tools or a sandbox: keep those columns neutral.
