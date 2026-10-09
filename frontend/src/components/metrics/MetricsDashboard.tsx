@@ -24,11 +24,11 @@ interface Props {
   description?: string;
   /** System view: show app names and the active-apps KPI. */
   systemScope?: boolean;
-  /** What `llm_calls` counts for this view: LLM calls by default; a System One agent only calls an LLM to summarize. */
-  callsLabel?: string;
+  /** A System One agent has no streaming, tools or LLM turns: its own cards (server tokens, summarization) replace those. */
+  variant?: 'default' | 'system_one';
 }
 
-export function MetricsDashboard({ api, dimensions, title, description, systemScope = false, callsLabel = 'LLM calls' }: Props) {
+export function MetricsDashboard({ api, dimensions, title, description, systemScope = false, variant = 'default' }: Props) {
   const [range, setRange] = useState<TimeRange>('7d');
   const [dimension, setDimension] = useState<BreakdownDimension>(dimensions[0]);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
@@ -69,29 +69,44 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
   const kpis = useMemo(() => {
     if (!summary) return null;
     const { current: c, previous: p } = summary;
-    return [
+    const systemOne = variant === 'system_one';
+    const cards = [
       { label: 'Executions', value: formatCount(c.executions), change: relativeChange(c.executions, p.executions),
         hint: c.subagent_calls ? `+${formatCount(c.subagent_calls)} sub-agent calls` : undefined },
       { label: 'Error rate', value: formatPercent(c.error_rate), change: relativeChange(c.error_rate, p.error_rate),
         higherIsBetter: false, hint: c.timeouts ? `${formatCount(c.timeouts)} timeouts` : `${formatCount(c.errors)} failed` },
       { label: 'Latency p95', value: formatMs(c.latency_p95_ms), change: relativeChange(c.latency_p95_ms, p.latency_p95_ms),
         higherIsBetter: false, hint: `p50 ${formatMs(c.latency_p50_ms)}` },
-      { label: 'Time to first token', value: formatMs(c.ttft_p50_ms), change: relativeChange(c.ttft_p50_ms, p.ttft_p50_ms),
-        higherIsBetter: false, hint: 'p50, streaming only' },
-      { label: 'Total tokens', value: formatCount(c.total_tokens), change: relativeChange(c.total_tokens, p.total_tokens),
+      // Time to first token only exists for streamed answers: System One returns one response.
+      ...(systemOne ? [] : [
+        { label: 'Time to first token', value: formatMs(c.ttft_p50_ms), change: relativeChange(c.ttft_p50_ms, p.ttft_p50_ms),
+          higherIsBetter: false, hint: 'p50, streaming only' },
+      ]),
+      { label: systemOne ? 'System One tokens' : 'Total tokens', value: formatCount(c.total_tokens), change: relativeChange(c.total_tokens, p.total_tokens),
         hint: `${formatCount(c.input_tokens)} in · ${formatCount(c.output_tokens)} out` },
-      { label: 'Tokens / execution', value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
-        change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
-        hint: `${formatCount(c.llm_calls)} ${callsLabel}` },
-      { label: 'Tool calls', value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
-        hint: c.tool_errors ? `${formatCount(c.tool_errors)} failed` : undefined },
+      systemOne
+        ? { label: 'System One tokens / execution', value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
+            change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
+            hint: 'prompt tokens of the decision server' }
+        : { label: 'Tokens / execution', value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
+            change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
+            hint: `${formatCount(c.llm_calls)} LLM calls` },
+      ...(systemOne ? [
+        { label: 'Summarization calls', value: formatCount(c.summarization_calls ?? 0),
+          change: relativeChange(c.summarization_calls ?? 0, p.summarization_calls ?? 0),
+          hint: `${formatCount(c.summarization_input_tokens ?? 0)} in · ${formatCount(c.summarization_output_tokens ?? 0)} out tokens` },
+      ] : [
+        { label: 'Tool calls', value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
+          hint: c.tool_errors ? `${formatCount(c.tool_errors)} failed` : undefined },
+      ]),
       systemScope
         ? { label: 'Active apps', value: formatCount(c.active_apps), change: relativeChange(c.active_apps, p.active_apps),
             hint: `${formatCount(c.active_agents)} agents · ${formatCount(c.active_users)} users` }
         : { label: 'Active users', value: formatCount(c.active_users), change: relativeChange(c.active_users, p.active_users),
             hint: `${formatCount(c.active_agents)} agents` },
     ];
-  }, [summary, systemScope, callsLabel]);
+    return cards;
+  }, [summary, systemScope, variant]);
 
   return (
     <div className="space-y-6">

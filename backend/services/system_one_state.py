@@ -8,7 +8,7 @@ than an error.
 """
 import re
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Awaitable, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from schemas.system_one_schemas import ChoiceQuestion, NoulQuestion, Question
 from utils.logger import get_logger
@@ -20,7 +20,16 @@ _QUESTION_MARGIN_CHARS = 50
 MIN_TEXT_ROOM_CHARS = 500   # what a question must leave of the per-prompt budget for the text itself
 _BUDGET_ERROR = re.compile(r"Longest prompt has (\d+) tokens; limit is (\d+)")
 
-Summarizer = Callable[[str, List[Question], int], Awaitable[str]]
+@dataclass
+class SummaryOutput:
+    """What a summarizer returns: the text and, when the LLM reports it, what the call used."""
+    text: str
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+
+
+# A summarizer may return plain text (usage unknown) or a SummaryOutput.
+Summarizer = Callable[[str, List[Question], int], Awaitable[Union[str, SummaryOutput]]]
 
 
 @dataclass
@@ -28,6 +37,10 @@ class ReducedState:
     text: str
     mode: Literal["none", "summarized", "truncated"]
     original_chars: int
+    # Calls made to the summarizing LLM for this reduction (a failed one still counts) and the tokens it reported.
+    summary_calls: int = 0
+    summary_input_tokens: int = 0
+    summary_output_tokens: int = 0
 
 
 def build_state(text: str, files: List[Dict]) -> str:
@@ -89,15 +102,23 @@ async def reduce_state(state: str, questions: List[Question], max_state_chars: i
     if original <= budget:
         return ReducedState(state, "none", original)
 
+    calls = in_tokens = out_tokens = 0
     if summarize is not None:
+        calls = 1
         try:
-            summary = (await summarize(state, questions, budget) or "").strip()
+            output = await summarize(state, questions, budget)
+            if isinstance(output, str):
+                output = SummaryOutput(output)
+            summary = (output.text or "").strip()
+            in_tokens, out_tokens = output.input_tokens or 0, output.output_tokens or 0
         except Exception:
             logger.warning("[system_one] summarization failed; truncating instead", exc_info=True)
             summary = ""
+        usage = dict(summary_calls=calls, summary_input_tokens=in_tokens, summary_output_tokens=out_tokens)
         if summary:
             if len(summary) <= budget:
-                return ReducedState(summary, "summarized", original)
-            return ReducedState(truncate_at_word(summary, budget), "truncated", original)
+                return ReducedState(summary, "summarized", original, **usage)
+            return ReducedState(truncate_at_word(summary, budget), "truncated", original, **usage)
+        return ReducedState(truncate_at_word(state, budget), "truncated", original, **usage)
 
     return ReducedState(truncate_at_word(state, budget), "truncated", original)

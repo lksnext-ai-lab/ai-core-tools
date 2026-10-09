@@ -132,3 +132,33 @@ async def test_deleting_the_event_deletes_its_answers(committed):
     finally:
         db.close()
     assert rows(committed.agent_id) == ([], [])
+
+
+async def test_summarization_is_persisted_on_its_own_and_summed_apart_from_the_system_one_tokens(committed):
+    from dataclasses import replace
+    from db.database import SessionLocal
+    from services.metrics_query_service import MetricsQueryService, MetricsScope
+    from services.system_one_state import SummaryOutput
+
+    summarize = AsyncMock(return_value=SummaryOutput("short summary", input_tokens=900, output_tokens=120))
+    snapshot = replace(committed.snapshot, summarize=summarize, max_state_chars=1000)
+    with patch("services.system_one_evaluator.system_one_client.evaluate", AsyncMock(return_value=RAW)):
+        await SystemOneEvaluator().evaluate(snapshot, "word " * 5000, [], {"user_id": None, "api_key_id": None})
+        await SystemOneEvaluator().evaluate(committed.snapshot, "a short text", [], {"user_id": None, "api_key_id": None})
+    await drain_writes()
+
+    events, _ = rows(committed.agent_id)
+    by_calls = {e.summarization_calls: e for e in events}
+    assert set(by_calls) == {0, 1}
+    summarized = by_calls[1]
+    assert (summarized.summarization_input_tokens, summarized.summarization_output_tokens) == (900, 120)
+    assert (summarized.input_tokens, summarized.output_tokens, summarized.llm_calls) == (120, 3, 0)   # the server's own
+    assert (by_calls[0].summarization_input_tokens, by_calls[0].summarization_output_tokens) == (0, 0)
+
+    db = SessionLocal()
+    try:
+        stats = MetricsQueryService.summary(db, MetricsScope(app_id=committed.app_id, agent_id=committed.agent_id), "24h").current
+    finally:
+        db.close()
+    assert (stats.summarization_calls, stats.summarization_input_tokens, stats.summarization_output_tokens) == (1, 900, 120)
+    assert (stats.input_tokens, stats.output_tokens, stats.llm_calls) == (240, 6, 0)
