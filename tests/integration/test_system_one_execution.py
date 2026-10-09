@@ -104,3 +104,12 @@ async def test_empty_text_and_no_files_is_a_400(db, agent, server):
         await run(db, agent, "  ")
     assert e.value.status_code == 400
     server[0].assert_not_awaited()
+
+
+async def test_the_callers_api_key_never_reaches_the_logs(db, agent, server):
+    """The app logger does not propagate to caplog, so the calls to the module logger are inspected directly."""
+    ctx = {"user_id": "apikey_abc", "app_id": agent.app_id, "api_key": "SUPER-SECRET-API-KEY-123"}
+    with patch("services.agent_execution_service.logger") as log, patch("services.system_one_evaluator.logger") as log2:
+        await run(db, agent, "call me", ctx=ctx, app_id=agent.app_id)
+    written = [str(c) for mock in (log, log2) for c in mock.mock_calls]
+    assert "SUPER-SECRET-API-KEY-123" not in " ".join(written)

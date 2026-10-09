@@ -87,7 +87,7 @@ interface Agent {
   media_chunk_min_duration?: number | null;
   media_chunk_max_duration?: number | null;
   media_chunk_overlap?: number | null;
-  ai_services: Array<ServiceOptionLike & { supports_video?: boolean }>;
+  ai_services: Array<ServiceOptionLike & { supports_video?: boolean; is_system?: boolean }>;
   sandbox_services: ServiceOptionLike[];
   system_one_services?: Array<{ service_id: number; name: string }>;
   silos: Array<{ silo_id: number; name: string }>;
@@ -992,7 +992,7 @@ function AgentFormPage() {
             <SystemOneAgentSection
               appId={appId ?? ''}
               systemOneServices={agent?.system_one_services ?? []}
-              aiServices={agent?.ai_services ?? []}
+              aiServices={(agent?.ai_services ?? []).filter((s) => !s.is_system)}
               serviceId={formData.system_one_service_id}
               onServiceChange={(id) => handleInputChange('system_one_service_id', id)}
               summarizationServiceId={formData.summarization_service_id}

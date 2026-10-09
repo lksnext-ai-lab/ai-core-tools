@@ -27,7 +27,7 @@ TAG = ["System One Services"]
 
 def _server_error(action: str, exc: Exception, **ctx) -> HTTPException:
     # Log only the exception type: the message of an unhandled error may carry credentials.
-    logger.error("Error %s (%s): %s", action, ctx, type(exc).__name__, exc_info=True)
+    logger.error("Error %s (%s): %s", action, ctx, type(exc).__name__)
     return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error {action}")
 
 

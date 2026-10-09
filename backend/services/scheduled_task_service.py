@@ -90,6 +90,8 @@ class ScheduledTaskService:
         output_bindings: Optional[List[Dict[str, Any]]] = None,
     ) -> ScheduledTask:
         agent = self._agent(data["agent_id"], app_id)
+        if getattr(agent, "type", None) == "system_one_agent":
+            raise ValueError("System One agents cannot be scheduled: they are evaluated on demand")
         if data.get("conversation_mode") == "continuous" and not getattr(agent, "has_memory", False):
             # Without memory every run would start from scratch: not a continuous conversation.
             raise ValueError("Continuous conversations require an agent with memory enabled")

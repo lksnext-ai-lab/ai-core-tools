@@ -128,7 +128,6 @@ class IACTSystemOneTool(BaseTool):
             return _error_text(exc), None
         except Exception as exc:
             # Only the exception type is logged and returned: its message may carry request details.
-            logger.error("System One tool failed (agent_id=%s): %s", self.snapshot.agent_id, type(exc).__name__,
-                         exc_info=True)
+            logger.error("System One tool failed (agent_id=%s): %s", self.snapshot.agent_id, type(exc).__name__)
             return "System One failed to evaluate the text.", None
         return format_tool_content(result), result

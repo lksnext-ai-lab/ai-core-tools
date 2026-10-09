@@ -85,13 +85,13 @@ def test_service_of_another_app_or_unknown_is_rejected(repos):
     repos.create.assert_not_called()
 
 
-def test_summarization_llm_must_be_visible_to_the_app(repos):
+def test_summarization_llm_must_belong_to_the_app_not_be_a_platform_one(repos):
+    """A platform-level (app_id NULL) LLM would bypass the SaaS usage metering the chat path applies to it."""
     run(repos, data(summarization_service_id=11))                       # the app's own
     assert repos.created["agent"].summarization_service_id == 11
-    run(repos, data(summarization_service_id=12))                       # a platform-level (system) one
-    assert repos.created["agent"].summarization_service_id == 12
-    with pytest.raises(ValueError, match="summarization"):
-        run(repos, data(summarization_service_id=999))                  # another app's
+    for foreign in (12, 999):                                           # platform-level, or another app's
+        with pytest.raises(ValueError, match="summarization"):
+            run(repos, data(summarization_service_id=foreign))
     run(repos, data(summarization_service_id=None))
     assert repos.created["agent"].summarization_service_id is None
 

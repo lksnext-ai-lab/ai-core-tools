@@ -174,9 +174,32 @@ async def test_connection_with_config_maps_the_probe_result(repo):
     with patch.object(module.system_one_client, "probe", probe):
         out = await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok"})
-    assert out == {"status": "success", "message": "Connection successful",
-                   "models": ["nimble-latest"], "limits": {"max_concurrent_requests": 4}}
+    assert out == {"status": "success", "message": "Connection successful", "models": ["nimble-latest"],
+                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4}
     probe.assert_awaited_once_with("http://so.test", "tok")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workers,limits,expected", [
+    ("8", {"max_concurrent_requests": 4}, 1),        # 4 slots shared by 8 processes: one each, retries absorb the rest
+    ("2", {"max_concurrent_requests": 16}, 8),
+    ("1", {"max_concurrent_requests": 4}, 4),
+    ("8", None, None),                                # limits unknown: nothing to suggest
+])
+async def test_the_probe_suggests_a_per_process_concurrency(repo, monkeypatch, workers, limits, expected):
+    monkeypatch.setenv("UVICORN_WORKERS", workers)
+    probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": [], "limits": limits})
+    with patch.object(module.system_one_client, "probe", probe):
+        out = await SystemOneServiceService.test_connection_with_config(MagicMock(), 10, {"endpoint": "http://so.test"})
+    assert out["suggested_max_concurrency"] == expected
+
+
+@pytest.mark.asyncio
+async def test_a_failed_probe_suggests_nothing(repo):
+    probe = AsyncMock(return_value={"ok": False, "message": "down", "models": [], "limits": None})
+    with patch.object(module.system_one_client, "probe", probe):
+        out = await SystemOneServiceService.test_connection_with_config(MagicMock(), 10, {"endpoint": "http://so.test"})
+    assert out["suggested_max_concurrency"] is None
 
 
 @pytest.mark.asyncio

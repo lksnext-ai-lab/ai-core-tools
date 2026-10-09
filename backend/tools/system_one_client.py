@@ -13,6 +13,7 @@ Errors come in two shapes: ``{"error": {"message": ...}}`` and FastAPI's ``{"det
 from __future__ import annotations
 
 import asyncio
+import math
 import weakref
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -139,12 +140,16 @@ def _error_for(response: httpx.Response) -> SystemOneError:
 
 
 def _retry_delay(response: httpx.Response, attempt: int) -> float:
-    header = response.headers.get("Retry-After")
+    """Seconds to wait: the server's Retry-After when it is a usable number (capped), else a growing backoff.
+
+    ``float()`` also accepts "nan" and "inf", and ``asyncio.sleep(nan)`` never returns: the slot would stay held forever.
+    """
     try:
-        if header is not None:
-            return min(max(float(header), 0.0), _RETRY_AFTER_CAP_S)
+        value = float(response.headers.get("Retry-After", ""))
     except ValueError:
-        pass
+        value = math.nan
+    if math.isfinite(value) and value >= 0:
+        return min(value, _RETRY_AFTER_CAP_S)
     return _BACKOFF_S * attempt
 
 

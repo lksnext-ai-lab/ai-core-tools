@@ -123,3 +123,21 @@ def test_deleting_the_app_removes_agents_then_services(client, db, fake_app, own
     assert r.status_code == 200, r.text
     assert db.query(SystemOneAgent).filter(SystemOneAgent.agent_id == aid).count() == 0
     assert db.query(SystemOneService).filter(SystemOneService.service_id == sid).count() == 0
+
+
+def test_a_platform_level_summarization_llm_is_rejected_but_the_apps_own_is_fine(client, db, fake_app, owner_headers, so_service):
+    from models.ai_service import AIService
+
+    own = AIService(name="Own LLM", provider="OpenAI", api_key="sk-x", description="m",  # pragma: allowlist secret
+                    app_id=fake_app.app_id, create_date=datetime.now())
+    platform = AIService(name="Platform LLM", provider="OpenAI", api_key="sk-y", description="m",  # pragma: allowlist secret
+                         app_id=None, create_date=datetime.now())
+    db.add_all([own, platform])
+    db.flush()
+    r = client.post(agents(fake_app, "0"), headers=owner_headers, json=payload(so_service.service_id, summarization_service_id=platform.service_id))
+    assert r.status_code == 400 and "summarization" in r.json()["detail"]
+    ok = client.post(agents(fake_app, "0"), headers=owner_headers, json=payload(so_service.service_id, summarization_service_id=own.service_id))
+    assert ok.status_code == 200 and ok.json()["summarization_service_id"] == own.service_id
+    blank = client.get(agents(fake_app, "0"), headers=owner_headers).json()
+    flags = {s["name"]: s["is_system"] for s in blank["ai_services"]}
+    assert flags["Own LLM"] is False and flags["[System] Platform LLM"] is True

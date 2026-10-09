@@ -1126,6 +1126,11 @@ class AgentExecutionService:
         agent = self.agent_service.get_agent(db, agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
+        if agent.type == 'system_one_agent':
+            raise HTTPException(
+                status_code=400,
+                detail="System One agents evaluate a text, they are not chatted with: use the evaluate endpoint",
+            )
 
         # 2. Access to this agent (app/tenant ownership, API key scope, etc.) is
         # verified by the caller (router) before this service is ever invoked —
@@ -1767,7 +1772,8 @@ class AgentExecutionService:
         agent = self.agent_service.get_agent(db, agent_id, agent_type='system_one_agent')
         if not agent or not isinstance(agent, SystemOneAgent) or (app_id is not None and agent.app_id != app_id):
             raise HTTPException(status_code=404, detail="System One agent not found")
-        await self._validate_agent_access(agent, user_context)
+        # Access is enforced by the routers (role / API key + the app check above). _validate_agent_access is a
+        # stub that only logs the whole user_context, which on the public API contains the raw API key.
 
         files = files or []
         images = [f.filename for f in files if _is_image_upload(f)]

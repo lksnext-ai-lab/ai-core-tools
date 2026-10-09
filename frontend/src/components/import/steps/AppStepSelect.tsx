@@ -62,6 +62,17 @@ function AppStepSelect({
       })),
     },
     {
+      type: 'system_one_service',
+      label: 'System One Services',
+      icon: COMPONENT_TYPE_ICONS.system_one_service,
+      items: preview.system_one_services.map((c) => ({
+        key: makeKey('system_one_service', c.component_name),
+        name: c.component_name,
+        needsApiKey: false,
+        deps: [],
+      })),
+    },
+    {
       type: 'embedding_service',
       label: 'Embedding Services',
       icon: COMPONENT_TYPE_ICONS.embedding_service,

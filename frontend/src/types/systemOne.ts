@@ -29,6 +29,8 @@ export interface SystemOneConnectionResult {
   message: string;
   models: string[];
   limits: Record<string, number> | null;
+  /** Server limit divided by the backend processes (at least 1); null when the server did not report its limits. */
+  suggested_max_concurrency?: number | null;
 }
 
 // ----------------------------------------------------------------- questions

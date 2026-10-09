@@ -168,6 +168,17 @@ async def test_an_invalid_answer_from_the_server_is_an_error_not_a_crash(mocks):
     assert mocks.record.call_args.kwargs["status"] == "ERROR"
 
 
+@pytest.mark.parametrize("usage", [{"input_tokens": "lots", "output_tokens": 1}, {"input_tokens": None}, ["a"], "x", 7, {}])
+async def test_a_malformed_usage_does_not_lose_a_good_evaluation(mocks, usage):
+    raw = json.loads(json.dumps(RAW))
+    raw["usage"] = usage
+    mocks.evaluate.return_value = raw
+    result = await run(snapshot())
+    assert result.answers["urgent"].decision is True
+    assert result.usage is None or (result.usage.input_tokens >= 0)
+    assert mocks.record.call_args.kwargs["status"] == "SUCCESS"
+
+
 # -------------------------------------------------------------------- metrics
 
 async def test_success_records_one_event_with_one_row_per_question(mocks):

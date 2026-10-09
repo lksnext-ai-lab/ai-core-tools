@@ -113,6 +113,10 @@ function AppImportStepper({
             type: 'ai_service',
             name: c.component_name,
           })),
+          ...result.system_one_services.map((c) => ({
+            type: 'system_one_service',
+            name: c.component_name,
+          })),
           ...result.embedding_services.map((c) => ({
             type: 'embedding_service',
             name: c.component_name,
