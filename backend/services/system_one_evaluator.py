@@ -7,7 +7,7 @@ worker threads, where lazy-loading a detached agent would fail.
 v1 is text only: images are rejected, not ignored.
 """
 import uuid
-from dataclasses import dataclass
+from dataclasses import replace, dataclass
 from datetime import datetime
 from time import perf_counter
 from types import SimpleNamespace
@@ -21,7 +21,7 @@ from schemas.system_one_schemas import Question, QuestionList, SystemOneResult, 
 from services.agent_metrics_recorder import record_agent_execution
 from services.system_one_service_service import max_concurrency_of
 from services.system_one_state import (
-    ReducedState, Summarizer, build_state, parse_budget_error, reduce_state, shrink_factor, truncate_at_word,
+    ReducedState, Summarizer, SummaryOutput, build_state, parse_budget_error, reduce_state, shrink_factor, truncate_at_word,
 )
 from tools import system_one_client
 from tools.aiServiceTools import create_llm_from_service
@@ -76,7 +76,7 @@ def _question_lines(questions: List[Question]) -> str:
 
 
 def _make_summarizer(llm: Any) -> Summarizer:
-    async def summarize(text: str, questions: List[Question], budget: int) -> str:
+    async def summarize(text: str, questions: List[Question], budget: int) -> SummaryOutput:
         # "At most": asking for a size close to the budget made the LLM write ~5x more and take ~10x longer in a
         # real test (110 s vs 11 s), so the summary is allowed to be short.
         prompt = (
@@ -85,7 +85,12 @@ def _make_summarizer(llm: Any) -> Summarizer:
             f"Reply with the summary only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
         )
         reply = await llm.ainvoke(prompt)
-        return _text_of(getattr(reply, "content", reply))
+        usage = getattr(reply, "usage_metadata", None) or {}
+        return SummaryOutput(
+            _text_of(getattr(reply, "content", reply)),
+            input_tokens=usage.get("input_tokens") if isinstance(usage, dict) else None,
+            output_tokens=usage.get("output_tokens") if isinstance(usage, dict) else None,
+        )
 
     return summarize
 
@@ -203,7 +208,7 @@ class SystemOneEvaluator:
             shrunk = truncate_at_word(reduced.text, int(len(reduced.text) * shrink_factor(*parsed)))
             if not shrunk.strip():
                 raise
-            reduced = ReducedState(shrunk, "truncated", reduced.original_chars)
+            reduced = replace(reduced, text=shrunk, mode="truncated")   # keeps what the summarizer used
             logger.info("[system_one] state over the server's token budget; retrying with %d chars", len(shrunk))
             return await system_one_client.evaluate(snapshot.endpoint, reduced.text, snapshot.questions), reduced
 
@@ -222,10 +227,9 @@ class SystemOneEvaluator:
         started_at, clock = datetime.utcnow(), perf_counter()
         result: Optional[SystemOneResult] = None
         failure: Optional[Exception] = None
-        summarized = False
+        reduced: Optional[ReducedState] = None
         try:
             reduced = await reduce_state(state, snapshot.questions, snapshot.max_state_chars, snapshot.summarize)
-            summarized = reduced.mode == "summarized"
             raw, reduced = await self._call(snapshot, reduced)
             result = SystemOneResult(
                 answers=decide_all(snapshot.questions, raw["answers"]),
@@ -244,16 +248,21 @@ class SystemOneEvaluator:
             failure = exc
             raise
         finally:
-            self._record(snapshot, text, files, user_context, started_at, clock, result, failure, summarized)
+            self._record(snapshot, text, files, user_context, started_at, clock, result, failure, reduced)
 
     @staticmethod
-    def _record(snapshot, text, files, user_context, started_at, clock, result, failure, summarized) -> None:
+    def _record(snapshot, text, files, user_context, started_at, clock, result, failure, reduced) -> None:
         finished_at = datetime.utcnow()
         duration_ms = int((perf_counter() - clock) * 1000)
         overrides: Dict[str, Any] = {
             "model_name": result.model if result else snapshot.endpoint.model,
             "provider": _PROVIDER,
-            "llm_calls": 1 if summarized else 0,
+            # The decision model is not an LLM: its calls are not counted as such. What the summarizing LLM (if any)
+            # did is recorded on its own, apart from the System One server's tokens in input/output/total_tokens.
+            "llm_calls": 0,
+            "summarization_calls": reduced.summary_calls if reduced else 0,
+            "summarization_input_tokens": reduced.summary_input_tokens if reduced else 0,
+            "summarization_output_tokens": reduced.summary_output_tokens if reduced else 0,
             "had_files": len(files) > 0,
             "file_count": len(files),
             "had_images": False,

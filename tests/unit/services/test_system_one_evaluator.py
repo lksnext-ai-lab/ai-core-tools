@@ -240,10 +240,29 @@ async def test_undetermined_decision_is_recorded_as_null(mocks):
     assert rows["area"]["decision"] is None and rows["area"]["probability"] == 0.55
 
 
-async def test_summarization_counts_as_an_llm_call(mocks):
-    await run(snapshot(summarize=AsyncMock(return_value="s"), max_state_chars=1000), "word " * 5000)
-    assert mocks.record.call_args.kwargs["event_overrides"]["llm_calls"] == 1
-    assert all(r["state_reduction"] == "summarized" for r in mocks.record.call_args.kwargs["system_one_answers"])
+async def test_summarization_is_recorded_on_its_own_and_is_not_an_llm_call_of_the_decision_model(mocks):
+    from services.system_one_state import SummaryOutput
+    summarize = AsyncMock(return_value=SummaryOutput("s", input_tokens=900, output_tokens=120))
+    await run(snapshot(summarize=summarize, max_state_chars=1000), "word " * 5000)
+    over = mocks.record.call_args.kwargs["event_overrides"]
+    assert (over["summarization_calls"], over["summarization_input_tokens"], over["summarization_output_tokens"]) == (1, 900, 120)
+    assert over["llm_calls"] == 0                          # the System One tokens/server are not an LLM
+    assert over["input_tokens"] == 400                     # those stay the System One server's own usage
+
+
+async def test_without_summarization_nothing_is_recorded_for_it(mocks):
+    await run(snapshot())
+    over = mocks.record.call_args.kwargs["event_overrides"]
+    assert (over["summarization_calls"], over["summarization_input_tokens"], over["summarization_output_tokens"]) == (0, 0, 0)
+
+
+async def test_a_summarization_that_failed_before_the_server_answered_is_still_recorded(mocks):
+    mocks.evaluate.side_effect = SystemOneError("unavailable", "down", 503)
+    summarize = AsyncMock(return_value="s")
+    with pytest.raises(HTTPException):
+        await run(snapshot(summarize=summarize, max_state_chars=1000), "word " * 5000)
+    assert mocks.record.call_args.kwargs["event_overrides"]["summarization_calls"] == 1
+
 
 
 async def test_the_state_never_reaches_the_log(mocks, caplog):
@@ -292,9 +311,19 @@ async def test_snapshot_builds_a_summarizer_from_the_llm_service():
         snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
     assert snap.summarize is not None and build.call_args.kwargs.get("temperature") == 0
     out = await snap.summarize("long " * 10, QUESTIONS, 500)
-    assert out == "the summary"
+    assert out.text == "the summary" and (out.input_tokens, out.output_tokens) == (None, None)   # this LLM reported no usage
     prompt = llm.ainvoke.await_args.args[0]
     assert "Is it urgent?" in prompt and "Which area?" in prompt and "500" in prompt
+
+
+async def test_the_summarizer_passes_on_the_token_usage_the_llm_reports():
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=SimpleNamespace(
+        content="the summary", usage_metadata={"input_tokens": 910, "output_tokens": 130, "total_tokens": 1040}))
+    with patch.object(module, "create_llm_from_service", return_value=llm):
+        snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
+    out = await snap.summarize("long " * 10, QUESTIONS, 500)
+    assert (out.input_tokens, out.output_tokens) == (910, 130)
 
 
 async def test_summarizer_handles_block_content_and_caps_the_input():
@@ -302,7 +331,7 @@ async def test_summarizer_handles_block_content_and_caps_the_input():
     llm.ainvoke = AsyncMock(return_value=SimpleNamespace(content=[{"type": "text", "text": "part one "}, {"type": "text", "text": "part two"}]))
     with patch.object(module, "create_llm_from_service", return_value=llm):
         snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
-    assert await snap.summarize("x" * 500_000, QUESTIONS, 500) == "part one part two"
+    assert (await snap.summarize("x" * 500_000, QUESTIONS, 500)).text == "part one part two"
     assert len(llm.ainvoke.await_args.args[0]) < 200_000
 
 

@@ -3,7 +3,7 @@ from pydantic import TypeAdapter
 
 from schemas.system_one_schemas import Question
 from services.system_one_state import (
-    build_state, parse_budget_error, question_overhead_chars, reduce_state, shrink_factor, truncate_at_word,
+    SummaryOutput, build_state, parse_budget_error, question_overhead_chars, reduce_state, shrink_factor, truncate_at_word,
 )
 
 Q = TypeAdapter(Question).validate_python
@@ -118,3 +118,35 @@ def test_a_question_with_only_one_meaning_still_counts_its_size():
     from services.system_one_state import question_overhead_chars
     q = NoulQuestion(key="u", type="noul", instructions="x" * 10, criteria={"true": "y" * 5})
     assert question_overhead_chars([q]) >= 15
+
+
+# --------------------------------------------- what the summarizing LLM used is reported with the reduction
+
+async def test_summary_usage_is_reported_when_the_llm_gives_it():
+    async def summarize(text, questions, budget):
+        return SummaryOutput("short summary", input_tokens=900, output_tokens=120)
+
+    r = await reduce_state("word " * 5000, QUESTIONS, 1000, summarize)
+    assert (r.mode, r.text) == ("summarized", "short summary")
+    assert (r.summary_calls, r.summary_input_tokens, r.summary_output_tokens) == (1, 900, 120)
+
+
+async def test_a_summarizer_that_returns_plain_text_still_counts_one_call():
+    async def summarize(text, questions, budget):
+        return "short summary"
+
+    r = await reduce_state("word " * 5000, QUESTIONS, 1000, summarize)
+    assert (r.summary_calls, r.summary_input_tokens, r.summary_output_tokens) == (1, 0, 0)
+
+
+async def test_a_failed_summary_is_still_a_call_that_was_made():
+    async def summarize(text, questions, budget):
+        raise RuntimeError("llm down")
+
+    r = await reduce_state("word " * 5000, QUESTIONS, 1000, summarize)
+    assert r.mode == "truncated" and (r.summary_calls, r.summary_input_tokens) == (1, 0)
+
+
+async def test_no_summarizer_no_calls():
+    r = await reduce_state("word " * 5000, QUESTIONS, 1000, None)
+    assert (r.summary_calls, r.summary_input_tokens, r.summary_output_tokens) == (0, 0, 0)

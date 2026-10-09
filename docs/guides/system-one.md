@@ -123,6 +123,17 @@ Errors: `400` nothing to evaluate / image / unreadable attachment, `404` agent n
 
 ---
 
+## Metrics
+
+The agent's *Metrics* tab shows its executions like any other agent, with these differences:
+- **System One tokens** (and per execution) are the prompt tokens reported by the System One server, one call per execution. It is a decision model, not an LLM, so these are not counted as LLM calls.
+- **Summarization calls** are the calls to the summarizing LLM, with the input and output tokens it reported (0 when the LLM does not report usage). They are recorded apart from the server's tokens.
+- **Latency** is the whole evaluation: summarizing (when it happens, seconds) plus the server call (a fraction of a second).
+- *Time to first token* and *Tool calls* are not shown: they do not apply (one response, no tools).
+- The answers of every question (decision, probability, ...) are stored per execution.
+
+---
+
 ## Export and import
 
 An exported agent carries the **names** of its System One service and summarization LLM, never a token. Importing a single agent resolves them by name in the target app: the System One service must already exist there (otherwise the import fails and tells you to create it); a missing summarization LLM falls back to truncation.
