@@ -239,6 +239,7 @@ class AgentService:
             agent_id = None
 
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        previous_name = agent.name if agent else None
 
         if not agent:
             # Enforce per-app agent limit before creation (SaaS mode only)
@@ -302,8 +303,15 @@ class AgentService:
             agent = AgentRepository.update(db, agent)
         else:
             agent = AgentRepository.create(db, agent)
-        
-        # Return the agent ID
+
+        if previous_name and previous_name != agent.name:
+            # Approval rules name an agent used as a tool by its tool name.
+            from services.middleware_service import MiddlewareService
+            from utils.schema_utils import sanitize_identifier
+            MiddlewareService.rename_tool_in_approval_rules(
+                db, agent.app_id, sanitize_identifier(previous_name), sanitize_identifier(agent.name)
+            )
+
         return agent.agent_id
 
 
@@ -589,6 +597,12 @@ class AgentService:
         if MiddlewareType.HUMAN_IN_THE_LOOP in seen_types and not has_memory:
             raise ValueError("Human-in-the-loop middlewares require conversation memory to be enabled")
         return ordered_ids
+
+    @staticmethod
+    def validate_current_middlewares(db: Session, app_id: int, agent_id: int, has_memory: bool) -> None:
+        """Validate the agent's attached middlewares against new settings (e.g. memory turned off)."""
+        current_ids = AgentRepository.get_agent_associations_dict(db, agent_id)['middleware_ids']
+        AgentService.validate_middleware_selection(db, app_id, current_ids, has_memory)
 
     def update_agent_middlewares(self, db: Session, agent_id: int, ordered_ids: list):
         """Replace the agent's middleware chain; list position is the execution order."""

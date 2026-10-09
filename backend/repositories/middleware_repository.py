@@ -1,6 +1,6 @@
 from typing import Iterable, List, Optional, Set
 from sqlalchemy.orm import Session
-from models.middleware import Middleware
+from models.middleware import Middleware, MiddlewareType
 from models.ai_service import AIService
 
 
@@ -15,6 +15,13 @@ class MiddlewareRepository:
             .order_by(Middleware.name)
             .all()
         )
+
+    @staticmethod
+    def get_by_app_id_and_types(db: Session, app_id: int, types: Iterable[MiddlewareType]) -> List[Middleware]:
+        return db.query(Middleware).filter(
+            Middleware.app_id == app_id,
+            Middleware.middleware_type.in_(list(types)),
+        ).all()
 
     @staticmethod
     def get_by_id_and_app_id(db: Session, middleware_id: int, app_id: int) -> Optional[Middleware]:

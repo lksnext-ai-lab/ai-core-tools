@@ -23,14 +23,22 @@ rest follow the agent's order (`agent_middlewares.order`).
 - **One middleware per type per agent.** LangChain rejects duplicate middleware instances, so the
   API returns `400` and the UI disables a second middleware of the same type.
 - **Human approval requires conversation memory** (the checkpointer is what pauses and resumes the
-  run). Selecting it in the UI turns memory on; the API returns `400` otherwise.
+  run). Selecting it in the UI turns memory on; the API returns `400` otherwise, also when memory is
+  turned off on an agent that already has it.
+- **Agents used as tools run their own middlewares** (guardrails, PII, limits, summarization). They
+  cannot pause for a person, so the tools their approval rules gate are not given to them.
+- **Approval rules follow renamed tool agents:** renaming an agent rewrites the rules that name it
+  (`Old_Name` → `New_Name`) and cancels the pending approvals of the agents using those rules.
+- **AI services in use cannot be deleted:** deleting one that a summarization or PII middleware
+  references returns `409` naming the middlewares (otherwise they would silently fall back to the
+  agent's model).
 - **Tenant isolation:** middlewares, and the AI services a config references, must belong to the
   same app (`404`/`400`/`422` otherwise).
 - **Stored configs are re-validated** when the chain is built: an invalid row is skipped with a
   warning instead of breaking the chat.
 - **Deletion:** deleting a middleware detaches it from its agents; deleting an agent removes its
   associations, conversations (with their checkpoints, media, sandboxes and files) and approvals but
-  keeps the middlewares; deleting an app removes everything.
+  keeps the middlewares; deleting an app removes everything, middlewares before AI services.
 - **PII output redaction and streaming:** with `apply_to_output`, tokens are not streamed; the
   redacted answer arrives in the `done` event. `strategy="block"` ends the turn with
   "The message was blocked because it contains personal data (…)" (SSE `error` / HTTP 422).
@@ -92,7 +100,10 @@ using it, with memory on.
 5. **Ordering / duplicates** — select two guardrails: the second is disabled. Reorder with the
    arrows, save, reopen: order kept.
 6. **Deletion** — delete a middleware in use (agents lose it), an agent with middlewares and
-   conversations, and the app (no agent is left behind).
+   conversations, and the app (no agent is left behind). Deleting an AI service a PII detector uses
+   returns `409`.
+7. **Tool agents** — give an agent used as a tool a guardrail: its answers follow it. Rename it: the
+   approval rule of the calling agent follows the new name.
 
 ## Automated tests
 
@@ -102,7 +113,8 @@ using it, with memory on.
 | LLM PII detector | `tests/unit/tools/test_llm_pii_middleware.py` |
 | Chain building from DB rows (order, invalid config skipped, one per type) | `tests/integration/tools/test_agent_middleware_chain_integration.py` |
 | CRUD, config validation, tenant isolation, agent selection rules, cascades | `tests/integration/routers/internal/test_middlewares.py` |
-| Agent/app deletion | `tests/integration/routers/internal/test_middleware_relations.py` |
+| Agent/app deletion, AI service in use, tool-agent rename | `tests/integration/routers/internal/test_middleware_relations.py` |
+| Summarization defaults, chain of agents used as tools | `tests/unit/tools/test_middleware_factory.py` |
 | Approval ownership, action ids, decision validation, expiry status | `tests/unit/services/test_hitl_approval_service.py` |
 | Claim compare-and-set, one pending approval per conversation, cascade | `tests/integration/repositories/test_hitl_approval_repository.py` |
 | Streaming pause / resume / stale / non-interactive channel / busy conversation | `tests/unit/services/test_agent_streaming_service.py` |

@@ -105,12 +105,15 @@ _BUILDERS: dict[MiddlewareType, Callable[[Any, Any, Any], List[Any]]] = {
 }
 
 
-def build_agent_middlewares(agent, llm) -> List[Any]:
+def build_agent_middlewares(agent, llm, include_human_approval: bool = True) -> List[Any]:
     """Return the ordered middleware list for ``create_agent``.
 
     Summarization always goes first (it trims history before any other hook sees it);
     the rest follow the agent's configured order. Only one middleware of each type is
     used, matching LangChain's requirement of unique middleware instances.
+
+    ``include_human_approval=False`` is for runs that cannot pause (an agent used as a
+    tool): the caller must then withhold the gated tools (see ``tools_needing_approval``).
     """
     configured: list[tuple[MiddlewareType, Any]] = []
     seen: set[MiddlewareType] = set()
@@ -136,11 +139,19 @@ def build_agent_middlewares(agent, llm) -> List[Any]:
     for mw_type, cfg in configured:
         if mw_type == MiddlewareType.SUMMARIZATION:
             continue
+        if mw_type == MiddlewareType.HUMAN_IN_THE_LOOP and not include_human_approval:
+            continue
         chain.extend(_BUILDERS[mw_type](agent, llm, cfg))
 
     if configured:
         logger.info("Agent %s middleware chain: %s", agent.agent_id, [m.name for m in chain])
     return chain
+
+
+def tools_needing_approval(agent) -> set[str]:
+    """Names of the tools the agent's human-approval middleware gates."""
+    config = human_in_the_loop_config(agent)
+    return set(config.interrupt_on) if config else set()
 
 
 def human_in_the_loop_config(agent) -> Optional[HITLConfig]:

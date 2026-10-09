@@ -1,9 +1,12 @@
 """
 Integration tests for what happens to middlewares and their related entities on
-deletion:
+deletion and rename:
 
   - deleting an agent with conversations (its conversations go with it)
   - deleting an app never leaves agents behind
+  - an AI service used by a middleware cannot be deleted (409)
+  - renaming an agent used as a tool keeps the approval rules that gate it
+  - memory cannot be turned off under a human-approval middleware
 """
 
 import uuid
@@ -11,6 +14,7 @@ import uuid
 import pytest
 
 from models.agent import Agent
+from models.ai_service import AIService
 from models.conversation import Conversation
 from models.middleware import Middleware
 
@@ -41,6 +45,10 @@ def create_agent(client, app_id, headers, service_id, middleware_ids, name="Agen
     response = client.post(agents_url(app_id, 0), json=payload, headers=headers)
     assert response.status_code in (200, 201), response.text
     return response.json()
+
+
+def approval_rules(tool_name: str) -> dict:
+    return {"interrupt_on": {tool_name: {"allowed_decisions": ["approve", "reject"]}}}
 
 
 @pytest.fixture
@@ -102,3 +110,75 @@ class TestAgentAndAppDeletion:
         assert db.get(Agent, agent["agent_id"]) is None
         assert db.query(Agent).filter(Agent.app_id.is_(None)).count() == 0
         assert db.get(Middleware, mid) is None
+
+
+# ---------------------------------------------------------------------------
+# AI services referenced by middlewares
+# ---------------------------------------------------------------------------
+
+class TestAIServiceInUse:
+    def test_ai_service_used_by_a_middleware_cannot_be_deleted(
+        self, client, fake_app, fake_ai_service, owner_headers, db
+    ):
+        db.flush()
+        detector = AIService(name="Local detector", provider="OpenAI", api_key="sk-test",  # pragma: allowlist secret
+                             app_id=fake_app.app_id)
+        db.add(detector)
+        db.flush()
+        config = {"pii_types": ["email"],
+                  "llm_detector": {"enabled": True, "ai_service": f"ai_service:{detector.service_id}"}}
+        mid = create_middleware(client, fake_app.app_id, owner_headers, "PII detector", "pii", config)
+        url = f"/internal/apps/{fake_app.app_id}/ai-services/{detector.service_id}"
+
+        response = client.delete(url, headers=owner_headers)
+
+        assert response.status_code == 409
+        assert "'PII detector'" in response.json()["detail"]
+        assert db.get(AIService, detector.service_id) is not None
+
+        config["llm_detector"]["ai_service"] = "agent_llm"
+        client.post(middlewares_url(fake_app.app_id, mid), headers=owner_headers, json={
+            "name": "PII detector", "description": "", "middleware_type": "pii", "config": config,
+        })
+        assert client.delete(url, headers=owner_headers).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Agents used as tools
+# ---------------------------------------------------------------------------
+
+class TestToolAgentRename:
+    def test_rename_moves_the_approval_rule(self, client, fake_app, fake_ai_service, owner_headers, db):
+        db.flush()
+        tool = create_agent(client, fake_app.app_id, owner_headers, fake_ai_service.service_id, [],
+                            name="Docs Search", is_tool=True)
+        hitl = create_middleware(client, fake_app.app_id, owner_headers, "Approve docs",
+                                 "human_in_the_loop", approval_rules("Docs_Search"))
+        create_agent(client, fake_app.app_id, owner_headers, fake_ai_service.service_id, [hitl],
+                     name="Main", has_memory=True, tool_ids=[tool["agent_id"]])
+
+        response = client.post(agents_url(fake_app.app_id, tool["agent_id"]), headers=owner_headers, json={
+            "name": "Docs Finder", "service_id": fake_ai_service.service_id, "is_tool": True,
+        })
+
+        assert response.status_code in (200, 201), response.text
+        rules = client.get(middlewares_url(fake_app.app_id, hitl), headers=owner_headers).json()["config"]
+        assert list(rules["interrupt_on"]) == ["Docs_Finder"]
+
+
+class TestMemoryWithApproval:
+    def test_memory_cannot_be_turned_off_without_sending_the_chain(
+        self, client, fake_app, fake_ai_service, owner_headers, db
+    ):
+        db.flush()
+        hitl = create_middleware(client, fake_app.app_id, owner_headers, "Approve",
+                                 "human_in_the_loop", approval_rules("search"))
+        agent = create_agent(client, fake_app.app_id, owner_headers, fake_ai_service.service_id, [hitl],
+                             has_memory=True)
+
+        response = client.post(agents_url(fake_app.app_id, agent["agent_id"]), headers=owner_headers, json={
+            "name": "Agent", "service_id": fake_ai_service.service_id, "has_memory": False,
+        })
+
+        assert response.status_code == 400
+        assert "memory" in response.json()["detail"]

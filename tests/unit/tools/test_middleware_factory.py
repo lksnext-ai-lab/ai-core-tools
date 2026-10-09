@@ -1,11 +1,11 @@
-"""Unit tests for the summarization defaults of the agent middleware chain."""
+"""Unit tests for the agent middleware chain: summarization defaults and agents used as tools."""
 from types import SimpleNamespace
 
-from langchain.agents.middleware import SummarizationMiddleware
+from langchain.agents.middleware import HumanInTheLoopMiddleware, SummarizationMiddleware
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from models.middleware import MiddlewareType
-from tools.middleware.factory import build_agent_middlewares, default_trigger_tokens
+from tools.middleware.factory import build_agent_middlewares, default_trigger_tokens, tools_needing_approval
 
 
 def _llm(max_input_tokens=None):
@@ -13,11 +13,16 @@ def _llm(max_input_tokens=None):
     return FakeListChatModel(responses=["ok"], profile=profile)
 
 
-def _agent(has_memory=True, summarization_config=None):
+def _agent(has_memory=True, summarization_config=None, approval_config=None):
     associations = []
     if summarization_config is not None:
         middleware = SimpleNamespace(
             middleware_id=1, middleware_type=MiddlewareType.SUMMARIZATION, config=summarization_config,
+        )
+        associations.append(SimpleNamespace(middleware=middleware))
+    if approval_config is not None:
+        middleware = SimpleNamespace(
+            middleware_id=2, middleware_type=MiddlewareType.HUMAN_IN_THE_LOOP, config=approval_config,
         )
         associations.append(SimpleNamespace(middleware=middleware))
     return SimpleNamespace(agent_id=1, has_memory=has_memory, middleware_associations=associations, app=None)
@@ -65,3 +70,20 @@ class TestAttachedSummarization:
 
         assert middleware.trigger == ("tokens", 150_000)
         assert middleware.trim_tokens_to_summarize is None
+
+
+class TestAgentUsedAsTool:
+    APPROVAL = {"interrupt_on": {"delete_file": {"allowed_decisions": ["approve", "reject"]}}}
+
+    def test_human_approval_is_left_out_when_the_run_cannot_pause(self):
+        agent = _agent(approval_config=self.APPROVAL)
+
+        with_approval = build_agent_middlewares(agent, _llm(128_000))
+        without_approval = build_agent_middlewares(agent, _llm(128_000), include_human_approval=False)
+
+        assert any(isinstance(m, HumanInTheLoopMiddleware) for m in with_approval)
+        assert not any(isinstance(m, HumanInTheLoopMiddleware) for m in without_approval)
+
+    def test_tools_needing_approval(self):
+        assert tools_needing_approval(_agent(approval_config=self.APPROVAL)) == {"delete_file"}
+        assert tools_needing_approval(_agent()) == set()

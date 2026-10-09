@@ -1200,11 +1200,22 @@ class IACTTool(BaseTool):
                 + "</code_interpreter>"
             )
 
-        # Create sub-agent
+        # A sub-agent runs inside the caller's tool call and cannot pause for a person, so
+        # the tools its approval rules gate are withheld (never run unapproved). Its other
+        # middlewares (guardrails, PII, limits, summarization) apply as in a direct chat.
+        from tools.middleware.factory import build_agent_middlewares, tools_needing_approval
+        gated = tools_needing_approval(agent)
+        if gated:
+            withheld = [t.name for t in tools if getattr(t, "name", None) in gated]
+            tools = [t for t in tools if getattr(t, "name", None) not in gated]
+            if withheld:
+                logger.info("Sub-agent %s runs without tools that need approval: %s", agent.agent_id, withheld)
+
         instance.react_agent = create_langchain_agent(
             model=instance.llm,
             tools=tools,
             system_prompt=tool_system_prompt if tool_system_prompt else None,
+            middleware=build_agent_middlewares(agent, instance.llm, include_human_approval=False),
         )
         return instance
 

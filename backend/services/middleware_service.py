@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -98,6 +99,46 @@ class MiddlewareService:
             raise MiddlewareValidationError(f"A middleware named '{data.name}' already exists in this app")
         db.refresh(middleware)
         return _to_detail(middleware)
+
+    @staticmethod
+    def names_using_ai_service(db: Session, app_id: int, service_id: int) -> List[str]:
+        """Names of the app's middlewares whose config references this AI service."""
+        names = []
+        types = (MiddlewareType.PII, MiddlewareType.SUMMARIZATION)
+        for middleware in MiddlewareRepository.get_by_app_id_and_types(db, app_id, types):
+            try:
+                config = parse_middleware_config(middleware.middleware_type, middleware.config)
+            except ValidationError:
+                continue
+            if service_id in referenced_ai_service_ids(middleware.middleware_type, config):
+                names.append(middleware.name)
+        return sorted(names)
+
+    @staticmethod
+    def rename_tool_in_approval_rules(db: Session, app_id: Optional[int], old_name: str, new_name: str) -> None:
+        """Move human-approval rules to a tool's new name (an agent used as a tool was renamed).
+
+        Without it the rule would keep the old name and the renamed tool would run unapproved.
+        Pending approvals of the affected agents are cancelled, as with any rule change.
+        """
+        if not app_id or old_name == new_name:
+            return
+        changed = []
+        for middleware in MiddlewareRepository.get_by_app_id_and_types(db, app_id, (MiddlewareType.HUMAN_IN_THE_LOOP,)):
+            interrupt_on = dict((middleware.config or {}).get("interrupt_on") or {})
+            if old_name not in interrupt_on:
+                continue
+            rule = interrupt_on.pop(old_name)
+            interrupt_on.setdefault(new_name, rule)
+            middleware.config = {**middleware.config, "interrupt_on": interrupt_on}
+            changed.append(middleware)
+        if not changed:
+            return
+        approvals.cancel_pending_for_agents(
+            db, [a.agent_id for m in changed for a in m.agent_associations], reason="approval_rules_changed"
+        )
+        db.commit()
+        logger.info("Renamed tool %r to %r in %d approval rule(s) of app %s", old_name, new_name, len(changed), app_id)
 
     @staticmethod
     def delete_middleware(db: Session, app_id: int, middleware_id: int) -> bool:
