@@ -117,7 +117,7 @@ curl -X POST "https://your-host/public/v1/app/<app_id>/system-one/<agent_id>/eva
 
 The response is typed (see `/docs/public`): `answers` keyed by question key, each a `noul`, `choice` or `score` answer, plus `state_reduction`, `original_chars`, `state_chars`, `model` and `usage`.
 
-Agents can be created and updated with `POST /public/v1/app/<app_id>/agents/system-one` and `PUT .../agents/system-one/<agent_id>` (a partial update changes only the fields sent). **Services are created in the UI**, like every other service type: the API creates agents that reference an existing one.
+System One agents (and their services) are created and edited in the app; the public API only evaluates with them. The generic `PUT /agents/{id}` refuses them.
 
 Errors: `400` nothing to evaluate / image / unreadable attachment, `404` agent not found in the app, `422` the server rejected the request (a generic message: the server's own text is logged for the administrator, not returned; the exception is "text too long"), `502` the server answered with an unexpected response or refused the service's token, `503` server unavailable or overloaded, `504` timeout. A call has one overall deadline of 120 s (waiting for a free slot, every attempt and the pauses between them).
 

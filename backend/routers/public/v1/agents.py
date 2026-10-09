@@ -11,10 +11,8 @@ from schemas.agent_schemas import (
     PublicAgentResponseSchema,
     CreateAgentRequestSchema,
     CreateOCRAgentRequestSchema,
-    CreateSystemOneAgentRequestSchema,
     UpdateAgentRequestSchema,
     UpdateOCRAgentRequestSchema,
-    UpdateSystemOneAgentRequestSchema,
 )
 from .auth import get_api_key_auth, validate_api_key_for_app, validate_agent_ownership
 
@@ -32,7 +30,6 @@ agents_router = APIRouter()
 
 AGENT_NOT_FOUND = "Agent not found"
 OCR_AGENT_NOT_FOUND = "OCR Agent not found"
-SYSTEM_ONE_AGENT_NOT_FOUND = "System One agent not found"
 
 
 def _validate_referenced_resources(db: Session, agent_dict: dict, app_id: int):
@@ -204,92 +201,6 @@ async def create_ocr_agent(
         )
 
 
-@agents_router.post(
-    "/system-one",
-    summary="Create a new System One agent",
-    tags=["Agents"],
-    response_model=PublicAgentResponseSchema,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_system_one_agent(
-    app_id: int,
-    agent_data: CreateSystemOneAgentRequestSchema,
-    api_key: Annotated[str, Depends(get_api_key_auth)],
-    db: Annotated[Session, Depends(get_db)],
-):
-    """Create a System One agent. Its System One service must already exist in this app (services are created in the UI)."""
-    validate_api_key_for_app(app_id, api_key, db)
-
-    try:
-        agent_dict = agent_data.model_dump(mode="json")
-        agent_dict["app_id"] = app_id
-        agent_dict["type"] = "system_one_agent"
-
-        agent_service = AgentService()
-        agent_id = agent_service.create_or_update_agent(db, agent_dict, "system_one_agent")
-
-        created_agent = agent_service.get_agent(db, agent_id, "system_one_agent")
-        logger.info(f"Created System One agent {agent_id} for app {app_id}")
-        return PublicAgentResponseSchema(agent=PublicAgentDetailSchema.model_validate(created_agent))
-
-    except ValueError as e:
-        # Validation messages never carry secrets (they name the field and the problem).
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating System One agent for app {app_id}: {type(e).__name__}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create System One agent")
-
-
-@agents_router.put(
-    "/system-one/{agent_id}",
-    summary="Update an existing System One agent",
-    tags=["Agents"],
-    response_model=PublicAgentResponseSchema,
-    responses={404: {"description": SYSTEM_ONE_AGENT_NOT_FOUND}},
-)
-async def update_system_one_agent(
-    app_id: int,
-    agent_id: int,
-    agent_data: UpdateSystemOneAgentRequestSchema,
-    api_key: Annotated[str, Depends(get_api_key_auth)],
-    db: Annotated[Session, Depends(get_db)],
-):
-    """Update a System One agent: only the fields sent change."""
-    validate_api_key_for_app(app_id, api_key, db)
-
-    agent_service = AgentService()
-    existing_agent = agent_service.get_agent(db, agent_id, "system_one_agent")
-    if not existing_agent or existing_agent.app_id != app_id:
-        raise HTTPException(status_code=404, detail=SYSTEM_ONE_AGENT_NOT_FOUND)
-
-    try:
-        update_dict = agent_data.model_dump(exclude_unset=True, mode="json")
-        # The shared update path rewrites name, description and is_tool from the dict, so a partial
-        # update must carry the stored values for the ones it did not send.
-        update_dict.setdefault("name", existing_agent.name)
-        update_dict.setdefault("description", existing_agent.description or "")
-        update_dict.setdefault("is_tool", bool(existing_agent.is_tool))
-        update_dict["agent_id"] = agent_id
-        update_dict["app_id"] = app_id
-        update_dict["type"] = "system_one_agent"
-
-        updated_agent_id = agent_service.create_or_update_agent(db, update_dict, "system_one_agent")
-
-        updated_agent = agent_service.get_agent(db, updated_agent_id, "system_one_agent")
-        logger.info(f"Updated System One agent {agent_id} for app {app_id}")
-        return PublicAgentResponseSchema(agent=PublicAgentDetailSchema.model_validate(updated_agent))
-
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating System One agent {agent_id} for app {app_id}: {type(e).__name__}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to update System One agent")
-
-
 @agents_router.put(
     "/{agent_id}",
     summary="Update an existing agent",
@@ -308,10 +219,10 @@ async def update_agent(
 
     existing_agent = validate_agent_ownership(db, agent_id, app_id)
     if existing_agent.type == "system_one_agent":
-        # The generic update would reset fields it does not know (is_tool, questions' service…).
+        # The generic update would reset fields it does not know (is_tool, questions, service…).
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="System One agents are updated with PUT /agents/system-one/{agent_id}",
+            detail="System One agents cannot be updated through the public API; edit them in the app",
         )
 
     try:

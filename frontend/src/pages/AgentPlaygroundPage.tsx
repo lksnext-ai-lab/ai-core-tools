@@ -5,7 +5,6 @@ import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
 import { SystemOneInterface } from '../components/playground/SystemOneInterface';
-import { SystemOneAPIExamples } from '../components/playground/SystemOneAPIExamples';
 import type { SystemOneQuestion } from '../types/systemOne';
 import APIExamples from '../components/playground/APIExamples';
 import PromptModal from '../components/playground/PromptModal';
@@ -190,7 +189,8 @@ function AgentPlaygroundPage() {
 
   const tabs = [
     { id: 'playground', label: 'Playground', icon: <Gamepad2 className="w-4 h-4" /> },
-    { id: 'api', label: 'API Examples', icon: <Link2 className="w-4 h-4" /> },
+    // System One agents have no chat API to show: their evaluate endpoint is in the guide.
+    ...(isSystemOneAgent ? [] : [{ id: 'api', label: 'API Examples', icon: <Link2 className="w-4 h-4" /> }]),
   ];
 
   return (
@@ -323,16 +323,7 @@ function AgentPlaygroundPage() {
               </>
             )}
 
-            {activeTab === 'api' && isSystemOneAgent && (
-              <SystemOneAPIExamples
-                appId={Number.parseInt(appId!)}
-                agentId={Number.parseInt(agentId!)}
-                agentName={agent.name}
-                questions={agent.questions ?? []}
-              />
-            )}
-
-            {activeTab === 'api' && !isSystemOneAgent && (
+            {activeTab === 'api' && (
               <APIExamples
                 appId={Number.parseInt(appId!)}
                 agentId={Number.parseInt(agentId!)}
