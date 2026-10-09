@@ -126,7 +126,7 @@ def _error_message(response: httpx.Response) -> str:
 
 def _error_for(response: httpx.Response) -> SystemOneError:
     status, message = response.status_code, _error_message(response)
-    if status == 401:
+    if status in (401, 403):   # servers differ: some answer 403 for a missing or wrong key
         kind: ErrorKind = "unauthorized"
     elif status in (429, 529):
         kind = "overloaded"
@@ -257,8 +257,8 @@ async def probe(base_url: str, api_key: Optional[str],
         except httpx.TransportError:
             result["message"] = "Cannot connect to the System One server"
             return result
-        if health.status_code == 401:
-            result["message"] = "The server rejected the token (401)"
+        if health.status_code in (401, 403):
+            result["message"] = f"The server rejected the token ({health.status_code})"
             return result
         try:
             healthy = health.status_code == 200 and health.json().get("status") == "ok"
@@ -270,8 +270,8 @@ async def probe(base_url: str, api_key: Optional[str],
 
         try:
             models = await get("/v1/models")
-            if models.status_code == 401:
-                result["message"] = "The server rejected the token (401)"
+            if models.status_code in (401, 403):
+                result["message"] = f"The server rejected the token ({models.status_code})"
                 return result
             if models.status_code == 200:
                 result["models"] = [m["id"] for m in models.json().get("data", []) if isinstance(m, dict) and "id" in m]

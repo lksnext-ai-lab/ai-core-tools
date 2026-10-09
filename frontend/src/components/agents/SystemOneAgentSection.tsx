@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Gauge } from 'lucide-react';
 import SystemOneQuestionsEditor from './SystemOneQuestionsEditor';
 import { validateMaxStateChars, type EditorQuestion } from '../../utils/systemOneQuestions';
+import type { QuestionLimits } from '../../utils/systemOneLimits';
 
 const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200';
@@ -26,6 +27,7 @@ interface SystemOneAgentSectionProps {
   readonly onIsToolChange: (value: boolean) => void;
   readonly questions: EditorQuestion[];
   readonly onQuestionsChange: (questions: EditorQuestion[]) => void;
+  readonly limits: QuestionLimits;
   readonly generalProblems: string[];
   readonly problemsByQuestion: string[][];
 }
@@ -122,7 +124,8 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <SystemOneQuestionsEditor questions={props.questions} onChange={props.onQuestionsChange} generalProblems={props.generalProblems}
+        <SystemOneQuestionsEditor questions={props.questions} onChange={props.onQuestionsChange} limits={props.limits}
+                                  generalProblems={props.generalProblems}
                                   problemsByQuestion={props.problemsByQuestion} />
       </div>
     </div>

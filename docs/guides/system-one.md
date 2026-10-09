@@ -24,11 +24,13 @@ A System One agent has no LLM, memory, prompt, RAG, MCP or skills. Each evaluati
 
 Settings → System One Services → **Add System One Service**. It is a three-step wizard, like the AI service one:
 
-1. **Connection**: the server URL (`http://` or `https://`; private addresses are allowed on purpose, since a self-hosted server normally lives on a private network) and an optional Bearer token. The token is stored masked: when editing, leave the masked value to keep it or empty it to remove it. It belongs to the URL it was stored for, so changing the URL clears it and you type it again; *Test connection* never sends the stored token to a different URL. Only administrators can create or test services.
+1. **Connection**: the server's base URL (prefilled with `https://api.typesafe.ai`; `http://` or `https://`; private addresses are allowed on purpose, since a self-hosted server normally lives on a private network) and an optional Bearer token. The token is stored masked: when editing, leave the masked value to keep it or empty it to remove it. It belongs to the URL it was stored for, so changing the URL clears it and you type it again; *Test connection* never sends the stored token to a different URL. Only administrators can create or test services.
 2. **Model**: the wizard asks the server which models it offers (`/v1/models`) and you pick one. There is no default model. If the server cannot be reached or lists none, you can type the identifier by hand.
 3. **Test**: a name (suggested from the model), the maximum concurrent requests (per **backend process**, prefilled from the server's limit) and **Test connection**, which calls `/health`, `/v1/models` and `/v1/limits`, checks that the chosen model is offered, and shows the limits the server reports.
 
 ### Concurrency
+
+The test (steps 2 and 3) reads the server's `max_concurrent_requests`. A cap **above that limit cannot be saved**; one above `limit ÷ backend processes` is allowed with a warning, because the processes add up.
 
 The server accepts a limited number of simultaneous requests (4 by default) and answers `529` with a `Retry-After` above it. The backend runs several processes (`UVICORN_WORKERS`), each with its own cap, so set the value to **the server limit divided by the number of backend processes** (at least 1). The client also retries `429`, `502`, `503` and `529` up to three times, honoring `Retry-After`. A changed value applies to new calls without a restart.
 
@@ -38,13 +40,17 @@ A service can be deleted even if agents use it, like an AI service. The agents a
 
 ## Defining questions
 
-Every System One agent holds 1 to 64 questions. All of them are answered, in one call, for every text.
+Every System One agent holds at least one question; the maximum is the one the chosen server reports in `/v1/limits` (the form reads it and checks against it). All of them are answered, in one call, for every text.
+
+The order only decides how the questions are listed (playground, tool description, JSON); each one is answered on its own. Drag a question by its handle to reorder it (or use the arrows, or Alt+↑ / Alt+↓ inside a question).
+
+**How long a question may be** is not a fixed number: every prompt the server evaluates holds the text **plus one question**, and the agent's *maximum text length* is that per-prompt budget. A question (instructions, options, levels) must leave at least 500 characters of it for the text; the form and the API refuse it otherwise, saying how much it takes.
 
 | Type | You define | You get |
 |---|---|---|
 | **Yes / No** (`noul`) | Instructions; optionally the meaning of yes and no; a threshold (default 0.5). | `decision` = probability ≥ threshold. |
-| **Choice** | Instructions; 2 to 26 options (name + optional description); optional minimum probability. | `decision` = the option with the most probability, or `null` below the minimum. |
-| **Score** | Instructions; 2 to 26 ordered levels (lowest to highest); optional minimum probability. | `decision` = the **most probable level**, or `null` below the minimum. |
+| **Choice** | Instructions; 2 or more options (name + optional description; the maximum is the server's); optional minimum probability. | `decision` = the option with the most probability, or `null` below the minimum. |
+| **Score** | Instructions; 2 or more ordered levels (lowest to highest; the maximum is the server's); optional minimum probability. | `decision` = the **most probable level**, or `null` below the minimum. |
 
 Practical rules:
 

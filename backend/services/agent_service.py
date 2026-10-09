@@ -15,6 +15,7 @@ from services.service_lifecycle_service import ServiceLifecycleService
 from utils import a2a_config
 from repositories.system_one_service_repository import SystemOneServiceRepository
 from schemas.system_one_schemas import QuestionList, questions_error_message
+from services.system_one_state import MIN_TEXT_ROOM_CHARS, question_overhead_chars
 from utils.logger import get_logger
 from types import SimpleNamespace
 
@@ -582,6 +583,16 @@ class AgentService:
             agent.max_state_chars = max_chars
         elif creating:
             agent.max_state_chars = 6000
+
+        # The server counts the text PLUS one question in every prompt, and max_state_chars is that per-prompt budget:
+        # a question that eats it leaves nothing to evaluate (the length of a question is judged here, not per field).
+        overhead = question_overhead_chars(TypeAdapter(QuestionList).validate_python(agent.questions))
+        if agent.max_state_chars - overhead < MIN_TEXT_ROOM_CHARS:
+            raise ValueError(
+                f"The longest question takes about {overhead} of the {agent.max_state_chars} characters of each prompt; "
+                f"it must leave at least {MIN_TEXT_ROOM_CHARS} of room for the text. "
+                "Shorten the question or raise the maximum text length"
+            )
 
         # Nothing here uses an LLM, memory, a silo, tools or a sandbox: keep those columns neutral.
         agent.service_id = None

@@ -4,11 +4,12 @@ from typing import Annotated, Dict, List, Literal, Optional, Union
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
 
 QuestionKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,40}$")]
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]       # instructions
-ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]  # criteria
-OptionKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+# No per-field length caps: how long a question may be depends on the prompt budget (see AgentService), not on a number here.
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+ShortText = Text
+OptionKey = Text
 Prob = Annotated[float, Field(ge=0.0, le=1.0)]
-MAX_QUESTIONS, MIN_OPTIONS, MAX_OPTIONS = 64, 2, 26  # limits of the System One server
+MIN_OPTIONS = 2  # the upper limits (questions, options) are each server's own: see /v1/limits
 
 
 class _QuestionBase(BaseModel):
@@ -32,12 +33,12 @@ class NoulQuestion(_QuestionBase):
 class ChoiceOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: OptionKey
-    description: Optional[Annotated[str, StringConstraints(max_length=500)]] = None
+    description: Optional[str] = None
 
 
 class ChoiceQuestion(_QuestionBase):
     type: Literal["choice"]
-    criteria: Annotated[List[ChoiceOption], Field(min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)]
+    criteria: Annotated[List[ChoiceOption], Field(min_length=MIN_OPTIONS)]
     min_probability: Optional[Prob] = None
 
     @field_validator("criteria")
@@ -54,7 +55,7 @@ class ChoiceQuestion(_QuestionBase):
 
 class ScoreQuestion(_QuestionBase):
     type: Literal["score"]
-    criteria: Annotated[List[ShortText], Field(min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)]
+    criteria: Annotated[List[ShortText], Field(min_length=MIN_OPTIONS)]
     min_probability: Optional[Prob] = None
 
 
@@ -71,7 +72,7 @@ def _unique_keys(questions):
 
 
 QuestionList = Annotated[
-    List[Question], Field(min_length=1, max_length=MAX_QUESTIONS), AfterValidator(_unique_keys)
+    List[Question], Field(min_length=1), AfterValidator(_unique_keys)
 ]
 
 

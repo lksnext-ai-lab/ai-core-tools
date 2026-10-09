@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { randomId } from '../../utils/randomId';
 import {
-  MAX_OPTIONS,
-  MAX_QUESTIONS,
   MIN_OPTIONS,
   changeQuestionType,
   newQuestion,
+  reorder,
   type EditorQuestion,
 } from '../../utils/systemOneQuestions';
+import type { QuestionLimits } from '../../utils/systemOneLimits';
 import type { ChoiceOption, SystemOneQuestionType } from '../../types/systemOne';
 
 // Placeholders are deliberately simple English examples, in light gray, so the expected shape of each box is obvious.
@@ -29,6 +29,8 @@ interface SystemOneQuestionsEditorProps {
   readonly questions: EditorQuestion[];
   readonly onChange: (questions: EditorQuestion[]) => void;
   /** About the list as a whole. */
+  /** What the chosen server accepts (undefined fields = unknown, no upper limit is enforced). */
+  readonly limits: QuestionLimits;
   readonly generalProblems: string[];
   /** Per question, same order: shown right above the question they belong to. */
   readonly problemsByQuestion: string[][];
@@ -38,8 +40,22 @@ function parseNumber(raw: string): number | undefined {
   return raw.trim() === '' ? undefined : Number(raw);
 }
 
-function SystemOneQuestionsEditor({ questions, onChange, generalProblems, problemsByQuestion }: SystemOneQuestionsEditorProps) {
+function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems, problemsByQuestion }: SystemOneQuestionsEditorProps) {
   const [announcement, setAnnouncement] = useState('');
+  // Drag and drop: only the grip starts a drag (so text can still be selected inside the fields).
+  const [armed, setArmed] = useState<number | null>(null);
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const endDrag = () => { setArmed(null); setDragging(null); setOver(null); };
+  const drop = (target: number) => {
+    if (dragging !== null && dragging !== target) {
+      onChange(reorder(questions, dragging, target));
+      setAnnouncement(`Question moved to position ${target + 1} of ${questions.length}`);
+    }
+    endDrag();
+  };
+  const optionRange = limits.maxOptions === undefined ? `${MIN_OPTIONS} or more` : `${MIN_OPTIONS}-${limits.maxOptions}`;
+  const optionsFull = (count: number) => limits.maxOptions !== undefined && count >= limits.maxOptions;
   const update = (index: number, next: EditorQuestion) => onChange(questions.map((q, i) => (i === index ? next : q)));
   const remove = (index: number) => onChange(questions.filter((_, i) => i !== index));
   // After a move the control that had the focus is re-created in its new place (or becomes disabled at an end):
@@ -72,11 +88,11 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
           <h4 className="text-base font-semibold text-gray-900">Questions</h4>
           <p className="text-sm text-gray-600">
             The agent answers all of them for every text. Keys and option names are part of what the model reads: make them descriptive.
-            The order only decides how they are listed; each question is answered on its own. With the cursor inside a question,
-            Alt+↑ / Alt+↓ moves it.
+            The order only decides how they are listed; each question is answered on its own. Drag a question by its handle to
+            reorder (or use the arrows, or Alt+↑ / Alt+↓ inside a question).
           </p>
         </div>
-        <span className="text-sm text-gray-500" aria-live="polite">{questions.length} / {MAX_QUESTIONS}</span>
+        <span className="text-sm text-gray-500" aria-live="polite">{questions.length}{limits.maxQuestions === undefined ? '' : ` / ${limits.maxQuestions}`}</span>
       </div>
 
       <p className="sr-only" aria-live="polite">{announcement}</p>
@@ -94,8 +110,27 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
           const describedBy = own.length > 0 ? `${id}-problems` : undefined;
           return (
             <fieldset key={id} onKeyDown={(e) => moveWithKeyboard(e, index)}
-                      className={`rounded-xl border bg-gray-50 p-4 ${own.length > 0 ? 'border-red-300' : 'border-gray-200'}`}>
-              <legend className="px-2 text-sm font-medium text-gray-700">Question {index + 1}</legend>
+                      draggable={armed === index}
+                      onDragStart={(e) => { setDragging(index); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); }}
+                      onDragOver={(e) => { if (dragging !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(index); } }}
+                      onDrop={(e) => { e.preventDefault(); drop(index); }}
+                      onDragEnd={endDrag}
+                      className={`rounded-xl border bg-gray-50 p-4 transition-shadow ${own.length > 0 ? 'border-red-300' : 'border-gray-200'} ${
+                        dragging === index ? 'opacity-50' : ''} ${over === index && dragging !== null && dragging !== index ? 'ring-2 ring-blue-400' : ''}`}>
+              <legend className="px-2 text-sm font-medium text-gray-700">
+                <span className="inline-flex items-center gap-1">
+                  <span
+                    className="cursor-grab select-none rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 active:cursor-grabbing"
+                    title="Drag to reorder"
+                    aria-hidden="true"
+                    onMouseDown={() => setArmed(index)}
+                    onMouseUp={() => setArmed(null)}
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </span>
+                  Question {index + 1}
+                </span>
+              </legend>
 
               {own.length > 0 && (
                 <ul id={`${id}-problems`} data-question-problem className="mb-3 list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-7 text-sm text-red-700" role="alert">
@@ -160,7 +195,7 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
 
               {question.type === 'choice' && (
                 <div className="mt-3">
-                  <p className="mb-1 text-xs font-medium text-gray-600">Options ({MIN_OPTIONS}-{MAX_OPTIONS})</p>
+                  <p className="mb-1 text-xs font-medium text-gray-600">Options ({optionRange})</p>
                   <div className="space-y-2">
                     {question.criteria.map((option: ChoiceOption, optionIndex) => (
                       <div key={`${id}-o${optionIndex}`} className="grid grid-cols-[1fr_2fr_auto] gap-2">
@@ -175,7 +210,7 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
                       </div>
                     ))}
                   </div>
-                  <button type="button" className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-40" disabled={question.criteria.length >= MAX_OPTIONS}
+                  <button type="button" className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-40" disabled={optionsFull(question.criteria.length)}
                           onClick={() => update(index, { ...question, criteria: [...question.criteria, { key: '', description: '' }] })}>
                     <Plus className="h-4 w-4" aria-hidden="true" /> Add option
                   </button>
@@ -184,7 +219,7 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
 
               {question.type === 'score' && (
                 <div className="mt-3">
-                  <p className="mb-1 text-xs font-medium text-gray-600">Levels, from lowest to highest ({MIN_OPTIONS}-{MAX_OPTIONS})</p>
+                  <p className="mb-1 text-xs font-medium text-gray-600">Levels, from lowest to highest ({optionRange})</p>
                   <div className="space-y-2">
                     {question.criteria.map((level, levelIndex) => (
                       <div key={`${id}-l${levelIndex}`} className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
@@ -198,7 +233,7 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
                       </div>
                     ))}
                   </div>
-                  <button type="button" className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-40" disabled={question.criteria.length >= MAX_OPTIONS}
+                  <button type="button" className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-40" disabled={optionsFull(question.criteria.length)}
                           onClick={() => update(index, { ...question, criteria: [...question.criteria, ''] })}>
                     <Plus className="h-4 w-4" aria-hidden="true" /> Add level
                   </button>
@@ -212,7 +247,7 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
                   </label>
                   <input id={`${id}-minp`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="no minimum" value={question.min_probability ?? ''}
                          onChange={(e) => update(index, { ...question, min_probability: parseNumber(e.target.value) })} />
-                  <p className="mt-1 text-xs text-gray-500">Below it the decision is empty (undetermined). The probabilities are always returned.</p>
+                  <p className="mt-1 text-xs text-gray-500">Below this probability the decision is left empty. Empty field = always decide.</p>
                 </div>
               )}
             </fieldset>
@@ -222,7 +257,7 @@ function SystemOneQuestionsEditor({ questions, onChange, generalProblems, proble
 
       <div className="mt-4 flex flex-wrap gap-2">
         {(Object.keys(TYPE_LABEL) as SystemOneQuestionType[]).map((type) => (
-          <button key={type} type="button" onClick={() => add(type)} disabled={questions.length >= MAX_QUESTIONS}
+          <button key={type} type="button" onClick={() => add(type)} disabled={limits.maxQuestions !== undefined && questions.length >= limits.maxQuestions}
                   className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40">
             <Plus className="h-4 w-4" aria-hidden="true" /> {TYPE_LABEL[type]} question
           </button>

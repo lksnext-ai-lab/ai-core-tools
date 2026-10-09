@@ -30,6 +30,7 @@ import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import SystemOneAgentSection from '../components/agents/SystemOneAgentSection';
 import { toEditorQuestions, toPayload, checkQuestions, validateMaxStateChars, validateQuestions, type EditorQuestion } from '../utils/systemOneQuestions';
+import { questionLimits, type QuestionLimits } from '../utils/systemOneLimits';
 import type { SystemOneQuestion } from '../types/systemOne';
 
 // Define the Agent types
@@ -332,6 +333,22 @@ function AgentFormPage() {
     a2a_skill_tags: [],
     a2a_examples: [],
   });
+
+  // What the chosen System One server accepts; unknown (empty) until it answers, and then nothing is capped by us.
+  const [serverQuestionLimits, setServerQuestionLimits] = useState<QuestionLimits>({});
+  useEffect(() => {
+    const serviceId = formData.type === 'system_one_agent' ? formData.system_one_service_id : undefined;
+    if (!appId || !serviceId) {
+      setServerQuestionLimits({});
+      return;
+    }
+    let cancelled = false;
+    apiService.testSystemOneService(Number.parseInt(appId), serviceId)
+      .then((result) => { if (!cancelled) setServerQuestionLimits(questionLimits(result.limits)); })
+      .catch(() => { if (!cancelled) setServerQuestionLimits({}); });
+    return () => { cancelled = true; };
+  }, [appId, formData.type, formData.system_one_service_id]);
+  const questionContext = { ...serverQuestionLimits, maxStateChars: formData.max_state_chars };
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
   const [loadingSiloMetadata, setLoadingSiloMetadata] = useState(false);
@@ -654,7 +671,7 @@ function AgentFormPage() {
       toast.error('The name is required');
       return;
     }
-    const problems = validateQuestions(formData.questions);
+    const problems = validateQuestions(formData.questions, questionContext);
     const maxCharsProblem = validateMaxStateChars(formData.max_state_chars);
     if (maxCharsProblem) problems.unshift(maxCharsProblem);
     if (!formData.system_one_service_id) problems.unshift('Select a System One service');
@@ -1010,8 +1027,9 @@ function AgentFormPage() {
               onIsToolChange={(value) => handleInputChange('is_tool', value)}
               questions={formData.questions}
               onQuestionsChange={(questions) => handleInputChange('questions', questions)}
-              generalProblems={showQuestionProblems ? checkQuestions(formData.questions).general : []}
-              problemsByQuestion={showQuestionProblems ? checkQuestions(formData.questions).byQuestion : []}
+              limits={serverQuestionLimits}
+              generalProblems={showQuestionProblems ? checkQuestions(formData.questions, questionContext).general : []}
+              problemsByQuestion={showQuestionProblems ? checkQuestions(formData.questions, questionContext).byQuestion : []}
             />
           )}
 

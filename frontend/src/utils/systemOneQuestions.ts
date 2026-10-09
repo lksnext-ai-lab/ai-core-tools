@@ -1,5 +1,6 @@
 // Pure helpers of the System One questions editor: defaults, validation (mirrors the backend rules in
 // backend/schemas/system_one_schemas.py) and normalization of what is sent to the API.
+import type { QuestionLimits } from './systemOneLimits';
 import type {
   ChoiceOption,
   ChoiceQuestion,
@@ -9,13 +10,11 @@ import type {
   SystemOneQuestionType,
 } from '../types/systemOne';
 
-export const MAX_QUESTIONS = 64;
 export const MIN_OPTIONS = 2;
-export const MAX_OPTIONS = 26;
+/** Mirrors backend question_overhead_chars / MIN_TEXT_ROOM_CHARS: what a question takes of each prompt's budget. */
+const QUESTION_MARGIN_CHARS = 50;
+const MIN_TEXT_ROOM_CHARS = 500;
 export const MAX_KEY_LENGTH = 40;
-export const MAX_INSTRUCTIONS_LENGTH = 4000;
-export const MAX_CRITERIA_LENGTH = 500;
-export const MAX_OPTION_NAME_LENGTH = 100;
 export const MIN_STATE_CHARS = 500;
 export const MAX_STATE_CHARS = 20000;
 const KEY_PATTERN = /^[a-z0-9_]{1,40}$/;
@@ -48,12 +47,25 @@ export function validateMaxStateChars(value: number): string | null {
   return null;
 }
 
-function tooLong(text: string | undefined | null, max: number): boolean {
-  return (text?.trim().length ?? 0) > max;
-}
-
 function label(question: EditorQuestion, index: number): string {
   return question.key.trim() ? `Question ${index + 1} (${question.key.trim()})` : `Question ${index + 1}`;
+}
+
+function rangeMessage(what: string, max: number | undefined): string {
+  return max === undefined ? `it needs at least ${MIN_OPTIONS} ${what}` : `it needs between ${MIN_OPTIONS} and ${max} ${what}`;
+}
+
+/** Characters one question takes of every prompt: its instructions, options/levels and a margin (as the backend counts). */
+export function questionSize(question: EditorQuestion): number {
+  let total = question.instructions.trim().length;
+  if (question.type === 'noul') {
+    total += (question.criteria?.true?.trim().length ?? 0) + (question.criteria?.false?.trim().length ?? 0);
+  } else if (question.type === 'choice') {
+    total += question.criteria.reduce((sum, o) => sum + o.key.trim().length + (o.description?.trim().length ?? 0), 0);
+  } else {
+    total += question.criteria.reduce((sum, level) => sum + level.trim().length, 0);
+  }
+  return total + QUESTION_MARGIN_CHARS;
 }
 
 function validateNoul(question: NoulQuestion): string[] {
@@ -64,17 +76,14 @@ function validateNoul(question: NoulQuestion): string[] {
   const yes = question.criteria?.true?.trim() ?? '';
   const no = question.criteria?.false?.trim() ?? '';
   if ((yes === '') !== (no === '')) problems.push(`fill both meanings (yes and no) or leave both empty`);
-  if (tooLong(yes, MAX_CRITERIA_LENGTH) || tooLong(no, MAX_CRITERIA_LENGTH)) {
-    problems.push(`each meaning can have at most ${MAX_CRITERIA_LENGTH} characters`);
-  }
   return problems;
 }
 
-function validateChoice(question: ChoiceQuestion): string[] {
+function validateChoice(question: ChoiceQuestion, limits: QuestionLimits): string[] {
   const problems: string[] = [];
   const options = question.criteria;
-  if (options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) {
-    problems.push(`it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} options`);
+  if (options.length < MIN_OPTIONS || (limits.maxOptions !== undefined && options.length > limits.maxOptions)) {
+    problems.push(rangeMessage('options', limits.maxOptions));
   }
   const seen = new Set<string>();
   for (const option of options) {
@@ -82,10 +91,6 @@ function validateChoice(question: ChoiceQuestion): string[] {
     if (!key) {
       problems.push(`every option needs a name`);
       continue;
-    }
-    if (key.length > MAX_OPTION_NAME_LENGTH) problems.push(`the option "${key.slice(0, 20)}…" is over ${MAX_OPTION_NAME_LENGTH} characters`);
-    if (tooLong(option.description, MAX_CRITERIA_LENGTH)) {
-      problems.push(`the description of "${key}" can have at most ${MAX_CRITERIA_LENGTH} characters`);
     }
     const folded = key.toLowerCase();
     if (seen.has(folded)) problems.push(`the option "${key}" is repeated (names are compared ignoring case)`);
@@ -97,16 +102,13 @@ function validateChoice(question: ChoiceQuestion): string[] {
   return problems;
 }
 
-function validateScore(question: ScoreQuestion): string[] {
+function validateScore(question: ScoreQuestion, limits: QuestionLimits): string[] {
   const problems: string[] = [];
   const levels = question.criteria;
-  if (levels.length < MIN_OPTIONS || levels.length > MAX_OPTIONS) {
-    problems.push(`it needs between ${MIN_OPTIONS} and ${MAX_OPTIONS} levels`);
+  if (levels.length < MIN_OPTIONS || (limits.maxOptions !== undefined && levels.length > limits.maxOptions)) {
+    problems.push(rangeMessage('levels', limits.maxOptions));
   }
   if (levels.some((level) => !level.trim())) problems.push(`every level needs a description`);
-  if (levels.some((level) => tooLong(level, MAX_CRITERIA_LENGTH))) {
-    problems.push(`each level can have at most ${MAX_CRITERIA_LENGTH} characters`);
-  }
   if (question.min_probability != null && !isProbability(question.min_probability)) {
     problems.push(`the minimum probability must be a number between 0 and 1`);
   }
@@ -122,10 +124,17 @@ export interface QuestionProblems {
   byQuestion: string[][];
 }
 
-export function checkQuestions(questions: EditorQuestion[]): QuestionProblems {
+export interface QuestionContext extends QuestionLimits {
+  /** The agent's per-prompt budget in characters: a question must leave room for the text inside it. */
+  maxStateChars?: number;
+}
+
+export function checkQuestions(questions: EditorQuestion[], context: QuestionContext = {}): QuestionProblems {
   const general: string[] = [];
   if (questions.length === 0) general.push('Add at least one question');
-  if (questions.length > MAX_QUESTIONS) general.push(`A System One agent supports at most ${MAX_QUESTIONS} questions`);
+  if (context.maxQuestions !== undefined && questions.length > context.maxQuestions) {
+    general.push(`This server accepts at most ${context.maxQuestions} questions per call`);
+  }
 
   const seenKeys = new Set<string>();
   const byQuestion = questions.map((question) => {
@@ -138,20 +147,23 @@ export function checkQuestions(questions: EditorQuestion[]): QuestionProblems {
     }
     seenKeys.add(key);
     if (!question.instructions.trim()) problems.push('the instructions are required');
-    if (tooLong(question.instructions, MAX_INSTRUCTIONS_LENGTH)) {
-      problems.push(`the instructions can have at most ${MAX_INSTRUCTIONS_LENGTH} characters`);
+    const size = questionSize(question);
+    if (context.maxStateChars !== undefined && Number.isFinite(context.maxStateChars) && context.maxStateChars - size < MIN_TEXT_ROOM_CHARS) {
+      problems.push(
+        `it takes about ${size} of the ${context.maxStateChars} characters of each prompt and must leave at least ${MIN_TEXT_ROOM_CHARS} for the text: shorten it or raise the maximum text length`,
+      );
     }
     if (question.type === 'noul') problems.push(...validateNoul(question));
-    else if (question.type === 'choice') problems.push(...validateChoice(question));
-    else problems.push(...validateScore(question));
+    else if (question.type === 'choice') problems.push(...validateChoice(question, context));
+    else problems.push(...validateScore(question, context));
     return problems.map(capitalize);
   });
   return { general, byQuestion };
 }
 
 /** Human-readable problems, in question order, each naming its question. Empty array = valid. */
-export function validateQuestions(questions: EditorQuestion[]): string[] {
-  const { general, byQuestion } = checkQuestions(questions);
+export function validateQuestions(questions: EditorQuestion[], context: QuestionContext = {}): string[] {
+  const { general, byQuestion } = checkQuestions(questions, context);
   return [
     ...general,
     ...byQuestion.flatMap((problems, index) => problems.map((p) => `${label(questions[index], index)}: ${p}`)),
@@ -193,4 +205,13 @@ export function toPayload(questions: EditorQuestion[]): SystemOneQuestion[] {
 /** Questions from the API as editor questions (each gets a client-only id). */
 export function toEditorQuestions(questions: SystemOneQuestion[] | null | undefined, makeId: () => string): EditorQuestion[] {
   return (questions ?? []).map((q) => ({ ...q, _id: makeId() }));
+}
+
+/** Moves the item at `from` to position `to` (what dropping a dragged question on another one does). */
+export function reorder<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
 }

@@ -1,8 +1,8 @@
 // System One: connections, question definitions and evaluation results.
 // v1 evaluates TEXT only.
 
-/** Endpoint prefilled when adding a service. Empty until the hosted API's URL is decided. */
-export const SYSTEM_ONE_DEFAULT_ENDPOINT = '';
+/** Base URL prefilled when adding a service (the client appends /v1/systemone, /v1/models, /v1/limits). */
+export const SYSTEM_ONE_DEFAULT_ENDPOINT = 'https://api.typesafe.ai';
 
 export interface SystemOneService {
   service_id: number;

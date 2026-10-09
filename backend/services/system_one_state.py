@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 
 _MIN_BUDGET_CHARS = 200
 _QUESTION_MARGIN_CHARS = 50
+MIN_TEXT_ROOM_CHARS = 500   # what a question must leave of the per-prompt budget for the text itself
 _BUDGET_ERROR = re.compile(r"Longest prompt has (\d+) tokens; limit is (\d+)")
 
 Summarizer = Callable[[str, List[Question], int], Awaitable[str]]

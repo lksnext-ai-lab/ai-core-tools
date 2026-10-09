@@ -157,7 +157,7 @@ async def test_502_and_503_retry_then_unavailable(sleeps, status, kind):
     assert e.value.kind == kind and len(calls) == 3
 
 
-@pytest.mark.parametrize("status,kind", [(422, "invalid_request"), (401, "unauthorized"),
+@pytest.mark.parametrize("status,kind", [(422, "invalid_request"), (401, "unauthorized"), (403, "unauthorized"),
                                          (413, "invalid_request"), (400, "invalid_request")])
 async def test_client_errors_never_retry(sleeps, status, kind):
     calls = []
@@ -391,3 +391,27 @@ async def test_a_changed_cap_drops_the_previous_semaphore_of_that_service():
     client._slot(endpoint(service_id=73, max_concurrency=5))
     held = client._slots_by_loop[loop]
     assert held[73][0] == 5 and held[74][0] == 2 and len(held) == 2
+
+
+async def test_probe_treats_a_403_on_the_models_listing_as_a_rejected_token():
+    # The hosted API answers 403 (authentication_error) when the key is missing: that is not a successful connection.
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        return httpx.Response(403, json={"detail": {"error_type": "authentication_error", "message": "Must supply an API key!"}})
+
+    out = await client.probe("http://so.test", None, transport=transport(handler))
+    assert out["ok"] is False and "token" in out["message"].lower()
+
+
+async def test_probe_is_fine_without_a_limits_endpoint():
+    # Not every server has /v1/limits: the connection works, nothing is known about its limits.
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "some-model"}]})
+        return httpx.Response(404, json={"detail": "Not Found"})
+
+    out = await client.probe("http://so.test", "tok", transport=transport(handler))
+    assert out["ok"] is True and out["models"] == ["some-model"] and out["limits"] is None
