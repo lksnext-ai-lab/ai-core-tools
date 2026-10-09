@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Layers, Pencil, Trash2, Lightbulb } from 'lucide-react';
+import { Layers, Pencil, Trash2, Lightbulb, Upload, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '../../components/ui/Modal';
 import MiddlewareForm from '../../components/forms/MiddlewareForm';
@@ -12,6 +12,7 @@ import type { Middleware, MiddlewarePayload } from '../../core/types';
 import { MIDDLEWARE_TYPES, MIDDLEWARE_TYPE_INFO, middlewareTypeLabel } from '../../constants/middlewares';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import ImportModal, { type ConflictMode, type ImportResponse } from '../../components/ui/ImportModal';
 import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
@@ -28,6 +29,8 @@ function MiddlewaresPage() {
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingMiddleware, setEditingMiddleware] = useState<Middleware | null>(null);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [exportingId, setExportingId] = useState<number | null>(null);
 
     useEffect(() => {
         loadMiddlewares();
@@ -117,6 +120,49 @@ function MiddlewaresPage() {
         await loadMiddlewares();
     }
 
+    async function handleExport(middleware: Middleware) {
+        if (!appId) return;
+        setExportingId(middleware.middleware_id);
+        try {
+            const blob = await apiService.exportMiddleware(Number.parseInt(appId), middleware.middleware_id);
+            const sanitizedName = middleware.name.replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
+            const timestamp = new Date().toISOString().split('T')[0];
+            const url = globalThis.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `middleware-${sanitizedName}-${timestamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            globalThis.URL.revokeObjectURL(url);
+            a.remove();
+            toast.success(MESSAGES.EXPORTED('middleware'));
+        } catch (err) {
+            toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('middleware')));
+        } finally {
+            setExportingId(null);
+        }
+    }
+
+    async function handleImport(file: File, conflictMode: ConflictMode, newName?: string): Promise<ImportResponse> {
+        if (!appId) throw new Error('App ID not found');
+        try {
+            const result = await apiService.importMiddleware(Number.parseInt(appId), file, conflictMode, newName);
+            if (result.success) {
+                setShowImportModal(false);
+                toast.success(result.message || MESSAGES.IMPORTED('middleware'));
+                // e.g. the AI service it used does not exist here: the user must act on it.
+                for (const warning of result.summary?.warnings ?? []) {
+                    toast.warning(warning);
+                }
+                await loadMiddlewares();
+            }
+            return result;
+        } catch (err) {
+            toast.error(errorMessage(err, MESSAGES.IMPORT_FAILED('middleware')));
+            throw err;
+        }
+    }
+
     function handleCloseModal() {
         setIsModalOpen(false);
         setEditingMiddleware(null);
@@ -148,13 +194,23 @@ function MiddlewaresPage() {
                     <p className="text-gray-600">Reusable safety, approval and cost controls for your agents</p>
                 </div>
                 {canEdit && (
-                    <button
-                        onClick={handleCreateMiddleware}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center"
-                    >
-                        <span className="mr-2">+</span>
-                        {' '}Add Middleware
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setShowImportModal(true)}
+                            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
+                        >
+                            <Upload className="w-4 h-4 mr-2" aria-hidden="true" />Import
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCreateMiddleware}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center"
+                        >
+                            <span className="mr-2">+</span>
+                            {' '}Add Middleware
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -224,6 +280,12 @@ function MiddlewaresPage() {
                                             variant: 'primary'
                                         },
                                         {
+                                            label: exportingId === mw.middleware_id ? 'Exporting...' : 'Export',
+                                            onClick: () => { void handleExport(mw); },
+                                            icon: <ArrowDownToLine className="w-4 h-4" />,
+                                            variant: 'primary'
+                                        },
+                                        {
                                             label: 'Delete',
                                             onClick: () => { void handleDelete(mw.middleware_id); },
                                             icon: <Trash2 className="w-4 h-4" />,
@@ -286,6 +348,14 @@ function MiddlewaresPage() {
                     onCancel={handleCloseModal}
                 />
             </Modal>
+
+            <ImportModal
+                isOpen={showImportModal}
+                onClose={() => setShowImportModal(false)}
+                onImport={handleImport}
+                componentType="middleware"
+                componentLabel="Middleware"
+            />
         </div>
     );
 }

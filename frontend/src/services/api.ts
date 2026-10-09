@@ -1403,6 +1403,42 @@ class ApiService {
     });
   }
 
+  async exportMiddleware(appId: number, middlewareId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/middlewares/${middlewareId}/export`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: this.buildAuthHeaders('POST', false),
+    });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.blob();
+  }
+
+  async importMiddleware(
+    appId: number,
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string,
+  ): Promise<ImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    let url = `${this.baseURL}/internal/apps/${appId}/middlewares/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: this.buildAuthHeaders('POST', true),
+      body: formData,
+    });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.json();
+  }
+
   async importSkill(appId: number, file: File): Promise<Skill> {
     const formData = new FormData();
     formData.append('file', file);

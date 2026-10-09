@@ -152,7 +152,6 @@ class MiddlewareListItemSchema(BaseModel):
     middleware_type: str
     config: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
-    is_frozen: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

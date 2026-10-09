@@ -144,7 +144,6 @@ export interface Middleware {
   middleware_type: MiddlewareType;
   config?: Record<string, any> | null;
   created_at?: string | null;
-  is_frozen?: boolean;
 }
 
 export interface MiddlewarePayload {

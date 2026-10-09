@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Enum, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -29,7 +29,6 @@ class Middleware(Base):
 
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    is_frozen = Column(Boolean, default=False, nullable=False)
 
     app_id = Column(Integer, ForeignKey('App.app_id', ondelete='CASCADE'), nullable=False)
     app = relationship('App', back_populates='middlewares')

@@ -39,6 +39,10 @@ rest follow the agent's order (`agent_middlewares.order`).
 - **Deletion:** deleting a middleware detaches it from its agents; deleting an agent removes its
   associations, conversations (with their checkpoints, media, sandboxes and files) and approvals but
   keeps the middlewares; deleting an app removes everything, middlewares before AI services.
+- **Export/import:** a middleware can be exported and imported on its own (Middlewares page), and
+  travels with agent and full-app exports. The AI service it references travels by name; if the target
+  app has none with that name the import keeps the agent's model and reports a warning. Agent imports
+  reuse an identical existing middleware, otherwise import a renamed copy.
 - **PII output redaction and streaming:** with `apply_to_output`, tokens are not streamed; the
   redacted answer arrives in the `done` event. `strategy="block"` ends the turn with
   "The message was blocked because it contains personal data (…)" (SSE `error` / HTTP 422).
@@ -104,6 +108,8 @@ using it, with memory on.
    returns `409`.
 7. **Tool agents** — give an agent used as a tool a guardrail: its answers follow it. Rename it: the
    approval rule of the calling agent follows the new name.
+8. **Export/import** — export a PII middleware with an LLM detector and import it into another app,
+   with and without an AI service of the same name (the second shows a warning).
 
 ## Automated tests
 
@@ -113,7 +119,7 @@ using it, with memory on.
 | LLM PII detector | `tests/unit/tools/test_llm_pii_middleware.py` |
 | Chain building from DB rows (order, invalid config skipped, one per type) | `tests/integration/tools/test_agent_middleware_chain_integration.py` |
 | CRUD, config validation, tenant isolation, agent selection rules, cascades | `tests/integration/routers/internal/test_middlewares.py` |
-| Agent/app deletion, AI service in use, tool-agent rename | `tests/integration/routers/internal/test_middleware_relations.py` |
+| Agent/app deletion, AI service in use, tool-agent rename, export/import | `tests/integration/routers/internal/test_middleware_relations.py` |
 | Summarization defaults, chain of agents used as tools | `tests/unit/tools/test_middleware_factory.py` |
 | Approval ownership, action ids, decision validation, expiry status | `tests/unit/services/test_hitl_approval_service.py` |
 | Claim compare-and-set, one pending approval per conversation, cascade | `tests/integration/repositories/test_hitl_approval_repository.py` |

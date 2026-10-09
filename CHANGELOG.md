@@ -21,12 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **AI services used by middlewares cannot be deleted**: `DELETE /internal/apps/{app}/ai-services/{id}` returns `409` naming the summarization/PII middlewares that reference it.
+- **Middleware export/import**: middlewares can be exported and imported on their own and travel with agent and full-app exports (AI services by name). `Middleware.is_frozen`, never applied, is dropped.
 - **Agents used as tools run their middlewares**; the tools their approval rules gate are withheld because a sub-agent cannot pause. Renaming an agent moves the approval rules that name it.
 - **Conversation summarization defaults**: agents with memory now summarize at 85% of the model's input window (at most 150,000 tokens; 32,000 for models without a profile), keep the last 20 messages and summarize the whole older history. The summarization middleware uses the same values when its trigger or token limit is left empty. The agent form no longer shows the memory management fields.
 
 ### Fixed
 
 - **Deleting an agent with conversations failed** (`Conversation.agent_id` had no ON DELETE action) and **app deletion left invisible agents behind** with their conversations: conversations now cascade (migration `agentdel001`), their checkpoints, media, sandboxes and files are removed, and an app deletion aborts instead of orphaning an agent.
+- **Full-app import lost tool agents**: agents were imported in name order, so an agent sorted before its tool agent lost the tool silently, and `is_tool` was not exported. Tool agents now import first and keep `is_tool`.
 - **Memory could be turned off under a human-approval middleware** when an agent update omitted `middleware_ids`.
 - **Summaries lost older context**: the default summarization trimmed the history it summarized to 20 tokens (`memory_summarize_threshold`), so each summary only saw the latest message and dropped the previous summary.
 

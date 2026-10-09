@@ -32,7 +32,6 @@ def _to_detail(mw: Middleware) -> MiddlewareDetailSchema:
         middleware_type=mw.middleware_type.value,
         config=mw.config,
         created_at=mw.create_date,
-        is_frozen=bool(mw.is_frozen),
     )
 
 
