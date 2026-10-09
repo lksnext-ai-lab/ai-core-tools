@@ -284,3 +284,14 @@ def test_saving_a_new_url_is_fine_when_there_is_no_stored_token(repo):
     repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key=None)
     SystemOneServiceService.create_or_update_system_one_service(
         MagicMock(), 10, 1, _data(endpoint="http://other.test", api_key="****"))
+
+
+@pytest.mark.asyncio
+async def test_without_uvicorn_workers_the_dockerfile_default_of_two_is_assumed(repo, monkeypatch):
+    # The image starts 2 workers when UVICORN_WORKERS is unset; suggesting a cap as if there were 1
+    # would let the processes together exceed the server's limit.
+    monkeypatch.delenv("UVICORN_WORKERS", raising=False)
+    probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": [], "limits": {"max_concurrent_requests": 4}})
+    with patch.object(module.system_one_client, "probe", probe):
+        out = await SystemOneServiceService.test_connection_with_config(MagicMock(), 10, {"endpoint": "http://so.test"})
+    assert out["suggested_max_concurrency"] == 2

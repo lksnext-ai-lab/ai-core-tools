@@ -32,8 +32,9 @@ class ServiceInUseError(Exception):
 
 
 def _workers() -> int:
+    # 2 = the Docker image's default when UVICORN_WORKERS is unset (it is not exported to the process).
     try:
-        return max(1, int(os.getenv("UVICORN_WORKERS", "1")))
+        return max(1, int(os.getenv("UVICORN_WORKERS", "2")))
     except ValueError:
         return 1
 
