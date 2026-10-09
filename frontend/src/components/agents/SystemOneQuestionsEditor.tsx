@@ -74,25 +74,20 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
       ((wanted as HTMLButtonElement | null)?.disabled ? fallback : wanted ?? fallback)?.focus();
     }, 0);
   };
-  const moveWithKeyboard = (event: React.KeyboardEvent, index: number) => {
-    if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
-    event.preventDefault();
-    move(index, event.key === 'ArrowUp' ? -1 : 1, (event.target as HTMLElement).id || undefined);
-  };
   const add = (type: SystemOneQuestionType) => onChange([...questions, newQuestion(type, randomId())]);
 
   return (
     <div>
-      <div className="mb-3 flex items-end justify-between">
-        <div>
+      <div className="mb-3 flex items-end justify-between gap-4">
+        <div className="min-w-0">
           <h4 className="text-base font-semibold text-gray-900">Questions</h4>
           <p className="text-sm text-gray-600">
             The agent answers all of them for every text. Keys and option names are part of what the model reads: make them descriptive.
-            The order only decides how they are listed; each question is answered on its own. Drag a question by its handle to
-            reorder (or use the arrows, or Alt+↑ / Alt+↓ inside a question).
+            The order only decides how they are listed; each question is answered on its own. Drag a question by its handle, or use
+            its arrows, to reorder.
           </p>
         </div>
-        <span className="text-sm text-gray-500" aria-live="polite">{questions.length}{limits.maxQuestions === undefined ? '' : ` / ${limits.maxQuestions}`}</span>
+        <span className="shrink-0 whitespace-nowrap text-sm text-gray-500" aria-live="polite">{questions.length}{limits.maxQuestions === undefined ? '' : ` / ${limits.maxQuestions}`}</span>
       </div>
 
       <p className="sr-only" aria-live="polite">{announcement}</p>
@@ -109,7 +104,7 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
           const own = problemsByQuestion[index] ?? [];
           const describedBy = own.length > 0 ? `${id}-problems` : undefined;
           return (
-            <fieldset key={id} onKeyDown={(e) => moveWithKeyboard(e, index)}
+            <fieldset key={id}
                       draggable={armed === index}
                       onDragStart={(e) => { setDragging(index); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); }}
                       onDragOver={(e) => { if (dragging !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(index); } }}

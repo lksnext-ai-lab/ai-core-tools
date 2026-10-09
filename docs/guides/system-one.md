@@ -42,7 +42,7 @@ A service can be deleted even if agents use it, like an AI service. The agents a
 
 Every System One agent holds at least one question; the maximum is the one the chosen server reports in `/v1/limits` (the form reads it and checks against it). All of them are answered, in one call, for every text.
 
-The order only decides how the questions are listed (playground, tool description, JSON); each one is answered on its own. Drag a question by its handle to reorder it (or use the arrows, or Alt+↑ / Alt+↓ inside a question).
+The order only decides how the questions are listed (playground, tool description, JSON); each one is answered on its own. Drag a question by its handle to reorder it, or use the arrows next to it.
 
 **How long a question may be** is not a fixed number: every prompt the server evaluates holds the text **plus one question**, and the agent's *maximum text length* is that per-prompt budget. A question (instructions, options, levels) must leave at least 500 characters of it for the text; the form and the API refuse it otherwise, saying how much it takes.
 
