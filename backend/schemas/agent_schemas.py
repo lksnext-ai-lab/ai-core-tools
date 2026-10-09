@@ -543,28 +543,6 @@ class CreateOCRAgentRequestSchema(BaseModel):
     skill_ids: Optional[List[int]] = []
 
 
-class CreateSystemOneAgentRequestSchema(BaseModel):
-    """Schema for creating a System One agent via public API (the System One service must already exist)"""
-    name: str
-    description: Optional[str] = ""
-    is_tool: bool = True
-    system_one_service_id: int
-    questions: QuestionList
-    summarization_service_id: Optional[int] = None
-    max_state_chars: int = Field(default=6000, ge=500, le=20000)
-
-
-class UpdateSystemOneAgentRequestSchema(BaseModel):
-    """Schema for updating a System One agent via public API: only the fields sent change"""
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_tool: Optional[bool] = None
-    system_one_service_id: Optional[int] = None
-    questions: Optional[QuestionList] = None
-    summarization_service_id: Optional[int] = None
-    max_state_chars: Optional[int] = Field(default=None, ge=500, le=20000)
-
-
 class UpdateAgentRequestSchema(RagConfigFieldsMixin):
     """Schema for updating an existing agent via public API"""
     name: Optional[str] = None

@@ -68,6 +68,6 @@ def test_the_generic_public_update_refuses_a_system_one_agent(client, fake_app, 
     r = client.put(f"/public/v1/app/{fake_app.app_id}/agents/{so_agent.agent_id}",
                    headers={"X-API-KEY": fake_api_key.key}, json={"name": "Renamed"})
     assert r.status_code == 400
-    assert "system-one" in r.json()["detail"].lower()
+    assert "system one" in r.json()["detail"].lower()
     db.refresh(so_agent)
     assert so_agent.name == "Triage" and so_agent.is_tool is True
