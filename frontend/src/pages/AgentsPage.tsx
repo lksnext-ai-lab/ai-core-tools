@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock } from 'lucide-react';
+import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock, Gauge } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -229,6 +229,8 @@ function AgentsPage() {
     switch (type) {
       case 'ocr_agent':
         return <FileText className="w-4 h-4" />;
+      case 'system_one_agent':
+        return <Gauge className="w-4 h-4" />;
       case 'agent':
       default:
         return <Bot className="w-4 h-4" />;
@@ -239,6 +241,8 @@ function AgentsPage() {
     switch (type) {
       case 'ocr_agent':
         return 'OCR Agent';
+      case 'system_one_agent':
+        return 'System One Agent';
       case 'agent':
       default:
         return 'AI Agent';
