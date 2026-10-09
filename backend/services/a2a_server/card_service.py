@@ -47,7 +47,8 @@ from utils.a2a_config import agent_card_url, agent_rpc_url
 _APP_VERSION_DEFAULT = "0.2.37"
 
 # Always declared, regardless of the agent's own configuration (FR-7).
-_BASE_INPUT_MODES: Tuple[str, ...] = ("text/plain", "application/json")
+_JSON_MEDIA_TYPE = "application/json"
+_BASE_INPUT_MODES: Tuple[str, ...] = ("text/plain", _JSON_MEDIA_TYPE)
 _BASE_OUTPUT_MODES: Tuple[str, ...] = ("text/plain",)
 
 # Document MIME types the existing chat file pipeline accepts, taken verbatim
@@ -97,8 +98,8 @@ def _default_input_modes(snap: A2AAgentSnapshot) -> List[str]:
 
 def _default_output_modes(snap: A2AAgentSnapshot) -> List[str]:
     modes = list(_BASE_OUTPUT_MODES)
-    if snap.has_output_parser and "application/json" not in modes:
-        modes.append("application/json")
+    if snap.has_output_parser and _JSON_MEDIA_TYPE not in modes:
+        modes.append(_JSON_MEDIA_TYPE)
     if snap.can_produce_files:
         for mime in _FILE_OUTPUT_MODES:
             if mime not in modes:

@@ -4,7 +4,7 @@ Enforces per-app CORS origin restrictions based on app configuration.
 """
 from fastapi import HTTPException, Depends, Request, status
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Protocol
 
 from models.app import App
 from db.database import get_db
@@ -14,7 +14,15 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def check_allowed_origin(app: App, origin: Optional[str], app_ref: Optional[str] = None) -> None:
+class _CorsScopedApp(Protocol):
+    """What `check_allowed_origin` reads off an app: satisfied by `App` and by
+    lightweight snapshots that carry just these two fields."""
+
+    app_id: int
+    agent_cors_origins: Optional[str]
+
+
+def check_allowed_origin(app: _CorsScopedApp, origin: Optional[str], app_ref: Optional[str] = None) -> None:
     """
     Validate a request `Origin` header against an already-loaded app's CORS allow-list.
 

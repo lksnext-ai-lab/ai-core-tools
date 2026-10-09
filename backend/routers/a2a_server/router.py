@@ -39,7 +39,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Annotated, Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
@@ -90,15 +90,19 @@ _ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]+$")
 # path segment can never forge or split a log line.
 _SLUG_LOG_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
 
+_METHOD_V03_STREAM = "message/stream"
+_METHOD_V03_RESUBSCRIBE = "tasks/resubscribe"
+_JSON_CONTENT_TYPE = "application/json"
+
 # Methods (v1.0 + v0.3 compat) that consume the app's execution budget (DEV-2).
-_SEND_METHODS = frozenset({"SendMessage", "SendStreamingMessage", "message/send", "message/stream"})
+_SEND_METHODS = frozenset({"SendMessage", "SendStreamingMessage", "message/send", _METHOD_V03_STREAM})
 
 # Methods that open an SSE response (RB-2/RB-3).
-_STREAM_METHODS = frozenset({"SendStreamingMessage", "SubscribeToTask", "message/stream", "tasks/resubscribe"})
+_STREAM_METHODS = frozenset({"SendStreamingMessage", "SubscribeToTask", _METHOD_V03_STREAM, _METHOD_V03_RESUBSCRIBE})
 
 # Methods whose JSON-RPC `params` carry a bare `{"id": "..."}` task id.
 _TASK_ID_PARAM_METHODS = frozenset(
-    {"GetTask", "CancelTask", "SubscribeToTask", "tasks/get", "tasks/cancel", "tasks/resubscribe"}
+    {"GetTask", "CancelTask", "SubscribeToTask", "tasks/get", "tasks/cancel", _METHOD_V03_RESUBSCRIBE}
 )
 
 # MEDIUM-6: every method name this router (or the SDK, including its v0.3
@@ -111,7 +115,7 @@ _KNOWN_METHODS = frozenset(
         "SendMessage", "SendStreamingMessage", "GetTask", "ListTasks", "CancelTask", "SubscribeToTask",
         "GetExtendedAgentCard", "CreateTaskPushNotificationConfig", "GetTaskPushNotificationConfig",
         "ListTaskPushNotificationConfigs", "DeleteTaskPushNotificationConfig",
-        "message/send", "message/stream", "tasks/get", "tasks/cancel", "tasks/resubscribe",
+        "message/send", _METHOD_V03_STREAM, "tasks/get", "tasks/cancel", _METHOD_V03_RESUBSCRIBE,
         "tasks/pushNotificationConfig/set", "tasks/pushNotificationConfig/get",
         "tasks/pushNotificationConfig/list", "tasks/pushNotificationConfig/delete",
     }
@@ -229,7 +233,7 @@ async def get_agent_card(
     app_slug: str,
     agent_id: str,
     request: Request,
-    api_key: Optional[str] = Depends(api_key_header),
+    api_key: Annotated[Optional[str], Depends(api_key_header)] = None,
 ) -> Response:
     """Per-agent A2A v1.0 card (FR-5). `agent_id` is typed `str` so a
     non-numeric value falls into the uniform 404, never FastAPI's 422."""
@@ -262,14 +266,14 @@ async def get_agent_card(
         "card", outcome="visible", reason="visible", client_ip=client_ip,
         app_slug=app_slug, agent_id=agent_id_int,
     )
-    return JSONResponse(card, headers={"Cache-Control": cache_control, "Content-Type": "application/json"})
+    return JSONResponse(card, headers={"Cache-Control": cache_control, "Content-Type": _JSON_CONTENT_TYPE})
 
 
 @a2a_router.get("/a2a/v1/apps/{app_slug}/agents", include_in_schema=False)
 async def list_agents(
     app_slug: str,
     request: Request,
-    api_key: Optional[str] = Depends(api_key_header),
+    api_key: Annotated[Optional[str], Depends(api_key_header)] = None,
 ) -> Response:
     """The Mattin-specific app catalog (FR-9): visible agents, `agent_id` ascending."""
     cfg = get_a2a_config()
@@ -293,7 +297,7 @@ async def list_agents(
         "catalog", outcome="visible", reason="visible", client_ip=client_ip,
         app_slug=app_slug, count=len(entries),
     )
-    return JSONResponse(entries, headers={"Cache-Control": cache_control, "Content-Type": "application/json"})
+    return JSONResponse(entries, headers={"Cache-Control": cache_control, "Content-Type": _JSON_CONTENT_TYPE})
 
 
 @a2a_router.get("/.well-known/agent-card.json", include_in_schema=False)
@@ -316,7 +320,7 @@ async def get_root_agent_card(request: Request) -> Response:
     base_url = _resolve_base_url(request)
     card = card_to_json(build_public_card(resolution.snapshot, base_url))
     _log_discovery("root_card", outcome="visible", reason="visible", client_ip=client_ip)
-    return JSONResponse(card, headers={"Cache-Control": "no-cache", "Content-Type": "application/json"})
+    return JSONResponse(card, headers={"Cache-Control": "no-cache", "Content-Type": _JSON_CONTENT_TYPE})
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +671,7 @@ async def rpc_endpoint(app_slug: str, agent_id: str, request: Request) -> Respon
         # difference between a transient leak and a stuck bulkhead slot.
         background_bulkhead = bulkhead
 
-        async def _release_bulkhead_too() -> None:
+        async def _release_bulkhead_too() -> None:  # NOSONAR - awaited by Starlette's BackgroundTask
             background_bulkhead.release()
 
         _chain_background(resp, BackgroundTask(_release_bulkhead_too))

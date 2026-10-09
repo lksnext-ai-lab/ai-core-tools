@@ -120,7 +120,7 @@ def build_placeholder_extended_card() -> AgentCard:
     )
 
 
-async def _extended_modifier(card: AgentCard, ctx: ServerCallContext) -> AgentCard:
+async def _extended_modifier(card: AgentCard, ctx: ServerCallContext) -> AgentCard:  # NOSONAR - the SDK awaits extended_card_modifier
     """Builds the real, per-agent extended card (AD-1) from `ctx.state["a2a"].snapshot`.
 
     No DB access here -- the snapshot was already resolved by the router

@@ -205,7 +205,7 @@ async def bounded_sse_iterator(
     outcome = "stream_ended"
     liveness_timeout = min(2.0, liveness_interval_seconds) if liveness_interval_seconds > 0 else 2.0
 
-    async def _drain_remaining(grace_seconds: float) -> None:
+    async def _drain_remaining(grace_seconds: float) -> AsyncGenerator[Dict[str, Any], None]:
         """MEDIUM-10: forwards any events still arriving for `grace_seconds`
         after a terminal/missing finding, instead of cutting the stream."""
         nonlocal pending
@@ -300,16 +300,15 @@ async def bounded_sse_iterator(
         except Exception:
             logger.exception("a2a.stream.emit_log_error task_id=%s", task_id)
 
-        with anyio.CancelScope(shield=True):
-            with anyio.move_on_after(_TEARDOWN_BUDGET_SECONDS):
-                if not pending.done():
-                    pending.cancel()
-                with contextlib.suppress(StopAsyncIteration, asyncio.CancelledError, Exception):
-                    await pending
-                try:
-                    await inner.aclose()
-                except Exception:
-                    logger.exception("a2a.stream.inner_close_error task_id=%s", task_id)
+        with anyio.CancelScope(shield=True), anyio.move_on_after(_TEARDOWN_BUDGET_SECONDS):
+            if not pending.done():
+                pending.cancel()
+            with contextlib.suppress(StopAsyncIteration, asyncio.CancelledError, Exception):
+                await pending
+            try:
+                await inner.aclose()
+            except Exception:
+                logger.exception("a2a.stream.inner_close_error task_id=%s", task_id)
 
 
 __all__ = [

@@ -116,6 +116,14 @@ export function Tabs({
           const isActive = tab.id === activeTab;
           const isDisabled = !!tab.disabled;
           const disabledReasonId = `${tab.id}-disabled-reason`;
+          let tabStateClasses: string;
+          if (isDisabled) {
+            tabStateClasses = 'cursor-not-allowed text-gray-400 dark:text-gray-600';
+          } else if (isActive) {
+            tabStateClasses = 'border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400';
+          } else {
+            tabStateClasses = 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100';
+          }
 
           return (
             <React.Fragment key={tab.id}>
@@ -139,13 +147,7 @@ export function Tabs({
                   px-4 py-3 text-sm font-medium whitespace-nowrap
                   transition-colors duration-200
                   focus:outline-none
-                  ${
-                    isDisabled
-                      ? 'cursor-not-allowed text-gray-400 dark:text-gray-600'
-                      : isActive
-                        ? 'border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                        : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100'
-                  }
+                  ${tabStateClasses}
                 `}
               >
                 {tab.icon && <span className="mr-2">{tab.icon}</span>}

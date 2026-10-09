@@ -229,7 +229,7 @@ export function AgentA2ASettings({
               onChange={() => onChange({ a2a_card_visibility: 'public' })}
               className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-700"
             />
-            Public card — anyone with the URL can read the agent card
+            <span>Public card — anyone with the URL can read the agent card</span>
           </label>
           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
             <input
@@ -240,7 +240,7 @@ export function AgentA2ASettings({
               onChange={() => onChange({ a2a_card_visibility: 'api_key' })}
               className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-700"
             />
-            API key required — the card is only served to callers with a valid X-API-KEY
+            <span>API key required — the card is only served to callers with a valid X-API-KEY</span>
           </label>
         </div>
         <FieldError id={visibilityErrorId} message={visibilityError} />

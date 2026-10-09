@@ -60,7 +60,6 @@ def a2a_sdk_tables(test_engine):
             f"{table!r} does not exist on the test DB; tests/conftest.py's test_engine "
             "fixture should have created it via get_sdk_metadata()"
         )
-    yield
 
 
 class A2ACommittedWorld:

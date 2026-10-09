@@ -43,7 +43,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, Union
 
-from google.protobuf.json_format import ParseDict
+from google.protobuf.json_format import Parse
 from google.protobuf.struct_pb2 import Value
 
 from a2a.types import Part
@@ -560,5 +560,5 @@ def _build_data_part(value: Any) -> Part:
     AC-22: ``media_type`` is always ``"application/json"`` on a ``DataPart``.
     """
     pb_value = Value()
-    ParseDict(value, pb_value)
+    Parse(json.dumps(value), pb_value)
     return Part(data=pb_value, media_type="application/json")
