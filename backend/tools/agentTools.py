@@ -20,6 +20,7 @@ from services.agent_cache_service import CheckpointerCacheService
 from langchain_core.documents import Document
 from langchain_core.tools import StructuredTool
 from services.agent_metrics_collector import METRICS_SUB_AGENT_ID_KEY, METRICS_TOOL_TYPE_KEY
+from tools.system_one_tool import IACTSystemOneTool
 import json
 import asyncio
 import uuid
@@ -824,6 +825,8 @@ def _tag_untyped_tools(tools: List[Any]) -> None:
             continue
         if isinstance(tool, (IACTTool, IACTOCRTool)):
             _tag_tool(tool, "AGENT", **{METRICS_SUB_AGENT_ID_KEY: tool.agent.agent_id})
+        elif isinstance(tool, IACTSystemOneTool):
+            _tag_tool(tool, "AGENT", **{METRICS_SUB_AGENT_ID_KEY: tool.snapshot.agent_id})
         else:
             _tag_tool(tool, "BUILTIN")
 
@@ -1886,6 +1889,11 @@ async def discover_tool(
     """
     if agent.type == "ocr_agent":
         return await IACTOCRTool.create(
+            agent, user_context=user_context, attached_files=attached_files,
+            user_message=user_message,
+        )
+    if agent.type == "system_one_agent":
+        return await IACTSystemOneTool.create(
             agent, user_context=user_context, attached_files=attached_files,
             user_message=user_message,
         )

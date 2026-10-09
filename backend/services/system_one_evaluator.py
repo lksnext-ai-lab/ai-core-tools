@@ -50,6 +50,7 @@ class SystemOneSnapshot:
     max_state_chars: int
     summarize: Optional[Summarizer]
     metrics_subject: Any            # what the metrics recorder reads from an agent (ids only)
+    agent_description: str = ""
 
 
 def _text_of(content: Any) -> str:
@@ -136,6 +137,7 @@ class SystemOneEvaluator:
             agent_id=agent.agent_id,
             app_id=agent.app_id,
             agent_name=agent.name or "",
+            agent_description=agent.description or "",
             questions=TypeAdapter(QuestionList).validate_python(agent.questions),
             endpoint=endpoint,
             max_state_chars=agent.max_state_chars or 6000,
