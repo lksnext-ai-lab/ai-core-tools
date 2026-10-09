@@ -9,6 +9,7 @@ from db.database import get_db
 from routers.controls.role_authorization import AppRole, require_min_role
 from schemas.system_one_service_schemas import (
     CreateUpdateSystemOneServiceSchema,
+    SystemOneConnectionConfigSchema,
     SystemOneServiceDetailSchema,
     SystemOneServiceListItemSchema,
 )
@@ -50,7 +51,7 @@ async def list_system_one_services(
                                  tags=TAG)
 async def test_system_one_connection_with_config(
     app_id: int,
-    config: CreateUpdateSystemOneServiceSchema,
+    config: SystemOneConnectionConfigSchema,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("administrator"))],
     db: Annotated[Session, Depends(get_db)],
