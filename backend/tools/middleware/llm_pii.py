@@ -44,13 +44,19 @@ _DETECTION_PROMPT = (
 )
 
 
+def _entity_label(entity_type: str) -> str:
+    """Entity names are free text ("person name"); labels need one token ([REDACTED_PERSON_NAME])."""
+    return re.sub(r"[^0-9A-Za-z]+", "_", entity_type).strip("_").lower() or "pii"
+
+
 def _find_matches(content: str, findings: list[_PIIFinding]) -> list[PIIMatch]:
     matches: list[PIIMatch] = []
     for finding in findings:
         if not finding.value:
             continue
+        label = _entity_label(finding.type)
         for m in re.finditer(re.escape(finding.value), content, re.IGNORECASE):
-            matches.append(PIIMatch(type=finding.type, value=m.group(), start=m.start(), end=m.end()))
+            matches.append(PIIMatch(type=label, value=m.group(), start=m.start(), end=m.end()))
     # apply_strategy expects non-overlapping matches in order.
     matches.sort(key=lambda m: m["start"])
     result: list[PIIMatch] = []

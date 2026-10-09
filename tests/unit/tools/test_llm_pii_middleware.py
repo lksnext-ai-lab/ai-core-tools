@@ -44,6 +44,17 @@ async def test_redacts_detected_entity_in_input():
 
 
 @pytest.mark.asyncio
+async def test_multi_word_entity_becomes_a_single_token_label():
+    llm = _FakeLLM([_PIIFinding(type="Person name", value="Ane"), _PIIFinding(type="national ID", value="12345678Z")])
+    mw = LLMPIIMiddleware(llm=llm, entities=["person name", "national ID"], strategy="redact")
+    state = {"messages": [HumanMessage(content="Soy Ane, DNI 12345678Z.")]}
+
+    result = await mw.abefore_agent(state, _FakeRuntime())
+
+    assert result["messages"][0].content == "Soy [REDACTED_PERSON_NAME], DNI [REDACTED_NATIONAL_ID]."
+
+
+@pytest.mark.asyncio
 async def test_no_findings_returns_none():
     llm = _FakeLLM([])
     mw = LLMPIIMiddleware(llm=llm, entities=["person"], strategy="redact")
