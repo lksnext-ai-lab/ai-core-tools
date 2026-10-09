@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Pencil, ClipboardCopy, Trash2, Loader2, Plug, Gauge } from 'lucide-react';
+import { Pencil, ClipboardCopy, Trash2, Loader2, Plug, Gauge, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import SystemOneServiceWizard from '../../components/services/SystemOneServiceWizard';
@@ -122,6 +122,15 @@ function SystemOneServicesPage() {
           },
           { header: 'Server', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.endpoint}</span> },
           { header: 'Model', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.model}</span> },
+          { header: 'Status', render: (service: SystemOneService) => (
+            service.model ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Ready</span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <AlertTriangle className="w-3 h-3" /> Model required
+              </span>
+            )
+          )},
           { header: 'Agents', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.agent_count ?? 0}</span> },
           { header: 'Concurrency', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.max_concurrency}</span> },
           { header: 'Created', render: (service: SystemOneService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },

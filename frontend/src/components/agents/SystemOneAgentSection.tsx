@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Gauge } from 'lucide-react';
 import SystemOneQuestionsEditor from './SystemOneQuestionsEditor';
@@ -31,6 +32,14 @@ interface SystemOneAgentSectionProps {
 const toId = (raw: string): number | undefined => (raw === '' ? undefined : Number(raw));
 
 function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
+  // What is typed is kept as text so the field can be emptied (a number input bound to Number('') shows a stuck 0).
+  const [maxCharsDraft, setMaxCharsDraft] = useState(String(props.maxStateChars));
+  useEffect(() => {
+    // Follow the value when it changes from outside (the agent loads after the first render), never while typing.
+    if (Number(maxCharsDraft) !== props.maxStateChars && !(maxCharsDraft === '' && Number.isNaN(props.maxStateChars))) {
+      setMaxCharsDraft(Number.isNaN(props.maxStateChars) ? '' : String(props.maxStateChars));
+    }
+  }, [props.maxStateChars]);
   const maxCharsProblem = validateMaxStateChars(props.maxStateChars);
   const { appId, systemOneServices, aiServices } = props;
 
@@ -89,9 +98,12 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
 
           <div>
             <label htmlFor="so-max-chars" className="block text-sm font-medium text-gray-700 mb-2">Maximum text length (characters)</label>
-            <input id="so-max-chars" type="number" min={500} max={20000} step={100} className={inputClass} value={props.maxStateChars}
+            <input id="so-max-chars" type="number" min={500} max={20000} step={100} className={inputClass} value={maxCharsDraft}
                    aria-invalid={maxCharsProblem !== null} aria-describedby={maxCharsProblem ? 'so-max-chars-error' : 'so-max-chars-hint'}
-                   onChange={(e) => props.onMaxStateCharsChange(Number(e.target.value))} />
+                   onChange={(e) => {
+                     setMaxCharsDraft(e.target.value);
+                     props.onMaxStateCharsChange(e.target.value.trim() === '' ? Number.NaN : Number(e.target.value));
+                   }} />
             {maxCharsProblem
               ? <p id="so-max-chars-error" role="alert" className="mt-1 text-xs text-red-600">{maxCharsProblem}</p>
               : <p id="so-max-chars-hint" className="mt-1 text-xs text-gray-500">Between 500 and 20000. The model works best with shorter texts (around 6000).</p>}

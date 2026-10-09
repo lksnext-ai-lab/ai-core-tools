@@ -43,7 +43,7 @@ def _stamp(s):
 def test_schema_validation_and_whitespace_trimming():
     d = _data(name="  Nimble  ", endpoint=" http://so.test/ ", api_key=" tok\n", model=" nimble-latest ")
     assert (d.name, d.endpoint, d.api_key, d.model) == ("Nimble", "http://so.test/", "tok", "nimble-latest")
-    for bad in ({"max_concurrency": 0}, {"max_concurrency": 65}, {"name": ""}, {"name": "x" * 101}, {"model": ""}):
+    for bad in ({"max_concurrency": 0}, {"name": ""}, {"name": "x" * 101}, {"model": ""}):
         with pytest.raises(ValidationError):
             _data(**bad)
 
@@ -306,3 +306,8 @@ def test_the_list_says_how_many_agents_would_lose_their_service(repo):
     repo.get_agents_using.side_effect = lambda db, sid: [MagicMock(), MagicMock()] if sid == 1 else []
     items = SystemOneServiceService.get_system_one_services_by_app_id(MagicMock(), 10)
     assert [i.agent_count for i in items] == [2, 0]
+
+
+def test_there_is_no_upper_bound_on_the_concurrency_cap_only_a_positive_one():
+    # What a server tolerates is its own business (it reports it in /v1/limits): no invented ceiling here.
+    assert _data(max_concurrency=500).max_concurrency == 500

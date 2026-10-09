@@ -118,9 +118,10 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
                            onChange={(e) => update(index, { ...question, criteria: { true: question.criteria?.true ?? '', false: e.target.value } })} />
                   </div>
                   <div>
-                    <label htmlFor={`${id}-threshold`} className="mb-1 block text-xs font-medium text-gray-600">Threshold for "yes"</label>
+                    <label htmlFor={`${id}-threshold`} className="mb-1 block text-xs font-medium text-gray-600">Threshold for "yes" <span className="font-normal">(optional)</span></label>
                     <input id={`${id}-threshold`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="0.5"
                            value={question.threshold ?? ''} onChange={(e) => update(index, { ...question, threshold: parseNumber(e.target.value) })} />
+                    <p className="mt-1 text-xs text-gray-500">Empty = 0.5. "Yes" when the probability reaches it.</p>
                   </div>
                 </div>
               )}
@@ -177,7 +178,7 @@ function SystemOneQuestionsEditor({ questions, onChange, problems }: SystemOneQu
                   <label htmlFor={`${id}-minp`} className="mb-1 block text-xs font-medium text-gray-600">
                     Minimum probability <span className="font-normal">(optional)</span>
                   </label>
-                  <input id={`${id}-minp`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="0.5" value={question.min_probability ?? ''}
+                  <input id={`${id}-minp`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="no minimum" value={question.min_probability ?? ''}
                          onChange={(e) => update(index, { ...question, min_probability: parseNumber(e.target.value) })} />
                   <p className="mt-1 text-xs text-gray-500">Below it the decision is empty (undetermined). The probabilities are always returned.</p>
                 </div>
