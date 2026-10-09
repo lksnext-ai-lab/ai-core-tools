@@ -23,7 +23,6 @@ def test_valid_questions_parse_with_defaults():
     {**NOUL, "key": "Has Space"}, {**NOUL, "key": ""}, {**NOUL, "key": "x" * 41},
     {**NOUL, "instructions": "  "}, {**NOUL, "threshold": 1.5}, {**NOUL, "threshold": -0.1},
     {**CHOICE, "criteria": [{"key": "only"}]},
-    {**CHOICE, "criteria": [{"key": f"o{i}"} for i in range(27)]},
     {**CHOICE, "criteria": [{"key": "Billing"}, {"key": "billing"}]},      # case-insensitive dup
     {**CHOICE, "criteria": [{"key": " "}, {"key": "b"}]},
     {**SCORE, "criteria": ["only"]}, {**SCORE, "criteria": ["a", ""]},
@@ -44,27 +43,19 @@ def test_question_list_bounds_and_unique_keys():
     assert len(ql.validate_python([NOUL])) == 1
     with pytest.raises(ValidationError):
         ql.validate_python([])
-    with pytest.raises(ValidationError):
-        ql.validate_python([{**NOUL, "key": f"q{i}"} for i in range(65)])
     with pytest.raises(ValidationError) as e:
         ql.validate_python([NOUL, NOUL])
     assert "is_urgent" in str(e.value)
 
 
-# ------------------------------------------------ text fields are bounded (agent JSON is stored and sent)
+# ---------------------------------- the size of a question is judged against the prompt budget, not per field
 
-@pytest.mark.parametrize("question", [
-    {"key": "q", "type": "noul", "instructions": "x" * 4001},
-    {"key": "q", "type": "noul", "instructions": "ok", "criteria": {"true": "x" * 501, "false": "no"}},
-    {"key": "q", "type": "choice", "instructions": "ok", "criteria": [{"key": "a" * 101}, {"key": "b"}]},
-    {"key": "q", "type": "choice", "instructions": "ok", "criteria": [{"key": "a", "description": "x" * 501}, {"key": "b"}]},
-    {"key": "q", "type": "score", "instructions": "ok", "criteria": ["x" * 501, "high"]},
-])
-def test_overlong_question_text_is_rejected(question):
-    with pytest.raises(ValidationError):
-        TypeAdapter(Question).validate_python(question)
+def test_long_question_text_is_valid_shape_the_budget_rule_lives_with_the_agent():
+    assert q.validate_python({"key": "q", "type": "score", "instructions": "x" * 5000, "criteria": ["y" * 900, "z"]})
 
 
-def test_text_at_the_limit_is_accepted():
-    TypeAdapter(Question).validate_python({"key": "q", "type": "score", "instructions": "x" * 4000,
-                                           "criteria": ["x" * 500, "y"]})
+def test_the_upper_limits_belong_to_the_server_not_to_the_schema():
+    # Each server reports its own (/v1/limits): the form checks against them, the schema only checks shape.
+    assert len(ql.validate_python([{**NOUL, "key": f"q{i}"} for i in range(200)])) == 200
+    assert len(q.validate_python({**CHOICE, "criteria": [{"key": f"o{i}"} for i in range(40)]}).criteria) == 40
+    assert len(q.validate_python({**SCORE, "criteria": [f"l{i}" for i in range(40)]}).criteria) == 40

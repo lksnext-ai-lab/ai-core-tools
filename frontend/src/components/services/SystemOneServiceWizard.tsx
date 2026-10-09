@@ -7,6 +7,7 @@ import { FormField } from '../ui/FormField';
 import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 import { SYSTEM_ONE_DEFAULT_ENDPOINT } from '../../types/systemOne';
+import { checkConcurrency } from '../../utils/systemOneLimits';
 import type {
   SystemOneConnectionResult,
   SystemOneServiceDetail,
@@ -122,13 +123,20 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     parsedConcurrency !== null && (!Number.isInteger(parsedConcurrency) || parsedConcurrency < 1)
       ? 'Enter a whole number of at least 1, or leave it empty'
       : null;
+  // The latest answer from the server (the model step or an explicit test) tells how many requests it accepts.
+  const known = testResult?.status === 'success' ? testResult : listResult?.status === 'success' ? listResult : null;
+  const concurrencyCheck = checkConcurrency(
+    concurrencyError === null ? parsedConcurrency : null,
+    known?.limits?.max_concurrent_requests,
+    known?.suggested_max_concurrency,
+  );
   const suggestedName = ensureUnique(model.trim() ? `System One - ${model.trim()}` : 'System One', existingNames);
   const finalName = name.trim() || suggestedName;
 
   function nextDisabled(): boolean {
     if (stepId === 'connection') return !isUrl(endpoint);
     if (stepId === 'model') return listing || !model.trim();
-    return !finalName || concurrencyError !== null;
+    return !finalName || concurrencyError !== null || concurrencyCheck.error !== undefined;
   }
 
   function payload(): SystemOneServicePayload {
@@ -221,7 +229,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   type="text"
                   value={endpoint}
                   onChange={(e) => changeEndpoint(e.target.value)}
-                  placeholder="https://your-system-one-host"
+                  placeholder={SYSTEM_ONE_DEFAULT_ENDPOINT}
                   helpText="Private addresses are allowed: a self-hosted server normally lives on a private network."
                   required
                 />
@@ -304,7 +312,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   value={concurrency}
                   onChange={(e) => setConcurrency(e.target.value)}
                   placeholder="1"
-                  error={concurrencyError ?? undefined}
+                  error={concurrencyError ?? concurrencyCheck.error}
                   helpText={
                     (listResult?.suggested_max_concurrency != null
                       ? `Suggested for this server: ${listResult.suggested_max_concurrency}. `
@@ -312,6 +320,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                     'The server accepts a limited number of requests at once and answers 529 above it: use its limit divided by the number of backend processes.'
                   }
                 />
+                {concurrencyCheck.warning && <Alert type="warning" message={concurrencyCheck.warning} />}
                 <div aria-live="polite">
                   {testResult && (
                     <div className={`rounded-lg p-3 text-sm ${testResult.status === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>

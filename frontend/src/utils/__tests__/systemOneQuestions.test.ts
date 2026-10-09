@@ -5,6 +5,7 @@ import {
   toEditorQuestions,
   toPayload,
   checkQuestions,
+  reorder,
   validateMaxStateChars,
   validateQuestions,
   type EditorQuestion,
@@ -28,7 +29,7 @@ describe('validateQuestions', () => {
   it('needs at least one and at most 64 questions', () => {
     expect(validateQuestions([])).toEqual(['Add at least one question']);
     const many = Array.from({ length: 65 }, (_, i) => noul({ key: `q${i}` }));
-    expect(validateQuestions(many).some((p) => p.includes('at most 64'))).toBe(true);
+    expect(validateQuestions(many, { maxQuestions: 64, maxOptions: 26 }).some((p) => p.includes('at most 64'))).toBe(true);
   });
 
   it.each(['Has Space', '', 'x'.repeat(41), 'Upper', 'a-b'])('rejects the key %j', (key) => {
@@ -52,9 +53,9 @@ describe('validateQuestions', () => {
   });
 
   it('checks the number and names of choice options', () => {
-    expect(validateQuestions([choice({ criteria: [{ key: 'only' }] })]).some((p) => p.includes('between 2 and 26'))).toBe(true);
+    expect(validateQuestions([choice({ criteria: [{ key: 'only' }] })], { maxQuestions: 64, maxOptions: 26 }).some((p) => p.includes('between 2 and 26'))).toBe(true);
     const tooMany = Array.from({ length: 27 }, (_, i) => ({ key: `o${i}` }));
-    expect(validateQuestions([choice({ criteria: tooMany })]).some((p) => p.includes('between 2 and 26'))).toBe(true);
+    expect(validateQuestions([choice({ criteria: tooMany })], { maxQuestions: 64, maxOptions: 26 }).some((p) => p.includes('between 2 and 26'))).toBe(true);
     expect(validateQuestions([choice({ criteria: [{ key: 'Billing' }, { key: 'billing' }] })]).some((p) => p.includes('repeated'))).toBe(true);
     expect(validateQuestions([choice({ criteria: [{ key: ' ' }, { key: 'b' }] })]).some((p) => p.includes('needs a name'))).toBe(true);
   });
@@ -64,7 +65,7 @@ describe('validateQuestions', () => {
   });
 
   it('checks score levels and the minimum probability', () => {
-    expect(validateQuestions([score({ criteria: ['only'] })]).some((p) => p.includes('between 2 and 26'))).toBe(true);
+    expect(validateQuestions([score({ criteria: ['only'] })], { maxQuestions: 64, maxOptions: 26 }).some((p) => p.includes('between 2 and 26'))).toBe(true);
     expect(validateQuestions([score({ criteria: ['a', ' '] })]).some((p) => p.toLowerCase().includes('every level'))).toBe(true);
     expect(validateQuestions([score({ min_probability: 2 })]).some((p) => p.includes('minimum probability'))).toBe(true);
     expect(validateQuestions([choice({ min_probability: -0.1 })]).some((p) => p.includes('minimum probability'))).toBe(true);
@@ -129,22 +130,36 @@ describe('changeQuestionType / newQuestion / toEditorQuestions', () => {
   });
 });
 
-describe('text length limits (mirror the backend)', () => {
-  it('rejects instructions over 4000 characters, accepts exactly 4000', () => {
-    expect(validateQuestions([noul({ instructions: 'x'.repeat(4000) })])).toEqual([]);
-    expect(validateQuestions([noul({ instructions: 'x'.repeat(4001) })]).some((p) => p.includes('4000'))).toBe(true);
+describe('a question must leave room for the text in the prompt budget (mirrors the backend)', () => {
+  it('accepts a long question when the budget is big enough and refuses it when it is not', () => {
+    const long = noul({ instructions: 'x'.repeat(5600) });
+    expect(checkQuestions([long], { maxStateChars: 12000 }).byQuestion[0]).toEqual([]);
+    expect(checkQuestions([long], { maxStateChars: 6000 }).byQuestion[0].some((p) => p.includes('leave at least 500'))).toBe(true);
   });
 
-  it('rejects criteria text over 500 characters', () => {
-    const long = 'x'.repeat(501);
-    expect(validateQuestions([score({ criteria: [long, 'High'] } as Partial<EditorQuestion>)]).some((p) => p.includes('500'))).toBe(true);
-    expect(validateQuestions([noul({ criteria: { true: long, false: 'no' } } as Partial<EditorQuestion>)]).some((p) => p.includes('500'))).toBe(true);
-    expect(validateQuestions([choice({ criteria: [{ key: 'a', description: long }, { key: 'b', description: '' }] } as Partial<EditorQuestion>)]).some((p) => p.includes('500'))).toBe(true);
+  it('counts options and levels, not only the instructions', () => {
+    const q = score({ criteria: ['y'.repeat(3000), 'z'.repeat(3000)] } as Partial<EditorQuestion>);
+    expect(checkQuestions([q], { maxStateChars: 6000 }).byQuestion[0].length).toBeGreaterThan(0);
   });
 
-  it('rejects an option name over 100 characters', () => {
-    const q = choice({ criteria: [{ key: 'a'.repeat(101), description: '' }, { key: 'b', description: '' }] } as Partial<EditorQuestion>);
-    expect(validateQuestions([q]).some((p) => p.includes('100'))).toBe(true);
+  it('does not judge the size when the budget is unknown or being retyped', () => {
+    const long = noul({ instructions: 'x'.repeat(50000) });
+    expect(checkQuestions([long]).byQuestion[0]).toEqual([]);
+    expect(checkQuestions([long], { maxStateChars: Number.NaN }).byQuestion[0]).toEqual([]);
+  });
+});
+
+describe('reorder', () => {
+  it('moves an item to the position it is dropped on, either direction', () => {
+    expect(reorder(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd']);
+    expect(reorder(['a', 'b', 'c', 'd'], 3, 1)).toEqual(['a', 'd', 'b', 'c']);
+  });
+
+  it('returns the list untouched for a no-op or an invalid position', () => {
+    const list = ['a', 'b'];
+    expect(reorder(list, 1, 1)).toBe(list);
+    expect(reorder(list, 0, 5)).toBe(list);
+    expect(reorder(list, -1, 0)).toBe(list);
   });
 });
 
@@ -172,7 +187,7 @@ describe('checkQuestions (problems grouped by the question they belong to)', () 
   it('keeps list-wide problems out of the questions', () => {
     expect(checkQuestions([]).general).toEqual(['Add at least one question']);
     const many = Array.from({ length: 65 }, (_, i) => noul({ key: `q${i}` }));
-    expect(checkQuestions(many).general.some((p) => p.includes('at most 64'))).toBe(true);
+    expect(checkQuestions(many, { maxQuestions: 64, maxOptions: 26 }).general.some((p) => p.includes('at most 64'))).toBe(true);
   });
 
   it('starts each message with a capital so it reads on its own above the question', () => {

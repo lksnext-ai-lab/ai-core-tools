@@ -154,3 +154,24 @@ def test_the_type_of_an_existing_agent_cannot_be_changed(repos, existing_type, r
     repos.create.assert_not_called()
     repos.update.assert_not_called()
 
+
+
+def test_a_question_must_leave_room_for_the_text_in_the_prompt_budget(repos):
+    # The server counts the text PLUS one question per prompt; max_state_chars is that per-prompt budget.
+    long_question = {"key": "u", "type": "noul", "instructions": "x" * 5600}
+    with pytest.raises(ValueError, match="room for the text"):
+        run(repos, data(questions=[long_question], max_state_chars=6000))
+
+
+def test_the_same_question_is_fine_with_a_bigger_budget(repos):
+    long_question = {"key": "u", "type": "noul", "instructions": "x" * 5600}
+    assert run(repos, data(questions=[long_question], max_state_chars=12000)) == 42
+
+
+def test_raising_the_questions_on_update_is_checked_against_the_stored_budget(repos):
+    existing = SystemOneAgent(agent_id=42, app_id=1, name="Triage", system_one_service_id=7, max_state_chars=6000,
+                              questions=QUESTIONS, is_tool=True)
+    repos.by_type.return_value = existing
+    long_question = {"key": "u", "type": "noul", "instructions": "x" * 5600}
+    with pytest.raises(ValueError, match="room for the text"):
+        run(repos, data(agent_id=42, questions=[long_question], max_state_chars=None))
