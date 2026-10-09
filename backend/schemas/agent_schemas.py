@@ -466,6 +466,11 @@ class PublicAgentDetailSchema(BaseModel):
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
     text_system_prompt: Optional[str] = None
+    # System One-specific fields
+    system_one_service_id: Optional[int] = None
+    questions: Optional[List[Dict[str, Any]]] = None
+    summarization_service_id: Optional[int] = None
+    max_state_chars: Optional[int] = None
     # RAG retrieval config (step_008)
     rag_k: Optional[int] = None
     rag_search_type: Optional[str] = None
@@ -513,6 +518,28 @@ class CreateOCRAgentRequestSchema(BaseModel):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
+
+
+class CreateSystemOneAgentRequestSchema(BaseModel):
+    """Schema for creating a System One agent via public API (the System One service must already exist)"""
+    name: str
+    description: Optional[str] = ""
+    is_tool: bool = True
+    system_one_service_id: int
+    questions: QuestionList
+    summarization_service_id: Optional[int] = None
+    max_state_chars: int = Field(default=6000, ge=500, le=20000)
+
+
+class UpdateSystemOneAgentRequestSchema(BaseModel):
+    """Schema for updating a System One agent via public API: only the fields sent change"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_tool: Optional[bool] = None
+    system_one_service_id: Optional[int] = None
+    questions: Optional[QuestionList] = None
+    summarization_service_id: Optional[int] = None
+    max_state_chars: Optional[int] = Field(default=None, ge=500, le=20000)
 
 
 class UpdateAgentRequestSchema(RagConfigFieldsMixin):
