@@ -15,8 +15,11 @@ sys.path.append('/backend')  # Ruta absoluta en Docker
 
 from logging.config import fileConfig
 
+import re
+
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from sqlalchemy import text as sa_text
 
 from alembic import context
 
@@ -26,8 +29,16 @@ print("Importing Base from database")
 try:
     from db.database import Base
     # CRITICAL: Import models to register them with Base.metadata
-    # models/__init__.py imports all model classes  
+    # models/__init__.py imports all model classes
     import models
+    # a2a-sdk tables (a2a_tasks/a2a_task_events/a2a_task_versions) are NOT in Mattin's
+    # Base.metadata -- they are created only by the a2a001 migration, hard-coded to mirror
+    # services.a2a_server.sdk_models.get_sdk_metadata() exactly (AD-2). include_name() below
+    # must ignore them, or autogenerate would propose dropping them.
+    # Imported from table_names (not sdk_models) deliberately: table_names has no a2a-sdk
+    # import, so a broken/missing a2a-sdk install can never block an unrelated migration
+    # run just because env.py needed these three strings.
+    from services.a2a_server.table_names import TASKS_TABLE, EVENTS_TABLE, VERSIONS_TABLE
     print(f"Base and models imported. Tables registered: {len(Base.metadata.tables)}")
 except ImportError as e:
     print(f"Error al importar: {e}")
@@ -70,7 +81,17 @@ def include_name(name, type_, parent_names):
         'checkpoint_blobs',
         'checkpoint_writes',
         'checkpoint_migrations',
+        # a2a-sdk tables: created only by the a2a001 migration, never part of
+        # Mattin's Base.metadata (AD-2). `a2a_context_link` IS Mattin metadata
+        # and must NOT be added here.
+        TASKS_TABLE,
+        EVENTS_TABLE,
+        VERSIONS_TABLE,
     ]
+    if type_ == "index" and name is not None and (
+        name.startswith("ix_a2a_tasks") or name.startswith("idx_a2a_tasks") or name.startswith("ix_a2a_task_events")
+    ):
+        return False
     return name not in ignored_tables
 
 # other values from the config, defined by the needs of env.py,
@@ -118,8 +139,29 @@ def run_migrations_online():
     )
 
     with connectable.connect() as connection:
+        # Fail fast instead of queueing behind live reads/writes: a DDL statement
+        # (ALTER TABLE, ALTER TYPE, etc.) that cannot acquire its lock within this
+        # window raises immediately rather than blocking the connection -- and, by
+        # extension, every other query waiting behind it -- indefinitely.
+        # ALEMBIC_LOCK_TIMEOUT overrides the default for a one-off slow migration.
+        lock_timeout = os.getenv('ALEMBIC_LOCK_TIMEOUT', '5s')
+        if not re.fullmatch(r'[0-9]+(ms|s|min|h|d)?', lock_timeout):
+            raise ValueError(
+                f"ALEMBIC_LOCK_TIMEOUT={lock_timeout!r} is not a valid Postgres interval "
+                "(e.g. '5s', '500ms', '2min')"
+            )
+        # SET SESSION (not just SET, which is transaction-scoped by default under
+        # psycopg2's non-autocommit connections) so the timeout survives whatever
+        # transaction boundaries the migrations below open/close (e.g.
+        # `op.get_context().autocommit_block()` for `ALTER TYPE ... ADD VALUE`).
+        # The explicit commit() closes out this statement's own implicit
+        # transaction so Alembic's `context.begin_transaction()` right below starts
+        # from a clean slate -- leaving the connection mid-transaction here breaks
+        # migrations that rely on `autocommit_block()`.
+        connection.execute(sa_text(f"SET SESSION lock_timeout = '{lock_timeout}'"))
+        connection.commit()
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
             include_name=include_name
         )

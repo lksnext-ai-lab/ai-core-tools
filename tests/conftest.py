@@ -148,7 +148,25 @@ def test_engine():
         )
 
     Base.metadata.create_all(bind=engine)
+
+    # a2a-sdk tables (a2a_tasks/a2a_task_events/a2a_task_versions) are NOT part of
+    # Mattin's Base.metadata (AD-2) -- the a2a001 Alembic migration creates them for
+    # real, but this fixture builds the schema via create_all, not Alembic, so they
+    # need their own create_all against the registry that is the schema source of
+    # truth. get_sdk_metadata() also guarantees the three model classes have been
+    # declared (they are memoized, so this is safe to call once per session).
+    # The Mattin-owned ix_a2a_tasks_last_updated index (not part of the SDK mixins;
+    # see a2a001's upgrade()) is declared ON the registry's `a2a_tasks` model itself
+    # (sdk_models.get_sdk_models()), so create_all below creates it too -- no
+    # second, ad-hoc declaration here.
+    from services.a2a_server.sdk_models import get_sdk_metadata
+
+    sdk_metadata = get_sdk_metadata()
+    sdk_metadata.create_all(bind=engine)
+
     yield engine
+
+    sdk_metadata.drop_all(bind=engine)
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
 

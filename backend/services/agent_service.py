@@ -5,6 +5,9 @@ from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
+from repositories.app_repository import AppRepository
+from services.a2a_server.lifecycle_service import schedule_owner_purge
+from utils import a2a_config
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,6 +19,31 @@ def _typed_attr(obj, name: str, expected_type, default=None):
     if value is None:
         return default
     return value if isinstance(value, expected_type) else default
+
+
+def _build_a2a_urls(app_slug: Optional[str], agent_id: int) -> tuple[Optional[str], Optional[str]]:
+    """Return (card_url, rpc_url) for the agent, or (None, None) if the app has no slug.
+
+    Uses the no-request public base URL fallback (FR-11): the ``A2A_PUBLIC_BASE_URL``
+    env var, else ``FRONTEND_URL``. The internal agent API has no inbound A2A request
+    to fall back to, unlike the A2A router itself.
+
+    ``app_slug``/``agent_id`` are validated with ``isinstance`` (not just truthiness)
+    so a non-string/non-int value — e.g. a ``MagicMock`` attribute in a unit test
+    that doesn't stub the App lookup — is treated as "no slug" instead of being
+    passed into ``urllib.parse.quote``, which only accepts str/bytes.
+    """
+    if not isinstance(app_slug, str) or not app_slug:
+        return None, None
+    if not isinstance(agent_id, int) or not agent_id:
+        return None, None
+    base = a2a_config.public_base_url()
+    if not base:
+        return None, None
+    return (
+        a2a_config.agent_card_url(base, app_slug, agent_id),
+        a2a_config.agent_rpc_url(base, app_slug, agent_id),
+    )
 
 
 def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
@@ -69,8 +97,9 @@ class AgentService:
                     if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
                     else None
                 ),
+                a2a_enabled=bool(_typed_attr(agent, 'a2a_enabled', bool, False)),
             ))
-        
+
         return result
 
     def get_agents(self, db: Session, app_id: int) -> List[Agent]:
@@ -115,7 +144,18 @@ class AgentService:
             agent, "media_chunk_max_duration", int, 120
         )
         media_chunk_overlap = _typed_attr(agent, "media_chunk_overlap", int, 5)
-        
+
+        a2a_card_url: Optional[str] = None
+        a2a_rpc_url: Optional[str] = None
+        if agent_id != 0:
+            # Slug-only projection (AppRepository.get_slug_by_id): building the A2A
+            # URLs needs nothing else from App, so avoid fetching the full row.
+            app_slug = AppRepository(db).get_slug_by_id(app_id)
+            a2a_card_url, a2a_rpc_url = _build_a2a_urls(
+                app_slug if isinstance(app_slug, str) else None,
+                _typed_attr(agent, 'agent_id', int),
+            )
+
         return AgentDetailSchema(
             agent_id=agent.agent_id,
             name=agent.name or "",
@@ -179,6 +219,15 @@ class AgentService:
             rag_score_threshold=getattr(agent, 'rag_score_threshold', None) if isinstance(getattr(agent, 'rag_score_threshold', None), (float, int, type(None))) else None,
             rag_max_retrieval_calls=getattr(agent, 'rag_max_retrieval_calls', None) if isinstance(getattr(agent, 'rag_max_retrieval_calls', None), (int, type(None))) else None,
             rag_fixed_filters=getattr(agent, 'rag_fixed_filters', None) if isinstance(getattr(agent, 'rag_fixed_filters', None), (list, type(None))) else None,
+            # A2A (Agent2Agent protocol) configuration (step_009, FR-3)
+            a2a_enabled=bool(_typed_attr(agent, 'a2a_enabled', bool, False)),
+            a2a_card_visibility=_typed_attr(agent, 'a2a_card_visibility', str, 'public') or 'public',
+            a2a_name_override=_typed_attr(agent, 'a2a_name_override', str),
+            a2a_description_override=_typed_attr(agent, 'a2a_description_override', str),
+            a2a_skill_tags=_typed_attr(agent, 'a2a_skill_tags', list, []) or [],
+            a2a_examples=_typed_attr(agent, 'a2a_examples', list, []) or [],
+            a2a_card_url=a2a_card_url,
+            a2a_rpc_url=a2a_rpc_url,
         )
 
     def _get_agent_for_detail(self, db: Session, agent_id: int, app_id: Optional[int] = None):
@@ -526,6 +575,27 @@ class AgentService:
         if 'rag_fixed_filters' in data:
             agent.rag_fixed_filters = data['rag_fixed_filters']
 
+        # A2A (Agent2Agent protocol) configuration (step_009, FR-3). Values are already
+        # trimmed/capped/deduped by the schema validators; only persist here.
+        # Presence-gated (not "truthy"-gated): the schema already validated/normalized
+        # each value (including rejecting an explicit null a2a_card_visibility with a
+        # 422), so a key present in ``data`` is always safe to assign verbatim. A key
+        # the caller never sent is absent from ``data`` entirely (see the router), so
+        # it is never touched here — no `or <default>` fallback that could mask an
+        # explicit, intentional value.
+        if 'a2a_enabled' in data:
+            agent.a2a_enabled = bool(data['a2a_enabled'])
+        if 'a2a_card_visibility' in data:
+            agent.a2a_card_visibility = data['a2a_card_visibility']
+        if 'a2a_name_override' in data:
+            agent.a2a_name_override = data['a2a_name_override']
+        if 'a2a_description_override' in data:
+            agent.a2a_description_override = data['a2a_description_override']
+        if 'a2a_skill_tags' in data:
+            agent.a2a_skill_tags = data['a2a_skill_tags'] or []
+        if 'a2a_examples' in data:
+            agent.a2a_examples = data['a2a_examples'] or []
+
     def update_agent_tools(self, db: Session, agent_id: int, tool_ids: list, form_data: dict = None):
         """Update agent tools associations"""
         # Get the agent
@@ -666,6 +736,9 @@ class AgentService:
 
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
+        # AD-10: capture app_id before deletion (OCRAgent is STI, so get_by_id covers it).
+        agent = AgentRepository.get_by_id(db, agent_id)
+        a2a_app_id = agent.app_id if agent else None
         # Scheduled tasks own conversations, files, temp silos and DBOS schedules
         # that a plain FK cascade would leave behind.
         try:
@@ -705,7 +778,10 @@ class AgentService:
                 "Could not clear sandbox DB state for agent %s conversations: %s",
                 agent_id, exc
             )
-        return AgentRepository.delete_by_id(db, agent_id)
+        deleted = AgentRepository.delete_by_id(db, agent_id)
+        if deleted and a2a_app_id is not None:
+            schedule_owner_purge(a2a_app_id, agent_id=agent_id)  # FR-22: sync, never raises
+        return deleted
 
     def _remove_tool_references(self, db: Session, tool_id: int):
         """Remove all tool associations where this agent is used as a tool"""

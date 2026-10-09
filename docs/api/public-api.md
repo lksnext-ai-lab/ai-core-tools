@@ -476,6 +476,12 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
   -H "X-API-Key: mattin_..."
 ```
 
+## A2A (Agent2Agent protocol)
+
+Agents can also be opted into the **A2A** (Agent2Agent) protocol, a separate JSON-RPC surface at `/a2a/v1/apps/{app_slug}/agents/{agent_id}` that lets external A2A-compliant clients and agent frameworks call Mattin agents as peers. It reuses the same app API keys and `agent_rate_limit`/origin controls described above, but is opt-in per agent (disabled by default) and uses its own task lifecycle (send/stream/get/list/cancel/subscribe) instead of the `/chat` endpoint.
+
+See [A2A Integration](../ai/a2a-integration.md) for the full reference: URLs, visibility modes, auth semantics, supported methods, input/output handling, rate limits, env vars, and the deployment runbook.
+
 ## Error Responses
 
 **Standard error format**:
@@ -539,6 +545,7 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
 ## See Also
 
 - [Internal API](internal-api.md) — Frontend-backend API
+- [A2A Integration](../ai/a2a-integration.md) — Agent2Agent protocol JSON-RPC surface
 - [Backend Architecture](../architecture/backend.md) — Router implementation
 - [Agent System](../ai/agent-system.md) — Agent execution details
 - [Authentication Guide](../guides/authentication.md) — API key management

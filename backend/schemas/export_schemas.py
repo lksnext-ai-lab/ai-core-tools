@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from schemas.agent_schemas import A2AAgentFieldsMixin
+
 
 # ==================== METADATA ====================
 
@@ -154,8 +156,16 @@ class ExportAgentMCPRefSchema(BaseModel):
     mcp_name: str  # Reference by name
 
 
-class ExportAgentSchema(BaseModel):
-    """Agent export schema (configuration only, no conversations)"""
+class ExportAgentSchema(A2AAgentFieldsMixin):
+    """Agent export schema (configuration only, no conversations).
+
+    Inherits the A2A (Agent2Agent protocol) fields and their validators from
+    ``A2AAgentFieldsMixin`` (step_009) so export/import reuse the exact same caps
+    and normalization instead of duplicating them (FR-24, AC-39). Import always
+    forces ``a2a_enabled=False`` regardless of the exported value (enforced in
+    ``AgentImportService``, never here, so a round-trip export/import of the same
+    file still faithfully reports what was in the file).
+    """
 
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
