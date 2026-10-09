@@ -1,10 +1,8 @@
 """Teams Workflows webhook provider using Adaptive Cards and authenticated links."""
 
 import base64
-import ipaddress
 import json
 import logging
-import socket
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -14,6 +12,7 @@ from urllib.parse import urlparse
 import httpx
 
 from output.contracts import ProviderDescriptor
+from utils.ssrf_guard import is_blocked_ip, resolve_host
 
 
 MAX_CARD_BYTES = 24 * 1024
@@ -47,6 +46,18 @@ class DeliveryError(Exception):
         self.retry_after = retry_after
 
 
+def ensure_public_host(hostname: str, label: str) -> None:
+    """Reject hosts that do not resolve or resolve to a non-public address (SSRF guard)."""
+    try:
+        addresses = resolve_host(hostname)
+    except OSError as exc:
+        raise ValueError(f"{label} host could not be resolved") from exc
+    if not addresses:
+        raise ValueError(f"{label} host could not be resolved")
+    if any(is_blocked_ip(address) for address in addresses):
+        raise ValueError(f"{label} URL cannot target a private or reserved network")
+
+
 def validate_webhook_url(value: str) -> str:
     """Require HTTPS and a public DNS target; webhook URLs are bearer credentials."""
     raw = (value or "").strip()
@@ -57,16 +68,7 @@ def validate_webhook_url(value: str) -> str:
         raise ValueError("Teams Workflow URL must use a Microsoft Power Automate host")
     if parsed.port not in (None, 443):
         raise ValueError("Teams Workflow URL must use the standard HTTPS port")
-    try:
-        addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise ValueError("Teams Workflow host could not be resolved") from exc
-    if not addresses:
-        raise ValueError("Teams Workflow host could not be resolved")
-    for address in addresses:
-        ip = ipaddress.ip_address(address[4][0])
-        if not ip.is_global:
-            raise ValueError("Teams Workflow URL cannot target a private or reserved network")
+    ensure_public_host(parsed.hostname, "Teams Workflow")
     return raw
 
 

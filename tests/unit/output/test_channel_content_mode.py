@@ -21,7 +21,7 @@ def db(monkeypatch):
         ScheduledTask, ScheduledTaskRun, OutputDestination, ScheduledTaskOutputBinding,
         OutputDelivery, OutputDeliveryAttempt,
     )])
-    monkeypatch.setattr(teams_workflow.socket, "getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("20.1.2.3", 443))])
+    monkeypatch.setattr(teams_workflow, "resolve_host", lambda host: ["20.1.2.3"])
     with Session(engine) as session:
         yield session
     engine.dispose()

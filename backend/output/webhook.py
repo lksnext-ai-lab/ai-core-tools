@@ -4,17 +4,15 @@ import asyncio
 import base64
 import hashlib
 import hmac
-import ipaddress
 import os
 import time
-import socket
 from typing import Any, AsyncIterator
 from urllib.parse import urlparse
 
 import httpx
 
 from output.contracts import ProviderDescriptor
-from output.teams_workflow import DeliveryError
+from output.teams_workflow import DeliveryError, ensure_public_host
 
 
 
@@ -26,15 +24,7 @@ def validate_webhook_url(value: str) -> str:
         raise ValueError("Webhook URL must be an HTTPS URL without user info or a fragment")
     if parsed.port not in (None, 443):
         raise ValueError("Webhook URL must use port 443")
-    try:
-        addresses = socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise ValueError("Webhook host could not be resolved") from exc
-    if not addresses:
-        raise ValueError("Webhook host could not be resolved")
-    for address in addresses:
-        if not ipaddress.ip_address(address[4][0]).is_global:
-            raise ValueError("Webhook URL cannot target a private or reserved network")
+    ensure_public_host(hostname, "Webhook")
     return raw
 
 

@@ -4,13 +4,13 @@ from output import teams_workflow as module
 
 
 def test_webhook_url_requires_https_and_public_host(monkeypatch):
-    monkeypatch.setattr(module.socket, "getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("20.1.2.3", 443))])
+    monkeypatch.setattr(module, "resolve_host", lambda host: ["20.1.2.3"])
     assert module.validate_webhook_url("https://prod.logic.azure.com/trigger?sig=secret") == "https://prod.logic.azure.com/trigger?sig=secret"
 
     with pytest.raises(ValueError, match="HTTPS"):
         module.validate_webhook_url("http://prod.logic.azure.com/trigger")
 
-    monkeypatch.setattr(module.socket, "getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("10.0.0.8", 443))])
+    monkeypatch.setattr(module, "resolve_host", lambda host: ["10.0.0.8"])
     with pytest.raises(ValueError, match="private or reserved"):
         module.validate_webhook_url("https://prod.logic.azure.com/trigger")
 
