@@ -120,9 +120,15 @@ using it, with memory on.
 | Chain building from DB rows (order, invalid config skipped, one per type) | `tests/integration/tools/test_agent_middleware_chain_integration.py` |
 | CRUD, config validation, tenant isolation, agent selection rules, cascades | `tests/integration/routers/internal/test_middlewares.py` |
 | Agent/app deletion, AI service in use, tool-agent rename, export/import | `tests/integration/routers/internal/test_middleware_relations.py` |
+| Approval endpoints (requester only, invalid decisions, expired) | `tests/integration/routers/test_approval_routers.py` |
+| Expiry sweeper (advisory lock, failures, stuck transitions) | `tests/unit/services/test_hitl_expiry_worker.py` |
 | Summarization defaults, chain of agents used as tools | `tests/unit/tools/test_middleware_factory.py` |
 | Approval ownership, action ids, decision validation, expiry status | `tests/unit/services/test_hitl_approval_service.py` |
 | Claim compare-and-set, one pending approval per conversation, cascade | `tests/integration/repositories/test_hitl_approval_repository.py` |
 | Streaming pause / resume / stale / non-interactive channel / busy conversation | `tests/unit/services/test_agent_streaming_service.py` |
 | Heartbeat, run timeout, cancellation of agent streams | `tests/unit/tools/test_stream_guard.py` |
 | Tool events for rejected / edited calls | `tests/unit/tools/test_streaming_utils.py` |
+
+CI runs the unit suite plus these integration files in the **Middleware Integration Tests** job
+(`.github/workflows/test.yml`, real PostgreSQL); its coverage (`coverage-middlewares.xml`) is sent
+to SonarCloud with the unit and A2A coverage.
