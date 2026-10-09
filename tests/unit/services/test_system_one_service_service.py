@@ -168,7 +168,8 @@ def test_delete_free_service_and_missing_service(repo):
 # ------------------------------------------------------- connection tests
 
 @pytest.mark.asyncio
-async def test_connection_with_config_maps_the_probe_result(repo):
+async def test_connection_with_config_maps_the_probe_result(repo, monkeypatch):
+    monkeypatch.setenv("UVICORN_WORKERS", "1")  # the suggestion depends on the host's worker count
     probe = AsyncMock(return_value={"ok": True, "message": "Connection successful",
                                     "models": ["nimble-latest"], "limits": {"max_concurrent_requests": 4}})
     with patch.object(module.system_one_client, "probe", probe):
@@ -238,3 +239,48 @@ async def test_saved_service_connection_test(repo):
     probe.assert_awaited_once_with("http://so.test", "secret-token-1234")
     repo.get_by_id_and_app_id.return_value = None
     assert await SystemOneServiceService.test_connection(MagicMock(), 10, 2) is None
+
+
+# ------------------------------------------ the stored token never follows a changed URL
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sent", ["", "****1234"])
+async def test_connection_does_not_send_the_stored_token_to_a_different_url(repo, sent):
+    repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key="stored-token")
+    probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": [], "limits": None})
+    with patch.object(module.system_one_client, "probe", probe):
+        await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "http://attacker.test", "api_key": sent}, service_id=1)
+    probe.assert_awaited_once_with("http://attacker.test", None)
+
+
+@pytest.mark.asyncio
+async def test_connection_still_uses_the_stored_token_for_the_same_url_spelled_differently(repo):
+    repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key="stored-token")
+    probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": [], "limits": None})
+    with patch.object(module.system_one_client, "probe", probe):
+        await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "HTTP://SO.test/", "api_key": ""}, service_id=1)
+    probe.assert_awaited_once_with("HTTP://SO.test/", "stored-token")
+
+
+def test_saving_a_new_url_without_retyping_the_token_is_refused(repo):
+    repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key="stored-token")
+    with pytest.raises(ValueError, match="token"):
+        SystemOneServiceService.create_or_update_system_one_service(
+            MagicMock(), 10, 1, _data(endpoint="http://other.test", api_key="****oken"))
+    repo.update.assert_not_called()
+
+
+def test_saving_a_new_url_with_a_retyped_or_cleared_token_is_allowed(repo):
+    for token in ("brand-new", ""):
+        repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key="stored-token")
+        SystemOneServiceService.create_or_update_system_one_service(
+            MagicMock(), 10, 1, _data(endpoint="http://other.test", api_key=token))
+        assert repo.update.call_args[0][1].api_key == (token or None)
+
+
+def test_saving_a_new_url_is_fine_when_there_is_no_stored_token(repo):
+    repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key=None)
+    SystemOneServiceService.create_or_update_system_one_service(
+        MagicMock(), 10, 1, _data(endpoint="http://other.test", api_key="****"))

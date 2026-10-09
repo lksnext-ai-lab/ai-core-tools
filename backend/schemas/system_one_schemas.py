@@ -4,7 +4,9 @@ from typing import Annotated, Dict, List, Literal, Optional, Union
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
 
 QuestionKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,40}$")]
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]       # instructions
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]  # criteria
+OptionKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 Prob = Annotated[float, Field(ge=0.0, le=1.0)]
 MAX_QUESTIONS, MIN_OPTIONS, MAX_OPTIONS = 64, 2, 26  # limits of the System One server
 
@@ -17,8 +19,8 @@ class _QuestionBase(BaseModel):
 
 class NoulCriteria(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    true: Text
-    false: Text
+    true: ShortText
+    false: ShortText
 
 
 class NoulQuestion(_QuestionBase):
@@ -29,8 +31,8 @@ class NoulQuestion(_QuestionBase):
 
 class ChoiceOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    key: Text
-    description: Optional[str] = None
+    key: OptionKey
+    description: Optional[Annotated[str, StringConstraints(max_length=500)]] = None
 
 
 class ChoiceQuestion(_QuestionBase):
@@ -52,7 +54,7 @@ class ChoiceQuestion(_QuestionBase):
 
 class ScoreQuestion(_QuestionBase):
     type: Literal["score"]
-    criteria: Annotated[List[Text], Field(min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)]
+    criteria: Annotated[List[ShortText], Field(min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)]
     min_probability: Optional[Prob] = None
 
 

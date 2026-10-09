@@ -28,7 +28,7 @@ Settings → System One Services → **Add System One Service**.
 |---|---|
 | Name | Free text. |
 | Server URL | `http://` or `https://`, e.g. `http://172.16.59.1:8100`. Private addresses are allowed on purpose: a self-hosted server normally lives on a private network. Only administrators can create or test services. |
-| Token | Optional Bearer token, if the server requires one. Stored masked; leave the masked value to keep it, empty it to remove it. |
+| Token | Optional Bearer token, if the server requires one. Stored masked; leave the masked value to keep it, empty it to remove it. The token belongs to the URL it was stored for: if you change the URL you must type it again (or clear it), and *Test connection* never sends the stored token to a different URL. |
 | Model | `nimble-latest` always uses the newest published model, which can change probabilities. **Test connection** lists the models the server offers so you can pin a specific version. If the test fails the field stays free text and you can still save. |
 | Maximum concurrent requests | Per **backend process**. |
 
@@ -36,7 +36,7 @@ Settings → System One Services → **Add System One Service**.
 
 ### Concurrency
 
-The server accepts a limited number of simultaneous requests (4 by default) and answers `529` with a `Retry-After` above it. The backend runs several processes (`UVICORN_WORKERS`), each with its own cap, so set the value to **the server limit divided by the number of backend processes** (at least 1). The client also retries `429`, `502`, `503` and `529` up to three times, honoring `Retry-After`.
+The server accepts a limited number of simultaneous requests (4 by default) and answers `529` with a `Retry-After` above it. The backend runs several processes (`UVICORN_WORKERS`), each with its own cap, so set the value to **the server limit divided by the number of backend processes** (at least 1). The client also retries `429`, `502`, `503` and `529` up to three times, honoring `Retry-After`. A changed value applies to new calls without a restart.
 
 ### Deleting a service
 
@@ -68,7 +68,7 @@ Practical rules:
 The server measures **8192 tokens per question prompt** (the text plus that one question) and was trained on prompts up to 2048 tokens. Each agent has a **maximum text length** in characters (default 6000, 500 to 20000) and an optional **summarization LLM** (one of the app's own AI services; platform-level ones are not offered, because they would run unmetered):
 
 - text fits → evaluated as is (`state_reduction: "none"`);
-- does not fit, summarization LLM set → summarized first (`"summarized"`); if the summary fails, is empty or still too long → truncated;
+- does not fit, summarization LLM set (an AI service of **this app**; platform-wide services are not offered, so a summary is never an unmetered call) → summarized first (`"summarized"`); if the summary fails, is empty or still too long → truncated;
 - does not fit, no LLM → truncated at a word boundary (`"truncated"`);
 - the server still rejects it as too long → shrunk proportionally and retried once.
 
@@ -119,7 +119,7 @@ The response is typed (see `/docs/public`): `answers` keyed by question key, eac
 
 Agents can be created and updated with `POST /public/v1/app/<app_id>/agents/system-one` and `PUT .../agents/system-one/<agent_id>` (a partial update changes only the fields sent). **Services are created in the UI**, like every other service type: the API creates agents that reference an existing one.
 
-Errors: `400` nothing to evaluate / image / unreadable attachment, `404` agent not found in the app, `422` the server rejected the request, `503` server unavailable or overloaded, `504` timeout.
+Errors: `400` nothing to evaluate / image / unreadable attachment, `404` agent not found in the app, `422` the server rejected the request (a generic message: the server's own text is logged for the administrator, not returned; the exception is "text too long"), `502` the server answered with an unexpected response or refused the service's token, `503` server unavailable or overloaded, `504` timeout. A call has one overall deadline of 120 s (waiting for a free slot, every attempt and the pauses between them).
 
 ---
 

@@ -49,3 +49,22 @@ def test_question_list_bounds_and_unique_keys():
     with pytest.raises(ValidationError) as e:
         ql.validate_python([NOUL, NOUL])
     assert "is_urgent" in str(e.value)
+
+
+# ------------------------------------------------ text fields are bounded (agent JSON is stored and sent)
+
+@pytest.mark.parametrize("question", [
+    {"key": "q", "type": "noul", "instructions": "x" * 4001},
+    {"key": "q", "type": "noul", "instructions": "ok", "criteria": {"true": "x" * 501, "false": "no"}},
+    {"key": "q", "type": "choice", "instructions": "ok", "criteria": [{"key": "a" * 101}, {"key": "b"}]},
+    {"key": "q", "type": "choice", "instructions": "ok", "criteria": [{"key": "a", "description": "x" * 501}, {"key": "b"}]},
+    {"key": "q", "type": "score", "instructions": "ok", "criteria": ["x" * 501, "high"]},
+])
+def test_overlong_question_text_is_rejected(question):
+    with pytest.raises(ValidationError):
+        TypeAdapter(Question).validate_python(question)
+
+
+def test_text_at_the_limit_is_accepted():
+    TypeAdapter(Question).validate_python({"key": "q", "type": "score", "instructions": "x" * 4000,
+                                           "criteria": ["x" * 500, "y"]})

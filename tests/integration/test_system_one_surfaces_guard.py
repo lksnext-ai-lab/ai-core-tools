@@ -60,3 +60,14 @@ def test_a_scheduled_task_cannot_target_a_system_one_agent(db, fake_app, fake_us
     with pytest.raises(ValueError, match="System One"):
         ScheduledTaskService(db).create(app_id=fake_app.app_id, created_by=fake_user.user_id, data={
             "name": "nightly", "agent_id": so_agent.agent_id, "cron_expression": "0 3 * * *"})
+
+
+# ------------------------------------------------ public generic update stays off System One agents
+
+def test_the_generic_public_update_refuses_a_system_one_agent(client, fake_app, so_agent, fake_api_key, db):
+    r = client.put(f"/public/v1/app/{fake_app.app_id}/agents/{so_agent.agent_id}",
+                   headers={"X-API-KEY": fake_api_key.key}, json={"name": "Renamed"})
+    assert r.status_code == 400
+    assert "system-one" in r.json()["detail"].lower()
+    db.refresh(so_agent)
+    assert so_agent.name == "Triage" and so_agent.is_tool is True

@@ -38,6 +38,11 @@ def _workers() -> int:
         return 1
 
 
+def _same_endpoint(a: Optional[str], b: Optional[str]) -> bool:
+    """Whether two base URLs name the same server (case and a trailing slash do not matter)."""
+    return (a or "").strip().rstrip("/").casefold() == (b or "").strip().rstrip("/").casefold()
+
+
 def _read_extra(raw: Optional[str]) -> Dict[str, Any]:
     try:
         data = json.loads(raw) if raw else {}
@@ -106,11 +111,15 @@ class SystemOneServiceService:
             if not service:
                 return None
 
+        previous_endpoint = service.endpoint
         service.name = data.name
         service.endpoint = endpoint
         service.description = data.model
         # "****abcd" is the masked echo of the stored token: never overwrite a real secret with it.
         token = data.api_key or ""
+        if is_masked_key(token) and service.api_key and not _same_endpoint(previous_endpoint, endpoint):
+            # The stored secret belongs to the server it was typed for: it must not follow the URL elsewhere.
+            raise ValueError("The URL changed: type the token again (or clear it) so it is not sent to a new server")
         if not is_masked_key(token):
             service.api_key = token or None
         concurrency = data.max_concurrency or system_one_client.default_max_concurrency(None, _workers())
@@ -195,7 +204,9 @@ class SystemOneServiceService:
         api_key = config.get("api_key") or ""
         if service_id is not None and (not api_key or is_masked_key(api_key) or api_key == PLACEHOLDER_API_KEY):
             stored = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
-            api_key = (stored.api_key if stored else None) or ""
+            # Only for the server the token was stored for: a changed URL gets no secret.
+            same = stored is not None and _same_endpoint(stored.endpoint, endpoint)
+            api_key = (stored.api_key if same else None) or ""
         try:
             result = await system_one_client.probe(endpoint, api_key or None)
         except ValueError as exc:

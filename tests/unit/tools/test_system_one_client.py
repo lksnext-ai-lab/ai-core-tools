@@ -349,3 +349,45 @@ def test_endpoint_is_hashable_and_hides_token_in_repr():
     ep = endpoint(api_key="super-secret")
     assert "super-secret" not in repr(ep)
     assert json.dumps(client.build_request_body("m", "s", [NOUL]))
+
+
+# ------------------------------------- one overall deadline, and no semaphores left behind
+
+async def test_the_whole_call_has_a_deadline_not_just_each_http_phase(monkeypatch):
+    monkeypatch.setattr(client, "_DEADLINE_S", 0.05)
+
+    async def slow(request):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json=ok_json(ALL))
+
+    with pytest.raises(SystemOneError) as e:
+        await client.evaluate(endpoint(service_id=71), "text", ALL, transport=httpx.MockTransport(slow))
+    assert e.value.kind == "timeout" and e.value.status is None
+
+
+async def test_waiting_for_a_slot_counts_against_the_deadline(monkeypatch):
+    monkeypatch.setattr(client, "_DEADLINE_S", 0.2)
+    release = asyncio.Event()
+
+    async def held(request):
+        await release.wait()
+        return httpx.Response(200, json=ok_json(ALL))
+
+    ep = endpoint(service_id=72, max_concurrency=1)
+    first = asyncio.create_task(client.evaluate(ep, "a", ALL, transport=httpx.MockTransport(held)))
+    await asyncio.sleep(0.02)  # the first call owns the only slot
+    monkeypatch.setattr(client, "_DEADLINE_S", 0.05)
+    with pytest.raises(SystemOneError) as e:
+        await client.evaluate(ep, "b", ALL, transport=httpx.MockTransport(held))
+    assert e.value.kind == "timeout"
+    release.set()
+    first.cancel()
+
+
+async def test_a_changed_cap_drops_the_previous_semaphore_of_that_service():
+    loop = asyncio.get_running_loop()
+    client._slot(endpoint(service_id=73, max_concurrency=2))
+    client._slot(endpoint(service_id=74, max_concurrency=2))
+    client._slot(endpoint(service_id=73, max_concurrency=5))
+    keys = set(client._slots_by_loop[loop])
+    assert (73, 5) in keys and (73, 2) not in keys and (74, 2) in keys

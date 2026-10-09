@@ -141,3 +141,14 @@ def test_a_platform_level_summarization_llm_is_rejected_but_the_apps_own_is_fine
     blank = client.get(agents(fake_app, "0"), headers=owner_headers).json()
     flags = {s["name"]: s["is_system"] for s in blank["ai_services"]}
     assert flags["Own LLM"] is False and flags["[System] Platform LLM"] is True
+
+
+def test_tool_links_are_not_kept_on_a_system_one_agent(client, fake_app, fake_agent, owner_headers, so_service, db):
+    # A System One agent has no LLM: links to tools would be stored and never used.
+    fake_agent.is_tool = True
+    db.flush()
+    created = create(client, fake_app, owner_headers, so_service.service_id, tool_ids=[fake_agent.agent_id])
+    assert created["tool_ids"] == []
+    updated = client.post(agents(fake_app, str(created["agent_id"])),
+                          json=payload(so_service.service_id, tool_ids=[fake_agent.agent_id]), headers=owner_headers).json()
+    assert updated["tool_ids"] == []
