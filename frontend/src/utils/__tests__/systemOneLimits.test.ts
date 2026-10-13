@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkConcurrency, questionLimits } from '../systemOneLimits';
+import { checkConcurrency, questionLimits, textLengthHint } from '../systemOneLimits';
 import { checkQuestions, type EditorQuestion } from '../systemOneQuestions';
 
 const noul = (key: string): EditorQuestion => ({ _id: key, key, type: 'noul', instructions: 'Is it urgent?' }) as EditorQuestion;
@@ -49,5 +49,20 @@ describe('checkConcurrency', () => {
     expect(checkConcurrency(null, 4, 2)).toEqual({});
     expect(checkConcurrency(500, null, null)).toEqual({});
     expect(checkConcurrency(500, undefined, undefined)).toEqual({});
+  });
+});
+
+describe('textLengthHint', () => {
+  it('is silent when the length fits what the server usually holds, or when nothing is known', () => {
+    expect(textLengthHint(6000, 8192)).toBeNull();
+    expect(textLengthHint(32768, 8192)).toBeNull();
+    expect(textLengthHint(50000, undefined)).toBeNull();
+    expect(textLengthHint(Number.NaN, 8192)).toBeNull();
+  });
+  it('says what the server accepts when the length goes beyond it', () => {
+    expect(textLengthHint(40000, 8192)).toMatch(/8,192|8\.192|8192/);
+  });
+  it('reads max_prompt_tokens from the limits', () => {
+    expect(questionLimits({ max_prompt_tokens: 8192 }).maxPromptTokens).toBe(8192);
   });
 });

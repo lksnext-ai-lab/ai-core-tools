@@ -165,13 +165,13 @@ describe('reorder', () => {
 });
 
 describe('validateMaxStateChars', () => {
-  it('accepts 500 to 20000 whole numbers', () => {
-    expect([500, 6000, 20000].map(validateMaxStateChars)).toEqual([null, null, null]);
+  it('accepts any whole number from 500 up: the server enforces its own budget', () => {
+    expect([500, 6000, 20000, 100000].map(validateMaxStateChars)).toEqual([null, null, null, null]);
   });
 
   it('rejects empty/zero, fractions and out-of-range values with a readable message', () => {
-    for (const bad of [Number.NaN, 0, 499, 20001, 600.5]) {
-      expect(validateMaxStateChars(bad)).toMatch(/500.*20000/);
+    for (const bad of [Number.NaN, 0, 499, 600.5]) {
+      expect(validateMaxStateChars(bad)).toMatch(/at least 500/);
     }
   });
 });

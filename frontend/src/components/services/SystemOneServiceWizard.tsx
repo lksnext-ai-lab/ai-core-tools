@@ -197,7 +197,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     setCurrentStep((s) => Math.max(s - 1, 0));
   }
 
-  const limits = limitsSummary(testResult?.limits ?? listResult?.limits ?? null);
+  // Limits are shown only for a result that succeeded: next to a failed test (token rejected, no connection) they would
+  // contradict it. Before any test, the ones the model step already read are fine.
+  const limits = limitsSummary(testResult ? (testResult.status === 'success' ? testResult.limits : null) : (listResult?.limits ?? null));
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit System One service' : 'Add System One service'} size="xlarge">
