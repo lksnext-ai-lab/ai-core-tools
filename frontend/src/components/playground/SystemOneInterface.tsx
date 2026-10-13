@@ -32,6 +32,8 @@ interface Evaluation {
 const TEXT_FILE_ACCEPT = '.pdf,.txt,.md,.csv,.json,.log,.xml,.html';
 const percent = (p: number) => `${Math.round(p * 100)}%`;
 
+const formatMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
+
 function isImage(file: File): boolean {
   return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i.test(file.name);
 }
@@ -111,9 +113,7 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
   const message = (
     <>
       The text was {summarized ? 'summarized' : 'truncated'} before evaluating ({formatCount(result.original_chars)} →{' '}
-      {formatCount(result.state_chars)} characters).
-      <br />
-      The decisions are based on {summarized ? 'its summary' : 'its first part'}.
+      {formatCount(result.state_chars)} characters). The decisions are based on {summarized ? 'its summary' : 'its first part'}.
     </>
   );
   // Without the text there is nothing to open (an older response): keep the plain notice.
@@ -271,6 +271,13 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
           <p className="mt-2 text-xs text-gray-500">
             Model {latest.result.model}
             {latest.result.usage && <> · {latest.result.usage.input_tokens} input tokens</>}
+            {latest.result.timings && (
+              <>
+                {' · '}
+                {latest.result.timings.summarization_ms != null && <>summarization {formatMs(latest.result.timings.summarization_ms)} + </>}
+                evaluation {formatMs(latest.result.timings.evaluation_ms)}
+              </>
+            )}
           </p>
         </section>
       )}

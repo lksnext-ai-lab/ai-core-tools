@@ -108,6 +108,12 @@ async def test_long_text_is_summarized_when_the_agent_has_a_summarizer(mocks):
     assert result.state_reduction == "summarized" and result.state_chars == len("short summary")
     assert result.original_chars == len(("word " * 5000).strip())
     assert mocks.evaluate.await_args.args[1] == "short summary"
+    assert result.timings.summarization_ms is not None and result.timings.evaluation_ms >= 0
+
+
+async def test_timings_have_no_summarization_phase_without_a_summarizer(mocks):
+    result = await run(snapshot(), "short text")
+    assert result.timings.summarization_ms is None
 
 
 async def test_long_text_is_truncated_without_a_summarizer(mocks):
