@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronRight, FileText, Gauge, Loader2, Play, X } from 'lucide-react';
 import { apiService } from '../../services/api';
-import { promptBudget, type EditorQuestion } from '../../utils/systemOneQuestions';
+import { formatCount, promptBudget, type EditorQuestion } from '../../utils/systemOneQuestions';
 import { categoryColor, scaleColor, yesNoColor } from '../../utils/systemOneColors';
 import type {
   SystemOneAnswer,
@@ -106,8 +106,8 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
   const summarized = result.state_reduction === 'summarized';
   const message = (
     <>
-      The text was {summarized ? 'summarized' : 'truncated'} before evaluating ({result.original_chars.toLocaleString()} →{' '}
-      {result.state_chars.toLocaleString()} characters).
+      The text was {summarized ? 'summarized' : 'truncated'} before evaluating ({formatCount(result.original_chars)} →{' '}
+      {formatCount(result.state_chars)} characters).
       <br />
       The decisions are based on {summarized ? 'its summary' : 'its first part'}.
     </>
