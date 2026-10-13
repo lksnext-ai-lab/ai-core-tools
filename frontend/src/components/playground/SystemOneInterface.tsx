@@ -157,7 +157,8 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
 
   const questionByKey = new Map(questions.map((q) => [q.key, q]));
   // Say what is happening while it runs: a long text goes through the agent's LLM first, which takes seconds.
-  const estimatedChars = text.trim().length + files.reduce((sum, f) => sum + f.size, 0);
+  // Images go to the model as they are: they are never summarized, so they do not count toward the text budget.
+  const estimatedChars = text.trim().length + files.filter((f) => !isImage(f)).reduce((sum, f) => sum + f.size, 0);
   const willSummarize = summarizes && estimatedChars > promptBudget(questions as EditorQuestion[], maxStateChars);
   const [slow, setSlow] = useState(false);
   useEffect(() => {
