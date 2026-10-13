@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock, Gauge } from 'lucide-react';
+import { agentRowStatus } from '../utils/systemOneStatus';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -411,12 +412,17 @@ function AgentsPage() {
           },
           {
             header: 'Status',
-            render: () => (
-              <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
-                {' '}Active
-              </span>
-            )
+            render: (agent) => {
+              const status = agentRowStatus(agent);
+              const inoperative = status.kind === 'inoperative';
+              return (
+                <span title={status.detail}
+                      className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${inoperative ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                  <span className={`w-2 h-2 rounded-full mr-2 ${inoperative ? 'bg-yellow-500' : 'bg-green-400'}`} />
+                  {' '}{status.label}
+                </span>
+              );
+            }
           },
           {
             header: 'Scheduling',
