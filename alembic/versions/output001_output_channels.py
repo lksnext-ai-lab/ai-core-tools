@@ -1,10 +1,14 @@
-"""Teams Workflow output destinations, task bindings, and durable delivery outbox."""
+"""Scheduled-task output channels: destinations, task bindings, delivery outbox and attachments.
+
+Revision ID: output001_output_channels
+Revises: a2a001_agent_server
+"""
 
 from alembic import op
 import sqlalchemy as sa
 
-revision = "periodic006"
-down_revision = "periodic005"
+revision = "output001_output_channels"
+down_revision = "a2a001_agent_server"
 branch_labels = None
 depends_on = None
 
@@ -19,8 +23,10 @@ def upgrade():
         sa.Column("app_id", sa.Integer(), sa.ForeignKey("App.app_id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("provider_key", sa.String(length=80), nullable=False, server_default="teams_workflow"),
+        sa.Column("content_mode", sa.String(length=30), nullable=False, server_default="result"),
         sa.Column("public_config", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column("webhook_url", sa.Text(), nullable=False),
+        sa.Column("credentials", sa.JSON(), nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_by", sa.Integer(), sa.ForeignKey("User.user_id", ondelete="SET NULL"), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
@@ -36,7 +42,6 @@ def upgrade():
         sa.Column("destination_id", sa.Integer(), sa.ForeignKey("output_destination.id", ondelete="CASCADE"), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("event_types", sa.JSON(), nullable=False, server_default='["succeeded"]'),
-        sa.Column("content_mode", sa.String(length=30), nullable=False, server_default="result"),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("scheduled_task_id", "destination_id", name="uq_task_output_destination"),
     )
@@ -52,6 +57,10 @@ def upgrade():
         sa.Column("event_type", sa.String(length=30), nullable=False, server_default="succeeded"),
         sa.Column("destination_snapshot", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column("payload", sa.JSON(), nullable=False, server_default="{}"),
+        sa.Column("request_body", sa.LargeBinary(), nullable=True),
+        sa.Column("request_body_path", sa.Text(), nullable=True),
+        sa.Column("request_body_size", sa.Integer(), nullable=True),
+        sa.Column("request_body_sha256", sa.String(length=64), nullable=True),
         sa.Column("status", sa.String(length=20), nullable=False, server_default="pending"),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("dispatch_generation", sa.Integer(), nullable=False, server_default="0"),
@@ -82,8 +91,25 @@ def upgrade():
     )
     op.create_index("ix_output_delivery_attempt_delivery_id", "output_delivery_attempt", ["delivery_id"])
 
+    op.create_table(
+        "output_artifact",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("run_id", sa.Integer(), sa.ForeignKey("scheduled_task_run.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("file_id", sa.String(length=255), nullable=False),
+        sa.Column("filename", sa.String(length=512), nullable=False),
+        sa.Column("content_type", sa.String(length=255), nullable=False),
+        sa.Column("size_bytes", sa.Integer(), nullable=False),
+        sa.Column("sha256", sa.String(length=64), nullable=False),
+        sa.Column("object_key", sa.Text(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.UniqueConstraint("run_id", "file_id", name="uq_output_artifact_run_file"),
+    )
+    op.create_index("ix_output_artifact_run_id", "output_artifact", ["run_id"])
+
 
 def downgrade():
+    op.drop_index("ix_output_artifact_run_id", table_name="output_artifact")
+    op.drop_table("output_artifact")
     op.drop_index("ix_output_delivery_attempt_delivery_id", table_name="output_delivery_attempt")
     op.drop_table("output_delivery_attempt")
     op.drop_index("ix_output_delivery_dispatch", table_name="output_delivery")
