@@ -241,3 +241,20 @@ describe('decimal input accepts a comma or a point', () => {
     expect(parseDecimal('abc')).toBeNaN();
   });
 });
+
+describe('decimals are shown with a point whatever the browser language', () => {
+  it('formatDecimal writes a point and leaves empty values empty', async () => {
+    const { formatDecimal } = await import('../systemOneQuestions');
+    expect(formatDecimal(0.5)).toBe('0.5');
+    expect(formatDecimal(0.75)).toBe('0.75');
+    expect(formatDecimal(0)).toBe('0');
+    expect(formatDecimal(undefined)).toBe('');
+    expect(formatDecimal(null)).toBe('');
+    expect(formatDecimal(Number.NaN)).toBe('');
+  });
+  it('formatCount groups thousands the English way (22,496), not by the browser language', async () => {
+    const { formatCount } = await import('../systemOneQuestions');
+    expect(formatCount(22496)).toBe('22,496');
+    expect(formatCount(950)).toBe('950');
+  });
+});

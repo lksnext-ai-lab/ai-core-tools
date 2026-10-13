@@ -59,5 +59,5 @@ export function textLengthHint(maxStateChars: number, maxPromptTokens: number | 
   if (!maxPromptTokens || !Number.isFinite(maxStateChars)) return null;
   const typical = maxPromptTokens * CHARS_PER_TOKEN;
   if (maxStateChars <= typical) return null;
-  return `This server accepts ${maxPromptTokens.toLocaleString()} tokens per prompt, about ${typical.toLocaleString()} characters of ordinary text: a longer text may be shortened by the server's limit.`;
+  return `This server accepts ${maxPromptTokens.toLocaleString('en-US')} tokens per prompt, about ${typical.toLocaleString('en-US')} characters of ordinary text: a longer text may be shortened by the server's limit.`;
 }

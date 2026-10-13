@@ -226,3 +226,13 @@ export function parseDecimal(raw: string): number | undefined {
   if (text === '') return undefined;
   return Number.parseFloat(text.replace(',', '.'));
 }
+
+/** A decimal as text with a point, whatever the browser language (a number input would show a comma in Spanish). */
+export function formatDecimal(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+}
+
+/** A count with English grouping (22,496): the interface is in English, and the browser language must not change it. */
+export function formatCount(value: number): string {
+  return value.toLocaleString('en-US');
+}

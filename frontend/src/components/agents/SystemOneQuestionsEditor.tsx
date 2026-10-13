@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { randomId } from '../../utils/randomId';
+import DecimalInput from './DecimalInput';
 import {
   MIN_OPTIONS,
   changeQuestionType,
-  parseDecimal,
   newQuestion,
   reorder,
   type EditorQuestion,
@@ -178,8 +178,8 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                   </div>
                   <div>
                     <label htmlFor={`${id}-threshold`} className="mb-1 block text-xs font-medium text-gray-600">Threshold for "yes" <span className="font-normal">(optional)</span></label>
-                    <input id={`${id}-threshold`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="0.5"
-                           value={question.threshold ?? ''} onChange={(e) => update(index, { ...question, threshold: parseDecimal(e.target.value) })} />
+                    <DecimalInput id={`${id}-threshold`} className={inputClass} placeholder="0.5"
+                                  value={question.threshold} onChange={(value) => update(index, { ...question, threshold: value })} />
                     <p className="mt-1 text-xs text-gray-500">Empty = 0.5. "Yes" when the probability reaches it.</p>
                   </div>
                   <p className="text-xs text-gray-500 md:col-span-3">
@@ -253,8 +253,8 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                   <label htmlFor={`${id}-minp`} className="mb-1 block text-xs font-medium text-gray-600">
                     Minimum probability <span className="font-normal">(optional)</span>
                   </label>
-                  <input id={`${id}-minp`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="no minimum" value={question.min_probability ?? ''}
-                         onChange={(e) => update(index, { ...question, min_probability: parseDecimal(e.target.value) })} />
+                  <DecimalInput id={`${id}-minp`} className={inputClass} placeholder="no minimum"
+                                value={question.min_probability} onChange={(value) => update(index, { ...question, min_probability: value })} />
                   <p className="mt-1 text-xs text-gray-500">Below this probability the decision is left empty. Empty field = always decide.</p>
                 </div>
               )}
