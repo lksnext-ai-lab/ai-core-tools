@@ -16,6 +16,8 @@ from utils.clock import utcnow_naive
 from .factories import HMAC_SECRET, TEAMS_URL, WEBHOOK_URL, make_destination, make_run, make_task
 
 HMAC_CONFIG = {"auth_mode": "hmac_sha256"}
+FUTURE_EXPIRY = datetime(2999, 1, 1)
+PAST_EXPIRY = datetime(2020, 1, 1)
 HMAC_CREDENTIALS = {"signing_secret": HMAC_SECRET}
 
 
@@ -290,6 +292,47 @@ class TestSpool:
         assert not orphan.exists()
         assert referenced_artifact.exists() and referenced_body.exists() and recent.exists()
         assert not (outbox.spool / "artifacts/2").exists()
+
+
+class TestSpoolRelease:
+    def _spooled(self, outbox, db, delivery_id, run_id, *, status, expires_at=None):
+        key = f"deliveries/{delivery_id}.multipart"
+        path = outbox.spool / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"body")
+        old = datetime.now().timestamp() - 7200
+        os.utime(path, (old, old))
+        db.add(OutputDelivery(id=delivery_id, run_id=run_id, binding_id=delivery_id, status=status,
+                              expires_at=expires_at, request_body=b"{}", request_body_path=key))
+        return path
+
+    @pytest.mark.parametrize("status, expires_at, released", [
+        ("pending", None, False),
+        ("failed", FUTURE_EXPIRY, False),
+        ("unknown", FUTURE_EXPIRY, False),
+        ("accepted", FUTURE_EXPIRY, True),
+        ("cancelled", FUTURE_EXPIRY, True),
+        ("failed", PAST_EXPIRY, True),
+    ])
+    def test_bodies_are_kept_only_while_a_send_can_still_use_them(self, outbox, status, expires_at, released):
+        with outbox() as db:
+            path = self._spooled(outbox, db, 1, 1, status=status, expires_at=expires_at)
+            artifact = _artifact(outbox.spool)
+            old = datetime.now().timestamp() - 7200
+            os.utime(outbox.spool / artifact["object_key"], (old, old))
+            db.add(OutputArtifact(run_id=1, **{key: artifact[key] for key in (
+                "file_id", "filename", "content_type", "size_bytes", "sha256", "object_key")}))
+            db.commit()
+
+            service.cleanup_spool_files(db)
+
+            db.expire_all()
+            delivery = db.get(OutputDelivery, 1)
+            assert (delivery.request_body is None) is released
+            assert (delivery.request_body_path is None) is released
+            assert (db.query(OutputArtifact).count() == 0) is released
+        assert path.exists() is not released
+        assert (outbox.spool / artifact["object_key"]).exists() is not released
 
 
 class TestMultipart:
@@ -642,6 +685,8 @@ class TestProcessDelivery:
         assert options["body"] is None and options["body_path"] == str(body)
         delivery, _ = self._load(outbox, delivery_id)
         assert delivery.status == "accepted"
+        # An accepted delivery is never sent again: its prepared body is released.
+        assert delivery.request_body is None and delivery.request_body_path is None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("content, size, digest, message", [

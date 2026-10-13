@@ -22,6 +22,8 @@ _EDITABLE_FIELDS = {
     "status", "max_runs_retained", "marketplace_visibility",
 }
 _FINISHED_STATUSES = ("succeeded", "failed")
+# Covers an hourly task for the full ~7-day notification lifetime.
+_MAX_NOTIFICATION_PROTECTED_RUNS = 200
 # Background history deletions started from sync code (agent/app deletion).
 _pending_cleanups: set = set()
 
@@ -230,14 +232,18 @@ class ScheduledTaskService:
             .all()
         )
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        protected = {
-            run.id for run in finished
+        # Delivered notifications link to the run and its files, so runs beyond
+        # the limit stay while a delivery is live, but only the newest
+        # _MAX_NOTIFICATION_PROTECTED_RUNS of them: a high-frequency task must
+        # not keep a week of runs and their files.
+        protected = set([
+            run.id for run in finished[keep:]
             if any(
                 delivery.status != "cancelled"
                 and (not getattr(delivery, "expires_at", None) or delivery.expires_at.replace(tzinfo=None) > now)
                 for delivery in getattr(run, "output_deliveries", [])
             )
-        }
+        ][:_MAX_NOTIFICATION_PROTECTED_RUNS])
         stale = [run for run in finished[keep:] if run.id not in protected]
         if not stale:
             return 0

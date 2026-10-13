@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,9 @@ from output.teams_workflow import DeliveryError, build_adaptive_card
 from utils.clock import utcnow_naive
 
 MAX_ATTEMPTS = 5
+# A prepared request body is still needed while a send can happen: automatically
+# (pending/retry_wait/sending) or by manual retry (failed/unknown) until expiry.
+BODY_NEEDED_STATUSES = ("pending", "retry_wait", "sending", "failed", "unknown")
 LEASE_SECONDS = 120
 # A send must finish (or give up) this long before its lease expires, so the
 # worker always records the outcome before the reconciler treats the attempt
@@ -323,8 +327,25 @@ def _safe_spool_file(relative_key: str) -> Path:
     return candidate
 
 
+def _release_unneeded_bodies(db: Session) -> None:
+    """Drop prepared bodies and artifact rows that no future send can use."""
+    now = utcnow_naive()
+    needed = and_(
+        OutputDelivery.status.in_(BODY_NEEDED_STATUSES),
+        or_(OutputDelivery.expires_at.is_(None), OutputDelivery.expires_at > now),
+    )
+    db.query(OutputDelivery).filter(
+        ~needed,
+        or_(OutputDelivery.request_body.is_not(None), OutputDelivery.request_body_path.is_not(None)),
+    ).update({OutputDelivery.request_body: None, OutputDelivery.request_body_path: None}, synchronize_session=False)
+    still_needed = db.query(OutputDelivery.id).filter(OutputDelivery.run_id == OutputArtifact.run_id, needed).exists()
+    db.query(OutputArtifact).filter(~still_needed).delete(synchronize_session=False)
+    db.commit()
+
+
 def cleanup_spool_files(db: Session, *, grace_seconds: int = 3600, max_files: int = 1000) -> int:
-    """Remove old spool objects after their database references have expired."""
+    """Release unneeded prepared bodies, then remove unreferenced spool objects."""
+    _release_unneeded_bodies(db)
     root = _spool_root()
     referenced = {
         key for (key,) in db.query(OutputArtifact.object_key).all() if key
@@ -862,6 +883,9 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
             attempt.status = "accepted"
             delivery.status = "accepted"
             delivery.receipt = receipt
+            # Never sent again: the spool file goes with the next cleanup sweep.
+            delivery.request_body = None
+            delivery.request_body_path = None
         elif kind == "unknown":
             attempt.status = delivery.status = "unknown"
             attempt.error_summary = delivery.error_summary = message

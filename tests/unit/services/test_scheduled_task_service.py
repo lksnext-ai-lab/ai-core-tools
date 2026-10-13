@@ -268,3 +268,19 @@ async def test_prune_releases_notification_run_after_expiry():
 
     assert await ScheduledTaskService(db).prune_runs(_task(max_runs_retained=1)) == 1
     db.delete.assert_called_once_with(expired)
+
+
+@pytest.mark.asyncio
+async def test_prune_caps_how_many_runs_notification_links_keep():
+    from services import scheduled_task_service
+
+    live = [SimpleNamespace(status="accepted", expires_at=datetime.utcnow() + timedelta(hours=1))]
+    newest = SimpleNamespace(id=10_000, conversation_id=None, output_files=[], output_deliveries=[])
+    linked = [
+        SimpleNamespace(id=index, conversation_id=None, output_files=[], output_deliveries=live)
+        for index in range(scheduled_task_service._MAX_NOTIFICATION_PROTECTED_RUNS + 2, 0, -1)
+    ]
+    db = _prune_db([newest, *linked], {})
+
+    assert await ScheduledTaskService(db).prune_runs(_task(max_runs_retained=1)) == 2
+    assert [call.args[0].id for call in db.delete.call_args_list] == [2, 1]
