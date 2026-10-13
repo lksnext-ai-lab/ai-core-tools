@@ -166,7 +166,7 @@ def test_full_roundtrip_creates_the_service_and_links_the_agent(db, fake_user, w
     assert any("System One service 'Nimble'" in w and "token" in w.lower() for w in summary.total_warnings)
     svc = db.query(SystemOneService).filter(SystemOneService.app_id == summary.app_id).one()
     assert svc.api_key is None and svc.endpoint == "http://172.16.59.1:8100" and svc.description == "nimble-latest"
-    assert json.loads(svc.extra_config) == {"max_concurrency": 2}
+    assert json.loads(svc.extra_config) == {"max_concurrency": 2, "provider": "system_one"}
     agent = db.query(SystemOneAgent).filter(SystemOneAgent.app_id == summary.app_id).one()
     assert agent.system_one_service_id == svc.service_id and agent.questions == _normalized(world.agent.questions)
 
