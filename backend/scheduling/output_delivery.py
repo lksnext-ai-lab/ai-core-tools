@@ -1,5 +1,6 @@
 """DBOS queue workers for the scheduled-task output outbox."""
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -65,7 +66,10 @@ async def _reconcile_pending_deliveries() -> int:
                 with db.begin_nested():
                     from output.service import prepare_run_attachments
                     artifacts, attachment_error = await prepare_run_attachments(db, task=run.task, run=run)
-                    create_deliveries_for_run(
+                    # Multipart bodies are written off the event loop; the session
+                    # is only used by the thread while this coroutine awaits it.
+                    await asyncio.to_thread(
+                        create_deliveries_for_run,
                         db, task=run.task, run=run,
                         artifacts=artifacts, attachment_error=attachment_error,
                     )
@@ -132,7 +136,7 @@ async def _reconcile_pending_deliveries() -> int:
             enqueue.append((item.id, item.dispatch_generation))
         db.commit()
         try:
-            cleanup_spool_files(db)
+            await asyncio.to_thread(cleanup_spool_files, db)
         except Exception:
             logger.exception("Could not clean expired webhook spool files")
     except Exception:

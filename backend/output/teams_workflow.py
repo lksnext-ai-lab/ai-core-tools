@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import httpx
 
 from output.contracts import ProviderDescriptor
-from utils.ssrf_guard import is_blocked_ip, resolve_host
+from utils.ssrf_guard import FetchUnresolvableError, SsrfBlockedError, is_blocked_ip, pinned_async_transport, resolve_host
 
 
 MAX_CARD_BYTES = 24 * 1024
@@ -58,8 +58,8 @@ def ensure_public_host(hostname: str, label: str) -> None:
         raise ValueError(f"{label} URL cannot target a private or reserved network")
 
 
-def validate_webhook_url(value: str) -> str:
-    """Require HTTPS and a public DNS target; webhook URLs are bearer credentials."""
+def check_webhook_url(value: str) -> str:
+    """Structural checks only (no DNS): HTTPS, a Microsoft Power Automate host, port 443."""
     raw = (value or "").strip()
     parsed = urlparse(raw)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
@@ -68,7 +68,17 @@ def validate_webhook_url(value: str) -> str:
         raise ValueError("Teams Workflow URL must use a Microsoft Power Automate host")
     if parsed.port not in (None, 443):
         raise ValueError("Teams Workflow URL must use the standard HTTPS port")
-    ensure_public_host(parsed.hostname, "Teams Workflow")
+    return raw
+
+
+def validate_webhook_url(value: str) -> str:
+    """Require HTTPS and a public DNS target; webhook URLs are bearer credentials.
+
+    Resolves DNS synchronously: call it from sync code only. Sends re-check the
+    resolved address through the pinned transport instead.
+    """
+    raw = check_webhook_url(value)
+    ensure_public_host(urlparse(raw).hostname, "Teams Workflow")
     return raw
 
 
@@ -173,9 +183,16 @@ def parse_retry_after(value: str | None) -> float | None:
 async def post_card(webhook_url: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Send one card; do not follow redirects because the URL contains a credential."""
     try:
-        validate_webhook_url(webhook_url)
-        async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0), follow_redirects=False, trust_env=False) as client:
+        check_webhook_url(webhook_url)
+        async with httpx.AsyncClient(
+            transport=pinned_async_transport(), timeout=httpx.Timeout(20.0, connect=5.0),
+            follow_redirects=False, trust_env=False,
+        ) as client:
             response = await client.post(webhook_url, json=payload)
+    except FetchUnresolvableError as exc:
+        raise DeliveryError("Teams Workflow host could not be resolved", kind="retryable") from exc
+    except SsrfBlockedError as exc:
+        raise DeliveryError("Teams Workflow URL cannot target a private or reserved network", kind="permanent") from exc
     except httpx.ConnectTimeout as exc:
         raise DeliveryError("Timed out connecting to Teams Workflow", kind="retryable") from exc
     except httpx.ConnectError as exc:

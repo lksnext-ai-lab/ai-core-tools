@@ -67,8 +67,10 @@ async def list_output_destinations(app_id: int, role: CanView, db: DB):
     return [destination_dto(item) for item in items]
 
 
+# Destination validation resolves DNS synchronously: these handlers are plain
+# functions so FastAPI runs them in its threadpool, off the event loop.
 @router.post("/output-destinations", response_model=OutputDestinationResponseSchema, status_code=status.HTTP_201_CREATED)
-async def create_output_destination(app_id: int, payload: OutputDestinationCreateSchema, auth: Auth, role: CanEdit, db: DB):
+def create_output_destination(app_id: int, payload: OutputDestinationCreateSchema, auth: Auth, role: CanEdit, db: DB):
     try:
         item = create_destination(db, app_id=app_id, created_by=int(auth.identity.id), name=payload.name,
                                   webhook_url=payload.webhook_url, provider_key=payload.provider_key,
@@ -80,7 +82,7 @@ async def create_output_destination(app_id: int, payload: OutputDestinationCreat
 
 
 @router.patch("/output-destinations/{destination_id}", response_model=OutputDestinationResponseSchema)
-async def patch_output_destination(app_id: int, destination_id: int, payload: OutputDestinationUpdateSchema, role: CanEdit, db: DB):
+def patch_output_destination(app_id: int, destination_id: int, payload: OutputDestinationUpdateSchema, role: CanEdit, db: DB):
     try:
         item = get_destination(db, app_id=app_id, destination_id=destination_id)
         return destination_dto(update_destination(db, item, payload.model_dump(exclude_unset=True)))

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from db import database
 from models.output_delivery import OutputArtifact, OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
@@ -17,7 +18,8 @@ from services import file_cleanup_worker
 
 @pytest.fixture
 def sessions(monkeypatch, tmp_path):
-    engine = create_engine("sqlite://")
+    # One shared connection: outbox creation runs in a worker thread.
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     # Foreign keys to unrelated application entities are not enforced by SQLite.
     # Use the production outbox models and real SQL transactions/savepoints.
     tables = [model.__table__ for model in (

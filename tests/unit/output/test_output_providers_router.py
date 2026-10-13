@@ -45,6 +45,12 @@ async def _status_of(coroutine):
     return caught.value.status_code
 
 
+def _sync_status_of(handler, **kwargs):
+    with pytest.raises(HTTPException) as caught:
+        handler(**kwargs)
+    return caught.value.status_code
+
+
 @pytest.mark.asyncio
 async def test_lists_registered_providers():
     providers = await router.list_output_providers(app_id=1, role=None)
@@ -54,7 +60,7 @@ async def test_lists_registered_providers():
 
 @pytest.mark.asyncio
 async def test_destination_crud(db):
-    created = await router.create_output_destination(
+    created = router.create_output_destination(
         app_id=1, payload=OutputDestinationCreateSchema(name="Ops", webhook_url=TEAMS_URL), auth=AUTH, role=None, db=db,
     )
     assert created["name"] == "Ops" and db.get(OutputDestination, created["id"]).created_by == 7
@@ -62,7 +68,7 @@ async def test_destination_crud(db):
     listed = await router.list_output_destinations(app_id=1, role=None, db=db)
     assert [item["name"] for item in listed] == ["Alerts", "Ops"]
 
-    patched = await router.patch_output_destination(
+    patched = router.patch_output_destination(
         app_id=1, destination_id=created["id"], payload=OutputDestinationUpdateSchema(name="Ops 2"), role=None, db=db,
     )
     assert patched["name"] == "Ops 2"
@@ -74,11 +80,11 @@ async def test_destination_crud(db):
 @pytest.mark.asyncio
 async def test_destination_errors_map_to_http_statuses(db):
     duplicate = OutputDestinationCreateSchema(name="Alerts", webhook_url=TEAMS_URL)
-    assert await _status_of(router.create_output_destination(app_id=1, payload=duplicate, auth=AUTH, role=None, db=db)) == 400
+    assert _sync_status_of(router.create_output_destination, app_id=1, payload=duplicate, auth=AUTH, role=None, db=db) == 400
     rename = OutputDestinationUpdateSchema(name="New")
-    assert await _status_of(router.patch_output_destination(app_id=1, destination_id=99, payload=rename, role=None, db=db)) == 404
+    assert _sync_status_of(router.patch_output_destination, app_id=1, destination_id=99, payload=rename, role=None, db=db) == 404
     other_workflow = OutputDestinationUpdateSchema(content_mode="link_only", webhook_url="https://prod.logic.azure.com/other")
-    assert await _status_of(router.patch_output_destination(app_id=1, destination_id=1, payload=other_workflow, role=None, db=db)) == 400
+    assert _sync_status_of(router.patch_output_destination, app_id=1, destination_id=1, payload=other_workflow, role=None, db=db) == 400
     assert await _status_of(router.delete_output_destination(app_id=2, destination_id=1, role=None, db=db)) == 404
 
 

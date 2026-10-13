@@ -1,5 +1,6 @@
 """The only backend module that imports DBOS directly."""
 
+import asyncio
 import json
 import os
 from datetime import datetime, timezone
@@ -157,7 +158,10 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
             run.outputs_reconciled = True
             from output.service import create_deliveries_for_run, prepare_run_attachments
             artifacts, attachment_error = await prepare_run_attachments(db, task=task, run=run)
-            deliveries = create_deliveries_for_run(
+            # Webhook multipart bodies are written and fsynced here: keep that off
+            # the event loop. The session is only used by the thread while we await.
+            deliveries = await asyncio.to_thread(
+                create_deliveries_for_run,
                 db, task=task, run=run, artifacts=artifacts, attachment_error=attachment_error,
             )
             db.commit()

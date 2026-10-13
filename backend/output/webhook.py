@@ -13,10 +13,11 @@ import httpx
 
 from output.contracts import ProviderDescriptor
 from output.teams_workflow import DeliveryError, ensure_public_host
+from utils.ssrf_guard import FetchUnresolvableError, SsrfBlockedError, pinned_async_transport
 
 
-
-def validate_webhook_url(value: str) -> str:
+def check_webhook_url(value: str) -> str:
+    """Structural checks only (no DNS): HTTPS on port 443, no user info or fragment."""
     raw = (value or "").strip()
     parsed = urlparse(raw)
     hostname = (parsed.hostname or "").lower().rstrip(".")
@@ -24,7 +25,17 @@ def validate_webhook_url(value: str) -> str:
         raise ValueError("Webhook URL must be an HTTPS URL without user info or a fragment")
     if parsed.port not in (None, 443):
         raise ValueError("Webhook URL must use port 443")
-    ensure_public_host(hostname, "Webhook")
+    return raw
+
+
+def validate_webhook_url(value: str) -> str:
+    """Structural checks plus a public DNS target.
+
+    Resolves DNS synchronously: call it from sync code only. Sends re-check the
+    resolved address through the pinned transport instead.
+    """
+    raw = check_webhook_url(value)
+    ensure_public_host(urlparse(raw).hostname.lower().rstrip("."), "Webhook")
     return raw
 
 
@@ -116,7 +127,7 @@ class WebhookProvider:
         body_path: str | None = None,
     ) -> dict[str, Any]:
         try:
-            validate_webhook_url(secret)
+            check_webhook_url(secret)
             validated = validate_webhook_config(config, credentials)
         except ValueError as exc:
             raise DeliveryError(str(exc), kind="permanent") from exc
@@ -145,6 +156,7 @@ class WebhookProvider:
             content: bytes | AsyncIterator[bytes] = body if body is not None else _file_stream(body_path or "")
             timeout = 120.0 if content_type.startswith("multipart/form-data") else 20.0
             async with httpx.AsyncClient(
+                transport=pinned_async_transport(),
                 timeout=httpx.Timeout(timeout, connect=5.0),
                 follow_redirects=False,
                 trust_env=False,
@@ -152,6 +164,10 @@ class WebhookProvider:
                 async with client.stream("POST", secret, headers=headers, content=content) as response:
                     status_code = response.status_code
                     retry_after_value = response.headers.get("Retry-After")
+        except FetchUnresolvableError as exc:
+            raise DeliveryError("Webhook host could not be resolved", kind="retryable") from exc
+        except SsrfBlockedError as exc:
+            raise DeliveryError("Webhook URL cannot target a private or reserved network", kind="permanent") from exc
         except httpx.ConnectTimeout as exc:
             raise DeliveryError("Could not connect to webhook before sending", kind="retryable") from exc
         except httpx.ConnectError as exc:

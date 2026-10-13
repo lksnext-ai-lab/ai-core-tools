@@ -47,6 +47,7 @@ import urllib.parse
 from typing import Iterable, Literal
 
 import httpcore
+import httpx
 
 from utils.logger import get_logger
 
@@ -420,6 +421,26 @@ class _PinnedBackend(httpcore.AsyncNetworkBackend):
 
     async def sleep(self, seconds: float) -> None:
         await self._inner.sleep(seconds)
+
+
+def pinned_async_transport(*, connect_timeout_s: float = _MAX_CONNECT_TIMEOUT_S) -> httpx.AsyncHTTPTransport:
+    """An ``httpx`` transport whose connections go through :class:`_PinnedBackend`.
+
+    For callers that need ``httpx`` (streamed request bodies, its exception
+    types) rather than :func:`fetch_bytes`. DNS is resolved asynchronously and
+    every connection is pinned to the validated IPs. A blocked or unresolvable
+    host raises :class:`SsrfBlockedError` / :class:`FetchUnresolvableError`
+    from the request, before any byte is sent.
+    """
+    transport = httpx.AsyncHTTPTransport(verify=_SSL_CONTEXT)
+    # httpx exposes no network-backend option: replace the pool it built with
+    # an equivalent one using the pinned backend. A contract test guards this
+    # private attribute across httpx upgrades.
+    transport._pool = httpcore.AsyncConnectionPool(
+        ssl_context=_SSL_CONTEXT,
+        network_backend=_PinnedBackend(connect_timeout_s=connect_timeout_s),
+    )
+    return transport
 
 
 def _content_type_without_params(headers: list[tuple[bytes, bytes]]) -> str | None:

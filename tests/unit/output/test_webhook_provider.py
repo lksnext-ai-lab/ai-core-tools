@@ -222,3 +222,56 @@ def test_provider_validates_destination_and_secret():
     url, config = provider.validate_destination(WEBHOOK_URL, {"auth_mode": "none"}, None)
     assert url == WEBHOOK_URL and config["auth_mode"] == "none"
     assert provider.descriptor.supports_binary_attachments is True
+
+
+class TestSendResolvesThroughThePinnedTransport:
+    @pytest.mark.asyncio
+    async def test_send_does_no_blocking_dns_lookup(self, monkeypatch):
+        def blocking_lookup(host):
+            raise AssertionError("send() must not resolve DNS synchronously")
+
+        monkeypatch.setattr(teams_workflow, "resolve_host", blocking_lookup)
+        monkeypatch.setattr(module.httpx, "AsyncClient", FakeHttp())
+        assert (await _send())["http_status"] == 202
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("resolved, kind, message", [
+        (["10.0.0.5"], "permanent", "private or reserved"),
+        (None, "retryable", "could not be resolved"),
+    ])
+    async def test_rebinding_and_unresolvable_hosts_are_refused_before_sending(self, monkeypatch, resolved, kind, message):
+        import socket
+
+        from utils import ssrf_guard
+
+        async def resolve(host):
+            if resolved is None:
+                raise socket.gaierror("nxdomain")
+            return resolved
+
+        monkeypatch.setattr(ssrf_guard, "resolve_host_async", resolve)
+        with pytest.raises(DeliveryError, match=message) as caught:
+            await _send(config={"auth_mode": "none"}, credentials={})
+        assert caught.value.kind == kind
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resolved, kind", [(["127.0.0.1"], "permanent"), (None, "retryable")])
+async def test_teams_post_card_is_pinned_too(monkeypatch, resolved, kind):
+    import socket
+
+    from utils import ssrf_guard
+
+    async def resolve(host):
+        if resolved is None:
+            raise socket.gaierror("nxdomain")
+        return resolved
+
+    def blocking_lookup(host):
+        raise AssertionError("post_card() must not resolve DNS synchronously")
+
+    monkeypatch.setattr(ssrf_guard, "resolve_host_async", resolve)
+    monkeypatch.setattr(teams_workflow, "resolve_host", blocking_lookup)
+    with pytest.raises(DeliveryError) as caught:
+        await teams_workflow.post_card("https://prod.logic.azure.com/workflows/x", {"type": "message"})
+    assert caught.value.kind == kind
