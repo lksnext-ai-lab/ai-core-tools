@@ -34,6 +34,8 @@ def repos(mocker):
         created["agent"] = agent
         return agent
 
+    # Upstream's ownership check of referenced ids is not what these tests are about (they send stray ids on purpose).
+    mocker.patch.object(AgentService, "_validate_referenced_resource_ids")
     r = SimpleNamespace(
         created=created,
         by_type=mocker.patch("services.agent_service.AgentRepository.get_agent_by_id_and_type", return_value=None),
@@ -116,6 +118,7 @@ def test_max_state_chars_out_of_range_is_rejected(repos, value):
 def test_partial_update_keeps_what_is_not_sent(repos):
     existing = SystemOneAgent()
     existing.agent_id = 5
+    existing.app_id = 1
     existing.type = "system_one_agent"
     existing.system_one_service_id = 7
     existing.questions = QUESTIONS
@@ -133,6 +136,7 @@ def test_partial_update_keeps_what_is_not_sent(repos):
 def test_update_can_replace_the_questions(repos):
     existing = SystemOneAgent()
     existing.agent_id = 5
+    existing.app_id = 1
     existing.type = "system_one_agent"
     existing.system_one_service_id = 7
     existing.questions = QUESTIONS
@@ -147,6 +151,7 @@ def test_update_can_replace_the_questions(repos):
 def test_the_type_of_an_existing_agent_cannot_be_changed(repos, existing_type, requested):
     existing = Agent()
     existing.agent_id = 5
+    existing.app_id = 1
     existing.type = existing_type
     repos.get_by_id.return_value = existing
     with pytest.raises(ValueError, match="type"):
