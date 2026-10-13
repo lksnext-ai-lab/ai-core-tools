@@ -99,6 +99,30 @@ async def test_unreadable_attachments_are_named_in_a_400_instead_of_being_droppe
     server[0].assert_not_awaited()
 
 
+def _scanned_pdf() -> bytes:
+    """A PDF whose page has no text layer (what a scan is): readable, but nothing to extract."""
+    from pypdf import PdfWriter
+    out = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=300, height=300)
+    writer.write(out)
+    return out.getvalue()
+
+
+async def test_an_attachment_with_no_extractable_text_is_named_even_when_other_text_exists(db, agent, server):
+    # Otherwise "see attached" would be evaluated alone and the user would believe the scan had been read.
+    with pytest.raises(HTTPException) as e:
+        await run(db, agent, "see attached", [upload("scan.pdf", _scanned_pdf(), "application/pdf")])
+    assert e.value.status_code == 400 and "scan.pdf" in e.value.detail and "extractable" in e.value.detail.lower()
+    server[0].assert_not_awaited()
+
+
+async def test_a_readable_attachment_next_to_one_without_text_still_names_only_the_empty_one(db, agent, server):
+    with pytest.raises(HTTPException) as e:
+        await run(db, agent, "x", [upload("ok.txt", b"fine"), upload("scan.pdf", _scanned_pdf(), "application/pdf")])
+    assert "scan.pdf" in e.value.detail and "ok.txt" not in e.value.detail
+
+
 async def test_empty_text_and_no_files_is_a_400(db, agent, server):
     with pytest.raises(HTTPException) as e:
         await run(db, agent, "  ")
