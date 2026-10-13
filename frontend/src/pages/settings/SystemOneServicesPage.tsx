@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pencil, ClipboardCopy, Trash2, Loader2, Plug, Gauge, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -11,6 +11,7 @@ import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { apiService } from '../../services/api';
 import { AppRole } from '../../types/roles';
+import { STATUS_LABEL, serviceStatus, type ServiceStatusKind, type StatusCheck } from '../../utils/systemOneStatus';
 import type {
   SystemOneConnectionResult,
   SystemOneService,
@@ -23,6 +24,25 @@ const noCache = {
   set: () => undefined,
   invalidate: () => undefined,
 };
+
+const BADGE_STYLE: Record<ServiceStatusKind, string> = {
+  checking: 'bg-gray-100 text-gray-600',
+  connected: 'bg-green-100 text-green-800',
+  unverifiable: 'bg-gray-100 text-gray-700',
+  token_rejected: 'bg-red-100 text-red-800',
+  unreachable: 'bg-red-100 text-red-800',
+  model_required: 'bg-yellow-100 text-yellow-800',
+};
+
+function StatusBadge({ kind, detail }: { readonly kind: ServiceStatusKind; readonly detail?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${BADGE_STYLE[kind]}`} title={detail}>
+      {kind === 'checking' && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />}
+      {(kind === 'model_required' || kind === 'token_rejected' || kind === 'unreachable') && <AlertTriangle className="w-3 h-3" aria-hidden="true" />}
+      {STATUS_LABEL[kind]}
+    </span>
+  );
+}
 
 function SystemOneServicesPage() {
   const { appId } = useParams();
@@ -51,6 +71,20 @@ function SystemOneServicesPage() {
         : null;
     },
   });
+
+  // Live status of each service (a read-only check against its server), filled in as the answers arrive.
+  const [checks, setChecks] = useState<Record<number, StatusCheck>>({});
+  useEffect(() => {
+    if (!appId) return;
+    let cancelled = false;
+    for (const service of services) {
+      if (!service.model) continue;
+      apiService.getSystemOneServiceStatus(Number.parseInt(appId), service.service_id)
+        .then((check) => { if (!cancelled) setChecks((current) => ({ ...current, [service.service_id]: check })); })
+        .catch(() => { if (!cancelled) setChecks((current) => ({ ...current, [service.service_id]: { status: 'error', message: 'Cannot reach the server', verifiable: true } })); });
+    }
+    return () => { cancelled = true; };
+  }, [appId, services]);
 
   const [testResult, setTestResult] = useState<SystemOneConnectionResult | null>(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -122,15 +156,10 @@ function SystemOneServicesPage() {
           },
           { header: 'Server', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.endpoint}</span> },
           { header: 'Model', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.model}</span> },
-          { header: 'Status', render: (service: SystemOneService) => (
-            service.model ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Ready</span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> Model required
-              </span>
-            )
-          )},
+          { header: 'Status', render: (service: SystemOneService) => {
+            const kind = serviceStatus(service.model, checks[service.service_id]);
+            return <StatusBadge kind={kind} detail={checks[service.service_id]?.message} />;
+          }},
           { header: 'Agents', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.agent_count ?? 0}</span> },
           { header: 'Concurrency', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.max_concurrency}</span> },
           { header: 'Created', render: (service: SystemOneService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },

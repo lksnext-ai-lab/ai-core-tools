@@ -16,7 +16,6 @@ const QUESTION_MARGIN_CHARS = 50;
 const MIN_TEXT_ROOM_CHARS = 500;
 export const MAX_KEY_LENGTH = 40;
 export const MIN_STATE_CHARS = 500;
-export const MAX_STATE_CHARS = 20000;
 const KEY_PATTERN = /^[a-z0-9_]{1,40}$/;
 
 /** A question as edited in the form: `_id` is a client-only React key, never sent. */
@@ -41,8 +40,8 @@ function isProbability(value: unknown): boolean {
 
 /** Message for an invalid "maximum text length", or null when it is fine. */
 export function validateMaxStateChars(value: number): string | null {
-  if (!Number.isInteger(value) || value < MIN_STATE_CHARS || value > MAX_STATE_CHARS) {
-    return `The maximum text length must be a whole number between ${MIN_STATE_CHARS} and ${MAX_STATE_CHARS}`;
+  if (!Number.isInteger(value) || value < MIN_STATE_CHARS) {
+    return `The maximum text length must be a whole number of at least ${MIN_STATE_CHARS}`;
   }
   return null;
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Gauge } from 'lucide-react';
 import SystemOneQuestionsEditor from './SystemOneQuestionsEditor';
 import { validateMaxStateChars, type EditorQuestion } from '../../utils/systemOneQuestions';
-import type { QuestionLimits } from '../../utils/systemOneLimits';
+import { textLengthHint, type QuestionLimits } from '../../utils/systemOneLimits';
 
 const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200';
@@ -44,6 +44,7 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
     }
   }, [props.maxStateChars]);
   const maxCharsProblem = validateMaxStateChars(props.maxStateChars);
+  const lengthHint = textLengthHint(props.maxStateChars, props.limits.maxPromptTokens);
   const { appId, systemOneServices, aiServices } = props;
 
   return (
@@ -101,7 +102,7 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
 
           <div>
             <label htmlFor="so-max-chars" className="block text-sm font-medium text-gray-700 mb-2">Maximum text length (characters)</label>
-            <input id="so-max-chars" type="number" min={500} max={20000} step={100} className={inputClass} value={maxCharsDraft}
+            <input id="so-max-chars" type="number" min={500} step={100} className={inputClass} value={maxCharsDraft}
                    aria-invalid={maxCharsProblem !== null} aria-describedby={maxCharsProblem ? 'so-max-chars-error' : 'so-max-chars-hint'}
                    onChange={(e) => {
                      setMaxCharsDraft(e.target.value);
@@ -109,7 +110,8 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
                    }} />
             {maxCharsProblem
               ? <p id="so-max-chars-error" role="alert" className="mt-1 text-xs text-red-600">{maxCharsProblem}</p>
-              : <p id="so-max-chars-hint" className="mt-1 text-xs text-gray-500">Between 500 and 20000. The model works best with shorter texts (around 6000).</p>}
+              : <p id="so-max-chars-hint" className="mt-1 text-xs text-gray-500">At least 500. The model works best with shorter texts (around 6000).</p>}
+            {!maxCharsProblem && lengthHint && <p className="mt-1 text-xs text-amber-700">{lengthHint}</p>}
           </div>
 
           <div className="flex items-start">

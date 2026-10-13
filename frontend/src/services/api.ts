@@ -1494,6 +1494,11 @@ class ApiService {
     });
   }
 
+  /** Reachability and token check for the services table (read-only, never spends tokens). */
+  async getSystemOneServiceStatus(appId: number, serviceId: number): Promise<{ status: 'success' | 'error'; message: string; verifiable: boolean }> {
+    return this.request(`/internal/apps/${appId}/system-one-services/${serviceId}/status`);
+  }
+
   async testSystemOneServiceWithConfig(
     appId: number,
     data: Pick<SystemOneServicePayload, 'endpoint' | 'api_key'> & { model?: string },
