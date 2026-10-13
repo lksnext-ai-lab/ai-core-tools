@@ -24,7 +24,9 @@ def outbox(monkeypatch, tmp_path):
         ScheduledTask, ScheduledTaskRun, OutputDestination, ScheduledTaskOutputBinding,
         OutputDelivery, OutputDeliveryAttempt, OutputArtifact,
     )])
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    # autoflush=False matches production's SessionLocal: pending rows are not
+    # visible to queries until an explicit flush.
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     monkeypatch.setattr(database, "SessionLocal", factory)
     spool = tmp_path / "output-deliveries"
     spool.mkdir()

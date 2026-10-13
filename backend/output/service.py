@@ -558,6 +558,10 @@ def create_deliveries_for_run(
         OutputDestination.app_id == task.app_id,
     ).all()
     deliveries = []
+    # One artifact row per run file, shared by every attachment destination.
+    # Tracked in memory: with autoflush off, rows added for an earlier binding
+    # are not visible to a query yet.
+    known_artifacts: set[str] | None = None
     for binding in bindings:
         existing = db.query(OutputDelivery).filter_by(
             run_id=run.id, binding_id=binding.id, event_type="succeeded",
@@ -623,9 +627,11 @@ def create_deliveries_for_run(
         db.add(delivery)
         deliveries.append(delivery)
         if destination.provider_key == "webhook" and config.get("include_attachments") and not attachment_error:
-            known = {row.file_id for row in db.query(OutputArtifact).filter_by(run_id=run.id).all()}
+            if known_artifacts is None:
+                known_artifacts = {row.file_id for row in db.query(OutputArtifact).filter_by(run_id=run.id).all()}
             for artifact in destination_artifacts:
-                if artifact["file_id"] not in known:
+                if artifact["file_id"] not in known_artifacts:
+                    known_artifacts.add(artifact["file_id"])
                     db.add(OutputArtifact(
                         run_id=run.id,
                         file_id=artifact["file_id"], filename=artifact["filename"],

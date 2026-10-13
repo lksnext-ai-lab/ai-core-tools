@@ -455,6 +455,22 @@ class TestCreateDeliveries:
         assert (outbox.spool / delivery.request_body_path).stat().st_size == delivery.request_body_size
         assert delivery.payload["attachments"][0]["sha256"] == artifact["sha256"]
 
+    def test_several_attachment_webhooks_share_one_artifact_row_per_file(self, outbox):
+        artifact = _artifact(outbox.spool)
+        with outbox() as db:
+            task, run = make_task(), make_run()
+            destinations = [
+                make_destination(index, provider_key="webhook", config={"include_attachments": True, "auth_mode": "none"})
+                for index in (1, 2)
+            ]
+            db.add_all([task, run, *destinations])
+            for destination in destinations:
+                _bind(db, destination)
+            deliveries = service.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact])
+            db.commit()
+            assert [delivery.status for delivery in deliveries] == ["pending", "pending"]
+            assert db.query(OutputArtifact).count() == 1
+
     def test_attachment_error_fails_delivery_immediately(self, outbox):
         with outbox() as db:
             destination = make_destination(provider_key="webhook", config={"include_attachments": True})
