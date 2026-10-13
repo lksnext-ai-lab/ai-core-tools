@@ -510,3 +510,10 @@ def test_the_color_preference_is_ours_and_never_sent_to_the_server():
     scored = QA({"key": "anger", "type": "score", "instructions": "How angry?", "criteria": ["Calm", "Angry"], "color_start": "red"})
     body = client.build_request_body("m", "text", [scored])["questions"]["anger"]
     assert body == {"type": "score", "instructions": "How angry?", "criteria": ["Calm", "Angry"]}
+
+
+def test_an_option_color_is_ours_and_never_sent_to_the_server():
+    colored = QA({"key": "area", "type": "choice", "instructions": "Which?",
+                  "criteria": [{"key": "billing", "description": "Invoices", "color": "#2563eb"}, {"key": "tech", "color": "#9333ea"}]})
+    body = client.build_request_body("m", "text", [colored])["questions"]["area"]
+    assert body["criteria"] == {"billing": "Invoices", "tech": None}

@@ -74,3 +74,11 @@ def test_a_score_question_chooses_which_end_of_the_scale_is_green():
     assert q.validate_python({**SCORE, "color_start": "red"}).color_start == "red"
     with pytest.raises(ValidationError):
         q.validate_python({**SCORE, "color_start": "blue"})
+
+
+def test_a_choice_option_may_carry_a_playground_color():
+    with_color = q.validate_python({**CHOICE, "criteria": [{"key": "billing", "color": "#2563eb"}, {"key": "support"}]})
+    assert with_color.criteria[0].color == "#2563eb" and with_color.criteria[1].color is None
+    for bad in ("blue", "#12345", "#gggggg", "2563eb"):
+        with pytest.raises(ValidationError):
+            q.validate_python({**CHOICE, "criteria": [{"key": "billing", "color": bad}, {"key": "support"}]})

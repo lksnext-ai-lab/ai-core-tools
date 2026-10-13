@@ -192,7 +192,11 @@ export function toPayload(questions: EditorQuestion[]): SystemOneQuestion[] {
     if (q.type === 'choice') {
       const criteria: ChoiceOption[] = q.criteria.map((o) => {
         const description = o.description?.trim() ?? '';
-        return description ? { key: o.key.trim(), description } : { key: o.key.trim() };
+        return {
+          key: o.key.trim(),
+          ...(description ? { description } : {}),
+          ...(o.color ? { color: o.color } : {}),
+        };
       });
       return { ...common, type: 'choice', criteria, ...extra };
     }

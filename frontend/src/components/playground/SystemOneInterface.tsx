@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronRight, FileText, Gauge, Loader2, Play, X } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { formatCount, promptBudget, type EditorQuestion } from '../../utils/systemOneQuestions';
-import { categoryColor, scaleColor, yesNoColor } from '../../utils/systemOneColors';
+import { optionColor, scaleColor, yesNoColor } from '../../utils/systemOneColors';
 import type {
   SystemOneAnswer,
   SystemOneQuestion,
@@ -58,11 +58,13 @@ function colorStartOf(question: SystemOneQuestion | undefined): 'green' | 'red' 
   return question?.type === 'score' ? question.color_start : undefined;
 }
 
-function AnswerCard({ questionKey, instructions, answer, colorStart }: { readonly questionKey: string; readonly instructions?: string; readonly answer: SystemOneAnswer; readonly colorStart?: 'green' | 'red' }) {
+function AnswerCard({ questionKey, instructions, answer, question }: { readonly questionKey: string; readonly instructions?: string; readonly answer: SystemOneAnswer; readonly question?: SystemOneQuestion }) {
+  const colorStart = colorStartOf(question);
+  const colorOfOption = (name: string) => optionColor(question?.type === 'choice' ? question.criteria.find((o) => o.key === name) : undefined, name);
   const { text, determined } = decisionText(answer);
   // Colors: Yes green / No red; each choice option its own stable color; a score runs green to red (see colorStart).
   const badgeColor = answer.type === 'noul' ? yesNoColor(answer.decision)
-    : answer.type === 'choice' ? (answer.choice ? categoryColor(answer.choice) : undefined)
+    : answer.type === 'choice' ? (answer.choice ? colorOfOption(answer.choice) : undefined)
     : scaleColor(answer.level_index ?? 0, Object.keys(answer.probabilities).length || 1, colorStart);
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -80,7 +82,7 @@ function AnswerCard({ questionKey, instructions, answer, colorStart }: { readonl
       <div className="mt-3 space-y-1">
         {answer.type === 'noul' && <ProbabilityBar label={`Yes (threshold ${percent(answer.threshold)})`} value={answer.probability} highlighted={answer.decision} color={yesNoColor(true)} />}
         {answer.type === 'choice' && Object.entries(answer.probabilities).map(([option, p]) => (
-          <ProbabilityBar key={option} label={option} value={p} highlighted={option === answer.choice} color={categoryColor(option)} />
+          <ProbabilityBar key={option} label={option} value={p} highlighted={option === answer.choice} color={colorOfOption(option)} />
         ))}
         {answer.type === 'score' && Object.keys(answer.probabilities).map((index, i, all) => (
           <ProbabilityBar key={index} label={`${index} · ${answer.legend[index] ?? ''}`} value={answer.probabilities[index]}
@@ -126,7 +128,9 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
       <summary className="flex cursor-pointer list-none items-start gap-2 p-3 [&::-webkit-details-marker]:hidden">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <p className="flex-1">
-          {message} <span className="font-medium underline">{summarized ? 'View the summary' : 'View the text that was evaluated'}</span>
+          {message}
+          <br />
+          <span className="font-medium underline">{summarized ? 'View the summary' : 'View the text that was evaluated'}</span>
         </p>
         <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
       </summary>
@@ -254,7 +258,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
           <ReductionNotice result={latest.result} />
           <div className="space-y-3">
             {Object.entries(latest.result.answers).map(([key, answer]) => (
-              <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} colorStart={colorStartOf(questionByKey.get(key))} />
+              <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} question={questionByKey.get(key)} />
             ))}
           </div>
           <p className="mt-2 text-xs text-gray-500">
@@ -274,7 +278,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
                 <ReductionNotice result={evaluation.result} />
                 <div className="space-y-2">
                   {Object.entries(evaluation.result.answers).map(([key, answer]) => (
-                    <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} colorStart={colorStartOf(questionByKey.get(key))} />
+                    <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} question={questionByKey.get(key)} />
                   ))}
                 </div>
               </div>
