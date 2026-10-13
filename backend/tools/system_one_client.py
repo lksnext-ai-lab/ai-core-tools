@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from tools.system_one_limiter import global_slot
+from tools.system_one_limiter import SlotWaitTimeout, global_slot
 from schemas.system_one_schemas import ChoiceQuestion, NoulQuestion, Question
 from utils.logger import get_logger
 
@@ -233,6 +233,8 @@ async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
         return await asyncio.wait_for(attempts(), timeout=_DEADLINE_S)
     except asyncio.TimeoutError:
         raise SystemOneError("timeout", "System One did not answer in time") from None
+    except SlotWaitTimeout:
+        raise SystemOneError("overloaded", "System One is busy: every slot of this service stayed taken") from None
 
 
 def check_base_url(base_url: str) -> str:

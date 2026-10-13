@@ -32,7 +32,7 @@ Not every server offers `/health`, `/v1/models` or `/v1/limits` (a hosted API ma
 
 ### Concurrency
 
-A System One server accepts a limited number of simultaneous requests (Nimble: 4) and answers `529` with a `Retry-After` above it. **The cap of a service is the total for the whole backend, not per process**: every call holds one of `cap` slots while it runs, and the slots are shared by all backend processes (Postgres advisory locks on a dedicated connection, `backend/tools/system_one_limiter.py`). Calls above the cap wait their turn instead of being rejected. Nothing but a service id and a slot number is stored in the database: no texts, no results.
+A System One server accepts a limited number of simultaneous requests (Nimble: 4) and answers `529` with a `Retry-After` above it. **The cap of a service is the total for the whole backend, not per process**: every call holds one of `cap` slots while it runs, and the slots are shared by all backend processes (Postgres advisory locks on a dedicated connection, `backend/tools/system_one_limiter.py`). Calls above the cap wait their turn instead of being rejected, for at most 20 seconds: every waiting request keeps a database session, so past that the caller gets `503` ("busy") and can retry, the same answer as the server's own `529`. Nothing but a service id and a slot number is stored in the database: no texts, no results.
 
 The test (steps 2 and 3) reads the server's `max_concurrent_requests` and prefills the cap with it. A cap **above that limit cannot be saved**, because it could never be used.
 

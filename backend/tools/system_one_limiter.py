@@ -24,6 +24,13 @@ logger = get_logger(__name__)
 _NAMESPACE = 0x5331                 # "S1": keeps our keys away from every other advisory lock of the application
 _MAX_SLOTS = 4096                   # slot number must fit its 12 bits of the key
 _POLL_S = 0.1
+# How long a call may wait for a slot. Every waiting request keeps a database session, so waits must not pile up
+# without bound: past this the caller is told the service is busy (the same answer as the server's own 529).
+MAX_WAIT_S = 20.0
+
+
+class SlotWaitTimeout(Exception):
+    """No slot became free in time."""
 
 
 def _key(service_id: int, slot: int) -> int:
@@ -39,8 +46,9 @@ async def _try_take_a_slot(conn: "psycopg.AsyncConnection", service_id: int, cap
 
 
 @asynccontextmanager
-async def global_slot(service_id: int, cap: int, *, dsn: Optional[str] = None) -> AsyncIterator[None]:
-    """Wait for one of ``cap`` slots of the service, hold it for the block, release it on exit (any exit).
+async def global_slot(service_id: int, cap: int, *, dsn: Optional[str] = None,
+                      max_wait_s: float = MAX_WAIT_S) -> AsyncIterator[None]:
+    """Wait (at most ``max_wait_s``, else ``SlotWaitTimeout``) for one of ``cap`` slots, hold it for the block, release it on exit.
 
     No limit (the block just runs) for a service that is not saved yet, or when the database cannot be reached: System
     One must not depend on this limiter, and the per-process cap still applies.
@@ -56,7 +64,10 @@ async def global_slot(service_id: int, cap: int, *, dsn: Optional[str] = None) -
         yield
         return
     try:
+        deadline = asyncio.get_running_loop().time() + max_wait_s
         while not await _try_take_a_slot(conn, service_id, cap):
+            if asyncio.get_running_loop().time() >= deadline:
+                raise SlotWaitTimeout()
             await asyncio.sleep(_POLL_S * (0.5 + random.random()))
         yield
     finally:

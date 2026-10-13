@@ -8,7 +8,7 @@ import asyncio
 import pytest
 
 from tests.conftest import TEST_DATABASE_URL
-from tools.system_one_limiter import global_slot
+from tools.system_one_limiter import SlotWaitTimeout, global_slot
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 DSN = TEST_DATABASE_URL
@@ -76,3 +76,22 @@ async def test_a_service_that_is_not_saved_yet_is_not_limited():
     counter = {"now": 0, "peak": 0}
     await asyncio.gather(*[_hold(-1, 1, counter, 0.05) for _ in range(3)])
     assert counter["peak"] == 3
+
+
+async def test_waiting_for_a_slot_has_a_limit_after_which_the_caller_is_told_to_try_again():
+    # Unbounded waits would pile requests up, each holding a database session; better a prompt "busy".
+    async def holder():
+        async with global_slot(9108, 1, dsn=DSN):
+            await asyncio.sleep(1.5)
+
+    first = asyncio.create_task(holder())
+    await asyncio.sleep(0.2)
+    started = asyncio.get_running_loop().time()
+    with pytest.raises(SlotWaitTimeout):
+        async with global_slot(9108, 1, dsn=DSN, max_wait_s=0.4):
+            pass
+    assert asyncio.get_running_loop().time() - started < 1.0
+    await first
+    async with asyncio.timeout(2):            # the slot is free again, and the timed-out waiter left nothing behind
+        async with global_slot(9108, 1, dsn=DSN):
+            pass
