@@ -1789,6 +1789,9 @@ class AgentExecutionService:
             raise HTTPException(status_code=400, detail=f"Could not read text from: {', '.join(unreadable)}")
 
         snapshot = SystemOneEvaluator.snapshot(agent)
+        # The evaluation can wait for a slot (up to 20 s) and for the server: do it without holding a pooled database
+        # connection, or a burst of requests pins the whole pool and their own authentication cannot get one.
+        db.commit()      # nothing is pending (only reads so far); this hands the connection back to the pool
         result = await SystemOneEvaluator().evaluate(snapshot, text or "", processed, user_context)
         self._update_request_count(agent, db)
         return result
