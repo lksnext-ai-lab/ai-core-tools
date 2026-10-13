@@ -30,6 +30,7 @@ import { randomId } from '../utils/randomId';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import SystemOneAgentSection from '../components/agents/SystemOneAgentSection';
+import { canBeScheduled } from '../utils/systemOneStatus';
 import { toEditorQuestions, toPayload, checkQuestions, validateMaxStateChars, validateQuestions, type EditorQuestion } from '../utils/systemOneQuestions';
 import { questionLimits, type QuestionLimits } from '../utils/systemOneLimits';
 import type { SystemOneQuestion } from '../types/systemOne';
@@ -951,7 +952,7 @@ function AgentFormPage() {
             activeTab={activeTab}
             onChange={setActiveTab}
           />
-          {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
+          {!isNewAgent && agent && canBeScheduled(agent) && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
 
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (
