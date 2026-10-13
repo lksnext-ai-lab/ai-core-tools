@@ -728,6 +728,31 @@ class TestProcessDelivery:
         assert provider.calls == []
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("provider_key, deduplicates, expected", [
+        ("teams_workflow", False, "unknown"),
+        ("webhook", False, "unknown"),
+        ("webhook", True, "retry_wait"),
+    ])
+    async def test_send_that_outlives_its_lease_is_cut_off_and_recorded(
+        self, outbox, monkeypatch, provider_key, deduplicates, expected,
+    ):
+        class SlowProvider:
+            async def send(self, *args, **kwargs):
+                await asyncio.sleep(5)
+
+        self._provider(monkeypatch, SlowProvider())
+        monkeypatch.setattr(service, "LEASE_SECONDS", 1)
+        monkeypatch.setattr(service, "SEND_DEADLINE_MARGIN_SECONDS", 0.9)
+        delivery_id = self._delivery(outbox, provider_key=provider_key, request_body=b"{}",
+                                     snapshot={"receiver_deduplicates": deduplicates})
+
+        await service.process_delivery(delivery_id, 0)
+
+        delivery, attempts = self._load(outbox, delivery_id)
+        assert delivery.status == expected and attempts[0].status == expected
+        assert "within its lease" in delivery.error_summary and delivery.lease_until is None
+
+    @pytest.mark.asyncio
     async def test_late_response_does_not_overwrite_a_newer_generation(self, outbox, monkeypatch):
         delivery_id = self._delivery(outbox)
 

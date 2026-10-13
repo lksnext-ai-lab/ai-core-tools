@@ -23,6 +23,8 @@ except ImportError:
 OUTPUT_QUEUE = "output-deliveries"
 OUTPUT_RECONCILER_QUEUE = "output-delivery-reconciler"
 OUTPUT_RECONCILER_SCHEDULE = "output-delivery-reconciler"
+# A pending row untouched for this long is assumed to have lost its workflow.
+STALE_PENDING_SECONDS = 300
 
 
 def enqueue_delivery(delivery_id: int, generation: int) -> str:
@@ -121,6 +123,12 @@ async def _reconcile_pending_deliveries() -> int:
                 item.dispatch_generation += 1
                 item.next_attempt_at = None
                 item.status = "pending"
+            elif item.updated_at and item.updated_at <= now - timedelta(seconds=STALE_PENDING_SECONDS):
+                # DBOS never re-runs a finished workflow id, so a dispatch that
+                # failed before claiming the row would leave it pending until it
+                # expires. A new generation gets a new workflow id; a still-queued
+                # old one becomes a no-op because process_delivery checks it.
+                item.dispatch_generation += 1
             enqueue.append((item.id, item.dispatch_generation))
         db.commit()
         try:

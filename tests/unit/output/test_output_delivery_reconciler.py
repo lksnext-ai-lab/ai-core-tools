@@ -60,6 +60,19 @@ async def test_due_deliveries_are_queued_and_retries_get_a_new_generation(sessio
 
 
 @pytest.mark.asyncio
+async def test_stale_pending_delivery_gets_a_new_generation(sessions, queued):
+    # Its gen-0 workflow already ended without claiming the row; re-enqueueing
+    # the same workflow id would be a no-op.
+    stale = _add(sessions, status="pending", updated_at=PAST)
+
+    assert await output_delivery._reconcile_pending_deliveries() == 1
+
+    assert queued == [(stale, 1)]
+    delivery, _ = _get(sessions, stale)
+    assert (delivery.status, delivery.dispatch_generation) == ("pending", 1)
+
+
+@pytest.mark.asyncio
 async def test_expired_deliveries_fail_instead_of_sending(sessions, queued):
     delivery_id = _add(sessions, status="pending", expires_at=PAST)
     assert await output_delivery._reconcile_pending_deliveries() == 0

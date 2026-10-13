@@ -25,6 +25,10 @@ from utils.clock import utcnow_naive
 
 MAX_ATTEMPTS = 5
 LEASE_SECONDS = 120
+# A send must finish (or give up) this long before its lease expires, so the
+# worker always records the outcome before the reconciler treats the attempt
+# as abandoned.
+SEND_DEADLINE_MARGIN_SECONDS = 15
 
 
 def _delivery_expiry() -> datetime:
@@ -806,30 +810,39 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         db = None
 
         try:
-            if provider_key == "webhook":
-                body = request_body
-                body_path = None
-                if request_body_key:
-                    path = _safe_spool_file(request_body_key)
-                    if not path.is_file() or path.stat().st_size != request_body_size:
-                        raise DeliveryError("Prepared webhook request body is missing or incomplete", kind="permanent")
-                    if await asyncio.to_thread(_file_sha256, path) != request_body_sha256:
-                        raise DeliveryError("Prepared webhook request body failed integrity validation", kind="permanent")
-                    body_path = str(path)
-                    body = None
-                receipt = await get_webhook_provider().send(
-                    webhook_url, payload, config={key: value for key, value in snapshot.items()
-                        if key in {"schema_version", "auth_mode", "receiver_deduplicates", "include_attachments"}},
-                    credentials=credentials, event_id=payload["event_id"],
-                    attempt_number=attempt_number,
-                    content_type=snapshot.get("content_type", "application/json"),
-                    body=body, body_path=body_path,
-                )
-            else:
-                receipt = await get_output_provider(provider_key).send(webhook_url, payload)
+            async with asyncio.timeout(lease_seconds - SEND_DEADLINE_MARGIN_SECONDS):
+                if provider_key == "webhook":
+                    body = request_body
+                    body_path = None
+                    if request_body_key:
+                        path = _safe_spool_file(request_body_key)
+                        if not path.is_file() or path.stat().st_size != request_body_size:
+                            raise DeliveryError("Prepared webhook request body is missing or incomplete", kind="permanent")
+                        if await asyncio.to_thread(_file_sha256, path) != request_body_sha256:
+                            raise DeliveryError("Prepared webhook request body failed integrity validation", kind="permanent")
+                        body_path = str(path)
+                        body = None
+                    receipt = await get_webhook_provider().send(
+                        webhook_url, payload, config={key: value for key, value in snapshot.items()
+                            if key in {"schema_version", "auth_mode", "receiver_deduplicates", "include_attachments"}},
+                        credentials=credentials, event_id=payload["event_id"],
+                        attempt_number=attempt_number,
+                        content_type=snapshot.get("content_type", "application/json"),
+                        body=body, body_path=body_path,
+                    )
+                else:
+                    receipt = await get_output_provider(provider_key).send(webhook_url, payload)
             outcome = ("accepted", receipt, None, None, None)
         except DeliveryError as exc:
             outcome = (exc.kind, None, exc.http_status, str(exc), exc.retry_after)
+        except TimeoutError:
+            # Bytes may already have reached the receiver: only a deduplicating
+            # webhook can safely be retried.
+            deduplicates = provider_key == "webhook" and snapshot.get("receiver_deduplicates") is True
+            outcome = (
+                "retryable" if deduplicates else "unknown", None, None,
+                "Delivery did not finish within its lease; acceptance may be unknown", None,
+            )
 
         db = SessionLocal()
         delivery = db.query(OutputDelivery).filter_by(id=delivery_id).with_for_update().one_or_none()
