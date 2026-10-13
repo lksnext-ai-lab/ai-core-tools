@@ -3,6 +3,8 @@ import asyncio
 from dataclasses import dataclass
 import ast
 import contextvars
+import base64
+import mimetypes
 import functools
 import json
 import posixpath
@@ -37,6 +39,7 @@ from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
 from services.system_one_evaluator import SystemOneEvaluator
+from tools import system_one_client
 from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
@@ -1766,7 +1769,7 @@ class AgentExecutionService:
 
         Used by the playground and the public API. ``app_id`` is the app the caller is authorized for:
         an agent of another app is a 404. There is no conversation or memory: every call is independent.
-        v1 is text only, so images and attachments whose text cannot be read are rejected explicitly
+        Images are sent only to providers that take them (else rejected), as are attachments whose text cannot be read
         (silently skipping them would evaluate a partial input without telling the caller).
         """
         agent = self.agent_service.get_agent(db, agent_id, agent_type='system_one_agent')
@@ -1776,12 +1779,20 @@ class AgentExecutionService:
         # stub that only logs the whole user_context, which on the public API contains the raw API key.
 
         files = files or []
-        images = [f.filename for f in files if _is_image_upload(f)]
-        if images:
-            raise HTTPException(
-                status_code=400,
-                detail=f"System One evaluates text only: images are not supported ({', '.join(images)})",
-            )
+        image_files = [f for f in files if _is_image_upload(f)]
+        files = [f for f in files if f not in image_files]
+        images: List[str] = []
+        if image_files:
+            if not system_one_client.supports_images(SystemOneEvaluator.snapshot(agent).endpoint.provider):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"This System One service evaluates text only: images are not supported "
+                           f"({', '.join(f.filename for f in image_files)})",
+                )
+            for f in image_files:
+                mime = (f.content_type or "").lower()
+                mime = mime if mime.startswith("image/") else (mimetypes.guess_type(f.filename or "")[0] or "image/png")
+                images.append(f"data:{mime};base64,{base64.b64encode(await f.read()).decode()}")
         processed = await self._process_files_for_agent(files, agent) if files else []
         readable = {p["filename"] for p in processed}
         unreadable = [f.filename for f in files if f.filename not in readable]
@@ -1801,7 +1812,7 @@ class AgentExecutionService:
         # The evaluation can wait for a slot (up to 20 s) and for the server: do it without holding a pooled database
         # connection, or a burst of requests pins the whole pool and their own authentication cannot get one.
         db.commit()      # nothing is pending (only reads so far); this hands the connection back to the pool
-        result = await SystemOneEvaluator().evaluate(snapshot, text or "", processed, user_context)
+        result = await SystemOneEvaluator().evaluate(snapshot, text or "", processed, user_context, images=images)
         self._update_request_count(agent, db)
         return result
 

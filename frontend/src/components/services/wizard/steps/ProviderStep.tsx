@@ -14,10 +14,12 @@ function ProviderStep({
   onSelect,
 }: Readonly<ProviderStepProps>) {
   const providers = getProvidersForKind(kind);
-  const subtitle =
-    kind === 'ai'
-      ? 'Pick the provider that hosts the chat, vision or audio model you want to use.'
-      : 'Pick the provider for the embedding model that will index your data.';
+  const SUBTITLES: Partial<Record<ServiceKind, string>> = {
+    ai: 'Pick the provider that hosts the chat, vision or audio model you want to use.',
+    embedding: 'Pick the provider for the embedding model that will index your data.',
+    system_one: 'Pick the server that answers the closed questions with probabilities.',
+  };
+  const subtitle = SUBTITLES[kind] ?? 'Pick the provider that hosts the service.';
 
   return (
     <div className="space-y-4">
@@ -53,7 +55,7 @@ function ProviderStep({
                     <span className="text-sm font-semibold text-gray-900 truncate">
                       {p.label}
                     </span>
-                    {!p.supportsModelListing && (
+                    {kind !== 'system_one' && !p.supportsModelListing && (
                       <span className="text-[10px] uppercase tracking-wide font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                         Manual
                       </span>

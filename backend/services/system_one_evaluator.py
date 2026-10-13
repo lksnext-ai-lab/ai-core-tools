@@ -4,7 +4,7 @@ The evaluator works on a ``SystemOneSnapshot`` (plain values, no ORM objects) bu
 alive. That makes it safe to run from places that have no session (a tool called by another agent) and from
 worker threads, where lazy-loading a detached agent would fail.
 
-v1 is text only: images are rejected, not ignored.
+Images go only to providers that accept them; otherwise they are rejected, not ignored.
 """
 import uuid
 from dataclasses import replace, dataclass
@@ -19,7 +19,7 @@ from pydantic import TypeAdapter
 from models.system_one_agent import SystemOneAgent
 from schemas.system_one_schemas import Question, QuestionList, SystemOneResult, Usage
 from services.agent_metrics_recorder import record_agent_execution
-from services.system_one_service_service import max_concurrency_of
+from services.system_one_service_service import max_concurrency_of, provider_of
 from services.system_one_state import (
     ReducedState, Summarizer, SummaryOutput, build_state, parse_budget_error, reduce_state, shrink_factor, truncate_at_word,
 )
@@ -175,6 +175,7 @@ class SystemOneEvaluator:
             api_key=service.api_key,
             max_concurrency=max_concurrency_of(service),
             service_id=service.service_id,
+            provider=provider_of(service),
         )
         summarize = None
         if agent.summarization_service is not None:
@@ -197,10 +198,10 @@ class SystemOneEvaluator:
         )
 
     @staticmethod
-    async def _call(snapshot: SystemOneSnapshot, reduced: ReducedState):
+    async def _call(snapshot: SystemOneSnapshot, reduced: ReducedState, images: Optional[List[str]] = None):
         """Ask the server; on its "Longest prompt has N tokens" error shrink the state once and retry."""
         try:
-            return await system_one_client.evaluate(snapshot.endpoint, reduced.text, snapshot.questions), reduced
+            return await system_one_client.evaluate(snapshot.endpoint, reduced.text, snapshot.questions, images=images), reduced
         except SystemOneError as exc:
             parsed = parse_budget_error(exc.message) if exc.kind == "invalid_request" else None
             if parsed is None:
@@ -210,15 +211,15 @@ class SystemOneEvaluator:
                 raise
             reduced = replace(reduced, text=shrunk, mode="truncated")   # keeps what the summarizer used
             logger.info("[system_one] state over the server's token budget; retrying with %d chars", len(shrunk))
-            return await system_one_client.evaluate(snapshot.endpoint, reduced.text, snapshot.questions), reduced
+            return await system_one_client.evaluate(snapshot.endpoint, reduced.text, snapshot.questions, images=images), reduced
 
     async def evaluate(self, snapshot: SystemOneSnapshot, text: str, files: List[Dict],
-                       user_context: Dict[str, Any]) -> SystemOneResult:
+                       user_context: Dict[str, Any], images: Optional[List[str]] = None) -> SystemOneResult:
         try:
             state = build_state(text, files)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-        if not state.strip():
+        if not state.strip() and not images:
             raise HTTPException(
                 status_code=400,
                 detail="Nothing to evaluate: the text is empty and the attachments contain no extractable text",
@@ -230,7 +231,7 @@ class SystemOneEvaluator:
         reduced: Optional[ReducedState] = None
         try:
             reduced = await reduce_state(state, snapshot.questions, snapshot.max_state_chars, snapshot.summarize)
-            raw, reduced = await self._call(snapshot, reduced)
+            raw, reduced = await self._call(snapshot, reduced, images)
             result = SystemOneResult(
                 answers=decide_all(snapshot.questions, raw["answers"]),
                 state_reduction=reduced.mode,
@@ -248,10 +249,10 @@ class SystemOneEvaluator:
             failure = exc
             raise
         finally:
-            self._record(snapshot, text, files, user_context, started_at, clock, result, failure, reduced)
+            self._record(snapshot, text, files, user_context, started_at, clock, result, failure, reduced, len(images or []))
 
     @staticmethod
-    def _record(snapshot, text, files, user_context, started_at, clock, result, failure, reduced) -> None:
+    def _record(snapshot, text, files, user_context, started_at, clock, result, failure, reduced, image_count=0) -> None:
         finished_at = datetime.utcnow()
         duration_ms = int((perf_counter() - clock) * 1000)
         overrides: Dict[str, Any] = {
@@ -263,9 +264,9 @@ class SystemOneEvaluator:
             "summarization_calls": reduced.summary_calls if reduced else 0,
             "summarization_input_tokens": reduced.summary_input_tokens if reduced else 0,
             "summarization_output_tokens": reduced.summary_output_tokens if reduced else 0,
-            "had_files": len(files) > 0,
-            "file_count": len(files),
-            "had_images": False,
+            "had_files": len(files) + image_count > 0,
+            "file_count": len(files) + image_count,
+            "had_images": image_count > 0,
         }
         if result is not None and result.usage is not None:
             overrides.update(

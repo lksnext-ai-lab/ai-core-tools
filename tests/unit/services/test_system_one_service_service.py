@@ -57,13 +57,13 @@ def test_create_stores_fields_and_normalizes(repo):
     saved = repo.create.call_args[0][1]
     assert saved.app_id == 10 and saved.name == "Nimble" and saved.endpoint == "http://so.test"
     assert saved.description == "nimble-latest" and saved.api_key == "tok"
-    assert json.loads(saved.extra_config) == {"max_concurrency": 2}
+    assert json.loads(saved.extra_config) == {"max_concurrency": 2, "provider": "system_one"}
     assert out.max_concurrency == 2 and out.model == "nimble-latest" and out.api_key.startswith("****")
 
 
 def test_create_defaults_concurrency_when_missing(repo):
     SystemOneServiceService.create_or_update_system_one_service(MagicMock(), 10, 0, _data(max_concurrency=None))
-    assert json.loads(repo.create.call_args[0][1].extra_config) == {"max_concurrency": 1}
+    assert json.loads(repo.create.call_args[0][1].extra_config) == {"max_concurrency": 1, "provider": "system_one"}
 
 
 @pytest.mark.parametrize("endpoint", ["ftp://x", "file:///etc/passwd", "so.test", "http://", "javascript:alert(1)"])
@@ -175,7 +175,7 @@ async def test_connection_with_config_maps_the_probe_result(repo):
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok"})
     assert out == {"status": "success", "message": "Connection successful", "models": ["nimble-latest"],
                    "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False, "verifiable": True}
-    probe.assert_awaited_once_with("http://so.test", "tok")
+    probe.assert_awaited_once_with("http://so.test", "tok", "system_one")
 
 
 @pytest.mark.asyncio
@@ -207,7 +207,7 @@ async def test_connection_recovers_the_stored_token_when_not_retyped(repo, sent)
     with patch.object(module.system_one_client, "probe", probe):
         await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": sent}, service_id=1)
-    probe.assert_awaited_once_with("http://so.test", "stored-token")
+    probe.assert_awaited_once_with("http://so.test", "stored-token", "system_one")
 
 
 @pytest.mark.asyncio
@@ -232,7 +232,7 @@ async def test_saved_service_connection_test(repo):
     with patch.object(module.system_one_client, "probe", probe):
         out = await SystemOneServiceService.test_connection(MagicMock(), 10, 1)
     assert out["status"] == "success"
-    probe.assert_awaited_once_with("http://so.test", "secret-token-1234")
+    probe.assert_awaited_once_with("http://so.test", "secret-token-1234", "system_one")
     repo.get_by_id_and_app_id.return_value = None
     assert await SystemOneServiceService.test_connection(MagicMock(), 10, 2) is None
 
@@ -247,7 +247,7 @@ async def test_connection_does_not_send_the_stored_token_to_a_different_url(repo
     with patch.object(module.system_one_client, "probe", probe):
         await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "http://attacker.test", "api_key": sent}, service_id=1)
-    probe.assert_awaited_once_with("http://attacker.test", None)
+    probe.assert_awaited_once_with("http://attacker.test", None, "system_one")
 
 
 @pytest.mark.asyncio
@@ -257,7 +257,7 @@ async def test_connection_still_uses_the_stored_token_for_the_same_url_spelled_d
     with patch.object(module.system_one_client, "probe", probe):
         await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "HTTP://SO.test/", "api_key": ""}, service_id=1)
-    probe.assert_awaited_once_with("HTTP://SO.test/", "stored-token")
+    probe.assert_awaited_once_with("HTTP://SO.test/", "stored-token", "system_one")
 
 
 def test_saving_a_new_url_without_retyping_the_token_is_refused(repo):

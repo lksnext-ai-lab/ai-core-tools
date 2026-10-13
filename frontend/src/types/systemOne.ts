@@ -1,13 +1,16 @@
 // System One: connections, question definitions and evaluation results.
 // v1 evaluates TEXT only.
 
-/** Base URL prefilled when adding a service (the client appends /v1/systemone, /v1/models, /v1/limits). */
-export const SYSTEM_ONE_DEFAULT_ENDPOINT = 'https://api.typesafe.ai';
+export type SystemOneProvider = 'system_one' | 'openai_decisions';
+
 
 export interface SystemOneService {
   service_id: number;
   name: string;
   endpoint: string;
+  provider: SystemOneProvider;
+  /** Whether the provider accepts images next to the text. */
+  supports_images?: boolean;
   model: string;
   max_concurrency: number;
   /** Agents that would be left without a service if this one were deleted. */
@@ -23,6 +26,7 @@ export interface SystemOneServiceDetail extends SystemOneService {
 export interface SystemOneServicePayload {
   name: string;
   endpoint: string;
+  provider: SystemOneProvider;
   /** "" = no token; "****…" = keep the stored one. */
   api_key: string;
   model: string;
