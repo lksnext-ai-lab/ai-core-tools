@@ -129,6 +129,17 @@ LLM calls are tracked per-user per-month by `UsageTrackingService`. Usage is per
 
 ---
 
+### System One and quotas
+
+System One agents are **not metered** by the quotas above: the monthly `llm_calls` counter only counts calls to a **platform** LLM (an AI service with no app), and a System One service is the app's own connection (URL, token, model), as is the summarizing LLM of a System One agent, which can only be an AI service of the app. Nothing of the operator's is consumed, so nothing is counted.
+
+If the platform ever offers a hosted System One service (one the operator pays for), **do not add a new counter**. Every System One execution already records the prompt tokens reported by the server (`agent_execution_event.input_tokens`, and the cost of these models is per input token, with free output). The design would be:
+1. Sum `input_tokens` of the executions that used the platform's service in the billing period (the index `ix_aee_app_started` on `(app_id, started_at DESC)` already serves the metrics queries).
+2. Add a tier limit for it in `tier_config` (e.g. `system_one_tokens`), with the same defaults mechanism as the other limits.
+3. Check it **before** the call, like `UsageTrackingService` does for platform LLMs (HTTP 429 when exhausted).
+
+Until then this is a product decision, not a gap in the current version.
+
 ## Customizing Tier Defaults
 
 Default tier limits are stored in `backend/system_defaults.yaml` under the `tier_config` key:
