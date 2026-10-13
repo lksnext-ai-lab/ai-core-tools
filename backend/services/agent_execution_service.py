@@ -1787,6 +1787,15 @@ class AgentExecutionService:
         unreadable = [f.filename for f in files if f.filename not in readable]
         if unreadable:
             raise HTTPException(status_code=400, detail=f"Could not read text from: {', '.join(unreadable)}")
+        # Read fine but nothing in it (a scanned PDF has no text layer): say so, or the rest of the input would be
+        # evaluated alone and the caller would believe the file had been read. Only here, where the caller attached the
+        # files on purpose; a tool call keeps ignoring an empty attachment of its parent's turn.
+        empty = [p["filename"] for p in processed if not (p.get("content") or "").strip()]
+        if empty:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No extractable text in: {', '.join(empty)} (a scanned PDF has no text layer and needs OCR first)",
+            )
 
         snapshot = SystemOneEvaluator.snapshot(agent)
         # The evaluation can wait for a slot (up to 20 s) and for the server: do it without holding a pooled database

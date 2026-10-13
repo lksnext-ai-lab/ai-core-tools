@@ -80,7 +80,7 @@ The result always says which happened, with the original and evaluated sizes, so
 
 The summarizing LLM is asked for a summary of **at most** the room available (it usually writes much less) and receives the questions, so it keeps what they need. Asking for a size close to the room was tried: it kept more detail but took about ten times longer. It reads at most the first 120,000 characters. Attachments are read as plain text: an HTML file is evaluated with its markup (tags, CSS, scripts), which uses up the room quickly.
 
-Attachments: text and PDF text are extracted and appended to the text with their file names. A scanned PDF without extractable text, or only empty text, is a `400`. Images and files whose text cannot be read are rejected explicitly (never skipped).
+Attachments: text and PDF text are extracted and appended to the text with their file names. A scanned PDF has no text layer (the backend extracts text, it does not do OCR): an attachment with no extractable text is a `400` that names the file, **even when other text was sent**, so that the rest is never evaluated alone while the caller believes the file was read. An empty text with nothing attached is a `400` too. Images and files whose text cannot be read are rejected explicitly (never skipped).
 
 ---
 
