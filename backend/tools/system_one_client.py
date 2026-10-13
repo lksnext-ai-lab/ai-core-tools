@@ -33,6 +33,7 @@ PROVIDER_SYSTEM_ONE = "system_one"
 PROVIDER_OPENAI = "openai_decisions"
 PROVIDERS = (PROVIDER_SYSTEM_ONE, PROVIDER_OPENAI)
 IMAGE_PROVIDERS = frozenset({PROVIDER_OPENAI})
+IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg"})   # the formats OpenAI documents for the Decisions API
 OPENAI_MODELS = ["gpt-6-luna"]   # ponytail: the only model of the Decisions API today; it has no model listing
 
 ErrorKind = Literal["unavailable", "overloaded", "timeout", "unauthorized", "quota", "invalid_request", "invalid_response"]
