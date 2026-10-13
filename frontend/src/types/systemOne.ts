@@ -124,6 +124,8 @@ export interface SystemOneResult {
   state_chars: number;
   model: string;
   usage?: { input_tokens: number; output_tokens: number } | null;
+  /** Milliseconds per phase; summarization_ms is null when no summarizing LLM ran. */
+  timings?: { evaluation_ms: number; summarization_ms?: number | null } | null;
   /** The text the server evaluated, only when it was summarized or truncated. */
   evaluated_text?: string | null;
 }

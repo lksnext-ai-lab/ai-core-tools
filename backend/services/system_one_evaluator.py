@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from pydantic import TypeAdapter
 
 from models.system_one_agent import SystemOneAgent
-from schemas.system_one_schemas import Question, QuestionList, SystemOneResult, Usage
+from schemas.system_one_schemas import Question, QuestionList, SystemOneResult, Timings, Usage
 from services.agent_metrics_recorder import record_agent_execution
 from services.system_one_service_service import max_concurrency_of, provider_of
 from services.system_one_state import (
@@ -230,8 +230,12 @@ class SystemOneEvaluator:
         failure: Optional[Exception] = None
         reduced: Optional[ReducedState] = None
         try:
+            phase = perf_counter()
             reduced = await reduce_state(state, snapshot.questions, snapshot.max_state_chars, snapshot.summarize)
+            summarization_ms = int((perf_counter() - phase) * 1000) if reduced.summary_calls else None
+            phase = perf_counter()
             raw, reduced = await self._call(snapshot, reduced, images)
+            evaluation_ms = int((perf_counter() - phase) * 1000)
             result = SystemOneResult(
                 answers=decide_all(snapshot.questions, raw["answers"]),
                 state_reduction=reduced.mode,
@@ -240,6 +244,7 @@ class SystemOneEvaluator:
                 evaluated_text=reduced.text if reduced.mode != "none" else None,
                 model=str(raw.get("model") or snapshot.endpoint.model),
                 usage=_parse_usage(raw),
+                timings=Timings(evaluation_ms=evaluation_ms, summarization_ms=summarization_ms),
             )
             return result
         except SystemOneError as exc:

@@ -127,6 +127,12 @@ class Usage(BaseModel):
     output_tokens: int = 0
 
 
+class Timings(BaseModel):
+    """Wall-clock milliseconds of the two phases: the decision server (all attempts) and the summarizing LLM (if any)."""
+    evaluation_ms: int
+    summarization_ms: Optional[int] = None
+
+
 class SystemOneResult(BaseModel):
     answers: Dict[str, Answer]
     state_reduction: Literal["none", "summarized", "truncated"] = "none"
@@ -134,6 +140,7 @@ class SystemOneResult(BaseModel):
     state_chars: int
     model: str
     usage: Optional[Usage] = None
+    timings: Optional[Timings] = None
     # The text the server actually evaluated, only when it was summarized or truncated (so it can be read).
     evaluated_text: Optional[str] = None
 
