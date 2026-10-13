@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from tools.system_one_limiter import global_slot
 from schemas.system_one_schemas import ChoiceQuestion, NoulQuestion, Question
 from utils.logger import get_logger
 
@@ -58,11 +59,9 @@ class Endpoint:
     api_key: Optional[str] = field(default=None, repr=False)
 
 
-def default_max_concurrency(server_limit: Optional[int], workers: int) -> int:
-    """Per-process cap so that all backend workers together stay within the server's limit."""
-    if not server_limit:
-        return 1
-    return max(1, server_limit // max(workers, 1))
+def default_max_concurrency(server_limit: Optional[int]) -> int:
+    """The cap of a service is the whole server's limit: it is shared by every backend process (see the limiter)."""
+    return max(1, server_limit or 1)
 
 
 # ------------------------------------------------------------------ request
@@ -210,7 +209,9 @@ async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
     body = build_request_body(endpoint.model, state, questions)
 
     async def attempts() -> Dict[str, Any]:
-        async with _slot(endpoint):  # held across retries: under overload the others wait too
+        # Held across retries: under overload the others wait too. The process-local semaphore first, so that a
+        # burst waits in memory and not with one database connection each; then the slot shared by all processes.
+        async with _slot(endpoint), global_slot(endpoint.service_id, endpoint.max_concurrency):
             async with httpx.AsyncClient(timeout=_TIMEOUT_S, transport=transport) as http:
                 for attempt in range(1, _ATTEMPTS + 1):
                     try:

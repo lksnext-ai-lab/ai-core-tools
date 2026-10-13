@@ -26,29 +26,15 @@ export function questionLimits(raw: Record<string, number> | null | undefined): 
 export interface ConcurrencyCheck {
   /** Blocks saving. */
   error?: string;
-  /** Allowed, but worth knowing. */
-  warning?: string;
 }
 
 /**
- * The cap is per backend process and every process shares the server's limit: a cap above the whole limit can
- * never be right (error); one above limit ÷ processes can still overload it when the processes add up (warning).
+ * The cap is the whole server's limit: every backend process shares it through the global limiter, so a cap above
+ * what the server accepts at once can never be used.
  */
-export function checkConcurrency(
-  value: number | null,
-  serverLimit: number | null | undefined,
-  suggested: number | null | undefined,
-): ConcurrencyCheck {
-  if (value === null || !serverLimit) return {};
-  if (value > serverLimit) {
-    return { error: `The server accepts ${serverLimit} requests at once: a cap of ${value} can never be used` };
-  }
-  if (suggested && value > suggested) {
-    return {
-      warning: `Above ${suggested} (the server's ${serverLimit} shared among the backend processes) the server may answer "busy" under load`,
-    };
-  }
-  return {};
+export function checkConcurrency(value: number | null, serverLimit: number | null | undefined): ConcurrencyCheck {
+  if (value === null || !serverLimit || value <= serverLimit) return {};
+  return { error: `The server accepts ${serverLimit} requests at once: a cap of ${value} can never be used` };
 }
 
 /** Ordinary text is about 4 characters per token; dense text (codes, numbers) far fewer. A rough guide, never a limit. */

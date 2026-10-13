@@ -26,15 +26,17 @@ Settings → System One Services → **Add System One Service**. It is a three-s
 
 1. **Connection**: the server's base URL (prefilled with `https://api.typesafe.ai`; `http://` or `https://`; private addresses are allowed on purpose, since a self-hosted server normally lives on a private network) and an optional Bearer token. The token is stored masked: when editing, leave the masked value to keep it or empty it to remove it. It belongs to the URL it was stored for, so changing the URL clears it and you type it again; *Test connection* never sends the stored token to a different URL. Only administrators can create or test services.
 2. **Model**: the wizard asks the server which models it offers (`/v1/models`) and you pick one. There is no default model. If the server cannot be reached or lists none, you can type the identifier by hand.
-3. **Test**: a name (suggested from the model), the maximum concurrent requests (per **backend process**, prefilled from the server's limit) and **Test connection**, which calls `/health`, `/v1/models` and `/v1/limits`, checks that the chosen model is offered, and shows the limits the server reports.
+3. **Test**: a name (suggested from the model), the maximum concurrent requests (in **total**, prefilled with the server's limit) and **Test connection**, which calls `/health`, `/v1/models` and `/v1/limits`, checks that the chosen model is offered, and shows the limits the server reports.
 
 Not every server offers `/health`, `/v1/models` or `/v1/limits` (a hosted API may only have `/v1/systemone`): a missing health endpoint is not a failure, and the *Test* step skips the list. **Only when the server gives no way to list its models** does the test send one real, tiny question (one yes/no, a few tokens) with the chosen model, which proves the URL, the token and the model; the result says so. A server that lists its models is not called. Errors name the culprit: token rejected (401/403), no credit left (402), URL not found (404, some servers carry the model name in the URL), or the server's own message for a rejected question.
 
 ### Concurrency
 
-The test (steps 2 and 3) reads the server's `max_concurrent_requests`. A cap **above that limit cannot be saved**; one above `limit ÷ backend processes` is allowed with a warning, because the processes add up.
+A System One server accepts a limited number of simultaneous requests (Nimble: 4) and answers `529` with a `Retry-After` above it. **The cap of a service is the total for the whole backend, not per process**: every call holds one of `cap` slots while it runs, and the slots are shared by all backend processes (Postgres advisory locks on a dedicated connection, `backend/tools/system_one_limiter.py`). Calls above the cap wait their turn instead of being rejected. Nothing but a service id and a slot number is stored in the database: no texts, no results.
 
-The server accepts a limited number of simultaneous requests (4 by default) and answers `529` with a `Retry-After` above it. The backend runs several processes (`UVICORN_WORKERS`), each with its own cap, so set the value to **the server limit divided by the number of backend processes** (at least 1). The client also retries `429`, `502`, `503` and `529` up to three times, honoring `Retry-After`. A changed value applies to new calls without a restart.
+The test (steps 2 and 3) reads the server's `max_concurrent_requests` and prefills the cap with it. A cap **above that limit cannot be saved**, because it could never be used.
+
+If the database cannot be reached, the call goes ahead without the global limit (the process-local cap still applies): System One does not depend on it. The client also retries `429`, `502`, `503`, `529` up to three times, honoring `Retry-After`, and a changed value applies to new calls without a restart. A service saved before this behaviour had its cap read as *per process*; it now means the total, which is more conservative.
 
 ### Deleting a service
 
@@ -163,7 +165,7 @@ Like every other write, evaluating from the playground is a `POST`: users whose 
 | Piece | File |
 |---|---|
 | Models | `backend/models/system_one_service.py`, `system_one_agent.py` (joined-table child of `Agent`, `type='system_one_agent'`), `agent_system_one_answer.py` |
-| Client (HTTP, retries, concurrency) | `backend/tools/system_one_client.py` |
+| Client (HTTP, retries, concurrency) | `backend/tools/system_one_client.py`, global slots in `backend/tools/system_one_limiter.py` |
 | Decisions | `backend/tools/system_one_decisions.py` |
 | Text building / size reduction | `backend/services/system_one_state.py` |
 | Evaluation + metrics | `backend/services/system_one_evaluator.py`, `AgentExecutionService.execute_agent_system_one` |

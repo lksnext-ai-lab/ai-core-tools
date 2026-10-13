@@ -119,11 +119,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
       : null;
   // The latest answer from the server (the model step or an explicit test) tells how many requests it accepts.
   const known = testResult?.status === 'success' ? testResult : listResult?.status === 'success' ? listResult : null;
-  const concurrencyCheck = checkConcurrency(
-    concurrencyError === null ? parsedConcurrency : null,
-    known?.limits?.max_concurrent_requests,
-    known?.suggested_max_concurrency,
-  );
+  const concurrencyCheck = checkConcurrency(concurrencyError === null ? parsedConcurrency : null, known?.limits?.max_concurrent_requests);
   const suggestedName = ensureUnique(model.trim() ? `System One - ${model.trim()}` : 'System One', existingNames);
   const finalName = name.trim() || suggestedName;
 
@@ -303,7 +299,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                 <FormField label="Name" id="so-name" type="text" value={name} onChange={(e) => setName(e.target.value)}
                            placeholder={suggestedName} helpText="Leave it empty to use the suggested name." />
                 <FormField
-                  label="Maximum concurrent requests (per backend process)"
+                  label="Maximum concurrent requests (in total)"
                   id="so-concurrency"
                   type="number"
                   value={concurrency}
@@ -314,10 +310,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                     (listResult?.suggested_max_concurrency != null
                       ? `Suggested for this server: ${listResult.suggested_max_concurrency}. `
                       : '') +
-                    'The server accepts a limited number of requests at once and answers 529 above it: use its limit divided by the number of backend processes.'
+                    'The server accepts a limited number of requests at once and answers 529 above it. This is the total for all backend processes: they share it, so use the server\'s own limit.'
                   }
                 />
-                {concurrencyCheck.warning && <Alert type="warning" message={concurrencyCheck.warning} />}
                 <div aria-live="polite">
                   {testResult && (
                     <div className={`rounded-lg p-3 text-sm ${testResult.status === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>

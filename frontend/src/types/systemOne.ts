@@ -34,7 +34,7 @@ export interface SystemOneConnectionResult {
   message: string;
   models: string[];
   limits: Record<string, number> | null;
-  /** Server limit divided by the backend processes (at least 1); null when the server did not report its limits. */
+  /** The server's own limit (the cap is the total, shared by all backend processes); null when it did not report its limits. */
   suggested_max_concurrency?: number | null;
   /** True when the server cannot list models and the check was one real, tiny call with the chosen model. */
   checked_with_call?: boolean;

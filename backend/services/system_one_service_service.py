@@ -1,6 +1,5 @@
 """Business logic of System One services (per-app connections to a System One server)."""
 import json
-import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -19,14 +18,6 @@ from utils.logger import get_logger
 from utils.secret_utils import is_masked_key, mask_api_key
 
 logger = get_logger(__name__)
-
-
-def _workers() -> int:
-    # 2 = the Docker image's default when UVICORN_WORKERS is unset (it is not exported to the process).
-    try:
-        return max(1, int(os.getenv("UVICORN_WORKERS", "2")))
-    except ValueError:
-        return 1
 
 
 def _failure(message: str) -> Dict[str, Any]:
@@ -123,7 +114,7 @@ class SystemOneServiceService:
             raise ValueError("The URL changed: type the token again (or clear it) so it is not sent to a new server")
         if not is_masked_key(token):
             service.api_key = token or None
-        concurrency = data.max_concurrency or system_one_client.default_max_concurrency(None, _workers())
+        concurrency = data.max_concurrency or system_one_client.default_max_concurrency(None)
         service.extra_config = json.dumps({"max_concurrency": concurrency})
 
         if service_id == 0:
@@ -181,9 +172,9 @@ class SystemOneServiceService:
             "limits": limits,
             "checked_with_call": checked_with_call,
             "verifiable": result.get("verifiable", True),
-            # The cap is per backend process and every process shares the server's limit (NFR-2).
+            # The cap is the whole server's limit, shared by all backend processes through the global limiter.
             "suggested_max_concurrency": (
-                system_one_client.default_max_concurrency(server_limit, _workers())
+                system_one_client.default_max_concurrency(server_limit)
                 if result["ok"] and isinstance(server_limit, int) else None
             ),
         }
