@@ -34,6 +34,12 @@ const percent = (p: number) => `${Math.round(p * 100)}%`;
 
 const formatMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
+const IMAGE_ACCEPT = 'image/png,image/jpeg'; // the formats OpenAI documents for the Decisions API
+
+function isSupportedImage(file: File): boolean {
+  return /^image\/(png|jpe?g)$/i.test(file.type) || /\.(png|jpe?g)$/i.test(file.name);
+}
+
 function isImage(file: File): boolean {
   return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i.test(file.name);
 }
@@ -171,13 +177,11 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
   function addFiles(selected: FileList | null) {
     if (!selected) return;
     const incoming = Array.from(selected);
-    const images = acceptsImages ? [] : incoming.filter(isImage);
-    if (images.length > 0) {
-      setError(`System One evaluates text only: images are not supported (${images.map((f) => f.name).join(', ')})`);
-    } else {
-      setError(null);
-    }
-    setFiles((current) => [...current, ...incoming.filter((f) => acceptsImages || !isImage(f))]);
+    const rejected = incoming.filter((f) => isImage(f) && !(acceptsImages && isSupportedImage(f)));
+    setError(rejected.length > 0
+      ? `${acceptsImages ? 'Only PNG and JPEG images are supported' : 'This service evaluates text only: images are not supported'} (${rejected.map((f) => f.name).join(', ')})`
+      : null);
+    setFiles((current) => [...current, ...incoming.filter((f) => !rejected.includes(f))]);
     if (fileInput.current) fileInput.current.value = '';
   }
 
@@ -214,7 +218,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400/70 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input ref={fileInput} id="so-files" type="file" multiple accept={acceptsImages ? `${TEXT_FILE_ACCEPT},image/png,image/jpeg,image/webp,image/gif` : TEXT_FILE_ACCEPT} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
+          <input ref={fileInput} id="so-files" type="file" multiple accept={acceptsImages ? `${TEXT_FILE_ACCEPT},${IMAGE_ACCEPT}` : TEXT_FILE_ACCEPT} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
           <label htmlFor="so-files" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
             <FileText className="h-4 w-4" aria-hidden="true" /> Attach documents
           </label>
