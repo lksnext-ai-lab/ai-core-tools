@@ -246,7 +246,7 @@ async def probe(base_url: str, api_key: Optional[str],
     """Check ``/health``, list ``/v1/models`` and read ``/v1/limits``. Never raises for server problems."""
     root = check_base_url(base_url)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "can_list_models": False}
+    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "verifiable": False}
 
     async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S, transport=transport, headers=headers) as http:
         async def get(path: str) -> httpx.Response:
@@ -287,10 +287,12 @@ async def probe(base_url: str, api_key: Optional[str],
             result["message"] = "The server answered /health but not /v1/models or /v1/limits"
             return result
 
-    result["can_list_models"] = bool(result["models"])
+    # Verifiable = the server gave something to check the connection against (health or a model list); a bare
+    # /v1/systemone server can only be proven by a real call.
+    result["verifiable"] = has_health or bool(result["models"])
     result["ok"] = True
     result["message"] = (
-        "Connection successful" if has_health or result["can_list_models"]
+        "Connection successful" if result["verifiable"]
         else "The server answered, but it has no health or model endpoints: the token and the model are only "
              "checked by a real call"
     )

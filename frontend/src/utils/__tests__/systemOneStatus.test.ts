@@ -41,3 +41,13 @@ describe('agentRowStatus (the Status column of the agents list)', () => {
     expect(agentRowStatus({ type: 'ocr_agent', system_one_service: undefined }).kind).toBe('active');
   });
 });
+
+import { canBeScheduled } from '../systemOneStatus';
+
+describe('canBeScheduled', () => {
+  it('leaves System One agents out of the scheduled-task picker: they evaluate on demand, they are not run on a timer', () => {
+    expect(canBeScheduled({ type: 'system_one_agent' })).toBe(false);
+    expect(canBeScheduled({ type: 'agent' })).toBe(true);
+    expect(canBeScheduled({ type: 'ocr_agent' })).toBe(true);
+  });
+});

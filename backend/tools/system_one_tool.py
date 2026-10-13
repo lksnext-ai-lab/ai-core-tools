@@ -5,7 +5,6 @@ it will get back), a compact JSON the LLM reads and the full ``SystemOneResult``
 A failing System One never aborts the calling agent's turn: the LLM gets a message and can carry on.
 """
 import json
-from types import SimpleNamespace
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 from fastapi import HTTPException
@@ -95,6 +94,7 @@ class IACTSystemOneTool(BaseTool):
     description: str = _DEFAULT_DESCRIPTION
     args_schema: Type[BaseModel] = SystemOneToolInput
     response_format: Literal["content", "content_and_artifact"] = "content_and_artifact"
+    agent_id: Optional[int] = None      # read by the tool tagging and the metrics, also when the tool is unusable
     snapshot: Any = None
     unavailable: Optional[str] = None
     user_context: Optional[Dict[str, Any]] = None
@@ -111,14 +111,14 @@ class IACTSystemOneTool(BaseTool):
             return cls(
                 name=sanitize_identifier(agent.name),
                 description=f"{agent.description or agent.name} (currently unavailable: {exc.detail})",
-                # The tool-tagging and metrics code read the agent id from the snapshot: keep it even when unusable.
-                snapshot=SimpleNamespace(agent_id=agent.agent_id),
+                agent_id=agent.agent_id,
                 unavailable=str(exc.detail),
                 user_context=user_context,
             )
         return cls(
             name=sanitize_identifier(agent.name),
             description=build_tool_description(snapshot),
+            agent_id=snapshot.agent_id,
             snapshot=snapshot,
             user_context=user_context,
             attached_files=attached_files or [],

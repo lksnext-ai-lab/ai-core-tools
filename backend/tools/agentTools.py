@@ -826,7 +826,7 @@ def _tag_untyped_tools(tools: List[Any]) -> None:
         if isinstance(tool, (IACTTool, IACTOCRTool)):
             _tag_tool(tool, "AGENT", **{METRICS_SUB_AGENT_ID_KEY: tool.agent.agent_id})
         elif isinstance(tool, IACTSystemOneTool):
-            _tag_tool(tool, "AGENT", **{METRICS_SUB_AGENT_ID_KEY: tool.snapshot.agent_id})
+            _tag_tool(tool, "AGENT", **{METRICS_SUB_AGENT_ID_KEY: tool.agent_id})
         else:
             _tag_tool(tool, "BUILTIN")
 

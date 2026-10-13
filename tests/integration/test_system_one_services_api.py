@@ -149,7 +149,7 @@ class TestConnection:
 
     def test_a_server_with_no_model_listing_is_checked_with_one_real_call(self, client, fake_app, owner_headers):
         bare = {"ok": True, "message": "The server answered, but it has no health or model endpoints", "models": [],
-                "limits": None, "can_list_models": False}
+                "limits": None, "verifiable": False}
         check = AsyncMock(return_value={"ok": True, "message": "Connection verified with a real test call"})
         with patch("services.system_one_service_service.system_one_client.probe", AsyncMock(return_value=bare)), \
              patch("services.system_one_service_service.system_one_client.check_model", check):
@@ -163,7 +163,7 @@ class TestConnection:
             self, client, fake_app, owner_headers, viewer_headers):
         sid = _create(client, fake_app, owner_headers)["service_id"]
         bare = {"ok": True, "message": "The server answered, but it has no health or model endpoints: the token and the model "
-                "are only checked by a real call", "models": [], "limits": None, "can_list_models": False}
+                "are only checked by a real call", "models": [], "limits": None, "verifiable": False}
         check = AsyncMock()
         with patch("services.system_one_service_service.system_one_client.probe", AsyncMock(return_value=bare)), \
              patch("services.system_one_service_service.system_one_client.check_model", check):
