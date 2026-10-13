@@ -538,3 +538,17 @@ def no_database_slots(monkeypatch):
 async def test_a_call_holds_a_global_slot_of_its_service_and_cap(no_database_slots):
     await client.evaluate(endpoint(service_id=91, max_concurrency=3), "text", [NOUL], transport=transport(lambda r: httpx.Response(200, json=ok_json([NOUL]))))
     assert no_database_slots == [(91, 3)]
+
+
+async def test_waiting_too_long_for_a_slot_is_an_overload_the_caller_can_retry(monkeypatch):
+    from tools.system_one_limiter import SlotWaitTimeout
+
+    @asynccontextmanager
+    async def busy(service_id, cap, **kw):
+        raise SlotWaitTimeout()
+        yield
+
+    monkeypatch.setattr(client, "global_slot", busy)
+    with pytest.raises(SystemOneError) as e:
+        await client.evaluate(endpoint(service_id=92), "t", [NOUL], transport=transport(lambda r: httpx.Response(200, json=ok_json([NOUL]))))
+    assert e.value.kind == "overloaded"
