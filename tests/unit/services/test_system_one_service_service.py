@@ -167,8 +167,7 @@ def test_delete_free_service_and_missing_service(repo):
 # ------------------------------------------------------- connection tests
 
 @pytest.mark.asyncio
-async def test_connection_with_config_maps_the_probe_result(repo, monkeypatch):
-    monkeypatch.setenv("UVICORN_WORKERS", "1")  # the suggestion depends on the host's worker count
+async def test_connection_with_config_maps_the_probe_result(repo):
     probe = AsyncMock(return_value={"ok": True, "message": "Connection successful",
                                     "models": ["nimble-latest"], "limits": {"max_concurrent_requests": 4}})
     with patch.object(module.system_one_client, "probe", probe):
@@ -180,14 +179,12 @@ async def test_connection_with_config_maps_the_probe_result(repo, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("workers,limits,expected", [
-    ("8", {"max_concurrent_requests": 4}, 1),        # 4 slots shared by 8 processes: one each, retries absorb the rest
-    ("2", {"max_concurrent_requests": 16}, 8),
-    ("1", {"max_concurrent_requests": 4}, 4),
-    ("8", None, None),                                # limits unknown: nothing to suggest
+@pytest.mark.parametrize("limits,expected", [
+    ({"max_concurrent_requests": 4}, 4),     # the cap is the whole server's limit: it is shared by every backend process
+    ({"max_concurrent_requests": 16}, 16),
+    (None, None),                            # limits unknown: nothing to suggest
 ])
-async def test_the_probe_suggests_a_per_process_concurrency(repo, monkeypatch, workers, limits, expected):
-    monkeypatch.setenv("UVICORN_WORKERS", workers)
+async def test_the_probe_suggests_the_servers_own_limit_as_the_total_cap(repo, limits, expected):
     probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": [], "limits": limits})
     with patch.object(module.system_one_client, "probe", probe):
         out = await SystemOneServiceService.test_connection_with_config(MagicMock(), 10, {"endpoint": "http://so.test"})
@@ -283,17 +280,6 @@ def test_saving_a_new_url_is_fine_when_there_is_no_stored_token(repo):
     repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key=None)
     SystemOneServiceService.create_or_update_system_one_service(
         MagicMock(), 10, 1, _data(endpoint="http://other.test", api_key="****"))
-
-
-@pytest.mark.asyncio
-async def test_without_uvicorn_workers_the_dockerfile_default_of_two_is_assumed(repo, monkeypatch):
-    # The image starts 2 workers when UVICORN_WORKERS is unset; suggesting a cap as if there were 1
-    # would let the processes together exceed the server's limit.
-    monkeypatch.delenv("UVICORN_WORKERS", raising=False)
-    probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": [], "limits": {"max_concurrent_requests": 4}})
-    with patch.object(module.system_one_client, "probe", probe):
-        out = await SystemOneServiceService.test_connection_with_config(MagicMock(), 10, {"endpoint": "http://so.test"})
-    assert out["suggested_max_concurrency"] == 2
 
 
 def test_a_model_has_no_default_it_must_be_chosen():

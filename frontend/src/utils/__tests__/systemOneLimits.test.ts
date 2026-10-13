@@ -34,21 +34,19 @@ describe('questions are checked against the limits of the chosen service', () =>
 });
 
 describe('checkConcurrency', () => {
-  it('blocks a cap above what the server accepts at once', () => {
-    expect(checkConcurrency(5, 4, 2).error).toMatch(/4/);
+  it('blocks a cap above what the server accepts at once: the cap is the whole server, shared by every process', () => {
+    expect(checkConcurrency(5, 4).error).toMatch(/4/);
   });
 
-  it('only warns above the per-process suggestion, because processes add up', () => {
-    const r = checkConcurrency(3, 4, 2);
-    expect(r.error).toBeUndefined();
-    expect(r.warning).toMatch(/2/);
+  it('allows any cap up to the limit, with no warning', () => {
+    expect(checkConcurrency(4, 4)).toEqual({});
+    expect(checkConcurrency(1, 4)).toEqual({});
   });
 
-  it('is silent at or under the suggestion, and when nothing is known', () => {
-    expect(checkConcurrency(2, 4, 2)).toEqual({});
-    expect(checkConcurrency(null, 4, 2)).toEqual({});
-    expect(checkConcurrency(500, null, null)).toEqual({});
-    expect(checkConcurrency(500, undefined, undefined)).toEqual({});
+  it('is silent when nothing is known', () => {
+    expect(checkConcurrency(null, 4)).toEqual({});
+    expect(checkConcurrency(500, null)).toEqual({});
+    expect(checkConcurrency(500, undefined)).toEqual({});
   });
 });
 

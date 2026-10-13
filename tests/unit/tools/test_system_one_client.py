@@ -3,6 +3,7 @@ import json
 
 import httpx
 import pytest
+from contextlib import asynccontextmanager
 from pydantic import TypeAdapter
 
 from schemas.system_one_schemas import Question
@@ -338,11 +339,10 @@ async def test_probe_rejects_bad_urls(url):
 
 
 def test_default_max_concurrency():
-    assert client.default_max_concurrency(4, 8) == 1
-    assert client.default_max_concurrency(16, 4) == 4
-    assert client.default_max_concurrency(None, 8) == 1
-    assert client.default_max_concurrency(4, 1) == 4
-    assert client.default_max_concurrency(4, 0) == 4
+    assert client.default_max_concurrency(4) == 4        # the whole server's limit, shared by all processes
+    assert client.default_max_concurrency(16) == 16
+    assert client.default_max_concurrency(None) == 1
+    assert client.default_max_concurrency(0) == 1
 
 
 def test_endpoint_is_hashable_and_hides_token_in_repr():
@@ -517,3 +517,24 @@ def test_an_option_color_is_ours_and_never_sent_to_the_server():
                   "criteria": [{"key": "billing", "description": "Invoices", "color": "#2563eb"}, {"key": "tech", "color": "#9333ea"}]})
     body = client.build_request_body("m", "text", [colored])["questions"]["area"]
     assert body["criteria"] == {"billing": "Invoices", "tech": None}
+
+
+# ------------------------------------------ every call takes a slot shared by all backend processes
+
+@pytest.fixture(autouse=True)
+def no_database_slots(monkeypatch):
+    """The unit tests never talk to Postgres: the global slot is replaced by one that records what it was asked for."""
+    taken = []
+
+    @asynccontextmanager
+    async def fake_slot(service_id, cap, **kw):
+        taken.append((service_id, cap))
+        yield
+
+    monkeypatch.setattr(client, "global_slot", fake_slot)
+    return taken
+
+
+async def test_a_call_holds_a_global_slot_of_its_service_and_cap(no_database_slots):
+    await client.evaluate(endpoint(service_id=91, max_concurrency=3), "text", [NOUL], transport=transport(lambda r: httpx.Response(200, json=ok_json([NOUL]))))
+    assert no_database_slots == [(91, 3)]
