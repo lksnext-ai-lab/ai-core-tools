@@ -175,7 +175,7 @@ async def test_connection_with_config_maps_the_probe_result(repo, monkeypatch):
         out = await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok"})
     assert out == {"status": "success", "message": "Connection successful", "models": ["nimble-latest"],
-                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4}
+                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False}
     probe.assert_awaited_once_with("http://so.test", "tok")
 
 
@@ -311,3 +311,70 @@ def test_the_list_says_how_many_agents_would_lose_their_service(repo):
 def test_there_is_no_upper_bound_on_the_concurrency_cap_only_a_positive_one():
     # What a server tolerates is its own business (it reports it in /v1/limits): no invented ceiling here.
     assert _data(max_concurrency=500).max_concurrency == 500
+
+
+# -------------------- a real call only when the server gives no way to list models (and a model is known)
+
+NOT_LISTED = {"ok": True, "message": "The server answered, but it has no health or model endpoints", "models": [],
+              "limits": None, "can_list_models": False}
+LISTED = {"ok": True, "message": "Connection successful", "models": ["m1"], "limits": None, "can_list_models": True}
+
+
+@pytest.mark.asyncio
+async def test_without_a_way_to_list_models_the_chosen_model_is_checked_with_a_real_call(repo):
+    check = AsyncMock(return_value={"ok": True, "message": "Connection verified with a real test call"})
+    with patch.object(module.system_one_client, "probe", AsyncMock(return_value=NOT_LISTED)), \
+         patch.object(module.system_one_client, "check_model", check):
+        out = await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "http://so.test/base", "api_key": "tok", "model": "the-model"})
+    assert out["status"] == "success" and "real test call" in out["message"] and out["checked_with_call"] is True
+    endpoint = check.await_args.args[0]
+    assert (endpoint.base_url, endpoint.model, endpoint.api_key) == ("http://so.test/base", "the-model", "tok")
+
+
+@pytest.mark.asyncio
+async def test_a_failed_real_call_is_a_failed_test(repo):
+    check = AsyncMock(return_value={"ok": False, "message": "The server rejected the token (HTTP 403)"})
+    with patch.object(module.system_one_client, "probe", AsyncMock(return_value=NOT_LISTED)), \
+         patch.object(module.system_one_client, "check_model", check):
+        out = await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok", "model": "m"})
+    assert out["status"] == "error" and "token" in out["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("probe_result,config", [
+    (LISTED, {"model": "m1"}),                 # the server lists models: the list is the check, no call
+    (NOT_LISTED, {}),                          # no model chosen yet (the model step): nothing to check
+])
+async def test_no_real_call_when_it_is_not_needed(repo, probe_result, config):
+    check = AsyncMock()
+    with patch.object(module.system_one_client, "probe", AsyncMock(return_value=probe_result)), \
+         patch.object(module.system_one_client, "check_model", check):
+        out = await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok", **config})
+    check.assert_not_awaited()
+    assert out["checked_with_call"] is False
+
+
+@pytest.mark.asyncio
+async def test_no_real_call_when_the_server_itself_was_not_reachable(repo):
+    check = AsyncMock()
+    failed = {**NOT_LISTED, "ok": False, "message": "Cannot connect to the System One server"}
+    with patch.object(module.system_one_client, "probe", AsyncMock(return_value=failed)), \
+         patch.object(module.system_one_client, "check_model", check):
+        out = await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "http://so.test", "model": "m"})
+    check.assert_not_awaited()
+    assert out["status"] == "error" and "connect" in out["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_a_saved_service_is_checked_with_its_own_model_and_token(repo):
+    repo.get_by_id_and_app_id.return_value = _service(endpoint="http://so.test", api_key="stored-token", description="saved-model")
+    check = AsyncMock(return_value={"ok": True, "message": "verified"})
+    with patch.object(module.system_one_client, "probe", AsyncMock(return_value=NOT_LISTED)), \
+         patch.object(module.system_one_client, "check_model", check):
+        out = await SystemOneServiceService.test_connection(MagicMock(), 10, 1)
+    endpoint = check.await_args.args[0]
+    assert (endpoint.model, endpoint.api_key) == ("saved-model", "stored-token") and out["status"] == "success"

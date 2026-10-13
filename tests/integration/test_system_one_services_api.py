@@ -147,6 +147,18 @@ class TestConnection:
                             json={"endpoint": "http://so.test", "api_key": "tok"}, headers=owner_headers)
         assert r.status_code == 200 and r.json()["models"] == ["nimble-latest"]
 
+    def test_a_server_with_no_model_listing_is_checked_with_one_real_call(self, client, fake_app, owner_headers):
+        bare = {"ok": True, "message": "The server answered, but it has no health or model endpoints", "models": [],
+                "limits": None, "can_list_models": False}
+        check = AsyncMock(return_value={"ok": True, "message": "Connection verified with a real test call"})
+        with patch("services.system_one_service_service.system_one_client.probe", AsyncMock(return_value=bare)), \
+             patch("services.system_one_service_service.system_one_client.check_model", check):
+            r = client.post(url(fake_app, "test-connection"),
+                            json={"endpoint": "http://so.test/the-model", "api_key": "tok", "model": "the-model"},
+                            headers=owner_headers)
+        assert r.status_code == 200 and r.json()["status"] == "success" and r.json()["checked_with_call"] is True
+        assert check.await_args.args[0].model == "the-model" and "tok" not in r.text
+
     def test_edit_mode_recovers_the_stored_token(self, client, fake_app, owner_headers):
         sid = _create(client, fake_app, owner_headers, api_key="stored-token-9999")["service_id"]
         probe = AsyncMock(return_value=self.PROBE_OK)

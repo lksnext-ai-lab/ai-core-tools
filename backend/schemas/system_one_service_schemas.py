@@ -33,6 +33,8 @@ class SystemOneConnectionConfigSchema(BaseModel):
     """What listing the models / testing a connection needs: the wizard asks before a model or a name exist."""
     endpoint: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
     api_key: Optional[str] = ""
+    # Known from the Test step on: lets a server with no model listing be checked with a real call.
+    model: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]] = None
 
     @field_validator("api_key", mode="before")
     @classmethod

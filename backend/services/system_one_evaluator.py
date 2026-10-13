@@ -35,7 +35,7 @@ _SUMMARY_INPUT_CAP_CHARS = 120_000      # what we hand to the summarizing LLM at
 _PROVIDER = "system_one"
 _HTTP_STATUS = {
     "unavailable": 503, "overloaded": 503, "timeout": 504,
-    "unauthorized": 502, "invalid_request": 422, "invalid_response": 502,
+    "unauthorized": 502, "quota": 503, "invalid_request": 422, "invalid_response": 502,
 }
 
 
@@ -136,6 +136,7 @@ _GENERIC = {
     "overloaded": "System One is busy, try again shortly",
     "timeout": "System One did not answer in time",
     "unauthorized": "System One rejected the service credentials",
+    "quota": "The System One account has no credit left: contact the administrator",
     "invalid_response": "System One returned an unexpected response",
 }
 
