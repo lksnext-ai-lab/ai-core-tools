@@ -50,3 +50,27 @@ describe('the color preference is saved with the score question', () => {
     expect((score as { color_start?: string }).color_start).toBe('green');
   });
 });
+
+import { optionColor } from '../systemOneColors';
+
+describe('optionColor', () => {
+  it('uses the color chosen for the option, else the automatic one of its name', () => {
+    expect(optionColor({ key: 'billing', color: '#112233' })).toBe('#112233');
+    expect(optionColor({ key: 'billing' })).toBe(categoryColor('billing'));
+    expect(optionColor({ key: 'billing', color: '' })).toBe(categoryColor('billing'));
+    expect(optionColor({ key: 'billing', color: null })).toBe(categoryColor('billing'));
+  });
+  it('falls back to the automatic color for an option name that is not defined any more', () => {
+    expect(optionColor(undefined, 'gone')).toBe(categoryColor('gone'));
+  });
+});
+
+describe('toPayload keeps a chosen option color and drops an empty one', () => {
+  it('keeps #hex and omits empty', () => {
+    const payload = toPayload([{ _id: 'c', key: 'area', type: 'choice', instructions: 'Which?', criteria: [
+      { key: 'billing', description: 'Invoices', color: '#112233' }, { key: 'tech', description: '', color: '' }] } as never]);
+    const options = (payload[0] as { criteria: Array<Record<string, string>> }).criteria;
+    expect(options[0]).toEqual({ key: 'billing', description: 'Invoices', color: '#112233' });
+    expect(options[1]).toEqual({ key: 'tech' });
+  });
+});

@@ -35,6 +35,8 @@ class ChoiceOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: OptionKey
     description: Optional[str] = None
+    # Only for the playground's colors (never sent to the server); empty = the automatic color of the name.
+    color: Optional[Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]] = None
 
 
 class ChoiceQuestion(_QuestionBase):

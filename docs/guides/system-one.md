@@ -46,6 +46,8 @@ Every System One agent holds at least one question; the maximum is the one the c
 
 The order only decides how the questions are listed (playground, tool description, JSON); each one is answered on its own. Drag a question by its handle to reorder it, or use the arrows next to it.
 
+**Colors in the playground.** Yes is green and No is red. Each option of a choice question has its own color, shown in the editor and chosen automatically from the option's name (the same name always gets the same color); click the swatch to pick another, and *auto* to go back. The levels of a score question run along a green-red gradient, and the setting under the levels says whether the first level is green (ascending) or red (descending); the dot next to each level shows the color it gets. These colors are only for display and are never sent to the server.
+
 **How long a question may be** is not a fixed number: every prompt the server evaluates holds the text **plus one question**, and the agent's *maximum text length* is that per-prompt budget. A question (instructions, options, levels) must leave at least 500 characters of it for the text; the form and the API refuse it otherwise, saying how much it takes.
 
 | Type | You define | You get |

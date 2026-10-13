@@ -54,6 +54,8 @@ export interface NoulQuestion {
 export interface ChoiceOption {
   key: string;
   description?: string | null;
+  /** Playground color (#rrggbb, never sent): empty = the automatic color of the name. */
+  color?: string | null;
 }
 
 export interface ChoiceQuestion {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { randomId } from '../../utils/randomId';
 import DecimalInput from './DecimalInput';
+import { optionColor, scaleColor } from '../../utils/systemOneColors';
 import {
   MIN_OPTIONS,
   changeQuestionType,
@@ -193,7 +194,18 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                   <p className="mb-1 text-xs font-medium text-gray-600">Options ({optionRange})</p>
                   <div className="space-y-2">
                     {question.criteria.map((option: ChoiceOption, optionIndex) => (
-                      <div key={`${id}-o${optionIndex}`} className="grid grid-cols-[1fr_2fr_auto] gap-2">
+                      <div key={`${id}-o${optionIndex}`} className="grid grid-cols-[auto_1fr_2fr_auto] items-center gap-2">
+                        <span className="inline-flex items-center gap-1" title={option.color ? 'Chosen color' : 'Automatic color (by name): click to choose another'}>
+                          <input type="color" aria-label={`Option ${optionIndex + 1} color`} className="h-8 w-8 cursor-pointer rounded border border-gray-300 bg-white p-0.5"
+                                 value={optionColor(option)}
+                                 onChange={(e) => update(index, { ...question, criteria: question.criteria.map((o, i) => (i === optionIndex ? { ...o, color: e.target.value } : o)) })} />
+                          {option.color && (
+                            <button type="button" className="text-[10px] text-gray-500 underline hover:text-gray-800" aria-label={`Option ${optionIndex + 1}: back to the automatic color`}
+                                    onClick={() => update(index, { ...question, criteria: question.criteria.map((o, i) => (i === optionIndex ? { ...o, color: null } : o)) })}>
+                              auto
+                            </button>
+                          )}
+                        </span>
                         <input aria-label={`Option ${optionIndex + 1} name`} className={inputClass} placeholder="billing" value={option.key}
                                onChange={(e) => update(index, { ...question, criteria: question.criteria.map((o, i) => (i === optionIndex ? { ...o, key: e.target.value } : o)) })} />
                         <input aria-label={`Option ${optionIndex + 1} description`} className={inputClass} placeholder="Invoices, payments, refunds" value={option.description ?? ''}
@@ -215,23 +227,14 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
               {question.type === 'score' && (
                 <div className="mt-3">
                   <p className="mb-1 text-xs font-medium text-gray-600">Levels, from lowest to highest ({optionRange})</p>
-                  <fieldset className="mb-2 flex flex-wrap items-center gap-4 text-xs text-gray-600">
-                    <legend className="mb-1 block font-medium">Colors in the playground</legend>
-                    <label className="inline-flex items-center gap-1.5">
-                      <input type="radio" name={`${id}-color`} checked={(question.color_start ?? 'green') === 'green'}
-                             onChange={() => update(index, { ...question, color_start: 'green' })} />
-                      First level green (ascending)
-                    </label>
-                    <label className="inline-flex items-center gap-1.5">
-                      <input type="radio" name={`${id}-color`} checked={question.color_start === 'red'}
-                             onChange={() => update(index, { ...question, color_start: 'red' })} />
-                      First level red (descending)
-                    </label>
-                  </fieldset>
                   <div className="space-y-2">
                     {question.criteria.map((level, levelIndex) => (
                       <div key={`${id}-l${levelIndex}`} className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
-                        <span className="w-6 text-center text-xs text-gray-500">{levelIndex}</span>
+                        <span className="inline-flex w-12 items-center justify-end gap-1.5 text-xs text-gray-500">
+                          <span className="h-3 w-3 rounded-full" aria-hidden="true"
+                                style={{ backgroundColor: scaleColor(levelIndex, question.criteria.length, question.color_start ?? 'green') }} />
+                          {levelIndex}
+                        </span>
                         <input aria-label={`Level ${levelIndex} description`} className={inputClass} placeholder={LEVEL_EXAMPLES[levelIndex] ?? `Level ${levelIndex}`} value={level}
                                onChange={(e) => update(index, { ...question, criteria: question.criteria.map((l, i) => (i === levelIndex ? e.target.value : l)) })} />
                         <button type="button" className={`${smallButton} hover:text-red-600`} aria-label={`Remove level ${levelIndex}`} disabled={question.criteria.length <= MIN_OPTIONS}
@@ -245,6 +248,19 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                           onClick={() => update(index, { ...question, criteria: [...question.criteria, ''] })}>
                     <Plus className="h-4 w-4" aria-hidden="true" /> Add level
                   </button>
+                  <fieldset className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-600">
+                    <legend className="mb-1 block font-medium">Colors in the playground (the dot next to each level shows its color)</legend>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input type="radio" name={`${id}-color`} checked={(question.color_start ?? 'green') === 'green'}
+                             onChange={() => update(index, { ...question, color_start: 'green' })} />
+                      First level green (ascending)
+                    </label>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input type="radio" name={`${id}-color`} checked={question.color_start === 'red'}
+                             onChange={() => update(index, { ...question, color_start: 'red' })} />
+                      First level red (descending)
+                    </label>
+                  </fieldset>
                 </div>
               )}
 

@@ -29,3 +29,9 @@ export function yesNoColor(decision: boolean | null): string {
   if (decision === null) return 'rgb(156, 163, 175)';
   return decision ? 'rgb(16, 185, 129)' : 'rgb(239, 68, 68)';
 }
+
+/** The color of a choice option: the one chosen in the question, else the automatic one of its name. */
+export function optionColor(option: { key: string; color?: string | null } | undefined, fallbackName?: string): string {
+  if (option?.color) return option.color;
+  return categoryColor(option?.key ?? fallbackName ?? '');
+}
