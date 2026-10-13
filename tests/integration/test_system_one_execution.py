@@ -92,6 +92,29 @@ async def test_images_are_rejected_not_ignored(db, agent, server, name, ctype):
     server[0].assert_not_awaited()
 
 
+@pytest.fixture
+def openai_agent(db, agent):
+    agent.system_one_service.extra_config = '{"max_concurrency": 1, "provider": "openai_decisions"}'
+    db.flush()
+    return agent
+
+
+async def test_an_openai_service_receives_png_and_jpeg_images_as_data_urls(db, openai_agent, server):
+    await run(db, openai_agent, "", [upload("a.png", b"\x89PNG", "image/png"), upload("b.jpg", b"\xff\xd8", "image/jpg")])
+    ev, rec = server
+    images = ev.await_args.kwargs["images"]
+    assert [i.split(";")[0] for i in images] == ["data:image/png", "data:image/jpeg"]
+    assert rec.call_args.kwargs["event_overrides"]["had_images"] is True
+
+
+@pytest.mark.parametrize("name,ctype", [("x.webp", "image/webp"), ("anim.gif", "image/gif")])
+async def test_an_openai_service_rejects_other_image_formats(db, openai_agent, server, name, ctype):
+    with pytest.raises(HTTPException) as e:
+        await run(db, openai_agent, "x", [upload(name, b"data", ctype)])
+    assert e.value.status_code == 400 and "PNG and JPEG" in e.value.detail and name in e.value.detail
+    server[0].assert_not_awaited()
+
+
 async def test_unreadable_attachments_are_named_in_a_400_instead_of_being_dropped(db, agent, server):
     with pytest.raises(HTTPException) as e:
         await run(db, agent, "x", [upload("ok.txt", b"fine"), upload("blob.bin", b"\xff\xfe\x00\x01", "application/octet-stream")])

@@ -1792,6 +1792,9 @@ class AgentExecutionService:
             for f in image_files:
                 mime = (f.content_type or "").lower()
                 mime = mime if mime.startswith("image/") else (mimetypes.guess_type(f.filename or "")[0] or "image/png")
+                mime = "image/jpeg" if mime == "image/jpg" else mime
+                if mime not in system_one_client.IMAGE_MIME_TYPES:
+                    raise HTTPException(status_code=400, detail=f"Only PNG and JPEG images are supported ({f.filename})")
                 images.append(f"data:{mime};base64,{base64.b64encode(await f.read()).decode()}")
         processed = await self._process_files_for_agent(files, agent) if files else []
         readable = {p["filename"] for p in processed}
