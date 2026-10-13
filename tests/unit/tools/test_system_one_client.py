@@ -423,3 +423,84 @@ def test_only_the_meanings_that_were_given_are_sent():
     body = client.build_request_body("m", "text", [only_yes, both])["questions"]
     assert body["u"]["criteria"] == {"true": "Today"}
     assert body["v"]["criteria"] == {"true": "Today", "false": "Later"}
+
+
+# ------------------------- servers without health / model endpoints (e.g. a hosted API with only /v1/systemone)
+
+def _bare_server(request):
+    return httpx.Response(404, json={"error": {"message": "This endpoint is not part of the serving API", "code": "not_found"}})
+
+
+async def test_a_missing_health_endpoint_is_not_a_failure():
+    out = await client.probe("http://so.test", "tok", transport=transport(_bare_server))
+    assert out["ok"] is True and out["models"] == [] and out["limits"] is None
+    assert out["can_list_models"] is False
+
+
+async def test_a_server_that_lists_models_says_so():
+    def handler(request):
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "some-model"}]})
+        return httpx.Response(404)
+
+    out = await client.probe("http://so.test", "tok", transport=transport(handler))
+    assert out["ok"] is True and out["models"] == ["some-model"] and out["can_list_models"] is True
+
+
+async def test_an_empty_model_list_is_no_way_to_choose():
+    def handler(request):
+        return httpx.Response(200, json={"data": []}) if request.url.path == "/v1/models" else httpx.Response(404)
+
+    out = await client.probe("http://so.test", "tok", transport=transport(handler))
+    assert out["ok"] is True and out["can_list_models"] is False
+
+
+async def test_a_health_endpoint_that_fails_is_still_a_failure():
+    out = await client.probe("http://so.test", "tok", transport=transport(lambda r: httpx.Response(500, json={"detail": "boom"})))
+    assert out["ok"] is False
+
+
+# ---------------------------------------------------------------- the real check call
+
+def _ok_handler(captured):
+    def handler(request):
+        body = json.loads(request.content)
+        captured.append(body)
+        return httpx.Response(200, json={"answers": {key: {"type": "noul", "noul": 0.9} for key in body["questions"]}})
+    return handler
+
+
+async def test_check_model_sends_one_tiny_question_with_the_chosen_model():
+    sent = []
+    out = await client.check_model(endpoint(model="the-model", service_id=81), transport=transport(_ok_handler(sent)))
+    assert out["ok"] is True
+    (body,) = sent
+    assert body["model"] == "the-model" and len(body["questions"]) == 1 and len(body["state"]) < 50
+    (question,) = body["questions"].values()
+    assert question["type"] == "noul"
+
+
+@pytest.mark.parametrize("status,body,fragment", [
+    (401, {"error": {"message": "Invalid or missing API key."}}, "token"),
+    (403, {"detail": "forbidden"}, "token"),
+    (402, {"error": {"message": "no credit", "code": "insufficient_quota"}}, "credit"),
+    (404, {"error": {"message": "not part of the serving API"}}, "URL"),
+    (422, {"detail": [{"msg": "Unknown model: nope"}]}, "Unknown model"),
+])
+async def test_check_model_tells_which_part_is_wrong(status, body, fragment):
+    out = await client.check_model(endpoint(service_id=82), transport=transport(lambda r: httpx.Response(status, json=body)))
+    assert out["ok"] is False and fragment.lower() in out["message"].lower()
+
+
+async def test_check_model_reports_a_server_that_is_down():
+    def handler(request):
+        raise httpx.ConnectError("refused")
+
+    out = await client.check_model(endpoint(service_id=83), transport=transport(handler))
+    assert out["ok"] is False and "connect" in out["message"].lower()
+
+
+async def test_a_402_is_its_own_kind_not_a_rejected_request():
+    with pytest.raises(SystemOneError) as e:
+        await client.evaluate(endpoint(service_id=84), "t", [NOUL], transport=transport(lambda r: httpx.Response(402, json={"error": {"message": "no credit"}})))
+    assert e.value.kind == "quota"

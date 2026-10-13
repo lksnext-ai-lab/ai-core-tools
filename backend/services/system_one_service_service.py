@@ -165,7 +165,7 @@ class SystemOneServiceService:
     # ------------------------------------------------------------ connection tests
 
     @staticmethod
-    def _probe_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    def _probe_result(result: Dict[str, Any], checked_with_call: bool = False) -> Dict[str, Any]:
         limits = result["limits"]
         server_limit = limits.get("max_concurrent_requests") if isinstance(limits, dict) else None
         return {
@@ -173,12 +173,30 @@ class SystemOneServiceService:
             "message": result["message"],
             "models": result["models"],
             "limits": limits,
+            "checked_with_call": checked_with_call,
             # The cap is per backend process and every process shares the server's limit (NFR-2).
             "suggested_max_concurrency": (
                 system_one_client.default_max_concurrency(server_limit, _workers())
                 if result["ok"] and isinstance(server_limit, int) else None
             ),
         }
+
+    @staticmethod
+    async def _verify(endpoint: str, api_key: str, model: str) -> Dict[str, Any]:
+        """Probe the server; when it offers no way to list models, prove URL, token and model with one real call.
+
+        A server that lists its models already shows the model exists; one that does not (a hosted API with only
+        ``/v1/systemone``) cannot be checked any other way. Without a model yet (the wizard's model step) there
+        is nothing to check.
+        """
+        result = await system_one_client.probe(endpoint, api_key or None)
+        if result["ok"] and not result["models"] and model:
+            checked = await system_one_client.check_model(
+                system_one_client.Endpoint(base_url=system_one_client.check_base_url(endpoint), model=model,
+                                           api_key=api_key or None, max_concurrency=1, service_id=-1))
+            result = {**result, "ok": checked["ok"], "message": checked["message"]}
+            return SystemOneServiceService._probe_result(result, checked_with_call=True)
+        return SystemOneServiceService._probe_result(result)
 
     @staticmethod
     async def test_connection_with_config(
@@ -197,10 +215,10 @@ class SystemOneServiceService:
             same = stored is not None and _same_endpoint(stored.endpoint, endpoint)
             api_key = (stored.api_key if same else None) or ""
         try:
-            result = await system_one_client.probe(endpoint, api_key or None)
+            return await SystemOneServiceService._verify(endpoint, api_key, (config.get("model") or "").strip())
         except ValueError as exc:
-            return {"status": "error", "message": str(exc), "models": [], "limits": None, "suggested_max_concurrency": None}
-        return SystemOneServiceService._probe_result(result)
+            return {"status": "error", "message": str(exc), "models": [], "limits": None,
+                    "suggested_max_concurrency": None, "checked_with_call": False}
 
     @staticmethod
     async def test_connection(db: Session, app_id: int, service_id: int) -> Optional[Dict[str, Any]]:
@@ -208,7 +226,7 @@ class SystemOneServiceService:
         if not service:
             return None
         try:
-            result = await system_one_client.probe(service.endpoint or "", service.api_key)
+            return await SystemOneServiceService._verify(service.endpoint or "", service.api_key or "", service.description or "")
         except ValueError as exc:
-            return {"status": "error", "message": str(exc), "models": [], "limits": None, "suggested_max_concurrency": None}
-        return SystemOneServiceService._probe_result(result)
+            return {"status": "error", "message": str(exc), "models": [], "limits": None,
+                    "suggested_max_concurrency": None, "checked_with_call": False}

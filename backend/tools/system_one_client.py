@@ -26,7 +26,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-ErrorKind = Literal["unavailable", "overloaded", "timeout", "unauthorized", "invalid_request", "invalid_response"]
+ErrorKind = Literal["unavailable", "overloaded", "timeout", "unauthorized", "quota", "invalid_request", "invalid_response"]
 
 _TIMEOUT_S = 30.0       # per httpx phase (connect/read/write/pool)
 _DEADLINE_S = 120.0     # the whole call: waiting for a slot + every attempt + the pauses between them
@@ -129,6 +129,8 @@ def _error_for(response: httpx.Response) -> SystemOneError:
     status, message = response.status_code, _error_message(response)
     if status in (401, 403):   # servers differ: some answer 403 for a missing or wrong key
         kind: ErrorKind = "unauthorized"
+    elif status == 402:       # a hosted API whose prepaid credit ran out
+        kind = "quota"
     elif status in (429, 529):
         kind = "overloaded"
     elif status == 504:
@@ -244,7 +246,7 @@ async def probe(base_url: str, api_key: Optional[str],
     """Check ``/health``, list ``/v1/models`` and read ``/v1/limits``. Never raises for server problems."""
     root = check_base_url(base_url)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None}
+    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "can_list_models": False}
 
     async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S, transport=transport, headers=headers) as http:
         async def get(path: str) -> httpx.Response:
@@ -261,13 +263,15 @@ async def probe(base_url: str, api_key: Optional[str],
         if health.status_code in (401, 403):
             result["message"] = f"The server rejected the token ({health.status_code})"
             return result
-        try:
-            healthy = health.status_code == 200 and health.json().get("status") == "ok"
-        except (ValueError, AttributeError):
-            healthy = False
-        if not healthy:
-            result["message"] = f"The server is not ready ({_error_message(health)})"
-            return result
+        has_health = health.status_code not in (404, 405)   # not every server has a health endpoint
+        if has_health:
+            try:
+                healthy = health.status_code == 200 and health.json().get("status") == "ok"
+            except (ValueError, AttributeError):
+                healthy = False
+            if not healthy:
+                result["message"] = f"The server is not ready ({_error_message(health)})"
+                return result
 
         try:
             models = await get("/v1/models")
@@ -283,6 +287,41 @@ async def probe(base_url: str, api_key: Optional[str],
             result["message"] = "The server answered /health but not /v1/models or /v1/limits"
             return result
 
+    result["can_list_models"] = bool(result["models"])
     result["ok"] = True
-    result["message"] = "Connection successful"
+    result["message"] = (
+        "Connection successful" if has_health or result["can_list_models"]
+        else "The server answered, but it has no health or model endpoints: the token and the model are only "
+             "checked by a real call"
+    )
     return result
+
+
+_CHECK_QUESTION = [NoulQuestion(key="ping", type="noul", instructions="Is the text a greeting?")]
+
+
+async def check_model(endpoint: Endpoint, *, transport: Optional[httpx.AsyncBaseTransport] = None) -> Dict[str, Any]:
+    """Verify URL, token and model with one real, tiny call (one question, a few tokens).
+
+    For servers that offer no way to list models or to check the token, this is the only proof. Never raises
+    for a server problem: ``{"ok": bool, "message": str}``.
+    """
+    try:
+        await evaluate(endpoint, "hello", _CHECK_QUESTION, transport=transport)
+    except SystemOneError as exc:
+        return {"ok": False, "message": _check_failure(exc)}
+    return {"ok": True, "message": "Connection verified with a real test call (one question, a few tokens)"}
+
+
+def _check_failure(exc: SystemOneError) -> str:
+    if exc.kind == "unauthorized":
+        return f"The server rejected the token (HTTP {exc.status})"
+    if exc.kind == "quota":
+        return "The account has no credit left"
+    if exc.kind == "invalid_request":
+        if exc.status == 404:
+            return "The server answered 404: check the URL (some servers carry the model name in it)"
+        return f"The server rejected the test question: {exc.message[:200]}"
+    if exc.kind == "invalid_response":
+        return "The server answered, but not in the format System One uses"
+    return exc.message

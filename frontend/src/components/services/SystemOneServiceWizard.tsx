@@ -153,8 +153,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     setTesting(true);
     setTestResult(null);
     try {
+      // The model goes along: a server that cannot list models is then checked with one real, tiny call.
       const result = await apiService.testSystemOneServiceWithConfig(
-        appId, { endpoint: endpoint.trim(), api_key: apiKey.trim() }, serviceId);
+        appId, { endpoint: endpoint.trim(), api_key: apiKey.trim(), model: model.trim() }, serviceId);
       // Reachable is not enough: the model that will be saved has to be one the server offers.
       if (result.status === 'success' && result.models.length > 0 && !result.models.includes(model.trim())) {
         setTestResult({ ...result, status: 'error', message: `The server does not offer the model "${model.trim()}"` });
@@ -334,6 +335,12 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                     </div>
                   )}
                 </div>
+                {listResult?.status === 'success' && models.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    This server cannot list its models, so the test sends one small real question (a few tokens) to check
+                    the URL, the token and the model.
+                  </p>
+                )}
                 <button type="button" onClick={() => void handleTest()} disabled={testing}
                         className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60">
                   {testing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plug className="h-4 w-4" aria-hidden="true" />}
