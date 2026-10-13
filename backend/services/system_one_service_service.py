@@ -45,6 +45,12 @@ def max_concurrency_of(service: SystemOneService) -> int:
     return value if isinstance(value, int) and value >= 1 else 1
 
 
+def provider_of(service: SystemOneService) -> str:
+    """The wire protocol, kept in ``extra_config`` (no column: services created before it are ``system_one``)."""
+    value = _read_extra(service.extra_config).get("provider")
+    return value if value in system_one_client.PROVIDERS else system_one_client.PROVIDER_SYSTEM_ONE
+
+
 class SystemOneServiceService:
 
     @staticmethod
@@ -54,6 +60,8 @@ class SystemOneServiceService:
             service_id=service.service_id,
             name=service.name,
             endpoint=service.endpoint or "",
+            provider=provider_of(service),
+            supports_images=system_one_client.supports_images(provider_of(service)),
             model=service.description or "",
             max_concurrency=max_concurrency_of(service),
             created_at=service.create_date,
@@ -66,6 +74,8 @@ class SystemOneServiceService:
             name=service.name,
             endpoint=service.endpoint or "",
             api_key=mask_api_key(service.api_key),
+            provider=provider_of(service),
+            supports_images=system_one_client.supports_images(provider_of(service)),
             model=service.description or "",
             max_concurrency=max_concurrency_of(service),
             created_at=service.create_date,
@@ -115,7 +125,7 @@ class SystemOneServiceService:
         if not is_masked_key(token):
             service.api_key = token or None
         concurrency = data.max_concurrency or system_one_client.default_max_concurrency(None)
-        service.extra_config = json.dumps({"max_concurrency": concurrency})
+        service.extra_config = json.dumps({"max_concurrency": concurrency, "provider": data.provider})
 
         if service_id == 0:
             service = SystemOneServiceRepository.create(db, service)
@@ -180,18 +190,20 @@ class SystemOneServiceService:
         }
 
     @staticmethod
-    async def _verify(endpoint: str, api_key: str, model: str, live_call: bool = True) -> Dict[str, Any]:
+    async def _verify(endpoint: str, api_key: str, model: str, live_call: bool = True,
+                      provider: str = system_one_client.PROVIDER_SYSTEM_ONE) -> Dict[str, Any]:
         """Probe the server; when it offers no way to list models, prove URL, token and model with one real call.
 
         A server that lists its models already shows the model exists; one that does not (a hosted API with only
         ``/v1/systemone``) cannot be checked any other way. Without a model yet (the wizard's model step) there
         is nothing to check.
         """
-        result = await system_one_client.probe(endpoint, api_key or None)
+        result = await system_one_client.probe(endpoint, api_key or None, provider)
         if live_call and result["ok"] and not result["models"] and model:
             checked = await system_one_client.check_model(
                 system_one_client.Endpoint(base_url=system_one_client.check_base_url(endpoint), model=model,
-                                           api_key=api_key or None, max_concurrency=1, service_id=-1))
+                                           api_key=api_key or None, max_concurrency=1, service_id=-1,
+                                           provider=provider))
             result = {**result, "ok": checked["ok"], "message": checked["message"]}
             return SystemOneServiceService._probe_result(result, checked_with_call=True)
         return SystemOneServiceService._probe_result(result)
@@ -213,7 +225,8 @@ class SystemOneServiceService:
             same = stored is not None and _same_endpoint(stored.endpoint, endpoint)
             api_key = (stored.api_key if same else None) or ""
         try:
-            return await SystemOneServiceService._verify(endpoint, api_key, (config.get("model") or "").strip())
+            return await SystemOneServiceService._verify(endpoint, api_key, (config.get("model") or "").strip(),
+                                                         provider=config.get("provider") or system_one_client.PROVIDER_SYSTEM_ONE)
         except ValueError as exc:
             return _failure(str(exc))
 
@@ -224,6 +237,6 @@ class SystemOneServiceService:
             return None
         try:
             return await SystemOneServiceService._verify(service.endpoint or "", service.api_key or "", service.description or "",
-                                                         live_call=live_call)
+                                                         live_call=live_call, provider=provider_of(service))
         except ValueError as exc:
             return _failure(str(exc))

@@ -7,16 +7,19 @@ import { FormField } from '../ui/FormField';
 import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 import { ensureUnique } from './wizard/ServiceWizard';
-import { SYSTEM_ONE_DEFAULT_ENDPOINT } from '../../types/systemOne';
+import ProviderStep from './wizard/steps/ProviderStep';
+import { getProviderDescriptor } from './wizard/providers';
 import { checkConcurrency } from '../../utils/systemOneLimits';
 import type {
   SystemOneConnectionResult,
+  SystemOneProvider,
   SystemOneServiceDetail,
   SystemOneServicePayload,
 } from '../../types/systemOne';
 
-// Same three-step shape as the AI service wizard: credentials -> model (listed from the API) -> confirm and test.
+// Same shape as the AI service wizard: provider -> credentials -> model (listed from the API) -> confirm and test.
 const STEPS: StepDefinition[] = [
+  { id: 'provider', label: 'Provider' },
   { id: 'connection', label: 'Connection' },
   { id: 'model', label: 'Model' },
   { id: 'test', label: 'Test' },
@@ -54,7 +57,10 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
 
-  const [endpoint, setEndpoint] = useState(service?.endpoint || SYSTEM_ONE_DEFAULT_ENDPOINT);
+  const [provider, setProvider] = useState<SystemOneProvider | ''>(service?.provider ?? '');
+  const providerInfo = getProviderDescriptor(provider);
+  const tokenRequired = providerInfo?.apiKey === 'required';
+  const [endpoint, setEndpoint] = useState(service?.endpoint || '');
   const [apiKey, setApiKey] = useState(service?.api_key ?? '');
   const [tokenReset, setTokenReset] = useState(false);
 
@@ -85,12 +91,25 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     }
   }
 
+  // Changing the provider swaps the URL only while it still is a provider default (never a URL the user typed), and
+  // drops what depended on the previous one.
+  function changeProvider(next: SystemOneProvider) {
+    if (next === provider) return;
+    const defaults = ['system_one', 'openai_decisions'].map((v) => normalizeUrl(getProviderDescriptor(v)?.defaultBaseUrl ?? ''));
+    if (endpoint.trim() === '' || defaults.includes(normalizeUrl(endpoint))) {
+      setEndpoint(getProviderDescriptor(next)?.defaultBaseUrl ?? '');
+    }
+    setProvider(next);
+    setListResult(null);
+    setModel('');
+  }
+
   async function listModels() {
     setListing(true);
     setListResult(null);
     try {
       const result = await apiService.testSystemOneServiceWithConfig(
-        appId, { endpoint: endpoint.trim(), api_key: apiKey.trim() }, serviceId);
+        appId, { endpoint: endpoint.trim(), api_key: apiKey.trim(), provider: provider as SystemOneProvider }, serviceId);
       setListResult(result);
       if (result.status === 'success' && result.suggested_max_concurrency != null && concurrency.trim() === '') {
         setConcurrency(String(result.suggested_max_concurrency));
@@ -106,7 +125,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const listedFor = useRef('');
   useEffect(() => {
     if (!isOpen || stepId !== 'model') return;
-    const key = `${endpoint.trim()}|${apiKey.trim()}`;
+    const key = `${provider}|${endpoint.trim()}|${apiKey.trim()}`;
     if (listedFor.current === key) return;
     listedFor.current = key;
     void listModels();
@@ -124,7 +143,8 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const finalName = name.trim() || suggestedName;
 
   function nextDisabled(): boolean {
-    if (stepId === 'connection') return !isUrl(endpoint);
+    if (stepId === 'provider') return !provider;
+    if (stepId === 'connection') return !isUrl(endpoint) || (tokenRequired && !apiKey.trim());
     if (stepId === 'model') return listing || !model.trim();
     return !finalName || concurrencyError !== null || concurrencyCheck.error !== undefined;
   }
@@ -133,6 +153,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     return {
       name: finalName,
       endpoint: endpoint.trim(),
+      provider: provider as SystemOneProvider,
       api_key: apiKey.trim(),
       model: model.trim(),
       max_concurrency: parsedConcurrency,
@@ -145,7 +166,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     try {
       // The model goes along: a server that cannot list models is then checked with one real, tiny call.
       const result = await apiService.testSystemOneServiceWithConfig(
-        appId, { endpoint: endpoint.trim(), api_key: apiKey.trim(), model: model.trim() }, serviceId);
+        appId, { endpoint: endpoint.trim(), api_key: apiKey.trim(), model: model.trim(), provider: provider as SystemOneProvider }, serviceId);
       // Reachable is not enough: the model that will be saved has to be one the server offers.
       if (result.status === 'success' && result.models.length > 0 && !result.models.includes(model.trim())) {
         setTestResult({ ...result, status: 'error', message: `The server does not offer the model "${model.trim()}"` });
@@ -207,12 +228,16 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
           showBack
         >
           <div className="px-2 py-3">
+            {stepId === 'provider' && (
+              <ProviderStep kind="system_one" selected={provider} onSelect={(v) => changeProvider(v as SystemOneProvider)} />
+            )}
+
             {stepId === 'connection' && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">Connect to a System One server</h3>
+                  <h3 className="text-base font-semibold text-gray-900">Connect a decision model</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    System One answers closed questions about a text with probabilities. These values are used to list
+                    It answers closed questions about a text with probabilities. These values are used to list
                     the available models. They are not saved until you confirm the service in the last step.
                   </p>
                 </div>
@@ -222,17 +247,18 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   type="text"
                   value={endpoint}
                   onChange={(e) => changeEndpoint(e.target.value)}
-                  placeholder={SYSTEM_ONE_DEFAULT_ENDPOINT}
+                  placeholder={providerInfo?.baseUrlPlaceholder}
                   helpText="Private addresses are allowed: a self-hosted server normally lives on a private network."
                   required
                 />
                 <FormField
-                  label="Token (optional)"
+                  label={tokenRequired ? 'API key' : 'Token (optional)'}
                   id="so-token"
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Bearer token, if the server requires one"
+                  placeholder={providerInfo?.apiKeyPlaceholder}
+                  required={tokenRequired}
                   helpText={isEdit && !tokenReset ? 'Leave the masked value to keep the stored token; empty it to remove it.' : undefined}
                 />
                 {tokenReset && (

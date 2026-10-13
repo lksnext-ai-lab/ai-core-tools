@@ -57,7 +57,7 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
           <div>
             <h3 className="text-xl font-semibold text-gray-900">System One</h3>
             <p className="text-sm text-gray-600">
-              Answers closed questions about a text with probabilities. Text only: images are not supported.
+              Answers closed questions about a text with probabilities. Images only work if the service's provider accepts them.
             </p>
           </div>
         </div>

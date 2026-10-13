@@ -18,6 +18,8 @@ interface SystemOneInterfaceProps {
   /** The agent's per-prompt budget in characters, and whether a summarizing LLM is set (to say what is going on). */
   readonly maxStateChars: number;
   readonly summarizes: boolean;
+  /** The agent's service, to know whether its provider takes images. */
+  readonly serviceId?: number | null;
 }
 
 interface Evaluation {
@@ -139,7 +141,12 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
   );
 }
 
-export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxStateChars, summarizes }: SystemOneInterfaceProps) => {
+export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxStateChars, summarizes, serviceId }: SystemOneInterfaceProps) => {
+  const [acceptsImages, setAcceptsImages] = useState(false);
+  useEffect(() => {
+    if (serviceId == null) return;
+    apiService.getSystemOneService(appId, serviceId).then((svc) => setAcceptsImages(!!svc.supports_images)).catch(() => setAcceptsImages(false));
+  }, [appId, serviceId]);
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [running, setRunning] = useState(false);
@@ -163,13 +170,13 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
   function addFiles(selected: FileList | null) {
     if (!selected) return;
     const incoming = Array.from(selected);
-    const images = incoming.filter(isImage);
+    const images = acceptsImages ? [] : incoming.filter(isImage);
     if (images.length > 0) {
       setError(`System One evaluates text only: images are not supported (${images.map((f) => f.name).join(', ')})`);
     } else {
       setError(null);
     }
-    setFiles((current) => [...current, ...incoming.filter((f) => !isImage(f))]);
+    setFiles((current) => [...current, ...incoming.filter((f) => acceptsImages || !isImage(f))]);
     if (fileInput.current) fileInput.current.value = '';
   }
 
@@ -195,7 +202,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100"><Gauge className="h-5 w-5 text-emerald-600" aria-hidden="true" /></div>
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{agentName}</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Paste a text (or attach text documents) and see the answer to each question. Text only.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Paste a text (or attach documents{acceptsImages ? ' and images' : ''}) and see the answer to each question.{acceptsImages ? '' : ' Text only.'}</p>
         </div>
       </div>
 
@@ -206,7 +213,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400/70 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input ref={fileInput} id="so-files" type="file" multiple accept={TEXT_FILE_ACCEPT} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
+          <input ref={fileInput} id="so-files" type="file" multiple accept={acceptsImages ? `${TEXT_FILE_ACCEPT},image/png,image/jpeg,image/webp,image/gif` : TEXT_FILE_ACCEPT} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
           <label htmlFor="so-files" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
             <FileText className="h-4 w-4" aria-hidden="true" /> Attach documents
           </label>

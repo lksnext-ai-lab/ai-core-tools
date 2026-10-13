@@ -19,7 +19,7 @@ from models.system_one_service import SystemOneService
 from schemas.export_schemas import AgentExportFileSchema, ExportSystemOneServiceSchema
 from schemas.import_schemas import ComponentType, ConflictMode, ImportSummarySchema
 from schemas.system_one_schemas import QuestionList, questions_error_message
-from services.system_one_service_service import max_concurrency_of
+from services.system_one_service_service import max_concurrency_of, provider_of
 from tools import system_one_client
 from utils.logger import get_logger
 
@@ -50,6 +50,7 @@ def export_system_one_service(service: SystemOneService) -> ExportSystemOneServi
         endpoint=service.endpoint,
         model_name=service.description or "",
         max_concurrency=max_concurrency_of(service),
+        provider=provider_of(service),
     )
 
 
@@ -74,7 +75,7 @@ def import_system_one_service(session: Session, item: ExportSystemOneServiceSche
         endpoint=endpoint,
         api_key=api_key or None,
         description=item.model_name or None,
-        extra_config=json.dumps({"max_concurrency": max(1, item.max_concurrency or 1)}),
+        extra_config=json.dumps({"max_concurrency": max(1, item.max_concurrency or 1), "provider": item.provider}),
         create_date=datetime.now(),
     )
     session.add(service)

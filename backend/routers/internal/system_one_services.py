@@ -59,7 +59,8 @@ async def test_system_one_connection_with_config(
 ):
     try:
         return await SystemOneServiceService.test_connection_with_config(
-            db, app_id, {"endpoint": config.endpoint, "api_key": config.api_key, "model": config.model}, service_id)
+            db, app_id, {"endpoint": config.endpoint, "api_key": config.api_key, "model": config.model,
+             "provider": config.provider}, service_id)
     except Exception as exc:
         raise _server_error("testing the System One connection", exc, app_id=app_id)
 

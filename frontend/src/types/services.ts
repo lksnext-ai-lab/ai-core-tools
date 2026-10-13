@@ -54,7 +54,7 @@ export interface ListProviderModelsResponse {
   readonly requires_manual_input: boolean;
 }
 
-export type ServiceKind = 'ai' | 'embedding' | 'sandbox';
+export type ServiceKind = 'ai' | 'embedding' | 'sandbox' | 'system_one';
 export type ServiceScope = 'app' | 'system';
 export type ServiceWizardMode = 'create' | 'edit-model';
 

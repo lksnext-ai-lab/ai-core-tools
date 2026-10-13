@@ -7,7 +7,7 @@ These schemas define the structure of exported data with:
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 from schemas.agent_schemas import A2AAgentFieldsMixin
@@ -52,6 +52,7 @@ class ExportSystemOneServiceSchema(BaseModel):
     endpoint: Optional[str] = None
     model_name: str = ""
     max_concurrency: int = 1
+    provider: Literal["system_one", "openai_decisions"] = "system_one"
 
 
 # ==================== EMBEDDING SERVICE ====================

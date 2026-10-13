@@ -4,7 +4,7 @@
 
 System One is a **decision model**: it reads a text and answers a fixed list of closed questions with probabilities, without generating text. Mattin AI lets you connect a System One server and build **System One agents** that classify, route, judge or decide over a text, from the playground, the public API, or as a **tool** of other agents.
 
-> **Text only.** This version evaluates text. Attached documents are converted to text; images are rejected. See [Future: multimodal](#future-multimodal).
+> **Text by default.** Attached documents are converted to text. Images are accepted only when the service's provider supports them (today: OpenAI Decisions); otherwise they are rejected. See [Providers](#providers).
 
 ---
 
@@ -182,6 +182,15 @@ Like every other write, evaluating from the playground is a `POST`: users whose 
 
 System One agents are not counted against the plan's `llm_calls` quota (see [SaaS mode](saas-mode.md#system-one-and-quotas) for why and for how a hosted service would be metered, per input token).
 
-## Future: multimodal
+## Providers
 
-System One evaluation is text only today. If a future model accepts images, the intended path mirrors `AIService.supports_video`: a capability flag **declared by hand on the System One service** (for example `supports_images`), which, when on, lets the agent send images instead of rejecting them. Nothing for this exists yet, and no column has been reserved.
+A service has a **provider**, chosen in the first step of the wizard (stored in `extra_config.provider`; services created before it are `system_one`). The backend client (`backend/tools/system_one_client.py`) translates each provider's wire format and normalizes the answer to the System One shape, so decisions, metrics and the agents are provider-agnostic.
+
+| Provider | Endpoint | Models | Limits | Images |
+|---|---|---|---|---|
+| `system_one` (Nimble, Jev, any `/v1/systemone` server) | `POST /v1/systemone` | `/v1/models` | `/v1/limits` | no |
+| `openai_decisions` | `POST /v1/decisions` (default URL `https://api.openai.com`, API key required) | fixed: `gpt-6-luna` | not published (set the concurrency by hand) | yes (base64 data URLs) |
+
+With OpenAI Decisions the evaluated text and images are sent to OpenAI. `noul` becomes a `predicate` (its true/false meanings are appended to the instructions), `choice` and `score` map to `choices` / `levels`. A `refusal` answer fails the call. Confidence thresholds tuned on one provider do not transfer to another. Images are sent from the playground and the public API; as a tool of another agent, images of the calling turn are still ignored.
+
+To add a provider: a constant and a request/response translator in the client, an entry in `SYSTEM_ONE_PROVIDERS` (frontend `types/systemOne.ts`), and `IMAGE_PROVIDERS` if it takes images.

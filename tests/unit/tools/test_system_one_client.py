@@ -552,3 +552,64 @@ async def test_waiting_too_long_for_a_slot_is_an_overload_the_caller_can_retry(m
     with pytest.raises(SystemOneError) as e:
         await client.evaluate(endpoint(service_id=92), "t", [NOUL], transport=transport(lambda r: httpx.Response(200, json=ok_json([NOUL]))))
     assert e.value.kind == "overloaded"
+
+
+# ------------------------------------------------------------ OpenAI Decisions
+
+OPENAI = dict(provider=client.PROVIDER_OPENAI, model="gpt-6-luna", base_url="https://api.openai.test", api_key="sk-x")
+
+
+def _openai_answers():
+    return {"answers": [
+        {"type": "predicate", "name": "urgent", "probability": 0.9},
+        {"type": "choice", "name": "area", "choice": "billing", "confidence": 0.8,
+         "probabilities": [{"value": "billing", "probability": 0.7}, {"value": "tech", "probability": 0.3}]},
+        {"type": "score", "name": "anger", "score": 0.3, "confidence": 0.5,
+         "probabilities": [{"value": 0, "label": "Calm", "probability": 0.7}, {"value": 1, "label": "Angry", "probability": 0.3}]},
+    ]}
+
+
+def test_openai_body_translates_the_three_types_and_images():
+    body = client.build_request_body("gpt-6-luna", "t", [NOUL_CRIT, CHOICE, SCORE], client.PROVIDER_OPENAI, ["data:image/png;base64,AA"])
+    assert body["input"][0]["content"] == [{"type": "input_text", "text": "t"},
+                                           {"type": "input_image", "image_url": "data:image/png;base64,AA"}]
+    reply, area, anger = body["questions"]
+    assert reply["type"] == "predicate" and "Today" in reply["instructions"]
+    assert area["choices"][0] == {"value": "billing", "description": "Invoices"}
+    assert anger["levels"][1]["label"] == "Angry"
+    assert client.build_request_body("m", "plain", [NOUL], client.PROVIDER_OPENAI)["input"] == "plain"
+
+
+@pytest.mark.asyncio
+async def test_openai_evaluate_posts_to_decisions_and_normalizes_the_answer():
+    seen = {}
+
+    def handler(request):
+        seen["url"], seen["auth"] = str(request.url), request.headers["authorization"]
+        return httpx.Response(200, json=_openai_answers())
+
+    raw = await client.evaluate(endpoint(**OPENAI), "t", ALL, transport=transport(handler))
+    assert seen == {"url": "https://api.openai.test/v1/decisions", "auth": "Bearer sk-x"}
+    assert raw["answers"]["urgent"]["noul"] == 0.9
+    assert raw["answers"]["area"]["probabilities"] == {"billing": 0.7, "tech": 0.3}
+    assert raw["answers"]["anger"]["legend"] == {"0": "Calm", "1": "Angry"}
+
+
+@pytest.mark.asyncio
+async def test_openai_refusal_and_text_only_provider_with_images():
+    refusal = {"answers": [{"type": "refusal", "name": "urgent"}]}
+    with pytest.raises(SystemOneError, match="refused"):
+        await client.evaluate(endpoint(**OPENAI), "t", [NOUL], transport=transport(lambda r: httpx.Response(200, json=refusal)))
+    with pytest.raises(SystemOneError, match="text only"):
+        await client.evaluate(endpoint(), "t", [NOUL], images=["data:image/png;base64,AA"])
+
+
+@pytest.mark.asyncio
+async def test_openai_probe_checks_the_key_and_lists_the_fixed_model():
+    ok = await client.probe("https://api.openai.test", "sk-x", client.PROVIDER_OPENAI,
+                            transport=transport(lambda r: httpx.Response(200, json={"data": []})))
+    assert ok["ok"] and ok["models"] == ["gpt-6-luna"]
+    bad = await client.probe("https://api.openai.test", "sk-x", client.PROVIDER_OPENAI,
+                             transport=transport(lambda r: httpx.Response(401, json={})))
+    assert not bad["ok"] and "rejected" in bad["message"]
+    assert not (await client.probe("https://api.openai.test", None, client.PROVIDER_OPENAI))["ok"]

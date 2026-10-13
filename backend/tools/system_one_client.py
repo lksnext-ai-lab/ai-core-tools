@@ -3,8 +3,10 @@
 System One answers closed questions about a text with probabilities (no text generation).
 One ``evaluate`` call sends ALL the questions of an agent in a single ``POST /v1/systemone``.
 
-v1 evaluates TEXT only. Multimodal input is future work (a capability flag declared on the
-service, like ``AIService.supports_video``) and is deliberately not modelled here.
+Two providers speak different wire formats (``PROVIDERS``): ``system_one`` (Nimble, Jev: ``/v1/systemone``) and
+``openai_decisions`` (``/v1/decisions``). The OpenAI answer is normalized to the System One shape right here, so
+everything downstream (decisions, evaluator, metrics) is provider-agnostic. Only providers in ``IMAGE_PROVIDERS``
+accept images.
 
 Server limits that shape this module: 4 concurrent requests by default (HTTP 529 plus
 ``Retry-After`` above that), 64 questions per call and 8192 tokens per question prompt.
@@ -26,6 +28,12 @@ from schemas.system_one_schemas import ChoiceQuestion, NoulQuestion, Question
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+PROVIDER_SYSTEM_ONE = "system_one"
+PROVIDER_OPENAI = "openai_decisions"
+PROVIDERS = (PROVIDER_SYSTEM_ONE, PROVIDER_OPENAI)
+IMAGE_PROVIDERS = frozenset({PROVIDER_OPENAI})
+OPENAI_MODELS = ["gpt-6-luna"]   # ponytail: the only model of the Decisions API today; it has no model listing
 
 ErrorKind = Literal["unavailable", "overloaded", "timeout", "unauthorized", "quota", "invalid_request", "invalid_response"]
 
@@ -57,6 +65,11 @@ class Endpoint:
     max_concurrency: int
     service_id: int
     api_key: Optional[str] = field(default=None, repr=False)
+    provider: str = PROVIDER_SYSTEM_ONE
+
+
+def supports_images(provider: str) -> bool:
+    return provider in IMAGE_PROVIDERS
 
 
 def default_max_concurrency(server_limit: Optional[int]) -> int:
@@ -66,7 +79,10 @@ def default_max_concurrency(server_limit: Optional[int]) -> int:
 
 # ------------------------------------------------------------------ request
 
-def build_request_body(model: str, state: str, questions: List[Question]) -> Dict[str, Any]:
+def build_request_body(model: str, state: str, questions: List[Question],
+                       provider: str = PROVIDER_SYSTEM_ONE, images: Optional[List[str]] = None) -> Dict[str, Any]:
+    if provider == PROVIDER_OPENAI:
+        return _build_openai_body(model, state, questions, images)
     body_questions: Dict[str, Any] = {}
     for q in questions:
         item: Dict[str, Any] = {"type": q.type, "instructions": q.instructions}
@@ -80,6 +96,56 @@ def build_request_body(model: str, state: str, questions: List[Question]) -> Dic
             item["criteria"] = list(q.criteria)
         body_questions[q.key] = item
     return {"model": model, "state": state, "questions": body_questions}
+
+
+def _build_openai_body(model: str, state: str, questions: List[Question], images: Optional[List[str]]) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    for q in questions:
+        item: Dict[str, Any] = {"type": "predicate", "name": q.key, "instructions": q.instructions}
+        if isinstance(q, NoulQuestion):
+            # A predicate has no per-answer meanings: they go into the instructions.
+            meanings = [f"{k} means: {v}." for k, v in (("true", q.criteria.true), ("false", q.criteria.false)) if v] if q.criteria else []
+            item["instructions"] = " ".join([q.instructions, *meanings])
+        elif isinstance(q, ChoiceQuestion):
+            item["type"] = "choice"
+            item["choices"] = [{"value": o.key, "description": o.description or o.key} for o in q.criteria]
+        else:
+            item["type"] = "score"
+            item["levels"] = [{"label": level, "description": level} for level in q.criteria]
+        items.append(item)
+    if images:
+        content: List[Dict[str, Any]] = ([{"type": "input_text", "text": state}] if state.strip() else [])
+        content += [{"type": "input_image", "image_url": url} for url in images]
+        input_: Any = [{"role": "user", "content": content}]
+    else:
+        input_ = state
+    return {"model": model, "input": input_, "questions": items}
+
+
+def _normalize_openai(data: Any, questions: List[Question]) -> Dict[str, Any]:
+    """OpenAI's ``{"answers": [..]}`` -> the System One shape (``answers`` keyed by question, probability maps)."""
+    answers = data.get("answers") if isinstance(data, dict) else None
+    if not isinstance(answers, list):
+        return {}
+    out: Dict[str, Any] = {}
+    for a in answers:
+        if not isinstance(a, dict) or not isinstance(a.get("name"), str):
+            continue
+        t, probs = a.get("type"), a.get("probabilities")
+        if t == "predicate":
+            out[a["name"]] = {"type": "noul", "noul": a.get("probability")}
+        elif t in ("choice", "score") and isinstance(probs, list):
+            pmap = {str(p.get("value")): p.get("probability") for p in probs if isinstance(p, dict)}
+            item = {"type": t, "probabilities": pmap, "confidence": a.get("confidence")}
+            if t == "choice":
+                item["choice"] = a.get("choice")
+            else:
+                item["score"] = a.get("score")
+                item["legend"] = {str(p.get("value")): str(p.get("label")) for p in probs if isinstance(p, dict)}
+            out[a["name"]] = item
+        elif t == "refusal":
+            out[a["name"]] = {"type": "refusal"}
+    return {"answers": out, "model": data.get("model"), "usage": data.get("usage")}
 
 
 # -------------------------------------------------------------- concurrency
@@ -167,7 +233,7 @@ def _is_prob_map(value: Any) -> bool:
     return isinstance(value, dict) and bool(value) and all(_is_number(v) for v in value.values())
 
 
-def _validate(response: httpx.Response, questions: List[Question]) -> Dict[str, Any]:
+def _validate(response: httpx.Response, questions: List[Question], provider: str = PROVIDER_SYSTEM_ONE) -> Dict[str, Any]:
     def invalid(why: str) -> SystemOneError:
         return SystemOneError("invalid_response", f"Unexpected System One response: {why}", response.status_code)
 
@@ -175,6 +241,8 @@ def _validate(response: httpx.Response, questions: List[Question]) -> Dict[str, 
         data = response.json()
     except ValueError:
         raise invalid("not JSON")
+    if provider == PROVIDER_OPENAI:
+        data = _normalize_openai(data, questions)
     answers = data.get("answers") if isinstance(data, dict) else None
     if not isinstance(answers, dict):
         raise invalid("no 'answers'")
@@ -182,6 +250,8 @@ def _validate(response: httpx.Response, questions: List[Question]) -> Dict[str, 
         a = answers.get(q.key)
         if not isinstance(a, dict):
             raise invalid(f"missing answer for '{q.key}'")
+        if a.get("type") == "refusal":
+            raise SystemOneError("invalid_request", f"The model refused to answer '{q.key}'", response.status_code)
         if a.get("type", q.type) != q.type:
             raise invalid(f"'{q.key}' answered as {a.get('type')} instead of {q.type}")
         if q.type == "noul":
@@ -199,14 +269,20 @@ def _validate(response: httpx.Response, questions: List[Question]) -> Dict[str, 
 # ---------------------------------------------------------------------- API
 
 async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
-                   *, transport: Optional[httpx.AsyncBaseTransport] = None) -> Dict[str, Any]:
-    """Send ``state`` with all ``questions``; return the validated raw server JSON.
+                   *, images: Optional[List[str]] = None,
+                   transport: Optional[httpx.AsyncBaseTransport] = None) -> Dict[str, Any]:
+    """Send ``state`` (and ``images`` as data URLs, only for providers that take them) with all ``questions``.
+
+    Returns the validated server JSON in the System One shape.
 
     ``transport`` exists for tests (``httpx.MockTransport``). Never logs the state or the token.
     """
-    url = endpoint.base_url.rstrip("/") + "/v1/systemone"
+    if images and not supports_images(endpoint.provider):
+        raise SystemOneError("invalid_request", "This provider evaluates text only")
+    path = "/v1/decisions" if endpoint.provider == PROVIDER_OPENAI else "/v1/systemone"
+    url = endpoint.base_url.rstrip("/") + path
     headers = {"Authorization": f"Bearer {endpoint.api_key}"} if endpoint.api_key else {}
-    body = build_request_body(endpoint.model, state, questions)
+    body = build_request_body(endpoint.model, state, questions, endpoint.provider, images)
 
     async def attempts() -> Dict[str, Any]:
         # Held across retries: under overload the others wait too. The process-local semaphore first, so that a
@@ -221,7 +297,7 @@ async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
                     except httpx.TransportError:
                         raise SystemOneError("unavailable", "Cannot connect to the System One server")
                     if response.status_code == 200:
-                        return _validate(response, questions)
+                        return _validate(response, questions, endpoint.provider)
                     if response.status_code in _RETRY_STATUSES and attempt < _ATTEMPTS:
                         logger.info("[system_one] HTTP %s, retry %d/%d", response.status_code, attempt, _ATTEMPTS - 1)
                         await _sleep(_retry_delay(response, attempt))
@@ -244,10 +320,35 @@ def check_base_url(base_url: str) -> str:
     return base_url.rstrip("/")
 
 
-async def probe(base_url: str, api_key: Optional[str],
+async def probe_openai(root: str, api_key: Optional[str], transport: Optional[httpx.AsyncBaseTransport]) -> Dict[str, Any]:
+    """OpenAI has no health or limits endpoint: ``GET /v1/models`` proves the key; the model list is fixed."""
+    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "verifiable": True}
+    if not api_key:
+        result["message"] = "OpenAI needs an API key"
+        return result
+    try:
+        async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S, transport=transport,
+                                     headers={"Authorization": f"Bearer {api_key}"}) as http:
+            response = await http.get(root + "/v1/models")
+    except httpx.TimeoutException:
+        result["message"] = "The server did not answer in time"
+        return result
+    except httpx.TransportError:
+        result["message"] = "Cannot connect to the server"
+        return result
+    if response.status_code != 200:
+        result["message"] = (f"The server rejected the API key ({response.status_code})"
+                             if response.status_code in (401, 403) else f"The server answered {_error_message(response)}")
+        return result
+    return {**result, "ok": True, "models": OPENAI_MODELS, "message": "Connection successful"}
+
+
+async def probe(base_url: str, api_key: Optional[str], provider: str = PROVIDER_SYSTEM_ONE,
                 *, transport: Optional[httpx.AsyncBaseTransport] = None) -> Dict[str, Any]:
     """Check ``/health``, list ``/v1/models`` and read ``/v1/limits``. Never raises for server problems."""
     root = check_base_url(base_url)
+    if provider == PROVIDER_OPENAI:
+        return await probe_openai(root, api_key, transport)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "verifiable": False}
 
