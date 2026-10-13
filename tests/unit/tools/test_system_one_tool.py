@@ -194,3 +194,12 @@ async def test_a_tool_of_an_agent_without_service_exists_and_says_why_it_cannot_
     assert "unavailable" in tool.description.lower()
     content, artifact = await tool._arun(text="hello")
     assert "service" in content.lower() and artifact is None
+
+
+async def test_an_unavailable_tool_is_tagged_so_the_turn_does_not_crash_on_it():
+    # Regression: a deleted service made the tool snapshot None, and tagging the turn's tools read snapshot.agent_id.
+    from tools.agentTools import _tag_untyped_tools
+    agent = SimpleNamespace(agent_id=3, name="Triage Bot", description="Classifies tickets", system_one_service=None)
+    tool = await IACTSystemOneTool.create(agent)
+    _tag_untyped_tools([tool])        # must not raise
+    assert tool.metadata is not None

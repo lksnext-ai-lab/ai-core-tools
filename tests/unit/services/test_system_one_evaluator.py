@@ -348,3 +348,16 @@ async def test_the_summary_is_asked_for_at_most_the_room_there_is():
         snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
     await snap.summarize("long " * 10, QUESTIONS, 1000)
     assert "at most 1000 characters" in llm.ainvoke.await_args.args[0]
+
+
+async def test_the_summary_keeps_the_evidence_but_is_told_not_to_answer_the_questions():
+    # A summary that already says "answer needed today: yes, department: billing" decides for the decision model.
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=SimpleNamespace(content="the summary"))
+    with patch.object(module, "create_llm_from_service", return_value=llm):
+        snap = SystemOneEvaluator.snapshot(_agent(summarization_service=AIService(service_id=11, name="LLM")))
+    await snap.summarize("long " * 10, QUESTIONS, 1000)
+    prompt = llm.ainvoke.await_args.args[0].lower()
+    assert "do not answer" in prompt and "conclusion" in prompt
+    assert "at most 1000 characters" in prompt
+    assert "is it urgent?" in prompt and "which area?" in prompt           # still told what matters

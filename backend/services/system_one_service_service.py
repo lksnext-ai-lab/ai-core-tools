@@ -182,7 +182,7 @@ class SystemOneServiceService:
         }
 
     @staticmethod
-    async def _verify(endpoint: str, api_key: str, model: str) -> Dict[str, Any]:
+    async def _verify(endpoint: str, api_key: str, model: str, live_call: bool = True) -> Dict[str, Any]:
         """Probe the server; when it offers no way to list models, prove URL, token and model with one real call.
 
         A server that lists its models already shows the model exists; one that does not (a hosted API with only
@@ -190,7 +190,7 @@ class SystemOneServiceService:
         is nothing to check.
         """
         result = await system_one_client.probe(endpoint, api_key or None)
-        if result["ok"] and not result["models"] and model:
+        if live_call and result["ok"] and not result["models"] and model:
             checked = await system_one_client.check_model(
                 system_one_client.Endpoint(base_url=system_one_client.check_base_url(endpoint), model=model,
                                            api_key=api_key or None, max_concurrency=1, service_id=-1))
@@ -221,12 +221,13 @@ class SystemOneServiceService:
                     "suggested_max_concurrency": None, "checked_with_call": False}
 
     @staticmethod
-    async def test_connection(db: Session, app_id: int, service_id: int) -> Optional[Dict[str, Any]]:
+    async def test_connection(db: Session, app_id: int, service_id: int, live_call: bool = True) -> Optional[Dict[str, Any]]:
         service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
         if not service:
             return None
         try:
-            return await SystemOneServiceService._verify(service.endpoint or "", service.api_key or "", service.description or "")
+            return await SystemOneServiceService._verify(service.endpoint or "", service.api_key or "", service.description or "",
+                                                         live_call=live_call)
         except ValueError as exc:
             return {"status": "error", "message": str(exc), "models": [], "limits": None,
                     "suggested_max_concurrency": None, "checked_with_call": False}

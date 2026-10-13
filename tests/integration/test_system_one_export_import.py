@@ -74,12 +74,19 @@ def test_normal_agents_export_is_unchanged(db, fake_app, fake_agent):
 
 # ------------------------------------------------------------- agent import
 
+def _normalized(questions):
+    """The questions as an import stores them: through the schema, so its defaults (e.g. color_start) are applied."""
+    from pydantic import TypeAdapter
+    from schemas.system_one_schemas import QuestionList
+    return [q.model_dump(mode="json", exclude_none=True) for q in TypeAdapter(QuestionList).validate_python(questions)]
+
+
 def test_roundtrip_in_the_same_app_with_rename(db, fake_app, world):
     export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
     result = AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.RENAME)
     assert result.created and result.component_name == "Triage (1)"
     copy = db.query(SystemOneAgent).filter(SystemOneAgent.agent_id == result.component_id).one()
-    assert copy.questions == world.agent.questions and copy.max_state_chars == 4000
+    assert copy.questions == _normalized(world.agent.questions) and copy.max_state_chars == 4000
     assert copy.system_one_service_id == world.service.service_id and copy.summarization_service_id == world.llm.service_id
     assert copy.is_tool is True and copy.service_id is None and copy.type == "system_one_agent"
 
@@ -161,7 +168,7 @@ def test_full_roundtrip_creates_the_service_and_links_the_agent(db, fake_user, w
     assert svc.api_key is None and svc.endpoint == "http://172.16.59.1:8100" and svc.description == "nimble-latest"
     assert json.loads(svc.extra_config) == {"max_concurrency": 2}
     agent = db.query(SystemOneAgent).filter(SystemOneAgent.app_id == summary.app_id).one()
-    assert agent.system_one_service_id == svc.service_id and agent.questions == world.agent.questions
+    assert agent.system_one_service_id == svc.service_id and agent.questions == _normalized(world.agent.questions)
 
 
 def test_full_import_applies_a_supplied_token(db, fake_user, world, fake_app):

@@ -70,6 +70,8 @@ export interface ScoreQuestion {
   instructions: string;
   criteria: string[];
   min_probability?: number | null;
+  /** Playground color only (never sent): which end of the scale is green. */
+  color_start?: 'green' | 'red';
 }
 
 export type SystemOneQuestion = NoulQuestion | ChoiceQuestion | ScoreQuestion;

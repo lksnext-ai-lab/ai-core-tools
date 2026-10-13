@@ -80,9 +80,11 @@ def _make_summarizer(llm: Any) -> Summarizer:
         # "At most": asking for a size close to the budget made the LLM write ~5x more and take ~10x longer in a
         # real test (110 s vs 11 s), so the summary is allowed to be short.
         prompt = (
-            f"Summarize the text below in at most {budget} characters. Keep every detail needed to answer "
-            f"these questions about it:\n{_question_lines(questions)}\n\n"
-            f"Reply with the summary only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
+            f"Condense the text below to at most {budget} characters, keeping the facts and the original wording of "
+            f"everything relevant to these topics:\n{_question_lines(questions)}\n\n"
+            "Do not answer the questions, do not state conclusions, ratings or judgments, and do not add anything that is "
+            "not in the text: a separate system makes the decisions from your text.\n"
+            f"Reply with the condensed text only.\n\nText:\n{text[:_SUMMARY_INPUT_CAP_CHARS]}"
         )
         reply = await llm.ainvoke(prompt)
         usage = getattr(reply, "usage_metadata", None) or {}
@@ -163,7 +165,7 @@ class SystemOneEvaluator:
         if service is None:
             raise HTTPException(
                 status_code=409,
-                detail="This agent has no System One service (it was deleted): choose another one in the agent's settings",
+                detail="This agent has no System One service: choose one in the agent's settings",
             )
         if not service.description:
             raise HTTPException(

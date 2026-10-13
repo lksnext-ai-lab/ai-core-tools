@@ -282,7 +282,9 @@ class AgentListItemSchema(BaseModel):
     last_used_date: Optional[datetime] = None
     request_count: int
     service_id: Optional[int] = None
-    ai_service: Optional[Dict[str, Any]] = None  # AI service details
+    ai_service: Optional[Dict[str, Any]] = None  # AI service details (LLM agents)
+    # System One agents: their service ({service_id, name, model}), shown in the same column as the AI service.
+    system_one_service: Optional[Dict[str, Any]] = None
     marketplace_visibility: Optional[str] = None
     is_frozen: bool = False
     a2a_enabled: bool = False
@@ -407,7 +409,7 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin, ExposedChatFiltersMixin, A2A
     system_one_service_id: Optional[int] = None
     questions: Optional[QuestionList] = None
     summarization_service_id: Optional[int] = None
-    max_state_chars: Optional[int] = Field(default=None, ge=500, le=20000)
+    max_state_chars: Optional[int] = Field(default=None, ge=500)
     # Media processing configuration (playground media upload)
     transcription_service_id: Optional[int] = None
     video_ai_service_id: Optional[int] = None

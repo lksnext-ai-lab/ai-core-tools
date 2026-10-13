@@ -95,6 +95,11 @@ class AgentService:
             if hasattr(agent, 'service_id') and agent.service_id and agent.service_id in ai_services_dict:
                 ai_service_info = ai_services_dict[agent.service_id]
             
+            s1_info = None
+            s1 = getattr(agent, 'system_one_service', None) if agent.type == 'system_one_agent' else None
+            if s1 is not None:
+                s1_info = {"service_id": s1.service_id, "name": s1.name, "model": s1.description or ""}
+
             result.append(AgentListItemSchema(
                 agent_id=agent.agent_id,
                 name=agent.name,
@@ -106,6 +111,7 @@ class AgentService:
                 request_count=agent.request_count or 0,
                 service_id=getattr(agent, 'service_id', None),
                 ai_service=ai_service_info,
+                system_one_service=s1_info,
                 marketplace_visibility=(
                     agent.marketplace_visibility.value
                     if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
@@ -808,6 +814,9 @@ class AgentService:
         """System One fields (service, questions, summarization LLM, size) and neutral values for the rest."""
         app_id = data['app_id']
         creating = agent.agent_id is None
+        if data.get('a2a_enabled'):
+            # A2A runs every message through the chat pipeline, which a System One agent refuses (it only evaluates).
+            raise ValueError("System One agents cannot be exposed through A2A")
 
         service_id = data.get('system_one_service_id')
         if service_id is not None:
@@ -842,8 +851,9 @@ class AgentService:
 
         max_chars = data.get('max_state_chars')
         if max_chars is not None:
-            if not 500 <= max_chars <= 20000:
-                raise ValueError("max_state_chars must be between 500 and 20000")
+            # No upper limit of ours: the server enforces its own prompt budget (and a text over it is shrunk and retried).
+            if max_chars < 500:
+                raise ValueError("max_state_chars must be at least 500")
             agent.max_state_chars = max_chars
         elif creating:
             agent.max_state_chars = 6000
@@ -866,6 +876,7 @@ class AgentService:
         agent.enable_code_interpreter = False
         agent.sandbox_service_id = None
         agent.skill_router_enabled = False
+        agent.a2a_enabled = False
         agent.server_tools = []
 
     @staticmethod

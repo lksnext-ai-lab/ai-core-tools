@@ -4,6 +4,7 @@ import { randomId } from '../../utils/randomId';
 import {
   MIN_OPTIONS,
   changeQuestionType,
+  parseDecimal,
   newQuestion,
   reorder,
   type EditorQuestion,
@@ -34,10 +35,6 @@ interface SystemOneQuestionsEditorProps {
   readonly generalProblems: string[];
   /** Per question, same order: shown right above the question they belong to. */
   readonly problemsByQuestion: string[][];
-}
-
-function parseNumber(raw: string): number | undefined {
-  return raw.trim() === '' ? undefined : Number(raw);
 }
 
 function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems, problemsByQuestion }: SystemOneQuestionsEditorProps) {
@@ -182,7 +179,7 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                   <div>
                     <label htmlFor={`${id}-threshold`} className="mb-1 block text-xs font-medium text-gray-600">Threshold for "yes" <span className="font-normal">(optional)</span></label>
                     <input id={`${id}-threshold`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="0.5"
-                           value={question.threshold ?? ''} onChange={(e) => update(index, { ...question, threshold: parseNumber(e.target.value) })} />
+                           value={question.threshold ?? ''} onChange={(e) => update(index, { ...question, threshold: parseDecimal(e.target.value) })} />
                     <p className="mt-1 text-xs text-gray-500">Empty = 0.5. "Yes" when the probability reaches it.</p>
                   </div>
                   <p className="text-xs text-gray-500 md:col-span-3">
@@ -218,6 +215,19 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
               {question.type === 'score' && (
                 <div className="mt-3">
                   <p className="mb-1 text-xs font-medium text-gray-600">Levels, from lowest to highest ({optionRange})</p>
+                  <fieldset className="mb-2 flex flex-wrap items-center gap-4 text-xs text-gray-600">
+                    <legend className="mb-1 block font-medium">Colors in the playground</legend>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input type="radio" name={`${id}-color`} checked={(question.color_start ?? 'green') === 'green'}
+                             onChange={() => update(index, { ...question, color_start: 'green' })} />
+                      First level green (ascending)
+                    </label>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input type="radio" name={`${id}-color`} checked={question.color_start === 'red'}
+                             onChange={() => update(index, { ...question, color_start: 'red' })} />
+                      First level red (descending)
+                    </label>
+                  </fieldset>
                   <div className="space-y-2">
                     {question.criteria.map((level, levelIndex) => (
                       <div key={`${id}-l${levelIndex}`} className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
@@ -244,7 +254,7 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
                     Minimum probability <span className="font-normal">(optional)</span>
                   </label>
                   <input id={`${id}-minp`} type="number" min={0} max={1} step={0.05} className={inputClass} placeholder="no minimum" value={question.min_probability ?? ''}
-                         onChange={(e) => update(index, { ...question, min_probability: parseNumber(e.target.value) })} />
+                         onChange={(e) => update(index, { ...question, min_probability: parseDecimal(e.target.value) })} />
                   <p className="mt-1 text-xs text-gray-500">Below this probability the decision is left empty. Empty field = always decide.</p>
                 </div>
               )}

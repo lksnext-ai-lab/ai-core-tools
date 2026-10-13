@@ -138,6 +138,30 @@ async def delete_system_one_service(
     return {"message": "System One service deleted successfully", "detached_agents": detached}
 
 
+@system_one_services_router.get("/{service_id}/status", summary="Is a saved System One service reachable?", tags=TAG)
+async def system_one_service_status(
+    app_id: int,
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Reachability and token check for the services table. Never makes the real (token-spending) call and
+    returns neither models nor limits."""
+    try:
+        result = await SystemOneServiceService.test_connection(db, app_id, service_id, live_call=False)
+    except Exception as exc:
+        raise _server_error("checking the System One service status", exc, app_id=app_id, service_id=service_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND)
+    return {
+        "status": result["status"],
+        "message": result["message"],
+        # A server with no health or model endpoint cannot be verified without a real call: say so apart from "ok".
+        "verifiable": bool(result["models"]) or "no health or model endpoints" not in result["message"],
+    }
+
+
 @system_one_services_router.post("/{service_id}/test", summary="Test a saved System One service", tags=TAG)
 async def test_system_one_service(
     app_id: int,

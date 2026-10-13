@@ -109,8 +109,8 @@ def test_invalid_questions_are_rejected_with_a_readable_message(repos, bad, matc
         run(repos, data(questions=bad))
 
 
-@pytest.mark.parametrize("value", [0, 499, 20001, -5])
-def test_max_state_chars_out_of_range_is_rejected(repos, value):
+@pytest.mark.parametrize("value", [0, 499, -5])
+def test_max_state_chars_below_the_minimum_is_rejected(repos, value):
     with pytest.raises(ValueError, match="max_state_chars"):
         run(repos, data(max_state_chars=value))
 
@@ -180,3 +180,30 @@ def test_raising_the_questions_on_update_is_checked_against_the_stored_budget(re
     long_question = {"key": "u", "type": "noul", "instructions": "x" * 5600}
     with pytest.raises(ValueError, match="needs at least 500"):
         run(repos, data(agent_id=42, questions=[long_question], max_state_chars=None))
+
+
+@pytest.mark.parametrize("value", [20001, 50000])
+def test_there_is_no_upper_limit_on_the_text_length_the_server_enforces_its_own_budget(repos, value):
+    assert run(repos, data(max_state_chars=value, questions=QUESTIONS)) == 42
+
+
+def test_a_system_one_agent_cannot_be_exposed_through_a2a(repos):
+    # A2A drives the chat pipeline, which a System One agent refuses: advertising it would only fail every message.
+    with pytest.raises(ValueError, match="A2A"):
+        run(repos, data(a2a_enabled=True))
+    run(repos, data(a2a_enabled=False))
+    assert repos.created["agent"].a2a_enabled is False
+
+
+def test_the_agents_list_carries_the_system_one_service_of_a_system_one_agent(mocker):
+    # The list shows one column for whichever service the agent uses: AI service for LLM agents, S1 service for System One.
+    from models.system_one_service import SystemOneService
+    s1 = SystemOneService(service_id=7, name="System One lab", endpoint="http://so.test", description="nimble-latest", app_id=1)
+    so = SystemOneAgent(agent_id=5, app_id=1, name="Triage", system_one_service_id=7, questions=QUESTIONS, is_tool=True)
+    so.system_one_service = s1
+    so.type = "system_one_agent"
+    mocker.patch("services.agent_service.AgentRepository.get_by_app_id", return_value=[so])
+    mocker.patch("services.agent_service.AgentRepository.get_ai_services_dict_by_app_id", return_value={})
+    (item,) = AgentService().get_agents_list(MagicMock(), 1)
+    assert item.system_one_service == {"service_id": 7, "name": "System One lab", "model": "nimble-latest"}
+    assert item.ai_service is None

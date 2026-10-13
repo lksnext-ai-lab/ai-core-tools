@@ -67,3 +67,10 @@ def test_yes_and_no_meanings_are_independent_and_optional_like_the_servers():
     assert only_yes.criteria.true == "Needs an answer today" and only_yes.criteria.false is None
     only_no = q.validate_python({**NOUL, "criteria": {"false": "Can wait"}})
     assert only_no.criteria.true is None and only_no.criteria.false == "Can wait"
+
+
+def test_a_score_question_chooses_which_end_of_the_scale_is_green():
+    assert q.validate_python(SCORE).color_start == "green"                     # default: the first level is the best
+    assert q.validate_python({**SCORE, "color_start": "red"}).color_start == "red"
+    with pytest.raises(ValidationError):
+        q.validate_python({**SCORE, "color_start": "blue"})

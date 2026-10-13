@@ -504,3 +504,9 @@ async def test_a_402_is_its_own_kind_not_a_rejected_request():
     with pytest.raises(SystemOneError) as e:
         await client.evaluate(endpoint(service_id=84), "t", [NOUL], transport=transport(lambda r: httpx.Response(402, json={"error": {"message": "no credit"}})))
     assert e.value.kind == "quota"
+
+
+def test_the_color_preference_is_ours_and_never_sent_to_the_server():
+    scored = QA({"key": "anger", "type": "score", "instructions": "How angry?", "criteria": ["Calm", "Angry"], "color_start": "red"})
+    body = client.build_request_body("m", "text", [scored])["questions"]["anger"]
+    assert body == {"type": "score", "instructions": "How angry?", "criteria": ["Calm", "Angry"]}

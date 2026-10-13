@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronRight, FileText, Gauge, Loader2, Play, X } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { promptBudget, type EditorQuestion } from '../../utils/systemOneQuestions';
+import { categoryColor, scaleColor, yesNoColor } from '../../utils/systemOneColors';
 import type {
   SystemOneAnswer,
   SystemOneQuestion,
@@ -33,13 +34,14 @@ function isImage(file: File): boolean {
   return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i.test(file.name);
 }
 
-function ProbabilityBar({ label, value, highlighted }: { readonly label: string; readonly value: number; readonly highlighted: boolean }) {
+function ProbabilityBar({ label, value, highlighted, color }: { readonly label: string; readonly value: number; readonly highlighted: boolean; readonly color?: string }) {
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className={`w-32 truncate ${highlighted ? 'font-semibold text-gray-900' : 'text-gray-600'}`} title={label}>{label}</span>
       <div className="h-2 flex-1 rounded-full bg-gray-200" role="progressbar" aria-label={`${label} probability`}
            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)}>
-        <div className={`h-2 rounded-full ${highlighted ? 'bg-emerald-500' : 'bg-gray-400'}`} style={{ width: percent(value) }} />
+        <div className={`h-2 rounded-full ${color ? '' : highlighted ? 'bg-emerald-500' : 'bg-gray-400'}`}
+             style={{ width: percent(value), ...(color ? { backgroundColor: color, opacity: highlighted ? 1 : 0.55 } : {}) }} />
       </div>
       <span className="w-10 text-right tabular-nums text-gray-700">{percent(value)}</span>
     </div>
@@ -51,8 +53,17 @@ function decisionText(answer: SystemOneAnswer): { text: string; determined: bool
   return answer.decision === null ? { text: 'Undetermined', determined: false } : { text: answer.decision, determined: true };
 }
 
-function AnswerCard({ questionKey, instructions, answer }: { readonly questionKey: string; readonly instructions?: string; readonly answer: SystemOneAnswer }) {
+/** The playground's own color preference of a score question (undefined for the other types). */
+function colorStartOf(question: SystemOneQuestion | undefined): 'green' | 'red' | undefined {
+  return question?.type === 'score' ? question.color_start : undefined;
+}
+
+function AnswerCard({ questionKey, instructions, answer, colorStart }: { readonly questionKey: string; readonly instructions?: string; readonly answer: SystemOneAnswer; readonly colorStart?: 'green' | 'red' }) {
   const { text, determined } = decisionText(answer);
+  // Colors: Yes green / No red; each choice option its own stable color; a score runs green to red (see colorStart).
+  const badgeColor = answer.type === 'noul' ? yesNoColor(answer.decision)
+    : answer.type === 'choice' ? (answer.choice ? categoryColor(answer.choice) : undefined)
+    : scaleColor(answer.level_index ?? 0, Object.keys(answer.probabilities).length || 1, colorStart);
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -60,18 +71,20 @@ function AnswerCard({ questionKey, instructions, answer }: { readonly questionKe
           <p className="text-sm font-semibold text-gray-900">{questionKey}</p>
           {instructions && <p className="text-xs text-gray-500">{instructions}</p>}
         </div>
-        <span className={`rounded-full px-3 py-1 text-sm font-medium ${determined ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+        <span className={`rounded-full px-3 py-1 text-sm font-medium text-white ${badgeColor ? '' : determined ? 'bg-emerald-600' : 'bg-gray-500'}`}
+              style={badgeColor ? { backgroundColor: badgeColor } : undefined}>
           {text}
         </span>
       </div>
 
       <div className="mt-3 space-y-1">
-        {answer.type === 'noul' && <ProbabilityBar label={`Yes (threshold ${percent(answer.threshold)})`} value={answer.probability} highlighted={answer.decision} />}
+        {answer.type === 'noul' && <ProbabilityBar label={`Yes (threshold ${percent(answer.threshold)})`} value={answer.probability} highlighted={answer.decision} color={yesNoColor(true)} />}
         {answer.type === 'choice' && Object.entries(answer.probabilities).map(([option, p]) => (
-          <ProbabilityBar key={option} label={option} value={p} highlighted={option === answer.choice} />
+          <ProbabilityBar key={option} label={option} value={p} highlighted={option === answer.choice} color={categoryColor(option)} />
         ))}
-        {answer.type === 'score' && Object.entries(answer.probabilities).map(([index, p]) => (
-          <ProbabilityBar key={index} label={`${index} · ${answer.legend[index] ?? ''}`} value={p} highlighted={Number(index) === answer.level_index} />
+        {answer.type === 'score' && Object.keys(answer.probabilities).map((index, i, all) => (
+          <ProbabilityBar key={index} label={`${index} · ${answer.legend[index] ?? ''}`} value={answer.probabilities[index]}
+                          highlighted={Number(index) === answer.level_index} color={scaleColor(i, all.length, colorStart)} />
         ))}
       </div>
 
@@ -94,7 +107,9 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
   const message = (
     <>
       The text was {summarized ? 'summarized' : 'truncated'} before evaluating ({result.original_chars.toLocaleString()} →{' '}
-      {result.state_chars.toLocaleString()} characters), so the decisions are based on {summarized ? 'its summary' : 'its first part'}.
+      {result.state_chars.toLocaleString()} characters).
+      <br />
+      The decisions are based on {summarized ? 'its summary' : 'its first part'}.
     </>
   );
   // Without the text there is nothing to open (an older response): keep the plain notice.
@@ -239,7 +254,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
           <ReductionNotice result={latest.result} />
           <div className="space-y-3">
             {Object.entries(latest.result.answers).map(([key, answer]) => (
-              <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} />
+              <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} colorStart={colorStartOf(questionByKey.get(key))} />
             ))}
           </div>
           <p className="mt-2 text-xs text-gray-500">
@@ -259,7 +274,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
                 <ReductionNotice result={evaluation.result} />
                 <div className="space-y-2">
                   {Object.entries(evaluation.result.answers).map(([key, answer]) => (
-                    <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} />
+                    <AnswerCard key={key} questionKey={key} instructions={questionByKey.get(key)?.instructions} answer={answer} colorStart={colorStartOf(questionByKey.get(key))} />
                   ))}
                 </div>
               </div>

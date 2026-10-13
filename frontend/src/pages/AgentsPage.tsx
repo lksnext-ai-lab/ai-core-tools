@@ -35,6 +35,11 @@ interface Agent {
     provider: string;
   };
   lifecycle_warnings?: ServiceLifecycleWarning[];
+  system_one_service?: {
+    service_id: number;
+    name: string;
+    model: string;
+  } | null;
 }
 
 // Define the App type
@@ -52,6 +57,8 @@ function AgentsPage() {
   const mutate = useApiMutation();
 
   const [agents, setAgents] = useState<Agent[]>([]);
+  // The column is titled "AI/S1 Service" only when a System One agent is in the list.
+  const hasSystemOneAgents = agents.some((agent) => agent.type === 'system_one_agent');
   const [scheduledTaskCounts, setScheduledTaskCounts] = useState<Record<number, number>>({});
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
@@ -375,9 +382,20 @@ function AgentsPage() {
             )
           },
           {
-            header: 'AI Service',
-            render: (agent) => (
-              agent.ai_service ? (
+            // One column for both kinds: an LLM agent's AI service, a System One agent's S1 service.
+            header: hasSystemOneAgents ? 'AI/S1 Service' : 'AI Service',
+            render: (agent) => {
+              if (agent.type === 'system_one_agent') {
+                return agent.system_one_service ? (
+                  <div className="text-sm">
+                    <div className="font-medium text-gray-900">{agent.system_one_service.name}</div>
+                    <div className="text-xs text-gray-500">{agent.system_one_service.model} • System One</div>
+                  </div>
+                ) : (
+                  <span className="text-gray-400 italic text-sm">No System One service</span>
+                );
+              }
+              return agent.ai_service ? (
                 <div className="text-sm">
                   <div className="font-medium text-gray-900">
                     {agent.ai_service.name}
@@ -388,8 +406,8 @@ function AgentsPage() {
                 </div>
               ) : (
                 <span className="text-gray-400 italic text-sm">No AI Service</span>
-              )
-            )
+              );
+            }
           },
           {
             header: 'Status',
