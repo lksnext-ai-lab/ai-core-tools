@@ -175,7 +175,7 @@ async def test_connection_with_config_maps_the_probe_result(repo, monkeypatch):
         out = await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok"})
     assert out == {"status": "success", "message": "Connection successful", "models": ["nimble-latest"],
-                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False}
+                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False, "verifiable": True}
     probe.assert_awaited_once_with("http://so.test", "tok")
 
 
@@ -316,8 +316,8 @@ def test_there_is_no_upper_bound_on_the_concurrency_cap_only_a_positive_one():
 # -------------------- a real call only when the server gives no way to list models (and a model is known)
 
 NOT_LISTED = {"ok": True, "message": "The server answered, but it has no health or model endpoints", "models": [],
-              "limits": None, "can_list_models": False}
-LISTED = {"ok": True, "message": "Connection successful", "models": ["m1"], "limits": None, "can_list_models": True}
+              "limits": None, "verifiable": False}
+LISTED = {"ok": True, "message": "Connection successful", "models": ["m1"], "limits": None, "verifiable": True}
 
 
 @pytest.mark.asyncio

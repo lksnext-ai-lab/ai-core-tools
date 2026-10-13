@@ -8,7 +8,7 @@ than an error.
 """
 import re
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Awaitable, Callable, Dict, List, Literal, Optional, Tuple
 
 from schemas.system_one_schemas import ChoiceQuestion, NoulQuestion, Question
 from utils.logger import get_logger
@@ -28,8 +28,7 @@ class SummaryOutput:
     output_tokens: Optional[int] = None
 
 
-# A summarizer may return plain text (usage unknown) or a SummaryOutput.
-Summarizer = Callable[[str, List[Question], int], Awaitable[Union[str, SummaryOutput]]]
+Summarizer = Callable[[str, List[Question], int], Awaitable[SummaryOutput]]
 
 
 @dataclass
@@ -107,8 +106,6 @@ async def reduce_state(state: str, questions: List[Question], max_state_chars: i
         calls = 1
         try:
             output = await summarize(state, questions, budget)
-            if isinstance(output, str):
-                output = SummaryOutput(output)
             summary = (output.text or "").strip()
             in_tokens, out_tokens = output.input_tokens or 0, output.output_tokens or 0
         except Exception:

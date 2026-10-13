@@ -434,7 +434,7 @@ def _bare_server(request):
 async def test_a_missing_health_endpoint_is_not_a_failure():
     out = await client.probe("http://so.test", "tok", transport=transport(_bare_server))
     assert out["ok"] is True and out["models"] == [] and out["limits"] is None
-    assert out["can_list_models"] is False
+    assert out["verifiable"] is False
 
 
 async def test_a_server_that_lists_models_says_so():
@@ -444,7 +444,7 @@ async def test_a_server_that_lists_models_says_so():
         return httpx.Response(404)
 
     out = await client.probe("http://so.test", "tok", transport=transport(handler))
-    assert out["ok"] is True and out["models"] == ["some-model"] and out["can_list_models"] is True
+    assert out["ok"] is True and out["models"] == ["some-model"] and out["verifiable"] is True
 
 
 async def test_an_empty_model_list_is_no_way_to_choose():
@@ -452,7 +452,7 @@ async def test_an_empty_model_list_is_no_way_to_choose():
         return httpx.Response(200, json={"data": []}) if request.url.path == "/v1/models" else httpx.Response(404)
 
     out = await client.probe("http://so.test", "tok", transport=transport(handler))
-    assert out["ok"] is True and out["can_list_models"] is False
+    assert out["ok"] is True and out["verifiable"] is False
 
 
 async def test_a_health_endpoint_that_fails_is_still_a_failure():

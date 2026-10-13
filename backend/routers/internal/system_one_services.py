@@ -154,12 +154,7 @@ async def system_one_service_status(
         raise _server_error("checking the System One service status", exc, app_id=app_id, service_id=service_id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND)
-    return {
-        "status": result["status"],
-        "message": result["message"],
-        # A server with no health or model endpoint cannot be verified without a real call: say so apart from "ok".
-        "verifiable": bool(result["models"]) or "no health or model endpoints" not in result["message"],
-    }
+    return {"status": result["status"], "message": result["message"], "verifiable": result["verifiable"]}
 
 
 @system_one_services_router.post("/{service_id}/test", summary="Test a saved System One service", tags=TAG)

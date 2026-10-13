@@ -33,10 +33,6 @@ logger = get_logger(__name__)
 
 _SUMMARY_INPUT_CAP_CHARS = 120_000      # what we hand to the summarizing LLM at most
 _PROVIDER = "system_one"
-_HTTP_STATUS = {
-    "unavailable": 503, "overloaded": 503, "timeout": 504,
-    "unauthorized": 502, "quota": 503, "invalid_request": 422, "invalid_response": 502,
-}
 
 
 @dataclass(frozen=True)
@@ -132,14 +128,15 @@ def _answer_rows(result: SystemOneResult) -> List[Dict[str, Any]]:
     ]
 
 
-_GENERIC = {
-    "invalid_request": "System One rejected the request. Check the agent's questions and the size of the text.",
-    "unavailable": "System One is unavailable",
-    "overloaded": "System One is busy, try again shortly",
-    "timeout": "System One did not answer in time",
-    "unauthorized": "System One rejected the service credentials",
-    "quota": "The System One account has no credit left: contact the administrator",
-    "invalid_response": "System One returned an unexpected response",
+# kind -> (HTTP status for the caller, the message callers may read)
+_ERRORS = {
+    "invalid_request": (422, "System One rejected the request. Check the agent's questions and the size of the text."),
+    "unavailable": (503, "System One is unavailable"),
+    "overloaded": (503, "System One is busy, try again shortly"),
+    "timeout": (504, "System One did not answer in time"),
+    "unauthorized": (502, "System One rejected the service credentials"),
+    "quota": (503, "The System One account has no credit left: contact the administrator"),
+    "invalid_response": (502, "System One returned an unexpected response"),
 }
 
 
@@ -153,7 +150,7 @@ def _public_detail(exc: SystemOneError) -> str:
     if exc.status is None or parse_budget_error(exc.message) is not None:
         return exc.message
     logger.warning("[system_one] %s (HTTP %s): %s", exc.kind, exc.status, exc.message[:200])
-    return _GENERIC[exc.kind]
+    return _ERRORS[exc.kind][1]
 
 
 class SystemOneEvaluator:
@@ -246,7 +243,7 @@ class SystemOneEvaluator:
             return result
         except SystemOneError as exc:
             failure = exc
-            raise HTTPException(status_code=_HTTP_STATUS[exc.kind], detail=_public_detail(exc)) from exc
+            raise HTTPException(status_code=_ERRORS[exc.kind][0], detail=_public_detail(exc)) from exc
         except Exception as exc:
             failure = exc
             raise

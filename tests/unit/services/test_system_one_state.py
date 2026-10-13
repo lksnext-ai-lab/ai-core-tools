@@ -63,7 +63,7 @@ async def test_too_long_with_llm_summarizes():
 
     async def summarize(text, questions, budget):
         seen["budget"], seen["questions"] = budget, questions
-        return "short summary"
+        return SummaryOutput("short summary")
 
     r = await reduce_state("word " * 5000, QUESTIONS, 1000, summarize)
     assert (r.mode, r.text) == ("summarized", "short summary")
@@ -74,7 +74,7 @@ async def test_too_long_with_llm_summarizes():
 @pytest.mark.parametrize("bad", ["", "   ", "x" * 5000])
 async def test_bad_summary_falls_back_to_truncation(bad):
     async def summarize(text, questions, budget):
-        return bad
+        return SummaryOutput(bad)
 
     r = await reduce_state("word " * 5000, QUESTIONS, 1000, summarize)
     assert r.mode == "truncated" and (r.text == "" or 0 < len(r.text) <= 1000) and r.text != ""
@@ -131,9 +131,9 @@ async def test_summary_usage_is_reported_when_the_llm_gives_it():
     assert (r.summary_calls, r.summary_input_tokens, r.summary_output_tokens) == (1, 900, 120)
 
 
-async def test_a_summarizer_that_returns_plain_text_still_counts_one_call():
+async def test_an_llm_that_reports_no_usage_still_counts_one_call_with_zero_tokens():
     async def summarize(text, questions, budget):
-        return "short summary"
+        return SummaryOutput("short summary")
 
     r = await reduce_state("word " * 5000, QUESTIONS, 1000, summarize)
     assert (r.summary_calls, r.summary_input_tokens, r.summary_output_tokens) == (1, 0, 0)

@@ -29,6 +29,12 @@ def _workers() -> int:
         return 1
 
 
+def _failure(message: str) -> Dict[str, Any]:
+    """The result of a test that could not even start (e.g. a malformed URL)."""
+    return {"status": "error", "message": message, "models": [], "limits": None,
+            "suggested_max_concurrency": None, "checked_with_call": False, "verifiable": True}
+
+
 def _same_endpoint(a: Optional[str], b: Optional[str]) -> bool:
     """Whether two base URLs name the same server (case and a trailing slash do not matter)."""
     return (a or "").strip().rstrip("/").casefold() == (b or "").strip().rstrip("/").casefold()
@@ -174,6 +180,7 @@ class SystemOneServiceService:
             "models": result["models"],
             "limits": limits,
             "checked_with_call": checked_with_call,
+            "verifiable": result.get("verifiable", True),
             # The cap is per backend process and every process shares the server's limit (NFR-2).
             "suggested_max_concurrency": (
                 system_one_client.default_max_concurrency(server_limit, _workers())
@@ -217,8 +224,7 @@ class SystemOneServiceService:
         try:
             return await SystemOneServiceService._verify(endpoint, api_key, (config.get("model") or "").strip())
         except ValueError as exc:
-            return {"status": "error", "message": str(exc), "models": [], "limits": None,
-                    "suggested_max_concurrency": None, "checked_with_call": False}
+            return _failure(str(exc))
 
     @staticmethod
     async def test_connection(db: Session, app_id: int, service_id: int, live_call: bool = True) -> Optional[Dict[str, Any]]:
@@ -229,5 +235,4 @@ class SystemOneServiceService:
             return await SystemOneServiceService._verify(service.endpoint or "", service.api_key or "", service.description or "",
                                                          live_call=live_call)
         except ValueError as exc:
-            return {"status": "error", "message": str(exc), "models": [], "limits": None,
-                    "suggested_max_concurrency": None, "checked_with_call": False}
+            return _failure(str(exc))

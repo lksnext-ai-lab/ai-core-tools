@@ -6,6 +6,7 @@ import type { StepDefinition, StepStatus } from '../ui/Stepper';
 import { FormField } from '../ui/FormField';
 import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
+import { ensureUnique } from './wizard/ServiceWizard';
 import { SYSTEM_ONE_DEFAULT_ENDPOINT } from '../../types/systemOne';
 import { checkConcurrency } from '../../utils/systemOneLimits';
 import type {
@@ -34,13 +35,6 @@ interface SystemOneServiceWizardProps {
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
 const isUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
-
-function ensureUnique(base: string, existing: readonly string[]): string {
-  if (!existing.includes(base)) return base;
-  let counter = 2;
-  while (existing.includes(`${base} (${counter})`)) counter++;
-  return `${base} (${counter})`;
-}
 
 function limitsSummary(limits: Record<string, number> | null): string | null {
   if (!limits) return null;

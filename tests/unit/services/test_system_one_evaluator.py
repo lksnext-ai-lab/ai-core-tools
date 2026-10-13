@@ -12,6 +12,7 @@ from models.system_one_agent import SystemOneAgent
 from models.system_one_service import SystemOneService
 from schemas.system_one_schemas import Question
 from services import system_one_evaluator as module
+from services.system_one_state import SummaryOutput
 from services.system_one_evaluator import SystemOneEvaluator, SystemOneSnapshot
 from tools.system_one_client import Endpoint, SystemOneError
 
@@ -102,7 +103,7 @@ async def test_images_are_rejected_as_text_only(mocks):
 # ------------------------------------------------------------ state reduction
 
 async def test_long_text_is_summarized_when_the_agent_has_a_summarizer(mocks):
-    summarize = AsyncMock(return_value="short summary")
+    summarize = AsyncMock(return_value=SummaryOutput("short summary"))
     result = await run(snapshot(summarize=summarize, max_state_chars=1000), "word " * 5000)
     assert result.state_reduction == "summarized" and result.state_chars == len("short summary")
     assert result.original_chars == len(("word " * 5000).strip())
@@ -122,7 +123,7 @@ async def test_failing_summarizer_falls_back_to_truncation(mocks):
 
 async def test_the_text_that_was_really_evaluated_is_returned_when_it_was_reduced(mocks):
     # So the user can read what the decision was based on (the summary, or the cut text).
-    summarized = await run(snapshot(summarize=AsyncMock(return_value="short summary"), max_state_chars=1000), "word " * 5000)
+    summarized = await run(snapshot(summarize=AsyncMock(return_value=SummaryOutput("short summary")), max_state_chars=1000), "word " * 5000)
     assert summarized.evaluated_text == "short summary"
     truncated = await run(snapshot(max_state_chars=1000), "word " * 5000)
     assert truncated.evaluated_text == mocks.evaluate.await_args.args[1]
@@ -258,7 +259,7 @@ async def test_without_summarization_nothing_is_recorded_for_it(mocks):
 
 async def test_a_summarization_that_failed_before_the_server_answered_is_still_recorded(mocks):
     mocks.evaluate.side_effect = SystemOneError("unavailable", "down", 503)
-    summarize = AsyncMock(return_value="s")
+    summarize = AsyncMock(return_value=SummaryOutput("s"))
     with pytest.raises(HTTPException):
         await run(snapshot(summarize=summarize, max_state_chars=1000), "word " * 5000)
     assert mocks.record.call_args.kwargs["event_overrides"]["summarization_calls"] == 1

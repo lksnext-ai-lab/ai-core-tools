@@ -41,3 +41,8 @@ export function agentRowStatus(agent: { type: string; system_one_service?: unkno
   }
   return { kind: 'active', label: 'Active' };
 }
+
+/** The backend refuses to schedule a System One agent (it evaluates on demand), so the picker must not offer it. */
+export function canBeScheduled(agent: { type: string }): boolean {
+  return agent.type !== 'system_one_agent';
+}
