@@ -378,3 +378,14 @@ async def test_a_saved_service_is_checked_with_its_own_model_and_token(repo):
         out = await SystemOneServiceService.test_connection(MagicMock(), 10, 1)
     endpoint = check.await_args.args[0]
     assert (endpoint.model, endpoint.api_key) == ("saved-model", "stored-token") and out["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_a_status_check_never_spends_tokens_on_a_real_call(repo):
+    repo.get_by_id_and_app_id.return_value = _service()
+    check = AsyncMock()
+    with patch.object(module.system_one_client, "probe", AsyncMock(return_value=NOT_LISTED)), \
+         patch.object(module.system_one_client, "check_model", check):
+        out = await SystemOneServiceService.test_connection(MagicMock(), 10, 1, live_call=False)
+    check.assert_not_awaited()
+    assert out["status"] == "success" and out["checked_with_call"] is False

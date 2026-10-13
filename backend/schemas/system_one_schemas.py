@@ -58,6 +58,8 @@ class ScoreQuestion(_QuestionBase):
     type: Literal["score"]
     criteria: Annotated[List[ShortText], Field(min_length=MIN_OPTIONS)]
     min_probability: Optional[Prob] = None
+    # Only for the playground's colors (never sent to the server): which end of the scale is green.
+    color_start: Literal["green", "red"] = "green"
 
 
 Question = Annotated[Union[NoulQuestion, ChoiceQuestion, ScoreQuestion], Field(discriminator="type")]

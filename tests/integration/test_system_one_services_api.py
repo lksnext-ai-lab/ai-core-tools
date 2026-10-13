@@ -159,6 +159,22 @@ class TestConnection:
         assert r.status_code == 200 and r.json()["status"] == "success" and r.json()["checked_with_call"] is True
         assert check.await_args.args[0].model == "the-model" and "tok" not in r.text
 
+    def test_the_status_of_a_saved_service_is_readable_by_a_viewer_and_never_spends_a_real_call(
+            self, client, fake_app, owner_headers, viewer_headers):
+        sid = _create(client, fake_app, owner_headers)["service_id"]
+        bare = {"ok": True, "message": "The server answered, but it has no health or model endpoints: the token and the model "
+                "are only checked by a real call", "models": [], "limits": None, "can_list_models": False}
+        check = AsyncMock()
+        with patch("services.system_one_service_service.system_one_client.probe", AsyncMock(return_value=bare)), \
+             patch("services.system_one_service_service.system_one_client.check_model", check):
+            r = client.get(url(fake_app, f"{sid}/status"), headers=viewer_headers)
+        assert r.status_code == 200
+        assert r.json() == {"status": "success", "message": bare["message"], "verifiable": False}
+        check.assert_not_awaited()
+
+    def test_the_status_of_an_unknown_service_is_404(self, client, fake_app, owner_headers):
+        assert client.get(url(fake_app, "987654/status"), headers=owner_headers).status_code == 404
+
     def test_edit_mode_recovers_the_stored_token(self, client, fake_app, owner_headers):
         sid = _create(client, fake_app, owner_headers, api_key="stored-token-9999")["service_id"]
         probe = AsyncMock(return_value=self.PROBE_OK)

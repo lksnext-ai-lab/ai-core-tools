@@ -197,7 +197,7 @@ export function toPayload(questions: EditorQuestion[]): SystemOneQuestion[] {
       });
       return { ...common, type: 'choice', criteria, ...extra };
     }
-    return { ...common, type: 'score', criteria: q.criteria.map((level) => level.trim()), ...extra };
+    return { ...common, type: 'score', criteria: q.criteria.map((level) => level.trim()), color_start: q.color_start ?? 'green', ...extra };
   });
 }
 
@@ -219,4 +219,11 @@ export function reorder<T>(items: T[], from: number, to: number): T[] {
 export function promptBudget(questions: EditorQuestion[], maxStateChars: number): number {
   const longest = questions.reduce((max, q) => Math.max(max, questionSize(q)), 0);
   return Math.max(maxStateChars - longest, MIN_TEXT_ROOM_CHARS);
+}
+
+/** A decimal typed with a comma (Spanish keyboards) or a point. Empty = undefined; anything else not a number = NaN. */
+export function parseDecimal(raw: string): number | undefined {
+  const text = raw.trim();
+  if (text === '') return undefined;
+  return Number.parseFloat(text.replace(',', '.'));
 }

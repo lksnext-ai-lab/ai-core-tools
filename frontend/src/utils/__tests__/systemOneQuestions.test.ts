@@ -90,7 +90,7 @@ describe('toPayload', () => {
       key: 'area', type: 'choice', instructions: 'Which area?',
       criteria: [{ key: 'billing', description: 'Invoices' }, { key: 'tech' }],
     });
-    expect(payload[2]).toEqual({ key: 'anger', type: 'score', instructions: 'How angry?', criteria: ['Calm', 'Angry'] });
+    expect(payload[2]).toEqual({ key: 'anger', type: 'score', instructions: 'How angry?', criteria: ['Calm', 'Angry'], color_start: 'green' });
     expect(JSON.stringify(payload)).not.toContain('_id');
   });
 
@@ -228,5 +228,16 @@ describe('promptBudget', () => {
 
   it('never goes below the room a question must leave', () => {
     expect(promptBudget([noul({ instructions: 'x'.repeat(9000) })], 6000)).toBe(500);
+  });
+});
+
+describe('decimal input accepts a comma or a point', () => {
+  it('reads 0,5 and 0.5 as the same number', async () => {
+    const { parseDecimal } = await import('../systemOneQuestions');
+    expect(parseDecimal('0,5')).toBe(0.5);
+    expect(parseDecimal('0.5')).toBe(0.5);
+    expect(parseDecimal(' 0,75 ')).toBe(0.75);
+    expect(parseDecimal('')).toBeUndefined();
+    expect(parseDecimal('abc')).toBeNaN();
   });
 });
