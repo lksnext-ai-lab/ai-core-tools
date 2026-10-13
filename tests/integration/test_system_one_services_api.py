@@ -182,7 +182,7 @@ class TestConnection:
             r = client.post(url(fake_app, "test-connection") + f"?service_id={sid}",
                             json=payload(api_key="****9999"), headers=owner_headers)
         assert r.status_code == 200
-        probe.assert_awaited_once_with("http://172.16.59.1:8100", "stored-token-9999")
+        probe.assert_awaited_once_with("http://172.16.59.1:8100", "stored-token-9999", "system_one")
 
     def test_saved_service_test(self, client, fake_app, owner_headers):
         sid = _create(client, fake_app, owner_headers)["service_id"]
