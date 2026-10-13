@@ -23,3 +23,21 @@ describe('serviceStatus', () => {
     expect(serviceStatus('m', { status: 'error', message: 'Cannot connect to the System One server', verifiable: true })).toBe('unreachable');
   });
 });
+
+import { agentRowStatus } from '../systemOneStatus';
+
+describe('agentRowStatus (the Status column of the agents list)', () => {
+  it('is active for any agent that can run', () => {
+    expect(agentRowStatus({ type: 'agent', system_one_service: null }).kind).toBe('active');
+    expect(agentRowStatus({ type: 'system_one_agent', system_one_service: { service_id: 1, name: 'S', model: 'm' } }).kind).toBe('active');
+  });
+  it('says a System One agent without its service cannot run', () => {
+    const status = agentRowStatus({ type: 'system_one_agent', system_one_service: null });
+    expect(status.kind).toBe('inoperative');
+    expect(status.label).toBe('Inoperative');
+    expect(status.detail).toMatch(/no System One service/i);
+  });
+  it('does not change how other agent types are shown', () => {
+    expect(agentRowStatus({ type: 'ocr_agent', system_one_service: undefined }).kind).toBe('active');
+  });
+});

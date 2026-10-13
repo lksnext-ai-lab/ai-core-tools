@@ -24,3 +24,20 @@ export const STATUS_LABEL: Record<ServiceStatusKind, string> = {
   unreachable: 'Unreachable',
   model_required: 'Model required',
 };
+
+export interface AgentRowStatus {
+  kind: 'active' | 'inoperative';
+  label: string;
+  detail?: string;
+}
+
+/**
+ * Status of an agent in the agents list. Every agent used to read "Active"; a System One agent whose service was
+ * deleted cannot evaluate anything, so it says so. Other agent types are untouched.
+ */
+export function agentRowStatus(agent: { type: string; system_one_service?: unknown }): AgentRowStatus {
+  if (agent.type === 'system_one_agent' && !agent.system_one_service) {
+    return { kind: 'inoperative', label: 'Inoperative', detail: 'This agent has no System One service: choose one in its settings' };
+  }
+  return { kind: 'active', label: 'Active' };
+}
