@@ -55,14 +55,14 @@ export default function AttachedFilesPanel({
   title = 'Attached Files',
 }: Readonly<AttachedFilesPanelProps>) {
   return (
-    <div className="w-64 shrink-0 bg-white shadow rounded-lg flex flex-col h-full max-h-full min-h-0">
+    <div className="w-64 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-full max-h-full min-h-0">
       {/* Header */}
-      <div className="p-3 border-b shrink-0">
-        <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+      <div className="p-3 border-b border-line dark:border-line-dark shrink-0">
+        <h3 className="text-sm font-medium text-fg dark:text-fg-dark flex items-center gap-2">
           <Paperclip className="w-4 h-4" />
           <span>{title}</span>
           {files.length > 0 && (
-            <span className="ml-auto text-xs text-gray-400">
+            <span className="ml-auto text-xs text-fg dark:text-fg-dark">
               {files.length} file{files.length === 1 ? '' : 's'}
             </span>
           )}
@@ -73,25 +73,25 @@ export default function AttachedFilesPanel({
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 overscroll-contain">
         {isLoading && (
           <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-500">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-line dark:border-line-dark" />
             Uploading...
           </div>
         )}
 
         {!isLoading && files.length === 0 && (
-          <div className="py-6 text-center text-gray-400">
+          <div className="py-6 text-center text-fg-secondary dark:text-fg-secondary-dark">
             <div className="flex justify-center mb-2">
               <Paperclip className="w-6 h-6" />
             </div>
-            <p className="text-xs">No files attached yet</p>
-            <p className="text-xs mt-1 text-gray-300">Use the attach button to upload</p>
+            <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">No files attached yet</p>
+            <p className="text-xs mt-1 text-fg-tertiary dark:text-fg-tertiary-dark">Use the attach button to upload</p>
           </div>
         )}
 
         {files.map((file) => (
           <div
             key={file.id}
-            className="flex items-start gap-2 bg-gray-50 rounded border border-gray-200 px-2 py-2 hover:border-gray-300 transition-colors"
+            className="flex items-start gap-2 bg-surface dark:bg-surface-dark rounded border border-line dark:border-line-dark px-2 py-2 hover:border-ink dark:hover:border-ink-dark transition-colors"
           >
             {/* Icon */}
             <span className="shrink-0 mt-0.5">{getFileIcon(file.file_type)}</span>
@@ -100,7 +100,7 @@ export default function AttachedFilesPanel({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1 flex-wrap">
                 <span
-                  className="text-xs font-medium text-gray-800 truncate max-w-[120px]"
+                  className="text-xs font-medium text-fg dark:text-fg-dark truncate max-w-[120px]"
                   title={file.filename}
                 >
                   {file.filename}
@@ -127,7 +127,7 @@ export default function AttachedFilesPanel({
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+              <div className="flex items-center gap-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-0.5">
                 {file.file_size_display && <span>{file.file_size_display}</span>}
                 {file.has_extractable_content !== undefined && (
                   <>
@@ -140,7 +140,7 @@ export default function AttachedFilesPanel({
               </div>
               {file.content_preview && (
                 <p
-                  className="text-xs text-gray-400 truncate mt-0.5"
+                  className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark truncate mt-0.5"
                   title={file.content_preview}
                 >
                   {file.content_preview}
@@ -148,7 +148,7 @@ export default function AttachedFilesPanel({
               )}
               {getDisplayStatus(file.processing_status) === 'error' && file.error_message && (
                 <p
-                  className="text-xs text-red-600 mt-0.5 line-clamp-2"
+                  className="text-xs text-error dark:text-error-dark mt-0.5 line-clamp-2"
                   title={file.error_message}
                 >
                   {file.error_message}

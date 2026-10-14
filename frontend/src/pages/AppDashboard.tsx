@@ -26,6 +26,7 @@ import Speedometer from '../components/ui/Speedometer';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
+import { CardApp } from '../components/ui/CardApp';
 
 interface App {
   app_id: number;
@@ -378,10 +379,10 @@ function AppDashboard() {
               <Link
                 key={agent.agent_id}
                 to={`/apps/${appId}/agents`}
-                className="flex items-center gap-2 group rounded-lg px-1 -mx-1 hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-2 group rounded-lg px-1 -mx-1 hover:text-fg-tertiary dark:hover:text-fg-tertiary-dark transition-colors"
                 aria-label={`Go to ${agent.name}`}
               >
-                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark w-28 truncate shrink-0 group-hover:text-blue-700 transition-colors" title={agent.name}>
+                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark w-28 truncate shrink-0 group-hover:text-fg-tertiary dark:group-hover:text-fg-tertiary-dark transition-colors" title={agent.name}>
                   {agent.name}
                 </span>
                 <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -409,10 +410,10 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Block 1: Enriched Hero Banner                                       */}
       {/* ------------------------------------------------------------------ */}
-      <div className="bg-[var(--color-card-bg-tit)] dark:bg-canvas-alt-dark from-slate-50 via-blue-50 to-indigo-50 border border-slate-200 dark:border-btCard-border-dark rounded-xl p-6">
+      <CardApp variant="canvas" className="p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-[var(--text-bronze)] uppercase tracking-wider mb-1">Workspace</p>
+            <p className="text-xs text-bronze-dark uppercase tracking-wider mb-1">Workspace</p>
             <Title
               titulo={currentApp.name}
               subtitulo='Manage your AI components and data resources'
@@ -461,7 +462,7 @@ function AppDashboard() {
             </Link>
           </div>
         </div>
-      </div>
+      </CardApp>
 
       {/* ------------------------------------------------------------------ */}
       {/* Feature Cards (existing)                                            */}
@@ -469,9 +470,10 @@ function AppDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {cards.map((card) => {
           return (
-            <div
+            <CardApp
               key={card.href}
-              className="bg-white dark:bg-btCard-dark rounded-xl border border-gray-200 dark:border-btCard-border-dark p-5 hover:shadow-md hover:border-gray-300 transition-all duration-200 group flex flex-col"
+              variant="white"
+              className=""
             >
               {/* Icon + Count */}
               <div className="flex items-start justify-between mb-4">
@@ -503,7 +505,7 @@ function AppDashboard() {
                 {card.label}
                 <ArrowRight className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform duration-150" />
               </Link>
-            </div>
+            </CardApp>
           );
         })}
       </div>
@@ -513,24 +515,24 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Block 2: Rate Limit Speedometer */}
-        <div className="bg-white dark:bg-btCard-dark rounded-xl border border-gray-200 dark:border-btCard-border-dark p-5">
+        <CardApp variant="white" >
           <div className="flex items-center gap-2 mb-4">
-            <Zap className="w-4 h-4 text-amber-500" />
+            <Zap className="w-4 h-4 text-bronze-dark" />
             <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">Rate Limit Usage</h2>
           </div>
 
           {speedometerContent}
-        </div>
+        </CardApp>
 
         {/* Block 3: Top Agents Leaderboard */}
-        <div className="bg-white  dark:bg-btCard-dark rounded-xl border border-gray-200 dark:border-btCard-border-dark p-5">
+        <CardApp variant="white">
           <div className="flex items-center gap-2 mb-4">
-            <Trophy className="w-4 h-4 text-blue-500" />
+            <Trophy className="w-4 h-4 text-bronze-dark" />
             <h2 className="text-sm font-semibold text-fg-secondary dark:text-fg-secondary-dark">Top Agents by Usage</h2>
           </div>
 
           {agentsContent}
-        </div>
+        </CardApp>
       </div>
 
       {/* ------------------------------------------------------------------ */}

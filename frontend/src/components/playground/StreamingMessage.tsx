@@ -45,12 +45,12 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
                   {[0, 1, 2].map((i) => (
                     <span
                       key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-typing-dots"
+                      className="w-1.5 h-1.5 rounded-full bg-accent dark:bg-accent-dark animate-typing-dots"
                       style={{ animationDelay: `${i * 0.2}s` }}
                     />
                   ))}
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+                <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
                   {thinkingMessage}
                 </span>
               </div>
@@ -60,7 +60,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
 
         {isStreaming && elapsedMs !== undefined && (
           <div
-            className="mt-1 ml-1 flex items-center gap-1.5 text-xs tabular-nums text-gray-400 dark:text-gray-500"
+            className="mt-1 ml-1 flex items-center gap-1.5 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark"
             aria-live="polite"
           >
             <Timer className="h-3.5 w-3.5" aria-hidden="true" />
@@ -70,7 +70,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
 
         {/* Message content */}
         {hasContent && (
-          <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
+          <div className="pg-bubble-agent text-sm leading-relaxed text-fg dark:text-fg-dark">
             <div className={isStreaming ? 'pg-cursor' : ''}>
               <MessageContent content={content} />
             </div>
@@ -85,7 +85,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
                 {[0, 1, 2].map((i) => (
                   <span
                     key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-typing-dots"
+                    className="w-1.5 h-1.5 rounded-full bg-fg-faint dark:bg-fg-faint-dark animate-typing-dots"
                     style={{ animationDelay: `${i * 0.2}s` }}
                   />
                 ))}

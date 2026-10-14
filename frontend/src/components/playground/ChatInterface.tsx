@@ -9,6 +9,7 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import BackgroundImage from '../ui/BackgroundImage';
 import ToolHistoryPanel from './ToolHistoryPanel';
 import MediaUploadModal from './MediaUploadModal';
 import VideoPlayer from './VideoPlayer';
@@ -1039,45 +1040,48 @@ function ChatInterface({
                       key={message.id}
                       className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
-                      <div className="max-w-[90%] lg:max-w-[80%] min-w-0">
-                        <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
-                          <MessageContent
-                            content={stripTimestampLabels(message.content)}
-                            resolveFileUrl={resolveFileUrl}
-                          />
-                        </div>
-                        {msgTimestamps.length > 0 &&
-                          readyVideoMedias.map((media) => {
-                            const streamUrl = videoStreamUrls[media.media_id];
-                            const mediaTimestamps = getTimestampsForMedia(
-                              msgTimestamps,
-                              media.name,
-                              readyVideoMedias.length,
-                            );
-                            if (!streamUrl || mediaTimestamps.length === 0) return null;
-                            return (
-                              <VideoPlayer
-                                key={media.media_id}
-                                videoUrl={streamUrl}
-                                timestamps={mediaTimestamps}
-                                title={media.name}
-                                isAudio={media.media_type === 'audio'}
-                              />
-                            );
-                          })}
-                        <div className="mt-1">
-                          <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {message.timestamp.toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
+                      <div className="flex items-start gap-4 max-w-[90%] lg:max-w-[80%] min-w-0">
+                        <BackgroundImage icon="Bot" size={38} iconSize={18} variant="marron" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <div className="min-w-0 flex-1">
+                          <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
+                            <MessageContent
+                              content={stripTimestampLabels(message.content)}
+                              resolveFileUrl={resolveFileUrl}
+                            />
+                          </div>
+                          {msgTimestamps.length > 0 &&
+                            readyVideoMedias.map((media) => {
+                              const streamUrl = videoStreamUrls[media.media_id];
+                              const mediaTimestamps = getTimestampsForMedia(
+                                msgTimestamps,
+                                media.name,
+                                readyVideoMedias.length,
+                              );
+                              if (!streamUrl || mediaTimestamps.length === 0) return null;
+                              return (
+                                <VideoPlayer
+                                  key={media.media_id}
+                                  videoUrl={streamUrl}
+                                  timestamps={mediaTimestamps}
+                                  title={media.name}
+                                  isAudio={media.media_type === 'audio'}
+                                />
+                              );
                             })}
-                          </span>
-                          {message.elapsedMs !== undefined && (
-                            <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
-                              <Timer className="h-3 w-3" aria-hidden="true" />
-                              {formatDuration(message.elapsedMs)}
+                          <div className="mt-1">
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
                             </span>
-                          )}
+                            {message.elapsedMs !== undefined && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                                <Timer className="h-3 w-3" aria-hidden="true" />
+                                {formatDuration(message.elapsedMs)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -7,6 +7,7 @@ import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { Badge } from '../components/ui/Badge';
+import ButtonApp from '../components/ui/ButtonApp';
 import { StarRating } from '../components/marketplace/StarRating';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { errorMessage } from '../constants/messages';
@@ -117,20 +118,23 @@ export default function MarketplaceAgentDetailPage() {
   }, [loadData]);
 
   const handleStartChat = useCallback(async () => {
-    if (!agent) return;
+    if (!agent || starting) return;
     setStarting(true);
-    const conv = await mutate(
-      () => apiService.createMarketplaceConversation(agent.agent_id),
-      {
-        loading: 'Starting conversation…',
-        success: 'Conversation started',
-        error: (err) => errorMessage(err, 'Failed to start conversation'),
-      },
-    );
-    setStarting(false);
-    if (!conv) return;
-    navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
-  }, [agent, mutate, navigate]);
+    try {
+      const conv = await mutate(
+        () => apiService.createMarketplaceConversation(agent.agent_id),
+        {
+          loading: 'Starting conversation…',
+          success: 'Conversation started',
+          error: (err) => errorMessage(err, 'Failed to start conversation'),
+        },
+      );
+      if (!conv) return;
+      navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
+    } finally {
+      setStarting(false);
+    }
+  }, [agent, starting, mutate, navigate]);
 
   const handleRate = useCallback(
     async (rating: number) => {
@@ -255,14 +259,13 @@ export default function MarketplaceAgentDetailPage() {
 
         {/* Action buttons (desktop) */}
         <div className="hidden sm:flex flex-col gap-2 pt-2">
-          <button
-            type="button"
+          <ButtonApp
+            label={starting ? 'Starting…' : 'Start New Chat'}
             onClick={handleStartChat}
-            disabled={starting}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {starting ? 'Starting…' : 'Start New Chat'}
-          </button>
+            variant="primary"
+            size="medium"
+            loading={starting}
+          />
         </div>
       </div>
 
@@ -336,14 +339,14 @@ export default function MarketplaceAgentDetailPage() {
 
           {/* Mobile action button */}
           <div className="sm:hidden">
-            <button
-              type="button"
+            <ButtonApp
+              label={starting ? 'Starting…' : 'Start New Chat'}
               onClick={handleStartChat}
-              disabled={starting}
-              className="w-full px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {starting ? 'Starting…' : 'Start New Chat'}
-            </button>
+              variant="primary"
+              size="medium"
+              loading={starting}
+              className="w-full"
+            />
           </div>
 
           {/* Existing conversations */}

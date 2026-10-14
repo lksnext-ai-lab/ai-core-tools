@@ -49,6 +49,10 @@ export { SettingsPageWrapper } from './components/settings/SettingsPageWrapper';
 export { Badge, ProviderBadge, StatusBadge } from './components/ui/Badge';
 export { ButtonApp } from './components/ui/ButtonApp';
 export type { ButtonAppProps, ButtonAppSize, ButtonAppVariant } from './components/ui/ButtonApp';
+export { ButtonTab } from './components/ui/ButtonTab';
+export type { ButtonTabProps } from './components/ui/ButtonTab';
+export { ButtonTabItem } from './components/ui/ButtonTabItem';
+export type { ButtonTabItemProps, ButtonTabItemVariant } from './components/ui/ButtonTabItem';
 export { BackgroundImage } from './components/ui/BackgroundImage';
 export type { BackgroundImageIconName, BackgroundImageProps, BackgroundImageVariant } from './components/ui/BackgroundImage';
 

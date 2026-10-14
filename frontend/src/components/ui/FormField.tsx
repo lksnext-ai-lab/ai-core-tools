@@ -6,6 +6,8 @@ interface FormFieldProps {
   type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel';
   value: string | number;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  min?: number;
+  max?: number;
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
@@ -24,6 +26,8 @@ export function FormField({
   type = 'text',
   value,
   onChange,
+  min,
+  max,
   placeholder,
   disabled = false,
   required = false,
@@ -52,6 +56,8 @@ export function FormField({
         type={type}
         value={value}
         onChange={onChange}
+        min={min}
+        max={max}
         placeholder={placeholder}
         disabled={disabled}
         required={required}
@@ -165,7 +171,7 @@ interface FormSelectProps {
   error?: string;
   helpText?: string;
   className?: string;
-  selectClassName?: string;
+  labelClassName?: string;
 }
 
 /**
@@ -182,7 +188,7 @@ export function FormSelect({
   error,
   helpText,
   className = '',
-  selectClassName = ''
+  labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1'
 }: Readonly<FormSelectProps>) {
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
@@ -192,7 +198,7 @@ export function FormSelect({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
+        className={labelClassName}
       >
         {label}
         {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
@@ -213,7 +219,7 @@ export function FormSelect({
             : 'border-gray-300  focus:border-accent dark:border-btCard-border-dark dark:focus:border-accent '
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
-        } ${selectClassName}`}
+        }`}
       >
         {options.map(option => (
           <option key={option.value} value={option.value}>
@@ -243,6 +249,7 @@ interface FormCheckboxProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   disabled?: boolean;
   helpText?: string;
+  ariaDescribedBy?: string;
   className?: string;
 }
 
@@ -256,8 +263,12 @@ export function FormCheckbox({
   onChange,
   disabled = false,
   helpText,
+  ariaDescribedBy,
   className = ''
 }: Readonly<FormCheckboxProps>) {
+  const helpTextId = helpText ? `${id}-help` : undefined;
+  const describedBy = [ariaDescribedBy, helpTextId].filter(Boolean).join(' ') || undefined;
+
   return (
     <div className={`flex items-start ${className}`}>
       <div className="flex items-center h-5">
@@ -268,6 +279,7 @@ export function FormCheckbox({
           checked={checked}
           onChange={onChange}
           disabled={disabled}
+          aria-describedby={describedBy}
           className="w-4 h-4 accent-ink dark:accent-ink-dark border-line-strong rounded focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
@@ -279,7 +291,7 @@ export function FormCheckbox({
           {label}
         </label>
         {helpText && (
-          <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+          <p id={helpTextId} className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
         )}
       </div>
     </div>

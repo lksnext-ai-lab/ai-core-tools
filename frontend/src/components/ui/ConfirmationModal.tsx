@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import Modal from './Modal';
+import ButtonApp from './ButtonApp';
 
 export type ConfirmVariant = 'danger' | 'warning' | 'info';
 
@@ -62,14 +63,13 @@ function ConfirmationModal({
         <div className="flex-1 text-sm text-fg-secondary dark:text-fg-secondary-dark pt-2">{message}</div>
       </div>
       <div className="mt-6 flex justify-end gap-3">
-        <button
-          type="button"
+        <ButtonApp
+          label={cancelLabel}
           onClick={onCancel}
           disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-fg bg-transparent border border-line-strong rounded-lg hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-focus disabled:opacity-50 dark:text-fg-dark dark:border-line-strong-dark dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark dark:focus-visible:ring-offset-surface-dark"
-        >
-          {cancelLabel}
-        </button>
+          variant="secondary"
+          size="medium"
+        />
         <button
           type="button"
           onClick={onConfirm}

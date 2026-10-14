@@ -12,11 +12,11 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['marron'],
+      options: ['marron', 'vacio'],
     },
     icon: {
       control: 'select',
-      options: ['Bot', 'FileText', 'MessagesSquare', 'Store'],
+      options: ['Bot', 'FileText', 'MessageSquare', 'Store'],
     },
   },
 } satisfies Meta<typeof BackgroundImage>;
@@ -24,7 +24,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const RecentConversation: Story = {
+export const Size34: Story = {
   args: {
     icon: 'Bot',
     size: 34,
@@ -32,7 +32,7 @@ export const RecentConversation: Story = {
   },
 };
 
-export const DocumentConversation: Story = {
+export const Size40: Story = {
   args: {
     icon: 'FileText',
     size: 40,
@@ -40,27 +40,23 @@ export const DocumentConversation: Story = {
   },
 };
 
-export const SupportConversation: Story = {
+export const Siz48: Story = {
   args: {
-    icon: 'MessagesSquare',
+    icon: 'MessageSquare',
     size: 48,
     variant: 'marron',
   },
 };
 
-export const Dark: Story = {
+export const VacioSinIcono: Story = {
   args: {
-    icon: 'Bot',
-    size: 34,
-    variant: 'marron',
+    icon: undefined,
+    alt: '',
+    text: 'YOU',
+    size: 38,
+    variant: 'vacio',
   },
-  parameters: {
-    layout: 'fullscreen',
-  },
-  render: (args) => (
-    <div className="dark flex min-h-screen items-center justify-center bg-canvas-dark p-8">
-      <BackgroundImage {...args} />
-    </div>
-  ),
 };
+
+
 

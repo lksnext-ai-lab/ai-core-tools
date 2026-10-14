@@ -207,7 +207,10 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/marketplace/scheduled-tasks/:taskId/conversation" element={<ProtectedLayoutRoute {...commonLayoutProps}><MarketplaceScheduledTaskRunPage /></ProtectedLayoutRoute>} />
 
                 <Route path="/marketplace/chat/:conversationId" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute
+                    {...commonLayoutProps}
+                    mainProps={{ className: '!p-0 [&>div]:max-w-none [&>div]:h-full' }}
+                  >
                     <MarketplaceChatPage />
                   </ProtectedLayoutRoute>
                 } />

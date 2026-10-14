@@ -56,11 +56,11 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
   return (
     <>
       <CardDetailEntidad
-        description={`${agent.short_description || 'No description provided.'}\n${agent.published_at
+        description={`${agent.short_description || 'No description provided.'}`}
+        titleCab={agent.display_name}
+        subTitleCab={`${agent.app_name} • ${agent.published_at
           ? new Date(agent.published_at).toLocaleDateString('en-CA')
           : '—'}`}
-        titleCab={agent.display_name}
-        subTitleCab={agent.app_name}
         imageFallback={<Bot className="w-5 h-5 text-fg dark:text-fg-dark" aria-hidden="true" />}
         badges={[
           ...(agent.category
@@ -93,7 +93,6 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
         onActionClick={() => handleStartChat()}
         actionDisabled={starting}
         actionAriaLabel={`Start chat with ${agent.display_name}`}
-        className="w-full cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-blue-300"
       />
 
       {/* Previous button implementation retained for comparison:

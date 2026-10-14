@@ -76,7 +76,7 @@ export const Danger: Story = {
 };
 
 
-export const PrtimaryIcon: Story = {
+export const PrimaryIcon: Story = {
   args: {
     label: 'Browse Agents',
     variant: 'primary',

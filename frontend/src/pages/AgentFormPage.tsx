@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
+import { AlertTriangle, Settings, FileText, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
 import { apiService, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
-import { Badge } from '../components/ui/Badge';
+import { Badge, ProviderBadge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
 import type { TabItem } from '../components/ui/Tabs';
-import { FormField, FormSelect } from '../components/ui/FormField';
+import { FormCheckbox, FormField, FormSelect } from '../components/ui/FormField';
 import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
 import type { RagConfigValue, RagFixedFilter, RagSearchType } from '../components/forms/RagConfigSection';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
@@ -21,6 +21,8 @@ import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
 import { randomId } from '../utils/randomId';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { CardApp } from '../components/ui/CardApp';
 
 // Define the Agent types
 interface Agent {
@@ -132,24 +134,22 @@ const OutputParserField = ({
   agent: Agent | null;
 }) => (
   <div>
-    <div className="flex items-center mb-2">
-      <input
-        id="output_parser_toggle"
-        type="checkbox"
-        checked={showOutputParser}
-        onChange={(e) => {
-          setShowOutputParser(e.target.checked);
-          if (!e.target.checked) {
-            handleInputChange('output_parser_id', undefined);
-          }
-        }}
-        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-      />
-      <label htmlFor="output_parser_toggle" className="ml-2 text-sm font-medium text-gray-700">Data Structure</label>
-    </div>
+    <FormCheckbox
+      id="output_parser_toggle"
+      label="Data Structure"
+      checked={showOutputParser}
+      onChange={(e) => {
+        setShowOutputParser(e.target.checked);
+        if (!e.target.checked) {
+          handleInputChange('output_parser_id', undefined);
+        }
+      }}
+      className="mb-2"
+    />
 
     {showOutputParser && (
-      <select
+      <FormSelect
+        label="Data Structure"
         id="output_parser"
         value={formData.output_parser_id || ''}
         onChange={(e) =>
@@ -158,15 +158,15 @@ const OutputParserField = ({
             e.target.value ? Number.parseInt(e.target.value) : undefined
           )
         }
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-      >
-        <option value="">-- Select a Data Structure --</option>
-        {agent?.output_parsers.map((parser) => (
-          <option key={parser.parser_id} value={parser.parser_id}>
-            {parser.name}
-          </option>
-        ))}
-      </select>
+        options={[
+          { value: '', label: '-- Select a Data Structure --' },
+          ...(agent?.output_parsers.map((parser) => ({
+            value: parser.parser_id,
+            label: parser.name,
+          })) ?? []),
+        ]}
+        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+      />
     )}
   </div>
 );
@@ -186,7 +186,7 @@ function getPageDescription(type: string, isNewAgent: boolean, agentName?: strin
 function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: number }) {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
-  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-fg">Scheduled tasks using this agent</h3><p className="text-sm text-fg-secondary">Scheduling is managed independently from the agent.</p></div>
+  return <section className="mb-6 rounded-md border border-line bg-surface dark:border-line-dark dark:bg-surface-dark p-6 "><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-fg dark:text-fg-dark">Scheduled tasks using this agent</h3><p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Scheduling is managed independently from the agent.</p></div>
     {/*<button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button>*/}
     <ButtonApp
       type="button"
@@ -195,7 +195,7 @@ function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: nu
       label="Create scheduled task"
     ></ButtonApp>
     
-    </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-gray-500">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
+    </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-fg-tertiary dark:text-fg-tertiary-dark">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
 }
 
 function AgentFormPage() {
@@ -665,7 +665,7 @@ function AgentFormPage() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2 text-gray-600">Loading agent...</span>
+          <span className="ml-2 text-secondary dark:text-secondary-dark">Loading agent...</span>
         </div>
       </div>
     );
@@ -697,7 +697,7 @@ function AgentFormPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
           {/*<div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl font-bold text-fg dark:text-fg-dark">
               {pageTitle}
             </h1>
             <p className="text-gray-600 mt-2">
@@ -712,7 +712,7 @@ function AgentFormPage() {
           />
           {/*<button
             onClick={() => navigate(`/apps/${appId}/agents`)}
-            className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-gray-700 shadow-sm border border-gray-200 transition-all duration-200"
+            className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-fg-secondary dark:text-fg-secondary-dark shadow-sm border border-gray-200 transition-all duration-200"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {' '}
@@ -793,17 +793,15 @@ function AgentFormPage() {
 
           {/* TAB 2: PROMPTS */}
           {activeTab === 'prompts' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+            <CardApp variant="white" className="p-8">
               <div className="flex items-center mb-6">
-                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                  <MessageSquare className="w-5 h-5 text-purple-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900">Prompts & Instructions</h3>
+                <BackgroundImage icon="MessageSquare" size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
+                <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Prompts & Instructions</h3>
               </div>
               
               <div className="space-y-6">
                 <div>
-                  <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="system_prompt" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                     System Prompt
                   </label>
                   <textarea
@@ -811,13 +809,13 @@ function AgentFormPage() {
                     value={formData.system_prompt}
                     onChange={(e) => handleInputChange('system_prompt', e.target.value)}
                     rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="w-full px-4 py-3 border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
                     placeholder="Define the agent's behavior and capabilities..."
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="prompt_template" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="prompt_template" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                     Prompt Template
                   </label>
                   <textarea
@@ -825,10 +823,10 @@ function AgentFormPage() {
                     value={formData.prompt_template}
                     onChange={(e) => handleInputChange('prompt_template', e.target.value)}
                     rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="w-full px-4 py-3 border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
                     placeholder="Template for user interactions (must include {question})..."
                   />
-                  <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
+                  <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
 
                 {/* Memory Management - Conditional */}
@@ -839,8 +837,8 @@ function AgentFormPage() {
                         <Brain className="w-5 h-5 text-indigo-600" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configure the agent's memory management strategy</p>
+                        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">Memory Management</h3>
+                        <p className="text-sm text-secondary dark:text-secondary-dark mt-1">Configure the agent's memory management strategy</p>
                       </div>
                     </div>
 
@@ -859,7 +857,7 @@ function AgentFormPage() {
                     
                     <div className="space-y-6">
                       <div>
-                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                           Maximum Messages
                         </label>
                         <input
@@ -871,13 +869,13 @@ function AgentFormPage() {
                           onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2">
                           Maximum number of messages to keep in the conversation history (recommended: 20)
                         </p>
                       </div>
 
                       <div>
-                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                           Token Limit
                         </label>
                         <input
@@ -890,13 +888,13 @@ function AgentFormPage() {
                           onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2">
                           Maximum number of tokens for the conversation history (recommended: 4000)
                         </p>
                       </div>
 
                       <div>
-                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                           Summarization Threshold
                         </label>
                         <input
@@ -908,33 +906,33 @@ function AgentFormPage() {
                           onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                         />
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2">
                           Number of old messages at which summarization is considered (future implementation, recommended: 10)
                         </p>
                       </div>
                     </div>
 
                     <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
+                      <h4 className="text-sm font-semibold text-fg dark:text-fg-dark mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600">Messages:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
+                          <span className="text-secondary dark:text-secondary-dark">Messages:</span>
+                          <span className="ml-2 font-medium text-fg dark:text-fg-dark">{formData.memory_max_messages}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Tokens:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
+                          <span className="text-secondary dark:text-secondary-dark">Tokens:</span>
+                          <span className="ml-2 font-medium text-fg dark:text-fg-dark">{formData.memory_max_tokens.toLocaleString()}</span>
                         </div>
                         <div>
-                          <span className="text-gray-600">Threshold:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
+                          <span className="text-secondary dark:text-secondary-dark">Threshold:</span>
+                          <span className="ml-2 font-medium text-fg dark:text-fg-dark">{formData.memory_summarize_threshold}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            </CardApp>
           )}
 
           {/* TAB 3: CONFIGURATION */}
@@ -943,12 +941,10 @@ function AgentFormPage() {
               {/* Configuration for regular agents */}
               {formData.type !== 'ocr_agent' && (
                 <>
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                  <CardApp variant="white" className="p-8">
                     <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center mr-4">
-                        <Settings className="w-5 h-5 text-orange-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">Configuration</h3>
+                      <BackgroundImage icon={Settings} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
+                      <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Configuration</h3>
                     </div>
                     
                     {/* No AI Services Warning */}
@@ -956,46 +952,42 @@ function AgentFormPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label htmlFor="ai_service" className="block text-sm font-medium text-gray-700 mb-2">
-                          AI Service *
-                        </label>
-                        <select
+                        <FormSelect
+                          label="AI Service"
                           id="ai_service"
                           value={formData.service_id || ''}
                           onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                           required
-                        >
-                          <option value="">Select AI Service</option>
-                          {agent?.ai_services.map((service) => (
-                            <option key={service.service_id} value={service.service_id}>
-                              {service.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: '', label: 'Select AI Service' },
+                            ...(agent?.ai_services.map((service) => ({
+                              value: service.service_id,
+                              label: service.name,
+                            })) ?? []),
+                          ]}
+                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        />
                       </div>
 
                       <div>
-                        <label htmlFor="silo" className="block text-sm font-medium text-gray-700 mb-2">
-                          Knowledge Base (Silo)
-                        </label>
-                        <select
+                        <FormSelect
+                          label="Knowledge Base (Silo)"
                           id="silo"
                           value={formData.silo_id || ''}
                           onChange={(e) => handleInputChange('silo_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">Select Knowledge Base</option>
-                          {agent?.silos.map((silo) => (
-                            <option key={silo.silo_id} value={silo.silo_id}>
-                              {silo.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: '', label: 'Select Knowledge Base' },
+                            ...(agent?.silos.map((silo) => ({
+                              value: silo.silo_id,
+                              label: silo.name,
+                            })) ?? []),
+                          ]}
+                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        />
                       </div>
 
                       <div>
-                        <label htmlFor="temperature" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="temperature" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                           Temperature
                         </label>
                         <div className="flex items-center space-x-4">
@@ -1007,13 +999,13 @@ function AgentFormPage() {
                             step="0.1"
                             value={formData.temperature}
                             onChange={(e) => handleInputChange('temperature', Number.parseFloat(e.target.value))}
-                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none accent-accent cursor-pointer"
                           />
-                          <span className="text-sm font-medium text-gray-600 w-12">
+                          <span className="text-sm font-medium text-fg-tertiary dark:text-fg-tertiary-dark w-12">
                             {formData.temperature.toFixed(1)}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
                           Controls randomness: 0 = deterministic, 2 = very creative
                         </p>
                       </div>
@@ -1028,7 +1020,7 @@ function AgentFormPage() {
                         />
                       </div>
                     </div>
-                  </div>
+                  </CardApp>
 
                   {/* RAG retrieval config — only meaningful when a silo is selected */}
                   {formData.silo_id && (
@@ -1049,12 +1041,10 @@ function AgentFormPage() {
                   )}
 
                   {/* Agent Capabilities Card */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                  <CardApp variant="white" className="p-8">
                     <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                        <Zap className="w-5 h-5 text-green-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
+                      <BackgroundImage icon={Zap} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
+                      <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Capabilities</h3>
                     </div>
 
                     {/* MCP Warning Dialog */}
@@ -1088,7 +1078,7 @@ function AgentFormPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowMcpWarning(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-fg dark:text-fg-dark text-sm font-medium rounded-lg transition-colors"
                               >
                                 Cancel
                               </button>
@@ -1101,10 +1091,10 @@ function AgentFormPage() {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
+                      <CardApp variant="info" className="p-4">
+                        <FormCheckbox
                           id="is_tool"
-                          type="checkbox"
+                          label="Tool Agent"
                           checked={formData.is_tool}
                           onChange={(e) => {
                             // If unmarking as tool and agent is used in MCP servers, show warning
@@ -1114,93 +1104,73 @@ function AgentFormPage() {
                               handleInputChange('is_tool', e.target.checked);
                             }
                           }}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          helpText="Can be used by other agents"
                         />
-                        <div className="ml-3">
-                          <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
-                          <p className="text-xs text-gray-500">Can be used by other agents</p>
-                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                            <p className="text-xs text-purple-600 mt-1">
-                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
 
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
+                        {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                          <p className="ml-7 mt-1 text-fg-tertiary dark:text-fg-tertiary-dark">
+                            Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                          </p>
+                        )}
+                      </CardApp>
+
+
+                      <CardApp variant="info" className="p-4">
+                        <FormCheckbox
                           id="has_memory"
-                          type="checkbox"
+                          label="Conversational"
                           checked={formData.has_memory}
                           onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          helpText="Maintains conversation memory"
                         />
-                        <div className="ml-3">
-                          <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
-                          <p className="text-xs text-gray-500">Maintains conversation memory</p>
-                        </div>
-                      </div>
+                      </CardApp>
 
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
+                      <CardApp variant="info" className="p-4">
+                        <FormCheckbox
                           id="enable_code_interpreter"
-                          type="checkbox"
+                          label="Code Interpreter"
                           checked={formData.enable_code_interpreter}
                           onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
-                          aria-describedby="enable_code_interpreter_help"
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          helpText="Allows the agent to execute Python code (pandas, openpyxl, numpy)"
                         />
-                        <div className="ml-3">
-                          <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
-                          <p id="enable_code_interpreter_help" className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
-                        </div>
-                      </div>
+                      </CardApp>
 
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <input
+                      <CardApp variant="info" className="p-4">
+                        <FormCheckbox
                           id="skill_router_enabled"
-                          type="checkbox"
+                          label="Skill Router"
                           checked={formData.skill_router_enabled}
                           onChange={(e) => handleInputChange('skill_router_enabled', e.target.checked)}
-                          aria-describedby="skill_router_enabled_help"
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          helpText="Let the model pre-select at most 2 skills per turn; off by default."
                         />
-                        <div className="ml-3">
-                          <label htmlFor="skill_router_enabled" className="text-sm font-medium text-gray-900">Skill Router</label>
-                          <p id="skill_router_enabled_help" className="text-xs text-gray-500">Let the model pre-select at most 2 skills per turn; off by default.</p>
-                        </div>
-                      </div>
+                      </CardApp>
 
                       {formData.enable_code_interpreter && (
                         <div className="md:col-span-2">
-                          <label htmlFor="sandbox_service" className="block text-sm font-medium text-gray-700 mb-2">
-                            Sandbox Service
-                          </label>
-                          <select
+                          <FormSelect
+                            label="Sandbox Service"
                             id="sandbox_service"
                             value={formData.sandbox_service_id || ''}
                             onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          >
-                            <option value="">Use app/system default</option>
-                            {agent?.sandbox_services.map((service) => (
-                              <option key={service.service_id} value={service.service_id}>
-                                {service.name}
-                              </option>
-                            ))}
-                          </select>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
-                          </p>
+                            options={[
+                              { value: '', label: 'Use app/system default' },
+                              ...(agent?.sandbox_services.map((service) => ({
+                                value: service.service_id,
+                                label: service.name,
+                              })) ?? []),
+                            ]}
+                            helpText="Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service."
+                            labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                          />
                         </div>
                       )}
                     </div>
 
                     {/* Provider-side Tools */}
-                    <div className="mt-6 pt-6 border-t border-gray-100">
+                    <div className="mt-6 pt-6 border-t border-line dark:border-btCard-border-dark">
                       <div className="mb-3">
-                        <h4 className="text-sm font-semibold text-gray-800">Provider-side Tools</h4>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <h4 className="text-sm font-semibold text-fg dark:text-fg-dark">Provider-side Tools</h4>
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-0.5">
                           These tools run on the AI provider's infrastructure — no extra backend setup needed.
                           Only tools supported by the agent's selected provider will be active.
                         </p>
@@ -1248,47 +1218,45 @@ function AgentFormPage() {
                               key={tool.id}
                               type="button"
                               onClick={toggle}
-                              className={`text-left p-3 rounded-xl border-2 transition-colors ${
-                                active
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                              className={`text-left p-3 rounded-md  transition-colors ${
+                                active 
+                                  ? 'bg-surface-hover dark:bg-btCard-hover border-2 border-bg-soft dark:border-bronze-border-dark'
+                                  : 'bg-surface dark:bg-surface-dark border border-line dark:border-line-dark'
                               }`}
                             >
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-base">{tool.icon}</span>
-                                <span className={`text-sm font-medium ${active ? 'text-blue-800' : 'text-gray-800'}`}>
+                                <span className={`text-sm font-medium ${active ? 'text-fg-primary dark:text-fg-primary-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`}>
                                   {tool.label}
                                 </span>
                                 {active && (
                                   <span className="ml-auto text-xs font-medium text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">ON</span>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-500 mb-2">{tool.description}</p>
+                              <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mb-2">{tool.description}</p>
                               <div className="flex flex-wrap gap-1">
                                 {tool.providers.map(p => (
-                                  <span key={p} className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{p}</span>
+                                  <ProviderBadge key={p} provider={p} />
                                 ))}
                               </div>
                             </button>
                           );
                         })}
                       </div>
-                      <p className="text-xs text-amber-600 mt-3 flex items-start gap-1">
+                      <CardApp variant="alert" className="p-1 my-1">
                         <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API).
                         Unsupported tools for the selected provider are silently ignored.
-                      </p>
+                      </CardApp>
                     </div>
-                  </div>
+                  </CardApp>
 
                   {/* Media Processing Card */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                  <CardApp className="p-8">
                     <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                        <Tv className="w-5 h-5 text-purple-600" />
-                      </div>
+                      <BackgroundImage icon={Tv} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
                       <div>
-                        <h3 className="text-xl font-semibold text-gray-900">Media Processing</h3>
-                        <p className="text-sm text-gray-500">
+                        <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Media Processing</h3>
+                        <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
                           Default configuration used when uploading audio/video or YouTube URLs in the playground.
                           Set it here once so uploads only require choosing the file or URL.
                         </p>
@@ -1296,134 +1264,109 @@ function AgentFormPage() {
                     </div>
 
                     <div className="mb-6">
-                      <label htmlFor="media_embedding_service" className="block text-sm font-medium text-gray-700 mb-2">
-                        Embedding Service <span className="text-red-500">*</span>
-                      </label>
-                      <select
+                      <FormSelect
+                        label="Embedding Service"
                         id="media_embedding_service"
                         required
                         value={formData.media_embedding_service_id || ''}
                         onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      >
-                        <option value="">Select Embedding Service</option>
-                        {embeddingServices.map((service) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Required. Model used to vectorize uploaded media/documents into the conversation's
-                        temporary knowledge base for retrieval.
-                      </p>
+                        options={[
+                          { value: '', label: 'Select Embedding Service' },
+                          ...embeddingServices.map((service) => ({
+                            value: service.service_id,
+                            label: service.name,
+                          })),
+                        ]}
+                        helpText="Required. Model used to vectorize uploaded media/documents into the conversation's temporary knowledge base for retrieval."
+                        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                      />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label htmlFor="transcription_service" className="block text-sm font-medium text-gray-700 mb-2">
-                          Transcription Service
-                        </label>
-                        <select
+                        <FormSelect
+                          label="Transcription Service"
                           id="transcription_service"
                           value={formData.transcription_service_id || ''}
                           onChange={(e) => handleInputChange('transcription_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">Select Transcription Service</option>
-                          {agent?.ai_services.map((service) => (
-                            <option key={service.service_id} value={service.service_id}>
-                              {service.name}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">Speech-to-text model used to transcribe media.</p>
+                          options={[
+                            { value: '', label: 'Select Transcription Service' },
+                            ...(agent?.ai_services.map((service) => ({
+                              value: service.service_id,
+                              label: service.name,
+                            })) ?? []),
+                          ]}
+                          helpText="Speech-to-text model used to transcribe media."
+                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        />
                       </div>
 
                       <div>
-                        <label htmlFor="video_ai_service" className="block text-sm font-medium text-gray-700 mb-2">
-                          Video Analysis Service (optional)
-                        </label>
-                        <select
+                        <FormSelect
+                          label="Video Analysis Service (optional)"
                           id="video_ai_service"
                           value={formData.video_ai_service_id || ''}
                           onChange={(e) => handleInputChange('video_ai_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">None (audio only)</option>
-                          {agent?.ai_services.filter((service) => service.supports_video).map((service) => (
-                            <option key={service.service_id} value={service.service_id}>
-                              {service.name}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">Enables multimodal analysis (visual descriptions from video frames).</p>
+                          options={[
+                            { value: '', label: 'None (audio only)' },
+                            ...(agent?.ai_services.filter((service) => service.supports_video).map((service) => ({
+                              value: service.service_id,
+                              label: service.name,
+                            })) ?? []),
+                          ]}
+                          helpText="Enables multimodal analysis (visual descriptions from video frames)."
+                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        />
                       </div>
 
                       <div>
-                        <label htmlFor="media_forced_language" className="block text-sm font-medium text-gray-700 mb-2">
-                          Language
-                        </label>
-                        <select
+                        <FormSelect
+                          label="Language"
                           id="media_forced_language"
                           value={formData.media_forced_language || ''}
                           onChange={(e) => handleInputChange('media_forced_language', e.target.value || undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">Auto-detect</option>
-                          <option value="es">Spanish</option>
-                          <option value="en">English</option>
-                          <option value="eu">Basque</option>
-                          <option value="fr">French</option>
-                        </select>
+                          options={[
+                            { value: '', label: 'Auto-detect' },
+                            { value: 'es', label: 'Spanish' },
+                            { value: 'en', label: 'English' },
+                            { value: 'eu', label: 'Basque' },
+                            { value: 'fr', label: 'French' },
+                          ]}
+                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                      <div>
-                        <label htmlFor="media_chunk_min_duration" className="block text-sm font-medium text-gray-700 mb-2">
-                          Min Chunk (s)
-                        </label>
-                        <input
-                          id="media_chunk_min_duration"
-                          type="number"
-                          min={10}
-                          max={60}
-                          value={formData.media_chunk_min_duration}
-                          onChange={(e) => handleInputChange('media_chunk_min_duration', Number.parseInt(e.target.value) || 30)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="media_chunk_max_duration" className="block text-sm font-medium text-gray-700 mb-2">
-                          Max Chunk (s)
-                        </label>
-                        <input
-                          id="media_chunk_max_duration"
-                          type="number"
-                          min={60}
-                          max={300}
-                          value={formData.media_chunk_max_duration}
-                          onChange={(e) => handleInputChange('media_chunk_max_duration', Number.parseInt(e.target.value) || 120)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="media_chunk_overlap" className="block text-sm font-medium text-gray-700 mb-2">
-                          Overlap (s)
-                        </label>
-                        <input
-                          id="media_chunk_overlap"
-                          type="number"
-                          min={0}
-                          max={20}
-                          value={formData.media_chunk_overlap}
-                          onChange={(e) => handleInputChange('media_chunk_overlap', Number.parseInt(e.target.value) || 5)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        />
-                      </div>
+                      <FormField
+                        label="Min Chunk (s)"
+                        id="media_chunk_min_duration"
+                        type="number"
+                        min={10}
+                        max={60}
+                        value={formData.media_chunk_min_duration}
+                        onChange={(e) => handleInputChange('media_chunk_min_duration', Number.parseInt(e.target.value) || 30)}
+                      />
+                      <FormField
+                        label="Max Chunk (s)"
+                        id="media_chunk_max_duration"
+                        type="number"
+                        min={60}
+                        max={300}
+                        value={formData.media_chunk_max_duration}
+                        onChange={(e) => handleInputChange('media_chunk_max_duration', Number.parseInt(e.target.value) || 120)}
+                      />
+                      <FormField
+                        label="Overlap (s)"
+                        id="media_chunk_overlap"
+                        type="number"
+                        min={0}
+                        max={20}
+                        value={formData.media_chunk_overlap}
+                        onChange={(e) => handleInputChange('media_chunk_overlap', Number.parseInt(e.target.value) || 5)}
+                      />
                     </div>
-                  </div>
+                  </CardApp>
                 </>
               )}
               {/* Configuration for OCR agents */}
@@ -1433,7 +1376,7 @@ function AgentFormPage() {
                     <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
                       <FileText className="w-5 h-5 text-blue-600" />
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
+                    <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">OCR Configuration</h3>
                   </div>
 
                   {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
@@ -1442,13 +1385,13 @@ function AgentFormPage() {
                       <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
                         <Zap className="w-4 h-4 text-green-600" />
                       </div>
-                      <h4 className="text-base font-semibold text-gray-900">Capabilities</h4>
+                      <h4 className="text-base font-semibold text-fg dark:text-fg-dark">Capabilities</h4>
                     </div>
                     <div className="space-y-4">
-                      <div className="flex items-center p-3 bg-white rounded-lg border border-gray-200">
-                        <input
+                      <div className="p-3 bg-white rounded-lg border border-gray-200">
+                        <FormCheckbox
                           id="is_tool_ocr"
-                          type="checkbox"
+                          label="Tool Agent"
                           checked={formData.is_tool}
                           onChange={(e) => {
                             if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
@@ -1457,17 +1400,13 @@ function AgentFormPage() {
                               handleInputChange('is_tool', e.target.checked);
                             }
                           }}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          helpText="Can be used by other agents (including OCR tools)"
                         />
-                        <div className="ml-3">
-                          <label htmlFor="is_tool_ocr" className="text-sm font-medium text-gray-900">Tool Agent</label>
-                          <p className="text-xs text-gray-500">Can be used by other agents (including OCR tools)</p>
-                          {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                            <p className="text-xs text-purple-600 mt-1">
-                              Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </p>
-                          )}
-                        </div>
+                        {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                          <p className="ml-7 mt-1 text-xs text-purple-600">
+                            Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1477,26 +1416,25 @@ function AgentFormPage() {
 
                   <div className="space-y-6">
                     <div>
-                      <label htmlFor="vision_service" className="block text-sm font-medium text-gray-700 mb-2">
-                        Modelo de Visión
-                      </label>
-                      <select
+                      <FormSelect
+                        label="Modelo de Visión"
                         id="vision_service"
                         value={formData.vision_service_id || ''}
                         onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      >
-                        <option value="">-- Seleccionar modelo de visión --</option>
-                        {agent?.ai_services.map((service) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: '', label: '-- Seleccionar modelo de visión --' },
+                          ...(agent?.ai_services.map((service) => ({
+                            value: service.service_id,
+                            label: service.name,
+                          })) ?? []),
+                        ]}
+                        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        
+                      />
                     </div>
 
                     <div>
-                      <label htmlFor="vision_system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="vision_system_prompt" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                         System Prompt (Visión)
                       </label>
                       <textarea
@@ -1510,26 +1448,25 @@ function AgentFormPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="text_service" className="block text-sm font-medium text-gray-700 mb-2">
-                        Modelo de Texto
-                      </label>
-                      <select
+                      <FormSelect
+                        label="Modelo de Texto"
                         id="text_service"
                         value={formData.service_id || ''}
                         onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      >
-                        <option value="">-- Seleccionar modelo de texto --</option>
-                        {agent?.ai_services.map((service) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: '', label: '-- Seleccionar modelo de texto --' },
+                          ...(agent?.ai_services.map((service) => ({
+                            value: service.service_id,
+                            label: service.name,
+                          })) ?? []),
+                        ]}
+                        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        
+                      />
                     </div>
 
                     <div>
-                      <label htmlFor="text_system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="text_system_prompt" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
                         System Prompt (Texto)
                       </label>
                       <textarea
@@ -1565,31 +1502,27 @@ function AgentFormPage() {
                     <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
                       <Wrench className="w-5 h-5 text-yellow-600" />
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900">Available Tools</h3>
+                    <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Available Tools</h3>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {agent.tools.map((tool) => (
-                      <label
+                      <div
                         key={tool.agent_id}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full block ${
+                        className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${
                           formData.tool_ids.includes(tool.agent_id)
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={formData.tool_ids.includes(tool.agent_id)}
-                              onChange={() => handleToolToggle(tool.agent_id)}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="ml-3 text-sm font-medium text-gray-900">
-                              {tool.name}
-                            </span>
-                          </div>
+                          <FormCheckbox
+                            id={`tool-${tool.agent_id}`}
+                            label={tool.name}
+                            checked={formData.tool_ids.includes(tool.agent_id)}
+                            onChange={() => handleToolToggle(tool.agent_id)}
+                            className="flex-1"
+                          />
                           <div 
                             className={`w-2 h-2 rounded-full ${
                             formData.tool_ids.includes(tool.agent_id)
@@ -1598,7 +1531,7 @@ function AgentFormPage() {
                             }`}
                           />
                         </div>
-                      </label>
+                      </div>
                     ))}
                   </div>
                   
@@ -1619,7 +1552,7 @@ function AgentFormPage() {
                     <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
                       <Plug className="w-5 h-5 text-purple-600" />
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900">MCP Servers</h3>
+                    <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">MCP Servers</h3>
                     <div className="ml-3 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
                       Model Context Protocol
                     </div>
@@ -1642,29 +1575,27 @@ function AgentFormPage() {
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agent.mcp_configs.map((mcp) => (
-                          <label
+                          <div
                             key={mcp.config_id}
-                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
+                            className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${
                               formData.mcp_config_ids.includes(mcp.config_id)
                                 ? 'border-purple-500 bg-purple-50'
                                 : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center">
-                                <input
-                                  type="checkbox"
-                                  checked={formData.mcp_config_ids.includes(mcp.config_id)}
-                                  onChange={() => handleMCPToggle(mcp.config_id)}
-                                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                <span className="ml-3 text-sm font-medium text-gray-900">{mcp.name}</span>
-                              </div>
+                              <FormCheckbox
+                                id={`mcp-${mcp.config_id}`}
+                                label={mcp.name}
+                                checked={formData.mcp_config_ids.includes(mcp.config_id)}
+                                onChange={() => handleMCPToggle(mcp.config_id)}
+                                className="flex-1"
+                              />
                               <div className={`w-2 h-2 rounded-full ${
                                 formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
                               }`} />
                             </div>
-                          </label>
+                          </div>
                         ))}
                       </div>
                       
@@ -1679,10 +1610,10 @@ function AgentFormPage() {
                   ) : (
                     <div className="text-center py-8">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Plug className="w-8 h-8 text-gray-400" />
+                        <Plug className="w-8 h-8 text-fg-tertiary dark:text-fg-tertiary-dark" />
                       </div>
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">No MCP Servers Available</h4>
-                      <p className="text-gray-500 mb-4">
+                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No MCP Servers Available</h4>
+                      <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
                         You haven't configured any MCP servers yet. Create MCP configurations in the settings to enable external tool access.
                       </p>
                       <button
@@ -1703,11 +1634,11 @@ function AgentFormPage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                   <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+                      <h3 className="text-xl font-semibold text-fg dark:text-fg-dark flex items-center">
                         <Target className="w-5 h-5 mr-3" />
                         {' '}Skills
                       </h3>
-                      <p className="text-gray-600 mt-1">Assign specialized behaviors that the agent can activate on-demand</p>
+                      <p className="text-fg-tertiary dark:text-fg-tertiary-dark mt-1">Assign specialized behaviors that the agent can activate on-demand</p>
                     </div>
                   </div>
 
@@ -1720,26 +1651,23 @@ function AgentFormPage() {
                           const systemBadgeId = skill.is_system ? `skill-system-${skill.skill_id}` : undefined;
                           const describedBy = [systemBadgeId, disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
                           return (
-                            <label
+                            <div
                               key={skill.skill_id}
-                              className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
+                              className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${
                                 formData.skill_ids.includes(skill.skill_id)
                                   ? 'border-purple-500 bg-purple-50'
                                   : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.skill_ids.includes(skill.skill_id)}
-                                    onChange={() => handleSkillToggle(skill.skill_id)}
-                                    aria-label={skill.name}
-                                    aria-describedby={describedBy}
-                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                  />
-                                  <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
-                                </div>
+                                <FormCheckbox
+                                  id={`skill-${skill.skill_id}`}
+                                  label={skill.name}
+                                  checked={formData.skill_ids.includes(skill.skill_id)}
+                                  onChange={() => handleSkillToggle(skill.skill_id)}
+                                  ariaDescribedBy={describedBy}
+                                  className="flex-1"
+                                />
                                 <div className={`w-2 h-2 rounded-full ${
                                   formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
                                 }`} />
@@ -1756,9 +1684,9 @@ function AgentFormPage() {
                                 </p>
                               )}
                               {skill.description && (
-                                <p id={descriptionId} className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
+                                <p id={descriptionId} className="mt-2 ml-7 text-xs text-fg-tertiary dark:text-fg-tertiary-dark truncate">{skill.description}</p>
                               )}
-                            </label>
+                            </div>
                           );
                         })}
                       </div>
@@ -1775,10 +1703,10 @@ function AgentFormPage() {
                   ) : (
                     <div className="text-center py-8">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Target className="w-8 h-8 text-gray-400" />
+                        <Target className="w-8 h-8 text-fg-tertiary dark:text-fg-tertiary-dark" />
                       </div>
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">No Skills Available</h4>
-                      <p className="text-gray-500 mb-4">
+                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No Skills Available</h4>
+                      <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
                         You haven't created any skills yet. Create skills in the settings to enable specialized agent behaviors.
                       </p>
                       <button
@@ -1803,7 +1731,7 @@ function AgentFormPage() {
                 <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
                   <Store className="w-5 h-5 text-blue-600" aria-hidden="true" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900">Marketplace Publishing</h3>
+                <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Marketplace Publishing</h3>
               </div>
 
               {/* New agent: prompt user to save first */}
@@ -1816,21 +1744,24 @@ function AgentFormPage() {
               <>
               {/* Visibility Control */}
               <div className="mb-6">
-                <label htmlFor="marketplace-visibility" className="block text-sm font-medium text-gray-700 mb-2">Marketplace Visibility</label>
                 <div className="flex items-center gap-4">
-                  <select
+                  <FormSelect
+                    label="Marketplace Visibility"
                     id="marketplace-visibility"
                     value={marketplaceVisibility}
                     onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
                     disabled={formData.is_tool}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                  >
-                    <option value="unpublished">Unpublished (not listed)</option>
-                    <option value="private">Private (visible to app members only)</option>
-                    <option value="public">Public (visible to all users)</option>
-                  </select>
+                    options={[
+                      { value: 'unpublished', label: 'Unpublished (not listed)' },
+                      { value: 'private', label: 'Private (visible to app members only)' },
+                      { value: 'public', label: 'Public (visible to all users)' },
+                    ]}
+                    className="w-fit"
+                    labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                    
+                  />
                   {formData.is_tool && (
-                    <span className="text-xs text-gray-500 ml-2">Tool agents cannot be published to the marketplace</span>
+                    <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark ml-2">Tool agents cannot be published to the marketplace</span>
                   )}
                 </div>
               </div>
@@ -1839,7 +1770,7 @@ function AgentFormPage() {
               {showMarketplace && (
                 <div className="space-y-6">
                   <div>
-                    <label htmlFor="marketplace-display-name" className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
+                    <label htmlFor="marketplace-display-name" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Display Name</label>
                     <input
                       id="marketplace-display-name"
                       type="text"
@@ -1851,7 +1782,7 @@ function AgentFormPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
+                    <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Short Description</label>
                     <textarea
                       id="marketplace-short-description"
                       value={marketplaceProfile.short_description ?? ''}
@@ -1860,12 +1791,12 @@ function AgentFormPage() {
                       rows={2}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     />
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
                       {marketplaceProfile.short_description?.length ?? 0}/200 characters
                     </div>
                   </div>
                   <div>
-                    <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-gray-700 mb-2">Long Description</label>
+                    <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Long Description</label>
                     <textarea
                       id="marketplace-long-description"
                       value={marketplaceProfile.long_description ?? ''}
@@ -1876,21 +1807,24 @@ function AgentFormPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="marketplace-category" className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                    <select
+                    <FormSelect
+                      label="Category"
                       id="marketplace-category"
                       value={marketplaceProfile.category ?? ''}
                       onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    >
-                      <option value="">-- Select a category --</option>
-                      {MARKETPLACE_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: '-- Select a category --' },
+                        ...MARKETPLACE_CATEGORIES.map((category) => ({
+                          value: category,
+                          label: category,
+                        })),
+                      ]}
+                      labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                      
+                    />
                   </div>
                   <div>
-                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Tags</label>
                     <TagInput
                       id="marketplace-tags"
                       tags={marketplaceProfile.tags ?? []}
@@ -1900,7 +1834,7 @@ function AgentFormPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="marketplace-icon-url" className="block text-sm font-medium text-gray-700 mb-2">Icon URL</label>
+                    <label htmlFor="marketplace-icon-url" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Icon URL</label>
                     <input
                       id="marketplace-icon-url"
                       type="text"
@@ -1919,7 +1853,7 @@ function AgentFormPage() {
                     )}
                   </div>
                   <div>
-                    <label htmlFor="marketplace-cover-image-url" className="block text-sm font-medium text-gray-700 mb-2">Cover Image URL</label>
+                    <label htmlFor="marketplace-cover-image-url" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Cover Image URL</label>
                     <input
                       id="marketplace-cover-image-url"
                       type="text"
@@ -1938,8 +1872,8 @@ function AgentFormPage() {
                     )}
                   </div>
                    <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-3">Conversation Starters</label>
-                     <p className="text-xs text-gray-500 mb-4">
+                     <label className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-3">Conversation Starters</label>
+                     <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
                        Suggested opening messages for users. These only appear at the start of a new conversation.
                      </p>
                      <div className="space-y-3">

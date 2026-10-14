@@ -167,14 +167,8 @@ function AppsPage() {
                   {getAppRoleLabel(app.role)}
                 </span>
               )}
-              imageSrc=""
-              imageAlt=""
               badgeText="TP"
               onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
-              actionLabel=""
-              onActionClick={() => undefined}
-              actionDisabled
-              className=""
             />
           );
         })}

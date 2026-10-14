@@ -205,9 +205,10 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
   const renderedContent = useMemo(() => {
     if (typeof content === 'object' && content !== null) {
       return (
-        <pre className="bg-gray-100 p-4 rounded-lg whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
-          <code className="text-sm">{JSON.stringify(content, null, 2)}</code>
+        <pre className="bg-surface dark:bg-surface-dark p-4 rounded-lg whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
+          <code className="text-sm text-fg  dark:text-fg-dark">{JSON.stringify(content, null, 2)}</code>
         </pre>
+        
       );
     }
 
