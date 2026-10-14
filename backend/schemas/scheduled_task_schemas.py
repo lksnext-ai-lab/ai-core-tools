@@ -21,6 +21,7 @@ class ScheduledTaskCreateSchema(BaseModel):
     max_concurrent_runs: int = Field(default=1, ge=1, le=32)
     max_runs_retained: int = Field(default=10, ge=1, le=100)
     marketplace_visibility: str = Field(default="unpublished", pattern=VISIBILITY_PATTERN)
+    output_bindings: list[Dict[str, Any]] = Field(default_factory=list, max_length=20)
 
 
 class ScheduledTaskUpdateSchema(BaseModel):

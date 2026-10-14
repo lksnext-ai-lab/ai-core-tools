@@ -1,0 +1,28 @@
+"""Explicit allowlisted output provider registry."""
+
+from output.contracts import OutputProvider
+from output.teams_workflow import TeamsWorkflowProvider
+from output.webhook import WebhookProvider
+
+_WEBHOOK_PROVIDER = WebhookProvider()
+
+_PROVIDERS: dict[str, OutputProvider] = {
+    "teams_workflow": TeamsWorkflowProvider(),
+    "webhook": _WEBHOOK_PROVIDER,
+}
+
+
+def get_output_provider(provider_key: str) -> OutputProvider:
+    try:
+        return _PROVIDERS[provider_key]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported output provider: {provider_key}") from exc
+
+
+def get_webhook_provider() -> WebhookProvider:
+    """Typed accessor: the webhook provider's ``send`` takes extra keyword-only options."""
+    return _WEBHOOK_PROVIDER
+
+
+def list_output_providers() -> list[OutputProvider]:
+    return list(_PROVIDERS.values())

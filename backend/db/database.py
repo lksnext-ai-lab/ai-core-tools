@@ -35,6 +35,16 @@ engine = create_engine(
 # Configure async engine for async operations (needed for async retrievers in LangGraph)
 # Use psycopg (async) instead of asyncpg to avoid "cannot insert multiple commands" limitation
 # psycopg supports async natively and handles multiple SQL statements properly
+# RB-4/RB-13 (A2A step_017): the a2a-sdk store/stream/event-stream objects
+# (services/a2a_server/storage.py) run their polling/writes through this same
+# engine. Without connection-level timeouts, a stalled network path to
+# Postgres (as opposed to a saturated pool, which pool_timeout already
+# bounds) could hang a connect or leave a half-dead TCP connection open
+# indefinitely. These are libpq connection parameters, forwarded verbatim by
+# psycopg's async connect(**kwargs) -- connect_timeout bounds the TCP
+# handshake, the keepalives_* trio makes the OS probe an idle connection, and
+# tcp_user_timeout (ms) bounds how long the OS waits for an ACK before
+# declaring the connection dead, independent of the keepalive probes.
 ASYNC_DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://') if DATABASE_URL.startswith('postgresql://') else DATABASE_URL
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
@@ -44,6 +54,14 @@ async_engine = create_async_engine(
     pool_pre_ping=True,
     pool_recycle=DB_POOL_RECYCLE,
     echo=False,
+    connect_args={
+        "connect_timeout": 5,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+        "tcp_user_timeout": 30000,
+    } if ASYNC_DATABASE_URL.startswith("postgresql+psycopg://") else {},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

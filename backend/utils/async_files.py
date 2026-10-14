@@ -11,6 +11,11 @@ def _write_bytes(path: str, data: bytes) -> None:
         f.write(data)
 
 
+def _read_bytes(path: str) -> bytes:
+    with open(path, "rb") as f:
+        return f.read()
+
+
 def _write_text(path: str, text: str, encoding: str) -> None:
     with open(path, "w", encoding=encoding) as f:
         f.write(text)
@@ -39,6 +44,10 @@ def _write_temp_file(data: bytes, suffix: str, dir: str | None) -> str:
 
 async def write_bytes(path: str, data: bytes) -> None:
     await asyncio.to_thread(_write_bytes, path, data)
+
+
+async def read_bytes(path: str) -> bytes:
+    return await asyncio.to_thread(_read_bytes, path)
 
 
 async def write_text(path: str, text: str, encoding: str = "utf-8") -> None:

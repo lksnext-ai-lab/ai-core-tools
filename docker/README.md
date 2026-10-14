@@ -355,14 +355,32 @@ Postgres **no** está publicado al host por seguridad. Tres formas de acceder:
 
 Cuando el cliente tenga dominio interno y abra el 443:
 
-1. Edita el `Caddyfile`:
+1. Edita el `Caddyfile` — incluye también el bloque `@a2a` (rutas A2A, sin
+   `encode`, con su propio `request_body` y `flush_interval -1` para que las
+   respuestas SSE no se corten) junto al `@backend` habitual:
    ```
    mattinai.cliente.local {
        tls internal    # cert de la CA interna de Caddy (autofirmado)
-       encode zstd gzip
+
+       @a2a path /a2a/* /.well-known/agent-card.json
+       handle @a2a {
+           request_body {
+               max_size {$A2A_CADDY_MAX_REQUEST_BODY:40MB}
+           }
+           reverse_proxy backend:8000 {
+               flush_interval -1
+           }
+       }
+
        @backend path /internal/* /public/* /mcp/* /docs/* /scalar /openapi-*.json /static/* /health
-       handle @backend { reverse_proxy backend:8000 }
-       handle { reverse_proxy frontend:80 }
+       handle @backend {
+           encode zstd gzip
+           reverse_proxy backend:8000
+       }
+       handle {
+           encode zstd gzip
+           reverse_proxy frontend:80
+       }
    }
    ```
 2. En el compose, publica también el 443:
@@ -373,6 +391,39 @@ Cuando el cliente tenga dominio interno y abra el 443:
        - "443:443"
    ```
 3. Si el cliente tiene PKI corporativa, monta el cert del cliente en el contenedor y sustituye `tls internal` por `tls /etc/caddy/cert.pem /etc/caddy/key.pem`.
+4. Notas de operación para este cambio (y en general para cualquier
+   despliegue detrás de otro proxy/balanceador o con TLS):
+   - **Proxies de confianza**: si este Caddy queda él mismo detrás de otro
+     proxy/LB (no el caso de arriba, donde Caddy termina el TLS), fija
+     `CADDY_TRUSTED_PROXIES` a la CIDR de ese LB (ver `docker/.env.example`;
+     si esa CIDR es pública, añádela también a `UVICORN_FORWARDED_ALLOW_IPS`,
+     el LB debe sobrescribir `X-Forwarded-For` y nunca uses `0.0.0.0/0`)
+     para que Caddy confíe en SU `X-Forwarded-For` en vez de sobrescribirlo
+     con la IP del LB — si no, todos los clientes detrás de ese LB
+     comparten un único cubo de rate-limit. Por defecto (vacío), Caddy
+     reemplaza el `X-Forwarded-For` del cliente con la IP real del peer que
+     conecta; `backend/services/auth/login_throttle.py` depende de que ese
+     comportamiento por defecto se mantenga en el caso single-host.
+   - **IPv6**: publicar el puerto sin especificar familia (`"80:80"`,
+     `"443:443"`) también escucha en `[::]`, pero el proxy *userland* de
+     Docker hace NAT de esas conexiones IPv6 a través del gateway IPv4 del
+     bridge — Caddy ve todo ese tráfico como si viniera de una sola IP, así
+     que esos clientes comparten un único cubo de rate-limit entre sí. Para
+     aislarlos de verdad: activa una red IPv6 nativa en Docker
+     (`enable_ipv6`) o publica solo IPv4 explícitamente
+     (`"0.0.0.0:443:443"`) y resuelve IPv6 en otro front que sí reenvíe la
+     IP real (y entonces aplica el punto anterior sobre
+     `CADDY_TRUSTED_PROXIES`).
+   - **URL pública**: con TLS, `A2A_PUBLIC_BASE_URL` (o, si está vacía,
+     `FRONTEND_URL`) debe ser la URL `https://` pública real
+     (`https://mattinai.cliente.local`), no `http://localhost` — de lo
+     contrario las tarjetas A2A y las URLs de fichero firmadas apuntan al
+     esquema/host equivocado.
+   - **Apagado ordenado**: si cambias `UVICORN_GRACEFUL_SHUTDOWN_SECONDS`
+     (backend/Dockerfile, RB-15), sube también `stop_grace_period` del
+     servicio `backend` en el compose por encima de ese valor (más margen
+     para `close_runtime` y el resto del lifespan) — ver el comentario junto
+     a esa variable en `docker/.env.example` y `docker-compose.yaml`.
 
 ## Utilities aisladas
 

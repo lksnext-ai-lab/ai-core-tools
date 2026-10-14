@@ -36,6 +36,8 @@ from .usage_record import UsageRecord
 from .user_credential import UserCredential
 from .refresh_token import RefreshToken
 from .scheduled_task import ScheduledTask, ScheduledTaskRun
+from .a2a_context_link import A2AContextLink
+from .output_delivery import OutputArtifact, OutputDestination, ScheduledTaskOutputBinding, OutputDelivery, OutputDeliveryAttempt
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -56,6 +58,8 @@ __all__ = [
     'RefreshToken',
     'SandboxService',
     'ScheduledTask', 'ScheduledTaskRun',
+    'OutputArtifact', 'OutputDestination', 'ScheduledTaskOutputBinding', 'OutputDelivery', 'OutputDeliveryAttempt',
     'AgentExecutionEvent',
     'AgentToolCall',
+    'A2AContextLink',
 ]

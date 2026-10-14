@@ -107,6 +107,7 @@ interface StepperNavigationProps {
   cancelLabel?: string;
   nextDisabled?: boolean;
   isSubmitting?: boolean;
+  submittingLabel?: string;
   showBack?: boolean;
   showNext?: boolean;
 }
@@ -122,6 +123,7 @@ function StepperNavigation({
   cancelLabel = 'Cancel',
   nextDisabled = false,
   isSubmitting = false,
+  submittingLabel = 'Importing...',
   showBack = true,
   showNext = true,
 }: Readonly<StepperNavigationProps>) {
@@ -161,7 +163,7 @@ function StepperNavigation({
                 : 'bg-ink hover:bg-ink/85 dark:bg-ink-dark dark:hover:bg-ink-dark/85'
             }`}
           >
-            {isSubmitting ? 'Importing...' : label}
+            {isSubmitting ? submittingLabel : label}
           </button>
         )}
       </div>

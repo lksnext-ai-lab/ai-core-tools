@@ -45,6 +45,7 @@ docs/
 
 # Data directories (contain user data)
 backend/data/repositories/*
+backend/data/tmp/
 app/data/repositories/*
 data/repositories/*
 

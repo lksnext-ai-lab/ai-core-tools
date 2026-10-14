@@ -280,6 +280,13 @@ class TestFullAppImportIntegration:
         import_service = FullAppImportService(db_session)
 
         source_app = populated_app["app"]
+
+        # Enable A2A on one source agent (FR-24, AC-39): the full-app cycle
+        # must still land with a2a_enabled=False on the imported copy.
+        a2a_agent = populated_app["agents"][0]
+        a2a_agent.a2a_enabled = True
+        db_session.commit()
+
         export_data = export_service.export_full_app(source_app.app_id, user_id=source_app.owner_id)
 
         new_name = f"Imported App {datetime.now().timestamp()}"
@@ -313,6 +320,14 @@ class TestFullAppImportIntegration:
                 .all()
             )
             assert len(new_ai_services) == 2
+
+            # FR-24/AC-39: every imported agent must be a2a_enabled=False,
+            # even though the source agent had it enabled.
+            imported_agents = (
+                db_session.query(Agent).filter(Agent.app_id == summary.app_id).all()
+            )
+            assert len(imported_agents) == 2
+            assert all(a.a2a_enabled is False for a in imported_agents)
         finally:
             if imported_app:
                 db_session.delete(imported_app)
@@ -473,3 +488,295 @@ class TestFullAppImportIntegration:
             if created_app:
                 db_session.delete(created_app)
                 db_session.commit()
+
+
+@pytest.mark.integration
+class TestAgentA2AExportImportIntegration:
+    """Integration tests for A2A field export/import (FR-24, AC-39).
+
+    Export carries every A2A field as-is; import restores all of them but always
+    forces ``a2a_enabled=False`` so an imported agent is never silently exposed
+    through A2A.
+    """
+
+    def test_export_preserves_a2a_fields_import_forces_disabled(
+        self, db_session: Session, populated_app: dict
+    ):
+        """Export an A2A-enabled agent with all fields set, import it, and
+        assert every field round-trips except ``a2a_enabled``, which must be
+        False after import regardless of the exported value."""
+        from services.agent_export_service import AgentExportService
+        from services.agent_import_service import AgentImportService
+        from schemas.import_schemas import ConflictMode
+
+        source_app = populated_app["app"]
+        agent = populated_app["agents"][0]
+
+        agent.a2a_enabled = True
+        agent.a2a_card_visibility = "api_key"
+        agent.a2a_name_override = "Public Name"
+        agent.a2a_description_override = "Public description"
+        agent.a2a_skill_tags = ["billing", "support"]
+        agent.a2a_examples = ["How do I pay my invoice?"]
+        db_session.commit()
+
+        export_service = AgentExportService(db_session)
+        export_data = export_service.export_agent(
+            agent.agent_id, source_app.app_id, user_id=source_app.owner_id
+        )
+
+        # The export carries the fields exactly as persisted.
+        assert export_data.agent.a2a_enabled is True
+        assert export_data.agent.a2a_card_visibility == "api_key"
+        assert export_data.agent.a2a_name_override == "Public Name"
+        assert export_data.agent.a2a_description_override == "Public description"
+        assert export_data.agent.a2a_skill_tags == ["billing", "support"]
+        assert export_data.agent.a2a_examples == ["How do I pay my invoice?"]
+
+        import_service = AgentImportService(db_session)
+        new_name = f"Imported A2A Agent {datetime.now().timestamp()}"
+        summary = import_service.import_agent(
+            export_data=export_data,
+            app_id=source_app.app_id,
+            conflict_mode=ConflictMode.RENAME,
+            new_name=new_name,
+            import_bundled_silo=False,
+            import_bundled_output_parser=False,
+            import_bundled_mcp_configs=False,
+            import_bundled_agent_tools=False,
+        )
+
+        imported_agent = None
+        try:
+            imported_agent = (
+                db_session.query(Agent)
+                .filter(Agent.agent_id == summary.component_id)
+                .first()
+            )
+            assert imported_agent is not None
+
+            # a2a_enabled is always forced False on import, never the exported value.
+            assert imported_agent.a2a_enabled is False
+            # Every other A2A field round-trips unchanged.
+            assert imported_agent.a2a_card_visibility == "api_key"
+            assert imported_agent.a2a_name_override == "Public Name"
+            assert imported_agent.a2a_description_override == "Public description"
+            assert imported_agent.a2a_skill_tags == ["billing", "support"]
+            assert imported_agent.a2a_examples == ["How do I pay my invoice?"]
+        finally:
+            if imported_agent:
+                db_session.delete(imported_agent)
+                db_session.commit()
+
+    def test_import_old_export_without_a2a_fields_uses_defaults(
+        self, db_session: Session, populated_app: dict
+    ):
+        """An export file predating the A2A fields (e.g. hand-built, missing
+        keys) must still import, with the A2A fields defaulting to disabled /
+        empty rather than raising."""
+        from services.agent_export_service import AgentExportService
+        from services.agent_import_service import AgentImportService
+        from schemas.import_schemas import ConflictMode
+
+        source_app = populated_app["app"]
+        agent = populated_app["agents"][1]
+
+        export_service = AgentExportService(db_session)
+        export_data = export_service.export_agent(
+            agent.agent_id, source_app.app_id, user_id=source_app.owner_id
+        )
+
+        # Simulate an old export file: drop the A2A keys entirely, as a legacy
+        # export produced before step_009/step_010 would.
+        legacy_payload = export_data.model_dump()
+        for key in (
+            "a2a_enabled",
+            "a2a_card_visibility",
+            "a2a_name_override",
+            "a2a_description_override",
+            "a2a_skill_tags",
+            "a2a_examples",
+        ):
+            legacy_payload["agent"].pop(key, None)
+
+        from schemas.export_schemas import AgentExportFileSchema
+
+        legacy_export_data = AgentExportFileSchema.model_validate(legacy_payload)
+        assert legacy_export_data.agent.a2a_enabled is False
+        assert legacy_export_data.agent.a2a_card_visibility == "public"
+        assert legacy_export_data.agent.a2a_skill_tags == []
+        assert legacy_export_data.agent.a2a_examples == []
+
+        import_service = AgentImportService(db_session)
+        new_name = f"Imported Legacy Agent {datetime.now().timestamp()}"
+        summary = import_service.import_agent(
+            export_data=legacy_export_data,
+            app_id=source_app.app_id,
+            conflict_mode=ConflictMode.RENAME,
+            new_name=new_name,
+            import_bundled_silo=False,
+            import_bundled_output_parser=False,
+            import_bundled_mcp_configs=False,
+            import_bundled_agent_tools=False,
+        )
+
+        imported_agent = None
+        try:
+            imported_agent = (
+                db_session.query(Agent)
+                .filter(Agent.agent_id == summary.component_id)
+                .first()
+            )
+            assert imported_agent is not None
+            assert imported_agent.a2a_enabled is False
+            assert imported_agent.a2a_card_visibility == "public"
+            assert imported_agent.a2a_skill_tags == []
+            assert imported_agent.a2a_examples == []
+        finally:
+            if imported_agent:
+                db_session.delete(imported_agent)
+                db_session.commit()
+
+    def test_override_mode_forces_disabled_even_when_import_file_has_a2a_enabled_true(
+        self, db_session: Session, populated_app: dict
+    ):
+        """OVERRIDE conflict mode must still force a2a_enabled=False, even when
+        the pre-existing row was already disabled and the import file says
+        True. If the forcing in ``AgentImportService`` were ever replaced by a
+        plain copy of ``export_data.agent.a2a_enabled``, this would flip to
+        True and the test would fail."""
+        from services.agent_export_service import AgentExportService
+        from services.agent_import_service import AgentImportService
+        from schemas.import_schemas import ConflictMode
+
+        source_app = populated_app["app"]
+        agent = populated_app["agents"][1]
+        agent.a2a_enabled = False
+        db_session.commit()
+
+        export_service = AgentExportService(db_session)
+        export_data = export_service.export_agent(
+            agent.agent_id, source_app.app_id, user_id=source_app.owner_id
+        )
+        # Simulate re-importing a file where A2A was turned on after export.
+        export_data.agent.a2a_enabled = True
+
+        import_service = AgentImportService(db_session)
+        summary = import_service.import_agent(
+            export_data=export_data,
+            app_id=source_app.app_id,
+            conflict_mode=ConflictMode.OVERRIDE,
+            import_bundled_silo=False,
+            import_bundled_output_parser=False,
+            import_bundled_mcp_configs=False,
+            import_bundled_agent_tools=False,
+        )
+
+        db_session.refresh(agent)
+        assert summary.component_id == agent.agent_id
+        assert agent.a2a_enabled is False
+
+    def test_override_mode_of_a2a_enabled_agent_adds_disablement_warning(
+        self, db_session: Session, populated_app: dict
+    ):
+        """OVERRIDE-ing an agent that was already A2A-enabled must both force
+        it back to disabled and surface a warning telling the caller it must
+        be re-enabled explicitly."""
+        from services.agent_export_service import AgentExportService
+        from services.agent_import_service import AgentImportService
+        from schemas.import_schemas import ConflictMode
+
+        source_app = populated_app["app"]
+        agent = populated_app["agents"][1]
+        agent.a2a_enabled = True
+        db_session.commit()
+
+        export_service = AgentExportService(db_session)
+        export_data = export_service.export_agent(
+            agent.agent_id, source_app.app_id, user_id=source_app.owner_id
+        )
+
+        import_service = AgentImportService(db_session)
+        summary = import_service.import_agent(
+            export_data=export_data,
+            app_id=source_app.app_id,
+            conflict_mode=ConflictMode.OVERRIDE,
+            import_bundled_silo=False,
+            import_bundled_output_parser=False,
+            import_bundled_mcp_configs=False,
+            import_bundled_agent_tools=False,
+        )
+
+        db_session.refresh(agent)
+        assert agent.a2a_enabled is False
+        assert any(
+            "A2A exposure disabled by import" in w for w in summary.warnings
+        )
+
+    def test_import_ocr_agent_preserves_a2a_fields_and_forces_disabled(
+        self, db_session: Session, populated_app: dict
+    ):
+        """The OCRAgent constructor path must restore A2A fields and force
+        a2a_enabled=False exactly like the plain Agent path."""
+        from models.ocr_agent import OCRAgent
+        from services.agent_export_service import AgentExportService
+        from services.agent_import_service import AgentImportService
+        from schemas.import_schemas import ConflictMode
+
+        source_app = populated_app["app"]
+        ai_service = populated_app["ai_services"][0]
+
+        ocr_agent = OCRAgent(
+            app_id=source_app.app_id,
+            name=f"OCR Agent {datetime.now().timestamp()}",
+            description="Scans documents",
+            service_id=ai_service.service_id,
+            vision_service_id=ai_service.service_id,
+            vision_system_prompt="Describe the scanned page",
+            text_system_prompt="Structure the extracted text",
+            a2a_enabled=True,
+            a2a_card_visibility="api_key",
+            a2a_skill_tags=["ocr"],
+            a2a_examples=["Scan this invoice"],
+        )
+        db_session.add(ocr_agent)
+        db_session.commit()
+
+        export_service = AgentExportService(db_session)
+        export_data = export_service.export_agent(
+            ocr_agent.agent_id, source_app.app_id, user_id=source_app.owner_id
+        )
+        assert export_data.agent.a2a_enabled is True
+
+        import_service = AgentImportService(db_session)
+        new_name = f"Imported OCR Agent {datetime.now().timestamp()}"
+        summary = import_service.import_agent(
+            export_data=export_data,
+            app_id=source_app.app_id,
+            conflict_mode=ConflictMode.RENAME,
+            new_name=new_name,
+            import_bundled_silo=False,
+            import_bundled_output_parser=False,
+            import_bundled_mcp_configs=False,
+            import_bundled_agent_tools=False,
+        )
+
+        imported_agent = None
+        try:
+            imported_agent = (
+                db_session.query(OCRAgent)
+                .filter(OCRAgent.agent_id == summary.component_id)
+                .first()
+            )
+            assert imported_agent is not None
+            assert imported_agent.a2a_enabled is False
+            assert imported_agent.a2a_card_visibility == "api_key"
+            assert imported_agent.a2a_skill_tags == ["ocr"]
+            assert imported_agent.a2a_examples == ["Scan this invoice"]
+            assert imported_agent.vision_system_prompt == "Describe the scanned page"
+        finally:
+            if imported_agent:
+                db_session.delete(imported_agent)
+                db_session.commit()
+            db_session.delete(ocr_agent)
+            db_session.commit()

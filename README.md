@@ -1,6 +1,7 @@
 # Mattin AI - Your AI Toolbox
 
 [![License: AGPL 3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=lks-ot-i-plus-d_mattin-ai&metric=alert_status&token=c319b34cc5a95f63cb61e299c00557054b459bb1)](https://sonarcloud.io/summary/new_code?id=lks-ot-i-plus-d_mattin-ai)
 
 Mattin AI is a comprehensive AI toolbox that provides a wide range of artificial intelligence capabilities and tools. This project offers various AI functionalities including:
 

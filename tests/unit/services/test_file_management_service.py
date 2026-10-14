@@ -143,3 +143,99 @@ def test_load_session_files_does_not_probe_outside_storage(tmp_path):
 
     assert "../../outside" not in fms._files
     assert not any(str(outside) in str(call.args[0]) for call in isdir.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_get_session_file_finds_a_file_registered_by_another_instance(tmp_path):
+    """Regression target for the A2A output mapper: a fresh FileManagementService
+    instance must be able to find a file a *different* instance registered
+    earlier in the same turn, scoped strictly to its session."""
+    fms_writer = _fms(tmp_path)
+    out_dir = tmp_path / "tmp" / "outputs"
+    out_dir.mkdir()
+    (out_dir / "report.csv").write_bytes(b"a,b\n1,2\n")
+    user_context = {"user_id": "u1", "app_id": "app1"}
+
+    new_files = await fms_writer.sync_output_files(
+        working_dir=str(out_dir), agent_id=99, user_context=user_context, conversation_id="7"
+    )
+    assert new_files
+    file_id = new_files[0].file_id
+
+    fms_reader = _fms(tmp_path)
+    ref = await fms_reader.get_session_file(99, user_context, "7", file_id)
+    assert ref is not None
+    assert ref.filename == "report.csv"
+
+
+@pytest.mark.asyncio
+async def test_get_session_file_is_scoped_to_the_exact_session(tmp_path):
+    fms_writer = _fms(tmp_path)
+    out_dir = tmp_path / "tmp" / "outputs"
+    out_dir.mkdir()
+    (out_dir / "report.csv").write_bytes(b"a,b\n1,2\n")
+    user_context = {"user_id": "u1", "app_id": "app1"}
+
+    new_files = await fms_writer.sync_output_files(
+        working_dir=str(out_dir), agent_id=99, user_context=user_context, conversation_id="7"
+    )
+    file_id = new_files[0].file_id
+
+    fms_reader = _fms(tmp_path)
+    assert await fms_reader.get_session_file(99, user_context, "8", file_id) is None
+    assert await fms_reader.get_session_file(
+        99, {"user_id": "u1", "app_id": "app2"}, "7", file_id
+    ) is None
+    assert await fms_reader.get_session_file(
+        99, {"user_id": "u2", "app_id": "app1"}, "7", file_id
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_get_session_file_rejects_a_traversal_path_in_the_sidecar(tmp_path):
+    import json as json_module
+
+    fms = _fms(tmp_path)
+    user_context = {"user_id": "u1", "app_id": "app1"}
+    session_key = fms._get_session_key(99, user_context, "7")
+    session_dir = tmp_path / "tmp" / "persistent" / session_key
+    session_dir.mkdir(parents=True)
+    (session_dir / "evil.json").write_text(
+        json_module.dumps(
+            {
+                "file_id": "evil",
+                "filename": "passwd",
+                "file_type": "text",
+                "file_path": "../../etc/passwd",
+            }
+        )
+    )
+    (session_dir / "evil.content").write_text("ignored")
+
+    assert await fms.get_session_file(99, user_context, "7", "evil") is None
+
+
+@pytest.mark.asyncio
+async def test_get_session_file_rejects_a_symlink_escaping_tmp_base(tmp_path):
+    fms = _fms(tmp_path)
+    outside_target = tmp_path / "outside-secret.txt"
+    outside_target.write_text("top secret")
+
+    out_dir = tmp_path / "tmp" / "outputs"
+    out_dir.mkdir(parents=True)
+    link_path = out_dir / "escape_link"
+    link_path.symlink_to(outside_target)
+
+    user_context = {"user_id": "u1", "app_id": "app1"}
+    new_files = await fms.sync_output_files(
+        working_dir=str(out_dir), agent_id=55, user_context=user_context, conversation_id="7"
+    )
+    assert new_files
+    file_id = new_files[0].file_id
+
+    assert await fms.get_session_file(55, user_context, "7", file_id) is None
+
+
+def test_tmp_base_folder_property_matches_private_attribute(tmp_path):
+    fms = _fms(tmp_path)
+    assert fms.tmp_base_folder == fms._tmp_base_folder

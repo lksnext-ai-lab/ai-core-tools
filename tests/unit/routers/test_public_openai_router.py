@@ -144,32 +144,22 @@ class TestOpenAIRouter:
         exec_mock = _mock_execution_service(mocker)
         file_mock = _mock_file_management_service(mocker)
 
-        # Bypass DNS / SSRF validation: make example.com resolve to a public IP
-        mocker.patch(
-            "routers.public.v1.openai.socket.getaddrinfo",
-            return_value=[(None, None, None, None, ("93.184.216.34", 0))],
-        )
-
-        # Mock httpx streaming: client.stream() is an async context manager that
-        # yields a response whose aiter_bytes() produces chunks.
+        # The actual download now goes through the shared SSRF-guarded
+        # fetch_bytes (utils.ssrf_guard), not httpx directly, so that's what's
+        # mocked here instead of httpx internals.
         fake_image_bytes = b"fake-image-bytes"
-
-        async def _aiter_bytes(chunk_size=65536):
-            yield fake_image_bytes
-
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-type": "image/jpeg"}
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.aiter_bytes = _aiter_bytes
-        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_resp.__aexit__ = AsyncMock(return_value=None)
-
-        mock_client = MagicMock()
-        mock_client.stream = MagicMock(return_value=mock_resp)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-
-        mocker.patch("routers.public.v1.openai.httpx.AsyncClient", return_value=mock_client)
+        mock_fetch_bytes = mocker.patch.object(
+            openai_module,
+            "fetch_bytes",
+            new=AsyncMock(
+                return_value=openai_module.ssrf_guard.FetchedFile(
+                    content=fake_image_bytes,
+                    media_type="image/jpeg",
+                    filename="image.jpg",
+                    final_url="http://example.com/image.jpg",
+                )
+            ),
+        )
 
         req = OpenAIChatCompletionRequest(
             model="1",
@@ -195,7 +185,10 @@ class TestOpenAIRouter:
 
         assert result.object == "chat.completion"
 
-        mock_client.stream.assert_called_once_with("GET", "http://example.com/image.jpg", timeout=10.0)
+        mock_fetch_bytes.assert_called_once()
+        call_args = mock_fetch_bytes.call_args
+        assert call_args.args[0] == "http://example.com/image.jpg"
+        assert call_args.kwargs["timeout_s"] == 10.0
         file_mock.upload_file.assert_called_once()
 
         exec_mock.execute_agent_chat_with_file_refs.assert_called_once()
@@ -501,7 +494,17 @@ class TestStreamingChatCompletions:
 
 
 class TestSSRFValidation:
-    """Unit tests for _validate_image_url SSRF protection."""
+    """Unit tests for SSRF protection on remote image URLs.
+
+    ``_validate_image_url`` itself is now only a fast, non-resolving
+    scheme/hostname pre-check (round 2): DNS resolution and IP-range blocking
+    happen entirely inside ``fetch_bytes``/``_PinnedBackend``, on the event
+    loop, inside its own deadline. So the scheme-rejection cases below still
+    call ``_validate_image_url`` directly, but the resolved-host blocking
+    cases exercise the full ``chat_completions`` -> ``fetch_bytes`` path,
+    mocking ``ssrf_guard.resolve_host_async`` instead of a local
+    ``socket.getaddrinfo`` patch seam (there no longer is one in openai.py).
+    """
 
     def test_non_http_scheme_rejected(self, mocker):
         with pytest.raises(HTTPException) as exc_info:
@@ -514,52 +517,79 @@ class TestSSRFValidation:
             openai_module._validate_image_url("ftp://example.com/image.jpg")
         assert exc_info.value.status_code == 400
 
-    def test_loopback_ipv4_rejected(self, mocker):
-        mocker.patch(
-            "routers.public.v1.openai.socket.getaddrinfo",
-            return_value=[(None, None, None, None, ("127.0.0.1", 0))],
-        )
+    def test_missing_hostname_rejected(self, mocker):
         with pytest.raises(HTTPException) as exc_info:
-            openai_module._validate_image_url("http://localhost/image.jpg")
+            openai_module._validate_image_url("http:///image.jpg")
+        assert exc_info.value.status_code == 400
+
+    def test_public_hostname_passes_prevalidation(self, mocker):
+        # No DNS resolution happens in _validate_image_url itself (that's
+        # fetch_bytes's job) — this only asserts the pre-check doesn't reject
+        # a well-formed http(s) URL with a hostname.
+        openai_module._validate_image_url("https://example.com/image.jpg")
+
+    async def _run_with_image_url(self, mocker, url):
+        _patch_auth(mocker)
+        _mock_app(mocker)
+        _mock_agent_service(mocker)
+        _mock_execution_service(mocker)
+        _mock_file_management_service(mocker)
+
+        req = OpenAIChatCompletionRequest(
+            model="1",
+            messages=[
+                OpenAIMessage(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "What is this?"},
+                        {"type": "image_url", "image_url": {"url": url}},
+                    ],
+                )
+            ],
+            temperature=None,
+            max_tokens=None,
+        )
+        return await openai_module.chat_completions(app_id="1", request=req, api_key="key", db=MagicMock())
+
+    @pytest.mark.asyncio
+    async def test_loopback_ipv4_rejected(self, mocker):
+        mocker.patch.object(openai_module.ssrf_guard, "resolve_host_async", AsyncMock(return_value=["127.0.0.1"]))
+        with pytest.raises(HTTPException) as exc_info:
+            await self._run_with_image_url(mocker, "http://localhost/image.jpg")
         assert exc_info.value.status_code == 400
         assert "private" in exc_info.value.detail.lower() or "reserved" in exc_info.value.detail.lower()
 
-    def test_private_rfc1918_rejected(self, mocker):
-        mocker.patch(
-            "routers.public.v1.openai.socket.getaddrinfo",
-            return_value=[(None, None, None, None, ("192.168.1.100", 0))],
+    @pytest.mark.asyncio
+    async def test_private_rfc1918_rejected(self, mocker):
+        mocker.patch.object(
+            openai_module.ssrf_guard, "resolve_host_async", AsyncMock(return_value=["192.168.1.100"])
         )
         with pytest.raises(HTTPException) as exc_info:
-            openai_module._validate_image_url("http://internal-service/image.jpg")
+            await self._run_with_image_url(mocker, "http://internal-service/image.jpg")
         assert exc_info.value.status_code == 400
 
-    def test_link_local_rejected(self, mocker):
+    @pytest.mark.asyncio
+    async def test_link_local_rejected(self, mocker):
         # 169.254.169.254 is the AWS/GCP instance metadata endpoint
-        mocker.patch(
-            "routers.public.v1.openai.socket.getaddrinfo",
-            return_value=[(None, None, None, None, ("169.254.169.254", 0))],
+        mocker.patch.object(
+            openai_module.ssrf_guard, "resolve_host_async", AsyncMock(return_value=["169.254.169.254"])
         )
         with pytest.raises(HTTPException) as exc_info:
-            openai_module._validate_image_url("http://169.254.169.254/latest/meta-data/")
+            await self._run_with_image_url(mocker, "http://169.254.169.254/latest/meta-data/")
         assert exc_info.value.status_code == 400
 
-    def test_public_ip_accepted(self, mocker):
-        mocker.patch(
-            "routers.public.v1.openai.socket.getaddrinfo",
-            return_value=[(None, None, None, None, ("93.184.216.34", 0))],
-        )
-        # Should not raise
-        openai_module._validate_image_url("https://example.com/image.jpg")
-
-    def test_unresolvable_host_rejected(self, mocker):
+    @pytest.mark.asyncio
+    async def test_unresolvable_host_rejected(self, mocker):
         import socket as _socket
-        mocker.patch(
-            "routers.public.v1.openai.socket.getaddrinfo",
-            side_effect=_socket.gaierror("Name or service not known"),
-        )
+
+        async def _raise(host):
+            raise _socket.gaierror("Name or service not known")
+
+        mocker.patch.object(openai_module.ssrf_guard, "resolve_host_async", _raise)
         with pytest.raises(HTTPException) as exc_info:
-            openai_module._validate_image_url("http://nonexistent.invalid/img.jpg")
+            await self._run_with_image_url(mocker, "http://nonexistent.invalid/img.jpg")
         assert exc_info.value.status_code == 400
+        assert "resolved" in exc_info.value.detail.lower()
 
 
 class TestResponseFormat:
