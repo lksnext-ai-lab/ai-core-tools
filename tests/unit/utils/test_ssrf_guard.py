@@ -708,3 +708,35 @@ def test_no_duplicated_ssrf_logic_outside_ssrf_guard():
             offenders.append(f"{path}: contains 'getaddrinfo'")
 
     assert not offenders, "Found SSRF-relevant logic outside utils.ssrf_guard:\n" + "\n".join(offenders)
+
+
+# --- pinned_async_transport ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pinned_async_transport_refuses_blocked_hosts_through_httpx(monkeypatch):
+    """Contract test: httpx really uses the pinned pool (a private attribute swap)."""
+    import httpx
+    from utils import ssrf_guard
+
+    async def resolve_to_metadata_service(host):
+        return ["169.254.169.254"]
+
+    monkeypatch.setattr(ssrf_guard, "resolve_host_async", resolve_to_metadata_service)
+    async with httpx.AsyncClient(transport=ssrf_guard.pinned_async_transport()) as client:
+        with pytest.raises(ssrf_guard.SsrfBlockedError):
+            await client.post("https://rebinding.example/hook", content=b"{}")
+
+
+@pytest.mark.asyncio
+async def test_pinned_async_transport_reports_unresolvable_hosts(monkeypatch):
+    import httpx
+    from utils import ssrf_guard
+
+    async def unresolvable(host):
+        raise socket.gaierror("nxdomain")
+
+    monkeypatch.setattr(ssrf_guard, "resolve_host_async", unresolvable)
+    async with httpx.AsyncClient(transport=ssrf_guard.pinned_async_transport()) as client:
+        with pytest.raises(ssrf_guard.FetchUnresolvableError):
+            await client.post("https://missing.example/hook", content=b"{}")

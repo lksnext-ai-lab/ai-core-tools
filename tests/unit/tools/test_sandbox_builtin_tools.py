@@ -4,6 +4,14 @@ import subprocess
 import time
 from collections.abc import Callable
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _default_sandbox_languages(monkeypatch):
+    # A developer .env loaded by an earlier import may narrow this list.
+    monkeypatch.setenv("OPENSANDBOX_SUPPORTED_LANGUAGES", "python,bash")
+
 
 def _local_bash_run_code(
     handle,
