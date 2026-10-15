@@ -96,6 +96,7 @@ def import_system_one_agent(
     conflict_mode: ConflictMode = ConflictMode.FAIL,
     new_name: Optional[str] = None,
     service_id_map: Optional[Dict[str, int]] = None,
+    bundled_services: Optional[List[ExportSystemOneServiceSchema]] = None,
 ) -> ImportSummarySchema:
     validate_export_version(export_data.metadata.export_version)
     data = export_data.agent
@@ -113,12 +114,17 @@ def import_system_one_agent(
         service = (session.query(SystemOneService)
                    .filter(SystemOneService.name == data.system_one_service_name, SystemOneService.app_id == app_id)
                    .first())
-        if service is None:
+        bundled = next((b for b in bundled_services or [] if b.name == data.system_one_service_name), None)
+        if service is not None:
+            service_id = service.service_id          # a service of the same name in this app wins: no copies
+        elif bundled is not None:
+            service_id, service_warnings = import_system_one_service(session, bundled, app_id)
+            warnings.extend(service_warnings)
+        else:
             raise ValueError(
                 f"System One service '{data.system_one_service_name}' does not exist in this app; "
                 "create it before importing the agent"
             )
-        service_id = service.service_id
 
     summarization_id = None
     if data.summarization_service_name:
@@ -153,6 +159,8 @@ def import_system_one_agent(
         existing.summarization_service_id = summarization_id
         existing.questions = stored_questions
         existing.max_state_chars = max_chars
+        if data.is_tool is not None:
+            existing.is_tool = data.is_tool
         session.commit()
         warnings.append("Existing agent configuration updated.")
         return ImportSummarySchema(
@@ -169,7 +177,8 @@ def import_system_one_agent(
         summarization_service_id=summarization_id,
         questions=stored_questions,
         max_state_chars=max_chars,
-        is_tool=True,          # like a new System One agent in the form: mostly used as a tool
+        # files exported before the field existed: like a new System One agent in the form, mostly used as a tool
+        is_tool=True if data.is_tool is None else data.is_tool,
         create_date=datetime.now(),
         request_count=0,
     )

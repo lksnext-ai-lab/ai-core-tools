@@ -93,6 +93,7 @@ def test_roundtrip_in_the_same_app_with_rename(db, fake_app, world):
 
 def test_import_into_another_app_needs_the_service_there_by_name(db, fake_user, fake_app, world):
     export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    export.system_one_services = []                                          # a file that does not bundle it
     other = new_app(db, fake_user, "Target App")
     with pytest.raises(ValueError) as e:
         AgentImportService(db).import_agent(export, other.app_id)
@@ -104,6 +105,104 @@ def test_import_into_another_app_needs_the_service_there_by_name(db, fake_user, 
     assert imported.app_id == other.app_id and imported.system_one_service.endpoint == "http://other"
     assert imported.summarization_service_id is None                          # not in the target app: truncation
     assert any("summarization" in w.lower() for w in result.warnings)
+
+
+def test_agent_export_bundles_its_service_without_the_token(db, fake_app, world):
+    export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    [svc] = export.system_one_services
+    assert (svc.name, svc.endpoint, svc.model_name, svc.max_concurrency, svc.api_key) == (
+        "Nimble", "http://172.16.59.1:8100", "nimble-latest", 2, None)
+    assert TOKEN not in export.model_dump_json()
+    assert AgentExportService(db).export_agent(
+        world.agent.agent_id, fake_app.app_id, include_ai_service=False).system_one_services == []
+
+
+def test_import_into_another_app_creates_the_bundled_service(db, fake_user, fake_app, world):
+    export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    other = new_app(db, fake_user, "Target App")
+    result = AgentImportService(db).import_agent(export, other.app_id)
+    agent = db.query(SystemOneAgent).filter(SystemOneAgent.agent_id == result.component_id).one()
+    svc = agent.system_one_service
+    assert svc.app_id == other.app_id and svc.name == "Nimble" and svc.api_key is None
+    assert svc.endpoint == "http://172.16.59.1:8100" and svc.description == "nimble-latest"
+    assert json.loads(svc.extra_config) == {"max_concurrency": 2, "provider": "system_one"}
+    assert any("token" in w.lower() for w in result.warnings)
+
+
+def test_import_reuses_a_service_of_the_same_name_instead_of_copying_it(db, fake_user, fake_app, world):
+    export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    other = new_app(db, fake_user, "Target App")
+    mine = SystemOneService(name="Nimble", endpoint="http://mine", app_id=other.app_id, create_date=datetime.now())
+    db.add(mine)
+    db.commit()
+    result = AgentImportService(db).import_agent(export, other.app_id)
+    assert db.query(SystemOneAgent).get(result.component_id).system_one_service_id == mine.service_id
+    assert db.query(SystemOneService).filter(SystemOneService.app_id == other.app_id).count() == 1
+
+
+def test_a_system_one_tool_of_a_normal_agent_comes_with_its_service_into_another_app(
+        db, fake_user, fake_app, fake_agent, world):
+    from models.agent import AgentTool
+
+    db.add(AgentTool(agent_id=fake_agent.agent_id, tool_id=world.agent.agent_id))
+    db.commit()
+    export = AgentExportService(db).export_agent(fake_agent.agent_id, fake_app.app_id)
+    assert [s.name for s in export.system_one_services] == ["Nimble"]
+    other = new_app(db, fake_user, "Target App")
+    llm = AIService(name="Theirs", provider="OpenAI", api_key="sk-y", description="gpt-y",  # pragma: allowlist secret
+                    app_id=other.app_id, create_date=datetime.now())
+    db.add(llm)
+    db.commit()
+    result = AgentImportService(db).import_agent(export, other.app_id, selected_ai_service_id=llm.service_id)
+    assert not any("Failed" in w for w in result.warnings), result.warnings
+    tool = db.query(SystemOneAgent).filter(SystemOneAgent.app_id == other.app_id).one()
+    assert tool.system_one_service.app_id == other.app_id and tool.system_one_service.name == "Nimble"
+    linked = db.query(AgentTool).filter(AgentTool.agent_id == result.component_id).all()
+    assert [a.tool_id for a in linked] == [tool.agent_id]
+
+
+# --------------------------------------------------------------- is_tool
+
+@pytest.mark.parametrize("is_tool", [True, False])
+def test_is_tool_survives_a_system_one_roundtrip(db, fake_app, world, is_tool):
+    world.agent.is_tool = is_tool
+    db.commit()
+    export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    assert export.agent.is_tool is is_tool
+    result = AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.RENAME)
+    assert db.query(SystemOneAgent).get(result.component_id).is_tool is is_tool
+
+
+@pytest.mark.parametrize("is_tool", [True, False])
+def test_is_tool_survives_a_normal_agent_roundtrip(db, fake_app, fake_agent, is_tool):
+    fake_agent.is_tool = is_tool
+    db.commit()
+    export = AgentExportService(db).export_agent(fake_agent.agent_id, fake_app.app_id)
+    assert export.agent.is_tool is is_tool
+    result = AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.RENAME)
+    assert db.query(Agent).get(result.component_id).is_tool is is_tool
+
+
+def test_override_applies_is_tool_of_the_file(db, fake_app, fake_agent, world):
+    for original, flag in ((fake_agent, True), (world.agent, False)):
+        export = AgentExportService(db).export_agent(original.agent_id, fake_app.app_id)
+        export.agent.is_tool = flag
+        original.is_tool = not flag
+        db.commit()
+        AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.OVERRIDE)
+        db.refresh(original)
+        assert original.is_tool is flag
+
+
+def test_a_file_without_is_tool_keeps_the_defaults_of_each_type(db, fake_app, fake_agent, world):
+    """Files exported before the field existed: normal agents False, System One agents True (as before)."""
+    for original, expected in ((fake_agent, False), (world.agent, True)):
+        original.is_tool = not expected
+        db.commit()
+        export = AgentExportService(db).export_agent(original.agent_id, fake_app.app_id)
+        export.agent.is_tool = None
+        result = AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.RENAME)
+        assert db.query(Agent).get(result.component_id).is_tool is expected
 
 
 def test_import_with_invalid_questions_is_rejected(db, fake_app, world):
