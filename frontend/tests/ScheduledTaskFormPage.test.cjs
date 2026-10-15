@@ -63,6 +63,7 @@ function mount(overrides = {}) {
     sonner: { toast: { error() {}, success() {} } },
     'lucide-react': { Trash2: () => null },
     '../services/api': { apiService },
+    '../utils/systemOneStatus': { canBeScheduled: (agent) => agent.type !== 'system_one_agent' },
     '../components/ui/ConfirmationModal': () => null,
   };
   const exports = {};
