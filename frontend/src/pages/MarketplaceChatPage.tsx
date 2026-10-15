@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, MessageCircle, Paperclip, Plus, Square, Timer } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, MessageCircle, Paperclip, Square, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
@@ -10,10 +10,11 @@ import type { PanelFile } from '../components/playground/AttachedFilesPanel';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import BackgroundImage from '../components/ui/BackgroundImage';
+import { SidePanel } from '../components/ui/SidePanel';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
 import { formatDuration } from '../utils/duration';
 import { errorMessage } from '../constants/messages';
-import type { MarketplaceAgentDetail } from '../types/marketplace';
+import type { MarketplaceAgentDetail, MarketplaceConversation } from '../types/marketplace';
 
 interface ChatMessage {
   readonly id: string;
@@ -37,6 +38,43 @@ interface QuotaInfo {
   readonly call_count: number;
   readonly quota: number;
   readonly is_exempt: boolean;
+}
+
+interface HistoryGroup {
+  readonly label: string;
+  readonly items: MarketplaceConversation[];
+}
+
+/** Buckets conversations (newest first) into Today / Yesterday / Previous 7 days / Older. */
+function groupConversationsByDate(conversations: MarketplaceConversation[]): HistoryGroup[] {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const today = startOfToday.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const groups: HistoryGroup[] = [
+    { label: 'Today', items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'Previous 7 days', items: [] },
+    { label: 'Older', items: [] },
+  ];
+  const sorted = [...conversations].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+  );
+  for (const conv of sorted) {
+    const time = new Date(conv.updated_at).getTime();
+    if (time >= today) groups[0].items.push(conv);
+    else if (time >= today - dayMs) groups[1].items.push(conv);
+    else if (time >= today - 7 * dayMs) groups[2].items.push(conv);
+    else groups[3].items.push(conv);
+  }
+  return groups.filter((g) => g.items.length > 0);
+}
+
+function formatHistoryTime(iso: string, isToday: boolean): string {
+  const date = new Date(iso);
+  return isToday
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -64,6 +102,10 @@ export default function MarketplaceChatPage() {
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyConversations, setHistoryConversations] = useState<MarketplaceConversation[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -447,6 +489,42 @@ export default function MarketplaceChatPage() {
     }
   }, [agentId, navigate]);
 
+  // Load this agent's conversations each time the history panel opens.
+  useEffect(() => {
+    if (!historyOpen || !agentId) return;
+    let isMounted = true;
+    setHistoryLoading(true);
+    apiService
+      .getMarketplaceConversations(100, 0)
+      .then((data) => {
+        if (isMounted) {
+          setHistoryConversations(data.conversations.filter((c) => c.agent_id === agentId));
+        }
+      })
+      .catch((err) => {
+        if (isMounted) toast.error(errorMessage(err, 'Failed to load conversation history'));
+      })
+      .finally(() => {
+        if (isMounted) setHistoryLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [historyOpen, agentId]);
+
+  const closeHistory = useCallback(() => {
+    setHistoryOpen(false);
+    setHistorySearch('');
+  }, []);
+
+  const handleOpenConversation = useCallback(
+    (id: number) => {
+      closeHistory();
+      if (id !== numericId) navigate(`/marketplace/chat/${id}`);
+    },
+    [closeHistory, navigate, numericId],
+  );
+
   if (loadingHistory) {
     return <LoadingState message="Loading conversation..." />;
   }
@@ -477,11 +555,96 @@ export default function MarketplaceChatPage() {
     content_preview: f.content_preview,
   }));
 
+  const historyQuery = historySearch.trim().toLowerCase();
+  const historyGroups = groupConversationsByDate(
+    historyConversations.filter((c) =>
+      `${c.title ?? ''} ${c.last_message ?? ''}`.toLowerCase().includes(historyQuery),
+    ),
+  );
+
   const canSend =
     !isStreaming && !isQuotaExceeded && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   return (
-    <div className="flex items-stretch h-full min-h-0">
+    <div className="relative flex items-stretch h-full min-h-0">
+      <SidePanel
+        open={historyOpen}
+        onClose={closeHistory}
+        title="History"
+        closeLabel="Close history"
+        headerActions={
+          <button
+            type="button"
+            onClick={() => {
+              closeHistory();
+              void handleNewChat();
+            }}
+            className="font-display text-[12.5px] px-[11px] py-[5px] rounded-md
+                       border border-ink dark:border-ink-dark text-fg dark:text-fg-dark
+                       hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150"
+          >
+            New
+          </button>
+        }
+        toolbar={
+          <input
+            type="search"
+            value={historySearch}
+            onChange={(e) => setHistorySearch(e.target.value)}
+            placeholder="Search conversations…"
+            aria-label="Search conversations"
+            className="w-full rounded-md px-[11px] py-2 text-[13px]
+                       bg-surface dark:bg-surface-dark border border-line dark:border-line-dark
+                       text-fg dark:text-fg-dark placeholder:text-fg-tertiary dark:placeholder:text-fg-tertiary-dark
+                       focus:outline-none focus:border-accent dark:focus:border-accent-dark"
+          />
+        }
+      >
+        {historyLoading && historyConversations.length === 0 && (
+          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 py-3.5">Loading…</p>
+        )}
+        {!historyLoading && historyGroups.length === 0 && (
+          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 py-3.5">
+            {historyQuery ? 'No conversations match your search.' : 'No previous conversations.'}
+          </p>
+        )}
+        {historyGroups.map((group) => (
+          <div key={group.label} className="mb-3.5">
+            <div className="text-[11px] uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 pt-1.5 pb-1">
+              {group.label}
+            </div>
+            {group.items.map((conv) => {
+              const isCurrent = conv.conversation_id === numericId;
+              return (
+                <button
+                  key={conv.conversation_id}
+                  type="button"
+                  onClick={() => handleOpenConversation(conv.conversation_id)}
+                  aria-current={isCurrent ? 'page' : undefined}
+                  className={`w-full text-left flex flex-col gap-[3px] rounded-md px-2.5 py-[9px]
+                              hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150
+                              ${isCurrent ? 'bg-surface-hover dark:bg-surface-hover-dark' : ''}`}
+                >
+                  <span className="flex items-baseline gap-2 w-full">
+                    <span className="flex-1 min-w-0 truncate text-[13.5px] font-medium text-fg dark:text-fg-dark">
+                      {conv.title || 'New conversation'}
+                    </span>
+                    <span className="flex-none text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                      {formatHistoryTime(conv.updated_at, group.label === 'Today')}
+                    </span>
+                  </span>
+                  {conv.last_message && (
+                    <span className="truncate max-w-full text-[12.5px] leading-snug text-fg-tertiary dark:text-fg-tertiary-dark">
+                      {conv.last_message}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </SidePanel>
+
       <div className="flex-1 min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-full min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-8 py-[18px] border-b border-line dark:border-line-dark flex-shrink-0">
@@ -497,6 +660,22 @@ export default function MarketplaceChatPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {agentId && (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                title="Conversation history"
+                aria-label="Conversation history"
+                aria-expanded={historyOpen}
+                className="w-[34px] h-[34px] flex-none flex items-center justify-center rounded-lg
+                           border border-line dark:border-line-dark
+                           text-fg-secondary dark:text-fg-secondary-dark
+                           hover:bg-surface-hover dark:hover:bg-surface-hover-dark hover:text-fg dark:hover:text-fg-dark
+                           transition-colors duration-150"
+              >
+                <Clock className="w-[17px] h-[17px]" />
+              </button>
+            )}
             {quotaInfo && quotaInfo.quota > 0 && !quotaInfo.is_exempt && (
               <span
                 className={`text-xs rounded-full px-3 py-1 border ${
@@ -508,7 +687,7 @@ export default function MarketplaceChatPage() {
                 {quotaInfo.call_count}/{quotaInfo.quota} Marketplace usage
               </span>
             )}
-            {agentId && (
+            {/*{agentId && (
               <button
                 type="button"
                 onClick={handleNewChat}
@@ -521,7 +700,7 @@ export default function MarketplaceChatPage() {
                 <Plus className="w-3.5 h-3.5" /> New chat
               </button>
             )}
-            {agentId && (
+            {/*{agentId && (
               <Link
                 to={`/marketplace/agents/${agentId}`}
                 className="inline-flex items-center h-[34px] px-3 rounded-lg text-[13px]
@@ -532,7 +711,7 @@ export default function MarketplaceChatPage() {
               >
                 Agent details
               </Link>
-            )}
+            )}*/}
           </div>
         </div>
 

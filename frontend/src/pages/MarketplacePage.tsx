@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -14,6 +14,8 @@ import type {
 } from '../types/marketplace';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
+import { SidePanel } from '../components/ui/SidePanel';
+import MarketplaceAgentDetailPage from './MarketplaceAgentDetailPage';
 
 const PAGE_SIZE = 12;
 
@@ -82,7 +84,8 @@ export default function MarketplacePage() {
 
 /** Catalog of published agents — browse, search, and filter. */
 function MarketplaceAgentsTab() {
-  const navigate = useNavigate();
+  // Agent shown in the right-hand detail panel (null = closed)
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
 
   // Filter / pagination state
   const [search, setSearch] = useState('');
@@ -147,10 +150,8 @@ function MarketplaceAgentsTab() {
     void fetchCatalog();
   }, [fetchCatalog]);
 
-  const handleAgentClick = useCallback(
-    (agentId: number) => navigate(`/marketplace/agents/${agentId}`),
-    [navigate],
-  );
+  const handleAgentClick = useCallback((agentId: number) => setSelectedAgentId(agentId), []);
+  const handleClosePanel = useCallback(() => setSelectedAgentId(null), []);
 
   function renderContent() {
     if (loading) {
@@ -241,6 +242,21 @@ function MarketplaceAgentsTab() {
 
       {/* Content */}
       {renderContent()}
+
+      {/* Agent detail side panel — fixed wrapper so it overlays the whole viewport */}
+      {selectedAgentId !== null && (
+        <div className="fixed inset-0 z-50">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title="Marketplace"
+            widthClassName="w-[640px] max-w-full"
+          >
+            <MarketplaceAgentDetailPage key={selectedAgentId} agentId={selectedAgentId} variant="panel" />
+          </SidePanel>
+        </div>
+      )}
     </div>
   );
 }

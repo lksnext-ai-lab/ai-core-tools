@@ -95,8 +95,8 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          {title && <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{title}</h1>}
-          {description && <p className="text-sm text-gray-600 dark:text-gray-400">{description}</p>}
+          {title && <h1 className="text-2xl font-bold text-fg dark:text-fg-dark">{title}</h1>}
+          {description && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{description}</p>}
         </div>
         <MetricRangeSelector value={range} onChange={setRange} />
       </div>

@@ -120,9 +120,9 @@ export function Tabs({
           if (isDisabled) {
             tabStateClasses = 'cursor-not-allowed text-gray-400 dark:text-gray-600';
           } else if (isActive) {
-            tabStateClasses = 'border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400';
+            tabStateClasses = 'text-fg-primary dark:text-fg-dark  border-b-2  border-fg text-fg dark:border-fg-dark';
           } else {
-            tabStateClasses = 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100';
+            tabStateClasses = 'border-transparent text-fg-tertiary hover:text-fg-primary dark:text-fg-tertiary-dark dark:hover:text-fg-primary-dark';
           }
 
           return (

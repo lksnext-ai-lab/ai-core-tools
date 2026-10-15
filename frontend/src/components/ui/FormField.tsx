@@ -8,6 +8,7 @@ interface FormFieldProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   min?: number;
   max?: number;
+  maxLength?: number;
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
@@ -15,6 +16,8 @@ interface FormFieldProps {
   helpText?: string;
   className?: string;
   inputClassName?: string;
+  labelClassName?: string;
+  ref?: React.Ref<HTMLInputElement>;
 }
 
 /**
@@ -28,13 +31,16 @@ export function FormField({
   onChange,
   min,
   max,
+  maxLength,
   placeholder,
   disabled = false,
   required = false,
   error,
   helpText,
   className = '',
-  inputClassName = ''
+  inputClassName = '',
+  labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1',
+  ref
 }: Readonly<FormFieldProps>) {
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
@@ -44,13 +50,14 @@ export function FormField({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
+        className={labelClassName}
       >
         {label}
         {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
       </label>
 
       <input
+        ref={ref}
         id={id}
         name={id}
         type={type}
@@ -58,6 +65,7 @@ export function FormField({
         onChange={onChange}
         min={min}
         max={max}
+        maxLength={maxLength}
         placeholder={placeholder}
         disabled={disabled}
         required={required}
@@ -88,6 +96,7 @@ interface FormTextAreaProps {
   id: string;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  maxLength?: number;
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
@@ -106,6 +115,7 @@ export function FormTextArea({
   id,
   value,
   onChange,
+  maxLength,
   placeholder,
   disabled = false,
   required = false,
@@ -134,16 +144,17 @@ export function FormTextArea({
         name={id}
         value={value}
         onChange={onChange}
+        maxLength={maxLength}
         placeholder={placeholder}
         disabled={disabled}
         required={required}
         rows={rows}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:ring-1 transition-colors ${
+        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark ${
           error
             ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
-            : 'border-line-strong focus:ring-ink focus:border-ink dark:border-line-strong-dark dark:focus:ring-ink-dark dark:focus:border-ink-dark'
+            : 'focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${textareaClassName}`}
@@ -157,6 +168,7 @@ export function FormTextArea({
         <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
       )}
     </div>
+
   );
 }
 
@@ -280,7 +292,7 @@ export function FormCheckbox({
           onChange={onChange}
           disabled={disabled}
           aria-describedby={describedBy}
-          className="w-4 h-4 accent-ink dark:accent-ink-dark border-line-strong rounded focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-4 h-4 accent-ink dark:accent-ink-dark border-line-strong rounded focus-visible:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       <div className="ml-3">

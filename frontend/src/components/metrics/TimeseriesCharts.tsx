@@ -14,6 +14,7 @@ import {
 import type { TimeseriesResponse } from '../../types/metrics';
 import { formatBucket, formatCount, formatMs } from './format';
 import { useChartPalette, type ChartPalette } from './palette';
+import CardApp from '../ui/CardApp';
 
 interface ChartProps {
   data: TimeseriesResponse;
@@ -21,13 +22,13 @@ interface ChartProps {
 
 export function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <CardApp className="min-w-0">
       <header className="mb-3">
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
+        <h3 className="text-sm font-semibold text-fg dark:text-fg-dark">{title}</h3>
+        {subtitle && <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{subtitle}</p>}
       </header>
       {children}
-    </section>
+    </CardApp>
   );
 }
 

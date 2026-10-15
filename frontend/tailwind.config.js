@@ -16,7 +16,7 @@ export default {
           dark: '#1f1d17', 'tint-dark': '#252217', 'hover-dark': '#2a271c',
         },
         line: { DEFAULT: '#e8e8e8', strong: '#d0d0d0', dark: '#3a362a', 'strong-dark': '#4a4636' },
-        ink: { DEFAULT: '#202020', on: '#ffffff', dark: '#f2efe9', 'on-dark': '#15130f' },
+        ink: { DEFAULT: '#202020', on: '#ffffff', dark: '#f2efe9', 'on-dark': '#15130f', hover:'#383838', 'hover-dark':'#d8d3c8'  },
         fg: {
           DEFAULT: '#202020', secondary: '#4d4d4d', tertiary: '#828282', faint: '#a0a0a0', faint2: '#c8c8c8',
           dark: '#f2efe9', 'secondary-dark': '#c9c4b6', 'tertiary-dark': '#9d978a', 'faint-dark': '#8f8977', 'faint2-dark': '#5c5748',
@@ -41,6 +41,9 @@ export default {
         focus: { DEFAULT: '#1a5fd6', dark: '#7fb3ff' },
         btCard: { DEFAULT: '#E8E8E8', bg: '#ffffff', border: '#e8e8e8', hover: '#212121', dark: '#2a271c', 'bg-dark': '#2a271c','border-dark': '#3a362a' },
         tableCab: { DEFAULT: '#f5f5f5', bg: '#f5f5f5', dark: '#2a271c',  },
+        cardAlert:{ DEFAULT: '#f3ece0', bg: '#f3ece0', border: '#E6DDCB', 'bg-dark': '#2b2412', 'border-dark': '#4A3D1F', 'text': '#6b571f','text-dark': '#e0bd7c' },
+        textImg:{DEFAULT: '#CDCDCD', dark: '#5C5748'}
+
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],

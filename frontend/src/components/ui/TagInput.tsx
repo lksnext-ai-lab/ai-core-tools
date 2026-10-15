@@ -63,19 +63,15 @@ export function TagInput({
   return (
     <div>
       <div
-        className={`flex flex-wrap items-center gap-2 p-2 border rounded-xl min-h-[44px] transition-all duration-200 ${
-          disabled
-            ? 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
-            : 'border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 dark:border-gray-600'
+        className={`flex flex-wrap items-center gap-2 p-2 border dark:border-line-strong-dark rounded-md min-h-[44px] transition-all duration-200 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         }`}
       >
         {tags.map((tag, idx) => (
           <span
             key={tag}
-            className={`inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full ${
-              disabled
-                ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'
+            className={`inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full  ${
+              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]'
             }`}
           >
             {tag}
@@ -83,7 +79,7 @@ export function TagInput({
               <button
                 type="button"
                 onClick={() => removeTag(idx)}
-                className="ml-0.5 text-blue-600 hover:text-blue-900 font-medium dark:text-blue-300 dark:hover:text-blue-100"
+                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]"
                 aria-label={`Remove tag ${tag}`}
               >
                 <X className="w-3 h-3" />
@@ -100,10 +96,10 @@ export function TagInput({
           placeholder={tags.length === 0 && !atLimit ? placeholder : ''}
           disabled={disabled}
           readOnly={!disabled && atLimit}
-          className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-gray-900 placeholder:text-gray-400 disabled:cursor-not-allowed disabled:text-gray-600 read-only:cursor-default dark:text-gray-100 dark:placeholder:text-gray-500 dark:disabled:text-gray-300"
+          className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default  dark:placeholder:text-gray-500 "
         />
       </div>
-      <p className="text-xs text-gray-600 mt-1 dark:text-gray-300" aria-live="polite">
+      <p className="text-xs text-fg-secondary mt-1 dark:text-fg-secondary-dark" aria-live="polite">
         {tags.length}/{maxTags} tags
         {atLimit ? ' (maximum reached)' : ' — press Enter to add'}
       </p>

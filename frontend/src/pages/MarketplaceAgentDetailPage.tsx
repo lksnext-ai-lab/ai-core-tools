@@ -15,6 +15,8 @@ import type {
   MarketplaceAgentDetail,
   MarketplaceConversation,
 } from '../types/marketplace';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import CardApp from '../components/ui/CardApp';
 
 /** Parses an agent-load error into a user-friendly message. */
 function getAgentLoadError(err: unknown): string {
@@ -67,15 +69,26 @@ const CATEGORY_VARIANT: Record<
   Other: 'default',
 };
 
+interface MarketplaceAgentDetailPageProps {
+  /** Agent to show. Defaults to the `:agentId` route param. */
+  readonly agentId?: number;
+  /** `panel` renders a compact single-column layout for the marketplace side panel. */
+  readonly variant?: 'page' | 'panel';
+}
+
 /**
  * Marketplace agent detail page — full profile view with description,
  * metadata, existing conversations, and "Start Chat" action.
  */
-export default function MarketplaceAgentDetailPage() {
+export default function MarketplaceAgentDetailPage({
+  agentId: agentIdProp,
+  variant = 'page',
+}: MarketplaceAgentDetailPageProps = {}) {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const mutate = useApiMutation();
-  const numericId = Number(agentId);
+  const numericId = agentIdProp ?? Number(agentId);
+  const isPanel = variant === 'panel';
 
   const [agent, setAgent] = useState<MarketplaceAgentDetail | null>(null);
   const [conversations, setConversations] = useState<MarketplaceConversation[]>([]);
@@ -166,6 +179,7 @@ export default function MarketplaceAgentDetailPage() {
   }
 
   if (error) {
+    if (isPanel) return <ErrorState error={error} onRetry={loadData} />;
     return (
       <div className="space-y-4">
         <ErrorState error={error} onRetry={loadData} />
@@ -188,6 +202,21 @@ export default function MarketplaceAgentDetailPage() {
     : null;
 
   const hasConversation = conversations.length > 0;
+
+  if (isPanel) {
+    return (
+      <MarketplaceAgentPanelView
+        agent={agent}
+        conversations={conversations}
+        publishedDate={publishedDate}
+        myRating={myRating}
+        ratingSubmitting={ratingSubmitting}
+        starting={starting}
+        onStartChat={handleStartChat}
+        onRate={handleRate}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -388,6 +417,177 @@ export default function MarketplaceAgentDetailPage() {
 
 /* ========== Sub-components ========== */
 
+interface MarketplaceAgentPanelViewProps {
+  readonly agent: MarketplaceAgentDetail;
+  readonly conversations: MarketplaceConversation[];
+  readonly publishedDate: string | null;
+  readonly myRating: number | null;
+  readonly ratingSubmitting: boolean;
+  readonly starting: boolean;
+  readonly onStartChat: () => void;
+  readonly onRate: (rating: number) => void;
+}
+
+const PANEL_CARD =
+  'rounded-xl border border-line dark:border-line-dark bg-surface dark:bg-surface-dark p-6';
+const PANEL_CARD_TITLE =
+  'font-display text-[17px] font-medium text-fg dark:text-fg-dark mb-3';
+const PANEL_DT = 'text-fg-tertiary dark:text-fg-tertiary-dark';
+const PANEL_DD_ON = 'font-medium text-success dark:text-success-dark';
+const PANEL_DD_OFF = 'font-medium text-fg-tertiary dark:text-fg-tertiary-dark';
+
+/** Compact single-column agent profile shown in the marketplace side panel. */
+function MarketplaceAgentPanelView({
+  agent,
+  conversations,
+  publishedDate,
+  myRating,
+  ratingSubmitting,
+  starting,
+  onStartChat,
+  onRate,
+}: MarketplaceAgentPanelViewProps) {
+  const hasConversation = conversations.length > 0;
+
+  return (
+    <div className="space-y-5 px-4 py-4">
+      {/* Header */}
+      <div className="flex items-start gap-4">
+          {agent.icon_url ? (
+            <div className="flex-none w-[70px] h-[70px] rounded-lg border border-accent dark:border-accent-dark bg-surface dark:bg-surface-dark flex items-center justify-center overflow-hidden">
+              <img src={agent.icon_url} alt={agent.display_name} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <BackgroundImage
+              icon="Bot"
+              alt={agent.display_name}
+              size={70}
+              variant="vacio"
+            />
+          )}
+        
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-[28px] leading-tight text-fg dark:text-fg-dark break-words">
+            {agent.display_name}
+          </h3>
+          <p className="text-[16px] text-fg-tertiary dark:text-fg-tertiary-dark">by {agent.app_name}</p>
+          <RatingSummary
+            ratingAvg={agent.rating_avg}
+            ratingCount={agent.rating_count}
+            conversationCount={agent.conversation_count}
+          />
+        </div>
+      </div>
+
+      {/* Category, capabilities and tags */}
+      <div className="flex flex-wrap items-center gap-2">
+        {agent.category && (
+          <Badge label={agent.category} variant={CATEGORY_VARIANT[agent.category] ?? 'default'} />
+        )}
+        {agent.has_knowledge_base && <Badge label="Knowledge" variant="success" />}
+        {agent.has_memory && <Badge label="Memory" variant="info" />}
+        {agent.tags?.map((tag) => <Badge key={tag} label={tag} variant="default" />)}
+      </div>
+
+      <ButtonApp
+        label={starting ? 'Starting…' : 'Start New Chat'}
+        onClick={onStartChat}
+        variant="primary"
+        size="medium"
+        loading={starting}
+        className="w-full"
+      />
+
+      {/* About */}
+      <CardApp className={PANEL_CARD}>
+        <h4 className={PANEL_CARD_TITLE}>About</h4>
+        <div className="text-[15px] leading-relaxed text-fg-secondary dark:text-fg-secondary-dark">
+          <AgentDescription agent={agent} />
+        </div>
+      </CardApp>
+
+      {/* Details */}
+      <CardApp className={PANEL_CARD}>
+        <h4 className={PANEL_CARD_TITLE}>Details</h4>
+        <dl className="space-y-3 text-[15px]">
+          <div className="flex justify-between gap-4">
+            <dt className={PANEL_DT}>Memory</dt>
+            <dd className={agent.has_memory ? PANEL_DD_ON : PANEL_DD_OFF}>
+              {agent.has_memory ? 'Enabled' : 'Disabled'}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className={PANEL_DT}>Knowledge Base</dt>
+            <dd className={agent.has_knowledge_base ? PANEL_DD_ON : PANEL_DD_OFF}>
+              {agent.has_knowledge_base ? 'Yes' : 'No'}
+            </dd>
+          </div>
+          {publishedDate && (
+            <div className="flex justify-between gap-4">
+              <dt className={PANEL_DT}>Published</dt>
+              <dd className="font-medium text-fg dark:text-fg-dark">{publishedDate}</dd>
+            </div>
+          )}
+        </dl>
+      </CardApp>
+
+      {/* Rating */}
+      <CardApp className={PANEL_CARD}>
+        <h4 className={PANEL_CARD_TITLE}>Rate this agent</h4>
+        <div className="space-y-2">
+          {hasConversation ? (
+            <>
+              <StarRating value={myRating} interactive size="md" onChange={onRate} />
+              {myRating !== null && !ratingSubmitting && (
+                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                  Your rating: {myRating} star{myRating === 1 ? '' : 's'}. Click to change.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <StarRating value={null} size="md" />
+              <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                Start a conversation with this agent to leave a rating.
+              </p>
+            </>
+          )}
+        </div>
+      </CardApp>
+
+      {/* Existing conversations */}
+      {hasConversation && (
+        <CardApp className={PANEL_CARD}>
+          <h4 className={PANEL_CARD_TITLE}>Your Conversations</h4>
+          <ul className="space-y-3">
+            {conversations.map((conv) => (
+              <li key={conv.conversation_id}>
+                <Link
+                  to={`/marketplace/chat/${conv.conversation_id}`}
+                  className="block p-3 rounded-lg border border-line dark:border-line-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors"
+                >
+                  <p className="text-sm font-medium text-fg dark:text-fg-dark truncate">
+                    {conv.title || 'Untitled conversation'}
+                  </p>
+                  {conv.last_message && (
+                    <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark truncate mt-1">
+                      {conv.last_message}
+                    </p>
+                  )}
+                  <p className="text-xs text-fg-faint dark:text-fg-faint-dark mt-1">
+                    {new Date(conv.updated_at).toLocaleDateString()} ·{' '}
+                    {conv.message_count} message{conv.message_count === 1 ? '' : 's'}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </CardApp>
+      )}
+    </div>
+  );
+}
+
 interface AgentDescriptionProps {
   readonly agent: MarketplaceAgentDetail;
 }
@@ -401,7 +601,7 @@ function AgentDescription({ agent }: AgentDescriptionProps) {
     );
   }
   if (agent.short_description) {
-    return <p className="text-gray-600">{agent.short_description}</p>;
+    return <p className="text-fg dark:text-fg-dark">{agent.short_description}</p>;
   }
-  return <p className="text-gray-400 italic">No description available.</p>;
+  return <p className="text-fg-tertiary dark:text-fg-tertiary-dark italic">No description available.</p>;
 }

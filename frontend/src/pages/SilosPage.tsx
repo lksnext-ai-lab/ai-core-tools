@@ -12,6 +12,10 @@ import ImportModal, { type ConflictMode, type ImportResponse } from '../componen
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
+import CardApp from '../components/ui/CardApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
 // ...existing code...
 interface Silo {
@@ -186,10 +190,7 @@ function SilosPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
-            <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
-          </div>
+          <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
         </div>
 
         <div className="flex items-center justify-center py-12">
@@ -234,24 +235,21 @@ function SilosPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
-          <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
-        </div>
+        <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
         <div className="flex items-center space-x-3">
           {hasMinRole(AppRole.ADMINISTRATOR) && (
-            <button
+            <ButtonApp
+              label='Import Silo'
+              icon={<Upload className="w-4 h-4" />}
               onClick={() => setShowImportModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              <span>Import Silo</span>
-            </button>
+              variant="secondary"
+              size="medium"
+            />
           )}
           {canEdit && (
             <Link 
               to={`/apps/${appId}/silos/new`}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
+              className="rounded-md px-[15px] py-[9px] text-sm border border-transparent bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark hover:bg-ink-hover dark:hover:bg-ink-hover-dark"
             >
               <span aria-hidden="true" className="mr-2">+</span>
               <span>Create Silo</span>
@@ -264,22 +262,23 @@ function SilosPage() {
 
       {/* Silos List */}
       {silos.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md border p-8 text-center">
-          <Database className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Silos Yet</h3>
-          <p className="text-gray-600 mb-4">
+        <CardApp className="p-8 text-center">
+          
+          <BackgroundImage variant="gris" icon="Database" size={44} className="mx-auto mb-4" />
+          <h3 className="font-display text-[19px] font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-[6px]">No Silos Yet</h3>
+          <p className="text-fg-secondary dark:text-fg-secondary-dark text-[13.5px] mb-4">
             Create your first silo to start storing and searching documents with vector embeddings.
           </p>
           {canEdit && (
             <Link 
               to={`/apps/${appId}/silos/new`}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
+              className="mx-auto w-max rounded-md px-[15px] py-[9px] text-sm border border-transparent bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark hover:bg-ink-hover dark:hover:bg-ink-hover-dark"
             >
               <span aria-hidden="true" className="mr-2">+</span>
               <span>Create Your First Silo</span>
             </Link>
           )}
-        </div>
+        </CardApp>
       ) : (
         <Table
           data={silos}
@@ -290,21 +289,21 @@ function SilosPage() {
               render: (silo) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <div className="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center">
-                      <Database className="w-5 h-5 text-yellow-600" />
-                    </div>
+                    <BackgroundImage variant="marron" icon="Database" size={28}
+                      iconSize={14}
+                      className="rounded-lg"/>
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
                       {canEdit ? (
                         <Link
                           to={`/apps/${appId}/silos/${silo.silo_id}`}
-                          className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                          className="text-sm font-medium text-fg dark:text-fg-dark"
                         >
                           {silo.name}
                         </Link>
                       ) : (
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-fg dark:text-fg-dark">
                           {silo.name}
                         </span>
                       )}
@@ -316,7 +315,7 @@ function SilosPage() {
             {
               header: 'Description',
               accessor: 'description',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Type',
@@ -330,22 +329,22 @@ function SilosPage() {
               header: 'Vector DB',
               accessor: 'vector_db_type',
               render: (silo) => silo.vector_db_type || 'Unknown',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+              className: "text-xs text-fg-secondary dark:text-fg-secondary-dark"
             },
             {
               header: 'Documents',
               render: (silo) => `${silo.docs_count} documents`,
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+              className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Created',
               render: (silo) => silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Actions',
               headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
-              className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
+              className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark',
               render: (silo) => (
                 <ActionDropdown
                   actions={[

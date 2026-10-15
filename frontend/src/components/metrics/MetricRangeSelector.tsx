@@ -14,7 +14,7 @@ interface Props {
 
 export function MetricRangeSelector({ value, onChange }: Props) {
   return (
-    <div role="group" aria-label="Time range" className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800">
+    <div role="group" aria-label="Time range" className="flex items-center gap-1 rounded-lg bg-white dark:bg-surface-dark border border-line dark:border-btCard-border-dark">
       {RANGES.map((r) => (
         <button
           key={r.value}
@@ -23,8 +23,8 @@ export function MetricRangeSelector({ value, onChange }: Props) {
           onClick={() => onChange(r.value)}
           className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
             value === r.value
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
+              ? 'bg-fg dark:bg-fg-dark text-ink-on dark:text-ink-on-dark shadow-sm'
+              : 'text-fg dark:text-fg-dark'
           }`}
         >
           {r.label}

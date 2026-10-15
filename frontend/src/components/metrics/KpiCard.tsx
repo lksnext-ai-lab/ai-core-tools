@@ -1,5 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { formatPercent } from './format';
+import CardApp from '../ui/CardApp';
 
 interface Props {
   label: string;
@@ -13,14 +14,14 @@ interface Props {
 
 export function KpiCard({ label, value, change = null, higherIsBetter = true, hint }: Props) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{value}</p>
+    <CardApp variant="white">
+      <p className="text-xs font-medium uppercase tracking-wide text-fg dark:text-fg-dark">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-fg dark:text-fg-dark">{value}</p>
       <div className="mt-1 flex min-h-[1rem] items-center gap-2 text-xs">
         {change !== null && <ChangeBadge change={change} higherIsBetter={higherIsBetter} />}
-        {hint && <span className="truncate text-gray-400 dark:text-gray-500">{hint}</span>}
+        {hint && <span className="truncate text-fg-secondary dark:text-fg-secondary-dark">{hint}</span>}
       </div>
-    </div>
+    </CardApp>
   );
 }
 
