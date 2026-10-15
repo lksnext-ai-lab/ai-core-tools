@@ -226,6 +226,8 @@ class ExportAgentSchema(A2AAgentFieldsMixin):
     max_state_chars: Optional[int] = None
     system_one_service_name: Optional[str] = None  # Reference by name
     summarization_service_name: Optional[str] = None  # Reference by name
+    # None in files exported before the field existed: the import then keeps the default of each agent type
+    is_tool: Optional[bool] = None
     # Exclude: conversation history, request_count, usage stats
 
 
@@ -320,6 +322,8 @@ class AgentExportFileSchema(BaseModel):
     mcp_configs: List[ExportMCPConfigSchema] = []
     middlewares: List[ExportMiddlewareSchema] = []  # The agent's middlewares
     agent_tools: List[ExportAgentSchema] = []  # Referenced agents
+    # Services of the System One agent and of its System One tools, so that the file imports into another app
+    system_one_services: List[ExportSystemOneServiceSchema] = []
 
 
 # ==================== FULL APP EXPORT ====================
