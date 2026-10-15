@@ -43,6 +43,17 @@ def test_an_mcp_server_cannot_be_given_a_system_one_agent(client, fake_app, fake
     assert [a["agent_id"] for a in r.json()["agents"]] == [fake_agent.agent_id]
 
 
+# ---------------------------------------------------------------------- openai
+
+def test_the_openai_model_list_does_not_offer_system_one_agents(client, db, fake_app, fake_agent, so_agent, fake_api_key):
+    fake_app.enable_openai_api = True
+    db.flush()
+    r = client.get(f"/public/v1/app/{fake_app.app_id}/openai/v1/models", headers={"X-API-KEY": fake_api_key.key})
+    assert r.status_code == 200
+    ids = {m["id"] for m in r.json()["data"]}
+    assert str(fake_agent.agent_id) in ids and str(so_agent.agent_id) not in ids
+
+
 # ------------------------------------------------------------------------ chat
 
 def test_the_public_chat_route_rejects_a_system_one_agent_with_a_pointer_to_evaluate(client, fake_app, so_agent, fake_api_key):

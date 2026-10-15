@@ -147,7 +147,8 @@ async def list_models(
     
     models = []
     for agent in agents:
-        if not agent.has_memory:
+        # System One agents evaluate a text: chat/completions refuses them, so they are not offered as models
+        if not agent.has_memory and agent.type != 'system_one_agent':
             models.append(OpenAIModel(
                 id=str(agent.agent_id),
                 created=int(agent.create_date.timestamp()) if hasattr(agent, 'create_date') and agent.create_date else int(time.time()),
