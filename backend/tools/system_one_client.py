@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import weakref
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -69,8 +70,13 @@ class Endpoint:
     provider: str = PROVIDER_SYSTEM_ONE
 
 
-def supports_images(provider: str) -> bool:
-    return provider in IMAGE_PROVIDERS
+# Models that take images next to the text, by name (a gateway may prefix the id: "openai/gpt-6-luna-decisions").
+# ponytail: kept by hand, like model_catalog's vision patterns, because the providers' model lists do not say it.
+IMAGE_MODELS = re.compile(r"(?:^|/)gpt-6-luna")
+
+
+def supports_images(provider: str, model: str) -> bool:
+    return provider in IMAGE_PROVIDERS and bool(IMAGE_MODELS.search((model or "").lower()))
 
 
 def default_max_concurrency(server_limit: Optional[int]) -> int:
@@ -278,7 +284,7 @@ async def evaluate(endpoint: Endpoint, state: str, questions: List[Question],
 
     ``transport`` exists for tests (``httpx.MockTransport``). Never logs the state or the token.
     """
-    if images and not supports_images(endpoint.provider):
+    if images and not supports_images(endpoint.provider, endpoint.model):
         raise SystemOneError("invalid_request", "This provider evaluates text only")
     path = "/v1/decisions" if endpoint.provider == PROVIDER_OPENAI else "/v1/systemone"
     url = endpoint.base_url.rstrip("/") + path

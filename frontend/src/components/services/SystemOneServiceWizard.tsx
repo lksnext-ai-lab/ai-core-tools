@@ -78,6 +78,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const serviceId = isEdit ? service.service_id : undefined;
   const stepId = STEPS[currentStep].id;
   const models = listResult?.status === 'success' ? listResult.models : [];
+  const imageModels = listResult?.status === 'success' ? (listResult.image_models ?? []) : [];
   const listFailed = listResult !== null && models.length === 0;
 
   // The stored token belongs to the server it was typed for: moving the service empties the masked value
@@ -307,6 +308,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                         }`}
                       >
                         <span className="text-sm font-semibold text-gray-900 break-all">{m}</span>
+                        {imageModels.includes(m) && (
+                          <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">Images</span>
+                        )}
                       </button>
                     ))}
                   </div>

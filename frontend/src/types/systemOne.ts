@@ -1,5 +1,5 @@
 // System One: connections, question definitions and evaluation results.
-// v1 evaluates TEXT only.
+// Text; images only for the models that take them (see `supports_images`).
 
 export type SystemOneProvider = 'system_one' | 'openai_decisions';
 
@@ -37,6 +37,8 @@ export interface SystemOneConnectionResult {
   status: 'success' | 'error';
   message: string;
   models: string[];
+  /** The models that also take images (by name: the servers' own lists do not say it). */
+  image_models?: string[];
   limits: Record<string, number> | null;
   /** The server's own limit (the cap is the total, shared by all backend processes); null when it did not report its limits. */
   suggested_max_concurrency?: number | null;

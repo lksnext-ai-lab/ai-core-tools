@@ -155,7 +155,17 @@ function SystemOneServicesPage() {
             ),
           },
           { header: 'Server', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.endpoint}</span> },
-          { header: 'Model', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.model}</span> },
+          {
+            header: 'Model',
+            render: (service: SystemOneService) => (
+              <span className="text-sm text-gray-700">
+                {service.model}
+                {service.supports_images && (
+                  <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">Images</span>
+                )}
+              </span>
+            ),
+          },
           { header: 'Status', render: (service: SystemOneService) => {
             const kind = serviceStatus(service.model, checks[service.service_id]);
             return <StatusBadge kind={kind} detail={checks[service.service_id]?.message} />;
@@ -204,7 +214,7 @@ function SystemOneServicesPage() {
             <h3 className="text-sm font-medium text-blue-800">About System One</h3>
             <p className="mt-2 text-sm text-blue-700">
               System One answers closed questions about a text (yes/no, pick a category, score on a scale) with probabilities, without
-              generating text. In this version it evaluates text only: images are not supported. Deleting a service does not delete its
+              generating text. It evaluates text; images are accepted only by the models marked Images. Deleting a service does not delete its
               agents: they stay, but cannot run until you assign them another service.
             </p>
           </div>
