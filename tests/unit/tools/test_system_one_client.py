@@ -613,3 +613,23 @@ async def test_openai_probe_checks_the_key_and_lists_the_fixed_model():
                              transport=transport(lambda r: httpx.Response(401, json={})))
     assert not bad["ok"] and "rejected" in bad["message"]
     assert not (await client.probe("https://api.openai.test", None, client.PROVIDER_OPENAI))["ok"]
+
+
+# ------------------------------------------------- image support: provider AND model
+
+@pytest.mark.parametrize("provider,model,expected", [
+    (client.PROVIDER_OPENAI, "gpt-6-luna", True),
+    (client.PROVIDER_OPENAI, "openai/gpt-6-luna-decisions", True),     # as a gateway names it
+    (client.PROVIDER_OPENAI, "typesafe-ai/jev", False),                # a text-only decision model
+    (client.PROVIDER_OPENAI, "", False),
+    (client.PROVIDER_SYSTEM_ONE, "gpt-6-luna", False),                 # the provider's wire format has no images
+])
+def test_image_support_is_a_rule_on_the_provider_and_the_model(provider, model, expected):
+    assert client.supports_images(provider, model) is expected
+
+
+@pytest.mark.asyncio
+async def test_a_text_only_model_of_an_image_provider_rejects_images():
+    with pytest.raises(SystemOneError, match="text only"):
+        await client.evaluate(endpoint(**{**OPENAI, "model": "typesafe-ai/jev"}), "t", [NOUL],
+                              images=["data:image/png;base64,AA"])

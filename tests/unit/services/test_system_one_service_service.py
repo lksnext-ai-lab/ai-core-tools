@@ -127,6 +127,25 @@ def test_list_never_exposes_the_token(repo):
     assert "secret-token" not in json.dumps([i.model_dump(mode="json") for i in items])
 
 
+def test_the_list_and_the_detail_say_whether_the_model_takes_images(repo):
+    luna = _service(description="gpt-6-luna", extra_config='{"provider": "openai_decisions"}')
+    jev = _service(service_id=2, description="typesafe-ai/jev", extra_config='{"provider": "openai_decisions"}')
+    repo.get_by_app_id.return_value = [luna, jev, _service(service_id=3)]
+    assert [i.supports_images for i in SystemOneServiceService.get_system_one_services_by_app_id(MagicMock(), 10)] == [
+        True, False, False]
+    repo.get_by_id_and_app_id.return_value = luna
+    assert SystemOneServiceService.get_system_one_service_detail(MagicMock(), 10, 1).supports_images is True
+
+
+@pytest.mark.asyncio
+async def test_the_probe_marks_the_models_that_take_images(repo):
+    probe = AsyncMock(return_value={"ok": True, "message": "ok", "models": ["gpt-6-luna", "typesafe-ai/jev"], "limits": None})
+    with patch.object(module.system_one_client, "probe", probe):
+        out = await SystemOneServiceService.test_connection_with_config(
+            MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok", "provider": "openai_decisions"})
+    assert out["image_models"] == ["gpt-6-luna"]
+
+
 # ------------------------------------------------------------------- copy
 
 def test_copy_uses_the_repo_convention_and_keeps_the_token(repo):
@@ -174,7 +193,8 @@ async def test_connection_with_config_maps_the_probe_result(repo):
         out = await SystemOneServiceService.test_connection_with_config(
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok"})
     assert out == {"status": "success", "message": "Connection successful", "models": ["nimble-latest"],
-                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False, "verifiable": True}
+                   "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False, "verifiable": True,
+                   "image_models": []}
     probe.assert_awaited_once_with("http://so.test", "tok", "system_one")
 
 

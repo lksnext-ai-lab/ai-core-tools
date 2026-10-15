@@ -95,6 +95,7 @@ async def test_images_are_rejected_not_ignored(db, agent, server, name, ctype):
 @pytest.fixture
 def openai_agent(db, agent):
     agent.system_one_service.extra_config = '{"max_concurrency": 1, "provider": "openai_decisions"}'
+    agent.system_one_service.description = "gpt-6-luna"       # the model, not only the provider, takes images
     db.flush()
     return agent
 

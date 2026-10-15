@@ -61,7 +61,7 @@ class SystemOneServiceService:
             name=service.name,
             endpoint=service.endpoint or "",
             provider=provider_of(service),
-            supports_images=system_one_client.supports_images(provider_of(service)),
+            supports_images=system_one_client.supports_images(provider_of(service), service.description or ""),
             model=service.description or "",
             max_concurrency=max_concurrency_of(service),
             created_at=service.create_date,
@@ -75,7 +75,7 @@ class SystemOneServiceService:
             endpoint=service.endpoint or "",
             api_key=mask_api_key(service.api_key),
             provider=provider_of(service),
-            supports_images=system_one_client.supports_images(provider_of(service)),
+            supports_images=system_one_client.supports_images(provider_of(service), service.description or ""),
             model=service.description or "",
             max_concurrency=max_concurrency_of(service),
             created_at=service.create_date,
@@ -172,13 +172,15 @@ class SystemOneServiceService:
     # ------------------------------------------------------------ connection tests
 
     @staticmethod
-    def _probe_result(result: Dict[str, Any], checked_with_call: bool = False) -> Dict[str, Any]:
+    def _probe_result(result: Dict[str, Any], checked_with_call: bool = False,
+                      provider: str = system_one_client.PROVIDER_SYSTEM_ONE) -> Dict[str, Any]:
         limits = result["limits"]
         server_limit = limits.get("max_concurrent_requests") if isinstance(limits, dict) else None
         return {
             "status": "success" if result["ok"] else "error",
             "message": result["message"],
             "models": result["models"],
+            "image_models": [m for m in result["models"] if system_one_client.supports_images(provider, m)],
             "limits": limits,
             "checked_with_call": checked_with_call,
             "verifiable": result.get("verifiable", True),
@@ -205,8 +207,8 @@ class SystemOneServiceService:
                                            api_key=api_key or None, max_concurrency=1, service_id=-1,
                                            provider=provider))
             result = {**result, "ok": checked["ok"], "message": checked["message"]}
-            return SystemOneServiceService._probe_result(result, checked_with_call=True)
-        return SystemOneServiceService._probe_result(result)
+            return SystemOneServiceService._probe_result(result, checked_with_call=True, provider=provider)
+        return SystemOneServiceService._probe_result(result, provider=provider)
 
     @staticmethod
     async def test_connection_with_config(

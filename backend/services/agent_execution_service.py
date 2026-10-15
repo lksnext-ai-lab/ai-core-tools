@@ -1783,7 +1783,8 @@ class AgentExecutionService:
         files = [f for f in files if f not in image_files]
         images: List[str] = []
         if image_files:
-            if not system_one_client.supports_images(SystemOneEvaluator.snapshot(agent).endpoint.provider):
+            endpoint = SystemOneEvaluator.snapshot(agent).endpoint
+            if not system_one_client.supports_images(endpoint.provider, endpoint.model):
                 raise HTTPException(
                     status_code=400,
                     detail=f"This System One service evaluates text only: images are not supported "
