@@ -633,3 +633,30 @@ async def test_a_text_only_model_of_an_image_provider_rejects_images():
     with pytest.raises(SystemOneError, match="text only"):
         await client.evaluate(endpoint(**{**OPENAI, "model": "typesafe-ai/jev"}), "t", [NOUL],
                               images=["data:image/png;base64,AA"])
+
+
+# ------------------------------------------------- release dates (the "New" badge of the model cards)
+
+async def test_the_probe_reads_the_release_date_a_nimble_server_reports():
+    def handler(request):
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "nimble-latest"}, {"id": "old"}],
+                                             "models": [{"name": "nimble-latest", "release_date": "2026-09-17"},
+                                                        {"name": "old", "release_date": "not a date"}]})
+        return httpx.Response(404)
+
+    out = await client.probe("http://so.test", "tok", transport=transport(handler))
+    assert out["created"] == {"nimble-latest": 1789603200}          # 2026-09-17 00:00 UTC; the broken date is skipped
+
+
+@pytest.mark.asyncio
+async def test_the_openai_probe_takes_the_creation_time_of_the_decision_models_from_its_listing():
+    listing = {"data": [{"id": "gpt-6-luna", "created": 1790000000}, {"id": "gpt-4o", "created": 5}]}
+    ok = await client.probe("https://api.openai.test", "sk-x", client.PROVIDER_OPENAI,
+                            transport=transport(lambda r: httpx.Response(200, json=listing)))
+    assert ok["created"] == {"gpt-6-luna": 1790000000}              # only the models that can decide
+    empty = await client.probe("https://api.openai.test", "sk-x", client.PROVIDER_OPENAI,
+                               transport=transport(lambda r: httpx.Response(200, json={"data": []})))
+    assert empty["created"] == {}

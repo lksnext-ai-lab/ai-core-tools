@@ -161,7 +161,7 @@ function SystemOneServicesPage() {
               <span className="text-sm text-gray-700">
                 {service.model}
                 {service.supports_images && (
-                  <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">Images</span>
+                  <span className="ml-2 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800">Vision</span>
                 )}
               </span>
             ),
@@ -214,7 +214,7 @@ function SystemOneServicesPage() {
             <h3 className="text-sm font-medium text-blue-800">About System One</h3>
             <p className="mt-2 text-sm text-blue-700">
               System One answers closed questions about a text (yes/no, pick a category, score on a scale) with probabilities, without
-              generating text. It evaluates text; images are accepted only by the models marked Images. Deleting a service does not delete its
+              generating text. It evaluates text; images are accepted only by the models marked Vision. Deleting a service does not delete its
               agents: they stay, but cannot run until you assign them another service.
             </p>
           </div>

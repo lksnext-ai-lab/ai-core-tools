@@ -181,6 +181,7 @@ class SystemOneServiceService:
             "message": result["message"],
             "models": result["models"],
             "image_models": [m for m in result["models"] if system_one_client.supports_images(provider, m)],
+            "created": result.get("created", {}),
             "limits": limits,
             "checked_with_call": checked_with_call,
             "verifiable": result.get("verifiable", True),
