@@ -39,6 +39,8 @@ export interface SystemOneConnectionResult {
   models: string[];
   /** The models that also take images (by name: the servers' own lists do not say it). */
   image_models?: string[];
+  /** When each model was created or released (Unix seconds), for the "New" badge; models without a date are absent. */
+  created?: Record<string, number>;
   limits: Record<string, number> | null;
   /** The server's own limit (the cap is the total, shared by all backend processes); null when it did not report its limits. */
   suggested_max_concurrency?: number | null;

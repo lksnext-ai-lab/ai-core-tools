@@ -194,7 +194,7 @@ async def test_connection_with_config_maps_the_probe_result(repo):
             MagicMock(), 10, {"endpoint": "http://so.test", "api_key": "tok"})
     assert out == {"status": "success", "message": "Connection successful", "models": ["nimble-latest"],
                    "limits": {"max_concurrent_requests": 4}, "suggested_max_concurrency": 4, "checked_with_call": False, "verifiable": True,
-                   "image_models": []}
+                   "image_models": [], "created": {}}
     probe.assert_awaited_once_with("http://so.test", "tok", "system_one")
 
 

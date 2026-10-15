@@ -19,6 +19,7 @@ import math
 import re
 import weakref
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -327,9 +328,30 @@ def check_base_url(base_url: str) -> str:
     return base_url.rstrip("/")
 
 
+def _openai_creation_times(response: httpx.Response) -> Dict[str, int]:
+    """When OpenAI created each of the decision models (its listing says it for every model it has)."""
+    try:
+        listing = response.json().get("data", [])
+    except (ValueError, AttributeError):
+        return {}
+    return {m["id"]: m["created"] for m in listing
+            if isinstance(m, dict) and m.get("id") in OPENAI_MODELS and isinstance(m.get("created"), int)}
+
+
+def _release_dates(models: Any) -> Dict[str, int]:
+    """``release_date`` ("2026-09-17") of the models a Nimble server describes, as a UTC timestamp; broken ones are skipped."""
+    out: Dict[str, int] = {}
+    for m in models if isinstance(models, list) else []:
+        try:
+            out[m["name"]] = int(datetime.fromisoformat(m["release_date"]).replace(tzinfo=timezone.utc).timestamp())
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
 async def probe_openai(root: str, api_key: Optional[str], transport: Optional[httpx.AsyncBaseTransport]) -> Dict[str, Any]:
     """OpenAI has no health or limits endpoint: ``GET /v1/models`` proves the key; the model list is fixed."""
-    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "verifiable": True}
+    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "created": {}, "limits": None, "verifiable": True}
     if not api_key:
         result["message"] = "OpenAI needs an API key"
         return result
@@ -347,7 +369,8 @@ async def probe_openai(root: str, api_key: Optional[str], transport: Optional[ht
         result["message"] = (f"The server rejected the API key ({response.status_code})"
                              if response.status_code in (401, 403) else f"The server answered {_error_message(response)}")
         return result
-    return {**result, "ok": True, "models": OPENAI_MODELS, "message": "Connection successful"}
+    return {**result, "ok": True, "models": OPENAI_MODELS, "message": "Connection successful",
+            "created": _openai_creation_times(response)}
 
 
 async def probe(base_url: str, api_key: Optional[str], provider: str = PROVIDER_SYSTEM_ONE,
@@ -357,7 +380,7 @@ async def probe(base_url: str, api_key: Optional[str], provider: str = PROVIDER_
     if provider == PROVIDER_OPENAI:
         return await probe_openai(root, api_key, transport)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "limits": None, "verifiable": False}
+    result: Dict[str, Any] = {"ok": False, "message": "", "models": [], "created": {}, "limits": None, "verifiable": False}
 
     async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_S, transport=transport, headers=headers) as http:
         async def get(path: str) -> httpx.Response:
@@ -390,7 +413,9 @@ async def probe(base_url: str, api_key: Optional[str], provider: str = PROVIDER_
                 result["message"] = f"The server rejected the token ({models.status_code})"
                 return result
             if models.status_code == 200:
-                result["models"] = [m["id"] for m in models.json().get("data", []) if isinstance(m, dict) and "id" in m]
+                listing = models.json()
+                result["models"] = [m["id"] for m in listing.get("data", []) if isinstance(m, dict) and "id" in m]
+                result["created"] = _release_dates(listing.get("models"))
             limits = await get("/v1/limits")
             if limits.status_code == 200:
                 result["limits"] = limits.json()

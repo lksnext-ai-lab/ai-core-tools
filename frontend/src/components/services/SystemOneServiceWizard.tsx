@@ -8,8 +8,10 @@ import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 import { ensureUnique } from './wizard/ServiceWizard';
 import ProviderStep from './wizard/steps/ProviderStep';
+import { ModelCard } from './wizard/steps/ModelSelectionStep';
 import { getProviderDescriptor } from './wizard/providers';
 import { checkConcurrency } from '../../utils/systemOneLimits';
+import type { ProviderModelInfo } from '../../types/services';
 import type {
   SystemOneConnectionResult,
   SystemOneProvider,
@@ -79,6 +81,15 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const stepId = STEPS[currentStep].id;
   const models = listResult?.status === 'success' ? listResult.models : [];
   const imageModels = listResult?.status === 'success' ? (listResult.image_models ?? []) : [];
+  // The cards of the AI service wizard: only what the server tells is filled in (images -> "Vision", date -> "New").
+  const toModelInfo = (id: string): ProviderModelInfo => ({
+    id, display_name: id, family: null, context_window: null, owned_by: null, deprecated: false, source: 'api',
+    created_at: (listResult?.status === 'success' ? listResult.created?.[id] : undefined) ?? null,
+    capabilities: {
+      chat: false, embedding: false, vision: imageModels.includes(id), audio: false,
+      function_calling: false, tool_use: false, reasoning: false, json_mode: false,
+    },
+  });
   const listFailed = listResult !== null && models.length === 0;
 
   // The stored token belongs to the server it was typed for: moving the service empties the masked value
@@ -295,23 +306,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   </>
                 )}
                 {!listing && models.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1" role="radiogroup" aria-label="Models">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1" role="group" aria-label="Models">
                     {models.map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        role="radio"
-                        aria-checked={model === m}
-                        onClick={() => setModel(m)}
-                        className={`text-left p-3 rounded-lg border transition-colors ${
-                          model === m ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 bg-white hover:border-gray-300'
-                        }`}
-                      >
-                        <span className="text-sm font-semibold text-gray-900 break-all">{m}</span>
-                        {imageModels.includes(m) && (
-                          <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">Images</span>
-                        )}
-                      </button>
+                      <ModelCard key={m} model={toModelInfo(m)} selected={model === m} onSelect={() => setModel(m)} />
                     ))}
                   </div>
                 )}

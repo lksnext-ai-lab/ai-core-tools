@@ -242,7 +242,7 @@ interface ModelCardProps {
   readonly onSelect: () => void;
 }
 
-function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
+export function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
   const recent = isRecent(model.created_at);
   return (
     <button
