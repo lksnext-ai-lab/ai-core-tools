@@ -7,20 +7,62 @@ cases that most often trip up naive PDF extraction.
 
 Neither pypdf nor pdfplumber can extract text from a PDF whose pages are
 scanned images (no embedded text layer) — `extract_text()` returns an empty
-string. Detect this case and fall back to OCR:
+string. Detect this per page and fall back to OCR only for the pages that need
+it (OCR is slow, roughly 1–5 s per page at 300 DPI):
 
 ```python
 from pypdf import PdfReader
 
 reader = PdfReader("input.pdf")
-text = "".join((p.extract_text() or "") for p in reader.pages)
-if not text.strip():
-    print("No text layer found — this PDF is likely scanned; OCR is required.")
+empty_pages = [i for i, p in enumerate(reader.pages) if not (p.extract_text() or "").strip()]
 ```
 
-If OCR is genuinely needed, that is out of scope for this skill (no OCR
-library is installed) — use the platform's OCR agent type (`OCRAgent`) instead
-of trying to add Tesseract to this sandbox skill.
+### OCR with Tesseract
+
+The sandbox image ships the `tesseract` binary with English (`eng`), Spanish
+(`spa`), Basque (`eus`), Catalan (`cat`) and French (`fra`) language data;
+`pytesseract` is installed by this skill's bootstrap. Render each page with
+pypdfium2 (already installed as a pdfplumber dependency) and OCR the image:
+
+```python
+import shutil
+
+import pypdfium2 as pdfium
+import pytesseract
+
+if shutil.which("tesseract") is None:
+    raise RuntimeError("tesseract is not installed in this sandbox — OCR unavailable")
+
+pdf = pdfium.PdfDocument("input.pdf")
+for i in empty_pages:
+    image = pdf[i].render(scale=300 / 72).to_pil()   # 300 DPI
+    text = pytesseract.image_to_string(image, lang="spa+eng")
+    print(f"--- Page {i + 1} (OCR) ---\n{text}")
+```
+
+`scripts/extract_text.py` already does this automatically for pages without a
+text layer (`--lang` selects the Tesseract languages).
+
+OCR tips:
+
+- Pick `lang` to match the document (`"spa"`, `"eus+spa"`, …); a wrong or
+  overly broad language list lowers accuracy. Check what is installed with
+  `pytesseract.get_languages()`.
+- 300 DPI is the sweet spot; go lower (`scale=200 / 72`) for speed on long
+  documents, higher only for very small print.
+- For rotated scans, detect orientation first with
+  `pytesseract.image_to_osd(image)` and rotate the image before OCR.
+- `pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)`
+  returns per-word confidences and bounding boxes — use it to flag
+  low-confidence text instead of presenting it as exact.
+- OCR output is never exact: tell the user the text came from OCR, and
+  double-check numbers, dates and amounts before relying on them.
+- For OCR of standalone images (PNG/JPG), pass the file path or a
+  `PIL.Image` directly to `pytesseract.image_to_string`.
+
+If `tesseract` is not available (a sandbox provider other than the Mattin
+code-interpreter image), say so to the user and suggest the platform's OCR
+agent type (`OCRAgent`), which uses a vision model instead.
 
 ## Password-protected PDFs
 
