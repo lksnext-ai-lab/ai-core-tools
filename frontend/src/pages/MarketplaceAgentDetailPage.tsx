@@ -38,15 +38,15 @@ function RatingSummary({ ratingAvg, ratingCount, conversationCount }: RatingSumm
     <div className="flex items-center gap-2 mt-1.5">
       <StarRating value={ratingAvg ? Math.round(ratingAvg) : null} size="md" />
       {ratingAvg === null ? (
-        <span className="text-sm text-gray-400">No ratings yet</span>
+        <span className="text-sm text-fg-default dark:text-fg-default-dark">No ratings yet</span>
       ) : (
-        <span className="text-sm text-gray-600">
+        <span className="text-sm text-fg-default dark:text-fg-default-dark">
           {ratingAvg.toFixed(1)}{' '}
-          <span className="text-gray-400">({ratingCount} rating{ratingCount === 1 ? '' : 's'})</span>
+          <span className="text-fg-default dark:text-fg-default-dark">({ratingCount} rating{ratingCount === 1 ? '' : 's'})</span>
         </span>
       )}
       {conversationCount > 0 && (
-        <span className="text-sm text-gray-400">
+        <span className="text-sm text-fg-default dark:text-fg-default-dark">
           · {conversationCount.toLocaleString()} conversations
         </span>
       )}

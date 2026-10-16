@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import Modal from './Modal';
 import ButtonApp from './ButtonApp';
+import { Spinner } from './Spinner';
 
 export type ConfirmVariant = 'danger' | 'warning' | 'info';
 
@@ -76,28 +77,7 @@ function ConfirmationModal({
           disabled={isLoading}
           className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-dark disabled:opacity-50 ${styles.button}`}
         >
-          {isLoading && (
-            <svg
-              className="animate-spin -ml-1 mr-2 h-4 w-4 text-current"
-              fill="none"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-              />
-            </svg>
-          )}
+          {isLoading && <Spinner size="sm" tone="current" className="mr-2" />}
           {confirmLabel}
         </button>
       </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Copy, FileJson, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { Spinner } from '../ui/Spinner';
 
 export interface SearchResult {
   page_content: string;
@@ -268,7 +269,7 @@ export default function ResultCard({
               title="Delete this document from silo"
             >
               {isDeleting ? (
-                <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-red-600" />
+                <Spinner size="xs" tone="current" />
               ) : (
                 <Trash2 className="w-3.5 h-3.5" />
               )}

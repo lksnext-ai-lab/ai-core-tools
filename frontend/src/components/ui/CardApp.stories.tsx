@@ -12,7 +12,7 @@ const meta = {
   argTypes: {
     variant: {
       control: 'inline-radio',
-      options: ['white', 'canvas', 'info'],
+      options: ['white', 'canvas', 'subtle'],
     },
   },
   decorators: [
@@ -42,14 +42,14 @@ export const Canvas: Story = {
   },
 };
 
-export const Info: Story = {
+export const Subtle: Story = {
   args: {
-    variant: 'info',
+    variant: 'subtle',
     children: (
       <>
         <h2 className="text-base font-semibold text-fg dark:text-fg-dark">Workspace information</h2>
         <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
-          This card uses the info surface variant.
+          This card uses the subtle surface variant.
         </p>
       </>
     ),

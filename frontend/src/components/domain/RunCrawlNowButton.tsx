@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Loader2, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { CrawlJob } from '../../types/crawl';
+import { ButtonApp } from '../ui/ButtonApp';
 
 interface RunCrawlNowButtonProps {
   appId: number;
@@ -41,21 +42,15 @@ export default function RunCrawlNowButton({
 
   return (
     <div className="inline-flex flex-col items-start gap-1">
-      <button
-        type="button"
+      <ButtonApp
+        label={loading ? 'Starting...' : 'Run crawl now'}
         onClick={() => { void handleClick(); }}
-        disabled={disabled || loading}
-        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-      >
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <Play className="w-4 h-4" />
-        )}
-        {loading ? 'Starting...' : 'Run crawl now'}
-      </button>
+        disabled={disabled}
+        loading={loading}
+        icon={<Play className="w-4 h-4" />}
+      />
       {conflictNotice && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+        <p className="text-xs text-bronze dark:text-bronze-dark bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark px-3 py-2 rounded-lg">
           A crawl job is already queued or running.
         </p>
       )}

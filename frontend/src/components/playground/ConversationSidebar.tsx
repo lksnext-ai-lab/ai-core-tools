@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Pencil } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { LoadingState } from '../ui/LoadingState';
 
 interface Conversation {
   conversation_id: number;
@@ -139,9 +140,7 @@ export default function ConversationSidebar({
   const renderContent = () => {
     if (loading) {
       return (
-        <div className="flex items-center justify-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-        </div>
+        <LoadingState variant="section" message="Loading conversations..." />
       );
     }
 

@@ -8,17 +8,17 @@ import {
   FileText,
   Folder,
   Info,
-  Loader2,
   X,
 } from 'lucide-react';
 import FormActions from './FormActions';
 import { FormField, FormTextArea, FormCheckbox } from '../ui/FormField';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { Badge } from '../ui/Badge';
 import ReadOnlyBanner from '../ui/ReadOnlyBanner';
 import { apiService, ApiError } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
 import type { Skill, SkillFileInfo } from '../../core/types';
+import { Spinner } from '../ui/Spinner';
 
 export interface SkillFormSubmitData {
   readonly name: string;
@@ -163,11 +163,17 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
       <span role="status" aria-live="polite" className="sr-only">
         {announcement}
       </span>
-      <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-300 dark:border-gray-600 rounded-xl min-h-[44px] bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500 transition-all">
+      <div
+        className={`flex flex-wrap items-center gap-2 p-2 border dark:border-line-strong-dark rounded-md min-h-[44px] transition-all duration-200 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
+        }`}
+      >
         {tools.map((tool, idx) => (
           <span
             key={tool}
-            className="inline-flex items-center gap-1 text-sm font-mono bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 px-2.5 py-1 rounded-full"
+            className={`inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full ${
+              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]'
+            }`}
           >
             {tool}
             {!disabled && (
@@ -175,7 +181,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
                 type="button"
                 ref={(el) => { removeButtonRefs.current[idx] = el; }}
                 onClick={() => removeTool(idx)}
-                className="ml-0.5 text-purple-600 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-100 font-medium"
+                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]"
                 aria-label={`Remove allowed tool ${tool}`}
               >
                 <X className="w-3 h-3" aria-hidden="true" />
@@ -194,14 +200,14 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
             onBlur={() => addTool(draft)}
             placeholder={tools.length === 0 ? 'e.g. Bash, WebSearch — Enter or comma to add' : ''}
             aria-describedby="allowed_tools_help"
-            className="flex-1 min-w-[140px] border-none outline-none text-sm bg-transparent py-1 px-1 dark:text-gray-100"
+            className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
           />
         )}
         {disabled && tools.length === 0 && (
-          <span className="text-sm text-gray-400 dark:text-gray-500 italic">No allowed tools declared</span>
+          <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark italic">No allowed tools declared</span>
         )}
       </div>
-      <p id="allowed_tools_help" className="mt-1 flex items-start gap-1 text-xs text-gray-500 dark:text-gray-400">
+      <p id="allowed_tools_help" className="mt-1 flex items-start gap-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
         <span>
           Informational metadata only — stored, imported/exported and displayed, but <strong>not enforced</strong>{' '}
@@ -321,13 +327,13 @@ function FileTreeView({
                 onClick={() => onToggleFolder(node.path)}
                 aria-expanded={isOpen}
                 aria-controls={contentId}
-                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
+                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 {isOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 )}
                 <Folder className="w-4 h-4 shrink-0 text-amber-500" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
@@ -366,11 +372,11 @@ function FileTreeView({
                 onClick={() => onToggleFile(node)}
                 aria-expanded={isOpen}
                 aria-controls={previewId}
-                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
+                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-fg-dark hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 {isOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 ) : (
                   <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
                 )}
@@ -402,8 +408,8 @@ function FileTreeView({
                 className={`${paddingClassForDepth(Math.min(depth + 1, PADDING_CLASSES.length - 1))} pb-2`}
               >
                 {preview.status === 'loading' && (
-                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 py-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                  <div className="flex items-center gap-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark py-2">
+                    <Spinner size="xs" tone="muted" />
                     Loading preview…
                   </div>
                 )}
@@ -597,7 +603,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
     <form onSubmit={handleSubmit} className="space-y-6">
       {isReadOnly && <ReadOnlyBanner userRole={userRole ?? 'viewer'} minRole="platform administrators" />}
 
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
       <FormField
         label="Name"
@@ -657,7 +663,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
       <div>
         <label
           htmlFor={disabled ? undefined : 'allowed_tools'}
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
         >
           Allowed Tools
         </label>
@@ -691,37 +697,18 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         />
       </div>
 
-      <div>
-        <label htmlFor="runtime_options" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Runtime Options (JSON)
-        </label>
-        <textarea
-          id="runtime_options"
-          name="runtime_options"
-          value={formState.runtime_options_text}
-          onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
-          disabled={disabled}
-          rows={6}
-          aria-invalid={!runtimeOptionsValidation.valid}
-          aria-describedby="runtime_options_help"
-          placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
-          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors font-mono text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${
-            !runtimeOptionsValidation.valid
-              ? 'border-red-300 dark:border-red-600 focus:ring-red-500 focus:border-red-500'
-              : 'border-gray-300 dark:border-gray-600 focus:ring-purple-500 focus:border-purple-500'
-          } ${disabled ? 'bg-gray-100 dark:bg-gray-900 cursor-not-allowed' : ''}`}
-        />
-        {'error' in runtimeOptionsValidation ? (
-          <p id="runtime_options_help" className="mt-1 flex items-start gap-1 text-xs text-red-600 dark:text-red-400">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-            <span>{runtimeOptionsValidation.error}</span>
-          </p>
-        ) : (
-          <p id="runtime_options_help" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Optional JSON object passed to the sandbox runtime. Leave blank for none.
-          </p>
-        )}
-      </div>
+      <FormTextArea
+        label="Runtime Options (JSON)"
+        id="runtime_options"
+        value={formState.runtime_options_text}
+        onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
+        disabled={disabled}
+        rows={6}
+        error={'error' in runtimeOptionsValidation ? runtimeOptionsValidation.error : undefined}
+        helpText={runtimeOptionsValidation.valid ? 'Optional JSON object passed to the sandbox runtime. Leave blank for none.' : undefined}
+        placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
+        textareaClassName="font-mono text-sm"
+      />
 
       <FormCheckbox
         label="Enabled"
@@ -735,7 +722,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
       {isEditing && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">Package Resources</span>
+            <span className="block text-sm font-medium text-fg dark:text-gray-300">Package Resources</span>
             <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
               {skill?.is_system && <Badge label="System" variant="secondary" />}
               {skill?.is_enabled === false && <Badge label="Disabled" variant="warning" />}
@@ -743,7 +730,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
             </span>
           </div>
           <div className="border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
+            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2 text-sm text-fg dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
               <FileText className="w-4 h-4 shrink-0 text-purple-500" aria-hidden="true" />
               <span className="font-mono text-xs">SKILL.md</span>
               <span className="ml-auto text-xs text-gray-400">instructions</span>
@@ -776,7 +763,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-fg dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
             Close
           </button>

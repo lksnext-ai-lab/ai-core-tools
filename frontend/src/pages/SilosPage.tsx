@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertTriangle, Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
+import { Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
@@ -14,8 +14,11 @@ import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
+import Alert from '../components/ui/Alert';
+import ButtonLink from '../components/ui/ButtonLink';
 import CardApp from '../components/ui/CardApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
+import { LoadingState } from '../components/ui/LoadingState';
 
 // ...existing code...
 interface Silo {
@@ -193,10 +196,7 @@ function SilosPage() {
           <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading silos...</span>
-        </div>
+        <LoadingState variant="page" message="Loading silos..." />
       </div>
     );
   }
@@ -212,21 +212,18 @@ function SilosPage() {
           </div>
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Silos</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={() => loadSilos()}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
+        <Alert
+          type="error"
+          title="Error Loading Silos"
+          message={(
+            <>
+              {error}
+              <button type="button" onClick={() => loadSilos()} className="mt-2 block underline">
                 Try again
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -247,13 +244,13 @@ function SilosPage() {
             />
           )}
           {canEdit && (
-            <Link 
+            <ButtonLink
               to={`/apps/${appId}/silos/new`}
-              className="rounded-md px-[15px] py-[9px] text-sm border border-transparent bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark hover:bg-ink-hover dark:hover:bg-ink-hover-dark"
-            >
-              <span aria-hidden="true" className="mr-2">+</span>
-              <span>Create Silo</span>
-            </Link>
+              label="Create Silo"
+              variant="primary"
+              size="medium"
+              icon={<span aria-hidden="true">+</span>}
+            />
           )}
         </div>
       </div>

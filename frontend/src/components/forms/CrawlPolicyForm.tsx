@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { TagInput } from '../ui/TagInput';
 import ReadOnlyBanner from '../ui/ReadOnlyBanner';
 import Alert from '../ui/Alert';
 import { AppRole } from '../../types/roles';
 import type { CrawlPolicy, CrawlPolicyInput } from '../../types/crawl';
+import { ButtonApp } from '../ui/ButtonApp';
+import { LoadingState } from '../ui/LoadingState';
+import ExpansionDetails from '../ui/ExpansionDetails';
+import { FormCheckbox, FormField } from '../ui/FormField';
 
 interface CrawlPolicyFormProps {
   appId: number;
@@ -87,10 +91,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-600">Loading crawl policy...</span>
-      </div>
+      <LoadingState variant="section" message="Loading crawl policy..." />
     );
   }
 
@@ -102,66 +103,47 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
       {!canEdit && <ReadOnlyBanner userRole={AppRole.VIEWER} minRole={AppRole.EDITOR} />}
 
       {/* ==================== DISCOVERY ==================== */}
-      <details open className="border border-gray-200 rounded-lg overflow-hidden">
-        <summary className="px-4 py-3 bg-gray-50 cursor-pointer font-medium text-gray-800 select-none">
-          Discovery
-        </summary>
-        <div className="p-4 space-y-4">
+      <ExpansionDetails header="Discovery">
           {/* Sitemap URL */}
-          <div>
-            <label htmlFor="sitemap_url" className="block text-sm font-medium text-gray-700 mb-1">
-              Sitemap URL
-            </label>
-            <input
-              id="sitemap_url"
-              type="url"
-              value={formData.sitemap_url ?? ''}
-              onChange={e => setField('sitemap_url', e.target.value || null)}
-              disabled={!canEdit}
-              placeholder="https://example.com/sitemap.xml"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-            />
-            <p className="mt-1 text-xs text-gray-500">Leave empty to skip sitemap discovery.</p>
-          </div>
+          <FormField
+            id="sitemap_url"
+            label="Sitemap URL"
+            type="url"
+            value={formData.sitemap_url ?? ''}
+            onChange={e => setField('sitemap_url', e.target.value || null)}
+            disabled={!canEdit}
+            placeholder="https://example.com/sitemap.xml"
+            helpText="Leave empty to skip sitemap discovery."
+          />
 
           {/* Seed URL + max depth */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="seed_url" className="block text-sm font-medium text-gray-700 mb-1">
-                Seed URL
-              </label>
-              <input
-                id="seed_url"
-                type="url"
-                value={formData.seed_url ?? ''}
-                onChange={e => setField('seed_url', e.target.value || null)}
-                disabled={!canEdit}
-                placeholder="https://example.com/"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-              />
-              <p className="mt-1 text-xs text-gray-500">Starting URL for link-following crawl.</p>
-            </div>
-            <div>
-              <label htmlFor="max_depth" className="block text-sm font-medium text-gray-700 mb-1">
-                Max depth
-              </label>
-              <input
-                id="max_depth"
-                type="number"
-                min={0}
-                max={5}
-                value={formData.max_depth}
-                onChange={e => setField('max_depth', Math.max(0, Math.min(5, Number(e.target.value))))}
-                disabled={!canEdit}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-              />
-              <p className="mt-1 text-xs text-gray-500">0–5 link-following levels from the seed URL.</p>
-            </div>
+            <FormField
+              id="seed_url"
+              label="Seed URL"
+              type="url"
+              value={formData.seed_url ?? ''}
+              onChange={e => setField('seed_url', e.target.value || null)}
+              disabled={!canEdit}
+              placeholder="https://example.com/"
+              helpText="Starting URL for link-following crawl."
+            />
+            <FormField
+              id="max_depth"
+              label="Max depth"
+              type="number"
+              min={0}
+              max={5}
+              value={formData.max_depth}
+              onChange={e => setField('max_depth', Math.max(0, Math.min(5, Number(e.target.value))))}
+              disabled={!canEdit}
+              helpText="0–5 link-following levels from the seed URL."
+            />
           </div>
 
           {/* Manual URLs */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
               Manual URLs
             </label>
             <TagInput
@@ -170,130 +152,93 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
               maxTags={200}
               placeholder="https://example.com/page — press Enter"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-fg-secondary dark:text-secondary-dark">
               Individual URLs to always include. Duplicates are silently ignored.
             </p>
           </div>
-        </div>
-      </details>
+      </ExpansionDetails>
 
       {/* ==================== FILTERS ==================== */}
-      <details open className="border border-gray-200 rounded-lg overflow-hidden">
-        <summary className="px-4 py-3 bg-gray-50 cursor-pointer font-medium text-gray-800 select-none">
-          Filters
-        </summary>
-        <div className="p-4 space-y-4">
-          <p className="text-xs text-gray-500">
+      <ExpansionDetails header="Filters">
+          <p className="text-xs text-fg-secondary dark:text-secondary-dark">
             Patterns match against the URL path. Use <code className="bg-gray-100 px-1 rounded">**</code> to match
             any number of path segments (e.g. <code className="bg-gray-100 px-1 rounded">/docs/**</code>).
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Include globs</label>
+            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Include globs</label>
             <TagInput
               tags={formData.include_globs}
               onChange={tags => setField('include_globs', tags)}
               maxTags={50}
               placeholder="/docs/** — press Enter"
             />
-            <p className="mt-1 text-xs text-gray-500">Only crawl URLs that match at least one of these patterns. Leave empty to crawl everything.</p>
+            <p className="mt-1 text-xs text-fg-secondary dark:text-secondary-dark">Only crawl URLs that match at least one of these patterns. Leave empty to crawl everything.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Exclude globs</label>
+            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Exclude globs</label>
             <TagInput
               tags={formData.exclude_globs}
               onChange={tags => setField('exclude_globs', tags)}
               maxTags={50}
               placeholder="/admin/** — press Enter"
             />
-            <p className="mt-1 text-xs text-gray-500">Skip URLs that match any of these patterns.</p>
+            <p className="mt-1 text-xs text-fg-secondary dark:text-secondary-dark">Skip URLs that match any of these patterns.</p>
           </div>
-        </div>
-      </details>
+      </ExpansionDetails>
 
       {/* ==================== CRAWL BEHAVIOUR ==================== */}
-      <details open className="border border-gray-200 rounded-lg overflow-hidden">
-        <summary className="px-4 py-3 bg-gray-50 cursor-pointer font-medium text-gray-800 select-none">
-          Crawl behaviour
-        </summary>
-        <div className="p-4 space-y-4">
+      <ExpansionDetails header="Crawl behaviour">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="rate_limit_rps" className="block text-sm font-medium text-gray-700 mb-1">
-                Rate limit (requests/second)
-              </label>
-              <input
-                id="rate_limit_rps"
-                type="number"
-                min={0.1}
-                max={10}
-                step={0.1}
-                value={formData.rate_limit_rps}
-                onChange={e => setField('rate_limit_rps', parseFloat(e.target.value))}
-                disabled={!canEdit}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-              />
-              <p className="mt-1 text-xs text-gray-500">0.1–10 requests per second.</p>
-            </div>
-            <div>
-              <label htmlFor="refresh_interval_hours" className="block text-sm font-medium text-gray-700 mb-1">
-                Refresh interval (hours)
-              </label>
-              <input
-                id="refresh_interval_hours"
-                type="number"
-                min={0}
-                max={720}
-                value={formData.refresh_interval_hours}
-                onChange={e => setField('refresh_interval_hours', Number(e.target.value))}
-                disabled={!canEdit}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-              />
-              <p className="mt-1 text-xs text-gray-500">0 = disabled (never auto-crawl).</p>
-            </div>
+            <FormField
+              id="rate_limit_rps"
+              label="Rate limit (requests/second)"
+              type="number"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={formData.rate_limit_rps}
+              onChange={e => setField('rate_limit_rps', parseFloat(e.target.value))}
+              disabled={!canEdit}
+              helpText="0.1–10 requests per second."
+            />
+            <FormField
+              id="refresh_interval_hours"
+              label="Refresh interval (hours)"
+              type="number"
+              min={0}
+              max={720}
+              value={formData.refresh_interval_hours}
+              onChange={e => setField('refresh_interval_hours', Number(e.target.value))}
+              disabled={!canEdit}
+              helpText="0 = disabled (never auto-crawl)."
+            />
           </div>
 
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={formData.respect_robots_txt}
-                onChange={e => setField('respect_robots_txt', e.target.checked)}
-                disabled={!canEdit}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded disabled:opacity-60"
-              />
-              <span className="text-sm font-medium text-gray-700">Respect robots.txt</span>
-            </label>
-          </div>
+          <FormCheckbox
+            id="respect_robots_txt"
+            label="Respect robots.txt"
+            checked={formData.respect_robots_txt}
+            onChange={e => setField('respect_robots_txt', e.target.checked)}
+            disabled={!canEdit}
+          />
 
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={formData.is_active}
-                onChange={e => setField('is_active', e.target.checked)}
-                disabled={!canEdit}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded disabled:opacity-60"
-              />
-              <span className="text-sm font-medium text-gray-700">Enable scheduled crawls</span>
-            </label>
-          </div>
-        </div>
-      </details>
+          <FormCheckbox
+            id="is_active"
+            label="Enable scheduled crawls"
+            checked={formData.is_active}
+            onChange={e => setField('is_active', e.target.checked)}
+            disabled={!canEdit}
+          />
+      </ExpansionDetails>
 
       {canEdit && (
         <div className="flex justify-end">
-          <button
+          <ButtonApp
             type="submit"
-            disabled={saving}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            {saving ? 'Saving...' : 'Save policy'}
-          </button>
+            label={saving ? 'Saving...' : 'Save policy'}
+            loading={saving}
+            icon={<Save className="w-4 h-4" />}
+          />
         </div>
       )}
     </form>

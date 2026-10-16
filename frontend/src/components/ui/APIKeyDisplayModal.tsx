@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
+import Alert from './Alert';
 
 interface APIKeyDisplayModalProps {
   isOpen: boolean;
@@ -40,21 +40,7 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
     >
       <div className="space-y-6">
         {/* Success Message */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-green-800">
-                API Key Created
-              </h3>
-              <div className="mt-2 text-sm text-green-700">
-                <p>{apiKey?.message}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Alert type="success" title="API Key Created" message={apiKey?.message} />
 
         {/* API Key Details */}
         <div>
@@ -89,26 +75,18 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
         </div>
 
         {/* Security Warning */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
-                Important Security Notice
-              </h3>
-              <div className="mt-2 text-sm text-red-700">
-                <ul className="list-disc list-inside space-y-1">
-                  <li>This is the only time you will see this API key</li>
-                  <li>Copy and store it in a secure location immediately</li>
-                  <li>Never share this key publicly or commit it to version control</li>
-                  <li>If you lose this key, you'll need to create a new one</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Alert
+          type="warning"
+          title="Important Security Notice"
+          message={(
+            <ul className="list-disc list-inside space-y-1">
+              <li>This is the only time you will see this API key</li>
+              <li>Copy and store it in a secure location immediately</li>
+              <li>Never share this key publicly or commit it to version control</li>
+              <li>If you lose this key, you'll need to create a new one</li>
+            </ul>
+          )}
+        />
 
         {/* Close Button */}
         <div className="flex justify-end pt-4 border-t border-gray-200">

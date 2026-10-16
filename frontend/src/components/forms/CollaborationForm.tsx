@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
+import { Spinner } from '../ui/Spinner';
+import { ButtonApp } from '../ui/ButtonApp';
 import { apiService } from '../../services/api';
 
 interface PlatformUser {
@@ -159,7 +161,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
       <div className="space-y-4">
         {/* User search */}
@@ -189,8 +191,8 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                 aria-activedescendant={highlightedIndex >= 0 ? `collab-user-option-${results[highlightedIndex]?.user_id}` : undefined}
               />
               {searching && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+                <div className="absolute right-3 top-1/2 flex -translate-y-1/2">
+                  <Spinner size="sm" tone="muted" />
                 </div>
               )}
               {selectedUser && (
@@ -282,16 +284,12 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
       </div>
 
       <div className="flex justify-end">
-        <button
+        <ButtonApp
           type="submit"
-          disabled={!selectedUser || isSubmitting || loading}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg flex items-center transition-colors"
-        >
-          {isSubmitting && (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-          )}
-          {isSubmitting ? "Sending…" : "Send Invitation"}
-        </button>
+          label={isSubmitting ? "Sending…" : "Send Invitation"}
+          disabled={!selectedUser || loading}
+          loading={isSubmitting}
+        />
       </div>
     </form>
   );

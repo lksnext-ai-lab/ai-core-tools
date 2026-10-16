@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, Plug, XCircle } from 'lucide-react';
+import { Plug } from 'lucide-react';
 import { FormCheckbox } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
 import { getProviderBadgeColor } from '../../../ui/providerBadges';
@@ -9,6 +9,7 @@ import type {
 } from '../../../../types/services';
 import type { CredentialsState } from './CredentialsStep';
 import type { TestConnectionResult } from '../../serviceApi';
+import { ButtonApp } from '../../../ui/ButtonApp';
 
 interface ConfirmStepProps {
   readonly kind: ServiceKind;
@@ -175,56 +176,33 @@ function TestConnectionPanel({
             to verify everything is set up correctly.
           </p>
         </div>
-        <button
-          type="button"
+        <ButtonApp
+          label={testing ? 'Testing...' : 'Run test'}
           onClick={() => void onTest()}
-          disabled={testing}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md border inline-flex items-center gap-1.5 transition-colors ${
-            testing
-              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          {testing ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Plug className="w-3.5 h-3.5" />
-          )}
-          {testing ? 'Testing...' : 'Run test'}
-        </button>
+          loading={testing}
+          variant="secondary"
+          size="compact"
+          icon={<Plug className="w-3.5 h-3.5" />}
+        />
       </div>
 
       {result && (
-        <div
-          className={`rounded-md border p-2.5 text-sm flex items-start gap-2 ${
-            result.status === 'success'
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
-        >
-          <span className="flex-shrink-0 pt-0.5">
-            {result.status === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-green-500" />
-            ) : (
-              <XCircle className="w-4 h-4 text-red-500" />
-            )}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium">
-              {result.status === 'success' ? 'Connection successful' : 'Connection failed'}
-            </p>
-            <p className="mt-0.5 text-xs leading-relaxed break-words">
-              {result.message}
-            </p>
-            {result.response && (
-              <p className="mt-1 text-xs font-mono text-gray-600 break-words">
-                {result.response.length > 200
-                  ? `${result.response.slice(0, 200)}…`
-                  : result.response}
-              </p>
-            )}
-          </div>
-        </div>
+        <Alert
+          type={result.status === 'success' ? 'success' : 'error'}
+          title={result.status === 'success' ? 'Connection successful' : 'Connection failed'}
+          message={(
+            <>
+              <span className="text-xs break-words">{result.message}</span>
+              {result.response && (
+                <span className="mt-1 block text-xs font-mono break-words">
+                  {result.response.length > 200
+                    ? `${result.response.slice(0, 200)}…`
+                    : result.response}
+                </span>
+              )}
+            </>
+          )}
+        />
       )}
     </div>
   );

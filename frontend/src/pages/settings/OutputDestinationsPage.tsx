@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Loader2, Pencil, Plug, Plus, Trash2, Webhook } from 'lucide-react';
+import { Pencil, Plug, Plus, Trash2, Webhook } from 'lucide-react';
+import Alert from '../../components/ui/Alert';
 import { apiService, type OutputDestination } from '../../services/api';
 import { AppRole } from '../../types/roles';
 import { useAppRole } from '../../hooks/useAppRole';
@@ -12,6 +13,8 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Table from '../../components/ui/Table';
 import OutputChannelWizard from '../../components/output/OutputChannelWizard';
 import { contentModeLabels } from '../../components/output/outputChannelForm';
+import { Spinner } from '../../components/ui/Spinner';
+import { LoadingState } from '../../components/ui/LoadingState';
 
 export default function OutputDestinationsPage() {
   const { appId } = useParams();
@@ -99,9 +102,7 @@ export default function OutputDestinationsPage() {
         </button>}
       </div>
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
-      {loadError ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        <p>{loadError}</p><button type="button" onClick={() => setReloadKey((value) => value + 1)} className="mt-2 font-medium underline">Reintentar</button>
-      </div> : <Table<OutputDestination>
+      {loadError ? <Alert type="error" message={<>{loadError}<button type="button" onClick={() => setReloadKey((value) => value + 1)} className="mt-2 block font-medium underline">Reintentar</button></>} /> : <Table<OutputDestination>
         data={destinations} loading={loading} keyExtractor={(destination) => destination.id}
         columns={[
           { header: 'Nombre', render: (destination) => canEdit
@@ -113,7 +114,7 @@ export default function OutputDestinationsPage() {
           { header: 'Contenido', render: (destination) => <span className="text-sm text-gray-600">{contentModeLabels(destination.provider_key === 'webhook' ? 'webhook' : 'teams_workflow')[destination.content_mode ?? 'result']}</span> },
           { header: 'Creado', render: (destination) => <span className="text-sm text-gray-500">{new Date(destination.created_at).toLocaleDateString()}</span> },
           { header: 'Acciones', className: 'relative px-6 py-4 whitespace-nowrap', render: (destination) => canEdit ? <ActionDropdown size="sm" triggerText="Acciones" triggerAriaLabel={`Acciones de ${destination.name}`} actions={[
-            { label: testingId === destination.id ? 'Enviando…' : 'Probar destino', onClick: () => { void testDestination(destination); }, icon: testingId === destination.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />, disabled: testingId !== null, variant: 'primary' },
+            { label: testingId === destination.id ? 'Enviando…' : 'Probar destino', onClick: () => { void testDestination(destination); }, icon: testingId === destination.id ? <Spinner size="sm" tone="current" /> : <Plug className="h-4 w-4" />, disabled: testingId !== null, variant: 'primary' },
             { label: 'Editar', onClick: () => openWizard(destination), icon: <Pencil className="h-4 w-4" /> },
             { label: 'Eliminar', onClick: () => setDestinationToDelete(destination), icon: <Trash2 className="h-4 w-4" />, disabled: deletingId !== null, variant: 'danger' },
           ]} /> : <span className="text-sm text-gray-400">Solo lectura</span> },
@@ -128,7 +129,7 @@ export default function OutputDestinationsPage() {
         toast.success(editingDestination ? 'Canal de salida actualizado' : 'Canal de salida creado');
       }} />
       <Modal isOpen={isTestModalOpen} onClose={() => setIsTestModalOpen(false)} title={`Prueba de conexión: ${testDestinationName}`} size="medium">
-        {testingId !== null ? <div role="status" className="flex items-center justify-center gap-3 py-8 text-gray-600"><Loader2 className="h-6 w-6 animate-spin text-blue-600" />Enviando notificación de prueba…</div>
+        {testingId !== null ? <LoadingState variant="section" message="Enviando notificación de prueba…" />
           : testResult && <div role="status" className={`rounded-lg p-4 ${testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}><p className="font-medium">{testResult.success ? 'Conexión correcta' : 'Error de conexión'}</p><p className="mt-2 text-sm">{testResult.message}</p></div>}
       </Modal>
       <ConfirmationModal isOpen={destinationToDelete !== null} title="Eliminar canal de salida" message={destinationToDelete ? `Se eliminará «${destinationToDelete.name}» y dejará de enviar notificaciones en las tareas vinculadas. El historial de entregas se conservará.` : ''} confirmLabel="Eliminar canal" isLoading={deletingId !== null} onConfirm={() => { void deleteDestination(); }} onCancel={() => { if (deletingId === null) setDestinationToDelete(null); }} />

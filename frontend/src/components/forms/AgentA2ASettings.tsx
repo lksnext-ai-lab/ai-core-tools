@@ -1,7 +1,8 @@
 import { useCallback, useId, useRef, useState } from 'react';
-import { Copy, Info, Plus, Trash2 } from 'lucide-react';
+import { Copy, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { TagInput } from '../ui/TagInput';
+import Alert from '../ui/Alert';
 import CardApp from '../ui/CardApp';
 import FormField from '../ui/FormField';
 import ButtonApp from '../ui/ButtonApp';
@@ -96,11 +97,7 @@ function CopyableField({
         </div>
       ) : (
         
-        <CardApp variant="alert" className="mt-2">
-          <p>
-            {hint}
-          </p>
-        </CardApp>
+        <Alert type="warning" message={hint} className="mt-2" />
       )}
     </div>
   );
@@ -404,14 +401,19 @@ export function AgentA2ASettings({
         />
       </div>
 
-      <CardApp variant="alert" className="p-1 my-1">
-        <Info className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-        Callers must send an app API key in the <code>X-API-KEY</code> header. Create keys in the app's{' '}
-          <Link to={apiKeysSettingsUrl} className="text-bronze  dark:text-bronze-dark inline-block underline">
-            API Keys settings
-          </Link>.
-  
-      </CardApp>
+      <Alert
+        type="info"
+        title="API key required"
+        className="my-1"
+        message={(
+          <>
+            Callers must send an app API key in the <code>X-API-KEY</code> header. Create keys in the app's{' '}
+            <Link to={apiKeysSettingsUrl} className="inline-block underline">
+              API Keys settings
+            </Link>.
+          </>
+        )}
+      />
 
 
     </CardApp>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ArrowUpDown, ChevronDown, ChevronRight, Folder, Home, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
+import { LoadingState } from './ui/LoadingState';
 
 interface Folder {
   folder_id: number;
@@ -60,15 +62,11 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   if (hasChildren) {
     if (isExpanded) {
       expandIcon = (
-        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
+        <ChevronDown className="w-3 h-3" aria-hidden="true" />
       );
     } else {
       expandIcon = (
-        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-        </svg>
+        <ChevronRight className="w-3 h-3" aria-hidden="true" />
       );
     }
   }
@@ -77,8 +75,8 @@ const FolderNode: React.FC<FolderNodeProps> = ({
     <div className="select-none">
       <div className="relative">
         <div
-          className={`flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors ${
-            isSelected ? 'bg-blue-100 text-blue-800' : ''
+          className={`flex items-center p-2 rounded-md transition-colors hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${
+            isSelected ? 'bg-surface-hover text-accent dark:bg-surface-hover-dark dark:text-accent-dark' : 'text-fg dark:text-fg-dark'
           }`}
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
@@ -88,7 +86,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
               e.stopPropagation();
               onToggle(folder.folder_id);
             }}
-            className="mr-2 text-gray-500 hover:text-gray-700 w-4 h-4 flex items-center justify-center flex-shrink-0"
+            className="mr-2 text-fg-tertiary hover:text-fg dark:text-fg-tertiary-dark dark:hover:text-fg-dark w-4 h-4 flex items-center justify-center flex-shrink-0"
           >
             {expandIcon}
           </button>
@@ -98,14 +96,12 @@ const FolderNode: React.FC<FolderNodeProps> = ({
             className="flex items-center flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
             onClick={() => onSelect(folder.folder_id, folderPath)}
           >
-            <svg className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-            </svg>
+            <Folder className={`w-4 h-4 mr-2 flex-shrink-0 ${isSelected ? 'text-accent dark:text-accent-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`} aria-hidden="true" />
 
             <span className="flex-1 text-sm truncate">{folder.name}</span>
 
             {folder.resource_count > 0 && (
-              <span className="text-xs text-gray-500 ml-2">
+              <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark ml-2">
                 ({folder.resource_count})
               </span>
             )}
@@ -116,12 +112,10 @@ const FolderNode: React.FC<FolderNodeProps> = ({
             <button
               type="button"
               onClick={(e) => onToggleDropdown(folder.folder_id, e)}
-              className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
+              className="ml-2 p-1 text-fg-tertiary hover:text-fg hover:bg-surface-ash rounded transition-all duration-200 dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-tint-dark"
               title="Folder actions"
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-              </svg>
+              <MoreVertical className="w-4 h-4" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -130,49 +124,41 @@ const FolderNode: React.FC<FolderNodeProps> = ({
         {canEdit && openDropdown === folder.folder_id && (
           <div
             ref={(el) => { dropdownRefs.current[folder.folder_id] = el; }}
-            className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
+            className="absolute right-0 mt-1 w-48 bg-surface rounded-md shadow-lg z-50 border border-line dark:bg-surface-dark dark:border-line-dark"
             style={{ top: '100%' }}
           >
             <div className="py-1">
               <button
                 onClick={() => onAction('create', folder)}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
               >
-                <svg className="w-4 h-4 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
+                <Plus className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 Create subfolder
               </button>
               
               <button
                 onClick={() => onAction('rename', folder)}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
               >
-                <svg className="w-4 h-4 mr-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+                <Pencil className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 Rename folder
               </button>
               
               <button
                 onClick={() => onAction('move', folder)}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
               >
-                <svg className="w-4 h-4 mr-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
+                <ArrowUpDown className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 Move folder
               </button>
               
-              <div className="border-t border-gray-100"></div>
+              <div className="border-t border-line dark:border-line-dark"></div>
               
               <button
                 onClick={() => onAction('delete', folder)}
-                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                className="flex items-center w-full px-4 py-2 text-sm text-error hover:bg-error-bg dark:text-error-dark dark:hover:bg-error-bg-dark"
               >
-                <svg className="w-4 h-4 mr-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Trash2 className="w-4 h-4 mr-3 text-error dark:text-error-dark" aria-hidden="true" />
                 Delete folder
               </button>
             </div>
@@ -308,25 +294,33 @@ const FolderTree: React.FC<FolderTreeProps> = ({
 
   if (loading) {
     return (
-      <div className="p-4 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-2 text-sm text-gray-600">Loading folders...</p>
-      </div>
+      <LoadingState variant="section" message="Loading folders..." />
     );
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg">
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Folders</h3>
+    <div>
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <h3 className="text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Folders</h3>
+        {canEdit && onFolderCreate && (
+          <button
+            type="button"
+            onClick={() => onFolderCreate()}
+            className="p-1 rounded text-fg-tertiary hover:text-fg hover:bg-surface-ash transition-colors dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
+            title="Create folder"
+            aria-label="Create folder"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
       </div>
-      
-      <div className="p-4">
+
+      <div className="px-2 pb-4">
         {/* Root folder option */}
         <div className="relative">
           <div
-            className={`flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors mb-2 ${
-              selectedFolderId === null ? 'bg-blue-100 text-blue-800' : ''
+            className={`flex items-center p-2 rounded-md transition-colors mb-1 hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${
+              selectedFolderId === null ? 'bg-surface-hover text-accent dark:bg-surface-hover-dark dark:text-accent-dark' : 'text-fg dark:text-fg-dark'
             }`}
           >
             <button
@@ -334,9 +328,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
               className="flex items-center flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
               onClick={() => onFolderSelect(null, '')}
             >
-              <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-              </svg>
+              <Home className={`w-4 h-4 mr-2 ${selectedFolderId === null ? 'text-accent dark:text-accent-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`} aria-hidden="true" />
               <span className="text-sm font-medium">Repository Root</span>
             </button>
 
@@ -345,12 +337,10 @@ const FolderTree: React.FC<FolderTreeProps> = ({
               <button
                 type="button"
                 onClick={(e) => toggleDropdown(0, e)}
-                className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-all duration-200"
+                className="ml-2 p-1 text-fg-tertiary hover:text-fg hover:bg-surface-ash rounded transition-all duration-200 dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-tint-dark"
                 title="Root folder actions"
               >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                </svg>
+                <MoreVertical className="w-4 h-4" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -359,17 +349,15 @@ const FolderTree: React.FC<FolderTreeProps> = ({
           {canEdit && openDropdown === 0 && (
             <div
               ref={(el) => { dropdownRefs.current[0] = el; }}
-              className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200"
+              className="absolute right-0 mt-1 w-48 bg-surface rounded-md shadow-lg z-50 border border-line dark:bg-surface-dark dark:border-line-dark"
               style={{ top: '100%' }}
             >
               <div className="py-1">
                 <button
                   onClick={() => handleAction('create', { folder_id: 0, name: 'Root', parent_folder_id: null } as any)}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
                 >
-                  <svg className="w-4 h-4 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
+                  <Plus className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                   Create folder
                 </button>
               </div>
@@ -398,12 +386,10 @@ const FolderTree: React.FC<FolderTreeProps> = ({
         </div>
 
         {folders.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-            </svg>
+          <div className="text-center py-6 px-2 text-fg-tertiary dark:text-fg-tertiary-dark">
+            <Folder className="w-10 h-10 mx-auto mb-3 text-fg-faint2 dark:text-fg-faint2-dark" aria-hidden="true" />
             <p className="text-sm">No folders yet</p>
-            <p className="text-xs text-gray-400 mt-1">Create your first folder to organize files</p>
+            <p className="text-xs text-fg-faint dark:text-fg-faint-dark mt-1">Create your first folder to organize files</p>
           </div>
         )}
       </div>

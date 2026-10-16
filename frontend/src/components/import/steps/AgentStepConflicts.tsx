@@ -52,14 +52,17 @@ function AgentStepConflicts({
 
   return (
     <div className="space-y-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <p className="text-sm text-amber-900">
-          An agent named{' '}
-          <strong>"{preview.agent.component_name}"</strong>{' '}
-          already exists in this app. Choose how to resolve
-          this conflict.
-        </p>
-      </div>
+      <Alert
+        type="warning"
+        message={(
+          <>
+            An agent named{' '}
+            <strong>"{preview.agent.component_name}"</strong>{' '}
+            already exists in this app. Choose how to resolve
+            this conflict.
+          </>
+        )}
+      />
 
       <div className="space-y-2">
         {MODES.map((m) => (

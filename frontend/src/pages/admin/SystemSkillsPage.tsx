@@ -7,7 +7,6 @@ import {
   Lightbulb,
   Upload,
   ArrowDownToLine,
-  Loader2,
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
@@ -23,6 +22,8 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
 import type { Skill } from '../../core/types';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import { Spinner } from '../../components/ui/Spinner';
 
 function SystemSkillsPage() {
   const confirm = useConfirm();
@@ -212,19 +213,13 @@ function SystemSkillsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
+          <ButtonApp
+            label={importing ? 'Importing…' : 'Import package'}
             onClick={handleImportClick}
-            disabled={importing}
-            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {importing ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4 mr-2" />
-            )}
-            {importing ? 'Importing…' : 'Import package'}
-          </button>
+            loading={importing}
+            variant="secondary"
+            icon={<Upload className="w-4 h-4" />}
+          />
           <button
             type="button"
             onClick={handleOpenCreate}
@@ -334,7 +329,7 @@ function SystemSkillsPage() {
                   {
                     label: isExporting ? 'Exporting...' : 'Export',
                     onClick: () => { void handleExport(skill); },
-                    icon: isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />,
+                    icon: isExporting ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                     disabled: isExporting,
                     variant: 'secondary',
                   },
@@ -342,7 +337,7 @@ function SystemSkillsPage() {
                     label: isToggling ? 'Updating...' : (isEnabled ? 'Disable' : 'Enable'),
                     onClick: () => { void handleToggleEnabled(skill); },
                     icon: isToggling
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      ? <Spinner size="sm" tone="current" />
                       : (isEnabled ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4" />),
                     disabled: isToggling,
                     variant: isEnabled ? 'warning' : 'success',

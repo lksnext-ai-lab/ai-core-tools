@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Globe, Link2, Pencil, Trash2 } from 'lucide-react';
+import { Globe, Link2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -11,6 +11,10 @@ import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import { Title } from '../components/ui/Title';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { LoadingState } from '../components/ui/LoadingState';
 
 interface Domain {
   domain_id: number;
@@ -81,21 +85,15 @@ function DomainsPage() {
   }
 
   if (loading) {
-    return (
+    return(
       <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-            <p className="text-gray-600">Web scraping domains for content extraction</p>
+          {/* Page Header */}
+          <div className="flex items-center justify-between">
+            <Title variant="titSecundario" titulo="Domains" subtitulo="Web scraping domains for content extraction" titleMarginBottom={0} subtitleMarginBottom={0} />
           </div>
-        </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-          <span className="ml-2">Loading domains...</span>
+          <LoadingState variant="page" message="Loading domains..." />
         </div>
-      </div>
     );
   }
 
@@ -104,10 +102,7 @@ function DomainsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-            <p className="text-gray-600">Web scraping domains for content extraction</p>
-          </div>
+          <Title variant="titSecundario" titulo="Domains" subtitulo="Web scraping domains for content extraction" titleMarginBottom={0} subtitleMarginBottom={0} />
         </div>
 
         <Alert 
@@ -124,18 +119,15 @@ function DomainsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-          <p className="text-gray-600">Web scraping domains for content extraction</p>
-        </div>
+        <Title variant="titSecundario" titulo="Domains" subtitulo="Web scraping domains for content extraction" titleMarginBottom={0} subtitleMarginBottom={0} />
         {canEdit && (
-          <button
+          <ButtonApp
+            label="Create Domain"
+            variant="primary"
+            size="medium"
+            icon={<Plus className="w-4 h-4" />}
             onClick={() => navigate(`/apps/${appId}/domains/new`)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}Create Domain
-          </button>
+          />
         )}
       </div>
 
@@ -150,27 +142,23 @@ function DomainsPage() {
             header: 'Name',
             render: (domain) => (
               <div className="flex items-center">
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <Globe className="w-5 h-5 text-purple-600" />
-                  </div>
-                </div>
+                <BackgroundImage icon={Globe} size={40} iconSize={20} variant="marron" />
                 <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-fg dark:text-fg-dark">
                     {canEdit ? (
                       <Link
                         to={`/apps/${appId}/domains/${domain.domain_id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                        className="text-sm font-medium text-fg dark:text-fg-dark transition-colors"
                       >
                         {domain.name}
                       </Link>
                     ) : (
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-fg dark:text-fg-dark">
                         {domain.name}
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-gray-500">{domain.description}</div>
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{domain.description}</div>
                 </div>
               </div>
             )
@@ -178,21 +166,21 @@ function DomainsPage() {
           {
             header: 'Base URL',
             accessor: 'base_url',
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
             header: 'URLs',
             render: (domain) => `${domain.url_count} URLs`,
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
             header: 'Created',
             render: (domain) => new Date(domain.created_at).toLocaleDateString(),
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
             header: 'Actions',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+            headerClassName: 'px-6 py-3 text-right  tracking-wider',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative',
             render: (domain) => (
               <ActionDropdown
@@ -231,12 +219,12 @@ function DomainsPage() {
 
       {!loading && (!domains || domains.length === 0) && canEdit && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label="Create Your First Domain"
+            variant="primary"
+            size="medium"
             onClick={() => navigate(`/apps/${appId}/domains/new`)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First Domain
-          </button>
+          />
         </div>
       )}
     </div>

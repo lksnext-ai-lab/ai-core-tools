@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import Modal from './Modal';
+import Alert from './Alert';
 
 export interface OneTimeLinkModalProps {
   readonly isOpen: boolean;
@@ -66,14 +67,10 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={title} size="medium">
       <div className="space-y-5">
-        <div className="flex items-start gap-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4">
-          <CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <p className="text-sm text-green-800 dark:text-green-300">
-            The one-time link has been generated. Copy it now and send it to the user
-            over a secure channel (e.g. direct message or encrypted email). The link
-            will not be shown again.
-          </p>
-        </div>
+        <Alert
+          type="success"
+          message="The one-time link has been generated. Copy it now and send it to the user over a secure channel (e.g. direct message or encrypted email). The link will not be shown again."
+        />
 
         <div>
           <label htmlFor="onetimelink-value" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
@@ -119,17 +116,17 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
           </p>
         </div>
 
-        <div className="flex items-start gap-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
-          <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="space-y-1 text-sm text-amber-800 dark:text-amber-300">
-            <p className="font-medium">This link is shown only once.</p>
-            <ul className="list-disc list-inside space-y-0.5 text-amber-700 dark:text-amber-400">
+        <Alert
+          type="warning"
+          title="This link is shown only once."
+          message={(
+            <ul className="list-disc list-inside space-y-0.5">
               <li>It expires on <strong>{formatExpiry(expiresAt)}</strong>.</li>
               <li>Send it to the user over a secure, private channel.</li>
               <li>It can only be used once to set a password.</li>
             </ul>
-          </div>
-        </div>
+          )}
+        />
 
         <div className="flex justify-end border-t border-gray-200 dark:border-slate-700 pt-4">
           <button

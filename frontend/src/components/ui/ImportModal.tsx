@@ -1,5 +1,5 @@
 import { useState, useRef, type ChangeEvent } from 'react';
-import { FolderOpen, AlertTriangle } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import Modal from './Modal';
 import { FormSelect } from './FormField';
 import Alert from './Alert';
@@ -243,14 +243,11 @@ function ImportModal({
 
         {/* Embedding Service Selection (for silos without bundled service) */}
         {requiresEmbeddingServiceSelection && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
-            <div className="flex items-start">
-              <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2 shrink-0" />
-              <p className="text-sm text-yellow-800">
-                This silo requires an embedding service, but none is bundled in the export file.
-                Please select an existing embedding service to use:
-              </p>
-            </div>
+          <div className="space-y-3">
+            <Alert
+              type="warning"
+              message="This silo requires an embedding service, but none is bundled in the export file. Please select an existing embedding service to use:"
+            />
             <FormSelect
               label="Embedding Service"
               id="embedding-service-select"

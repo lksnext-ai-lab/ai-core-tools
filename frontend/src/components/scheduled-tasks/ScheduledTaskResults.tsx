@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import type { ScheduledTaskRun } from '../../services/api';
 import { RunStatusBadge } from './RunStatusBadge';
 import { formatDateTime, outputPreview } from './format';
+import CardApp from '../ui/CardApp';
+import Badge from '../ui/Badge';
 
 interface Props {
   conversationMode: string;
@@ -15,7 +17,7 @@ interface Props {
 }
 
 const entryClass =
-  'flex min-w-0 items-center gap-3 rounded-lg border border-gray-200 p-3 text-sm hover:border-blue-300 hover:bg-blue-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-blue-700 dark:hover:bg-blue-900/10';
+  'flex min-w-0 items-center gap-3 rounded-lg border border-line dark:border-line-dark p-3 text-sm hover:bg-surface-tint dark:hover:bg-surface-tint-dark ';
 
 /**
  * Results of a scheduled task: one entry per run, or a single entry for a
@@ -24,18 +26,18 @@ const entryClass =
 export function ScheduledTaskResults({ conversationMode, runs, maxRunsRetained, runHref, conversationHref }: Readonly<Props>) {
   const continuous = conversationMode === 'continuous';
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+    <CardApp>
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">
           {continuous ? 'Conversación' : 'Ejecuciones'}
-        </h2>
+        </h3>
         {maxRunsRetained !== undefined && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">Se conservan las últimas {maxRunsRetained} ejecuciones</span>
+          <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Se conservan las últimas {maxRunsRetained} ejecuciones</span>
         )}
       </div>
-      {runs === null && <p className="text-sm text-gray-500 dark:text-gray-400">Cargando ejecuciones…</p>}
+      {runs === null && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Cargando ejecuciones…</p>}
       {runs !== null && runs.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No hay ejecuciones todavía.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">No hay ejecuciones todavía.</p>
       )}
       {runs !== null && runs.length > 0 && continuous && <ContinuousEntry runs={runs} href={conversationHref} />}
       {runs !== null && runs.length > 0 && !continuous && (
@@ -45,11 +47,11 @@ export function ScheduledTaskResults({ conversationMode, runs, maxRunsRetained, 
               <Link to={runHref(run)} className={entryClass}>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(run.scheduled_time)}</span>
+                    <span className="font-medium text-fg dark:text-fg-dark">{formatDateTime(run.scheduled_time)}</span>
                     <RunStatusBadge status={run.status} />
                     {run.output_files?.length > 0 && <FileCount count={run.output_files.length} />}
                   </div>
-                  <p className="mt-1 truncate text-gray-600 dark:text-gray-400">
+                  <p className="mt-1 truncate text-fg-secondary dark:text-fg-secondary-dark">
                     {run.status === 'failed' ? run.error_summary : outputPreview(run.output_text)}
                   </p>
                 </div>
@@ -59,7 +61,7 @@ export function ScheduledTaskResults({ conversationMode, runs, maxRunsRetained, 
           ))}
         </ul>
       )}
-    </section>
+    </CardApp>
   );
 }
 
@@ -72,18 +74,19 @@ function ContinuousEntry({ runs, href }: Readonly<{ runs: ScheduledTaskRun[]; hr
       <MessagesSquare className="h-5 w-5 flex-shrink-0 text-blue-600" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="font-medium text-fg dark:text-fg-dark">
             {runs.length} respuesta{runs.length === 1 ? '' : 's'}
           </span>
-          <span className="text-gray-500 dark:text-gray-400">· última {formatDateTime(latest.scheduled_time)}</span>
+          <span className="text-fg-secondary dark:text-fg-secondary-dark">· última {formatDateTime(latest.scheduled_time)}</span>
           {failed > 0 && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/40 dark:text-red-300">
-              {failed} fallida{failed === 1 ? '' : 's'}
-            </span>
+            <Badge
+              label={`${failed} fallida${failed === 1 ? '' : 's'}`}
+              variant="error"
+            />
           )}
           {files > 0 && <FileCount count={files} />}
         </div>
-        <p className="mt-1 truncate text-gray-600 dark:text-gray-400">
+        <p className="mt-1 truncate text-fg-secondary dark:text-fg-secondary-dark">
           {latest.status === 'failed' ? latest.error_summary : outputPreview(latest.output_text)}
         </p>
       </div>

@@ -9,7 +9,6 @@ import {
   Settings,
   ChevronLeft,
   ArrowRight,
-  AlertTriangle,
   Users,
   Zap,
   CheckCircle2,
@@ -24,9 +23,13 @@ import {
 } from 'lucide-react';
 import Speedometer from '../components/ui/Speedometer';
 import Title from '../components/ui/Title';
+import Alert from '../components/ui/Alert';
 import ButtonApp from '../components/ui/ButtonApp';
+import ButtonLink from '../components/ui/ButtonLink';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
+import { LoadingState } from '../components/ui/LoadingState';
+import { Skeleton } from '../components/ui/Skeleton';
 
 interface App {
   app_id: number;
@@ -149,27 +152,24 @@ function AppDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-500 text-sm">Loading workspace...</span>
-      </div>
+      <LoadingState variant="page" message="Loading workspace..." />
     );
   }
 
   if (!currentApp) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-        <div className="flex">
-          <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-medium text-red-800">App Not Found</h3>
-            <p className="text-sm text-red-600 mt-1">The requested app could not be found.</p>
-            <Link to="/apps" className="mt-2 inline-block text-sm text-red-600 hover:text-red-800 underline">
+      <Alert
+        type="error"
+        title="App Not Found"
+        message={(
+          <>
+            The requested app could not be found.
+            <Link to="/apps" className="mt-2 block underline">
               Back to Apps
             </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      />
     );
   }
 
@@ -313,10 +313,10 @@ function AppDashboard() {
     );
   } else if (usageLoading) {
     speedometerContent = (
-      <div className="flex flex-col items-center justify-center py-6 gap-3 animate-pulse">
-        <div className="w-16 h-16 rounded-full bg-gray-100" />
-        <div className="h-3 w-24 bg-gray-100 rounded" />
-        <div className="h-3 w-32 bg-gray-100 rounded" />
+      <div className="flex flex-col items-center justify-center py-6 gap-3">
+        <Skeleton shape="round" className="w-16 h-16" />
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-3 w-32" />
       </div>
     );
   } else if (usageStats) {
@@ -340,12 +340,12 @@ function AppDashboard() {
   let agentsContent: React.ReactNode;
   if (agentsLoading) {
     agentsContent = (
-      <div className="space-y-3 animate-pulse">
+      <div className="space-y-3">
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex items-center gap-3">
-            <div className="h-3 w-28 bg-gray-100 rounded" />
-            <div className="flex-1 h-2 bg-gray-100 rounded-full" />
-            <div className="h-3 w-8 bg-gray-100 rounded" />
+            <Skeleton className="h-3 w-28" />
+            <Skeleton shape="round" className="flex-1 h-2" />
+            <Skeleton className="h-3 w-8" />
           </div>
         ))}
       </div>
@@ -453,13 +453,13 @@ function AppDashboard() {
                 onClick={() => navigate(`/apps/${appId}/agents`)}
               />
             )}
-            <Link
+            <ButtonLink
               to="/apps"
-              className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-ink bg-surface px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-fg transition-colors hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              All Apps
-            </Link>
+              label="All Apps"
+              variant="secondary"
+              size="medium"
+              icon={<ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />}
+            />
           </div>
         </div>
       </CardApp>

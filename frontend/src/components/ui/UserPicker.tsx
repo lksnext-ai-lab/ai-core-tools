@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
-import { Search, X, Loader2 } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { User } from '../../services/admin';
 import { errorMessage } from '../../constants/messages';
+import { Spinner } from './Spinner';
 
 export interface UserPickerProps {
   /** Label shown above the combobox input. */
@@ -202,7 +203,7 @@ function UserPicker({
         <div className="relative">
           <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             {isLoading ? (
-              <Loader2 className="w-4 h-4 text-gray-400 dark:text-slate-500 animate-spin" aria-hidden="true" />
+              <Spinner size="sm" tone="muted" />
             ) : (
               <Search className="w-4 h-4 text-gray-400 dark:text-slate-500" aria-hidden="true" />
             )}

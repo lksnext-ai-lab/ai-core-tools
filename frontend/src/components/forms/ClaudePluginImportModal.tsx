@@ -2,16 +2,16 @@ import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  Loader2,
   ShieldAlert,
   Upload,
   XCircle,
 } from 'lucide-react';
 import Modal from '../ui/Modal';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
 import type { ClaudePluginImportResult, ClaudePluginSkillResult } from '../../core/types';
+import { ButtonApp } from '../ui/ButtonApp';
 
 export interface ClaudePluginImportModalProps {
   readonly appId: number;
@@ -170,7 +170,7 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
               it — including any bootstrap script it carries — before enabling it.
             </p>
 
-            <FormError error={error} />
+            {error && <Alert type="error" message={error} />}
 
             <div>
               <label
@@ -203,19 +203,13 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
               >
                 Cancel
               </button>
-              <button
-                type="button"
+              <ButtonApp
+                label={isSubmitting ? 'Importing…' : 'Import'}
                 onClick={() => { void handleSubmit(); }}
-                disabled={isSubmitting || !selectedFile}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg flex items-center transition-colors disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" aria-hidden="true" />
-                )}
-                {isSubmitting ? 'Importing…' : 'Import'}
-              </button>
+                disabled={!selectedFile}
+                loading={isSubmitting}
+                icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+              />
               {/* A button label swap alone isn't reliably announced (WCAG 4.1.3) — mirror the
                   sr-only status pattern already used for async actions in SkillsPage. */}
               <span role="status" aria-live="polite" className="sr-only">
@@ -228,16 +222,11 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
         {result && (
           <div className="space-y-4">
             {result.skills.some((s) => s.has_bootstrap) && (
-              <div
-                role="alert"
-                className="flex items-start gap-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3"
-              >
-                <ShieldAlert className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0" aria-hidden="true" />
-                <p className="text-sm text-red-700 dark:text-red-300">
-                  One or more imported skills carry a bootstrap script that will execute code once
-                  enabled. Review each entry marked below carefully before enabling it.
-                </p>
-              </div>
+              <Alert
+                type="error"
+                title="Review before enabling"
+                message="One or more imported skills carry a bootstrap script that will execute code once enabled. Review each entry marked below carefully before enabling it."
+              />
             )}
 
             <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">

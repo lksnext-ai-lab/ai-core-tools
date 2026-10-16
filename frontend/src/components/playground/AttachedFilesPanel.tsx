@@ -1,4 +1,5 @@
-import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Loader2, Film } from 'lucide-react';
+import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Film } from 'lucide-react';
+import { Spinner } from '../ui/Spinner';
 
 export interface PanelFile {
   id: string;
@@ -19,10 +20,12 @@ interface AttachedFilesPanelProps {
   title?: string;
 }
 
+// Same palette as the Badge component variants (success / error / warning / info).
 function getStatusClassName(status?: string): string {
-  if (status === 'ready' || status === 'uploaded') return 'bg-green-100 text-green-700';
-  if (status === 'error') return 'bg-red-100 text-red-700';
-  return 'bg-yellow-100 text-yellow-700';
+  if (status === 'ready' || status === 'uploaded') return 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark';
+  if (status === 'error') return 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark';
+  if (status === 'pending') return 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark';
+  return 'bg-info-bg text-info dark:bg-info-bg-dark dark:text-info-dark';
 }
 
 function getDisplayStatus(status?: string): string | undefined {
@@ -72,8 +75,8 @@ export default function AttachedFilesPanel({
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 overscroll-contain">
         {isLoading && (
-          <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-500">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-line dark:border-line-dark" />
+          <div className="flex items-center justify-center py-4 gap-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+            <Spinner size="sm" tone="muted" />
             Uploading...
           </div>
         )}
@@ -116,14 +119,14 @@ export default function AttachedFilesPanel({
                       getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-green-500" /> Ready</>}
-                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-red-500" /> Error</>}
-                    {getDisplayStatus(file.processing_status) === 'pending' && <><Loader2 className="w-3 h-3 animate-spin" /> Pending</>}
-                    {getDisplayStatus(file.processing_status) === 'processing' && <><Loader2 className="w-3 h-3 animate-spin" /> Processing</>}
-                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Loader2 className="w-3 h-3 animate-spin" /> Transcribing</>}
-                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Loader2 className="w-3 h-3 animate-spin" /> Analyzing video</>}
-                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Loader2 className="w-3 h-3 animate-spin" /> Downloading</>}
-                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Loader2 className="w-3 h-3 animate-spin" /> Indexing</>}
+                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3" /> Ready</>}
+                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3" /> Error</>}
+                    {getDisplayStatus(file.processing_status) === 'pending' && <><Spinner size="xs" tone="current" /> Pending</>}
+                    {getDisplayStatus(file.processing_status) === 'processing' && <><Spinner size="xs" tone="current" /> Processing</>}
+                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Spinner size="xs" tone="current" /> Transcribing</>}
+                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Spinner size="xs" tone="current" /> Analyzing video</>}
+                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Spinner size="xs" tone="current" /> Downloading</>}
+                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Spinner size="xs" tone="current" /> Indexing</>}
                   </span>
                 )}
               </div>

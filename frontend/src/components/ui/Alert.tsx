@@ -68,10 +68,13 @@ const Alert: React.FC<AlertProps> = ({
       <div className="flex">
         <span className={`${styles.iconColor} mr-3 shrink-0`} aria-hidden="true">{alertIcons[type]}</span>
         <div className="flex-1">
-          <h3 className={`text-sm font-medium ${styles.titleColor}`}>
+          {title && (
+            <h3 className={`text-sm font-medium ${styles.titleColor}`}>
             {title || defaultTitle}
           </h3>
-          <p className={`text-sm ${styles.messageColor} mt-1`}>{message}</p>
+          )}
+          
+          <div className={`text-sm ${styles.messageColor} mt-1`}>{message}</div>
           {onDismiss && (
             <button
               type="button"

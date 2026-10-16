@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { FileText } from 'lucide-react';
+import { LoadingState } from './LoadingState';
 
 export interface TableColumn<T = any> {
   readonly header: string;
@@ -60,10 +61,7 @@ function Table<T = any>({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent dark:border-accent-dark"></div>
-        <span className="ml-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">Loading...</span>
-      </div>
+      <LoadingState variant="section" message="Loading..." />
     );
   }
 
@@ -76,10 +74,7 @@ function Table<T = any>({
               {columns.map((column) => (
                 <th
                   key={column.header}
-                  className={
-                    column.headerClassName ||
-                    'px-6 py-3 text-left text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark'
-                  }
+                  className={`px-6 py-3 ${/\btext-(left|center|right)\b/.test(column.headerClassName ?? '') ? '' : 'text-left'} text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark ${column.headerClassName ?? ''}`}
                 >
                   {column.headerContent ?? column.header}
                 </th>

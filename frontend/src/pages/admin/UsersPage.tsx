@@ -12,6 +12,7 @@ import { useUser } from '../../contexts/UserContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
 import { errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
 
 interface ResetLinkState {
   readonly token: string;
@@ -226,10 +227,7 @@ function UsersPage() {
 
   if (loading && users.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12" role="status">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" aria-hidden="true"></div>
-        <span className="ml-2">Loading users...</span>
-      </div>
+      <LoadingState variant="page" message="Loading users..." />
     );
   }
 

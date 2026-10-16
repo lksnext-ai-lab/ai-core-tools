@@ -45,7 +45,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
                   {[0, 1, 2].map((i) => (
                     <span
                       key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-accent dark:bg-accent-dark animate-typing-dots"
+                      className="w-1.5 h-1.5 rounded-full bg-fg-faint dark:bg-fg-faint-dark animate-typing-dots"
                       style={{ animationDelay: `${i * 0.2}s` }}
                     />
                   ))}

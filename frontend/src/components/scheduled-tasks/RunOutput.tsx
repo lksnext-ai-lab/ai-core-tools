@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import Alert from '../ui/Alert';
 import MessageContent from '../playground/MessageContent';
 import type { ScheduledTaskRun } from '../../services/api';
 import { RunStatusBadge } from './RunStatusBadge';
@@ -22,10 +22,11 @@ export function RunOutput({ run, resolveFileUrl }: Readonly<Props>) {
         {duration && <span className="text-xs text-gray-500 dark:text-gray-400">Duración {duration}</span>}
       </header>
       {run.status === 'failed' && (
-        <div role="alert" className="mb-3 flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
-          <span className="min-w-0 whitespace-pre-wrap break-words">{run.error_summary || 'La ejecución falló.'}</span>
-        </div>
+        <Alert
+          type="error"
+          className="mb-3"
+          message={<span className="whitespace-pre-wrap break-words">{run.error_summary || 'La ejecución falló.'}</span>}
+        />
       )}
       {run.output_text ? (
         <MessageContent content={run.output_text} resolveFileUrl={(fileId) => resolveFileUrl(run.id, fileId)} />

@@ -10,13 +10,17 @@ import { sharepointApi } from '../services/sharepoint';
 import type { SharePointSourceDetail, SharePointSyncStatus } from '../types/sharepoint';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { useApiMutation } from '../hooks/useApiMutation';
+import { LoadingState } from '../components/ui/LoadingState';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { Spinner } from '../components/ui/Spinner';
+import { Badge, type BadgeVariant } from '../components/ui/Badge';
 
-const STATUS_BADGE: Record<SharePointSyncStatus, { label: string; className: string }> = {
-  IDLE: { label: 'Idle', className: 'bg-gray-100 text-gray-600' },
-  RUNNING: { label: 'Running', className: 'bg-blue-100 text-blue-700' },
-  SUCCESS: { label: 'Success', className: 'bg-green-100 text-green-700' },
-  PARTIAL: { label: 'Partial', className: 'bg-amber-100 text-amber-700' },
-  ERROR: { label: 'Error', className: 'bg-red-100 text-red-700' },
+const STATUS_BADGE: Record<SharePointSyncStatus, { label: string; variant: BadgeVariant }> = {
+  IDLE: { label: 'Idle', variant: 'default' },
+  RUNNING: { label: 'Running', variant: 'info' },
+  SUCCESS: { label: 'Success', variant: 'success' },
+  PARTIAL: { label: 'Partial', variant: 'warning' },
+  ERROR: { label: 'Error', variant: 'error' },
 };
 
 function relativeTime(iso: string | null): string {
@@ -211,10 +215,7 @@ function SharePointSourceDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
-        <span className="ml-2">Loading...</span>
-      </div>
+      <LoadingState variant="page" message="Loading..." />
     );
   }
 
@@ -241,14 +242,12 @@ function SharePointSourceDetailPage() {
           {source.description && <p className="text-gray-500">{source.description}</p>}
         </div>
         {canEdit && (
-          <button
+          <ButtonApp
+            label={isRunning ? 'Syncing...' : 'Sync now'}
             onClick={() => { void handleSync(); }}
-            disabled={isRunning}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRunning ? 'animate-spin' : ''}`} />
-            {isRunning ? 'Syncing...' : 'Sync now'}
-          </button>
+            loading={isRunning}
+            icon={<RefreshCw className="w-4 h-4" />}
+          />
         )}
       </div>
 
@@ -263,12 +262,11 @@ function SharePointSourceDetailPage() {
           <div>
             <span className="text-xs text-gray-500">Status</span>
             <div className="mt-1">
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge.className}`}
-              >
-                {isRunning && <RefreshCw className="w-3 h-3 animate-spin" />}
-                {statusBadge.label}
-              </span>
+              <Badge
+                label={statusBadge.label}
+                variant={statusBadge.variant}
+                icon={source.last_sync_status === 'RUNNING' ? <Spinner size="xs" tone="current" /> : undefined}
+              />
             </div>
           </div>
           <div>

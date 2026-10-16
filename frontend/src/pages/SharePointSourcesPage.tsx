@@ -4,6 +4,7 @@ import { Cloud, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
+import ButtonApp from '../components/ui/ButtonApp';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
@@ -12,13 +13,18 @@ import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { sharepointApi } from '../services/sharepoint';
 import type { SharePointSource, SharePointSyncStatus } from '../types/sharepoint';
+import { LoadingState } from '../components/ui/LoadingState';
+import { Spinner } from '../components/ui/Spinner';
+import { Badge, type BadgeVariant } from '../components/ui/Badge';
+import { Title } from '../components/ui/Title';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
-const STATUS_BADGE: Record<SharePointSyncStatus, { label: string; className: string }> = {
-  IDLE: { label: 'Idle', className: 'bg-gray-100 text-gray-600' },
-  RUNNING: { label: 'Running', className: 'bg-blue-100 text-blue-700' },
-  SUCCESS: { label: 'Success', className: 'bg-green-100 text-green-700' },
-  PARTIAL: { label: 'Partial', className: 'bg-amber-100 text-amber-700' },
-  ERROR: { label: 'Error', className: 'bg-red-100 text-red-700' },
+const STATUS_BADGE: Record<SharePointSyncStatus, { label: string; variant: BadgeVariant }> = {
+  IDLE: { label: 'Idle', variant: 'default' },
+  RUNNING: { label: 'Running', variant: 'info' },
+  SUCCESS: { label: 'Success', variant: 'success' },
+  PARTIAL: { label: 'Partial', variant: 'warning' },
+  ERROR: { label: 'Error', variant: 'error' },
 };
 
 function relativeTime(iso: string | null): string {
@@ -121,15 +127,9 @@ function SharePointSourcesPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">SharePoint Sources</h1>
-            <p className="text-gray-600">Sync documents from Microsoft SharePoint</p>
-          </div>
+          <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         </div>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
-          <span className="ml-2">Loading sources...</span>
-        </div>
+        <LoadingState variant="page" message="Loading sources..." />
       </div>
     );
   }
@@ -138,10 +138,7 @@ function SharePointSourcesPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">SharePoint Sources</h1>
-            <p className="text-gray-600">Sync documents from Microsoft SharePoint</p>
-          </div>
+          <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         </div>
         <Alert
           type="error"
@@ -156,18 +153,14 @@ function SharePointSourcesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">SharePoint Sources</h1>
-          <p className="text-gray-600">Sync documents from Microsoft SharePoint</p>
-        </div>
+        <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         {canEdit && (
-          <button
+          <ButtonApp
+            label="Add SharePoint Source"
             onClick={() => navigate(`/apps/${appId}/sharepoint/new`)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            Add SharePoint Source
-          </button>
+            variant="primary"
+            size="medium"
+          />
         )}
       </div>
 
@@ -182,19 +175,17 @@ function SharePointSourcesPage() {
             render: (source) => (
               <div className="flex items-center">
                 <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <Cloud className="w-5 h-5 text-blue-600" />
-                  </div>
+                  <BackgroundImage variant="marron" icon="Cloud" size={40} />
                 </div>
                 <div className="ml-4">
                   <Link
                     to={`/apps/${appId}/sharepoint/${source.id}`}
-                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                    className="text-sm font-medium text-fg dark:text-fg-dark"
                   >
                     {source.name}
                   </Link>
                   {source.description && (
-                    <div className="text-sm text-gray-500">{source.description}</div>
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{source.description}</div>
                   )}
                 </div>
               </div>
@@ -203,7 +194,7 @@ function SharePointSourcesPage() {
           {
             header: 'Site / Drive',
             render: (source) => (
-              <span className="text-sm text-gray-700">
+              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                 {source.site_name ?? source.site_id} / {source.drive_name ?? source.drive_id}
               </span>
             ),
@@ -213,14 +204,11 @@ function SharePointSourcesPage() {
             render: (source) => {
               const badge = STATUS_BADGE[source.last_sync_status] ?? STATUS_BADGE.IDLE;
               return (
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}
-                >
-                  {source.last_sync_status === 'RUNNING' && (
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                  )}
-                  {badge.label}
-                </span>
+                <Badge
+                  label={badge.label}
+                  variant={badge.variant}
+                  icon={source.last_sync_status === 'RUNNING' ? <Spinner size="xs" tone="current" /> : undefined}
+                />
               );
             },
           },
@@ -228,7 +216,7 @@ function SharePointSourcesPage() {
             header: 'Last Synced',
             render: (source) => (
               <span
-                className="text-sm text-gray-500"
+                className="text-xs text-fg-secondary dark:text-fg-secondary-dark"
                 title={source.last_synced_at ? new Date(source.last_synced_at).toLocaleString() : 'Never'}
               >
                 {relativeTime(source.last_synced_at)}
@@ -238,7 +226,7 @@ function SharePointSourcesPage() {
           {
             header: 'Files',
             render: (source) => (
-              <span className="text-sm text-gray-700">{source.file_count}</span>
+              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{source.file_count}</span>
             ),
           },
           {
@@ -256,7 +244,7 @@ function SharePointSourcesPage() {
                           {
                             label: isRunning ? 'Syncing...' : 'Sync now',
                             onClick: () => { void handleSync(source); },
-                            icon: <RefreshCw className={`w-4 h-4 ${isRunning ? 'animate-spin' : ''}`} />,
+                            icon: isRunning ? <Spinner size="sm" tone="current" /> : <RefreshCw className="w-4 h-4" />,
                             variant: 'primary' as const,
                             disabled: isRunning,
                           },
@@ -293,16 +281,19 @@ function SharePointSourcesPage() {
 
       {!loading && sources.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label="Add Your First SharePoint Source"
             onClick={() => navigate(`/apps/${appId}/sharepoint/new`)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-          >
-            Add Your First SharePoint Source
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
     </div>
   );
+
+
+  
 }
 
 export default SharePointSourcesPage;

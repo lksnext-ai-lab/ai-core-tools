@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, Trash2, ArrowRightLeft, Loader2 } from 'lucide-react';
+import { Trash2, ArrowRightLeft } from 'lucide-react';
 import Modal from '../ui/Modal';
+import Alert from '../ui/Alert';
 import UserPicker from '../ui/UserPicker';
 import { adminService } from '../../services/admin';
 import type { User } from '../../services/admin';
 import { errorMessage } from '../../constants/messages';
+import { Spinner } from '../ui/Spinner';
 
 type DialogBranch = 'choose' | 'transfer' | 'cascade';
 
@@ -105,32 +107,17 @@ function DeleteUserDialog({
       size="medium"
     >
       <div className="space-y-5">
-        <div className="flex gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
-          <AlertTriangle
-            className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
-            aria-hidden="true"
-          />
-          <div className="text-sm text-amber-800 dark:text-amber-200">
-            <strong className="text-amber-800 dark:text-amber-200">{targetLabel}</strong> owns{' '}
-            <strong className="text-amber-800 dark:text-amber-200">
-              {appCount} {appWord}
-            </strong>
-            . Choose what to do with their {appWord} before deleting this account.
-          </div>
-        </div>
+        <Alert
+          type="warning"
+          message={(
+            <>
+              <strong>{targetLabel}</strong> owns <strong>{appCount} {appWord}</strong>
+              . Choose what to do with their {appWord} before deleting this account.
+            </>
+          )}
+        />
 
-        {submitError && (
-          <div
-            role="alert"
-            className="flex items-start gap-3 rounded-lg px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
-          >
-            <AlertTriangle
-              className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
-              aria-hidden="true"
-            />
-            <p className="text-sm text-red-700 dark:text-red-300">{submitError}</p>
-          </div>
-        )}
+        {submitError && <Alert type="error" message={submitError} />}
 
         {branch === 'choose' && (
           <div className="space-y-3">
@@ -242,11 +229,9 @@ function DeleteUserDialog({
                 disabled={!transferTarget || isSubmitting}
                 aria-busy={isSubmitting}
                 aria-describedby={!transferTarget ? TRANSFER_PICKER_ID : undefined}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent bg-ink px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-ink-on transition-colors hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50 dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-hover-dark"
               >
-                {isSubmitting && (
-                  <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
-                )}
+                {isSubmitting && <Spinner size="sm" tone="current" />}
                 {isSubmitting ? 'Transferring…' : `Transfer ${appWord} and delete user`}
               </button>
             </div>
@@ -330,11 +315,9 @@ function DeleteUserDialog({
                 disabled={!cascadeConfirmPhraseMatches || isSubmitting}
                 aria-busy={isSubmitting}
                 aria-describedby={CASCADE_INPUT_ID}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-error px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-error transition-colors hover:bg-error-bg disabled:cursor-not-allowed disabled:opacity-50 dark:border-error-dark dark:text-error-dark dark:hover:bg-error-bg-dark"
               >
-                {isSubmitting && (
-                  <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
-                )}
+                {isSubmitting && <Spinner size="sm" tone="current" />}
                 {isSubmitting ? 'Deleting…' : `Delete user and all ${appWord}`}
               </button>
             </div>

@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import { FormField, FormSelect, FormTextArea } from '../components/ui/FormField';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import Alert from '../components/ui/Alert';
+import { LoadingState } from '../components/ui/LoadingState';
 
 interface EmbeddingService {
   service_id: number;
@@ -155,42 +159,34 @@ function DomainFormPage() {
     }));
   }
 
-  if (loading) {
+if (loading) {
     return (
-      <div className="p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-12 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <LoadingState variant="page" message="Loading domain..." />
     );
   }
 
   if (loadError) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <div className="mt-2 text-sm text-red-700">
-                <p>{loadError}</p>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={loadDomainData}
-                  className="bg-red-100 px-2 py-1 rounded-md text-red-800 hover:bg-red-200"
-                >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Title variant="titPrincipal" titulo={isNewDomain ? 'Create Domain' : 'Edit Domain'} />
+        
+        <Alert
+          type="error"
+          title="Error"
+          message={(
+            <>
+              {loadError}
+              <br />
+              <button
+                type="button"
+                onClick={loadDomainData}
+                className="mt-4 bg-red-100 px-2 py-1 rounded-md text-red-800 hover:bg-red-200"
+              >
+                Try Again
+              </button>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -198,97 +194,69 @@ function DomainFormPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isNewDomain ? 'Create Domain' : 'Edit Domain'}
-          </h1>
-          <button
-            onClick={() => navigate(`/apps/${appId}/domains`)}
-            className="text-gray-600 hover:text-gray-900 px-3 py-1 rounded-md hover:bg-gray-100"
-          >
-            <ArrowLeft className="w-4 h-4 mr-1 inline-block" /> Back to Domains
-          </button>
-        </div>
+        <Title variant="titPrincipal" titulo={isNewDomain ? 'Create Domain' : 'Edit Domain'} />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow">
+      <form onSubmit={handleSubmit} className="space-y-6 ">
         {/* Basic Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="domain-name" className="block text-sm font-medium text-gray-700 mb-2">
-              Domain Name *
-            </label>
-            <input
-              id="domain-name"
-              type="text"
-              value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="My Website"
-              required
-            />
-          </div>
+          <FormField
+            label="Domain Name"
+            id="domain-name"
+            type="text"
+            value={formData.name}
+            onChange={(e) => handleInputChange('name', e.target.value)}
+            placeholder="My Website"
+            required
+          />
 
-          <div>
-            <label htmlFor="base-url" className="block text-sm font-medium text-gray-700 mb-2">
-              Base URL *
-            </label>
-            <input
-              id="base-url"
-              type="url"
-              value={formData.base_url}
-              onChange={(e) => handleInputChange('base_url', e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="https://example.com"
-              required
-            />
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-            Description
-          </label>
-          <textarea
-            id="description"
-            value={formData.description}
-            onChange={(e) => handleInputChange('description', e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows={3}
-            placeholder="Description of this domain..."
+          <FormField
+            label="Base URL"
+            id="base-url"
+            type="url"
+            value={formData.base_url}
+            onChange={(e) => handleInputChange('base_url', e.target.value)}
+            placeholder="https://example.com"
+            required
           />
         </div>
 
+        <FormTextArea
+          label="Description"
+          id="description"
+          value={formData.description}
+          onChange={(e) => handleInputChange('description', e.target.value)}
+          rows={3}
+          placeholder="Description of this domain..."
+        />
+
         {/* Embedding Service Selection */}
         <div>
-          <label htmlFor="embedding-service" className="block text-sm font-medium text-gray-700 mb-2">
-            Embedding Service *
-          </label>
-          <select
+          <FormSelect
+            label="Embedding Service"
             id="embedding-service"
             value={formData.embedding_service_id || ''}
             onChange={(e) => {
               const value = e.target.value;
               handleInputChange('embedding_service_id', value ? Number.parseInt(value, 10) : undefined);
             }}
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             required={isNewDomain}
             disabled={!isNewDomain}
-          >
-            <option value="">Select an embedding service</option>
-            {embeddingServices.map((service) => (
-              <option key={service.service_id} value={service.service_id}>
-                {service.is_system ? `[System] ${service.name}` : service.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: 'Select an embedding service' },
+              ...embeddingServices.map((service) => ({
+                value: service.service_id,
+                label: service.is_system ? `[System] ${service.name}` : service.name,
+              })),
+            ]}
+          />
           {embeddingServices.length === 0 && (
-            <p className="text-sm text-red-600 mt-1">
+            <p className="text-sm text-error dark:text-error-dark mt-1">
               No embedding services available. Please create one first.
             </p>
           )}
           {!isNewDomain && (
-            <p className="text-sm text-amber-600 mt-1">
+            <p className="text-sm text-accent dark:text-accent-dark mt-1">
               The embedding service cannot be changed after a domain is created.
             </p>
           )}
@@ -296,30 +264,22 @@ function DomainFormPage() {
 
         {/* Vector Database Selection */}
         <div>
-          <label htmlFor="domain-vector-db" className="block text-sm font-medium text-gray-700 mb-2">
-            Vector Database *
-          </label>
-          <select
+          <FormSelect
+            label="Vector Database"
             id="domain-vector-db"
             value={vectorDbSelectValue}
             onChange={(e) => handleInputChange('vector_db_type', e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             required={isNewDomain}
             disabled={vectorDbOptions.length === 0 || !isNewDomain}
-          >
-            {vectorDbOptions.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={vectorDbOptions.map((option) => ({ value: option.code, label: option.label }))}
+          />
           {vectorDbOptions.length === 0 && isNewDomain && (
-            <p className="text-sm text-red-600 mt-1">
+            <p className="text-sm text-accent dark:text-accent-dark mt-1">
               No vector databases available. Please configure a silo with vector support first.
             </p>
           )}
           {!isNewDomain && (
-            <p className="text-sm text-amber-600 mt-1">
+            <p className="text-sm text-accent dark:text-accent-dark mt-1">
               The vector database cannot be changed after a domain is created.
             </p>
           )}
@@ -329,70 +289,55 @@ function DomainFormPage() {
         <div className="border-t pt-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Content Extraction Settings</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label htmlFor="content-tag" className="block text-sm font-medium text-gray-700 mb-2">
-                Content Tag
-              </label>
-              <input
-                id="content-tag"
-                type="text"
-                value={formData.content_tag}
-                onChange={(e) => handleInputChange('content_tag', e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="body"
-              />
-              <p className="text-xs text-gray-500 mt-1">HTML tag to extract content from (default: body)</p>
-            </div>
+            <FormField
+              label="Content Tag"
+              id="content-tag"
+              type="text"
+              value={formData.content_tag}
+              onChange={(e) => handleInputChange('content_tag', e.target.value)}
+              placeholder="body"
+              helpText="HTML tag to extract content from (default: body)"
+            />
 
-            <div>
-              <label htmlFor="content-class" className="block text-sm font-medium text-gray-700 mb-2">
-                Content Class
-              </label>
-              <input
-                id="content-class"
-                type="text"
-                value={formData.content_class}
-                onChange={(e) => handleInputChange('content_class', e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="main-content"
-              />
-              <p className="text-xs text-gray-500 mt-1">CSS class to filter content (optional)</p>
-            </div>
+            <FormField
+              label="Content Class"
+              id="content-class"
+              type="text"
+              value={formData.content_class}
+              onChange={(e) => handleInputChange('content_class', e.target.value)}
+              placeholder="main-content"
+              helpText="CSS class to filter content (optional)"
+            />
 
-            <div>
-              <label htmlFor="content-id" className="block text-sm font-medium text-gray-700 mb-2">
-                Content ID
-              </label>
-              <input
-                id="content-id"
-                type="text"
-                value={formData.content_id}
-                onChange={(e) => handleInputChange('content_id', e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="content"
-              />
-              <p className="text-xs text-gray-500 mt-1">HTML ID to filter content (optional)</p>
-            </div>
+            <FormField
+              label="Content ID"
+              id="content-id"
+              type="text"
+              value={formData.content_id}
+              onChange={(e) => handleInputChange('content_id', e.target.value)}
+              placeholder="content"
+              helpText="HTML ID to filter content (optional)"
+            />
           </div>
         </div>
 
         {/* Form Actions */}
         <div className="flex justify-end space-x-4 pt-6 border-t">
-          <button
+          <ButtonApp
             type="button"
             onClick={() => navigate(`/apps/${appId}/domains`)}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            label="Cancel"
+            variant="secondary"
+            size="medium"
             disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
+          />
+          <ButtonApp
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            label={submitButtonLabel}
+            variant="primary"
+            size="medium"
             disabled={saving || embeddingServices.length === 0 || vectorDbOptions.length === 0}
-          >
-            {submitButtonLabel}
-          </button>
+          />
         </div>
       </form>
     </div>

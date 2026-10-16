@@ -4,6 +4,8 @@ import { useUser } from '../contexts/UserContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
 import type { MarketplaceQuotaUsage } from '../types/marketplace';
+import { LoadingState } from '../components/ui/LoadingState';
+import { Spinner } from '../components/ui/Spinner';
 
 interface App {
   app_id: number;
@@ -118,8 +120,8 @@ const ProfilePage: React.FC = () => {
   const renderQuotaContent = () => {
     if (!quotaUsage) {
       return (
-        <div className="flex items-center space-x-2 text-sm text-gray-400">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+        <div className="flex items-center space-x-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+          <Spinner size="sm" tone="muted" />
           <span>Loading...</span>
         </div>
       );
@@ -157,19 +159,14 @@ const ProfilePage: React.FC = () => {
 
   if (userLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
   if (!user) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">User not found. Please log in.</span>
-        </div>
+        <Alert type="error" message="User not found. Please log in." />
       </div>
     );
   }
@@ -240,10 +237,7 @@ const ProfilePage: React.FC = () => {
           
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             {loading && (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-2 text-sm text-gray-500">Loading invitations...</p>
-              </div>
+              <LoadingState variant="section" message="Loading invitations..." />
             )}
             {!loading && invitations.length > 0 && (
               <ul className="divide-y divide-gray-100">
@@ -314,10 +308,7 @@ const ProfilePage: React.FC = () => {
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             {loading && (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-2 text-sm text-gray-500">Loading collaborations...</p>
-              </div>
+              <LoadingState variant="section" message="Loading collaborations..." />
             )}
             {!loading && collaborations.length > 0 && (
               <ul className="divide-y divide-gray-100">

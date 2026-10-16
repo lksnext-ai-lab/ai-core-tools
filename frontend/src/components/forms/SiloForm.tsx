@@ -1,7 +1,11 @@
+import Alert from '../ui/Alert';
+import ButtonApp from '../ui/ButtonApp';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { FormField, FormSelect } from '../ui/FormField';
+import { LoadingState } from '../ui/LoadingState';
 
 interface VectorDbOption {
   code: string;
@@ -182,221 +186,164 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
 
   if (loadingFormData) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-        <span className="ml-2">Loading form data...</span>
-      </div>
+      <LoadingState variant="section" message="Loading form data..." />
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">
-          {isEditing ? `Edit Silo: ${silo?.name}` : 'Create New Silo'}
-        </h2>
-        <p className="text-gray-600">
-          {isEditing 
-            ? 'Update your silo configuration and settings.'
-            : 'Create a new silo for vector storage and semantic search.'
-          }
-        </p>
-      </div>
-
+    <div className="max-w-2xl">
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="bg-white shadow rounded-lg p-6">
+        <div className="">
           <div className="grid grid-cols-1 gap-6">
             {/* Silo Name */}
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Silo Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                placeholder="Enter silo name"
-                disabled={isSubmitting}
-              />
-            </div>
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Silo Description
-              </label>
-              <input
-                type="text"
-                id="description"
-                name="description"
-                value={formData.description || ''}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                placeholder="Enter silo description"
-                disabled={isSubmitting}
-              />
-            </div>
+            <FormField
+              label="Silo Name"
+              id="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              placeholder="Enter silo name"
+              disabled={isSubmitting}
+            />
+            <FormField
+              label="Silo Description"
+              id="description"
+              value={formData.description || ''}
+              onChange={handleChange}
+              required
+              placeholder="Enter silo description"
+              disabled={isSubmitting}
+            />
             {/* Metadata Definition (Output Parser) */}
             <div>
-              <label htmlFor="output_parser_id" className="block text-sm font-medium text-gray-700 mb-2">
-                Metadata Definition
-              </label>
-              <select
+              <FormSelect
+                label="Metadata Definition"
                 id="output_parser_id"
-                name="output_parser_id"
                 value={formData.output_parser_id?.toString() || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                options={[
+                  { value: '', label: 'No metadata definition' },
+                  ...outputParsers.map((parser) => ({
+                    value: parser.parser_id,
+                    label: parser.name,
+                  })),
+                ]}
                 disabled={isSubmitting}
-              >
-                <option value="">No metadata definition</option>
-                {outputParsers.map((parser) => (
-                  <option key={parser.parser_id} value={parser.parser_id}>
-                    {parser.name}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-sm text-gray-500">
-                Optional: Define structured metadata for documents in this silo.
-              </p>
+                helpText="Optional: Define structured metadata for documents in this silo."
+              />
             </div>
 
             {/* Embedding Service */}
             <div>
-              <label htmlFor="embedding_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                Embedding Service <span className="text-red-500">*</span>
-              </label>
-              <select
+              <FormSelect
+                label="Embedding Service"
                 id="embedding_service_id"
-                name="embedding_service_id"
                 value={formData.embedding_service_id?.toString() || ''}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                options={[
+                  { value: '', label: 'Select an embedding service' },
+                  ...embeddingServices.map((service) => ({
+                    value: service.service_id,
+                    label: [
+                      service.is_system ? '[System]' : '',
+                      service.name,
+                      service.provider ? `(${service.provider})` : '',
+                    ].filter(Boolean).join(' '),
+                  })),
+                ]}
                 disabled={isSubmitting || isEditing}
-              >
-                <option value="">Select an embedding service</option>
-                {embeddingServices.map((service) => (
-                  <option key={service.service_id} value={service.service_id}>
-                    {service.is_system ? `[System] ${service.name}` : service.name}{service.provider ? ` (${service.provider})` : ''}
-                  </option>
-                ))}
-              </select>
-              {isEditing ? (
-                <p className="mt-1 text-sm text-amber-600">
-                  The embedding service cannot be changed after a silo is created.
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-gray-500">
-                  Required: Choose the embedding service for vector generation.
-                </p>
-              )}
+                className={isEditing ? '[&>p]:text-accent dark:text-accent-dark' : ''}
+                helpText={
+                  isEditing
+                    ? 'The embedding service cannot be changed after a silo is created.'
+                    : 'Required: Choose the embedding service for vector generation.'
+                }
+              />
             </div>
 
             {/* Vector Database */}
             <div>
-              <label htmlFor="vector_db_type" className="block text-sm font-medium text-gray-700 mb-2">
-                Vector Database <span className="text-red-500">*</span>
-              </label>
-              <select
+              <FormSelect
+                label="Vector Database"
                 id="vector_db_type"
-                name="vector_db_type"
                 value={vectorDbOptions.length === 0 ? '' : formData.vector_db_type ?? ''}
                 onChange={handleChange}
                 required={!isEditing}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                options={[
+                  ...(vectorDbOptions.length === 0
+                    ? [{ value: '', label: 'No vector databases available' }]
+                    : []),
+                  ...vectorDbOptions.map((option) => ({
+                    value: option.code,
+                    label: option.label,
+                  })),
+                ]}
                 disabled={isSubmitting || vectorDbOptions.length === 0 || isEditing}
-              >
-                {vectorDbOptions.length === 0 && <option value="">No vector databases available</option>}
-                {vectorDbOptions.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              />
               {isEditing ? (
-                <p className="mt-1 text-sm text-gray-500 flex items-center gap-1">
+                <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark flex items-center gap-1">
                   <Info className="w-3.5 h-3.5 shrink-0" />
                   The vector database cannot be changed after a silo is created.
                 </p>
               ) : vectorDbOptions.length === 0 ? (
-                <p className="mt-1 text-sm text-red-600">
+                <p className="mt-1 text-sm text-error dark:text-error-dark">
                   No vector databases available. Configure a silo backend before proceeding.
                 </p>
               ) : (
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
                   Required: Select the storage engine that will persist vectors for this silo.
                 </p>
               )}
             </div>
           </div>
-
           {/* Error Message */}
           {error && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex">
-                <AlertTriangle className="w-4 h-4 text-yellow-500 mr-3 shrink-0" />
-                <div>
-                  <h3 className="text-sm font-medium text-red-800">Error</h3>
-                  <p className="text-sm text-red-600 mt-1">{error}</p>
-                </div>
-              </div>
-            </div>
+            <Alert type="error" message={error} />
           )}
 
           {/* Action Buttons */}
           <div className="mt-6 flex items-center justify-between">
-            <button
+            <ButtonApp
+              label="Cancel"
               type="button"
               onClick={onCancel}
               disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={submitButtonLabel}
               type="submit"
               disabled={isSubmitting}
-              className="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded-lg flex items-center"
-            >
-              {isSubmitting && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              )}
-              {submitButtonLabel}
-            </button>
+              loading={isSubmitting}
+              variant="primary"
+              size="medium"
+            />
           </div>
         </div>
       </form>
 
       {/* Info Section */}
-      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Info className="w-4 h-4 text-blue-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">
-              About Custom Silos
-            </h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>
-                Custom silos are vector storage containers that enable semantic search and retrieval. 
-                They store document embeddings and allow AI agents to find relevant information quickly.
-              </p>
-              <p className="mt-2">
-                <strong>Embedding Service:</strong> Required for converting text to vectors.
-                <br />
-                <strong>Metadata Definition:</strong> Optional structured data for filtering and organization.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title="About Custom Silos"
+        className="mt-8"
+        message={(
+          <>
+            <p>
+              Custom silos are vector storage containers that enable semantic search and retrieval. 
+              They store document embeddings and allow AI agents to find relevant information quickly.
+            </p>
+            <p className="mt-2">
+              <span className="font-medium">Embedding Service:</span> Required for converting text to vectors.
+              <br />
+              <span className="font-medium">Metadata Definition:</span> Optional structured data for filtering and organization.
+            </p>
+          </>
+        )}
+      />
     </div>
   );
 }

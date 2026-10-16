@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ExternalLink, Search } from 'lucide-react';
 import { FormField } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
+import { ButtonApp } from '../../../ui/ButtonApp';
 import { useProviderModels } from '../../../../hooks/useProviderModels';
 import { getProviderDescriptor } from '../providers';
 import type {
@@ -10,6 +11,7 @@ import type {
   ServiceScope,
 } from '../../../../types/services';
 import type { CredentialsState } from './CredentialsStep';
+import { Skeleton } from '../../../ui/Skeleton';
 
 interface ModelSelectionStepProps {
   readonly kind: ServiceKind;
@@ -315,22 +317,22 @@ function ModelGridSkeleton() {
   return (
     <div className="space-y-4">
       <div>
-        <div className="h-5 w-40 bg-gray-200 rounded animate-pulse" />
-        <div className="h-4 w-64 mt-2 bg-gray-100 rounded animate-pulse" />
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-4 w-64 mt-2" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {Array.from({ length: 6 }).map((_, idx) => (
           <div
             key={idx}
-            className="p-3 rounded-lg border border-gray-200 bg-white space-y-2 animate-pulse"
+            className="p-3 rounded-lg border border-line bg-surface space-y-2 dark:border-line-dark dark:bg-surface-dark"
           >
-            <div className="h-4 w-3/4 bg-gray-200 rounded" />
-            <div className="h-3 w-1/2 bg-gray-100 rounded" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
             <div className="flex gap-1 pt-1">
-              <div className="h-3 w-12 bg-gray-100 rounded" />
-              <div className="h-3 w-10 bg-gray-100 rounded" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-10" />
             </div>
-            <div className="h-3 w-20 bg-gray-100 rounded mt-1" />
+            <Skeleton className="h-3 w-20 mt-1" />
           </div>
         ))}
       </div>
@@ -399,32 +401,29 @@ function ProviderListingError({
   }
 
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
-      <div>
-        <h4 className="text-sm font-semibold text-red-800">{title}</h4>
-        <p className="text-sm text-red-700 mt-1">{description}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onRetry}
-          className="px-3 py-1.5 text-xs font-medium bg-white text-red-800 border border-red-300 rounded hover:bg-red-100"
-        >
-          Retry listing
-        </button>
-        {status === 401 && descriptorDocUrl && (
-          <a
-            href={descriptorDocUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-red-800 hover:text-red-900"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Get a {provider} key
-          </a>
-        )}
-      </div>
-    </div>
+    <Alert
+      type="error"
+      title={title}
+      message={(
+        <>
+          {description}
+          <span className="mt-3 flex flex-wrap items-center gap-3">
+            <ButtonApp label="Retry listing" variant="danger" size="compact" onClick={onRetry} />
+            {status === 401 && descriptorDocUrl && (
+              <a
+                href={descriptorDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium underline"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Get a {provider} key
+              </a>
+            )}
+          </span>
+        </>
+      )}
+    />
   );
 }
 

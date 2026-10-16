@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useFormState } from '../../hooks/useFormState';
 import { FormField } from '../ui/FormField';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { FormActions } from '../ui/FormActions';
 
 interface App {
@@ -68,7 +68,7 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
       />
 
       {/* Error Message */}
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
       {/* Action Buttons */}
       <FormActions

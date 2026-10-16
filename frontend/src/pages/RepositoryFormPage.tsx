@@ -3,6 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import Alert from '../components/ui/Alert';
+import { FormField, FormSelect } from '../components/ui/FormField';
+import ButtonApp from '../components/ui/ButtonApp';
+import { LoadingState } from '../components/ui/LoadingState';
 
 interface RepositoryFormData {
   name: string;
@@ -186,202 +191,143 @@ const RepositoryFormPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          {isNewRepository ? 'Create Repository' : 'Edit Repository'}
-        </h1>
-        <p className="text-gray-600 mt-2">
-          {isNewRepository 
-            ? 'Create a new repository to organize your documents. A silo will be automatically created for vector search.' 
-            : 'Update repository settings and configuration'
-          }
-        </p>
-      </div>
+
+      <Title variant="titPrincipal"
+        titulo={isNewRepository ? 'Create Repository' : 'Edit Repository'}
+        subtitulo={isNewRepository 
+          ? 'Create a new repository to organize your documents. A silo will be automatically created for vector search.' 
+          : 'Update repository settings and configuration'
+        } 
+      />
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
+        <Alert type="error" message={error} />
       )}
 
       {/* Form */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl">
+      <div className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Repository Name */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Repository Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter repository name"
-              required
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Choose a descriptive name for your repository
-            </p>
-          </div>
+          <FormField
+            label="Repository Name"
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="Enter repository name"
+            required
+            helpText="Choose a descriptive name for your repository"
+          />
 
           {/* Vector Database */}
-          <div>
-            <label htmlFor="vector_db_type" className="block text-sm font-medium text-gray-700 mb-2">
-              Vector Database <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="vector_db_type"
-              value={formData.vector_db_type}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  vector_db_type: e.target.value.toUpperCase(),
-                })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              required={isNewRepository}
-              disabled={!isNewRepository}
-            >
-              {vectorDbOptions.length === 0
-                ? (
-                  <option value={formData.vector_db_type}>{formData.vector_db_type}</option>
-                ) : (
-                  vectorDbOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))
-                )}
-            </select>
-            {isNewRepository ? (
-              <p className="text-sm text-gray-500 mt-1">
-                Select where embeddings for this repository will be stored.
-              </p>
-            ) : (
-              <p className="text-sm text-amber-600 mt-1">
-                The vector database cannot be changed after a repository is created.
-              </p>
-            )}
-          </div>
+          <FormSelect
+            label="Vector Database"
+            id="vector_db_type"
+            value={formData.vector_db_type}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                vector_db_type: e.target.value.toUpperCase(),
+              })
+            }
+            options={vectorDbOptions.length === 0
+              ? [{ value: formData.vector_db_type, label: formData.vector_db_type }]
+              : vectorDbOptions.map((option) => ({ value: option.code, label: option.label }))}
+            required={isNewRepository}
+            disabled={!isNewRepository}
+            className={!isNewRepository ? '[&>p]:text-amber-600' : ''}
+            helpText={isNewRepository
+              ? 'Select where embeddings for this repository will be stored.'
+              : 'The vector database cannot be changed after a repository is created.'}
+          />
 
           {/* Embedding Service (only for new repositories) */}
           {isNewRepository && (
-            <div>
-              <label htmlFor="embedding_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                Embedding Service <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="embedding_service_id"
-                value={formData.embedding_service_id || ''}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  embedding_service_id: e.target.value ? Number.parseInt(e.target.value, 10) : undefined 
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select an embedding service</option>
-                {embeddingServices.map((service) => (
-                  <option key={service.service_id} value={service.service_id}>
-                    {service.is_system ? '[System] ' : ''}{service.provider && service.model_name
-                      ? `${service.name} (${service.provider} - ${service.model_name})`
-                      : service.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-500 mt-1">
-                This embedding service will be used for the silo that's automatically created with this repository
-              </p>
-            </div>
+            <FormSelect
+              label="Embedding Service"
+              id="embedding_service_id"
+              value={formData.embedding_service_id || ''}
+              onChange={(e) => setFormData({ 
+                ...formData, 
+                embedding_service_id: e.target.value ? Number.parseInt(e.target.value, 10) : undefined 
+              })}
+              options={[
+                { value: '', label: 'Select an embedding service' },
+                ...embeddingServices.map((service) => ({
+                  value: service.service_id,
+                  label: `${service.is_system ? '[System] ' : ''}${service.provider && service.model_name
+                    ? `${service.name} (${service.provider} - ${service.model_name})`
+                    : service.name}`,
+                })),
+              ]}
+              required
+              helpText="This embedding service will be used for the silo that's automatically created with this repository"
+            />
           )}
 
           {/* Transcription Service */}
           {aiServices.length > 0 && (
-            <div>
-              <label htmlFor="transcription_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                Transcription Service (Whisper)
-              </label>
-              <select
-                id="transcription_service_id"
-                value={formData.transcription_service_id || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  transcription_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">None (no transcription analysis) </option>
-                {aiServices.map((service) => (
-                  <option key={service.service_id} value={service.service_id}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-500 mt-1">
-                Transcription service used for all media uploads in this repository.
-              </p>
-            </div>
+            <FormSelect
+              label="Transcription Service (Whisper)"
+              id="transcription_service_id"
+              value={formData.transcription_service_id || ''}
+              onChange={(e) => setFormData({
+                ...formData,
+                transcription_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
+              })}
+              options={[
+                { value: '', label: 'None (no transcription analysis) ' },
+                ...aiServices.map((service) => ({ value: service.service_id, label: service.name })),
+              ]}
+              helpText="Transcription service used for all media uploads in this repository."
+            />
           )}
 
           {/* Video AI Service */}
           {aiServices.filter(s => s.supports_video).length > 0 && (
-            <div>
-              <label htmlFor="video_ai_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                Video Analysis Service (Gemini)
-              </label>
-              <select
-                id="video_ai_service_id"
-                value={formData.video_ai_service_id || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  video_ai_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">None (no visual analysis)</option>
-                {aiServices.filter(s => s.supports_video).map((service) => (
-                  <option key={service.service_id} value={service.service_id}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-500 mt-1">
-                When set, media uploaded in multimodal mode will use this service for visual frame analysis.
-              </p>
-            </div>
+            <FormSelect
+              label="Video Analysis Service (Gemini)"
+              id="video_ai_service_id"
+              value={formData.video_ai_service_id || ''}
+              onChange={(e) => setFormData({
+                ...formData,
+                video_ai_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
+              })}
+              options={[
+                { value: '', label: 'None (no visual analysis)' },
+                ...aiServices.filter(s => s.supports_video).map((service) => ({
+                  value: service.service_id,
+                  label: service.name,
+                })),
+              ]}
+              helpText="When set, media uploaded in multimodal mode will use this service for visual frame analysis."
+            />
           )}
 
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
-            <button
+          <div className="flex justify-end gap-3 pt-6">
+            <ButtonApp
+              label="Cancel"
               type="button"
               onClick={handleCancel}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={isNewRepository ? 'Create Repository' : 'Save Changes'}
               type="submit"
               disabled={saving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {saving && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              )}
-              {isNewRepository ? 'Create Repository' : 'Save Changes'}
-            </button>
+              loading={saving}
+              variant="primary"
+              size="medium"
+            />
           </div>
         </form>
       </div>

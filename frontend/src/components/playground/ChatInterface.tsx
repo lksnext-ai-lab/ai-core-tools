@@ -14,6 +14,7 @@ import ToolHistoryPanel from './ToolHistoryPanel';
 import MediaUploadModal from './MediaUploadModal';
 import VideoPlayer from './VideoPlayer';
 import type { VideoTimestamp } from './VideoPlayer';
+import { LoadingState } from '../ui/LoadingState';
 
 interface Message {
   id: string;
@@ -892,10 +893,7 @@ function ChatInterface({
           >
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-full">
-                <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500">
-                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-300 border-t-transparent" />
-                  <span className="text-sm">Loading conversation...</span>
-                </div>
+                <LoadingState variant="section" message="Loading conversation..." />
               </div>
             ) : (
               <>

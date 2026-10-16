@@ -3,6 +3,7 @@ import { FolderOpen } from 'lucide-react';
 import Alert from '../../ui/Alert';
 import type { AppImportPreview } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
+import { LoadingState } from '../../ui/LoadingState';
 
 interface Props {
   file: File | null;
@@ -108,12 +109,7 @@ function AppStepUpload({
       </div>
 
       {isValidating && (
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-          <span className="ml-2 text-sm text-gray-600">
-            Validating export file...
-          </span>
-        </div>
+        <LoadingState variant="inline" message="Validating export file..." />
       )}
 
       {validationError && (

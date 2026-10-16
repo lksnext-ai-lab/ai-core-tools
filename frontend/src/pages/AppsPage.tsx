@@ -10,6 +10,7 @@ import Title from '../components/ui/Title';
 import CardDetailEntidad from '../components/ui/CardDetailEntidad';
 import { Badge } from '../components/ui/Badge';
 import ButtonApp from '../components/ui/ButtonApp';
+import { LoadingState } from '../components/ui/LoadingState';
 
 interface App {
   app_id: number;
@@ -93,10 +94,7 @@ function AppsPage() {
   // Show loading spinner while fetching data
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading apps...</span>
-      </div>
+      <LoadingState variant="page" message="Loading apps..." />
     );
   }
 

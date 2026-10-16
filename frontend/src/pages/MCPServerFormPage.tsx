@@ -4,6 +4,9 @@ import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { MCPServer, ToolAgent } from '../core/types';
+import { LoadingState } from '../components/ui/LoadingState';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import Alert from '../components/ui/Alert';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
@@ -134,10 +137,7 @@ function MCPServerFormPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading...</span>
-        </div>
+        <LoadingState variant="page" message="Loading..." />
       </div>
     );
   }
@@ -160,17 +160,7 @@ function MCPServerFormPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">!</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
@@ -325,18 +315,12 @@ function MCPServerFormPage() {
           >
             Cancel
           </button>
-          <button
+          <ButtonApp
             type="submit"
-            disabled={saving || !formData.name}
-            className="px-6 py-2 text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Saving...
-              </>
-            ) : submitLabel}
-          </button>
+            label={saving ? 'Saving...' : submitLabel}
+            disabled={!formData.name}
+            loading={saving}
+          />
         </div>
       </form>
     </div>

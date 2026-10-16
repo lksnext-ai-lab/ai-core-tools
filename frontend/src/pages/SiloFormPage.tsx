@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import SiloForm from '../components/forms/SiloForm';
+import Title from '../components/ui/Title';
+import { LoadingState } from '../components/ui/LoadingState';
+import Alert from '../components/ui/Alert';
 
 // Define the Silo type
 interface VectorDbOption {
@@ -78,6 +80,8 @@ function SiloFormPage() {
       {
         loading: isEditing ? MESSAGES.UPDATING('silo') : MESSAGES.CREATING('silo'),
         success: isEditing ? MESSAGES.UPDATED('silo') : MESSAGES.CREATED('silo'),
+
+        
         error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('silo')),
       },
     );
@@ -90,24 +94,21 @@ function SiloFormPage() {
   function handleCancel() {
     navigate(`/apps/${appId}/silos`);
   }
-
+  
   if (loading) {
     return (
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEditing ? 'Edit Silo' : 'Create New Silo'}
-            </h1>
-            <p className="text-gray-600">Configure your silo settings</p>
-          </div>
+          <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  
+            subtitulo={isEditing 
+                ? 'Update your silo configuration and settings.'
+                : 'Create a new silo for vector storage and semantic search.'
+            }
+          />
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading silo...</span>
-        </div>
+        <LoadingState variant="page" message="Loading silo..." />
       </div>
     );
   }
@@ -117,49 +118,38 @@ function SiloFormPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEditing ? 'Edit Silo' : 'Create New Silo'}
-            </h1>
-            <p className="text-gray-600">Configure your silo settings</p>
-          </div>
+          <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  subtitulo={isEditing 
+                ? 'Update your silo configuration and settings.'
+                : 'Create a new silo for vector storage and semantic search.'
+            }
+          />
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Silo</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={() => navigate(`/apps/${appId}/silos`)}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
+        <Alert
+          type="error"
+          title="Error Loading Silo"
+          message={(
+            <>
+              {error}
+              <button type="button" onClick={() => navigate(`/apps/${appId}/silos`)} className="mt-2 block underline">
                 Back to Silos
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isEditing ? 'Edit Silo' : 'Create New Silo'}
-          </h1>
-          <p className="text-gray-600">Configure your silo settings</p>
-        </div>
-        <button
-          onClick={handleCancel}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-        >
-          <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
-        </button>
+        <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  subtitulo={isEditing 
+                ? 'Update your silo configuration and settings.'
+                : 'Create a new silo for vector storage and semantic search.'
+            }
+          />
       </div>
 
       {/* Silo Form */}

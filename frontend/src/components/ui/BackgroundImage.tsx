@@ -1,8 +1,8 @@
-import { Bot, FileText, MessageSquare, Plug, Store, Target, Wrench, Database } from 'lucide-react';
+import { Bot, FileText, MessageSquare, Plug, Store, Target, Wrench, Database, CalendarClock, Cloud } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 
-export type BackgroundImageIconName = 'Bot' | 'FileText' | 'MessageSquare' | 'Store' | 'Wrench' | 'Plug' |'Target' |'Database';
+export type BackgroundImageIconName = 'Bot' | 'FileText' | 'MessageSquare' | 'Store' | 'Wrench' | 'Plug' |'Target' |'Database' | 'CalendarClock' | 'Cloud';
 export type BackgroundImageVariant = 'marron' | 'vacio' | 'gris';
 
 const icons: Record<BackgroundImageIconName, LucideIcon> = {
@@ -14,10 +14,12 @@ const icons: Record<BackgroundImageIconName, LucideIcon> = {
   Plug,
   Target,
   Database,
+  CalendarClock,
+  Cloud,
 };
 
 function getVariantBackgroundClass(variant: BackgroundImageVariant): string {
-  if (variant === 'marron') return 'bg-bronze-bg-soft dark:bg-bg-soft-dark';
+  if (variant === 'marron') return 'bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark';
   if (variant === 'vacio') return 'border border-accent dark:border-accent-dark';
   if (variant === 'gris') return 'bg-tableCab dark:bg-surface-hover-dark';
   return '';

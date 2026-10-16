@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { useUser } from '../contexts/UserContext';
+import { ButtonApp } from '../components/ui/ButtonApp';
 
 export interface ChangePasswordPageProps {
   readonly className?: string;
@@ -197,21 +198,14 @@ function ChangePasswordPage() {
             />
           </div>
 
-          <button
+          <ButtonApp
             type="submit"
-            disabled={isLoading || !currentPassword || !newPassword || !confirm}
-            className="btn-login-gradient w-full flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Changing password...
-              </>
-            ) : 'Change password'}
-          </button>
+            label={isLoading ? 'Changing password...' : 'Change password'}
+            disabled={!currentPassword || !newPassword || !confirm}
+            loading={isLoading}
+            size="spacious"
+            className="w-full"
+          />
         </form>
 
         <p className="mt-6 text-sm text-center text-slate-500 dark:text-slate-400">

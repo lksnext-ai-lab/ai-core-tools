@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { apiService } from '../../services/api';
+import ButtonApp from '../ui/ButtonApp';
+import { FormSelect } from '../ui/FormField';
 
 export type MetadataOperator = '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte' | '$in';
 export type SupportedDbType = 'PGVECTOR' | 'QDRANT';
@@ -443,7 +445,9 @@ export function SearchFilters({
                       if (fieldSuggestions.length > 0) setOpenSuggestionField(field.name);
                     }}
                     placeholder={currentOp === '$in' ? 'value1, value2, value3' : `Filter by ${field.name}`}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
+                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent ${
+                      disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
+                    }`}
                     disabled={disabled}
                   />
                   {showSuggestions && (
@@ -485,13 +489,13 @@ export function SearchFilters({
       {/* FR-3.6 — Saved filters */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {filterMetadata && !showSaveForm && (
-          <button
+          <ButtonApp
             type="button"
             onClick={() => setShowSaveForm(true)}
-            className="text-xs px-2 py-1 border border-amber-300 text-amber-700 rounded hover:bg-amber-50"
-          >
-            Save filter
-          </button>
+            label="Save filter"
+            variant="primary"
+            size="medium"
+          />
         )}
         {showSaveForm && (
           <div className="flex items-center gap-1">
@@ -504,39 +508,39 @@ export function SearchFilters({
                 if (e.key === 'Escape') { setShowSaveForm(false); setSaveFilterName(''); }
               }}
               placeholder="Filter name..."
-              className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+              className="w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
               autoFocus
             />
-            <button
+            <ButtonApp
               type="button"
               onClick={handleSaveFilter}
               disabled={!saveFilterName.trim()}
-              className="text-xs px-2 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50"
-            >
-              Save
-            </button>
-            <button
+              label="Save"
+              variant="primary"
+              size="medium"
+            />
+            <ButtonApp
               type="button"
               onClick={() => { setShowSaveForm(false); setSaveFilterName(''); }}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
-            >
-              Cancel
-            </button>
+              label="Cancel"
+              variant="secondary"
+              size="medium"
+            />
           </div>
         )}
         {savedFilters.length > 0 && (
-          <select
+          <FormSelect
+            label="Load saved filter"
+            labelClassName="sr-only"
+            id="load-saved-filter"
             value={loadSelectValue}
             onChange={handleLoadFilter}
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white"
-          >
-            <option value="">Load saved filter…</option>
-            {savedFilters.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: 'Load saved filter…' },
+              ...savedFilters.map((filter) => ({ value: filter.id, label: filter.name })),
+            ]}
+            className="w-48"
+          />
         )}
       </div>
 
@@ -546,20 +550,20 @@ export function SearchFilters({
           <span>
             Loaded: <strong>{loadedFilterName}</strong>
           </span>
-          <button
+          <ButtonApp
             type="button"
             onClick={() => { onFilterMetadataChange(undefined); setLoadedFilterName(null); }}
-            className="underline hover:no-underline"
-          >
-            Clear
-          </button>
-          <button
+            label="Clear"
+            variant="secondary"
+            size="medium"
+          />
+          <ButtonApp
             type="button"
             onClick={handleRemoveLoadedFilter}
-            className="underline hover:no-underline text-red-500 hover:text-red-700"
-          >
-            Delete
-          </button>
+            label="Delete"
+            variant="danger"
+            size="medium"
+          />
         </div>
       )}
     </div>

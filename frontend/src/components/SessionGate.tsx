@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useUser, type User } from '../contexts/UserContext';
 import { ErrorState } from './ui/ErrorState';
+import { LoadingState } from './ui/LoadingState';
 
 interface SessionGateProps {
   readonly children: (user: User) => React.ReactNode;
@@ -9,10 +10,7 @@ interface SessionGateProps {
 
 function FullScreenSpinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900" role="status" aria-live="polite">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
-      <span className="sr-only">Checking your session…</span>
-    </div>
+    <LoadingState variant="fullScreen" message="Checking your session…" />
   );
 }
 

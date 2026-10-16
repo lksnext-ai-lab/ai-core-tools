@@ -1,7 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { Loader2, CheckCircle2, XCircle, Ban, Clock } from 'lucide-react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { CheckCircle2, XCircle, Ban, Clock } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { CrawlJob, CrawlJobStatus } from '../../types/crawl';
+import { Spinner } from '../ui/Spinner';
+import { Badge, type BadgeVariant } from '../ui/Badge';
+import { ButtonApp } from '../ui/ButtonApp';
+import CardApp from '../ui/CardApp';
+import { Alert } from '../..';
 
 interface CrawlJobProgressPanelProps {
   appId: number;
@@ -14,20 +19,20 @@ interface CrawlJobProgressPanelProps {
 const ACTIVE_STATUSES: CrawlJobStatus[] = ['QUEUED', 'RUNNING'];
 const POLL_INTERVAL_MS = 2000;
 
-function statusBadge(status: CrawlJobStatus) {
+function statusBadge(status: CrawlJobStatus): { text: string; variant: BadgeVariant; icon: ReactNode } {
   switch (status) {
     case 'QUEUED':
-      return { text: 'Queued', className: 'bg-yellow-100 text-yellow-800', icon: <Clock className="w-3 h-3" /> };
+      return { text: 'Queued', variant: 'warning', icon: <Clock className="w-3 h-3" /> };
     case 'RUNNING':
-      return { text: 'Running', className: 'bg-blue-100 text-blue-800', icon: <Loader2 className="w-3 h-3 animate-spin" /> };
+      return { text: 'Running', variant: 'info', icon: <Spinner size="xs" tone="current" /> };
     case 'COMPLETED':
-      return { text: 'Completed', className: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="w-3 h-3" /> };
+      return { text: 'Completed', variant: 'success', icon: <CheckCircle2 className="w-3 h-3" /> };
     case 'FAILED':
-      return { text: 'Failed', className: 'bg-red-100 text-red-800', icon: <XCircle className="w-3 h-3" /> };
+      return { text: 'Failed', variant: 'error', icon: <XCircle className="w-3 h-3" /> };
     case 'CANCELLED':
-      return { text: 'Cancelled', className: 'bg-gray-100 text-gray-600', icon: <Ban className="w-3 h-3" /> };
+      return { text: 'Cancelled', variant: 'default', icon: <Ban className="w-3 h-3" /> };
     default:
-      return { text: status, className: 'bg-gray-100 text-gray-600', icon: null };
+      return { text: status, variant: 'default', icon: null };
   }
 }
 
@@ -119,29 +124,27 @@ export default function CrawlJobProgressPanel({
   const isActive = ACTIVE_STATUSES.includes(currentJob.status);
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+    <div className=" p-4 space-y-4">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
-            {badge.icon}
-            {badge.text}
-          </span>
-          <span className="text-xs text-gray-500">Job #{currentJob.id}</span>
-          <span className="text-xs text-gray-400">
+          <Badge label={badge.text} variant={badge.variant} icon={badge.icon} />
+          <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">Job #{currentJob.id}</span>
+          <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
             {currentJob.triggered_by === 'MANUAL' ? 'Manual trigger' : 'Scheduled'}
           </span>
         </div>
 
+        
+
         {canEdit && isActive && (
-          <button
-            type="button"
+          <ButtonApp
+            label={cancelling ? 'Cancelling...' : 'Cancel'}
+            variant="danger"
+            size="medium"
             onClick={() => { void handleCancel(); }}
             disabled={cancelling}
-            className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 border border-red-300 rounded px-2 py-0.5"
-          >
-            {cancelling ? 'Cancelling...' : 'Cancel'}
-          </button>
+          />
         )}
       </div>
 
@@ -156,26 +159,24 @@ export default function CrawlJobProgressPanel({
             { label: 'Removed', value: currentJob.removed_count },
           ] as const
         ).map(({ label, value }) => (
-          <div key={label} className="bg-gray-50 rounded p-2">
-            <p className="text-lg font-semibold text-gray-800">{value}</p>
-            <p className="text-xs text-gray-500">{label}</p>
-          </div>
+          <CardApp variant="white" key={label} className=" p-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-fg dark:text-fg-dark">{label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-fg dark:text-fg-dark">{value}</p>
+          </CardApp>
         ))}
       </div>
 
       {/* Timing */}
-      <div className="text-xs text-gray-500 flex gap-4">
+      <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark flex gap-4">
         <span>Duration: {formatDuration(currentJob.started_at, currentJob.finished_at)}</span>
         {currentJob.started_at && (
           <span>Started: {new Date(currentJob.started_at).toLocaleString()}</span>
         )}
       </div>
-
+        
       {/* Error log (terminal failure only) */}
       {currentJob.status === 'FAILED' && currentJob.error_log && (
-        <div className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
-          {currentJob.error_log}
-        </div>
+        <Alert type="error" title="" message={currentJob.error_log} />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -17,6 +17,7 @@ import type { AgentMCPUsage } from '../core/types';
 import BackgroundImage, { type BackgroundImageIconName } from '../components/ui/BackgroundImage';
 import ButtonApp from '../components/ui/ButtonApp';
 import Title from '../components/ui/Title';
+import { LoadingState } from '../components/ui/LoadingState';
 
 // Define the Agent type
 interface Agent {
@@ -130,20 +131,22 @@ function AgentsPage() {
       <div className="space-y-3">
         <p>Are you sure you want to delete &quot;{agent.name}&quot;? This action cannot be undone.</p>
         {mcpUsage && mcpUsage.mcp_servers.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="font-medium text-amber-900 text-sm">
-              This agent is used in {mcpUsage.mcp_servers.length} MCP server
-              {mcpUsage.mcp_servers.length === 1 ? '' : 's'}:
-            </p>
-            <ul className="mt-1 text-amber-800 text-sm list-disc list-inside">
-              {mcpUsage.mcp_servers.map((s) => (
-                <li key={s.server_id}>{s.server_name}</li>
-              ))}
-            </ul>
-            <p className="mt-2 text-amber-700 text-sm">
-              Deleting this agent will make it unavailable in those MCP servers.
-            </p>
-          </div>
+          <Alert
+            type="warning"
+            title={`This agent is used in ${mcpUsage.mcp_servers.length} MCP server${mcpUsage.mcp_servers.length === 1 ? '' : 's'}:`}
+            message={(
+              <>
+                <ul className="list-disc list-inside">
+                  {mcpUsage.mcp_servers.map((s) => (
+                    <li key={s.server_id}>{s.server_name}</li>
+                  ))}
+                </ul>
+                <p className="mt-2">
+                  Deleting this agent will make it unavailable in those MCP servers.
+                </p>
+              </>
+            )}
+          />
         )}
       </div>
     );
@@ -263,10 +266,7 @@ function AgentsPage() {
           />
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2">Loading agents...</span>
-        </div>
+        <LoadingState variant="page" message="Loading agents..." />
       </div>
     );
   }
@@ -562,14 +562,11 @@ function AgentsPage() {
               </label>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-              <div className="flex items-start">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mr-2 shrink-0" />
-                <p className="text-sm text-amber-800">
-                  Conversation history is NOT exported. Only configuration is included.
-                </p>
-              </div>
-            </div>
+            <Alert
+              type="warning"
+              className="mb-4"
+              message="Conversation history is NOT exported. Only configuration is included."
+            />
 
             <div className="flex space-x-3">
               <button

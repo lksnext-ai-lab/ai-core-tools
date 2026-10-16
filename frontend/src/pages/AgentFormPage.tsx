@@ -27,6 +27,7 @@ import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
+import { LoadingState } from '../components/ui/LoadingState';
 
 // Define the Agent types
 interface Agent {
@@ -266,26 +267,25 @@ function AgentFormPage() {
       : 'You need to configure at least one AI service before creating an agent. AI services define which language model your agent will use.';
 
     return (
-      <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6">
-        <div className="flex items-start">
-          <AlertTriangle className="w-5 h-5 text-amber-500 mr-3 shrink-0" />
-          <div className="flex-1">
-            <h4 className="text-sm font-semibold text-amber-900 mb-2">No AI Services Configured</h4>
-            <p className="text-sm text-amber-800 mb-3">
-              {message}
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
-              className="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              {' '}
-              Configure AI Services
-            </button>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="warning"
+        title="No AI Services Configured"
+        className="mb-6"
+        message={(
+          <>
+            {message}
+            <span className="mt-3 block">
+              <ButtonApp
+                label="Configure AI Services"
+                variant="secondary"
+                size="small"
+                icon={<Settings className="w-4 h-4" />}
+                onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
+              />
+            </span>
+          </>
+        )}
+      />
     );
   };
   const [saving, setSaving] = useState(false);
@@ -760,12 +760,7 @@ function AgentFormPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2 text-secondary dark:text-secondary-dark">Loading agent...</span>
-        </div>
-      </div>
+      <LoadingState variant="page" message="Loading agent..." />
     );
   }
 
@@ -935,29 +930,26 @@ function AgentFormPage() {
 
                 {/* Memory Management - Conditional */}
                 {formData.has_memory && (
-                  <div className="border-t border-gray-200 pt-6">
+                  <CardApp>
                     <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-                        <Brain className="w-5 h-5 text-indigo-600" />
-                      </div>
+                      <BackgroundImage
+                        icon={Brain}
+                        size={40}
+                        variant="marron"
+                        className="mr-4 rounded-xl"
+                      />
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">Memory Management</h3>
+                        <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Memory Management</h3>
                         <p className="text-sm text-secondary dark:text-secondary-dark mt-1">Configure the agent's memory management strategy</p>
                       </div>
                     </div>
 
-                    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
-                      <div className="flex items-start">
-                        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
-                        <div>
-                          <p className="text-sm text-indigo-800 font-medium">Automatic Hybrid Strategy</p>
-                          <p className="text-xs text-indigo-700 mt-1">
-                            The agent automatically applies a hybrid strategy that removes tool messages, trims the history,
-                            and manages token limits to optimize performance and costs.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    <Alert
+                      type="info"
+                      title="Automatic Hybrid Strategy"
+                      className="mb-6"
+                      message="The agent automatically applies a hybrid strategy that removes tool messages, trims the history, and manages token limits to optimize performance and costs."
+                    />
                     
                     <div className="space-y-6">
                       <div>
@@ -1033,7 +1025,7 @@ function AgentFormPage() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </CardApp>
                 )}
               </div>
             </CardApp>
@@ -1153,49 +1145,44 @@ function AgentFormPage() {
 
                     {/* MCP Warning Dialog */}
                     {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
-                      <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                        <div className="flex items-start">
-                          <span className="text-amber-500 text-xl mr-3">!</span>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-amber-900 mb-2">
-                              This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                            </h4>
-                            <p className="text-sm text-amber-800 mb-2">
+                      <Alert
+                        type="warning"
+                        title={`This agent is used in ${mcpUsage.mcp_servers.length} MCP server${mcpUsage.mcp_servers.length === 1 ? '' : 's'}`}
+                        className="mb-6"
+                        message={(
+                          <>
+                            <span className="mb-2 block">
                               Unmarking this agent as a tool will make it unavailable in the following MCP servers:
-                            </p>
-                            <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
+                            </span>
+                            <ul className="list-disc list-inside mb-3">
                               {mcpUsage.mcp_servers.map(s => (
                                 <li key={s.server_id}>{s.server_name}</li>
                               ))}
                             </ul>
-                            <div className="flex space-x-3">
-                              <button
-                                type="button"
+                            <span className="flex space-x-3">
+                              <ButtonApp
+                                label="Unmark as Tool Anyway"
+                                variant="primary"
+                                size="control"
                                 onClick={() => {
                                   handleInputChange('is_tool', false);
                                   setShowMcpWarning(false);
                                 }}
-                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Unmark as Tool Anyway
-                              </button>
-                              <button
-                                type="button"
+                              />
+                              <ButtonApp
+                                label="Cancel"
+                                variant="secondary"
+                                size="control"
                                 onClick={() => setShowMcpWarning(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-fg dark:text-fg-dark text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Cancel
-                              </button>
-
-                              
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                              />
+                            </span>
+                          </>
+                        )}
+                      />
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <CardApp variant="info" className="p-4">
+                      <CardApp variant="subtle" className="p-4">
                         <FormCheckbox
                           id="is_tool"
                           label="Tool Agent"
@@ -1219,7 +1206,7 @@ function AgentFormPage() {
                       </CardApp>
 
 
-                      <CardApp variant="info" className="p-4">
+                      <CardApp variant="subtle" className="p-4">
                         <FormCheckbox
                           id="has_memory"
                           label="Conversational"
@@ -1229,7 +1216,7 @@ function AgentFormPage() {
                         />
                       </CardApp>
 
-                      <CardApp variant="info" className="p-4">
+                      <CardApp variant="subtle" className="p-4">
                         <FormCheckbox
                           id="enable_code_interpreter"
                           label="Code Interpreter"
@@ -1239,7 +1226,7 @@ function AgentFormPage() {
                         />
                       </CardApp>
 
-                      <CardApp variant="info" className="p-4">
+                      <CardApp variant="subtle" className="p-4">
                         <FormCheckbox
                           id="skill_router_enabled"
                           label="Skill Router"
@@ -1348,10 +1335,12 @@ function AgentFormPage() {
                           );
                         })}
                       </div>
-                      <CardApp variant="alert" className="p-1 my-1">
-                        <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API).
-                        Unsupported tools for the selected provider are silently ignored.
-                      </CardApp>
+                      <Alert
+                        type="warning"
+                        title="Model compatibility"
+                        className="my-1"
+                        message="Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API). Unsupported tools for the selected provider are silently ignored."
+                      />
                     </div>
                   </CardApp>
 
@@ -1641,7 +1630,7 @@ function AgentFormPage() {
                   
                   {formData.tool_ids.length > 0 && (
 
-                    <CardApp variant="alert" className="mt-4">
+                    <CardApp variant="subtle" className="mt-4">
                       <span className="font-medium text-sm">{formData.tool_ids.length}</span> <span className="font-medium text-sm">tool{formData.tool_ids.length === 1 ? '' : 's'} selected</span>
                  
                     </CardApp>
@@ -1829,10 +1818,12 @@ function AgentFormPage() {
               
               {/* New agent: prompt user to save first */}
               {isNewAgent ? (
-                <CardApp variant="alert" className="mb-8" >
-                  <Info className="w-4 h-4 shrink-0   text-sm" aria-hidden="true" />
-                  <span className='text-sm'>Save the agent first to configure marketplace publishing.</span>
-              </CardApp>
+                <Alert
+                  type="info"
+                  title="Agent not saved"
+                  className="mb-8"
+                  message="Save the agent first to configure marketplace publishing."
+                />
               ) : (
               <>
               {/* Visibility Control */}

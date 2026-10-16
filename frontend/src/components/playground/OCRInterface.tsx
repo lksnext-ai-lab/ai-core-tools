@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Bot, ClipboardList, BarChart2, Download, Eye } from 'lucide-react';
 import { apiService } from '../../services/api';
 import MessageContent from './MessageContent';
+import { ButtonApp } from '../ui/ButtonApp';
 
 interface OCRInterfaceProps {
   appId: number;
@@ -218,20 +219,13 @@ export const OCRInterface: React.FC<OCRInterfaceProps> = ({
 
               {/* Process Button */}
               {selectedFile && (
-                <button
+                <ButtonApp
+                  label={isProcessing ? 'Procesando...' : 'Procesar PDF'}
                   onClick={handleProcessOCR}
-                  disabled={isProcessing}
-                  className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isProcessing ? (
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Procesando...
-                    </div>
-                  ) : (
-                    'Procesar PDF'
-                  )}
-                </button>
+                  loading={isProcessing}
+                  size="spacious"
+                  className="w-full"
+                />
               )}
             </div>
 

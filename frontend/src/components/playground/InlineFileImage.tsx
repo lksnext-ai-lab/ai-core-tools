@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Spinner } from '../ui/Spinner';
 
 interface InlineFileImageProps {
   fileId: string;
@@ -24,11 +25,8 @@ const InlineFileImage: React.FC<InlineFileImageProps> = ({ fileId, filename, res
 
   if (!src) {
     return (
-      <span className="inline-flex items-center gap-1 text-sm text-gray-500 italic">
-        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-        </svg>
+      <span className="inline-flex items-center gap-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark italic">
+        <Spinner size="sm" tone="muted" />
         Loading {filename}…
       </span>
     );

@@ -1,5 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Lightbulb, Brain, MessageCircle } from 'lucide-react';
+import { Brain, MessageCircle } from 'lucide-react';
+import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 
 interface PromptModalProps {
@@ -214,35 +215,24 @@ function PromptModal({
             )}
 
             {/* Status Messages */}
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center">
-                  <AlertTriangle className="w-5 h-5 text-yellow-500 mr-2 shrink-0" />
-                  <p className="text-red-800">{error}</p>
-                </div>
-              </div>
-            )}
+            {error && <Alert type="error" message={error} />}
 
-            {success && (
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 mr-2 shrink-0" />
-                  <p className="text-green-800">{success}</p>
-                </div>
-              </div>
-            )}
+            {success && <Alert type="success" message={success} />}
 
             {/* Help Text */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-2"><Lightbulb className="w-4 h-4 text-yellow-500" /> Tips for Writing Effective Prompts</h4>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• Be specific about the agent's role and capabilities</li>
-                <li>• Include examples of expected behavior</li>
-                <li>• Use clear, concise language</li>
-                <li>• Test your prompts in the playground to see how they work</li>
-                <li>• <strong>Note:</strong> Saving prompts will reset the conversation to test with fresh context</li>
-              </ul>
-            </div>
+            <Alert
+              type="info"
+              title="Tips for Writing Effective Prompts"
+              message={(
+                <ul className="space-y-1">
+                  <li>• Be specific about the agent's role and capabilities</li>
+                  <li>• Include examples of expected behavior</li>
+                  <li>• Use clear, concise language</li>
+                  <li>• Test your prompts in the playground to see how they work</li>
+                  <li>• <strong>Note:</strong> Saving prompts will reset the conversation to test with fresh context</li>
+                </ul>
+              )}
+            />
           </div>
 
           {/* Footer */}

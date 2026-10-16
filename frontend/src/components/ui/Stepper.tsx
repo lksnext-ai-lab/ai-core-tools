@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { Check } from 'lucide-react';
+import { ButtonApp } from './ButtonApp';
 
 export interface StepDefinition {
   id: string;
@@ -133,38 +134,31 @@ function StepperNavigation({
 
   return (
     <div className="flex items-center justify-between pt-4 border-t border-line dark:border-line-dark mt-4 flex-shrink-0">
-      <button
+      <ButtonApp
         type="button"
         onClick={onCancel}
         disabled={isSubmitting}
-        className="px-4 py-2 text-sm font-medium text-fg bg-transparent border border-line-strong rounded-lg hover:bg-surface-hover dark:text-fg-dark dark:border-line-strong-dark dark:hover:bg-surface-hover-dark disabled:opacity-50"
-      >
-        {cancelLabel}
-      </button>
+        label={cancelLabel}
+        variant="secondary"
+      />
       <div className="flex items-center space-x-3">
         {showBack && currentStep > 0 && (
-          <button
+          <ButtonApp
             type="button"
             onClick={onBack}
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-fg bg-transparent border border-line-strong rounded-lg hover:bg-surface-hover dark:text-fg-dark dark:border-line-strong-dark dark:hover:bg-surface-hover-dark disabled:opacity-50"
-          >
-            {backLabel}
-          </button>
+            label={backLabel}
+            variant="secondary"
+          />
         )}
         {showNext && (
-          <button
+          <ButtonApp
             type="button"
             onClick={onNext}
             disabled={nextDisabled || isSubmitting}
-            className={`px-4 py-2 text-sm font-medium text-ink-on rounded-lg disabled:opacity-50 dark:text-ink-on-dark ${
-              isFinalStep
-                ? 'font-semibold bg-ink hover:bg-ink/85 dark:bg-ink-dark dark:hover:bg-ink-dark/85'
-                : 'bg-ink hover:bg-ink/85 dark:bg-ink-dark dark:hover:bg-ink-dark/85'
-            }`}
-          >
-            {isSubmitting ? submittingLabel : label}
-          </button>
+            label={isSubmitting ? submittingLabel : label}
+            variant="primary"
+          />
         )}
       </div>
     </div>

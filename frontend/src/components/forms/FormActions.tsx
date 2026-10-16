@@ -1,3 +1,5 @@
+import { Spinner } from '../ui/Spinner';
+
 interface FormActionsProps {
   onCancel: () => void;
   isSubmitting: boolean;
@@ -42,7 +44,7 @@ function FormActions({
         className={`px-6 py-2 ${colorClasses[submitButtonColor]} text-white rounded-lg flex items-center transition-colors disabled:cursor-not-allowed disabled:opacity-70`}
       >
         {isSubmitting && (
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+          <Spinner size="sm" tone="current" className="mr-2" />
         )}
         {isSubmitting ? 'Saving...' : finalSubmitLabel}
       </button>

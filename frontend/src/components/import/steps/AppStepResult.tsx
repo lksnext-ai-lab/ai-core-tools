@@ -1,5 +1,6 @@
 import Alert from '../../ui/Alert';
 import type { FullAppImportResponse } from '../../../types/import';
+import { LoadingState } from '../../ui/LoadingState';
 
 interface Props {
   result: FullAppImportResponse | null;
@@ -20,12 +21,7 @@ function AppStepResult({
 }: Readonly<Props>) {
   if (isImporting) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 space-y-4">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-        <p className="text-sm text-gray-600">
-          Importing app...
-        </p>
-      </div>
+      <LoadingState variant="section" message="Importing app..." />
     );
   }
 

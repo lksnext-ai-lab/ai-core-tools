@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2, Lightbulb, FileText } from 'lucide-react';
+import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
@@ -16,6 +16,8 @@ import ImportModal, { type ConflictMode, type ImportResponse } from '../../compo
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Spinner } from '../../components/ui/Spinner';
 
 interface DataStructure {
   parser_id: number;
@@ -243,10 +245,7 @@ function DataStructuresPage() {
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading data structures...</p>
-        </div>
+        <LoadingState variant="page" message="Loading data structures..." />
       
     );
   }
@@ -347,7 +346,7 @@ function DataStructuresPage() {
                       {
                         label: exportingParserId === structure.parser_id ? 'Exporting...' : 'Export',
                         onClick: () => { void handleExport(structure.parser_id); },
-                        icon: exportingParserId === structure.parser_id ? <ArrowDownToLine className="w-4 h-4 animate-pulse" /> : <ArrowDownToLine className="w-4 h-4" />,
+                        icon: exportingParserId === structure.parser_id ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                         variant: 'primary' as const,
                         disabled: exportingParserId === structure.parser_id
                       },
@@ -392,48 +391,26 @@ function DataStructuresPage() {
         {/* Info Boxes */}
         <div className="mt-6 space-y-4">
           {/* Main Info */}
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <Lightbulb className="w-5 h-5 text-purple-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-purple-800">
-                  About Data Structures
-                </h3>
-                <div className="mt-2 text-sm text-purple-700">
-                  <p>
-                    Data structures are dynamic schemas that define the format for structured data extraction. 
-                    They automatically generate Pydantic models for validation and can reference other structures 
-                    for complex nested data patterns.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="info"
+            title="About Data Structures"
+            message="Data structures are dynamic schemas that define the format for structured data extraction. They automatically generate Pydantic models for validation and can reference other structures for complex nested data patterns."
+          />
 
           {/* Examples */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <FileText className="w-5 h-5 text-blue-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">
-                  Common Use Cases
-                </h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <ul className="list-disc list-inside space-y-1">
-                    <li><strong>Document Analysis:</strong> Extract structured metadata from documents</li>
-                    <li><strong>Agent Responses:</strong> Ensure consistent output format from AI agents</li>
-                    <li><strong>Data Validation:</strong> Validate and type-check extracted information</li>
-                    <li><strong>API Integration:</strong> Define schemas for external data sources</li>
-                    <li><strong>Complex Objects:</strong> Build nested structures with references</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="info"
+            title="Common Use Cases"
+            message={(
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong>Document Analysis:</strong> Extract structured metadata from documents</li>
+                <li><strong>Agent Responses:</strong> Ensure consistent output format from AI agents</li>
+                <li><strong>Data Validation:</strong> Validate and type-check extracted information</li>
+                <li><strong>API Integration:</strong> Define schemas for external data sources</li>
+                <li><strong>Complex Objects:</strong> Build nested structures with references</li>
+              </ul>
+            )}
+          />
         </div>
 
         {/* Create/Edit Modal */}

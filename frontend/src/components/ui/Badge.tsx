@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, X, AlertTriangle } from 'lucide-react';
 
-type BadgeVariant = 'success' | 'info' | 'warning' | 'error' | 'default' | 'primary' | 'secondary';
+export type BadgeVariant ='success' | 'info' | 'warning' | 'error' | 'default' | 'primary' | 'secondary';
 
 interface BadgeProps {
   readonly label: string;
@@ -31,7 +31,7 @@ export function Badge({
 
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${variantClasses[variant]} ${className}`}>
-      {icon && <span className="mr-1">{icon}</span>}
+      {icon && <span className="mr-1 inline-flex">{icon}</span>}
       {label}
     </span>
   );

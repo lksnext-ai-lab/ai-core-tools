@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
 import { StepperContainer } from '../components/ui/Stepper';
 import type { StepDefinition } from '../components/ui/Stepper';
 import { TagInput } from '../components/ui/TagInput';
@@ -8,6 +7,10 @@ import Alert from '../components/ui/Alert';
 import { sharepointApi } from '../services/sharepoint';
 import { apiService } from '../services/api';
 import type { MicrosoftDrive } from '../types/sharepoint';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { Spinner } from '../components/ui/Spinner';
+import Title from '../components/ui/Title';
+import { FormField, FormRadio, FormSelect, FormTextArea } from '../components/ui/FormField';
 
 const WIZARD_STEPS: StepDefinition[] = [
   { id: 'connect', label: 'Connect' },
@@ -199,10 +202,7 @@ function SharePointWizardPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Add SharePoint Source</h1>
-        <p className="text-gray-600">Connect a Microsoft SharePoint drive to index its documents.</p>
-      </div>
+      <Title variant="titPrincipal" titulo="Add SharePoint Source" subtitulo="Connect a Microsoft SharePoint drive to index its documents." />
 
       {error && (
         <Alert
@@ -214,7 +214,7 @@ function SharePointWizardPage() {
         />
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 min-h-[420px] flex flex-col">
+      <div className="min-h-[420px] flex flex-col">
         <StepperContainer
           steps={WIZARD_STEPS}
           currentStep={step}
@@ -228,66 +228,45 @@ function SharePointWizardPage() {
           {/* -------- Step 1: Credentials -------- */}
           {step === 0 && (
             <div className="space-y-4 py-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Source Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="My SharePoint Source"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  placeholder="Optional description"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <FormField
+                label="Source Name *"
+                id="source-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My SharePoint Source"
+              />
+              <FormTextArea
+                label="Description"
+                id="source-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                placeholder="Optional description"
+              />
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tenant ID <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={creds.tenant_id}
-                    onChange={(e) => setCreds({ ...creds, tenant_id: e.target.value })}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client ID <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={creds.client_id}
-                    onChange={(e) => setCreds({ ...creds, client_id: e.target.value })}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Client Secret <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={creds.client_secret}
-                  onChange={(e) => setCreds({ ...creds, client_secret: e.target.value })}
-                  placeholder="Your Azure app client secret"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <FormField
+                  label="Tenant ID *"
+                  id="tenant-id"
+                  value={creds.tenant_id}
+                  onChange={(e) => setCreds({ ...creds, tenant_id: e.target.value })}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+                <FormField
+                  label="Client ID *"
+                  id="client-id"
+                  value={creds.client_id}
+                  onChange={(e) => setCreds({ ...creds, client_id: e.target.value })}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
               </div>
+              <FormField
+                label="Client Secret *"
+                id="client-secret"
+                type="password"
+                value={creds.client_secret}
+                onChange={(e) => setCreds({ ...creds, client_secret: e.target.value })}
+                placeholder="Your Azure app client secret"
+              />
             </div>
           )}
 
@@ -295,27 +274,24 @@ function SharePointWizardPage() {
           {step === 1 && (
             <div className="space-y-4 py-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  SharePoint Site URL <span className="text-red-500">*</span>
-                </label>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
+                  <FormField
+                    label="SharePoint Site URL *"
+                    id="sharepoint-site-url"
                     value={siteUrl}
                     onChange={(e) => { setSiteUrl(e.target.value); setSelectedSite(null); setDrives([]); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleResolveSite(); } }}
                     placeholder="https://yourtenant.sharepoint.com/sites/Marketing"
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1"
+                    inputClassName="flex-1"
                   />
-                  <button
-                    type="button"
+                  <ButtonApp
+                    label="Load"
                     onClick={() => { void handleResolveSite(); }}
-                    disabled={!siteUrl.trim() || siteResolving}
-                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  >
-                    {siteResolving ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
-                    Load
-                  </button>
+                    disabled={!siteUrl.trim()}
+                    loading={siteResolving}
+                    size="control"
+                  />
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Enter the URL of your SharePoint site, then click Load.
@@ -335,34 +311,27 @@ function SharePointWizardPage() {
                     Drive <span className="text-red-500">*</span>
                   </label>
                   {drivesLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <RefreshCw className="w-4 h-4 animate-spin" /> Loading drives...
+                    <div className="flex items-center gap-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+                      <Spinner size="sm" tone="muted" /> Loading drives...
                     </div>
                   ) : drives.length === 0 ? (
                     <p className="text-sm text-gray-500">No drives found for this site.</p>
                   ) : (
                     <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
                       {drives.map((drive) => (
-                        <label key={drive.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                        <div key={drive.id} className={`flex items-center gap-3 px-3 py-2 transition-colors ${
                           selectedDrive?.drive_id === drive.id ? 'bg-blue-50' : 'hover:bg-gray-50'
                         }`}>
-                          <input
-                            type="radio"
-                            name="drive"
-                            value={drive.id}
+                          <FormRadio
+                            label={drive.name}
                             checked={selectedDrive?.drive_id === drive.id}
-                            onChange={() =>
-                              setSelectedDrive({ drive_id: drive.id, drive_name: drive.name })
-                            }
-                            className="text-blue-600"
+                            onChange={() => setSelectedDrive({ drive_id: drive.id, drive_name: drive.name })}
+                            className="flex items-center gap-3 cursor-pointer"
                           />
-                          <span className="text-sm text-gray-800">
-                            {drive.name}
-                            {drive.drive_type && (
-                              <span className="ml-1 text-xs text-gray-400">({drive.drive_type})</span>
-                            )}
-                          </span>
-                        </label>
+                          {drive.drive_type && (
+                            <span className="text-xs text-gray-400">({drive.drive_type})</span>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -375,53 +344,40 @@ function SharePointWizardPage() {
           {step === 2 && (
             <div className="space-y-4 py-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Silo Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
+                <FormField
+                  label="Silo Name *"
+                  id="silo-name"
                   value={siloName}
                   onChange={(e) => setSiloName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   A new silo will be created to store the indexed documents.
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Embedding Service
-                </label>
-                <select
-                  value={embeddingServiceId ?? ''}
+              <FormSelect
+                label="Embedding Service"
+                id="embedding-service"
+                value={embeddingServiceId ?? ''}
                   onChange={(e) =>
                     setEmbeddingServiceId(e.target.value ? Number(e.target.value) : undefined)
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">— Use default —</option>
-                  {embeddingServices.map((svc) => (
-                    <option key={svc.service_id} value={svc.service_id}>
-                      {svc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                options={[
+                  { value: '', label: '— Use default —' },
+                  ...embeddingServices.map((svc) => ({ value: svc.service_id, label: svc.name })),
+                ]}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vector Database
-                </label>
-                <select
-                  value={vectorDbType}
-                  onChange={(e) => setVectorDbType(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="PGVECTOR">PGVector (PostgreSQL)</option>
-                  <option value="QDRANT">Qdrant</option>
-                </select>
-              </div>
+              <FormSelect
+                label="Vector Database"
+                id="vector-database"
+                value={vectorDbType}
+                onChange={(e) => setVectorDbType(e.target.value)}
+                options={[
+                  { value: 'PGVECTOR', label: 'PGVector (PostgreSQL)' },
+                  { value: 'QDRANT', label: 'Qdrant' },
+                ]}
+              />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

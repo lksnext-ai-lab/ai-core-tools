@@ -243,9 +243,9 @@ function MarketplaceAgentsTab() {
       {/* Content */}
       {renderContent()}
 
-      {/* Agent detail side panel — fixed wrapper so it overlays the whole viewport */}
+      {/* Agent detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {selectedAgentId !== null && (
-        <div className="fixed inset-0 z-50">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
           <SidePanel
             open
             side="right"

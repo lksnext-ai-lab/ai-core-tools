@@ -107,6 +107,34 @@
   .marketplace-filter-select option::checkmark {
     display: none;
   }
+
+  /* Native time input: the dropdown list is browser-drawn, only color-scheme/accent reach it */
+  input[type="time"] {
+    accent-color: var(--text-bronze);
+  }
+
+  .dark input[type="time"] {
+    color-scheme: dark;
+    accent-color: theme('colors.bronze.dark');
+  }
+
+  /* Focused hour/minute segment; Chrome ignores :focus here, :focus-within matches */
+  input[type="time"]::-webkit-datetime-edit-hour-field:focus-within,
+  input[type="time"]::-webkit-datetime-edit-minute-field:focus-within {
+    background-color: var(--color-bronze-bg-sof);
+    color: var(--text-bronze);
+    border-radius: 4px;
+  }
+
+  .dark input[type="time"]::-webkit-datetime-edit-hour-field:focus-within,
+  .dark input[type="time"]::-webkit-datetime-edit-minute-field:focus-within {
+    background-color: theme('colors.bronze.bg-dark');
+    color: theme('colors.bronze.dark');
+  }
+
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
 }
 
 /* Staggered entrance: elements start invisible, animation fills to opacity:1 */

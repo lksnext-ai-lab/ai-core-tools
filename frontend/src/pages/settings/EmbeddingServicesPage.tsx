@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2, AlertTriangle } from 'lucide-react';
+import { Upload, ArrowDownToLine, Pencil, Trash2, BarChart2, AlertTriangle } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -14,6 +14,8 @@ import { useServicesManager } from '../../hooks/useServicesManager';
 import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
 import type { ConflictMode, ImportResponse } from '../../components/ui/ImportModal';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Spinner } from '../../components/ui/Spinner';
 
 interface EmbeddingService {
   service_id: number;
@@ -140,18 +142,20 @@ function EmbeddingServicesPage() {
   }
 
   if (loading) return (
-    <div className="p-6 text-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-      <p className="mt-2 text-gray-600">Loading embedding services...</p>
-    </div>
+    <LoadingState variant="page" message="Loading embedding services..." />
   );
 
   if (error) return (
     <div className="p-6">
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-red-600">Error: {error}</p>
-        <button onClick={() => { setIsModalOpen(false); setEditingService(null); }} className="mt-2 text-red-800 hover:text-red-900 underline">Try again</button>
-      </div>
+      <Alert
+        type="error"
+        message={(
+          <>
+            Error: {error}
+            <button type="button" onClick={() => { setIsModalOpen(false); setEditingService(null); }} className="mt-2 block underline">Try again</button>
+          </>
+        )}
+      />
     </div>
   );
 
@@ -180,27 +184,12 @@ function EmbeddingServicesPage() {
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
       {notification && (
-        <div className={`mb-4 rounded-lg p-4 ${notification.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {notification.type === 'success'
-                ? <CheckCircle2 className="w-5 h-5 text-green-400" />
-                : <XCircle className="w-5 h-5 text-red-400" />}
-            </div>
-            <div className="ml-3 flex-1">
-              <p className={`text-sm font-medium ${notification.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
-                {notification.message}
-              </p>
-            </div>
-            <button
-              onClick={() => setNotification(null)}
-              className={`ml-3 inline-flex rounded-md p-1.5 ${notification.type === 'success' ? 'text-green-500 hover:bg-green-100' : 'text-red-500 hover:bg-red-100'} focus:outline-none`}
-            >
-              <span className="sr-only">Dismiss</span>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        <Alert
+          type={notification.type}
+          message={notification.message}
+          onDismiss={() => setNotification(null)}
+          className="mb-4"
+        />
       )}
 
       <Table
@@ -243,7 +232,7 @@ function EmbeddingServicesPage() {
                 {
                   label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
                   onClick: () => void handleExport(service.service_id),
-                  icon: exportingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />,
+                  icon: exportingServiceId === service.service_id ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                   variant: 'primary' as const,
                   disabled: exportingServiceId === service.service_id
                 },

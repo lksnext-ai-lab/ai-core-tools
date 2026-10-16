@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, FolderOpen, Gamepad2, Pencil, Trash2 } from 'lucide-react';
+import { FolderOpen, Gamepad2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
@@ -10,6 +10,11 @@ import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import Alert from '../components/ui/Alert';
+import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { LoadingState } from '../components/ui/LoadingState';
 
 interface Repository {
   repository_id: number;
@@ -93,16 +98,10 @@ const RepositoriesPage: React.FC = () => {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
-            <p className="text-gray-600">Manage your document repositories</p>
-          </div>
+          <Title variant="titSecundario" titulo="Repositories" subtitulo="Manage your document repositories" />
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-          <span className="ml-2">Loading repositories...</span>
-        </div>
+        <LoadingState variant="page" message="Loading repositories..." />
       </div>
     );
   }
@@ -112,27 +111,25 @@ const RepositoriesPage: React.FC = () => {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
-            <p className="text-gray-600">Manage your document repositories</p>
-          </div>
+          <Title variant="titSecundario" titulo="Repositories" subtitulo="Manage your document repositories" />
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Repositories</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
+        <Alert
+          type="error"
+          title="Error Loading Repositories"
+          message={(
+            <>
+              {error}
+              <button
+                type="button"
                 onClick={() => loadRepositories()}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
+                className="mt-2 block text-sm underline"
               >
                 Try again
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -141,19 +138,15 @@ const RepositoriesPage: React.FC = () => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
-          <p className="text-gray-600">Manage your document repositories</p>
-        </div>
+        <Title variant="titSecundario" titulo="Repositories" subtitulo="Manage your document repositories" />
         {canEdit && (
-          <button
+          <ButtonApp
+            label="Create Repository"
             onClick={handleCreateRepository}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}
-            Create Repository
-          </button>
+            icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+            variant="primary"
+            size="medium"
+          />
         )}
       </div>
 
@@ -172,13 +165,9 @@ const RepositoriesPage: React.FC = () => {
                 className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors w-full text-left"
                 onClick={() => handleManageResources(repository.repository_id)}
               >
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <FolderOpen className="w-5 h-5 text-green-600" />
-                  </div>
-                </div>
+                <BackgroundImage icon={FolderOpen} size={40} iconSize={20} variant="marron" />
                 <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
+                  <div className="text-sm font-medium text-fg dark:text-fg-dark transition-colors">
                     {repository.name}
                   </div>
                 </div>
@@ -188,17 +177,17 @@ const RepositoriesPage: React.FC = () => {
           {
             header: 'Documents',
             render: (repository) => `${repository.resource_count} documents`,
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg dark:text-fg-dark'
           },
           {
             header: 'Created',
             render: (repository) => formatDate(repository.created_at),
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
             header: 'Actions',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative',
+            headerClassName: 'text-right tracking-wider',
+            className: 'px-6 py-4 whitespace-nowrap text-right text-xs text-fg-secondary dark:text-fg-secondary-dark relative',
             render: (repository) => (
               <ActionDropdown
                 actions={[
@@ -242,14 +231,15 @@ const RepositoriesPage: React.FC = () => {
         loading={loading}
       />
 
+
       {!loading && repositories.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label="Create Your First Repository"
             onClick={handleCreateRepository}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First Repository
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
     </div>

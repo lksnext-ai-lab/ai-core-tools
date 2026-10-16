@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Search, Info, Clock, History, Bot, SplitSquareHorizontal } from 'lucide-react';
+import { ArrowLeft, Search, Clock, History, Bot, SplitSquareHorizontal } from 'lucide-react';
 import SearchControls from '../components/playground/SearchControls';
 import SiloAPISnippets from '../components/playground/SiloAPISnippets';
 import SearchFilters from '../components/playground/SearchFilters';
@@ -8,6 +8,9 @@ import ResultCard from '../components/playground/ResultCard';
 import Modal from '../components/ui/Modal';
 import { useSiloSearch } from '../hooks/useSiloSearch';
 import type { PanelState } from '../hooks/useSiloSearch';
+import { LoadingState } from '../components/ui/LoadingState';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import Alert from '../components/ui/Alert';
 
 function SiloPlaygroundPage() {
   const { appId, siloId } = useParams();
@@ -82,10 +85,7 @@ function SiloPlaygroundPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading silo...</span>
-        </div>
+        <LoadingState variant="page" message="Loading silo..." />
       </div>
     );
   }
@@ -93,21 +93,18 @@ function SiloPlaygroundPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Silo</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={handleBack}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
+        <Alert
+          type="error"
+          title="Error Loading Silo"
+          message={(
+            <>
+              {error}
+              <button type="button" onClick={handleBack} className="mt-2 block underline">
                 Back to Silos
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -115,21 +112,18 @@ function SiloPlaygroundPage() {
   if (!silo) {
     return (
       <div className="space-y-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-yellow-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-yellow-800">Silo Not Found</h3>
-              <p className="text-sm text-yellow-600 mt-1">The requested silo could not be found.</p>
-              <button 
-                onClick={handleBack}
-                className="mt-2 text-sm text-yellow-800 hover:text-yellow-900 underline"
-              >
+        <Alert
+          type="warning"
+          title="Silo Not Found"
+          message={(
+            <>
+              <span className="block">The requested silo could not be found.</span>
+              <button type="button" onClick={handleBack} className="mt-2 block underline">
                 Back to Silos
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -161,17 +155,12 @@ function SiloPlaygroundPage() {
             className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
             disabled={panel.isSearching}
           />
-          <button
-            type="button"
+          <ButtonApp
+            label="Search"
             onClick={() => void searchPanel(panel.query, setter)}
-            disabled={panel.isSearching}
-            className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded flex items-center gap-1"
-          >
-            {panel.isSearching && (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
-            )}
-            Search
-          </button>
+            loading={panel.isSearching}
+            size="small"
+          />
         </div>
 
         {panel.error && <p className="text-xs text-red-600">{panel.error}</p>}
@@ -322,16 +311,11 @@ function SiloPlaygroundPage() {
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                 disabled={isSearching}
               />
-              <button
+              <ButtonApp
                 type="submit"
-                disabled={isSearching}
-                className="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded-lg flex items-center"
-              >
-                {isSearching && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                )}
-                {isSearching ? 'Searching...' : 'Search'}
-              </button>
+                label={isSearching ? 'Searching...' : 'Search'}
+                loading={isSearching}
+              />
             </div>
           </div>
         </form>
@@ -459,17 +443,7 @@ function SiloPlaygroundPage() {
         </div>
 
         {/* Search Error */}
-        {searchError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex">
-              <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-              <div>
-                <h3 className="text-sm font-medium text-red-800">Search Error</h3>
-                <p className="text-sm text-red-600 mt-1">{searchError}</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {searchError && <Alert type="error" title="Search Error" message={searchError} />}
       </div>
 
       {/* A/B compare mode */}
@@ -574,35 +548,29 @@ function SiloPlaygroundPage() {
       )}
 
       {/* Help Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Info className="w-5 h-5 text-blue-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">
-              How to Use the Playground
-            </h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>
-                The playground allows you to test semantic search within your silo. 
-                Enter natural language queries to find relevant documents.
-              </p>
-              <p className="mt-2">
-                <strong>Tips:</strong>
-                <br />
-                • Use natural language (e.g., "What is machine learning?")
-                <br />
-                • Leave empty to browse all available documents
-                <br />
-                • Try different phrasings for better results
-                <br />
-                • Results are ranked by relevance score
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title="How to Use the Playground"
+        message={(
+          <>
+            <p>
+              The playground allows you to test semantic search within your silo. 
+              Enter natural language queries to find relevant documents.
+            </p>
+            <p className="mt-2">
+              <strong>Tips:</strong>
+              <br />
+              • Use natural language (e.g., "What is machine learning?")
+              <br />
+              • Leave empty to browse all available documents
+              <br />
+              • Try different phrasings for better results
+              <br />
+              • Results are ranked by relevance score
+            </p>
+          </>
+        )}
+      />
 
       {/* Single delete confirmation modal */}
       <Modal

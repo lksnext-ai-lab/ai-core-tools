@@ -1,4 +1,5 @@
 import { randomId } from '../../utils/randomId';
+import Alert from '../ui/Alert';
 
 interface FieldDefinition {
   name: string;
@@ -280,18 +281,21 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
       )}
 
       {/* Field Types Help */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <h4 className="text-sm font-medium text-blue-800 mb-2">Field Types Reference</h4>
-        <div className="text-xs text-blue-700 space-y-1">
-          <p><strong>String:</strong> Text data (e.g., "hello world")</p>
-          <p><strong>Integer:</strong> Whole numbers (e.g., 42)</p>
-          <p><strong>Float:</strong> Decimal numbers (e.g., 3.14)</p>
-          <p><strong>Boolean:</strong> True/False values</p>
-          <p><strong>Date:</strong> Date values (e.g., 2024-01-15)</p>
-          <p><strong>List:</strong> Array of items with specified type</p>
-          <p><strong>Parser Reference:</strong> Reference to another data structure</p>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title="Field Types Reference"
+        message={(
+          <div className="text-xs space-y-1">
+            <p><strong>String:</strong> Text data (e.g., "hello world")</p>
+            <p><strong>Integer:</strong> Whole numbers (e.g., 42)</p>
+            <p><strong>Float:</strong> Decimal numbers (e.g., 3.14)</p>
+            <p><strong>Boolean:</strong> True/False values</p>
+            <p><strong>Date:</strong> Date values (e.g., 2024-01-15)</p>
+            <p><strong>List:</strong> Array of items with specified type</p>
+            <p><strong>Parser Reference:</strong> Reference to another data structure</p>
+          </div>
+        )}
+      />
     </div>
   );
 }

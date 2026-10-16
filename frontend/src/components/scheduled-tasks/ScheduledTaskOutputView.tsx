@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Alert from '../ui/Alert';
 import type { ScheduledTaskRun } from '../../services/api';
 import { RunFiles } from './RunFiles';
 import { RunOutput } from './RunOutput';
@@ -47,11 +48,7 @@ export function ScheduledTaskOutputView({ title, subtitle, backHref, backLabel, 
         {subtitle && <p className="text-gray-600 dark:text-gray-400">{subtitle}</p>}
       </div>
 
-      {error && (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-          {error}
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
       {!error && runs === null && (
         <div className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">Cargando…</div>
       )}

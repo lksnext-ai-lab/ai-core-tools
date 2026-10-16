@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { KeyRound, Pencil, PauseCircle, PlayCircle, Trash2, AlertTriangle } from 'lucide-react';
+import { KeyRound, Pencil, PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import APIKeyForm from '../../components/forms/APIKeyForm';
 import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
@@ -15,6 +15,7 @@ import Table from '../../components/ui/Table';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
 
 interface APIKey {
   key_id: number;
@@ -218,10 +219,7 @@ function APIKeysPage() {
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading API keys...</p>
-        </div>
+        <LoadingState variant="page" message="Loading API keys..." />
       
     );
   }
@@ -368,25 +366,12 @@ function APIKeysPage() {
         )}
 
         {/* Security Notice */}
-        <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <AlertTriangle className="w-5 h-5 text-yellow-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
-                Security Notice
-              </h3>
-              <div className="mt-2 text-sm text-yellow-700">
-                <p>
-                  Keep your API keys secure and never share them publicly. 
-                  Deactivate or delete keys that are no longer needed. 
-                  Monitor usage regularly to detect any unauthorized access.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Alert
+          type="warning"
+          title="Security Notice"
+          className="mt-6"
+          message="Keep your API keys secure and never share them publicly. Deactivate or delete keys that are no longer needed. Monitor usage regularly to detect any unauthorized access."
+        />
 
         {/* Create/Edit Modal */}
         <Modal

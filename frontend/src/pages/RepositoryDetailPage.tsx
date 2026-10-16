@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FolderOpen, Video, FileText, ArrowDownToLine, ArrowLeftRight, Trash2, Tv, Search, RefreshCw } from 'lucide-react';
+import { Clapperboard, Mic, FolderOpen, Folder, Home, ChevronRight, Video, FileText, ArrowDownToLine, ArrowLeftRight, Trash2, Tv, Search, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import FolderTree from '../components/FolderTree';
@@ -9,6 +9,12 @@ import Alert from '../components/ui/Alert';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
+import { Title } from '../components/ui/Title';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { FormField, FormSelect } from '../components/ui/FormField';
+import { LoadingState } from '../components/ui/LoadingState';
+import { Spinner } from '../components/ui/Spinner';
 
 interface Resource {
   resource_id: number;
@@ -81,19 +87,24 @@ function updateMediaInRepo(prev: RepositoryDetail | null, mediaId: number, media
   };
 }
 
-function FolderBreadcrumb({ path }: { readonly path: string }) {
-  if (!path) return null;
-  return (
-    <>
-      <span className="mx-2">/</span>
-      <span className="text-blue-600 font-medium">{path}</span>
-    </>
-  );
-}
-
-function UploadButtonIcon({ uploading }: { readonly uploading: boolean }) {
-  if (uploading) return <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />;
-  return <FolderOpen className="w-4 h-4" />;
+// Ancestors of the selected folder (root excluded), each with its full path, for the breadcrumb
+function getFolderTrail(
+  folders: RepositoryDetail['folders'] | undefined,
+  folderId: number | null
+): Array<{ folder_id: number; name: string; path: string }> {
+  if (!folders || folderId === null) return [];
+  const byId = new Map(folders.map(f => [f.folder_id, f]));
+  const chain: RepositoryDetail['folders'] = [];
+  let current = byId.get(folderId);
+  while (current && chain.length < folders.length) {
+    chain.unshift(current);
+    current = current.parent_folder_id ? byId.get(current.parent_folder_id) : undefined;
+  }
+  let path = '';
+  return chain.map(f => {
+    path = path ? `${path}/${f.name}` : f.name;
+    return { folder_id: f.folder_id, name: f.name, path };
+  });
 }
 
 function getAllFolderPaths(
@@ -449,8 +460,17 @@ const RepositoryDetailPage: React.FC = () => {
   // Filter media by selected folder
   const filteredMedia = filterByFolder(repository?.media, selectedFolderId);
 
+  // Direct subfolders of the selected folder, listed as rows in the files table
+  const subfolders = (repository?.folders ?? []).filter(
+    f => (f.parent_folder_id ?? null) === selectedFolderId
+  );
+  const folderTrail = getFolderTrail(repository?.folders, selectedFolderId);
+  const countFolderItems = (folderId: number) =>
+    (repository?.resources ?? []).filter(r => r.folder_id === folderId).length +
+    (repository?.media ?? []).filter(m => m.folder_id === folderId).length;
+
   const isEmpty =
-  filteredResources.length === 0 && filteredMedia.length === 0;
+  subfolders.length === 0 && filteredResources.length === 0 && filteredMedia.length === 0;
 
   const handleDownloadResource = async (resource: Resource) => {
     try {
@@ -597,9 +617,7 @@ const RepositoryDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
@@ -607,13 +625,13 @@ const RepositoryDetailPage: React.FC = () => {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Repository not found</h1>
-          <button
+          <h1 className="text-2xl font-bold text-fg dark:text-fg-dark mb-4">Repository not found</h1>
+          <ButtonApp
+            label="Back to Repositories"
+            variant="secondary"
+            size="medium"
             onClick={() => navigate(`/apps/${appId}/repositories`)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Back to Repositories
-          </button>
+          />
         </div>
       </div>
     );
@@ -622,77 +640,26 @@ const RepositoryDetailPage: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <button
-              onClick={() => navigate(`/apps/${appId}/repositories`)}
-              className="text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">{repository.name}</h1>
-          </div>
-          <p className="text-gray-600">
-            Created {formatDate(repository.created_at)} • {repository.resources.length} files
+      <div className="mb-8">
+        <Title
+          titulo={repository.name}
+          subtitulo={`Created ${formatDate(repository.created_at)} • ${repository.resources.length} files`}
+          subtitleMarginBottom={0}
+        />
+        {(repository.transcription_service_id || repository.video_ai_service_id) && (
+          <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
+            {repository.transcription_service_id && (
+              <span className="inline-flex items-center gap-1 mr-3">
+                <Mic className="w-4 h-4" aria-hidden="true" /> <span>Transcription: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</span>
+              </span>
+            )}
+            {repository.video_ai_service_id && (
+              <span className="inline-flex items-center gap-1">
+                <Clapperboard className="w-4 h-4" aria-hidden="true" /> <span>Video AI: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</span>
+              </span>
+            )}
           </p>
-          {(repository.transcription_service_id || repository.video_ai_service_id) && (
-            <p className="text-sm text-gray-500 mt-1">
-              {repository.transcription_service_id && (
-                <span className="inline-flex items-center gap-1 mr-3">
-                  🎙️ <span>Transcription: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</span>
-                </span>
-              )}
-              {repository.video_ai_service_id && (
-                <span className="inline-flex items-center gap-1">
-                  🎬 <span>Video AI: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</span>
-                </span>
-              )}
-            </p>
-          )}
-          
-          {/* Breadcrumb Navigation */}
-          <div className="mt-2 flex items-center text-sm text-gray-600">
-            <button
-              onClick={() => handleFolderSelect(null, '')}
-              className={`hover:text-blue-600 ${selectedFolderId === null ? 'text-blue-600 font-medium' : ''}`}
-            >
-              Repository Root
-            </button>
-            <FolderBreadcrumb path={selectedFolderPath} />
-          </div>
-        </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={() => navigate(`/apps/${appId}/repositories/${repositoryId}/playground`)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-          >
-            <Search className="w-4 h-4" /> Search
-          </button>
-          {canEdit && (
-            <>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-              >
-                <UploadButtonIcon uploading={uploading} />
-                Upload Files
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowMediaUploadModal(true);
-                }}
-                disabled={uploading}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-              >
-                <Video className="w-4 h-4" /> Upload Media
-              </button>
-            </>
-          )}
-        </div>
+        )}
       </div>
 
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
@@ -711,10 +678,10 @@ const RepositoryDetailPage: React.FC = () => {
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} className="mb-6" />}
       {reindexNotice && <Alert type={reindexNotice.type} message={reindexNotice.text} onDismiss={() => setReindexNotice(null)} className="mb-6" />}
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Explorer: folder tree + files */}
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] bg-surface border border-line rounded-lg dark:bg-surface-dark dark:border-line-dark">
         {/* Folder Tree Sidebar */}
-        <div className="lg:col-span-1">
+        <div className="bg-surface-tint border-b border-line rounded-t-lg lg:border-b-0 lg:border-r lg:rounded-tr-none lg:rounded-l-lg dark:bg-surface-tint-dark dark:border-line-dark">
           <FolderTree
             appId={Number.parseInt(appId!)}
             repositoryId={Number.parseInt(repositoryId!)}
@@ -729,92 +696,173 @@ const RepositoryDetailPage: React.FC = () => {
         </div>
 
         {/* Files + Media Section */}
-        <div className="lg:col-span-3">
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Files ({filteredResources.length + filteredMedia.length})
-                {selectedFolderPath && (
-                  <span className="text-sm font-normal text-gray-600 ml-2">
-                    in {selectedFolderPath}
-                  </span>
-                )}
-              </h2>
+        <div className="min-w-0">
+          {/* Toolbar: breadcrumb + actions */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-line dark:border-line-dark">
+            <nav aria-label="Folder path" className="flex flex-wrap items-center gap-1 min-w-0 text-sm">
+              <button
+                onClick={() => handleFolderSelect(null, '')}
+                aria-current={selectedFolderId === null ? 'page' : undefined}
+                className={`inline-flex items-center gap-1.5 transition-colors ${
+                  selectedFolderId === null
+                    ? 'font-medium text-fg dark:text-fg-dark'
+                    : 'text-fg-tertiary hover:text-accent dark:text-fg-tertiary-dark dark:hover:text-accent-dark'
+                }`}
+              >
+                <Home className="w-4 h-4" /> Repository Root
+              </button>
+              {folderTrail.map((crumb, index) => {
+                const isCurrent = index === folderTrail.length - 1;
+                return (
+                  <React.Fragment key={crumb.folder_id}>
+                    <ChevronRight className="w-3.5 h-3.5 text-fg-faint2 dark:text-fg-faint2-dark flex-shrink-0" />
+                    <button
+                      onClick={() => handleFolderSelect(crumb.folder_id, crumb.path)}
+                      aria-current={isCurrent ? 'page' : undefined}
+                      className={`truncate transition-colors ${
+                        isCurrent
+                          ? 'font-medium text-fg dark:text-fg-dark'
+                          : 'text-fg-tertiary hover:text-accent dark:text-fg-tertiary-dark dark:hover:text-accent-dark'
+                      }`}
+                    >
+                      {crumb.name}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+              <span className="ml-1 text-fg-faint dark:text-fg-faint-dark">
+                · {filteredResources.length + filteredMedia.length} files
+              </span>
+            </nav>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <ButtonApp
+                label="Search"
+                variant="muted"
+                size="control"
+                icon={<Search className="w-4 h-4" />}
+                onClick={() => navigate(`/apps/${appId}/repositories/${repositoryId}/playground`)}
+              />
+              {canEdit && (
+                <>
+                  <ButtonApp
+                    label="Upload Media"
+                    variant="secondary"
+                    size="control"
+                    icon={<Video className="w-4 h-4" />}
+                    onClick={() => {
+                      setShowMediaUploadModal(true);
+                    }}
+                    disabled={uploading}
+                  />
+                  <ButtonApp
+                    label="Upload Files"
+                    variant="primary"
+                    size="control"
+                    icon={<FolderOpen className="w-4 h-4" />}
+                    onClick={() => fileInputRef.current?.click()}
+                    loading={uploading}
+                  />
+                </>
+              )}
             </div>
+          </div>
 
-            {/* ✅ SHARED EMPTY STATE */}
-            {isEmpty ? (
-              <div className="p-10 text-center">
-                <div className="flex justify-center gap-6 mb-4">
-                  <FileText className="w-10 h-10 text-gray-400" />
-                  <Video className="w-10 h-10 text-gray-400" />
-                </div>
-
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {selectedFolderId === null
-                    ? 'No files or media in repository root'
-                    : 'No files or media in this folder'}
-                </h3>
-
-                <p className="text-gray-600 mb-6">
-                  {selectedFolderId === null
-                    ? 'Upload documents or media to get started'
-                    : 'Upload files or media to this folder'}
-                </p>
-
-                {canEdit && (
-                  <div className="flex justify-center gap-3">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-                    >
-                      Upload Files
-                    </button>
-
-                    <button
-                      onClick={() => setShowMediaUploadModal(true)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg"
-                    >
-                      Upload Media
-                    </button>
-                  </div>
-                )}
+          {/* SHARED EMPTY STATE */}
+          {isEmpty ? (
+            <div className="p-10 text-center">
+              <div className="flex justify-center gap-6 mb-4">
+                <FileText className="w-10 h-10 text-fg-faint2 dark:text-fg-faint2-dark" />
+                <Video className="w-10 h-10 text-fg-faint2 dark:text-fg-faint2-dark" />
               </div>
-            ) : (
-              <>
-                {/* ✅ FILES LIST */}
-                {filteredResources.length > 0 && (
-                  <div className="divide-y divide-gray-200">
-                    {filteredResources.map((resource) => (
-                      <div
-                        key={resource.resource_id}
-                        className="px-6 py-4 flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="bg-gray-100 p-2 rounded-lg"><FileText className="w-4 h-4" /></div>
-                          <div>
-                            <h3 className="font-medium text-gray-900">
-                              {resource.name}
-                            </h3>
-                            <p className="text-sm text-gray-500">
-                              {(resource.file_type || 'unknown').toUpperCase()} • Uploaded{' '}
-                              {formatDate(resource.created_at)}
-                            </p>
-                          </div>
-                        </div>
 
-                        <div className="flex items-center gap-2">
+              <h3 className="font-display text-lg font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-1">
+                {selectedFolderId === null
+                  ? 'No files or media in repository root'
+                  : 'No files or media in this folder'}
+              </h3>
+
+              <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+                {selectedFolderId === null
+                  ? 'Upload documents or media to get started'
+                  : 'Upload files or media to this folder'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-line dark:divide-line-dark">
+                <thead className="bg-tableCab dark:bg-tableCab-dark">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Name</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Type</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Uploaded</th>
+                    <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line text-sm text-fg dark:divide-line-dark dark:text-fg-dark">
+                  {/* SUBFOLDERS (double-click to open) */}
+                  {subfolders.map((folder) => {
+                    const folderPath = selectedFolderPath ? `${selectedFolderPath}/${folder.name}` : folder.name;
+                    const itemCount = countFolderItems(folder.folder_id);
+                    return (
+                      <tr
+                        key={`folder-${folder.folder_id}`}
+                        onDoubleClick={() => handleFolderSelect(folder.folder_id, folderPath)}
+                        className="cursor-pointer select-none hover:bg-surface-tint dark:hover:bg-surface-tint-dark"
+                      >
+                        <td className="px-5 py-3">
+                          <button
+                            type="button"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleFolderSelect(folder.folder_id, folderPath);
+                            }}
+                            title="Double-click to open"
+                            className="flex items-center gap-3 text-left"
+                          >
+                            <BackgroundImage icon={Folder} size={32} iconSize={16} variant="marron" />
+                            <span className="font-medium">{folder.name}</span>
+                            {itemCount > 0 && (
+                              <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">({itemCount})</span>
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">Folder</td>
+                        <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">—</td>
+                        <td className="px-5 py-3" />
+                      </tr>
+                    );
+                  })}
+
+                  {/* FILES LIST */}
+                  {filteredResources.map((resource) => (
+                    <tr key={resource.resource_id} className="hover:bg-surface-tint dark:hover:bg-surface-tint-dark">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <BackgroundImage icon="FileText" size={32} iconSize={16} variant="marron" />
+                          <span className="font-medium">{resource.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {(resource.file_type || 'unknown').toUpperCase()}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {formatDate(resource.created_at)}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-end gap-1">
                           {canEdit && (
                             <button
                               onClick={() => handleMoveResource(resource)}
-                              className="p-2 text-gray-400 hover:text-purple-600"
+                              className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
                             >
                               <ArrowLeftRight className="w-4 h-4" />
                             </button>
                           )}
                           <button
                             onClick={() => handleDownloadResource(resource)}
-                            className="p-2 text-gray-400 hover:text-blue-600"
+                            className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
                           >
                             <ArrowDownToLine className="w-4 h-4" />
                           </button>
@@ -824,88 +872,88 @@ const RepositoryDetailPage: React.FC = () => {
                               disabled={reindexingId !== null}
                               title="Re-extract and reindex this file"
                               aria-label={`Reindex ${resource.name}`}
-                              className="p-2 text-gray-400 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
                             >
-                              <RefreshCw className={`w-4 h-4 ${reindexingId === resource.resource_id ? 'animate-spin' : ''}`} />
+                              {reindexingId === resource.resource_id
+                                ? <Spinner size="sm" tone="current" />
+                                : <RefreshCw className="w-4 h-4" />}
                             </button>
                           )}
                           {canEdit && (
                             <button
                               onClick={() => handleDeleteResource(resource)}
-                              className="p-2 text-gray-400 hover:text-red-600"
+                              className="p-2 rounded text-fg-tertiary hover:text-error hover:bg-error-bg dark:text-fg-tertiary-dark dark:hover:text-error-dark dark:hover:bg-error-bg-dark"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      </td>
+                    </tr>
+                  ))}
 
-                {/* ✅ MEDIA LIST */}
-                {filteredMedia.length > 0 && (
-                  <div className="divide-y divide-gray-200 border-t">
-                    {filteredMedia.map((media) => (
-                      <div key={media.media_id} className="px-6 py-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="bg-purple-100 p-2 rounded-lg"><Video className="w-5 h-5 text-purple-600" /></div>
-                            <div>
-                              <h4 className="font-medium text-gray-900">
-                                {media.name}
-                              </h4>
-                              <p className="text-sm text-gray-500">
-                                {media.source_type.toUpperCase()} •{' '}
-                                {media.language || 'detecting...'} •{' '}
-                                {media.duration
-                                  ? `${media.duration.toFixed(1)}s`
-                                  : 'processing...'}
-                                {media.processing_mode === 'multimodal' && (
-                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700" title="Indexed with multimodal video analysis">
-                                    Multimodal
-                                  </span>
-                                )}
+                  {/* MEDIA LIST */}
+                  {filteredMedia.map((media) => (
+                    <tr key={media.media_id} className="hover:bg-surface-tint dark:hover:bg-surface-tint-dark">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="bg-surface-ash p-2 rounded-lg dark:bg-surface-hover-dark"><Video className="w-4 h-4" /></span>
+                          <div className="min-w-0">
+                            <h4 className="font-medium">{media.name}</h4>
+                            <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                              {media.language || 'detecting...'} •{' '}
+                              {media.duration
+                                ? `${media.duration.toFixed(1)}s`
+                                : 'processing...'}
+                              {media.processing_mode === 'multimodal' && (
+                                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark" title="Indexed with multimodal video analysis">
+                                  Multimodal
+                                </span>
+                              )}
+                            </p>
+                            {media.error_message && (
+                              <p className="text-xs text-error dark:text-error-dark mt-1">
+                                {media.error_message}
                               </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <StatusBadge status={media.status} processingMode={media.processing_mode} />
-
-                            {canEdit && (
-                              <>
-                                <button
-                                  onClick={() => handleMoveMedia(media)}
-                                  className="p-2 text-gray-400 hover:text-purple-600"
-                                >
-                                  <ArrowLeftRight className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteMedia(media)}
-                                  className="p-2 text-gray-400 hover:text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </>
                             )}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {media.source_type.toUpperCase()}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {formatDate(media.create_date)}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <StatusBadge status={media.status} processingMode={media.processing_mode} />
 
-                        {media.error_message && (
-                          <p className="text-sm text-red-600 mt-2">
-                            {media.error_message}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                          {canEdit && (
+                            <>
+                              <button
+                                onClick={() => handleMoveMedia(media)}
+                                className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
+                              >
+                                <ArrowLeftRight className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMedia(media)}
+                                className="p-2 rounded text-fg-tertiary hover:text-error hover:bg-error-bg dark:text-fg-tertiary-dark dark:hover:text-error-dark dark:hover:bg-error-bg-dark"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-
       </div>
 
       {/* Delete Confirmation Modal */}
@@ -948,34 +996,28 @@ const RepositoryDetailPage: React.FC = () => {
         title="Create Folder"
       >
         <div className="space-y-4">
-          <div>
-            <label htmlFor="create-folder-name" className="block text-sm font-medium text-gray-700 mb-2">
-              Folder Name
-            </label>
-            <input
-              id="create-folder-name"
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter folder name"
-              autoFocus
-            />
-          </div>
+          <FormField
+            label="Folder Name"
+            id="create-folder-name"
+            type="text"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            placeholder="Enter folder name"
+          />
           <div className="flex justify-end space-x-3">
-            <button
+            <ButtonApp
+              label="Cancel"
+              variant="secondary"
+              size="medium"
               onClick={() => setShowCreateFolderModal(false)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
+            />
+            <ButtonApp
+              label="Create"
+              variant="primary"
+              size="medium"
               onClick={createFolder}
               disabled={!newFolderName.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              Create
-            </button>
+            />
           </div>
         </div>
       </Modal>
@@ -987,34 +1029,28 @@ const RepositoryDetailPage: React.FC = () => {
         title="Rename Folder"
       >
         <div className="space-y-4">
-          <div>
-            <label htmlFor="rename-folder-name" className="block text-sm font-medium text-gray-700 mb-2">
-              Folder Name
-            </label>
-            <input
-              id="rename-folder-name"
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter folder name"
-              autoFocus
-            />
-          </div>
+          <FormField
+            label="Folder Name"
+            id="rename-folder-name"
+            type="text"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            placeholder="Enter folder name"
+          />
           <div className="flex justify-end space-x-3">
-            <button
+            <ButtonApp
+              label="Cancel"
+              variant="secondary"
+              size="medium"
               onClick={() => setShowRenameFolderModal(false)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
+            />
+            <ButtonApp
+              label="Rename"
+              variant="primary"
+              size="medium"
               onClick={renameFolder}
               disabled={!newFolderName.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              Rename
-            </button>
+            />
           </div>
         </div>
       </Modal>
@@ -1216,27 +1252,39 @@ const RepositoryDetailPage: React.FC = () => {
         }}
         title="Upload Media"
       >
-        <div className="space-y-4">
+        <div className="space-y-5">
           {/* Upload Type */}
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setUploadType('file')}
-              className={`flex-1 px-4 py-2 rounded ${uploadType === 'file' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
+              aria-pressed={uploadType === 'file'}
+              className={`flex items-center gap-3 p-3 rounded-lg border text-left text-sm transition-colors ${
+                uploadType === 'file'
+                  ? 'border-ink bg-surface text-fg dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark'
+                  : 'border-line bg-surface text-fg-secondary hover:bg-surface-hover dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark'
+              }`}
             >
-              <FolderOpen className="w-4 h-4 inline-block mr-1" /> File Upload
+              <BackgroundImage icon={FolderOpen} variant={uploadType === 'file' ? 'marron' : 'gris'} />
+              <span className="font-display tracking-[-0.02em]">File Upload</span>
             </button>
             <button
               onClick={() => setUploadType('youtube')}
-              className={`flex-1 px-4 py-2 rounded ${uploadType === 'youtube' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}
+              aria-pressed={uploadType === 'youtube'}
+              className={`flex items-center gap-3 p-3 rounded-lg border text-left text-sm transition-colors ${
+                uploadType === 'youtube'
+                  ? 'border-ink bg-surface text-fg dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark'
+                  : 'border-line bg-surface text-fg-secondary hover:bg-surface-hover dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark'
+              }`}
             >
-              <Tv className="w-4 h-4 inline-block mr-1" /> YouTube URL
+              <BackgroundImage icon={Tv} variant={uploadType === 'youtube' ? 'marron' : 'gris'} />
+              <span className="font-display tracking-[-0.02em]">YouTube URL</span>
             </button>
           </div>
 
           {/* File Upload */}
           {uploadType === 'file' && (
             <div>
-              <label htmlFor="media-files-input" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="media-files-input" className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
                 Select Video/Audio Files
               </label>
               <input
@@ -1245,132 +1293,119 @@ const RepositoryDetailPage: React.FC = () => {
                 multiple
                 accept="video/*,audio/*"
                 onChange={(e) => setMediaFiles(Array.from(e.target.files || []))}
-                className="w-full"
+                className="w-full p-3 text-sm text-fg-secondary border border-dashed border-line-strong rounded-lg bg-surface-tint cursor-pointer dark:text-fg-secondary-dark dark:border-line-strong-dark dark:bg-surface-tint-dark file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-ink file:bg-surface file:text-fg file:font-display file:text-sm file:cursor-pointer hover:file:bg-surface-hover dark:file:border-ink-dark dark:file:bg-surface-dark dark:file:text-fg-dark"
               />
               {mediaFiles.length > 0 && (
-                <p className="text-sm text-gray-600 mt-2">{mediaFiles.length} file(s) selected</p>
+                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">{mediaFiles.length} file(s) selected</p>
               )}
             </div>
           )}
 
           {/* YouTube URL */}
           {uploadType === 'youtube' && (
-            <div>
-              <label htmlFor="youtube-url-input" className="block text-sm font-medium text-gray-700 mb-2">
-                YouTube URL
-              </label>
-              <input
-                id="youtube-url-input"
-                type="text"
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="https://youtube.com/watch?v=..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
+            <FormField
+              label="YouTube URL"
+              id="youtube-url-input"
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              placeholder="https://youtube.com/watch?v=..."
+            />
           )}
 
           {/* Configuration */}
-          <div className="border-t pt-4">
-            <h3 className="font-medium mb-3">Processing Options</h3>
-            
+          <div className="border-t border-line pt-5 dark:border-line-dark">
+            <h3 className="font-display text-base font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-3">Processing Options</h3>
+
             {/* Repository AI Services (read-only info) */}
-            <div className="mb-3 space-y-2">
+            <div className="mb-4 space-y-2">
               {repository?.transcription_service_id ? (
-                <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-2 flex items-center gap-2">
-                  <span>🎙️</span>
-                  <span>Transcription: <strong>{repository.ai_services?.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</strong></span>
-                </div>
+                <Alert
+                  type="success"
+                  title="Transcription"
+                  message={<strong>{repository.ai_services?.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</strong>}
+                />
               ) : (
-                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
-                  ⚠️ No transcription service configured. Please set one in the repository settings before uploading media.
-                </div>
+                <Alert
+                  type="error"
+                  title="Transcription service missing"
+                  message="No transcription service configured. Please set one in the repository settings before uploading media."
+                />
               )}
               {repository?.video_ai_service_id && (
-                <div className="text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded p-2 flex items-center gap-2">
-                  <span>🎬</span>
-                  <span>Video Analysis: <strong>{repository.ai_services?.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</strong> (multimodal enabled)</span>
-                </div>
+                <Alert
+                  type="info"
+                  title="Video Analysis"
+                  message={<><strong>{repository.ai_services?.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</strong> (multimodal enabled)</>}
+                />
               )}
             </div>
 
             <div className="space-y-3">
+              <FormSelect
+                label="Language (optional)"
+                id="media-language-select"
+                value={mediaConfig.forced_language}
+                onChange={(e) => setMediaConfig({...mediaConfig, forced_language: e.target.value})}
+                options={[
+                  { value: '', label: 'Auto-detect' },
+                  { value: 'es', label: 'Spanish' },
+                  { value: 'en', label: 'English' },
+                  { value: 'eu', label: 'Basque' },
+                  { value: 'fr', label: 'French' },
+                ]}
+              />
 
-              <div>
-                <label htmlFor="media-language-select" className="block text-sm text-gray-700 mb-1">Language (optional)</label>
-                <select
-                  id="media-language-select"
-                  value={mediaConfig.forced_language}
-                  onChange={(e) => setMediaConfig({...mediaConfig, forced_language: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md text-sm"
-                >
-                  <option value="">Auto-detect</option>
-                  <option value="es">Spanish</option>
-                  <option value="en">English</option>
-                  <option value="eu">Basque</option>
-                  <option value="fr">French</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label htmlFor="chunk-min-duration" className="block text-xs text-gray-700 mb-1">Min Chunk (s)</label>
-                  <input
-                    id="chunk-min-duration"
-                    type="number"
-                    value={mediaConfig.chunk_min_duration}
-                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_min_duration: Number.parseInt(e.target.value)})}
-                    className="w-full px-2 py-1 border rounded text-sm"
-                    min="10"
-                    max="60"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="chunk-max-duration" className="block text-xs text-gray-700 mb-1">Max Chunk (s)</label>
-                  <input
-                    id="chunk-max-duration"
-                    type="number"
-                    value={mediaConfig.chunk_max_duration}
-                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_max_duration: Number.parseInt(e.target.value)})}
-                    className="w-full px-2 py-1 border rounded text-sm"
-                    min="60"
-                    max="300"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="chunk-overlap" className="block text-xs text-gray-700 mb-1">Overlap (s)</label>
-                  <input
-                    id="chunk-overlap"
-                    type="number"
-                    value={mediaConfig.chunk_overlap}
-                    onChange={(e) => setMediaConfig({...mediaConfig, chunk_overlap: Number.parseInt(e.target.value)})}
-                    className="w-full px-2 py-1 border rounded text-sm"
-                    min="0"
-                    max="20"
-                  />
-                </div>
+              <div className="grid grid-cols-3 gap-3">
+                <FormField
+                  label="Min Chunk (s)"
+                  id="chunk-min-duration"
+                  type="number"
+                  value={mediaConfig.chunk_min_duration}
+                  onChange={(e) => setMediaConfig({...mediaConfig, chunk_min_duration: Number.parseInt(e.target.value)})}
+                  min={10}
+                  max={60}
+                  labelClassName="block text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1"
+                />
+                <FormField
+                  label="Max Chunk (s)"
+                  id="chunk-max-duration"
+                  type="number"
+                  value={mediaConfig.chunk_max_duration}
+                  onChange={(e) => setMediaConfig({...mediaConfig, chunk_max_duration: Number.parseInt(e.target.value)})}
+                  min={60}
+                  max={300}
+                  labelClassName="block text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1"
+                />
+                <FormField
+                  label="Overlap (s)"
+                  id="chunk-overlap"
+                  type="number"
+                  value={mediaConfig.chunk_overlap}
+                  onChange={(e) => setMediaConfig({...mediaConfig, chunk_overlap: Number.parseInt(e.target.value)})}
+                  min={0}
+                  max={20}
+                  labelClassName="block text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1"
+                />
               </div>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button
+          <div className="flex justify-end gap-3 pt-5 border-t border-line dark:border-line-dark">
+            <ButtonApp
+              label="Cancel"
+              variant="secondary"
               onClick={() => setShowMediaUploadModal(false)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
+            />
+            <ButtonApp
+              label={uploading ? 'Uploading...' : 'Upload'}
+              variant="primary"
               onClick={handleMediaUpload}
               disabled={
                 !repository?.transcription_service_id ||
                 (uploadType === 'file' ? mediaFiles.length === 0 : !youtubeUrl)
               }
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
-            >
-              {uploading ? 'Uploading...' : 'Upload'}
-            </button>
+            />
           </div>
         </div>
       </Modal>

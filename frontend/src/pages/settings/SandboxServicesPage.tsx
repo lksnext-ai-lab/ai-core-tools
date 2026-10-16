@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Box, Plug, Pencil, ClipboardCopy, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Box, Plug, Pencil, ClipboardCopy, Trash2, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
@@ -13,6 +13,8 @@ import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Spinner } from '../../components/ui/Spinner';
 
 interface SandboxService {
   service_id: number;
@@ -81,10 +83,7 @@ function SandboxServicesPage() {
   }
 
   if (loading) return (
-    <div className="p-6 text-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-2 text-gray-600">Loading sandbox services...</p>
-    </div>
+    <LoadingState variant="page" message="Loading sandbox services..." />
   );
 
   if (error) return (
@@ -154,7 +153,7 @@ function SandboxServicesPage() {
                 {
                   label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
                   onClick: () => void handleTestConnection(service.service_id),
-                  icon: testingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />,
+                  icon: testingServiceId === service.service_id ? <Spinner size="sm" tone="current" /> : <Plug className="w-4 h-4" />,
                   disabled: testingServiceId === service.service_id
                 },
                 { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
@@ -178,17 +177,12 @@ function SandboxServicesPage() {
         </div>
       )}
 
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0"><Box className="w-5 h-5 text-blue-400" /></div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">About Sandbox Services</h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>Sandbox Services configure the isolated environment where agents execute Python code when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted container), Daytona, or E2B (managed cloud sandboxes).</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title="About Sandbox Services"
+        className="mt-6"
+        message="Sandbox Services configure the isolated environment where agents execute Python code when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted container), Daytona, or E2B (managed cloud sandboxes)."
+      />
 
       {isModalOpen && !editingService && (
         <ServiceWizard
@@ -223,10 +217,7 @@ function SandboxServicesPage() {
       >
         <div className="p-4">
           {testingServiceId ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Testing connection to sandbox service...</p>
-            </div>
+            <LoadingState variant="section" message="Testing connection to sandbox service..." />
           ) : testResult && (
             <div>
               <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

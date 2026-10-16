@@ -96,7 +96,7 @@ export function TagInput({
           placeholder={tags.length === 0 && !atLimit ? placeholder : ''}
           disabled={disabled}
           readOnly={!disabled && atLimit}
-          className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default  dark:placeholder:text-gray-500 "
+          className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
         />
       </div>
       <p className="text-xs text-fg-secondary mt-1 dark:text-fg-secondary-dark" aria-live="polite">

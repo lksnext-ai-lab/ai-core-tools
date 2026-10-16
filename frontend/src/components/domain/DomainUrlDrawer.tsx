@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Modal from '../ui/Modal';
+import Alert from '../ui/Alert';
 import type { DomainUrlDetail, DomainUrlStatus, DiscoverySource } from '../../types/crawl';
+import { ButtonApp } from '../ui/ButtonApp';
+import { LoadingState } from '../ui/LoadingState';
+import { Spinner } from '../ui/Spinner';
 
 interface DomainUrlDrawerProps {
   appId: number;
@@ -114,17 +118,10 @@ export default function DomainUrlDrawer({
       size="xlarge"
     >
       <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-            {error}
-          </div>
-        )}
+        {error && <Alert type="error" message={error} />}
 
         {loadingMeta ? (
-          <div className="flex justify-center items-center py-12">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-            <span className="ml-2 text-sm text-gray-500">Loading URL details...</span>
-          </div>
+          <LoadingState variant="section" message="Loading URL details..." />
         ) : urlDetail ? (
           <>
             {/* URL + Status */}
@@ -189,19 +186,13 @@ export default function DomainUrlDrawer({
             {/* Actions */}
             {canEdit && (
               <div>
-                <button
-                  type="button"
+                <ButtonApp
+                  label={recrawling ? 'Marking...' : 'Force re-crawl'}
                   onClick={() => { void handleRecrawl(); }}
-                  disabled={recrawling}
-                  className="flex items-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  {recrawling ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  {recrawling ? 'Marking...' : 'Force re-crawl'}
-                </button>
+                  loading={recrawling}
+                  size="small"
+                  icon={<RefreshCw className="w-4 h-4" />}
+                />
               </div>
             )}
           </>
@@ -211,8 +202,8 @@ export default function DomainUrlDrawer({
         <div>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Indexed content preview</p>
           {loadingContent ? (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
+            <div className="flex items-center gap-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+              <Spinner size="sm" tone="muted" />
               Loading content...
             </div>
           ) : content ? (

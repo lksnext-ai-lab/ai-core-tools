@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, AlertTriangle, Tag, BarChart2, Info, Zap, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug, Shield } from 'lucide-react';
+import { Check, Tag, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 import { useAppRole } from '../../hooks/useAppRole';
 import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import { Spinner } from '../../components/ui/Spinner';
 
 type LangsmithTestStatus = 'ok' | 'unauthorized' | 'network' | 'unknown';
 
@@ -204,10 +207,7 @@ function AppSettingsPage() {
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading app settings...</p>
-        </div>
+        <LoadingState variant="page" message="Loading app settings..." />
       
     );
   }
@@ -275,17 +275,14 @@ function AppSettingsPage() {
                       pattern="[a-z0-9-]+"
                     />
                     {canEdit && (
-                      <button
-                        type="button"
+                      <ButtonApp
+                        label={savingSlug ? 'Saving...' : 'Update Slug'}
                         onClick={handleSlugSubmit}
-                        disabled={savingSlug || !slugInput.trim()}
-                        className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center text-sm whitespace-nowrap"
-                      >
-                        {savingSlug && (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        )}
-                        {savingSlug ? 'Saving...' : 'Update Slug'}
-                      </button>
+                        disabled={!slugInput.trim()}
+                        loading={savingSlug}
+                        variant="secondary"
+                        className="whitespace-nowrap"
+                      />
                     )}
                   </div>
                   <p className="mt-1 text-sm text-gray-500">
@@ -332,13 +329,13 @@ function AppSettingsPage() {
                         type="button"
                         onClick={handleTestLangsmith}
                         disabled={testingLangsmith || !canTestLangsmith}
-                        className="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 rounded-lg text-sm whitespace-nowrap border border-gray-300"
+                        className="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-ink bg-surface px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-fg transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark"
                         title="Verify the API key against LangSmith"
                       >
                         {testingLangsmith ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                          <Spinner size="sm" tone="current" />
                         ) : (
-                          <Plug className="w-4 h-4 mr-2" />
+                          <Plug className="w-4 h-4" />
                         )}
                         {testingLangsmith ? 'Testing…' : 'Test connection'}
                       </button>
@@ -489,23 +486,7 @@ function AppSettingsPage() {
               </div>
 
               {/* Error Display */}
-              {error && (
-                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="w-5 h-5 text-red-400" />
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-red-800">
-                        Error Saving Settings
-                      </h3>
-                      <div className="mt-2 text-sm text-red-700">
-                        <p>{error}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {error && <Alert type="error" title="Error Saving Settings" message={error} className="mt-4" />}
 
               {/* Submit Button - Only show for admins */}
               {canEdit && (
@@ -517,16 +498,11 @@ function AppSettingsPage() {
                       </div>
                     )}
                   </div>
-                  <button
+                  <ButtonApp
                     type="submit"
-                    disabled={saving}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg flex items-center"
-                  >
-                    {saving && (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    )}
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
+                    label={saving ? 'Saving...' : 'Save Changes'}
+                    loading={saving}
+                  />
                 </div>
               )}
             </div>
@@ -556,100 +532,61 @@ function AppSettingsPage() {
             </div>
 
             {/* Langsmith Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <BarChart2 className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-blue-800">
-                    About Langsmith Integration
-                  </h3>
-                  <div className="mt-2 text-sm text-blue-700">
-                    <p>
-                      Langsmith provides monitoring, tracing, and debugging capabilities for your AI agents.
-                      Connect your Langsmith account to track agent performance and troubleshoot issues.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title="About Langsmith Integration"
+              message="Langsmith provides monitoring, tracing, and debugging capabilities for your AI agents. Connect your Langsmith account to track agent performance and troubleshoot issues."
+            />
 
             {/* OpenAI-compatible API Info */}
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Zap className="w-5 h-5 text-purple-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-purple-800">
-                    About OpenAI-compatible API
-                  </h3>
-                  <div className="mt-2 text-sm text-purple-700">
-                    <p className="mb-2">
-                      When enabled, your agents can be accessed through OpenAI-compatible API endpoints. 
-                      This allows integration with third-party tools and clients that expect OpenAI API format.
-                    </p>
-                    <p className="mb-2">
-                      <strong>Impact of this setting:</strong>
-                    </p>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>Enables compatibility with OpenAI-compatible clients and SDKs</li>
-                      <li>Provides standard chat completion endpoints</li>
-                      <li>Allows seamless integration with tools expecting OpenAI API interface</li>
-                      <li>Does not affect your existing internal APIs or agent functionality</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title="About OpenAI-compatible API"
+              message={(
+                <>
+                  <p className="mb-2">
+                    When enabled, your agents can be accessed through OpenAI-compatible API endpoints.
+                    This allows integration with third-party tools and clients that expect OpenAI API format.
+                  </p>
+                  <p className="mb-2">
+                    <strong>Impact of this setting:</strong>
+                  </p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Enables compatibility with OpenAI-compatible clients and SDKs</li>
+                    <li>Provides standard chat completion endpoints</li>
+                    <li>Allows seamless integration with tools expecting OpenAI API interface</li>
+                    <li>Does not affect your existing internal APIs or agent functionality</li>
+                  </ul>
+                </>
+              )}
+            />
 
             {/* App Settings Info */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Info className="w-5 h-5 text-gray-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-gray-800">
-                    App Configuration
-                  </h3>
-                  <div className="mt-2 text-sm text-gray-700">
-                    <p>
-                      These settings affect the overall behavior of your app. 
-                      The app name is used in navigation and API responses. 
-                      Changes to these settings are applied immediately.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title="App Configuration"
+              message="These settings affect the overall behavior of your app. The app name is used in navigation and API responses. Changes to these settings are applied immediately."
+            />
 
             {/* Sandbox Service Info */}
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Shield className="w-5 h-5 text-orange-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-orange-800">
-                    About Sandbox Services
-                  </h3>
-                  <div className="mt-2 text-sm text-orange-700">
-                    <p className="mb-2">
-                      A Sandbox Service controls the isolated environment where agents execute Python code
-                      when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted,
-                      container-isolated), Daytona, or E2B (managed cloud sandboxes) services under{' '}
-                      <strong>Settings → Sandbox Services</strong>.
-                    </p>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li><strong>Select a service</strong> — pins this app's agents to a specific sandbox configuration.</li>
-                      <li><strong>Inherit</strong> — uses the platform default configured by your system administrator.</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title="About Sandbox Services"
+              message={(
+                <>
+                  <p className="mb-2">
+                    A Sandbox Service controls the isolated environment where agents execute Python code
+                    when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted,
+                    container-isolated), Daytona, or E2B (managed cloud sandboxes) services under{' '}
+                    <strong>Settings → Sandbox Services</strong>.
+                  </p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li><strong>Select a service</strong> — pins this app's agents to a specific sandbox configuration.</li>
+                    <li><strong>Inherit</strong> — uses the platform default configured by your system administrator.</li>
+                  </ul>
+                </>
+              )}
+            />
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Upload, ArrowDownToLine, Loader2, Plug, Pencil, Trash2, Lightbulb } from 'lucide-react';
+import { Upload, ArrowDownToLine, Plug, Pencil, Trash2, Lightbulb } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
@@ -20,6 +20,8 @@ import ImportModal, {
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Spinner } from '../../components/ui/Spinner';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
@@ -266,10 +268,7 @@ function MCPConfigsPage() {
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading MCP configs...</p>
-        </div>
+        <LoadingState variant="page" message="Loading MCP configs..." />
       
     );
   }
@@ -395,7 +394,7 @@ function MCPConfigsPage() {
                         ),
                         onClick: () => { void handleExport(config.config_id); },
                         icon: exportingConfigId === config.config_id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          ? <Spinner size="sm" tone="current" />
                           : <ArrowDownToLine className="w-4 h-4" />,
                         disabled: exportingConfigId === config.config_id,
                         variant: 'primary' as const
@@ -410,7 +409,7 @@ function MCPConfigsPage() {
                           void handleTestConnection(config.config_id); 
                         },
                         icon: testingConfigId === config.config_id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          ? <Spinner size="sm" tone="current" />
                           : <Plug className="w-4 h-4" />,
                         disabled: testingConfigId === config.config_id
                       },
@@ -505,10 +504,7 @@ function MCPConfigsPage() {
         >
           <div className="p-4">
             {testingConfigId ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Testing connection to MCP server...</p>
-              </div>
+              <LoadingState variant="section" message="Testing connection to MCP server..." />
             ) : testResult && (
               <div>
                 <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

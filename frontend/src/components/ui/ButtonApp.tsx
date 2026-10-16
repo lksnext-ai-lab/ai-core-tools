@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { Spinner } from './Spinner';
+
 export type ButtonAppVariant = 'primary' | 'secondary' | 'table' | 'muted' | 'danger';
 export type ButtonAppSize = 'compact' | 'small' | 'control' | 'medium' | 'spacious' | 'large';
 export type ButtonAppType = 'button' | 'submit' | 'reset';
@@ -58,12 +60,7 @@ export function ButtonApp({
       aria-busy={loading}
       className={`${baseClasses} ${sizeClasses[size]} rounded-md ${variantClasses[variant]} ${className}`}
     >
-      {loading ? (
-        <span
-          className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"
-          aria-hidden="true"
-        />
-      ) : icon}
+      {loading ? <Spinner size="sm" tone="current" /> : icon}
       {label}
     </button>
   );

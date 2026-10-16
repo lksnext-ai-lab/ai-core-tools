@@ -43,7 +43,7 @@ export function StarRating({
           return (
             <span
               key={starValue}
-              className={`${starSize} leading-none ${isFilled ? 'text-yellow-400' : 'text-gray-300'}`}
+              className={`${starSize} leading-none ${isFilled ? 'text-bronze dark:text-bronze-dark' : 'text-fg-faint2 dark:text-fg-faint2-dark'}`}
               aria-hidden="true"
             >
               ★
@@ -59,8 +59,8 @@ export function StarRating({
             aria-checked={value === starValue}
             aria-label={`${starValue} star${starValue === 1 ? '' : 's'}`}
             className={`${starSize} leading-none transition-colors cursor-pointer ${
-              isFilled ? 'text-yellow-400' : 'text-gray-300'
-            } hover:text-yellow-400`}
+              isFilled ? 'text-bronze dark:text-bronze-dark' : 'text-fg-faint2 dark:text-fg-faint2-dark'
+            } hover:text-bronze dark:hover:text-bronze-dark`}
             onMouseEnter={() => setHovered(starValue)}
             onMouseLeave={() => setHovered(null)}
             onClick={() => onChange?.(starValue)}

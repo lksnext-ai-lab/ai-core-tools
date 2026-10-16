@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, XCircle, Plug } from 'lucide-react';
 import FormActions from './FormActions';
+import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 
 interface MCPConfigFormData {
@@ -128,11 +128,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
 
       {/* Config Name */}
       <div>
@@ -211,28 +207,22 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
 
       {/* Test Result */}
       {testResult && (
-        <div className={`p-3 rounded-lg border ${testResult.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {testResult.status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
-            </div>
-            <div className="ml-3 w-full">
-              <h3 className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>
-                {testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
-              </h3>
-              <div className={`mt-1 text-sm ${testResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-                {testResult.message}
-              </div>
+        <Alert
+          type={testResult.status === 'success' ? 'success' : 'error'}
+          title={testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
+          message={(
+            <>
+              {testResult.message}
               {testResult.tools && testResult.tools.length > 0 && (
                 <div className="mt-3">
-                  <h4 className="text-xs font-semibold text-green-800 uppercase tracking-wider mb-2">Available Tools</h4>
-                  <div className="bg-white rounded border border-green-200 max-h-40 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <tbody className="divide-y divide-gray-200">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider mb-2">Available Tools</h4>
+                  <div className="bg-surface dark:bg-surface-dark rounded border border-success-border dark:border-success-border-dark max-h-40 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-line dark:divide-line-dark">
+                      <tbody className="divide-y divide-line dark:divide-line-dark">
                         {testResult.tools.map((tool: any) => (
                           <tr key={tool.name}>
-                            <td className="px-3 py-2 text-xs font-medium text-gray-900">{tool.name}</td>
-                            <td className="px-3 py-2 text-xs text-gray-500">{tool.description}</td>
+                            <td className="px-3 py-2 text-xs font-medium text-fg dark:text-fg-dark">{tool.name}</td>
+                            <td className="px-3 py-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{tool.description}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -240,37 +230,31 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       )}
 
       {/* MCP Info Box */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Plug className="w-4 h-4 text-blue-400" />
+      <Alert
+        type="info"
+        title="About Model Context Protocol (MCP)"
+        message={(
+          <div className="text-xs space-y-2">
+            <p>
+              MCP enables AI agents to connect to external tools and data sources securely.
+            </p>
+            <p className="font-mono bg-surface-ash dark:bg-surface-hover-dark p-2 rounded text-xs">
+              Example stdio config:<br/>
+              &#123;"server-name": &#123;"command": "npx", "args": ["package@latest"]&#125;&#125;
+            </p>
+            <p className="font-mono bg-surface-ash dark:bg-surface-hover-dark p-2 rounded text-xs">
+              Example SSE config:<br/>
+              &#123;"server-name": &#123;"url": "https://server.com", "transport": "sse"&#125;&#125;
+            </p>
           </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">
-              About Model Context Protocol (MCP)
-            </h3>
-            <div className="mt-2 text-xs text-blue-700 space-y-2">
-              <p>
-                MCP enables AI agents to connect to external tools and data sources securely.
-              </p>
-              <p className="font-mono bg-blue-100 p-2 rounded text-xs">
-                Example stdio config:<br/>
-                &#123;"server-name": &#123;"command": "npx", "args": ["package@latest"]&#125;&#125;
-              </p>
-              <p className="font-mono bg-blue-100 p-2 rounded text-xs">
-                Example SSE config:<br/>
-                &#123;"server-name": &#123;"url": "https://server.com", "transport": "sse"&#125;&#125;
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+        )}
+      />
 
       <div className="flex justify-between items-center pt-4 border-t border-gray-200">
         <div>

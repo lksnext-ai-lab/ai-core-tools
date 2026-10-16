@@ -3,11 +3,13 @@ import React from 'react';
 interface FormFieldProps {
   label: string;
   id: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel';
+  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time';
   value: string | number;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   min?: number;
   max?: number;
+  step?: number;
   maxLength?: number;
   placeholder?: string;
   disabled?: boolean;
@@ -29,8 +31,10 @@ export function FormField({
   type = 'text',
   value,
   onChange,
+  onKeyDown,
   min,
   max,
+  step,
   maxLength,
   placeholder,
   disabled = false,
@@ -63,8 +67,10 @@ export function FormField({
         type={type}
         value={value}
         onChange={onChange}
+        onKeyDown={onKeyDown}
         min={min}
         max={max}
+        step={step}
         maxLength={maxLength}
         placeholder={placeholder}
         disabled={disabled}
@@ -81,7 +87,7 @@ export function FormField({
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">{helpText}</p>
       )}
 
       {error && (
@@ -307,6 +313,27 @@ export function FormCheckbox({
         )}
       </div>
     </div>
+  );
+}
+
+interface FormRadioProps {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+  className?: string;
+}
+
+export function FormRadio({
+  label,
+  checked,
+  onChange,
+  className = '',
+}: Readonly<FormRadioProps>) {
+  return (
+    <label className={className}>
+      <input type="radio" checked={checked} onChange={onChange} className="w-4 h-4 accent-ink border-gray-300  dark:accent-ink-dark"/>
+      {label}
+    </label>
   );
 }
 

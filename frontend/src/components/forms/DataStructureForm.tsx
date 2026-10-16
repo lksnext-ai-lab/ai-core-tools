@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BarChart2 } from 'lucide-react';
 import FieldManager from './FieldManager';
 import FormActions from './FormActions';
+import Alert from '../ui/Alert';
 import { randomId } from '../../utils/randomId';
 
 interface FieldDefinition {
@@ -139,11 +140,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
 
       {/* Basic Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

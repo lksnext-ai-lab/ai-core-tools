@@ -7,6 +7,9 @@ import { OCRInterface } from '../components/playground/OCRInterface';
 import APIExamples from '../components/playground/APIExamples';
 import PromptModal from '../components/playground/PromptModal';
 import ConversationSidebar from '../components/playground/ConversationSidebar';
+import { LoadingState } from '../components/ui/LoadingState';
+import Alert from '../components/ui/Alert';
+import { ButtonApp } from '../components/ui/ButtonApp';
 
 interface Agent {
   agent_id: number;
@@ -142,24 +145,25 @@ function AgentPlaygroundPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
   if (error) {
     return (
-      <div className="max-w-2xl mx-auto mt-8 p-6 bg-red-50 border border-red-200 rounded-lg">
-        <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Agent</h2>
-        <p className="text-red-600">{error}</p>
-        <button
-          onClick={() => navigate(`/apps/${appId}/agents`)}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-        >
-          Back to Agents
-        </button>
-      </div>
+      <Alert
+        type="error"
+        title="Error Loading Agent"
+        className="max-w-2xl mx-auto mt-8"
+        message={(
+          <>
+            {error}
+            <span className="mt-4 block">
+              <ButtonApp label="Back to Agents" variant="danger" size="medium" onClick={() => navigate(`/apps/${appId}/agents`)} />
+            </span>
+          </>
+        )}
+      />
     );
   }
 

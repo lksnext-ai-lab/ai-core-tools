@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, RefreshCw, Trash2, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw, Trash2, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../ui/ActionDropdown';
 import Alert from '../ui/Alert';
 import type { DomainUrl, DomainUrlStatus, DiscoverySource } from '../../types/crawl';
+import { Spinner } from '../ui/Spinner';
+import { Badge, type BadgeVariant } from '../ui/Badge';
+import { LoadingState } from '../ui/LoadingState';
+import { FormField, FormSelect } from '../ui/FormField';
+import { ButtonApp } from '../ui/ButtonApp';
+import Table, { type TableColumn } from '../ui/Table';
 
 interface DomainUrlsTableProps {
   appId: number;
@@ -12,24 +18,24 @@ interface DomainUrlsTableProps {
   onViewUrl?: (urlId: number) => void;
 }
 
-function getStatusBadge(status: DomainUrlStatus): { text: string; className: string } {
+function getStatusBadge(status: DomainUrlStatus): { text: string; variant: BadgeVariant; className?: string } {
   switch (status) {
     case 'PENDING':
-      return { text: 'Pending', className: 'bg-yellow-100 text-yellow-800' };
+      return { text: 'Pending', variant: 'warning' };
     case 'CRAWLING':
-      return { text: 'Crawling', className: 'bg-blue-100 text-blue-800' };
+      return { text: 'Crawling', variant: 'info' };
     case 'INDEXED':
-      return { text: 'Indexed', className: 'bg-green-100 text-green-800' };
+      return { text: 'Indexed', variant: 'success' };
     case 'SKIPPED':
-      return { text: 'Skipped', className: 'bg-gray-100 text-gray-600' };
+      return { text: 'Skipped', variant: 'default' };
     case 'FAILED':
-      return { text: 'Failed', className: 'bg-red-100 text-red-800' };
+      return { text: 'Failed', variant: 'error' };
     case 'REMOVED':
-      return { text: 'Removed', className: 'bg-gray-100 text-gray-400 line-through' };
+      return { text: 'Removed', variant: 'default', className: 'line-through opacity-70' };
     case 'EXCLUDED':
-      return { text: 'Excluded', className: 'bg-orange-100 text-orange-700' };
+      return { text: 'Excluded', variant: 'secondary' };
     default:
-      return { text: status, className: 'bg-gray-100 text-gray-600' };
+      return { text: status, variant: 'default' };
   }
 }
 
@@ -148,6 +154,107 @@ export default function DomainUrlsTable({
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
+  const columns: TableColumn<DomainUrl>[] = [
+    {
+      header: 'URL',
+      className: 'px-6 py-4 max-w-xs',
+      render: url => (
+        <span title={url.url} className="block truncate text-gray-900 font-mono text-xs">
+          {url.url}
+        </span>
+      ),
+    },
+    {
+      header: 'Status',
+      className: 'px-6 py-4 whitespace-nowrap',
+      render: url => {
+        const badge = getStatusBadge(url.status as DomainUrlStatus);
+        return (
+          <Badge
+            label={badge.text}
+            variant={badge.variant}
+            className={badge.className}
+            icon={badge.text === 'Crawling' ? <Spinner size="xs" tone="current" /> : undefined}
+          />
+        );
+      },
+    },
+    {
+      header: 'Via',
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-gray-500',
+      render: url => url.discovered_via as DiscoverySource,
+    },
+    {
+      header: 'Depth',
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-gray-500',
+      render: url => url.depth,
+    },
+    {
+      header: 'Last crawled',
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-gray-500',
+      render: url => formatDate(url.last_crawled_at),
+    },
+    {
+      header: 'Next crawl',
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-gray-500',
+      render: url => (
+        <span title={url.consecutive_skips > 1 ? `${url.consecutive_skips} skips (backoff active)` : undefined}>
+          {formatDate(url.next_crawl_at)}
+          {url.consecutive_skips > 1 && (
+            <span className="ml-1 text-orange-500">({url.consecutive_skips}x)</span>
+          )}
+        </span>
+      ),
+    },
+    {
+      header: 'Failures',
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-gray-500',
+      render: url => (
+        url.failure_count > 0
+          ? <span className="text-red-600 font-medium">{url.failure_count}</span>
+          : url.failure_count
+      ),
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      className: 'px-6 py-4 whitespace-nowrap text-right',
+      render: url => (
+        <ActionDropdown
+          size="sm"
+          actions={[
+            ...(onViewUrl ? [{
+              label: 'View detail',
+              onClick: () => onViewUrl(url.id),
+              icon: <Eye className="w-4 h-4" />,
+              variant: 'success' as const,
+            }] : []),
+            ...(canEdit ? [
+              {
+                label: 'Force re-crawl',
+                onClick: () => { void handleRecrawl(url.id); },
+                icon: recrawlingId === url.id
+                  ? <Spinner size="sm" tone="current" />
+                  : <RefreshCw className="w-4 h-4" />,
+                variant: 'primary' as const,
+                disabled: recrawlingId !== null,
+              },
+              {
+                label: 'Delete',
+                onClick: () => { void handleDelete(url.id); },
+                icon: deletingId === url.id
+                  ? <Spinner size="sm" tone="current" />
+                  : <Trash2 className="w-4 h-4" />,
+                variant: 'danger' as const,
+                disabled: deletingId !== null,
+              },
+            ] : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
@@ -155,167 +262,71 @@ export default function DomainUrlsTable({
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2 items-center">
-        <select
+        <FormSelect
+          id="status_filter"
+          label="Status"
+          labelClassName="sr-only"
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500"
-        >
-          {STATUS_OPTIONS.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-        <select
+          options={STATUS_OPTIONS}
+        />
+        <FormSelect
+          id="discovered_via_filter"
+          label="Source"
+          labelClassName="sr-only"
           value={discoveredViaFilter}
           onChange={e => setDiscoveredViaFilter(e.target.value)}
-          className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500"
-        >
-          {DISCOVERED_VIA_OPTIONS.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+          options={DISCOVERED_VIA_OPTIONS}
+        />
         <form onSubmit={handleSearchSubmit} className="flex gap-1">
-          <input
-            type="text"
+          <FormField
+            id="url_search"
+            label="Search URLs"
+            labelClassName="sr-only"
+            className="w-48"
             value={qInput}
             onChange={e => setQInput(e.target.value)}
             placeholder="Search URLs..."
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500 w-48"
           />
-          <button
+          <ButtonApp
             type="submit"
-            className="text-xs bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-md px-2 py-1"
-          >
-            Search
-          </button>
+            label="Search"
+            variant="secondary"
+            size="small"
+          />
           {qFilter && (
-            <button
-              type="button"
+            <ButtonApp
+              label="Clear"
+              variant="secondary"
+              size="small"
               onClick={() => { setQFilter(''); setQInput(''); }}
-              className="text-xs text-gray-500 hover:text-gray-700 px-1"
-            >
-              Clear
-            </button>
+            />
           )}
         </form>
-        <button
-          type="button"
+        <ButtonApp
+          label="Refresh"
+          variant="secondary"
+          size="small"
+          icon={<RefreshCw className="w-3 h-3" />}
+          className="ml-auto"
           onClick={() => void fetchUrls(page)}
-          className="ml-auto text-xs flex items-center gap-1 text-gray-500 hover:text-gray-700"
-        >
-          <RefreshCw className="w-3 h-3" />
-          Refresh
-        </button>
+        />
       </div>
 
       {/* Table */}
       {loading ? (
-        <div className="flex justify-center items-center py-12">
-          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-          <span className="ml-2 text-sm text-gray-500">Loading URLs...</span>
-        </div>
-      ) : urls.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 text-sm">
-          {statusFilter || discoveredViaFilter || qFilter
-            ? 'No URLs match the current filters.'
-            : 'No URLs yet. Add URLs manually or run a crawl.'}
-        </div>
+        <LoadingState variant="section" message="Loading URLs..." />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Via</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Depth</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last crawled</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next crawl</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Failures</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {urls.map(url => {
-                const badge = getStatusBadge(url.status as DomainUrlStatus);
-                return (
-                  <tr key={url.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 max-w-xs">
-                      <span
-                        title={url.url}
-                        className="block truncate text-gray-900 font-mono text-xs"
-                      >
-                        {url.url}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${badge.className}`}>
-                        {badge.text === 'Crawling' && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {badge.text}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                      {(url.discovered_via as DiscoverySource)}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                      {url.depth}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                      {formatDate(url.last_crawled_at)}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                      <span title={url.consecutive_skips > 1 ? `${url.consecutive_skips} skips (backoff active)` : undefined}>
-                        {formatDate(url.next_crawl_at)}
-                        {url.consecutive_skips > 1 && (
-                          <span className="ml-1 text-orange-500">({url.consecutive_skips}x)</span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                      {url.failure_count > 0 ? (
-                        <span className="text-red-600 font-medium">{url.failure_count}</span>
-                      ) : (
-                        url.failure_count
-                      )}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-right">
-                      <ActionDropdown
-                        size="sm"
-                        actions={[
-                          ...(onViewUrl ? [{
-                            label: 'View detail',
-                            onClick: () => onViewUrl(url.id),
-                            icon: <Eye className="w-4 h-4" />,
-                            variant: 'success' as const,
-                          }] : []),
-                          ...(canEdit ? [
-                            {
-                              label: 'Force re-crawl',
-                              onClick: () => { void handleRecrawl(url.id); },
-                              icon: recrawlingId === url.id
-                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                : <RefreshCw className="w-4 h-4" />,
-                              variant: 'primary' as const,
-                              disabled: recrawlingId !== null,
-                            },
-                            {
-                              label: 'Delete',
-                              onClick: () => { void handleDelete(url.id); },
-                              icon: deletingId === url.id
-                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                : <Trash2 className="w-4 h-4" />,
-                              variant: 'danger' as const,
-                              disabled: deletingId !== null,
-                            },
-                          ] : []),
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          columns={columns}
+          data={urls}
+          keyExtractor={url => url.id}
+          emptyMessage={
+            statusFilter || discoveredViaFilter || qFilter
+              ? 'No URLs match the current filters.'
+              : 'No URLs yet. Add URLs manually or run a crawl.'
+          }
+        />
       )}
 
       {/* Pagination */}

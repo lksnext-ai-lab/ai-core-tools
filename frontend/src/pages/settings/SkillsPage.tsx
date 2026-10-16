@@ -5,13 +5,12 @@ import {
   Target,
   Pencil,
   Trash2,
-  Lightbulb,
   Upload,
   ArrowDownToLine,
-  Loader2,
   ToggleLeft,
   ToggleRight,
   PackagePlus,
+  Plus,
 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import SkillForm from '../../components/forms/SkillForm';
@@ -28,6 +27,10 @@ import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import { Spinner } from '../../components/ui/Spinner';
+import Title from '../../components/ui/Title';
 
 function SkillsPage() {
   const { appId } = useParams();
@@ -378,7 +381,7 @@ function SkillsPage() {
             label: isExporting ? 'Exporting...' : 'Export',
             onClick: () => { void handleExport(skill); },
             icon: isExporting
-              ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ? <Spinner size="sm" tone="current" />
               : <ArrowDownToLine className="w-4 h-4" aria-hidden="true" />,
             disabled: isExporting,
             variant: 'secondary'
@@ -392,7 +395,7 @@ function SkillsPage() {
               label: isToggling ? 'Updating...' : (isEnabled ? 'Disable' : 'Enable'),
               onClick: () => { void handleToggleEnabled(skill); },
               icon: isToggling
-                ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ? <Spinner size="sm" tone="current" />
                 : (isEnabled ? <ToggleLeft className="w-4 h-4" aria-hidden="true" /> : <ToggleRight className="w-4 h-4" aria-hidden="true" />),
               disabled: isToggling,
               variant: isEnabled ? 'warning' : 'success'
@@ -430,10 +433,7 @@ function SkillsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-        <p className="mt-2 text-gray-600">Loading skills...</p>
-      </div>
+      <LoadingState variant="page" message="Loading skills..." />
     );
   }
 
@@ -449,40 +449,31 @@ function SkillsPage() {
     <div className="p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Skills</h2>
-          <p className="text-gray-600">Manage prompt-driven specializations for your agents</p>
-        </div>
+        <Title variant="titPrincipal" titulo='Skills' subtitulo='Manage prompt-driven specializations for your agents' />
         {canEdit && (
           <div className="flex gap-2">
-            <button
-              type="button"
+            <ButtonApp
+              label={importing ? 'Importing…' : 'Import package'}
               onClick={handleImportClick}
-              disabled={importing}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {importing ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4 mr-2" />
-              )}
-              {importing ? 'Importing…' : 'Import package'}
-            </button>
-            <button
+              loading={importing}
+              variant="secondary"
+              icon={<Upload className="w-4 h-4" />}
+            />
+            <ButtonApp
               type="button"
               onClick={handleClaudePluginImportClick}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
-            >
-              <PackagePlus className="w-4 h-4 mr-2" aria-hidden="true" />
-              Import Claude plugin
-            </button>
-            <button
+              label="Import Claude plugin"
+              icon={<PackagePlus className="w-4 h-4" aria-hidden="true" />}
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
               onClick={handleCreateSkill}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}Add Skill
-            </button>
+              label="Add Skill"
+              icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
       </div>
@@ -525,45 +516,39 @@ function SkillsPage() {
 
       {skills.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
             onClick={handleCreateSkill}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-          >
-            Add First Skill
-          </button>
+            label="Add First Skill"
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 
-      {/* Info Box */}
-      <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Lightbulb className="w-5 h-5 text-purple-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-purple-800">
-              About Skills
-            </h3>
-            <div className="mt-2 text-sm text-purple-700">
-              <p>
-                Skills are prompt-driven specializations that agents can dynamically load on-demand.
-                When an agent has skills assigned, it gains a <code className="bg-purple-100 px-1 rounded">load_skill</code> tool
-                that allows it to activate specialized behavior when needed. Skills marked <strong>System</strong> are
-                managed centrally and cannot be edited or deleted here.
-              </p>
-              <div className="mt-2">
-                <strong>Example Skills:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Code Review Guidelines - Best practices for reviewing code</li>
-                  <li>Technical Writing - Formatting and style for documentation</li>
-                  <li>Data Analysis - Steps for analyzing datasets</li>
-                  <li>Customer Support - Tone and process for handling inquiries</li>
-                </ul>
-              </div>
+      <Alert
+        type="info"
+        title="About Skills"
+        className="mt-6"
+        message={(
+          <>
+            <p>
+              Skills are prompt-driven specializations that agents can dynamically load on-demand.
+              When an agent has skills assigned, it gains a <code className="px-1 rounded">load_skill</code> tool
+              that allows it to activate specialized behavior when needed. Skills marked <strong>System</strong> are
+              managed centrally and cannot be edited or deleted here.
+            </p>
+            <div className="mt-2">
+              <span className="text-info dark:text-info-dark font-medium">Example Skills:</span>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>Code Review Guidelines - Best practices for reviewing code</li>
+                <li>Technical Writing - Formatting and style for documentation</li>
+                <li>Data Analysis - Steps for analyzing datasets</li>
+                <li>Customer Support - Tone and process for handling inquiries</li>
+              </ul>
             </div>
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {/* Create/Edit Modal */}
       <Modal

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Users, Handshake, Crown, Info, Lock, Lightbulb, AlertTriangle } from 'lucide-react';
+import { Users, Handshake, Crown, AlertTriangle } from 'lucide-react';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
@@ -13,6 +13,7 @@ import Table from '../../components/ui/Table';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
 
 interface Collaborator {
   id: number;
@@ -286,10 +287,7 @@ function CollaborationPage() {
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading collaboration settings...</p>
-        </div>
+        <LoadingState variant="page" message="Loading collaboration settings..." />
       
     );
   }
@@ -323,23 +321,11 @@ function CollaborationPage() {
     );
   } else {
     inviteCollaboratorSection = (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Info className="w-5 h-5 text-yellow-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-800">
-              Collaborator Access
-            </h3>
-            <div className="mt-2 text-sm text-yellow-700">
-              <p>
-                You have collaborator access to this app. Only administrators can invite new collaborators.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="warning"
+        title="Collaborator Access"
+        message="You have collaborator access to this app. Only administrators can invite new collaborators."
+      />
     );
   }
 
@@ -507,49 +493,33 @@ function CollaborationPage() {
         {/* Information Boxes */}
         <div className="space-y-4">
           {/* Collaboration Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <Lightbulb className="w-5 h-5 text-blue-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">
-                  About Collaboration
-                </h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <p>
-                    Collaboration allows multiple users to work on the same app. Invited users will 
-                    receive an email invitation and can access the app once they accept.
-                    {!isOwner && " You can leave this collaboration anytime from the apps list."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="info"
+            title="About Collaboration"
+            message={(
+              <>
+                Collaboration allows multiple users to work on the same app. Invited users will
+                receive an email invitation and can access the app once they accept.
+                {!isOwner && " You can leave this collaboration anytime from the apps list."}
+              </>
+            )}
+          />
 
           {/* Security Notice */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <Lock className="w-5 h-5 text-yellow-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  Collaboration Rules
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Only app owners can invite new collaborators</li>
-                    <li>Collaborators can be invited as editors or administrators</li>
-                    <li>Administrators have the same permissions as owners except managing collaborators</li>
-                    <li>Editors can modify app content but cannot manage collaborators or settings</li>
-                    <li>Owners have full control and can manage all collaborators</li>
-                    {!isOwner && <li>You can leave this collaboration from the main apps list</li>}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="warning"
+            title="Collaboration Rules"
+            message={(
+              <ul className="list-disc list-inside space-y-1">
+                <li>Only app owners can invite new collaborators</li>
+                <li>Collaborators can be invited as editors or administrators</li>
+                <li>Administrators have the same permissions as owners except managing collaborators</li>
+                <li>Editors can modify app content but cannot manage collaborators or settings</li>
+                <li>Owners have full control and can manage all collaborators</li>
+                {!isOwner && <li>You can leave this collaboration from the main apps list</li>}
+              </ul>
+            )}
+          />
         </div>
       </div>
     

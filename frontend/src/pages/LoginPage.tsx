@@ -6,6 +6,8 @@ import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../themes/ThemeContext';
 import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 import AIRobot3D from '../components/ui/AIRobot3D';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { Spinner } from '../components/ui/Spinner';
 
 const PHRASES = [
   'Hey! Ready to build something amazing?',
@@ -241,10 +243,7 @@ function LoginPage() {
 
             {configLoading && (
               <div className="flex justify-center py-4" aria-label="Loading sign-in options" aria-busy="true">
-                <svg className="animate-spin h-6 w-6 text-fg-faint dark:text-fg-faint-dark" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <Spinner size="md" tone="muted" />
               </div>
             )}
 
@@ -295,46 +294,34 @@ function LoginPage() {
                     className="w-full px-4 py-3 text-sm rounded-lg border bg-surface border-line-strong text-fg placeholder:text-fg-faint focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink dark:bg-surface-dark dark:border-line-strong-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark dark:focus:border-ink-dark dark:focus:ring-ink-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                   />
                 </div>
-                <button
+                <ButtonApp
                   type="submit"
-                  disabled={loading || !email || !password}
-                  className="w-full flex items-center justify-center px-4 py-3 rounded-lg text-sm font-medium bg-ink text-ink-on hover:bg-ink/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-focus dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-dark/85 dark:focus-visible:ring-focus-dark dark:focus-visible:ring-offset-surface-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Signing in...
-                    </>
-                  ) : 'Sign in'}
-                </button>
+                  label={loading ? 'Signing in...' : 'Sign in'}
+                  disabled={!email || !password}
+                  loading={loading}
+                  size="spacious"
+                  className="w-full"
+                />
               </form>
             )}
 
             {!configLoading && authMode === 'oidc' && (
-              <button
-                type="button"
+              <ButtonApp
+                label={loading ? 'Signing in...' : 'Sign in with Microsoft'}
                 onClick={handleOIDCLogin}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2.5 px-[18px] py-[13px] rounded-lg border text-sm font-medium bg-surface border-line-strong text-fg hover:bg-canvas-alt focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:bg-surface-dark dark:border-line-strong-dark dark:text-fg-dark dark:hover:bg-canvas-alt-dark dark:focus-visible:ring-focus-dark transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
+                loading={loading}
+                variant="secondary"
+                size="spacious"
+                className="w-full"
+                icon={
                   <svg className="w-[17px] h-[17px]" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#00A4EF" d="M0 0h11.377v11.372H0z" />
                     <path fill="#FFB900" d="M12.623 0H24v11.372H12.623z" />
                     <path fill="#7FBA00" d="M0 12.628h11.377V24H0z" />
                     <path fill="#F25022" d="M12.623 12.628H24V24H12.623z" />
                   </svg>
-                )}
-                {loading ? 'Signing in...' : 'Sign in with Microsoft'}
-              </button>
+                }
+              />
             )}
 
             {!configLoading && isSaasMode && (

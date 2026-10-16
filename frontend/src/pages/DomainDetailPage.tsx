@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
 import { Tabs } from '../components/ui/Tabs';
@@ -12,6 +12,13 @@ import RunCrawlNowButton from '../components/domain/RunCrawlNowButton';
 import DomainUrlsTable from '../components/domain/DomainUrlsTable';
 import DomainUrlDrawer from '../components/domain/DomainUrlDrawer';
 import type { CrawlJob, CrawlJobStatus } from '../types/crawl';
+import { LoadingState } from '../components/ui/LoadingState';
+import { Spinner } from '../components/ui/Spinner';
+import { Badge, type BadgeVariant } from '../components/ui/Badge';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
+import Table, { type TableColumn } from '../components/ui/Table';
 
 interface DomainDetail {
   domain_id: number;
@@ -38,14 +45,14 @@ const TABS = [
 
 // ==================== Job history table ====================
 
-function jobStatusBadge(status: CrawlJobStatus) {
+function jobStatusBadge(status: CrawlJobStatus): { text: string; variant: BadgeVariant; spinner?: boolean } {
   switch (status) {
-    case 'QUEUED': return { text: 'Queued', className: 'bg-yellow-100 text-yellow-800' };
-    case 'RUNNING': return { text: 'Running', className: 'bg-blue-100 text-blue-800', spinner: true };
-    case 'COMPLETED': return { text: 'Completed', className: 'bg-green-100 text-green-800' };
-    case 'FAILED': return { text: 'Failed', className: 'bg-red-100 text-red-800' };
-    case 'CANCELLED': return { text: 'Cancelled', className: 'bg-gray-100 text-gray-600' };
-    default: return { text: status, className: 'bg-gray-100 text-gray-600' };
+    case 'QUEUED': return { text: 'Queued', variant: 'warning' };
+    case 'RUNNING': return { text: 'Running', variant: 'info', spinner: true };
+    case 'COMPLETED': return { text: 'Completed', variant: 'success' };
+    case 'FAILED': return { text: 'Failed', variant: 'error' };
+    case 'CANCELLED': return { text: 'Cancelled', variant: 'default' };
+    default: return { text: status, variant: 'default' };
   }
 }
 
@@ -53,6 +60,48 @@ function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
 }
+
+const JOB_HISTORY_COLUMNS: TableColumn<CrawlJob>[] = [
+  { header: 'ID', render: job => <span className="text-fg-secondary dark:text-fg-secondary-dark">#{job.id}</span> },
+  {
+    header: 'Status',
+    render: job => {
+      const badge = jobStatusBadge(job.status as CrawlJobStatus);
+      return (
+        <Badge
+          label={badge.text}
+          variant={badge.variant}
+          icon={badge.spinner ? <Spinner size="xs" tone="current" /> : undefined}
+        />
+      );
+    },
+  },
+  {
+    header: 'Triggered by',
+    render: job => (
+      <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+        {job.triggered_by === 'MANUAL' ? 'Manual' : 'Scheduled'}
+      </span>
+    ),
+  },
+  {
+    header: 'Started',
+    render: job => <span className="whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDate(job.started_at)}</span>,
+  },
+  {
+    header: 'Finished',
+    render: job => <span className="whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDate(job.finished_at)}</span>,
+  },
+  { header: 'Discovered', accessor: 'discovered_count' },
+  { header: 'Indexed', accessor: 'indexed_count' },
+  { header: 'Skipped', accessor: 'skipped_count' },
+  {
+    header: 'Failed',
+    render: job => job.failed_count > 0
+      ? <span className="font-medium text-red-600">{job.failed_count}</span>
+      : job.failed_count,
+  },
+];
 
 interface JobHistoryTabProps {
   appId: number;
@@ -88,66 +137,19 @@ function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   if (loading) return (
-    <div className="flex justify-center items-center py-12">
-      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-      <span className="ml-2 text-sm text-gray-500">Loading job history...</span>
-    </div>
+    <LoadingState variant="section" message="Loading job history..." />
   );
 
   if (error) return <Alert type="error" message={error} onDismiss={() => setError(null)} />;
 
-  if (jobs.length === 0) return (
-    <div className="text-center py-12 text-gray-500 text-sm">No crawl jobs yet.</div>
-  );
-
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Triggered by</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Finished</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discovered</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Indexed</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Skipped</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Failed</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {jobs.map(job => {
-              const badge = jobStatusBadge(job.status as CrawlJobStatus);
-              return (
-                <tr key={job.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-500">#{job.id}</td>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${badge.className}`}>
-                      {(badge as any).spinner && <Loader2 className="w-3 h-3 animate-spin" />}
-                      {badge.text}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
-                    {job.triggered_by === 'MANUAL' ? 'Manual' : 'Scheduled'}
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{formatDate(job.started_at)}</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{formatDate(job.finished_at)}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500">{job.discovered_count}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500">{job.indexed_count}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500">{job.skipped_count}</td>
-                  <td className="px-4 py-2 text-xs">
-                    {job.failed_count > 0
-                      ? <span className="text-red-600 font-medium">{job.failed_count}</span>
-                      : job.failed_count}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        columns={JOB_HISTORY_COLUMNS}
+        data={jobs}
+        keyExtractor={job => job.id}
+        emptyMessage="No crawl jobs yet."
+      />
 
       {total > PER_PAGE && (
         <div className="flex items-center justify-center gap-3 text-sm text-gray-600">
@@ -239,24 +241,20 @@ const DomainDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
   if (error || !domain) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-          {error ?? 'Domain not found'}
-        </div>
-        <button
+        <Alert type="error" message={error ?? 'Domain not found'} className="mb-4" />
+        <ButtonApp
+          label="Back to App"
+          variant="secondary"
+          size="medium"
           onClick={() => navigate(`/apps/${appId}`)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Back to App
-        </button>
+        />
       </div>
     );
   }
@@ -274,24 +272,20 @@ const DomainDetailPage: React.FC = () => {
 
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{domain.name}</h1>
-          {domain.description && <p className="text-gray-600 mt-1">{domain.description}</p>}
-          <p className="text-sm text-gray-400 mt-1 font-mono">{domain.base_url}</p>
-        </div>
+        <Title
+          variant="titPrincipal"
+          titulo={domain.name}
+          subtitulo={`${domain.description}\n${domain.base_url}`}
+          subtitleMarginBottom={20}
+        />
         <div className="flex gap-2">
-          <button
-            onClick={() => navigate(`/apps/${appId}/domains/${domainId}/edit`)}
-            className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg"
-          >
-            Edit domain
-          </button>
-          <button
-            onClick={() => navigate(`/apps/${appId}/domains`)}
-            className="text-sm bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700"
-          >
-            Back to Domains
-          </button>
+          <ButtonApp
+            label="Edit domain"
+            variant="primary"
+            size="medium"
+            onClick={() => navigate(`/apps/${appId}/domains/${domainId}`)}
+          />
+          
         </div>
       </div>
 
@@ -302,27 +296,27 @@ const DomainDetailPage: React.FC = () => {
       {activeTab === 'configuration' && (
         <div className="space-y-6">
           {/* Scraping config (read-only display) */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Scraping configuration</h2>
+          <CardApp className="p-6">
+            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Scraping configuration</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-gray-500 text-xs font-medium uppercase tracking-wide">Content tag</span>
-                <p className="text-gray-900 mt-0.5">{domain.content_tag || 'body'}</p>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">Content tag</span>
+                <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_tag || 'body'}</p>
               </div>
               <div>
-                <span className="text-gray-500 text-xs font-medium uppercase tracking-wide">Content class</span>
-                <p className="text-gray-900 mt-0.5">{domain.content_class || '—'}</p>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">Content class</span>
+                <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_class || '—'}</p>
               </div>
               <div>
-                <span className="text-gray-500 text-xs font-medium uppercase tracking-wide">Content ID</span>
-                <p className="text-gray-900 mt-0.5">{domain.content_id || '—'}</p>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">Content ID</span>
+                <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_id || '—'}</p>
               </div>
             </div>
-          </div>
+          </CardApp>
 
           {/* Crawl policy */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Crawl policy</h2>
+          <CardApp className="p-6">
+            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Crawl policy</h2>
             <CrawlPolicyForm
               appId={numericAppId}
               domainId={numericDomainId}
@@ -332,7 +326,7 @@ const DomainDetailPage: React.FC = () => {
                 setTimeout(() => setSuccessMessage(null), 3000);
               }}
             />
-          </div>
+          </CardApp>
         </div>
       )}
 
@@ -340,9 +334,9 @@ const DomainDetailPage: React.FC = () => {
       {activeTab === 'urls' && (
         <div className="space-y-6">
           {/* Crawl job controls */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+          <CardApp className=" p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Crawl job</h2>
+              <h2 className="text-lg font-semibold text-fg dark:text-fg-dark">Crawl job</h2>
               {canEdit && (
                 <RunCrawlNowButton
                   appId={numericAppId}
@@ -361,18 +355,18 @@ const DomainDetailPage: React.FC = () => {
                 onJobUpdate={setLatestJob}
               />
             )}
-          </div>
+          </CardApp>
 
           {/* URL table */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">URLs ({domain.url_count})</h2>
+          <CardApp className="bg-white border border-gray-200 rounded-lg p-4">
+            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">URLs ({domain.url_count})</h2>
             <DomainUrlsTable
               appId={numericAppId}
               domainId={numericDomainId}
               canEdit={canEdit}
               onViewUrl={setSelectedUrlId}
             />
-          </div>
+          </CardApp>
 
           {/* URL detail drawer */}
           <DomainUrlDrawer
@@ -387,10 +381,10 @@ const DomainDetailPage: React.FC = () => {
 
       {/* Tab: Job history */}
       {activeTab === 'job-history' && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Crawl job history</h2>
+        <CardApp className="bg-white border border-gray-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Crawl job history</h2>
           <JobHistoryTab appId={numericAppId} domainId={numericDomainId} />
-        </div>
+        </CardApp>
       )}
     </div>
   );

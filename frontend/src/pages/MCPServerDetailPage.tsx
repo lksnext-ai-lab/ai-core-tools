@@ -4,6 +4,8 @@ import { apiService } from '../services/api';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import type { MCPServer } from '../core/types';
+import { LoadingState } from '../components/ui/LoadingState';
+import Alert from '../components/ui/Alert';
 
 function MCPServerDetailPage() {
   const { appId, serverId } = useParams();
@@ -73,10 +75,7 @@ function MCPServerDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading MCP server...</span>
-        </div>
+        <LoadingState variant="page" message="Loading MCP server..." />
       </div>
     );
   }
@@ -90,21 +89,17 @@ function MCPServerDetailPage() {
           </div>
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">!</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{error || 'MCP server not found'}</p>
-              <Link
-                to={`/apps/${appId}/mcp-servers`}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline inline-block"
-              >
+        <Alert
+          type="error"
+          message={(
+            <>
+              {error || 'MCP server not found'}
+              <Link to={`/apps/${appId}/mcp-servers`} className="mt-2 block underline">
                 Back to MCP Servers
               </Link>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -189,15 +184,11 @@ function MCPServerDetailPage() {
 
           {/* Warning for unavailable agents */}
           {server.agents && server.agents.some(a => !a.is_available) && (
-            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <div className="flex items-start">
-                <span className="text-amber-500 mr-2">!</span>
-                <div className="text-sm text-amber-800">
-                  <strong>Warning:</strong> Some agents are unavailable and won't be exposed as tools.
-                  They may have been deleted or unmarked as tools.
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="warning"
+              className="mb-4"
+              message="Some agents are unavailable and won't be exposed as tools. They may have been deleted or unmarked as tools."
+            />
           )}
 
           {server.agents && server.agents.length > 0 ? (
@@ -348,24 +339,19 @@ function MCPServerDetailPage() {
       )}
 
       {/* Authentication Note */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <span className="text-blue-400 text-xl mr-3">(i)</span>
-          <div>
-            <h3 className="text-sm font-medium text-blue-800">Authentication Required</h3>
-            <p className="text-sm text-blue-600 mt-1">
-              MCP endpoints require authentication. Use an API key from your app's API Keys settings
-              and include it in the <code className="bg-blue-100 px-1 rounded">X-API-KEY</code> header.
-            </p>
-            <Link
-              to={`/apps/${appId}/settings/api-keys`}
-              className="mt-2 text-sm text-blue-800 hover:text-blue-900 underline inline-block"
-            >
+      <Alert
+        type="info"
+        title="Authentication Required"
+        message={(
+          <>
+            MCP endpoints require authentication. Use an API key from your app's API Keys settings
+            and include it in the <code>X-API-KEY</code> header.
+            <Link to={`/apps/${appId}/settings/api-keys`} className="mt-2 block underline">
               Manage API Keys
             </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      />
     </div>
   );
 }

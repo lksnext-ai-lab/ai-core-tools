@@ -41,7 +41,6 @@ export default {
         focus: { DEFAULT: '#1a5fd6', dark: '#7fb3ff' },
         btCard: { DEFAULT: '#E8E8E8', bg: '#ffffff', border: '#e8e8e8', hover: '#212121', dark: '#2a271c', 'bg-dark': '#2a271c','border-dark': '#3a362a' },
         tableCab: { DEFAULT: '#f5f5f5', bg: '#f5f5f5', dark: '#2a271c',  },
-        cardAlert:{ DEFAULT: '#f3ece0', bg: '#f3ece0', border: '#E6DDCB', 'bg-dark': '#2b2412', 'border-dark': '#4A3D1F', 'text': '#6b571f','text-dark': '#e0bd7c' },
         textImg:{DEFAULT: '#CDCDCD', dark: '#5C5748'}
 
       },

@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Eye, Pencil, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
+import ButtonApp from '../components/ui/ButtonApp';
+import ButtonLink from '../components/ui/ButtonLink';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import Badge from '../components/ui/Badge';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
@@ -11,6 +15,9 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { MCPServerListItem } from '../core/types';
+import { LoadingState } from '../components/ui/LoadingState';
+import Alert from '../components/ui/Alert';
+import Title from '../components/ui/Title';
 
 function MCPServersPage() {
   const { appId } = useParams();
@@ -86,17 +93,11 @@ function MCPServersPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">MCP Servers</h1>
-            <p className="text-gray-600">Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients</p>
-          </div>
+        <div className="flex items-center justify-between">  
+          <Title variant="titSecundario" titulo="MCP Servers"  subtitulo="Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients" />
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading MCP servers...</span>
-        </div>
+        <LoadingState variant="page" message="Loading MCP servers..." />
       </div>
     );
   }
@@ -105,27 +106,21 @@ function MCPServersPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">MCP Servers</h1>
-            <p className="text-gray-600">Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients</p>
-          </div>
+          <Title variant="titSecundario" titulo="MCP Servers"  subtitulo="Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients" />
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">!</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading MCP Servers</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button
-                onClick={() => loadServers()}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
+        <Alert
+          type="error"
+          title="Error Loading MCP Servers"
+          message={(
+            <>
+              {error}
+              <button type="button" onClick={() => loadServers()} className="mt-2 block underline">
                 Try again
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -134,18 +129,15 @@ function MCPServersPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">MCP Servers</h1>
-          <p className="text-gray-600">Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients</p>
-        </div>
+        <Title variant="titSecundario" titulo="MCP Servers"  subtitulo="Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients" />
         {canEdit && (
-          <Link
+          <ButtonLink
+            label="Create MCP Server"
             to={`/apps/${appId}/mcp-servers/new`}
-            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span aria-hidden="true" className="mr-2">+</span>
-            <span>Create MCP Server</span>
-          </Link>
+            variant="primary"
+            size="control"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+          />
         )}
       </div>
 
@@ -160,13 +152,13 @@ function MCPServersPage() {
             Create an MCP server to expose your agents as tools for external MCP clients like Claude Desktop and Cursor.
           </p>
           {canEdit && (
-            <Link
+            <ButtonLink
+              label="Create Your First MCP Server"
               to={`/apps/${appId}/mcp-servers/new`}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
-            >
-              <span aria-hidden="true" className="mr-2">+</span>
-              <span>Create Your First MCP Server</span>
-            </Link>
+              variant="primary"
+              size="large"
+              icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            />
           )}
         </div>
       ) : (
@@ -179,20 +171,18 @@ function MCPServersPage() {
               render: (server) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <span className="text-purple-600 text-lg">-o-</span>
-                    </div>
+                    <BackgroundImage icon="Plug" size={40} iconSize={20} variant="marron" />
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">
                       <Link
                         to={`/apps/${appId}/mcp-servers/${server.server_id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                        className="text-sm font-medium text-fg dark:text-fg-dark"
                       >
                         {server.name}
                       </Link>
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                       /{server.slug}
                     </div>
                   </div>
@@ -202,19 +192,16 @@ function MCPServersPage() {
             {
               header: 'Status',
               render: (server) => (
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  server.is_active
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {server.is_active ? 'Active' : 'Inactive'}
-                </span>
+                <Badge
+                  label={server.is_active ? 'Active' : 'Inactive'}
+                  variant={server.is_active ? 'success' : 'default'}
+                />
               )
             },
             {
               header: 'Agents',
               render: (server) => (
-                <span className="text-sm text-gray-900">
+                <span className="text-xs text-secondary dark:text-fg-secondary-dark">
                   {server.agent_count} {server.agent_count === 1 ? 'agent' : 'agents'}
                 </span>
               )
@@ -223,27 +210,24 @@ function MCPServersPage() {
               header: 'Endpoint',
               render: (server) => (
                 <div className="flex items-center space-x-2">
-                  <code className="text-xs bg-gray-100 px-2 py-1 rounded truncate max-w-xs">
+                  <code className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate max-w-xs">
                     {server.endpoint_url}
                   </code>
-                  <button
-                    onClick={() => copyToClipboard(server.endpoint_url, server.server_id)}
-                    className="text-gray-400 hover:text-gray-600"
-                    title="Copy endpoint URL"
-                  >
-                    {copiedId === server.server_id ? (
-                      <span className="text-green-500">Done</span>
-                    ) : (
-                      <span>Copy</span>
-                    )}
-                  </button>
+                  <span title="Copy endpoint URL">
+                    <ButtonApp
+                      label={copiedId === server.server_id ? 'Done' : 'Copy'}
+                      onClick={() => copyToClipboard(server.endpoint_url, server.server_id)}
+                      variant="table"
+                      size="small"
+                    />
+                  </span>
                 </div>
               )
             },
             {
               header: 'Created',
               render: (server) => server.create_date ? new Date(server.create_date).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Actions',

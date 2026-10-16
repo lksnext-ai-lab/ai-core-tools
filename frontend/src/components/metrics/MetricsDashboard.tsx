@@ -16,6 +16,8 @@ import { MetricRangeSelector } from './MetricRangeSelector';
 import { ActivityChart, LatencyChart, TokensChart } from './TimeseriesCharts';
 import { ToolsTable } from './ToolsTable';
 import { formatCount, formatMs, formatPercent, relativeChange } from './format';
+import { Skeleton } from '../ui/Skeleton';
+import Alert from '../ui/Alert';
 
 interface Props {
   api: MetricsScopeApi;
@@ -101,17 +103,13 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
         <MetricRangeSelector value={range} onChange={setRange} />
       </div>
 
-      {loadError && (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-          {loadError}
-        </div>
-      )}
+      {loadError && <Alert type="error" message={loadError} />}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {kpis
           ? kpis.map((k) => <KpiCard key={k.label} {...k} />)
           : Array.from({ length: 8 }, (_, i) => (
-              <div key={i} className="h-[104px] animate-pulse rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800" />
+              <Skeleton key={i} shape="block" className="h-[104px]" />
             ))}
       </div>
 

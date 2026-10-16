@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
-import { KeyRound } from 'lucide-react';
 import { useFormState } from '../../hooks/useFormState';
 import { FormField, FormCheckbox } from '../ui/FormField';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { FormActions } from '../ui/FormActions';
 
 interface APIKeyFormData {
@@ -65,7 +64,7 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
   return (
     <form onSubmit={onFormSubmit} className="space-y-6">
       {/* Error Message */}
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
       {/* API Key Name */}
       <FormField
@@ -92,24 +91,11 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
 
       {/* Info Box */}
       {!isEditing && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <KeyRound className="w-4 h-4 text-blue-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">
-                API Key Security
-              </h3>
-              <div className="mt-2 text-xs text-blue-700">
-                <p>
-                  Your API key will be generated automatically and shown only once. 
-                  Make sure to copy and store it securely before closing this dialog.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Alert
+          type="info"
+          title="API Key Security"
+          message="Your API key will be generated automatically and shown only once. Make sure to copy and store it securely before closing this dialog."
+        />
       )}
 
       {/* Form Actions */}
