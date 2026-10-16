@@ -433,6 +433,21 @@ class PlaygroundMediaService:
         Returns:
             True if file was successfully vectorized.
         """
+        # The media embedding service is optional: without one (and no temp silo
+        # already created) the agent simply has no temp silo, and documents are
+        # sent in full in the prompt instead of being retrieved via RAG.
+        if not embedding_service_id and not PlaygroundMediaService.get_temp_repository(
+            app_id, agent_id, session_id, db
+        ):
+            agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+            if not getattr(agent, "media_embedding_service_id", None):
+                logger.info(
+                    "Agent %s has no media embedding service; skipping vectorization of %s",
+                    agent_id,
+                    filename,
+                )
+                return False
+
         repo = PlaygroundMediaService.get_or_create_temp_repository(
             app_id, agent_id, session_id, db,
             embedding_service_id=embedding_service_id,
