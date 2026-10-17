@@ -59,7 +59,7 @@ export default function MarketplaceHomePage() {
       }
     }
 
-    fetchConversations();
+    void fetchConversations();
 
     return () => {
       isMounted = false;
@@ -116,7 +116,7 @@ export default function MarketplaceHomePage() {
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleRenameSave(conversationId);
+      void handleRenameSave(conversationId);
     } else if (e.key === 'Escape') {
       setEditingConvId(null);
     }

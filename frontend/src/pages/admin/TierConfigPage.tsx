@@ -33,7 +33,7 @@ const TierConfigPage: React.FC = () => {
         if (isMounted) setIsLoading(false);
       }
     };
-    fetch();
+    void fetch();
     return () => {
       isMounted = false;
     };

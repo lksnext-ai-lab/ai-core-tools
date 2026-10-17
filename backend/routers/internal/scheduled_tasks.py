@@ -67,7 +67,10 @@ async def run_file_download(
 @router.post("", response_model=ScheduledTaskResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_task(payload: ScheduledTaskCreateSchema, app_id: int, auth: Auth, role: CanEdit, db: DB):
     try:
-        return _service(db).create(app_id=app_id, created_by=int(auth.identity.id), data=payload.model_dump())
+        return _service(db).create(
+            app_id=app_id, created_by=int(auth.identity.id), data=payload.model_dump(),
+            output_bindings=payload.output_bindings,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

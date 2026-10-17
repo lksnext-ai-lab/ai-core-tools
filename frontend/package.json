@@ -40,6 +40,9 @@
     "build:lib:watch": "tsc -p tsconfig.build.json --watch & vite build --mode library --watch",
     "build:production": "tsc -b --noCheck && vite build",
     "lint": "eslint .",
+    "test": "node --test tests/*.test.cjs",
+    "test:scheduled-task-form": "node --test tests/ScheduledTaskFormPage.test.cjs",
+    "test:hitl-approval": "node --test tests/HitlApprovalDecisions.test.cjs",
     "preview": "vite preview",
     "pack:local": "npm run build:lib && npm pack",
     "publish:npm": "npm run build:lib && npm publish --access public",
@@ -76,5 +79,8 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
     "vite": "^7.3.6"
+  },
+  "overrides": {
+    "uri-js": "npm:fast-uri@^3.1.8"
   }
 }

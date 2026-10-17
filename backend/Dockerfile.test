@@ -24,13 +24,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN pip install --no-cache-dir "poetry>=2.2.0,<3.0.0"
+# Install Poetry: pinned and hash-verified, wheels only (no setup scripts run).
+COPY backend/requirements-poetry.txt ./
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: -r requirements-poetry.txt
 
 # Install all dependencies (main + test group)
 COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false && \
-    poetry install --with test --no-interaction --no-ansi --no-cache
+    POETRY_INSTALLER_ONLY_BINARY=:all: poetry install --with test --no-interaction --no-ansi --no-cache
 
 # Copy source code and tests
 COPY backend/ /app/backend/

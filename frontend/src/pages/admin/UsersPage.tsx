@@ -86,7 +86,7 @@ function UsersPage() {
     setDeletingUser(userId);
     try {
       await adminService.deleteUser(userId);
-      mutate(
+      void mutate(
         () => Promise.resolve({ message: 'User deleted' }),
         {
           loading: 'Deleting user…',
@@ -101,7 +101,7 @@ function UsersPage() {
         setDeleteDialogUser(target);
         return;
       }
-      mutate(
+      void mutate(
         () => Promise.reject(err),
         {
           loading: 'Deleting user…',

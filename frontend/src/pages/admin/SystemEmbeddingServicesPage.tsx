@@ -60,7 +60,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchServices();
+    void fetchServices();
   }, [fetchServices]);
 
   const handleOpenCreate = () => {

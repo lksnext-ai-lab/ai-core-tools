@@ -129,13 +129,13 @@ class TestGetRepository:
 # ---------------------------------------------------------------------------
 
 class TestCreateRepository:
-    """POST /internal/apps/{app_id}/repositories/0 (repository_id=0 means create)"""
+    """POST /internal/apps/{app_id}/repositories/ (create repository)"""
 
     def test_create_repository_returns_201(self, client, fake_app, owner_headers, db):
         """Creating a new repository returns 201."""
         db.flush()
         response = client.post(
-            f"/internal/apps/{fake_app.app_id}/repositories/0",
+            f"/internal/apps/{fake_app.app_id}/repositories/",
             json=repository_payload(name="New Repository"),
             headers=owner_headers,
         )
@@ -150,7 +150,7 @@ class TestCreateRepository:
         db.flush()
 
         response = client.post(
-            f"/internal/apps/{fake_app.app_id}/repositories/0",
+            f"/internal/apps/{fake_app.app_id}/repositories/",
             json=repository_payload(name="Vectorized Repo"),
             headers=owner_headers,
         )
@@ -172,7 +172,7 @@ class TestCreateRepository:
         """Missing auth headers returns 401/403."""
         db.flush()
         response = client.post(
-            f"/internal/apps/{fake_app.app_id}/repositories/0",
+            f"/internal/apps/{fake_app.app_id}/repositories/",
             json=repository_payload(),
         )
         assert response.status_code in (401, 403)
@@ -183,7 +183,7 @@ class TestCreateRepository:
         """Invalid payload returns 422."""
         db.flush()
         response = client.post(
-            f"/internal/apps/{fake_app.app_id}/repositories/0",
+            f"/internal/apps/{fake_app.app_id}/repositories/",
             json={},  # Missing 'name'
             headers=owner_headers,
         )

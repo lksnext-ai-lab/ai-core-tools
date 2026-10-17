@@ -32,7 +32,7 @@ const RepositoriesPage: React.FC = () => {
 
   useEffect(() => {
     if (appId) {
-      loadRepositories();
+      void loadRepositories();
     }
   }, [appId]);
 

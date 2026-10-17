@@ -4,6 +4,7 @@ from models.app import App
 from repositories.app_repository import AppRepository
 from repositories.app_collaboration_repository import AppCollaborationRepository
 from datetime import datetime
+from services.a2a_server.lifecycle_service import schedule_owner_purge
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -70,6 +71,8 @@ class AppService:
         from .sandbox_service_service import SandboxServiceService
         from .api_key_service import APIKeyService
         from .mcp_config_service import MCPConfigService
+        from .middleware_service import MiddlewareService
+        from repositories.middleware_repository import MiddlewareRepository
         from .resource_service import ResourceService
         from .skill_service import SkillService
         from .mcp_server_service import MCPServerService
@@ -102,7 +105,13 @@ class AppService:
             agents = self.app_repo.get_agents_by_app_id(app_id)
             for agent in agents:
                 logger.info(f"Deleting agent {agent.agent_id}: {agent.name}")
-                agent_service.delete_agent(self.db, agent.agent_id)
+                if not agent_service.delete_agent(self.db, agent.agent_id):
+                    raise RuntimeError(f"agent {agent.agent_id} could not be deleted")
+
+            # 1b. Delete middlewares (after agents; before AI services, which they may reference)
+            for middleware in MiddlewareRepository.get_all_by_app_id(self.db, app_id):
+                logger.info(f"Deleting middleware {middleware.middleware_id}: {middleware.name}")
+                MiddlewareService.delete_middleware(self.db, app_id, middleware.middleware_id)
 
             # 2. Delete skills (after agents, since agents may reference skills)
             skills = self.app_repo.get_skills_by_app_id(app_id)
@@ -219,10 +228,11 @@ class AppService:
                 return False
 
             success = self.app_repo.delete(app)
-            
+
             if success:
                 logger.info(f"Successfully deleted app {app_id} and all related data")
-            
+                schedule_owner_purge(app_id)  # FR-22/AD-10: app-wide A2A purge; sync, never raises
+
             return success
                 
         except Exception as e:

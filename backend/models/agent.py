@@ -1,9 +1,13 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, text
+from sqlalchemy import (
+    Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, text,
+    CheckConstraint, Index,
+)
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
+from models.middleware import AgentMiddleware
 
 
 class MarketplaceVisibility(enum.Enum):
@@ -135,6 +139,20 @@ class Agent(Base):
         default=MarketplaceVisibility.UNPUBLISHED
     )
 
+    # A2A (Agent2Agent protocol) exposure (step_007; FR-3).
+    a2a_enabled = Column(Boolean, nullable=False, default=False, server_default='false')
+    a2a_card_visibility = Column(String(16), nullable=False, default='public', server_default='public')
+    a2a_name_override = Column(String(255), nullable=True)
+    a2a_description_override = Column(Text, nullable=True)
+    a2a_skill_tags = Column(JSON, nullable=False, default=list, server_default='[]')
+    a2a_examples = Column(JSON, nullable=False, default=list, server_default='[]')
+
+    __table_args__ = (
+        CheckConstraint("a2a_card_visibility IN ('public','api_key')", name='ck_agent_a2a_card_visibility'),
+        # Partial index: the A2A catalog/discovery query filters on app_id WHERE a2a_enabled.
+        Index('ix_agent_a2a_enabled_app', 'app_id', postgresql_where=text('a2a_enabled')),
+    )
+
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
 
@@ -167,6 +185,14 @@ class Agent(Base):
     skill_associations = relationship('AgentSkill',
                                      primaryjoin=(agent_id == AgentSkill.agent_id),
                                      back_populates='agent')
+
+    # Middleware relationship
+    middleware_associations = relationship('AgentMiddleware',
+                                          primaryjoin=(agent_id == AgentMiddleware.agent_id),
+                                          back_populates='agent',
+                                          order_by=AgentMiddleware.order,
+                                          cascade='all, delete-orphan',
+                                          passive_deletes=True)
 
     # Marketplace profile (1:1)
     marketplace_profile = relationship(

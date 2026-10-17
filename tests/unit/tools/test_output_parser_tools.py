@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 from typing import Optional, Union, get_args, get_origin
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from tools.outputParserTools import (
     create_dynamic_pydantic_model,
@@ -33,7 +33,7 @@ class TestCreateDynamicPydanticModelOptional:
         assert instance.name == "Alice"
         assert instance.age == 30
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Model()  # Missing required fields
 
     def test_optional_field_accepts_none(self):
@@ -106,7 +106,7 @@ class TestCreateDynamicPydanticModelOptional:
         )
 
         # Required fields must be provided
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Model(name="Alice")  # Missing required 'age'
 
         # Optional field can be omitted
@@ -127,7 +127,7 @@ class TestCreateDynamicPydanticModelOptional:
             field_optionals=None,
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Model(x=1.0)  # Missing required 'y'
 
         instance = Model(x=1.0, y=2.0)
@@ -159,7 +159,7 @@ class TestCreateModelFromJsonSchemaOptional:
 
         Model = create_model_from_json_schema(schema_data, "TestModel")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Model()  # name is required
 
     def test_optional_false_is_required(self):
@@ -170,7 +170,7 @@ class TestCreateModelFromJsonSchemaOptional:
 
         Model = create_model_from_json_schema(schema_data, "TestModel")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Model()
 
     def test_optional_int_field(self):

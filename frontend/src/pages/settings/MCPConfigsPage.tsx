@@ -41,7 +41,7 @@ function MCPConfigsPage() {
 
   // Load MCP configs from cache or API
   useEffect(() => {
-    loadMCPConfigs();
+    void loadMCPConfigs();
   }, [appId]);
 
   async function handleTestConnection(configId: number) {

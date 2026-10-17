@@ -62,7 +62,7 @@ export const useSubscription = (): UseSubscriptionReturn => {
   }, [isSaasMode]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   return { subscription, usage, isLoading, error, refresh: fetchData };

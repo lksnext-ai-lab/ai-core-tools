@@ -93,7 +93,7 @@ export const DeploymentModeProvider: React.FC<DeploymentModeProviderProps> = ({ 
       }
     };
 
-    fetchConfig();
+    void fetchConfig();
   }, []);
 
   return (

@@ -38,7 +38,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
   useEffect(() => {
     if (appId && repositoryId) {
-      loadRepositoryInfo();
+      void loadRepositoryInfo();
     }
   }, [appId, repositoryId]);
 

@@ -32,7 +32,7 @@ def api_headers(key: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_silo(db, fake_app):
     """A CUSTOM silo belonging to fake_app."""
     from models.silo import Silo

@@ -24,7 +24,7 @@ def _build_zip(name: str = "my-skill", body: str = "Do the thing.") -> bytes:
     return buf.getvalue()
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_app_2(db):
     """A second, unrelated App (for cross-scope / 404 checks)."""
     from models.app import App

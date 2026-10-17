@@ -35,7 +35,7 @@ function DomainsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadDomains();
+    void loadDomains();
   }, [appId]);
 
   async function loadDomains() {

@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON, Index
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
 
 class Media(Base):
     __tablename__ = 'Media'
+    __table_args__ = (Index('ix_media_silo_id', 'silo_id'),)
     
     media_id = Column(Integer, primary_key=True)
     # Every media item is indexed into a silo; repository_id is set only for media managed

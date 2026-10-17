@@ -56,7 +56,7 @@ function SystemSkillsPage() {
   }, []);
 
   useEffect(() => {
-    fetchSkills();
+    void fetchSkills();
   }, [fetchSkills]);
 
   function handleOpenCreate() {

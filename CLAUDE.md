@@ -161,7 +161,8 @@ backend/
 ├── routers/
 │   ├── internal/        # Frontend-backend API (session/OIDC auth)
 │   ├── public/v1/       # External API (X-API-KEY auth, rate limiting)
-│   └── mcp/             # JSON-RPC 2.0 MCP endpoints (X-API-KEY auth)
+│   ├── mcp/             # JSON-RPC 2.0 MCP endpoints (X-API-KEY auth)
+│   └── a2a_server/      # /a2a/v1/... Agent2Agent JSON-RPC endpoints (X-API-KEY auth, opt-in per agent)
 ├── tools/               # AI/LLM integration utilities
 │   ├── ai/              # LLM provider implementations
 │   └── vector_store_factory.py  # Factory for PGVector/Qdrant backends
@@ -183,7 +184,7 @@ User message + optional files
   → agent_chain.ainvoke() → apply OutputParser → persist conversation → return response
 ```
 
-**Memory**: `AsyncPostgresSaver` in PostgreSQL. Config per agent: `has_memory`, `memory_max_messages` (default 20), `memory_max_tokens` (default 4000), `memory_summarize_threshold` (default 10).
+**Memory**: `AsyncPostgresSaver` in PostgreSQL, on when `has_memory`. History is summarized by `SummarizationMiddleware` (`backend/tools/middleware/factory.py`): an attached summarization middleware, or the defaults — trigger at 85% of the model's input window capped at 150k tokens (32k if the model has no profile), keep the last 20 messages, summarize the whole older history. The legacy `memory_max_messages` / `memory_max_tokens` / `memory_summarize_threshold` columns are kept for export/import but no longer used.
 
 ### Frontend (`frontend/src/`)
 
@@ -258,6 +259,13 @@ ENTRA_CLIENT_SECRET=...
 # Optional
 LANGSMITH_TRACING=false
 LANGSMITH_API_KEY=...
+
+# A2A (Agent2Agent protocol) server — all optional, defaults shown.
+# Full reference (every variable, deployment runbook): docs/ai/a2a-integration.md
+A2A_ENABLED=true                # Kill switch: false -> every /a2a/* route 404s
+A2A_PUBLIC_BASE_URL=             # Base for absolute card/RPC URLs; falls back to FRONTEND_URL, then Host header
+A2A_MAX_REQUEST_MB=32            # SendMessage/SendStreamingMessage body cap
+A2A_TASK_RETENTION_DAYS=30       # How long terminal tasks/events/links are kept
 ```
 
 ### Frontend `.env`
@@ -282,9 +290,11 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - **Cascade deletion**: `AppService.delete_app()` performs ordered deletion across all entity types
 - **LangSmith tracing**: Per-App key in `App.langsmith_api_key` (project = app name) with optional global env-var fallback (`LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT`). Validated via `POST /internal/apps/{id}/langsmith/test`. Central module: `backend/tools/langsmith_config.py`
 - **MCP dual-role**: Mattin AI acts as both MCP server (exposing agents) and MCP client (consuming external tool servers)
+- **A2A server**: per-agent opt-in (`Agent.a2a_enabled`) Agent2Agent protocol v1.0 JSON-RPC server at `/a2a/v1/apps/{app_slug}/agents/{agent_id}` (`backend/services/a2a_server/`, `backend/routers/a2a_server/`). The SDK's task/event tables are Alembic-managed under `a2a_*` names and bound through `backend/services/a2a_server/sdk_models.py` + `storage.py` (narrow injection of three private SDK attributes); the `a2a-sdk` dependency is an **exact pin**, re-validated by `tests/integration/a2a_server/test_sdk_contract.py` on every bump. By convention no module under `backend/` is ever named `a2a` (it would shadow the SDK package on `sys.path`). Full reference: `docs/ai/a2a-integration.md`
 - **No plugin system**: SharePoint sync (`services/sharepoint/`) and agent metrics (`services/agent_metrics_collector.py` + `agent_metrics_recorder.py`, `routers/internal/metrics.py`, dashboards at platform/app/agent level) are regular core features — the former open-core `mattin.plugins` entry-point loader and `/internal/capabilities` endpoint were removed
 - **Scheduled tasks** (DBOS, `backend/scheduling/`): runs execute as the task, not a user (`task_user_context`) — conversations carry `Conversation.scheduled_task_id` with `user_id` NULL, system-LLM usage bills the creator, metrics use the `SCHEDULED_TASK` channel. Each run stores its answer + produced files (`scheduled_task_run.output_text/output_files`); only the newest `max_runs_retained` (default 10) are kept. Deleting a task (or its agent/app) removes its schedule, conversations, history, files and temp silos. Published tasks (`marketplace_visibility`) show read-only results in the marketplace's "Scheduled tasks" tab
 - **Video/audio indexing lives on the silo**: `Silo.transcription_service_id` (required for media) and `Silo.video_ai_service_id` (optional, `supports_video`) drive `tasks/media_tasks.py`. Repositories still configure them in their form, but the values are stored on the repository's silo (`Repository.transcription_service_id` is a read-through property). `Media.silo_id` is always set; `Media.repository_id` is NULL for media sent straight to a silo: the public `POST /silos/{id}/docs/index-file` queues video/audio (202 + `media_id`; status at `GET /silos/{id}/media/{media_id}` while processing — once indexed its file and row are deleted, only the vectors remain, like documents), plus `POST /silos/{id}/media/youtube`; caller `metadata` is attached to every chunk (`Media.custom_metadata`)
+- **Human approvals** (`services/hitl_approval_service.py`): every human-in-the-loop pause gets a `hitl_approval` row (owner, actions by `action_id` = tool call id, `expires_at`). Only the requester (same user / same API key) can answer, once (row compare-and-set); answers go through `/internal/approvals/{id}/…` and `/public/v1/app/{app}/approvals/{id}/decisions`. Unanswered approvals are rejected — never approved — by `services/hitl_expiry_worker.py`; non-interactive channels (MCP, scheduled, OpenAI-compatible, platform chatbot) reject the pause on the spot. Changing an agent's approval rules cancels its pending approvals
 - **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes (self-managed and SaaS alike)
 
 ## Anti-Patterns

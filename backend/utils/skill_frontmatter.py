@@ -19,6 +19,7 @@ Security notes:
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -191,7 +192,7 @@ def _check_safe_value(value: Any, key: str, depth: int = 0) -> None:
     if isinstance(value, str):
         _check_string(value, key)
     elif isinstance(value, float):
-        if value != value or value in (float("inf"), float("-inf")):
+        if not math.isfinite(value):
             raise SkillFrontmatterError(key, None, "non-finite numbers are not allowed")
     elif isinstance(value, int) and not isinstance(value, bool):
         if not -(2**63) <= value < 2**63:

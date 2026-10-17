@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from db.database import SessionLocal
 
+from models.hitl_approval import ApprovalChannel
 from models.mcp_server import MCPServer
 from services.agent_execution_service import AgentExecutionService
 from utils.logger import get_logger
@@ -258,6 +259,7 @@ class MCPServerHandler:
                 user_context=user_context,
                 conversation_id=None,
                 db=session,
+                channel=ApprovalChannel.MCP,
             )
 
             # Format response
@@ -280,7 +282,8 @@ class MCPServerHandler:
         except MCPError:
             raise
         except HTTPException as e:
-            raise MCPError(JSONRPCError.INTERNAL_ERROR, e.detail)
+            detail = e.detail.get("message", str(e.detail)) if isinstance(e.detail, dict) else e.detail
+            raise MCPError(JSONRPCError.INTERNAL_ERROR, detail)
         except Exception as e:
             logger.error(f"Error executing tool {tool_name}: {str(e)}")
             return {

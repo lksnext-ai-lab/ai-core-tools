@@ -69,7 +69,7 @@ function AgentPlaygroundPage() {
 
   useEffect(() => {
     if (appId && agentId) {
-      loadAgent();
+      void loadAgent();
     }
   }, [appId, agentId]);
 

@@ -69,6 +69,8 @@ os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 # transaction completes, which can't happen until the test body (blocked on `client`
 # setup) runs.
 os.environ.setdefault("AUTH_BOOTSTRAP_OMNIADMINS", "false")
+# Same for the HITL expiry sweeper: it reads and resolves approvals with its own sessions.
+os.environ.setdefault("HITL_EXPIRY_SWEEPER_ENABLED", "false")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -137,20 +139,41 @@ def test_engine():
     )
 
     # Runtime safety check: verify we connected to the test DB, not dev/prod.
+    # Accepts the shared `test_db`/`mattin_test_temp` names plus any `test_db_*` variant
+    # (e.g. `test_db_hotfix`) used to isolate a branch's test run from concurrent CI/dev
+    # runs against the shared test DB server on :5433.
     with engine.connect() as conn:
         db_name = conn.execute(text("SELECT current_database()")).scalar()
-        assert db_name in ("test_db", "mattin_test_temp"), (
+        assert db_name in ("test_db", "mattin_test_temp") or db_name.startswith("test_db_"), (
             f"SAFETY: test_engine connected to '{db_name}' instead of test database. "
             f"Aborting to prevent data loss."
         )
 
     Base.metadata.create_all(bind=engine)
+
+    # a2a-sdk tables (a2a_tasks/a2a_task_events/a2a_task_versions) are NOT part of
+    # Mattin's Base.metadata (AD-2) -- the a2a001 Alembic migration creates them for
+    # real, but this fixture builds the schema via create_all, not Alembic, so they
+    # need their own create_all against the registry that is the schema source of
+    # truth. get_sdk_metadata() also guarantees the three model classes have been
+    # declared (they are memoized, so this is safe to call once per session).
+    # The Mattin-owned ix_a2a_tasks_last_updated index (not part of the SDK mixins;
+    # see a2a001's upgrade()) is declared ON the registry's `a2a_tasks` model itself
+    # (sdk_models.get_sdk_models()), so create_all below creates it too -- no
+    # second, ad-hoc declaration here.
+    from services.a2a_server.sdk_models import get_sdk_metadata
+
+    sdk_metadata = get_sdk_metadata()
+    sdk_metadata.create_all(bind=engine)
+
     yield engine
+
+    sdk_metadata.drop_all(bind=engine)
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def db(test_engine):
     """
     Per-test database session with automatic rollback after each test.
@@ -178,7 +201,7 @@ def db(test_engine):
     connection.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def client(db, monkeypatch):
     """
     FastAPI TestClient with the get_db dependency overridden to use the test session.
@@ -221,7 +244,7 @@ def client(db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_user(db):
     """A persisted (but not committed to real DB) test User."""
     from models.user import User
@@ -230,13 +253,14 @@ def fake_user(db):
         email="testuser@mattin-test.com",
         name="Test User",
         is_active=True,
+        platform_role="editor",
     )
     db.add(user)
     db.flush()  # assigns user_id without committing the outer transaction
     return user
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_app(db, fake_user):
     """A test App owned by fake_user."""
     from models.app import App
@@ -253,7 +277,7 @@ def fake_app(db, fake_user):
     return app_obj
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_ai_service(db, fake_app):
     """A test AIService (OpenAI provider) linked to fake_app."""
     from models.ai_service import AIService
@@ -269,7 +293,18 @@ def fake_ai_service(db, fake_app):
     return svc
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
+def fake_embedding_service(db, fake_app):
+    """A test EmbeddingService linked to fake_app (required by agents with memory)."""
+    from models.embedding_service import EmbeddingService
+
+    svc = EmbeddingService(name="Test Embedding Service", provider="OpenAI", app_id=fake_app.app_id)
+    db.add(svc)
+    db.flush()
+    return svc
+
+
+@pytest.fixture
 def fake_agent(db, fake_app, fake_ai_service):
     """A minimal test Agent in fake_app."""
     from models.agent import Agent
@@ -288,7 +323,7 @@ def fake_agent(db, fake_app, fake_ai_service):
     return agent
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_api_key(db, fake_app, fake_user):
     """An active APIKey for fake_app."""
     from models.api_key import APIKey
@@ -312,7 +347,7 @@ def fake_api_key(db, fake_app, fake_user):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def auth_headers(fake_user, db):
     """
     Bearer token headers for fake_user minted directly via mint_access_token (LOCAL issuer).
@@ -331,7 +366,7 @@ def auth_headers(fake_user, db):
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def owner_headers(fake_user, fake_app, db):
     """
     Auth headers for fake_user who is the owner of fake_app.
@@ -362,7 +397,7 @@ def owner_headers(fake_user, fake_app, db):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_silo(db, fake_app):
     """A test Silo linked to fake_app (for domain tests)."""
     from models.silo import Silo
@@ -378,7 +413,7 @@ def fake_silo(db, fake_app):
     return silo
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def fake_domain(db, fake_app, fake_silo):
     """A test Domain with an associated CrawlPolicy (inactive default)."""
     from models.domain import Domain

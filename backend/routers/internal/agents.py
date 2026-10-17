@@ -31,6 +31,7 @@ from schemas.marketplace_schemas import (
 )
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from tools.stream_guard import guard_agent_stream
 from services.file_management_service import FileManagementService, FileReference
 from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from routers.internal.auth_utils import get_current_user_oauth
@@ -290,8 +291,11 @@ async def get_agent(
     """
     Get detailed information about a specific agent plus form data for editing.
     """
-    # App access validation would be implemented here
-    
+    # Verify the agent exists and belongs to this app before returning its details
+    # (agent_id == 0 is the "new agent" sentinel and has no app-scoped row to check).
+    if agent_id != 0:
+        _get_agent_or_404(db, agent_id, app_id)
+
     # Get agent details using service
     agent_detail = agent_service.get_agent_detail(db, app_id, agent_id)
     
@@ -365,8 +369,11 @@ async def create_or_update_agent(
     """
     Create a new agent or update an existing one.
     """
-    # App access validation would be implemented here
-    
+    # Verify the target agent (if updating an existing one) belongs to this app before
+    # mutating it — otherwise a caller could overwrite/move another app's agent.
+    if agent_id != 0:
+        _get_agent_or_404(db, agent_id, app_id)
+
     # Prepare agent data
     agent_dict = {
         'agent_id': agent_id,
@@ -409,6 +416,19 @@ async def create_or_update_agent(
         'media_chunk_overlap': agent_data.media_chunk_overlap,
     }
 
+    # A2A (Agent2Agent protocol) configuration (step_009, FR-3). Only include a key
+    # the caller actually sent: today's frontend doesn't send any A2A field yet, and
+    # since every field has a default, including them unconditionally would silently
+    # disable A2A / reset visibility to 'public' on every unrelated agent edit.
+    # ``model_fields_set`` distinguishes "omitted" from "explicitly sent" even when
+    # the sent value equals the field's default.
+    for a2a_field in (
+        'a2a_enabled', 'a2a_card_visibility', 'a2a_name_override',
+        'a2a_description_override', 'a2a_skill_tags', 'a2a_examples',
+    ):
+        if a2a_field in agent_data.model_fields_set:
+            agent_dict[a2a_field] = getattr(agent_data, a2a_field)
+
     # Avoid logging full prompt bodies / filter values at INFO; log identity + shape only.
     logger.info(
         "Creating/updating agent id=%s app=%s type=%s name=%r silo_id=%s",
@@ -416,6 +436,16 @@ async def create_or_update_agent(
     )
 
     try:
+        # Validate before writing anything so a bad selection leaves the agent untouched.
+        middleware_ids = None
+        if agent_data.middleware_ids is not None:
+            middleware_ids = AgentService.validate_middleware_selection(
+                db, app_id, agent_data.middleware_ids, bool(agent_data.has_memory)
+            )
+        elif agent_id:
+            # Chain not sent: it stays as is, but must still fit the agent's new settings
+            # (e.g. memory cannot be turned off under a human-approval middleware).
+            AgentService.validate_current_middlewares(db, app_id, agent_id, bool(agent_data.has_memory))
         # Create or update agent
         created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
     except ValueError as exc:
@@ -425,6 +455,8 @@ async def create_or_update_agent(
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
     agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+    if middleware_ids is not None:
+        agent_service.update_agent_middlewares(db, created_agent_id, middleware_ids)
 
     # Return updated agent (reuse the GET logic)
     return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
@@ -794,7 +826,7 @@ async def chat_with_agent_stream(
         # streaming, not when the endpoint returns its StreamingResponse.
         async def generator() -> AsyncGenerator[str, None]:
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release the request DB session: get_db teardown runs too late

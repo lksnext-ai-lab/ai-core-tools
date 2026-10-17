@@ -7,12 +7,17 @@ import pytest
 from scheduling import periodic_agent_task as module
 
 
-def _db_for(row):
+def _db_for(task, run=None):
     db = MagicMock()
-    query = MagicMock()
-    query.filter.return_value = query
-    query.one_or_none.return_value = row
-    db.query.return_value = query
+    task_query = MagicMock()
+    task_query.filter.return_value = task_query
+    task_query.one_or_none.return_value = task
+    run_query = MagicMock()
+    run_query.filter.return_value = run_query
+    run_query.one_or_none.return_value = run
+    def query(model):
+        return run_query if model is module.ScheduledTaskRun else task_query
+    db.query.side_effect = query
     return db
 
 
@@ -35,6 +40,7 @@ async def test_run_creates_task_owned_conversation_and_stores_output():
         patch.object(module, "SessionLocal", return_value=db),
         patch.object(module.ConversationService, "create_conversation", return_value=conversation) as create,
         patch.object(module, "invoke_agent_step", new=AsyncMock(return_value=output)) as invoke,
+        patch("output.service.create_deliveries_for_run", return_value=[]),
         patch.object(module.ScheduledTaskService, "prune_runs", new=AsyncMock()) as prune,
     ):
         result = await module._run_scheduled_task(datetime.now(timezone.utc), 7)

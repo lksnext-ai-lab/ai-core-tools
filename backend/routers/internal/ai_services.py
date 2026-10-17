@@ -10,7 +10,7 @@ import json
 from db.database import get_db
 
 # Import services
-from services.ai_service_service import AIServiceService
+from services.ai_service_service import AIServiceInUseError, AIServiceService
 from services.ai_service_export_service import AIServiceExportService
 from services.ai_service_import_service import AIServiceImportService
 from services.provider_models_service import (
@@ -344,6 +344,8 @@ async def delete_ai_service(
             )
         
         return {"message": "AI service deleted successfully"}
+    except AIServiceInUseError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

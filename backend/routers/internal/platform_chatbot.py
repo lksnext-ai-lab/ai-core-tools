@@ -10,6 +10,8 @@ from services.system_settings_service import SystemSettingsService
 from services.agent_service import AgentService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from models.hitl_approval import ApprovalChannel
+from tools.stream_guard import guard_agent_stream
 from schemas.platform_chatbot_schemas import (
     PlatformChatbotConfigResponse,
     PlatformChatbotChatRequest,
@@ -96,6 +98,7 @@ async def platform_chatbot_chat(
             user_context=user_context,
             conversation_id=None,
             db=db,
+            channel=ApprovalChannel.PLATFORM_CHATBOT,
         )
         return ChatResponseSchema(**result)
     except HTTPException:
@@ -149,11 +152,12 @@ async def platform_chatbot_chat_stream(
             user_context=user_context,
             conversation_id=None,
             db=db,
+            channel=ApprovalChannel.PLATFORM_CHATBOT,
         )
 
         async def generator():
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release request session; get_db teardown is too late for streaming.

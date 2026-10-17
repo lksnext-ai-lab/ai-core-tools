@@ -55,7 +55,7 @@ from services.auth.refresh_service import (
 _SQLITE_URL = "sqlite:///:memory:"
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def engine():
     eng = create_engine(_SQLITE_URL, connect_args={"check_same_thread": False})
     # Import all models so metadata is populated
@@ -66,7 +66,7 @@ def engine():
     eng.dispose()
 
 
-@pytest.fixture()
+@pytest.fixture
 def db(engine):
     """Per-test session with rollback isolation."""
     connection = engine.connect()
@@ -89,7 +89,7 @@ def db(engine):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def active_user(db) -> User:
     user = User(email="bob@example.com", name="Bob", is_active=True)
     db.add(user)
@@ -97,7 +97,7 @@ def active_user(db) -> User:
     return user
 
 
-@pytest.fixture()
+@pytest.fixture
 def inactive_user(db) -> User:
     user = User(email="gone@example.com", name="Gone", is_active=False)
     db.add(user)

@@ -71,7 +71,7 @@ class TestE2BCredentials:
         assert mock_sdk.create.call_args.kwargs["api_key"] == "service-api-key"
 
 
-@pytest.fixture()
+@pytest.fixture
 def provider_and_sandbox(monkeypatch):
     from tools.sandbox.e2b_provider import E2BProvider
 

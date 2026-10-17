@@ -1,8 +1,8 @@
+import asyncio
 import json
 import os
 import shutil
 import uuid
-import tempfile
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -10,7 +10,9 @@ from fastapi import UploadFile, HTTPException
 
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
-from utils.path_safety import resolve_within
+from utils.log_safety import sanitize_for_log
+from utils.path_safety import UnsafePathError, resolve_within
+from utils.async_files import read_json, read_text, write_json, write_temp_file, write_text
 
 logger = get_logger(__name__)
 
@@ -26,6 +28,33 @@ logger = get_logger(__name__)
 #   the background cleanup worker after TMP_PERSISTENT_TTL_DAYS of inactivity.
 STORAGE_STRATEGY_EPHEMERAL = "ephemeral"
 STORAGE_STRATEGY_PERSISTENT = "persistent"
+
+
+class UnsupportedFileTypeError(Exception):
+    """Raised by ``_process_file_content(strict=True)`` for a file type that would
+    otherwise fall back to a placeholder ("not implemented"/"type: unknown") sentence
+    instead of real extracted content. Callers with ``strict=False`` (the default,
+    used by every existing caller) never see this: they keep getting the placeholder.
+
+    Carries ``temp_path`` (the already-spooled upload on disk, if one was
+    created before the rejection) so ``upload_file``'s existing ``finally``
+    cleanup can remove it; otherwise that spool file would leak."""
+
+    def __init__(self, message: str, *, temp_path: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.temp_path = temp_path
+
+
+class FileProcessingError(Exception):
+    """Raised by ``_process_file_content(strict=True)`` when extraction for an
+    otherwise-supported type fails. ``strict=False`` callers keep getting the
+    "Error processing file: ..." placeholder string instead.
+
+    Carries ``temp_path`` for the same reason as :class:`UnsupportedFileTypeError`."""
+
+    def __init__(self, message: str, *, temp_path: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.temp_path = temp_path
 
 
 class FileReference:
@@ -177,7 +206,18 @@ class FileManagementService:
         os.makedirs(os.path.join(self._tmp_base_folder, "images"), exist_ok=True)
         
         # Files will be loaded on-demand per session
-    
+
+    @property
+    def tmp_base_folder(self) -> str:
+        """Public read-only accessor for ``TMP_BASE_FOLDER``.
+
+        Lets external callers (e.g. the A2A output mapper's file resolver)
+        join a ``FileReference.file_path`` into an absolute path through
+        ``utils.path_safety.resolve_within`` without reaching into the
+        ``_tmp_base_folder`` private attribute.
+        """
+        return self._tmp_base_folder
+
     async def upload_file(
         self,
         file: UploadFile,
@@ -185,6 +225,7 @@ class FileManagementService:
         user_context: Dict = None,
         conversation_id: Optional[int] = None,
         has_memory: bool = False,
+        strict: bool = False,
     ) -> FileReference:
         """
         Upload file for agent consumption.
@@ -212,6 +253,16 @@ class FileManagementService:
                 Callers MUST pass this so the storage strategy is correct;
                 defaulting to ``False`` keeps backward compatibility with
                 callers that have not been migrated yet.
+            strict: When ``True``, never substitute placeholder content.
+                An unsupported/unrecognized file type (anything that would
+                otherwise fall back to a "not implemented"/"type: unknown"
+                sentence) raises ``HTTPException(415)``; a genuine extraction
+                failure (e.g. a corrupt PDF, instead of the "Error processing
+                file: ..." placeholder, which would otherwise leak the raw
+                exception text to the LLM) raises ``HTTPException(422)``.
+                Defaults to ``False``, so every existing caller (public/
+                internal chat) keeps today's placeholder behaviour unchanged;
+                only the A2A input pipeline (FR-18: never a placeholder) opts in.
 
         Returns:
             FileReference object. The instance is decorated with two
@@ -229,7 +280,7 @@ class FileManagementService:
             file_type = self._get_file_type(file.filename)
 
             # Process file based on type (also returns file size)
-            content, temp_path, file_size = await self._process_file_content(file, file_type)
+            content, temp_path, file_size = await self._process_file_content(file, file_type, strict=strict)
 
             storage_strategy = self._resolve_storage_strategy(has_memory, conversation_id)
 
@@ -278,6 +329,23 @@ class FileManagementService:
 
         except HTTPException:
             raise
+        except UnsupportedFileTypeError as e:
+            # Recover the spooled temp file (if any) so the `finally` below
+            # removes it — _process_file_content raised before returning it,
+            # so this function's own `temp_path` local was never assigned.
+            temp_path = e.temp_path
+            logger.info(
+                "Rejected unsupported file type for %s: %s",
+                sanitize_for_log(file.filename), sanitize_for_log(str(e)),
+            )
+            raise HTTPException(status_code=415, detail="Unsupported file type") from e
+        except FileProcessingError as e:
+            temp_path = e.temp_path
+            logger.warning(
+                "File processing failed for %s: %s",
+                sanitize_for_log(file.filename), sanitize_for_log(str(e)),
+            )
+            raise HTTPException(status_code=422, detail="File processing failed") from e
         except Exception as e:
             logger.error(f"Error uploading file: {str(e)}")
             raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
@@ -317,8 +385,7 @@ class FileManagementService:
                 return extract_text_from_pdf(file_path)
             elif file_type in ["txt", "md", "json"]:
                 # Read text files directly
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                return await read_text(file_path)
             else:
                 # For other file types, return basic info
                 return f"File: {os.path.basename(file_path)} (type: {file_type})"
@@ -338,7 +405,66 @@ class FileManagementService:
             FileReference or None if not found
         """
         return self._files.get(file_id)
-    
+
+    async def get_session_file(
+        self,
+        agent_id: int,
+        user_context: Optional[Dict],
+        conversation_id: Optional[str],
+        file_id: str,
+    ) -> Optional[FileReference]:
+        """Look up ``file_id`` strictly within one ``(agent, user, conversation)`` session.
+
+        Unlike :meth:`get_file_reference` (which indexes the in-memory,
+        per-instance ``self._files`` mapping directly by ``file_id`` and
+        therefore only ever succeeds inside the exact instance that
+        registered the file), this recomputes the session key and
+        rehydrates it from the on-disk sidecars first -- the same pattern
+        :meth:`list_attached_files` already relies on to see files a
+        *different* ``FileManagementService`` instance registered earlier
+        in the same turn (e.g. the one ``_finalize_turn`` builds and
+        discards internally for ``sync_output_files``).
+
+        The lookup is strictly scoped to the session key derived from
+        ``agent_id``/``user_context``/``conversation_id``: a file
+        registered under a different agent, user, app or conversation is
+        invisible here even if its ``file_id`` is known. The resolved
+        ``file_path`` is also verified to still resolve inside
+        ``TMP_BASE_FOLDER`` (catching both a tampered/traversal sidecar and
+        a symlink that points outside it) before the reference is
+        returned; a reference whose path fails that check is treated as
+        not found rather than raised.
+
+        Args:
+            agent_id: ID of the agent the file was produced for.
+            user_context: Caller context used to derive the session key.
+            conversation_id: Conversation scope, or ``None`` for a
+                conversation-less (global agent) session.
+            file_id: The file's id.
+
+        Returns:
+            The :class:`FileReference`, or ``None`` if it does not exist in
+            this exact session or its path fails the containment check.
+        """
+        session_key = self._get_session_key(agent_id, user_context, conversation_id)
+        await asyncio.to_thread(self._load_session_files, session_key)
+
+        ref = self._files.get(session_key, {}).get(file_id)
+        if ref is None or not ref.file_path:
+            return None
+
+        try:
+            resolve_within(self._tmp_base_folder, ref.file_path)
+        except UnsafePathError:
+            logger.warning(
+                "get_session_file: file_path for file_id=%s escapes TMP_BASE_FOLDER "
+                "(tampered sidecar or symlink); treating as not found",
+                file_id,
+            )
+            return None
+
+        return ref
+
     async def list_attached_files(
         self, 
         agent_id: int, 
@@ -481,12 +607,10 @@ class FileManagementService:
             session_dir = os.path.join(self._persistent_dir, session_key)
             os.makedirs(session_dir, exist_ok=True)
             metadata_file = os.path.join(session_dir, f"{file_id}.json")
-            with open(metadata_file, 'w') as f:
-                json.dump(file_ref.to_dict(), f, indent=2)
+            await write_json(metadata_file, file_ref.to_dict())
             # _load_session_files requires a matching .content file to load the entry
             content_file = os.path.join(session_dir, f"{file_id}.content")
-            with open(content_file, 'w', encoding='utf-8') as f:
-                f.write(file_ref.content)
+            await write_text(content_file, file_ref.content)
 
             logger.info(f"Registered output file {filename} (id={file_id}) for session {session_key}")
             return file_ref
@@ -525,38 +649,46 @@ class FileManagementService:
         """Get file type from file path"""
         return self._get_file_type(os.path.basename(file_path))
     
-    async def _process_file_content(self, file: UploadFile, file_type: str) -> tuple[str, str, int]:
+    async def _process_file_content(
+        self, file: UploadFile, file_type: str, *, strict: bool = False
+    ) -> tuple[str, str, int]:
         """
         Process file content based on file type
-        
+
         Args:
             file: Uploaded file
             file_type: Type of file
-            
+            strict: When True, never return a placeholder/"not implemented"
+                content string: raise UnsupportedFileTypeError for an
+                unsupported type, or FileProcessingError if extraction fails
+                for an otherwise-supported type. See upload_file's docstring.
+
         Returns:
             Tuple of (processed_content, temp_file_path, file_size_bytes)
         """
         try:
             # Save file temporarily and get size
             temp_path, file_size = await self._save_uploaded_file_with_size(file)
-            
+
             try:
                 if file_type == "pdf":
                     # Use existing PDF tools
                     content = extract_text_from_pdf(temp_path)
                     return content, temp_path, file_size
-                
+
                 elif file_type == "text":
                     # Read text files
-                    with open(temp_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
+                    content = await read_text(temp_path)
                     return content, temp_path, file_size
-                
+
                 elif file_type == "image":
-                    # For images, return basic info (in production, use OCR)
+                    # For images, return basic info (in production, use OCR).
+                    # Not a lie under strict=True: images are genuinely usable —
+                    # AgentExecutionService sends them to a vision model via
+                    # file_path/base64, never via this content string.
                     content = f"Image file: {file.filename} (OCR processing not implemented)"
                     return content, temp_path, file_size
-                
+
                 elif file_type == "document" and file.filename.lower().endswith(".docx"):
                     import docx2txt
                     content = docx2txt.process(temp_path) or ""
@@ -564,38 +696,46 @@ class FileManagementService:
 
                 elif file_type == "document":
                     # .doc / spreadsheets / presentations: no text extraction yet
+                    if strict:
+                        raise UnsupportedFileTypeError(
+                            f"Document type not supported in strict mode: {file.filename}",
+                            temp_path=temp_path,
+                        )
                     content = f"Document file: {file.filename} (Document processing not implemented)"
                     return content, temp_path, file_size
-                
+
                 else:
-                    # For unknown types, return basic info
+                    # Unrecognized extension.
+                    if strict:
+                        raise UnsupportedFileTypeError(
+                            f"Unrecognized file type: {file.filename}", temp_path=temp_path
+                        )
                     content = f"File: {file.filename} (type: {file_type})"
                     return content, temp_path, file_size
-                    
+
+            except UnsupportedFileTypeError:
+                raise
             except Exception as e:
                 logger.error(f"Error processing file content: {str(e)}")
+                if strict:
+                    raise FileProcessingError(str(e), temp_path=temp_path) from e
                 return f"Error processing file: {str(e)}", temp_path, file_size
-                    
+
+        except (UnsupportedFileTypeError, FileProcessingError):
+            raise
         except Exception as e:
             logger.error(f"Error processing file content: {str(e)}")
+            if strict:
+                # _save_uploaded_file_with_size itself failed: no temp_path exists yet.
+                raise FileProcessingError(str(e), temp_path=None) from e
             return f"Error processing file: {str(e)}", None, 0
     
     async def _save_uploaded_file_with_size(self, file: UploadFile) -> tuple[str, int]:
         """Save uploaded file to temporary location and return path with file size"""
         # Create temporary file in TMP_BASE_FOLDER/uploads
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=self._temp_dir)
-        
-        try:
-            # Write file content and track size
-            content = await file.read()
-            file_size = len(content)
-            temp_file.write(content)
-            temp_file.flush()
-            
-            return temp_file.name, file_size
-        finally:
-            temp_file.close()
+        content = await file.read()
+        return await write_temp_file(content, suffix=suffix, dir=self._temp_dir), len(content)
     
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """Save uploaded file to temporary location (legacy method for compatibility)"""
@@ -722,13 +862,11 @@ class FileManagementService:
 
             # Save file metadata AFTER setting file_path
             metadata_file = resolve_within(session_dir, f"{file_id}.json")
-            with open(metadata_file, 'w') as f:
-                json.dump(file_ref.to_dict(), f, indent=2)
+            await write_json(metadata_file, file_ref.to_dict())
 
             # Save file content (extracted text)
             content_file = resolve_within(session_dir, f"{file_id}.content")
-            with open(content_file, 'w', encoding='utf-8') as f:
-                f.write(file_ref.content)
+            await write_text(content_file, file_ref.content)
 
             logger.info(
                 "Saved file %s to disk: %s (strategy: %s)",
@@ -823,8 +961,13 @@ class FileManagementService:
             ):
                 if not os.path.exists(base_dir):
                     continue
-                candidate = os.path.join(base_dir, session_key)
-                if os.path.exists(candidate) and os.path.isdir(candidate):
+                try:
+                    # session_key embeds caller-supplied ids: never probe a path
+                    # outside the storage dir (filesystem oracle).
+                    candidate = resolve_within(base_dir, session_key)
+                except UnsafePathError:
+                    return
+                if os.path.isdir(candidate):
                     session_path = candidate
                     loaded_strategy = strategy
                     # Prefer persistent if it exists; ephemeral is only checked
@@ -911,10 +1054,15 @@ class FileManagementService:
                         except Exception as e:
                             logger.error(f"Error loading file {file_id}: {str(e)}")
                             
-            logger.info(f"Loaded {len(self._files.get(session_key, {}))} persistent files for session {session_key}")
-            
-        except Exception as e:
-            logger.error(f"Error loading persistent files for session {session_key}: {str(e)}")
+            logger.info(
+                "Loaded %d persistent files for session %s",
+                len(self._files.get(session_key, {})), sanitize_for_log(session_key),
+            )
+
+        except Exception:
+            logger.exception(
+                "Error loading persistent files for session %s", sanitize_for_log(session_key)
+            )
 
     async def remove_files(
         self,
@@ -948,6 +1096,28 @@ class FileManagementService:
             except Exception as e:
                 logger.error(f"Error deleting conversation storage {path}: {e}")
 
+    def delete_agent_storage(self, agent_id: int, conversation_ids: List[int]) -> None:
+        """Delete every file stored for an agent: all its sessions and its conversations' working directories."""
+        # Session keys are "agent_{id}_user_…" / "agent_{id}_anonymous"; the trailing "_" keeps agent 1 from matching 12.
+        prefix = f"agent_{agent_id}_"
+        paths = []
+        if os.path.isdir(self._persistent_dir):
+            paths.extend(
+                os.path.join(self._persistent_dir, name)
+                for name in os.listdir(self._persistent_dir)
+                if name.startswith(prefix)
+            )
+        paths.extend(
+            os.path.join(self._tmp_base_folder, "conversations", str(conversation_id))
+            for conversation_id in conversation_ids
+        )
+        for path in paths:
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+            except OSError:
+                logger.exception("Error deleting agent storage %s", path)
+
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""
         try:
@@ -959,8 +1129,7 @@ class FileManagementService:
             # (original files stored in conversations/ dir have a relative file_path)
             if os.path.exists(metadata_file):
                 try:
-                    with open(metadata_file, 'r') as f:
-                        metadata = json.load(f)
+                    metadata = await read_json(metadata_file)
                     file_path = metadata.get('file_path')
                     if file_path:
                         # file_path is read back from a sidecar, so it must

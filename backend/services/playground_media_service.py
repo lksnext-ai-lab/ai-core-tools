@@ -406,6 +406,56 @@ class PlaygroundMediaService:
         return []
 
     @staticmethod
+    def _can_use_temp_silo(
+        app_id: int,
+        agent_id: int,
+        session_id: str,
+        db: Session,
+        embedding_service_id: Optional[int],
+    ) -> bool:
+        """Whether the session has (or can create) a temp silo.
+
+        The media embedding service is optional for non-conversational agents:
+        without one (and no temp silo already created) documents are sent in
+        full in the prompt instead of being retrieved via RAG.
+        """
+        if embedding_service_id:
+            return True
+        if PlaygroundMediaService.get_temp_repository(app_id, agent_id, session_id, db):
+            return True
+        agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+        return bool(getattr(agent, "media_embedding_service_id", None))
+
+    @staticmethod
+    def _index_file_documents(
+        silo_id: int,
+        abs_path: str,
+        filename: str,
+        base_metadata: dict,
+        db: Session,
+    ) -> bool:
+        """Index a file with the proper loaders/chunking; False if it could not be indexed."""
+        if not os.path.exists(abs_path):
+            return False
+        ext = os.path.splitext(filename)[1].lower()
+        try:
+            docs = SiloService.extract_documents_from_file(abs_path, ext, base_metadata)
+            if not docs:
+                return False
+            SiloService.index_multiple_content(
+                silo_id,
+                [{"content": d.page_content, "metadata": d.metadata} for d in docs],
+                db,
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "File-based extraction failed for %s, falling back to content: %s",
+                filename, exc,
+            )
+            return False
+
+    @staticmethod
     def vectorize_uploaded_file(
         app_id: int,
         agent_id: int,
@@ -436,6 +486,16 @@ class PlaygroundMediaService:
         Returns:
             True if file was successfully vectorized.
         """
+        if not PlaygroundMediaService._can_use_temp_silo(
+            app_id, agent_id, session_id, db, embedding_service_id
+        ):
+            logger.info(
+                "Agent %s has no media embedding service; skipping vectorization of %s",
+                agent_id,
+                filename,
+            )
+            return False
+
         repo = PlaygroundMediaService.get_or_create_temp_repository(
             app_id, agent_id, session_id, db,
             embedding_service_id=embedding_service_id,
@@ -455,29 +515,9 @@ class PlaygroundMediaService:
             "source": "playground_upload",
         }
 
-        docs_indexed = False
-
-        # Try file-based extraction with proper loaders/chunking
-        if file_path:
-            abs_path = os.path.join(tmp_base, file_path)
-            if os.path.exists(abs_path):
-                ext = os.path.splitext(filename)[1].lower()
-                try:
-                    docs = SiloService.extract_documents_from_file(
-                        abs_path, ext, base_metadata
-                    )
-                    if docs:
-                        SiloService.index_multiple_content(
-                            repo.silo_id,
-                            [{"content": d.page_content, "metadata": d.metadata} for d in docs],
-                            db,
-                        )
-                        docs_indexed = True
-                except Exception as exc:
-                    logger.warning(
-                        "File-based extraction failed for %s, falling back to content: %s",
-                        filename, exc,
-                    )
+        docs_indexed = bool(file_path) and PlaygroundMediaService._index_file_documents(
+            repo.silo_id, os.path.join(tmp_base, file_path), filename, base_metadata, db
+        )
 
         # Fallback: use pre-extracted text content
         if not docs_indexed and content:

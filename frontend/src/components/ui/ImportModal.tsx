@@ -25,6 +25,7 @@ export type ComponentType =
   | 'embedding_service'
   | 'output_parser'
   | 'mcp_config'
+  | 'middleware'
   | 'silo'
   | 'repository'
   | 'agent'

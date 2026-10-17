@@ -234,7 +234,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
   };
 
   useEffect(() => {
-    loadFolders();
+    void loadFolders();
   }, [appId, repositoryId]);
 
   const toggleExpand = (folderId: number) => {

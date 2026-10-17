@@ -21,7 +21,7 @@ from models.resource import Resource
 from models.embedding_service import EmbeddingService
 
 
-@pytest.fixture()
+@pytest.fixture
 def reindex_session_patch(db):
     """Redirect SessionLocal inside reindex_resource to the test connection.
 
@@ -38,7 +38,7 @@ def reindex_session_patch(db):
         yield
 
 
-@pytest.fixture()
+@pytest.fixture
 def reindex_silo(db, fake_app):
     """REPO-type Silo with an attached EmbeddingService, scoped to fake_app."""
     embedding_svc = EmbeddingService(
@@ -64,7 +64,7 @@ def reindex_silo(db, fake_app):
     return silo
 
 
-@pytest.fixture()
+@pytest.fixture
 def reindex_repository(db, fake_app, reindex_silo):
     """Repository linked to reindex_silo."""
     repo = Repository(
@@ -80,7 +80,7 @@ def reindex_repository(db, fake_app, reindex_silo):
     return repo
 
 
-@pytest.fixture()
+@pytest.fixture
 def reindex_resource(db, reindex_repository):
     """Resource inside reindex_repository."""
     resource = Resource(

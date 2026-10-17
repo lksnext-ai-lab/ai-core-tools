@@ -1,11 +1,12 @@
 import { configService } from '../core/ConfigService';
 import { authService } from './auth';
 import { getCsrfToken } from './cookies';
-import type { StreamEvent } from '../types/streaming';
+import type { HitlCancelResult, HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
 
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  /** Raw `detail` from the JSON error body (e.g. FastAPI's 422 validation array), when present. */
+  constructor(message: string, readonly status: number, readonly detail?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -41,6 +42,9 @@ import type {
   AgentMCPUsage,
   AppSlugInfo,
   ClaudePluginImportResult,
+  Middleware,
+  MiddlewarePayload,
+  MiddlewareType,
 } from '../core/types';
 import type {
   ImportResponse,
@@ -50,6 +54,20 @@ import type {
 } from '../types/import';
 
 type ConflictMode = 'fail' | 'rename' | 'override';
+
+/** Fields accepted by the admin skill create/update endpoints. Null clears nullable fields. */
+export interface SystemSkillWriteData {
+  name: string;
+  description?: string | null;
+  content: string;
+  display_name?: string | null;
+  when_to_use?: string | null;
+  allowed_tools?: string[] | null;
+  runtime?: string | null;
+  bootstrap_script_path?: string | null;
+  runtime_options?: Record<string, unknown> | null;
+  is_enabled?: boolean | null;
+}
 
 /** Rate-limit usage snapshot for a single app (also the per-item shape returned by getUsageStats()). */
 export interface UsageStats {
@@ -124,9 +142,18 @@ export interface Agent {
   tool_ids?: number[];
   mcp_config_ids?: number[];
   skill_ids?: number[];
+  middleware_ids?: number[];
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
+  a2a_enabled?: boolean;
+  a2a_card_visibility?: 'public' | 'api_key';
+  a2a_name_override?: string | null;
+  a2a_description_override?: string | null;
+  a2a_skill_tags?: string[];
+  a2a_examples?: string[];
+  a2a_card_url?: string | null;
+  a2a_rpc_url?: string | null;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -165,6 +192,7 @@ export interface Agent {
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string }>;
+  middlewares?: Array<{ middleware_id: number; name: string; description?: string; middleware_type: MiddlewareType }>;
 }
 
 export type ScheduledTaskVisibility = 'unpublished' | 'private' | 'public';
@@ -191,8 +219,56 @@ export interface ScheduledTask {
   next_run_at?: string | null;
 }
 
+export type OutputContentMode = 'result' | 'excerpt' | 'link_only';
+
+export interface OutputDestination {
+  id: number;
+  app_id: number;
+  name: string;
+  provider_key: 'teams_workflow' | 'webhook' | string;
+  enabled: boolean;
+  has_secret: boolean;
+  content_mode: OutputContentMode;
+  public_config: Record<string, unknown>;
+  has_credentials: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledTaskOutputBinding {
+  destination_id: number;
+  enabled: boolean;
+  destination_name?: string | null;
+  provider_key?: string | null;
+  include_attachments?: boolean;
+}
+
+export interface OutputDeliveryAttempt {
+  attempt_number: number;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  http_status?: number | null;
+  error_summary?: string | null;
+}
+
+export interface OutputDelivery {
+  id: number;
+  destination_name: string;
+  provider_key: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  next_attempt_at?: string | null;
+  receipt?: Record<string, unknown> | null;
+  error_summary?: string | null;
+  created_at: string;
+  attempts: OutputDeliveryAttempt[];
+}
+
 export type ScheduledTaskCreate = Pick<ScheduledTask, 'name' | 'agent_id' | 'input' | 'cron_expression' | 'timezone' | 'conversation_mode' | 'max_concurrent_runs'>
-  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>;
+  & Partial<Pick<ScheduledTask, 'description' | 'max_runs_retained' | 'marketplace_visibility'>>
+  & { output_bindings?: Omit<ScheduledTaskOutputBinding, 'destination_name'>[] };
 
 export type ScheduledTaskUpdate = Partial<Pick<ScheduledTask,
   'name' | 'description' | 'input' | 'cron_expression' | 'timezone' | 'max_concurrent_runs' | 'status'
@@ -643,9 +719,13 @@ class ApiService {
 
     if (typeof data['error'] === 'string') return data['error'];
     if (data['detail'] !== undefined) {
-      return typeof data['detail'] === 'string'
-        ? data['detail']
-        : JSON.stringify(data['detail']);
+      const detail = data['detail'];
+      if (typeof detail === 'string') return detail;
+      // Structured errors ({code, message}) carry a human-readable message.
+      if (detail && typeof detail === 'object' && typeof (detail as Record<string, unknown>)['message'] === 'string') {
+        return (detail as Record<string, unknown>)['message'] as string;
+      }
+      return JSON.stringify(detail);
     }
     if (typeof data['message'] === 'string') return data['message'];
     return null;
@@ -653,12 +733,16 @@ class ApiService {
 
   private async handleResponseError(response: Response): Promise<never> {
     let message = `API Error: ${response.status} ${response.statusText}`;
+    let detail: unknown;
 
     try {
       const errorData: unknown = await response.json();
       const extracted = this.extractErrorMessage(errorData);
       if (extracted) {
         message = extracted;
+      }
+      if (errorData && typeof errorData === 'object' && 'detail' in (errorData as Record<string, unknown>)) {
+        detail = (errorData as Record<string, unknown>)['detail'];
       }
     } catch (error) {
       console.debug('Failed to parse error response JSON:', error);
@@ -667,7 +751,7 @@ class ApiService {
       }
     }
 
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, detail);
   }
 
   async request<T = unknown>(
@@ -850,6 +934,42 @@ class ApiService {
 
   async deleteScheduledTask(appId: number, taskId: number): Promise<void> {
     return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}`, { method: 'DELETE' });
+  }
+
+  async getOutputDestinations(appId: number): Promise<OutputDestination[]> {
+    return this.request(`/internal/apps/${appId}/output-destinations`);
+  }
+
+  async createOutputDestination(appId: number, data: { name: string; provider_key: 'teams_workflow' | 'webhook'; webhook_url: string; content_mode?: OutputContentMode; public_config?: Record<string, unknown>; credentials?: Record<string, string> }): Promise<OutputDestination> {
+    return this.request(`/internal/apps/${appId}/output-destinations`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateOutputDestination(appId: number, destinationId: number, data: { webhook_url?: string; enabled?: boolean; name?: string; content_mode?: OutputContentMode; public_config?: Record<string, unknown>; credentials?: Record<string, string>; clear_credentials?: boolean }): Promise<OutputDestination> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  async deleteOutputDestination(appId: number, destinationId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}`, { method: 'DELETE' });
+  }
+
+  async testOutputDestination(appId: number, destinationId: number): Promise<{ accepted: boolean; http_status: number; event_id?: string | null }> {
+    return this.request(`/internal/apps/${appId}/output-destinations/${destinationId}/test`, { method: 'POST' });
+  }
+
+  async getScheduledTaskOutputs(appId: number, taskId: number): Promise<{ bindings: ScheduledTaskOutputBinding[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/outputs`);
+  }
+
+  async setScheduledTaskOutputs(appId: number, taskId: number, bindings: ScheduledTaskOutputBinding[]): Promise<{ bindings: ScheduledTaskOutputBinding[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/outputs`, { method: 'PUT', body: JSON.stringify({ bindings }) });
+  }
+
+  async getScheduledTaskRunDeliveries(appId: number, taskId: number, runId: number): Promise<{ deliveries: OutputDelivery[] }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/deliveries`);
+  }
+
+  async retryScheduledTaskDelivery(appId: number, taskId: number, runId: number, deliveryId: number): Promise<{ workflow_id: string }> {
+    return this.request(`/internal/apps/${appId}/scheduled-tasks/${taskId}/runs/${runId}/deliveries/${deliveryId}/retry`, { method: 'POST' });
   }
 
   async getScheduledTaskRuns(appId: number, taskId: number, page = 1, perPage = 50): Promise<ScheduledTaskRunList> {
@@ -1367,6 +1487,70 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/skills/${skillId}`, {
       method: 'DELETE',
     });
+  }
+
+  async getMiddlewares(appId: number): Promise<Middleware[]> {
+    return this.request(`/internal/apps/${appId}/middlewares/`);
+  }
+
+  async getMiddleware(appId: number, middlewareId: number): Promise<Middleware> {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`);
+  }
+
+  async createMiddleware(appId: number, data: MiddlewarePayload): Promise<Middleware> {
+    return this.request(`/internal/apps/${appId}/middlewares/0`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMiddleware(appId: number, middlewareId: number, data: MiddlewarePayload): Promise<Middleware> {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMiddleware(appId: number, middlewareId: number) {
+    return this.request(`/internal/apps/${appId}/middlewares/${middlewareId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async exportMiddleware(appId: number, middlewareId: number): Promise<Blob> {
+    const response = await fetch(`${this.baseURL}/internal/apps/${appId}/middlewares/${middlewareId}/export`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: this.buildAuthHeaders('POST', false),
+    });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.blob();
+  }
+
+  async importMiddleware(
+    appId: number,
+    file: File,
+    conflictMode: ConflictMode,
+    newName?: string,
+  ): Promise<ImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    let url = `${this.baseURL}/internal/apps/${appId}/middlewares/import?conflict_mode=${conflictMode}`;
+    if (newName) {
+      url += `&new_name=${encodeURIComponent(newName)}`;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: this.buildAuthHeaders('POST', true),
+      body: formData,
+    });
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.json();
   }
 
   async importSkill(appId: number, file: File): Promise<Skill> {
@@ -2196,15 +2380,25 @@ class ApiService {
       options.files.forEach((file) => formData.append('files', file));
     }
 
-    const url = `${this.baseURL}/internal/apps/${appId}/agents/${agentId}/chat/stream`;
-    const headers = this.buildAuthHeaders('POST', true);
+    await this.postSSE(
+      `/internal/apps/${appId}/agents/${agentId}/chat/stream`, formData, options.onEvent, options.signal,
+    );
+  }
 
-    const response = await fetch(url, {
+  /** POST a form or JSON body and consume the SSE response (same auth/cookies/CSRF as every other call). */
+  private async postSSE(
+    endpoint: string,
+    body: FormData | Record<string, unknown>,
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const isFormData = body instanceof FormData;
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
       credentials: 'include',
-      headers,
-      body: formData,
-      signal: options.signal,
+      headers: this.buildAuthHeaders('POST', isFormData),
+      body: isFormData ? body : JSON.stringify(body),
+      signal,
     });
 
     if (!response.ok) {
@@ -2229,11 +2423,35 @@ class ApiService {
         const lines = buffer.split('\n\n');
         buffer = lines.pop() || '';
 
-        this.parseSSELines(lines, options.onEvent);
+        this.parseSSELines(lines, onEvent);
       }
     } finally {
       reader.releaseLock();
     }
+  }
+
+  /** Answer a pending human-in-the-loop approval; streams the rest of the turn. */
+  async decideApprovalStream(
+    approvalId: string,
+    decisions: readonly HitlDecision[],
+    options: {
+      onEvent: (event: StreamEvent) => void;
+      signal?: AbortSignal;
+    }
+  ): Promise<void> {
+    await this.postSSE(
+      `/internal/approvals/${encodeURIComponent(approvalId)}/decisions/stream`,
+      { decisions },
+      options.onEvent,
+      options.signal,
+    );
+  }
+
+  /** Reject every action of a pending approval; returns the agent's answer. */
+  async cancelApproval(approvalId: string): Promise<HitlCancelResult> {
+    return this.request<HitlCancelResult>(`/internal/approvals/${encodeURIComponent(approvalId)}/cancel`, {
+      method: 'POST',
+    });
   }
 
   async uploadFileForChat(appId: number, agentId: number, file: File, conversationId?: number | null): Promise<{ file_id: string }> {
@@ -2507,7 +2725,11 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`);
   }
 
-  async getConversationWithHistory(conversationId: number): Promise<{ session_id?: string | null; messages: Array<{ role: string; content: string }> }> {
+  async getConversationWithHistory(conversationId: number): Promise<{
+    session_id?: string | null;
+    messages: Array<{ role: string; content: string }>;
+    pending_approval?: HitlPendingApproval | null;
+  }> {
     return this.request(`/internal/conversations/${conversationId}/history`);
   }
 
@@ -3036,36 +3258,14 @@ class ApiService {
     return this.request(`/internal/admin/system-skills/${skillId}`);
   }
 
-  async createSystemSkill(data: {
-    name: string;
-    description?: string;
-    content: string;
-    display_name?: string;
-    when_to_use?: string;
-    allowed_tools?: string[];
-    runtime?: string;
-    bootstrap_script_path?: string;
-    runtime_options?: Record<string, unknown>;
-    is_enabled?: boolean;
-  }): Promise<Skill> {
+  async createSystemSkill(data: SystemSkillWriteData): Promise<Skill> {
     return this.request('/internal/admin/system-skills', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSystemSkill(skillId: number, data: {
-    name: string;
-    description?: string;
-    content: string;
-    display_name?: string;
-    when_to_use?: string;
-    allowed_tools?: string[];
-    runtime?: string;
-    bootstrap_script_path?: string;
-    runtime_options?: Record<string, unknown>;
-    is_enabled?: boolean;
-  }): Promise<Skill> {
+  async updateSystemSkill(skillId: number, data: SystemSkillWriteData): Promise<Skill> {
     return this.request(`/internal/admin/system-skills/${skillId}`, {
       method: 'PUT',
       body: JSON.stringify(data),

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BarChart2 } from 'lucide-react';
 import FieldManager from './FieldManager';
 import FormActions from './FormActions';
+import { randomId } from '../../utils/randomId';
 
 interface FieldDefinition {
   name: string;
@@ -52,7 +53,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       setFormData({
         name: dataStructure.name || '',
         description: dataStructure.description || '',
-        fields: (dataStructure.fields || []).map(f => ({ ...f, _key: Math.random().toString(36).slice(2) }))
+        fields: (dataStructure.fields || []).map(f => ({ ...f, _key: randomId() }))
       });
     }
   }, [dataStructure]);

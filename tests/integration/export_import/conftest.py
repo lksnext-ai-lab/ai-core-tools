@@ -89,7 +89,7 @@ def engine(test_db_url):
     Base.metadata.drop_all(bind=eng)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def db_session(engine):
     """Create a new database session for each test."""
     from sqlalchemy.orm import sessionmaker

@@ -67,7 +67,7 @@ function SharePointSourceDetailPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    loadSource();
+    void loadSource();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };

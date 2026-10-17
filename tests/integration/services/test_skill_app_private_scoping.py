@@ -27,7 +27,7 @@ pytestmark = pytest.mark.integration
 # Environment: enable SaaS mode so tier enforcement / freeze are not no-ops
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(autouse=True)
 def saas_env(monkeypatch):
     monkeypatch.setenv("AICT_DEPLOYMENT_MODE", "saas")
     monkeypatch.setenv("STRIPE_API_KEY", "sk_test_fake")

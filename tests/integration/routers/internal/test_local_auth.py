@@ -86,7 +86,7 @@ def local_auth_env():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def local_user(db):
     """A LOCAL auth user seeded by the admin workflow (no credential yet)."""
     from models.user import User
@@ -103,7 +103,7 @@ def local_user(db):
     return user
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def local_user_with_credential(db, local_user) -> tuple:
     """A LOCAL auth user with a hashed password set.
 

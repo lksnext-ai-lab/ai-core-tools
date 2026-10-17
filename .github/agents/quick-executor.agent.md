@@ -205,7 +205,7 @@ Subagents do NOT have terminal access — they cannot run `git`, `alembic`, `pyt
 - ✅ State the planned sequence before invoking the first subagent
 - ✅ Commit one logical chunk at a time (one subagent's work = one commit, usually)
 - ✅ Use Conventional Commits format (`type(scope): subject`)
-- ✅ Commit with a plain `git commit` (no GPG signing — none configured)
+- ✅ Commit with `git commit -S` (GPG-signed; stop and ask if signing fails)
 - ✅ Pull before pushing (`git pull origin <branch>` then `git push`)
 - ✅ Pause for the 3 confirmations (commit, push, PR)
 - ✅ When a subagent reports `blocked` or `needs-revision`, stop and surface the issue — do NOT continue silently

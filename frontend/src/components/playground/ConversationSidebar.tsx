@@ -58,7 +58,7 @@ export default function ConversationSidebar({
   const [editingTitle, setEditingTitle] = useState('');
 
   useEffect(() => {
-    loadConversations();
+    void loadConversations();
   }, [agentId]);
 
   async function loadConversations() {
@@ -130,7 +130,7 @@ export default function ConversationSidebar({
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleRenameSave(conversationId);
+      void handleRenameSave(conversationId);
     } else if (e.key === 'Escape') {
       setEditingConvId(null);
     }

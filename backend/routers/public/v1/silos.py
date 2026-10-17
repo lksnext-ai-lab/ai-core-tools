@@ -2,7 +2,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFi
 from typing import Optional, Annotated
 from sqlalchemy.orm import Session
 import json
-import tempfile
 import os
 
 from services.silo_service import SiloService
@@ -35,6 +34,7 @@ from utils.error_handlers import ValidationError
 from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 
 from utils.logger import get_logger
+from utils.async_files import write_temp_file
 
 logger = get_logger(__name__)
 
@@ -645,12 +645,8 @@ async def index_file_document(
     try:
         file_extension = _document_extension(file)
 
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=file_extension
-        ) as temp_file:
-            temp_file_path = temp_file.name
-            content = await file.read()
-            temp_file.write(content)
+        content = await file.read()
+        temp_file_path = await write_temp_file(content, suffix=file_extension)
 
         docs = SiloService.extract_documents_from_file(
             temp_file_path, file_extension, metadata_dict

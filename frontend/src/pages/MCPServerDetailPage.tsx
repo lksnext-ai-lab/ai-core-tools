@@ -53,9 +53,14 @@ function MCPServerDetailPage() {
   }
 
   function copyToClipboard(text: string, field: string) {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
+    // Only show "copied" once the clipboard write actually succeeded (it can be
+    // rejected, e.g. without clipboard permission or when the page lacks focus).
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    }).catch(() => {
+      // ignore: nothing was copied, so no confirmation is shown
+    });
   }
 
   if (loading) {

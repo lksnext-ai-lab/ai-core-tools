@@ -1,6 +1,5 @@
 from langchain.messages import HumanMessage, SystemMessage, AnyMessage
 from langchain.agents import create_agent as create_langchain_agent, AgentState
-from langchain.agents.middleware import SummarizationMiddleware
 from utils.schema_utils import sanitize_identifier, ensure_json_schema_types
 from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
 from models.silo import Silo
@@ -49,6 +48,18 @@ from tools.sandbox.factory import SandboxProviderUnavailableError
 
 logger = get_logger(__name__)
 
+MCP_TOOLS_TIMEOUT = 10  # seconds to wait for MCP servers to respond
+
+
+def _extract_mcp_root_causes(exc: BaseException) -> str:
+    """Extract concise root-cause messages from (possibly nested) ExceptionGroups."""
+    causes: list[str] = []
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
+            causes.append(_extract_mcp_root_causes(sub))
+    else:
+        causes.append(f"{type(exc).__name__}: {exc}")
+    return "; ".join(causes)
 
 _AUTH_QUERY_PARAMS = {
     "access_token",
@@ -218,6 +229,7 @@ class MCPClientManager:
         # The client is managed internally by the library
         if self._client is not None:
             self._client = None
+
 
 async def _resolve_skills_for_prompt(
     agent: Agent,
@@ -413,24 +425,8 @@ async def create_agent(
             + "</output_format_instructions>"
         )
 
-    middleware = []
-    if agent.has_memory:
-        max_tokens = agent.memory_max_tokens or 4000
-        max_messages = agent.memory_max_messages or 20
-        from models.agent import DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
-        trim_tokens = agent.memory_summarize_threshold or DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
-        summarization = SummarizationMiddleware(
-            model=llm,
-            trigger=("tokens", max_tokens),
-            keep=("messages", max_messages),
-            trim_tokens_to_summarize=trim_tokens,
-        )
-        middleware.append(summarization)
-        logger.info(
-            f"SummarizationMiddleware configured for agent {agent.agent_id}: "
-            f"trigger=('tokens', {max_tokens}), keep=('messages', {max_messages}), "
-            f"trim_tokens_to_summarize={trim_tokens}"
-        )
+    from tools.middleware.factory import build_agent_middlewares
+    middleware = build_agent_middlewares(agent, llm)
 
     tools = []
 
@@ -642,17 +638,28 @@ async def create_agent(
     try:
         logger.info("Starting MCP tools loading...")
         mcp_client = await MCPClientManager().get_client(agent, user_context)
-        if (mcp_client):
-            mcp_tools = await mcp_client.get_tools()
+        if mcp_client:
+            mcp_tools = await asyncio.wait_for(
+                mcp_client.get_tools(), timeout=MCP_TOOLS_TIMEOUT
+            )
             logger.info(f"MCP tools loaded successfully: {len(mcp_tools)} tools")
             _prepare_mcp_tools(mcp_tools)
-            if (mcp_tools):
+            if mcp_tools:
                 for tool in mcp_tools:
                     _tag_tool(tool, "MCP")
                 tools.extend(mcp_tools)
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"MCP tools loading timed out after {MCP_TOOLS_TIMEOUT}s — "
+            "agent will continue without MCP tools"
+        )
+        mcp_client = None
     except Exception as e:
-        logger.error(f"Error loading MCP tools: {e}", exc_info=True)
-        # As of langchain-mcp-adapters 0.1.0, no manual cleanup needed
+        root_cause = _extract_mcp_root_causes(e) if isinstance(e, BaseExceptionGroup) else str(e)
+        logger.warning(
+            f"MCP tools unavailable (agent will continue without them): {root_cause}"
+        )
+        logger.debug("Full MCP tools loading error:", exc_info=True)
         mcp_client = None
 
     # Add skill loader / file reader tools if agent has skills. Providers are built lazily
@@ -766,6 +773,12 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     )
 
 
+def compute_thread_id(agent, session_id=None) -> str:
+    """Checkpointer thread_id for this agent/session — the single formula every
+    caller (chat, streaming, HITL resume) must agree on to find the same checkpoint."""
+    if getattr(agent, "has_memory", False) and session_id:
+        return f"thread_{agent.agent_id}_{session_id}"
+    return f"thread_{agent.agent_id}"
 
 
 def _mcp_tool_error_message(error: Exception) -> str:
@@ -812,7 +825,7 @@ def prepare_agent_config(agent):
     """Helper function to prepare agent configuration."""
     config = {
         "configurable": {
-            "thread_id": f"thread_{agent.agent_id}"
+            "thread_id": compute_thread_id(agent)
         },
         "recursion_limit": AICT_AGENT_RECURSION_LIMIT,
     }
@@ -875,7 +888,7 @@ def build_human_message(
     """
     from utils.config import get_app_config
 
-    formatted_message = agent.prompt_template.format(question=message)
+    formatted_message = agent.prompt_template.format(question=message) if agent.prompt_template else message
 
     if not image_files:
         return HumanMessage(content=formatted_message)
@@ -1117,7 +1130,9 @@ class IACTTool(BaseTool):
             logger.info(f"Starting MCP tools loading for sub-agent {agent.agent_id}...")
             instance.mcp_client = await MCPClientManager().get_client(agent, user_context)
             if instance.mcp_client:
-                mcp_tools = await instance.mcp_client.get_tools()
+                mcp_tools = await asyncio.wait_for(
+                    instance.mcp_client.get_tools(), timeout=MCP_TOOLS_TIMEOUT
+                )
                 logger.info(
                     f"MCP tools loaded successfully for sub-agent {agent.agent_id}: "
                     f"{len(mcp_tools)} tools"
@@ -1125,11 +1140,19 @@ class IACTTool(BaseTool):
                 _prepare_mcp_tools(mcp_tools)
                 if mcp_tools:
                     tools.extend(mcp_tools)
-        except Exception as e:
-            logger.error(
-                f"Error loading MCP tools for sub-agent {agent.agent_id}: {e}",
-                exc_info=True,
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"MCP tools loading timed out for sub-agent {agent.agent_id} "
+                f"after {MCP_TOOLS_TIMEOUT}s — sub-agent will continue without MCP tools"
             )
+            instance.mcp_client = None
+        except Exception as e:
+            root_cause = _extract_mcp_root_causes(e) if isinstance(e, BaseExceptionGroup) else str(e)
+            logger.warning(
+                f"MCP tools unavailable for sub-agent {agent.agent_id} "
+                f"(will continue without them): {root_cause}"
+            )
+            logger.debug("Full MCP tools loading error for sub-agent:", exc_info=True)
             instance.mcp_client = None
 
         # Build system prompt with optional skills section (LangChain v1 pattern)
@@ -1177,11 +1200,22 @@ class IACTTool(BaseTool):
                 + "</code_interpreter>"
             )
 
-        # Create sub-agent
+        # A sub-agent runs inside the caller's tool call and cannot pause for a person, so
+        # the tools its approval rules gate are withheld (never run unapproved). Its other
+        # middlewares (guardrails, PII, limits, summarization) apply as in a direct chat.
+        from tools.middleware.factory import build_agent_middlewares, tools_needing_approval
+        gated = tools_needing_approval(agent)
+        if gated:
+            withheld = [t.name for t in tools if getattr(t, "name", None) in gated]
+            tools = [t for t in tools if getattr(t, "name", None) not in gated]
+            if withheld:
+                logger.info("Sub-agent %s runs without tools that need approval: %s", agent.agent_id, withheld)
+
         instance.react_agent = create_langchain_agent(
             model=instance.llm,
             tools=tools,
             system_prompt=tool_system_prompt if tool_system_prompt else None,
+            middleware=build_agent_middlewares(agent, instance.llm, include_human_approval=False),
         )
         return instance
 

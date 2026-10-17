@@ -294,44 +294,6 @@ const plugin = createHelloWorldPlugin({
 });
 ```
 
-### temp-agents-plugin
-
-**Purpose**: Temporary agent management
-
-**Features**:
-- Create temporary agents
-- Auto-expiration
-- Management UI
-
-**Usage**:
-```typescript
-import { createTempAgentsPlugin } from 'temp-agents-plugin';
-
-const plugin = createTempAgentsPlugin({
-  defaultExpiration: 3600, // 1 hour
-  maxAgents: 10
-});
-```
-
-### holiday-indexing-plugin
-
-**Purpose**: Holiday-specific content indexing
-
-**Features**:
-- Holiday detection
-- Custom indexing logic
-- Seasonal themes
-
-**Usage**:
-```typescript
-import { createHolidayIndexingPlugin } from 'holiday-indexing-plugin';
-
-const plugin = createHolidayIndexingPlugin({
-  holidays: ['christmas', 'new-year'],
-  indexInterval: 86400 // Daily
-});
-```
-
 ## Publishing & Distribution
 
 ### npm Registry

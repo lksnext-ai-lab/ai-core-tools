@@ -175,7 +175,7 @@ For emergency fixes that must go directly to `main`:
 - ✅ **Edit `pyproject.toml` directly** on the release branch for the release version bump — do NOT delegate to `@version-bumper` for this
 - ✅ **Delegate to `@version-bumper`** only for the next-dev-cycle bump on `develop` (Phase 6)
 - ✅ Delegate to `@oss-manager` for `CHANGELOG.md` updates — never edit it directly
-- ✅ Use plain (unsigned) commits (`git commit`) for all release commits
+- ✅ Use GPG-signed commits (`git commit -S`) for all release commits; stop and ask if signing fails
 - ✅ Use annotated tags (`git tag -a`) for version tags
 - ✅ Open a PR from `release/<version>` to `main` — never merge directly without a PR
 - ✅ Tag `main` **after** the PR is merged (not before)

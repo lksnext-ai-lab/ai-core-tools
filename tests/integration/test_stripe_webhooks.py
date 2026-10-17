@@ -19,7 +19,7 @@ from unittest.mock import patch, MagicMock
 # Environment fixture
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(autouse=True)
 def saas_env(monkeypatch):
     monkeypatch.setenv("AICT_DEPLOYMENT_MODE", "saas")
     monkeypatch.setenv("STRIPE_API_KEY", "sk_test_fake")
@@ -69,7 +69,7 @@ def call_webhook(db, event: dict):
         ss.SubscriptionService.handle_webhook(db, b"payload", "sig_fake")
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def webhook_user(db):
     """A Free-tier user with a Stripe customer ID on their subscription."""
     from models.user import User

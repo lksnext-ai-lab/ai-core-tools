@@ -68,7 +68,7 @@ export function useSettingsData<T>(
 
   // Load data on mount and when dependencies change
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [appId, ...dependencies]);
 
   /**

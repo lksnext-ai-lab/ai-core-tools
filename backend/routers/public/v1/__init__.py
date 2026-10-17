@@ -9,6 +9,7 @@ from .repositories import repositories_router
 from .resources import resources_router
 from .silos import silos_router
 from .openai import openai_router
+from .approvals import approvals_router
 from routers.controls import enforce_app_rate_limit, enforce_allowed_origins, enforce_file_size_limit
 
 # Create the main public v1 router
@@ -24,3 +25,4 @@ public_v1_router.include_router(repositories_router, prefix="/app/{app_id}/repos
 public_v1_router.include_router(resources_router, prefix="/app/{app_id}/resources", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(silos_router, prefix="/app/{app_id}/silos", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
 public_v1_router.include_router(openai_router, prefix="/app/{app_id}/openai/v1", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_file_size_limit), Depends(enforce_allowed_origins)])
+public_v1_router.include_router(approvals_router, prefix="/app/{app_id}/approvals", dependencies=[Depends(enforce_app_rate_limit), Depends(enforce_allowed_origins)])

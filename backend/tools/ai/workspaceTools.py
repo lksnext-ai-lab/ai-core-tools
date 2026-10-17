@@ -1,18 +1,24 @@
-import ipaddress
 import logging
 import os
-import socket
+import socket  # noqa: F401 - patch seam for existing tests (AC-30): tests patch
+# `tools.ai.workspaceTools.socket.getaddrinfo`, which patches the real stdlib
+# `socket` module object (the same object `utils.ssrf_guard` resolves hosts
+# through), so this import must stay even though it's otherwise unused here.
 import urllib.error
 import urllib.parse
 
 import requests
 from langchain_core.tools import tool
 
+from utils.ssrf_guard import validate_url
+
 logger = logging.getLogger(__name__)
 
 # Only plain web traffic may be fetched by this tool — anything else (file://, ftp://, …)
 # is a path to local-disk or protocol-level exfiltration.
-_ALLOWED_SCHEMES = {"http", "https"}
+# Order matters: it is used verbatim in the "Only http/https URLs are
+# allowed" error message built by utils.ssrf_guard.validate_url.
+_ALLOWED_SCHEMES = ("http", "https")
 
 # Hard cap on how much a single download may write to disk. There's no app-scoped
 # upload-size setting reachable here (this tool factory only receives a working_dir,
@@ -29,33 +35,12 @@ _REQUEST_TIMEOUT_SECONDS = 30
 _MAX_REDIRECTS = 5
 
 
-# RFC 6598 shared/CGNAT address space (100.64.0.0/10) — used by some cloud
-# providers' metadata services (e.g. Alibaba Cloud's 100.100.100.200) and by
-# carrier-grade NAT. Not covered by ipaddress.is_private/is_reserved in
-# Python's stdlib, so it must be checked explicitly.
-_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
-
-
-def _is_blocked_ip(ip_str: str) -> bool:
-    """Return True if the given IP literal must not be reached by this tool."""
-    try:
-        ip = ipaddress.ip_address(ip_str)
-    except ValueError:
-        # Unparseable "IP" from getaddrinfo — treat as unsafe rather than risk a bypass.
-        return True
-    return (
-        ip.is_loopback
-        or ip.is_link_local
-        or ip.is_private
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-        or (ip.version == 4 and ip in _CGNAT_NETWORK)
-    )
-
-
 def _validate_url_host(url: str) -> str | None:
     """Validate a candidate URL's scheme and resolved host.
+
+    Delegates the IP-range and host-resolution checks to the shared SSRF guard
+    (``utils.ssrf_guard``), which is the only such implementation in the
+    codebase. Only this tool's error message format is kept here.
 
     Args:
         url: The URL to validate before it is fetched.
@@ -63,23 +48,13 @@ def _validate_url_host(url: str) -> str | None:
     Returns:
         An `"[Error] ..."` string if the URL must be rejected, otherwise `None`.
     """
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in _ALLOWED_SCHEMES:
-        return "[Error] Only http/https URLs are allowed"
-    if not parsed.hostname:
-        return "[Error] Only http/https URLs are allowed"
-
-    try:
-        addr_infos = socket.getaddrinfo(parsed.hostname, None)
-    except socket.gaierror as exc:
-        return f"[Error] Could not resolve host: {exc}"
-    if not addr_infos:
-        return "[Error] Could not resolve host"
-
-    for _family, _type, _proto, _canonname, sockaddr in addr_infos:
-        if _is_blocked_ip(sockaddr[0]):
-            return f"[Error] Refusing to download from disallowed host: {parsed.hostname}"
-    return None
+    result = validate_url(url, allowed_schemes=_ALLOWED_SCHEMES)
+    if result is None:
+        return None
+    if result.reason == "blocked":
+        hostname = urllib.parse.urlparse(url).hostname
+        return f"[Error] Refusing to download from disallowed host: {hostname}"
+    return f"[Error] {result.message}"
 
 
 def create_download_url_tool(working_dir: str):

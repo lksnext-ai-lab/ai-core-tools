@@ -54,9 +54,9 @@ function AppSettingsPage() {
   // Load app data on mount
   useEffect(() => {
     if (appId) {
-      loadAppData();
-      loadSlugData();
-      loadSandboxServices();
+      void loadAppData();
+      void loadSlugData();
+      void loadSandboxServices();
     }
   }, [appId]);
 

@@ -199,7 +199,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   };
 
