@@ -201,5 +201,6 @@ class TestReindexFailures:
         assert resp.status_code == 500
         detail = resp.json()["detail"]
         assert detail.startswith("Indexing failed (RuntimeError)")
-        assert "stale" not in detail and "SQL" not in detail and "db.internal" not in detail
+        for leaked in ("stale", "SQL", "db.internal"):
+            assert leaked not in detail
         store.delete_documents_excluding.assert_not_called()

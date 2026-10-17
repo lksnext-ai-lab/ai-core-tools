@@ -1037,10 +1037,10 @@ class SiloService:
                 logger.warning("metadata_values_cache: invalidation failed after index_resource for silo=%d: %s", silo_id, _cache_exc)
         except ResourceIndexingError as e:
             # Outcome already stored on the resource.
-            logger.error(f"Error indexing resource {resource.resource_id}: {e} (cause: {e.__cause__!r})")
+            logger.exception(f"Error indexing resource {resource.resource_id}: {e}")
             raise
         except Exception as e:
-            logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}", exc_info=True)
+            logger.exception(f"Error indexing resource {resource.resource_id}: {e}")
             message = classify_provider_error(e, "Indexing", step="Indexing").message
             if resource_with_relations is not None:
                 SiloService._set_index_status(resource_with_relations, session, message)

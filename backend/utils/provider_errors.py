@@ -68,24 +68,38 @@ def _bedrock_code(exc: BaseException) -> Optional[str]:
     return None
 
 
+def _kind_of_status(exc: BaseException, status: Optional[int]) -> Optional[ProviderErrorKind]:
+    if status in (401, 403) or (status == 400 and any(m in str(exc) for m in _INVALID_KEY_MARKERS)):
+        return ProviderErrorKind.AUTH
+    if status == 429:
+        return ProviderErrorKind.RATE_LIMIT
+    if status is not None and status >= 500:
+        return ProviderErrorKind.UNAVAILABLE
+    return None
+
+
+def _kind_of_single(exc: BaseException) -> Optional[ProviderErrorKind]:
+    """Kind carried by ``exc`` itself (not its causes), or None."""
+    kind = _kind_of_status(exc, _status_of(exc))
+    if kind is not None:
+        return kind
+    code = _bedrock_code(exc)
+    if code in _BEDROCK_AUTH_CODES:
+        return ProviderErrorKind.AUTH
+    if code in _BEDROCK_RATE_LIMIT_CODES:
+        return ProviderErrorKind.RATE_LIMIT
+    return None
+
+
 def _kind_of(exc: BaseException) -> ProviderErrorKind:
     # Walk the cause chain: LangChain and our own code often wrap the SDK exception.
     seen = set()
     current: Optional[BaseException] = exc
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        status = _status_of(current)
-        if status in (401, 403) or (status == 400 and any(m in str(current) for m in _INVALID_KEY_MARKERS)):
-            return ProviderErrorKind.AUTH
-        if status == 429:
-            return ProviderErrorKind.RATE_LIMIT
-        if status is not None and status >= 500:
-            return ProviderErrorKind.UNAVAILABLE
-        code = _bedrock_code(current)
-        if code in _BEDROCK_AUTH_CODES:
-            return ProviderErrorKind.AUTH
-        if code in _BEDROCK_RATE_LIMIT_CODES:
-            return ProviderErrorKind.RATE_LIMIT
+        kind = _kind_of_single(current)
+        if kind is not None:
+            return kind
         current = current.__cause__ or current.__context__
     return ProviderErrorKind.OTHER
 

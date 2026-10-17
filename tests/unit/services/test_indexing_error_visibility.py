@@ -185,3 +185,59 @@ class TestMediaPipelineErrors:
         assert media.status == "ready"
         health.record_success.assert_any_call(AIService, media.silo.transcription_service)
         health.record_success.assert_any_call(EmbeddingService, embedding)
+
+
+class TestServiceWarnings:
+    def test_distinct_errors_of_the_silo_services(self):
+        from services.silo_service import SiloService
+        broken = SimpleNamespace(last_error="key rejected")
+        silo = SimpleNamespace(
+            embedding_service=broken,
+            transcription_service=SimpleNamespace(last_error=None),
+            video_ai_service=broken,  # same service twice: reported once
+        )
+        assert SiloService.service_warnings(silo) == ["key rejected"]
+
+    def test_no_silo_no_warnings(self):
+        from services.silo_service import SiloService
+        assert SiloService.service_warnings(None) == []
+
+
+class TestSetIndexStatus:
+    def test_storage_failure_does_not_hide_the_indexing_result(self):
+        from services.silo_service import SiloService
+        session = MagicMock()
+        session.commit.side_effect = RuntimeError("db down")
+
+        SiloService._set_index_status(_resource(), session, "boom")  # must not raise
+
+        session.rollback.assert_called_once()
+
+
+class TestUploadResponse:
+    def _upload(self, resources):
+        from services import resource_service
+        db = MagicMock()
+        with patch.object(resource_service.ResourceRepository, "get_repository_by_id", return_value=object()), \
+                patch.object(resource_service.ResourceService, "create_multiple_resources",
+                             return_value=(resources, [])):
+            return resource_service.ResourceService.upload_resources_to_repository(1, 80, ["f"], db)
+
+    def test_indexing_failures_are_reported(self):
+        failed = SimpleNamespace(resource_id=2, uri="b.pdf", repository_id=80, create_date=None, type=".pdf",
+                                 status=RESOURCE_STATUS_ERROR, error_message="key rejected")
+
+        result = self._upload([failed])
+
+        assert "could not be indexed" in result["message"]
+        assert result["indexing_failures"] == [{"resource_id": 2, "filename": "b.pdf", "error": "key rejected"}]
+        assert result["created_resources"][0]["status"] == RESOURCE_STATUS_ERROR
+
+    def test_clean_upload_keeps_the_success_message(self):
+        ok = SimpleNamespace(resource_id=1, uri="a.pdf", repository_id=80, create_date=None, type=".pdf",
+                             status=RESOURCE_STATUS_INDEXED, error_message=None)
+
+        result = self._upload([ok])
+
+        assert result["message"].startswith("Successfully uploaded 1 files")
+        assert result["indexing_failures"] == []
