@@ -294,6 +294,17 @@ def fake_ai_service(db, fake_app):
 
 
 @pytest.fixture
+def fake_embedding_service(db, fake_app):
+    """A test EmbeddingService linked to fake_app (required by agents with memory)."""
+    from models.embedding_service import EmbeddingService
+
+    svc = EmbeddingService(name="Test Embedding Service", provider="OpenAI", app_id=fake_app.app_id)
+    db.add(svc)
+    db.flush()
+    return svc
+
+
+@pytest.fixture
 def fake_agent(db, fake_app, fake_ai_service):
     """A minimal test Agent in fake_app."""
     from models.agent import Agent

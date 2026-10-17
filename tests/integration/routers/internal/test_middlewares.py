@@ -316,13 +316,16 @@ class TestConfigValidation:
 # Agent middleware selection and cascade deletion
 # ---------------------------------------------------------------------------
 
-def _agent_payload(fake_ai_service, middleware_ids, has_memory=False):
-    return {
+def _agent_payload(fake_ai_service, middleware_ids, has_memory=False, media_embedding_service=None):
+    payload = {
         "name": "Agent with middlewares",
         "service_id": fake_ai_service.service_id,
         "has_memory": has_memory,
         "middleware_ids": middleware_ids,
     }
+    if media_embedding_service is not None:
+        payload["media_embedding_service_id"] = media_embedding_service.service_id
+    return payload
 
 
 class TestAgentMiddlewareSelection:
@@ -359,7 +362,9 @@ class TestAgentMiddlewareSelection:
                                json=_agent_payload(fake_ai_service, [foreign]), headers=owner_headers)
         assert response.status_code == 400
 
-    def test_hitl_requires_memory(self, client, fake_app, fake_ai_service, owner_headers, db):
+    def test_hitl_requires_memory(
+        self, client, fake_app, fake_ai_service, fake_embedding_service, owner_headers, db
+    ):
         db.flush()
         hitl = self._create(client, fake_app.app_id, owner_headers, name="Approve",
                             middleware_type="human_in_the_loop",
@@ -367,7 +372,8 @@ class TestAgentMiddlewareSelection:
         url = f"/internal/apps/{fake_app.app_id}/agents/0"
         assert client.post(url, json=_agent_payload(fake_ai_service, [hitl]),
                            headers=owner_headers).status_code == 400
-        assert client.post(url, json=_agent_payload(fake_ai_service, [hitl], has_memory=True),
+        assert client.post(url, json=_agent_payload(fake_ai_service, [hitl], has_memory=True,
+                                                    media_embedding_service=fake_embedding_service),
                            headers=owner_headers).status_code in (200, 201)
 
     def test_omitting_middleware_ids_keeps_selection(self, client, fake_app, fake_ai_service, owner_headers, db):

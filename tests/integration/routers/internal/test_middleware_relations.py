@@ -161,14 +161,17 @@ class TestAIServiceInUse:
 # ---------------------------------------------------------------------------
 
 class TestToolAgentRename:
-    def test_rename_moves_the_approval_rule(self, client, fake_app, fake_ai_service, owner_headers, db):
+    def test_rename_moves_the_approval_rule(
+        self, client, fake_app, fake_ai_service, fake_embedding_service, owner_headers, db
+    ):
         db.flush()
         tool = create_agent(client, fake_app.app_id, owner_headers, fake_ai_service.service_id, [],
                             name="Docs Search", is_tool=True)
         hitl = create_middleware(client, fake_app.app_id, owner_headers, "Approve docs",
                                  "human_in_the_loop", approval_rules("Docs_Search"))
         create_agent(client, fake_app.app_id, owner_headers, fake_ai_service.service_id, [hitl],
-                     name="Main", has_memory=True, tool_ids=[tool["agent_id"]])
+                     name="Main", has_memory=True, tool_ids=[tool["agent_id"]],
+                     media_embedding_service_id=fake_embedding_service.service_id)
 
         response = client.post(agents_url(fake_app.app_id, tool["agent_id"]), headers=owner_headers, json={
             "name": "Docs Finder", "service_id": fake_ai_service.service_id, "is_tool": True,
@@ -181,13 +184,13 @@ class TestToolAgentRename:
 
 class TestMemoryWithApproval:
     def test_memory_cannot_be_turned_off_without_sending_the_chain(
-        self, client, fake_app, fake_ai_service, owner_headers, db
+        self, client, fake_app, fake_ai_service, fake_embedding_service, owner_headers, db
     ):
         db.flush()
         hitl = create_middleware(client, fake_app.app_id, owner_headers, "Approve",
                                  "human_in_the_loop", approval_rules("search"))
         agent = create_agent(client, fake_app.app_id, owner_headers, fake_ai_service.service_id, [hitl],
-                             has_memory=True)
+                             has_memory=True, media_embedding_service_id=fake_embedding_service.service_id)
 
         response = client.post(agents_url(fake_app.app_id, agent["agent_id"]), headers=owner_headers, json={
             "name": "Agent", "service_id": fake_ai_service.service_id, "has_memory": False,
