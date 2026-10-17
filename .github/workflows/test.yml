@@ -320,6 +320,10 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm test
+
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest

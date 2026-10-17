@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Clock, ShieldAlert } from 'lucide-react';
 import { useCountdown } from '../../hooks/useCountdown';
+import { buildHitlDecisions, type HitlActionChoice } from './hitlApprovalDecisions';
 import type { HitlDecision, HitlPendingApproval } from '../../types/streaming';
 
 export interface HitlApprovalCardProps {
@@ -25,9 +26,9 @@ function formatRemaining(ms: number): string {
 /**
  * Human-in-the-loop review of the tool calls an agent wants to run.
  *
- * Only offers what the middleware allows for each tool: arguments are editable only when
- * `edit` is allowed, and Approve/Reject are disabled when any pending tool does not allow
- * them; Cancel covers that case. Unanswered requests expire and are rejected by the server.
+ * Each tool gets its own decision. All decisions are submitted together because the paused
+ * middleware resumes the complete batch; a single tool is decided with one click. Unanswered
+ * requests expire and are rejected by the server.
  */
 function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onExpire }: HitlApprovalCardProps) {
   const { actions } = approval;
@@ -36,11 +37,13 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
 
   const [drafts, setDrafts] = useState<string[]>(() => actions.map((a) => JSON.stringify(a.args, null, 2)));
   const [errors, setErrors] = useState<(string | null)[]>(() => actions.map(() => null));
+  const [choices, setChoices] = useState<(HitlActionChoice | null)[]>(() => actions.map(() => null));
   const expireNotified = useRef(false);
 
   useEffect(() => {
     setDrafts(actions.map((a) => JSON.stringify(a.args, null, 2)));
     setErrors(actions.map(() => null));
+    setChoices(actions.map(() => null));
     expireNotified.current = false;
   }, [approval, actions]);
 
@@ -52,55 +55,35 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
   }, [expired, onExpire]);
 
   const locked = disabled || expired;
-  const canApprove = actions.every((a) => a.allowed_decisions.includes('approve') || a.allowed_decisions.includes('edit'));
-  const canReject = actions.every((a) => a.allowed_decisions.includes('reject'));
+  const single = actions.length === 1;
+  const canApprove = (a: HitlPendingApproval['actions'][number]) =>
+    a.allowed_decisions.includes('approve') || a.allowed_decisions.includes('edit');
+  const canReject = (a: HitlPendingApproval['actions'][number]) => a.allowed_decisions.includes('reject');
 
-  const handleApprove = () => {
-    const nextErrors = actions.map(() => null as string | null);
-    const decisions: HitlDecision[] = [];
-    actions.forEach((action, idx) => {
-      if (!action.allowed_decisions.includes('edit')) {
-        decisions.push({ action_id: action.action_id, type: 'approve' });
-        return;
-      }
-      let args: unknown;
-      try {
-        args = JSON.parse(drafts[idx]);
-      } catch {
-        nextErrors[idx] = 'Arguments must be valid JSON.';
-        return;
-      }
-      if (typeof args !== 'object' || args === null || Array.isArray(args)) {
-        nextErrors[idx] = 'Arguments must be a JSON object.';
-        return;
-      }
-      const changed = JSON.stringify(args) !== JSON.stringify(action.args);
-      if (changed) {
-        decisions.push({ action_id: action.action_id, type: 'edit', args: args as Record<string, unknown> });
-      } else if (action.allowed_decisions.includes('approve')) {
-        decisions.push({ action_id: action.action_id, type: 'approve' });
-      } else {
-        nextErrors[idx] = 'This tool only accepts edited arguments.';
-      }
-    });
-    setErrors(nextErrors);
-    if (nextErrors.every((e) => e === null)) {
-      onDecide(decisions);
-    }
+  const submit = (nextChoices: (HitlActionChoice | null)[]) => {
+    const result = buildHitlDecisions(actions, drafts, nextChoices);
+    setErrors(result.errors);
+    if (result.decisions) onDecide(result.decisions);
   };
 
-  const handleReject = () => {
-    onDecide(actions.map((a) => ({
-      action_id: a.action_id,
-      type: 'reject',
-      message: `The user rejected the call to ${a.name}. Do not call it again unless the user asks for it.`,
-    })));
+  const choose = (idx: number, choice: HitlActionChoice) => {
+    const next = choices.map((c, i) => (i === idx ? choice : c));
+    setChoices(next);
+    setErrors((prev) => prev.map((error, i) => (i === idx ? null : error)));
+    if (single) submit(next);
+  };
+
+  const chooseAll = (choice: HitlActionChoice) => {
+    setChoices(actions.map(() => choice));
+    setErrors(actions.map(() => null));
   };
 
   const toolsLabel = actions.length === 1 ? 'this tool' : 'these tools';
   const statusText = expired
     ? 'This request expired and the tool was not executed. The agent’s answer will appear shortly.'
-    : `The agent wants to run ${toolsLabel}. Nothing runs until you decide.`;
+    : actions.length > 1
+      ? `The agent wants to run ${toolsLabel}. Choose for each tool, then submit your decisions.`
+      : `The agent wants to run ${toolsLabel}. Nothing runs until you decide.`;
 
   return (
     <section className="flex justify-start mb-4" aria-label="Approval required">
@@ -139,10 +122,12 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                     onChange={(e) => {
                       const value = e.target.value;
                       setDrafts((prev) => prev.map((d, i) => (i === idx ? value : d)));
+                      setChoices((prev) => prev.map((choice, i) => (i === idx ? null : choice)));
+                      setErrors((prev) => prev.map((error, i) => (i === idx ? null : error)));
                     }}
                     spellCheck={false}
                     disabled={locked}
-                    aria-invalid={errors[idx] !== null}
+                    aria-invalid={Boolean(errors[idx])}
                     aria-describedby={errors[idx] ? `${fieldId}-error` : undefined}
                   />
                 ) : (
@@ -153,28 +138,76 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                 {errors[idx] && (
                   <p id={`${fieldId}-error`} className="mt-1 text-xs text-red-600 dark:text-red-400">{errors[idx]}</p>
                 )}
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  {canApprove(action) && (
+                    <button
+                      type="button"
+                      onClick={() => choose(idx, 'approve')}
+                      disabled={locked}
+                      aria-pressed={single ? undefined : choices[idx] === 'approve'}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        choices[idx] === 'approve'
+                          ? 'bg-green-700 text-white'
+                          : 'bg-green-100 hover:bg-green-200 dark:bg-green-900/40 dark:hover:bg-green-900/70 text-green-800 dark:text-green-200'
+                      }`}
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {canReject(action) && (
+                    <button
+                      type="button"
+                      onClick={() => choose(idx, 'reject')}
+                      disabled={locked}
+                      aria-pressed={single ? undefined : choices[idx] === 'reject'}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        choices[idx] === 'reject'
+                          ? 'bg-red-700 text-white'
+                          : 'bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/70 text-red-800 dark:text-red-200'
+                      }`}
+                    >
+                      Reject
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleApprove}
-              disabled={locked || !canApprove}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              onClick={handleReject}
-              disabled={locked || !canReject}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              Reject
-            </button>
-            {!canReject && (
+            {!single && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => submit(choices)}
+                  disabled={locked || choices.some((choice) => choice === null)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Submit decisions
+                </button>
+                {actions.every(canApprove) && (
+                  <button
+                    type="button"
+                    onClick={() => chooseAll('approve')}
+                    disabled={locked}
+                    className="px-3 py-2 text-sm font-medium text-green-800 dark:text-green-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    Approve all
+                  </button>
+                )}
+                {actions.every(canReject) && (
+                  <button
+                    type="button"
+                    onClick={() => chooseAll('reject')}
+                    disabled={locked}
+                    className="px-3 py-2 text-sm font-medium text-red-800 dark:text-red-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    Reject all
+                  </button>
+                )}
+              </>
+            )}
+            {!actions.every(canReject) && (
               // Some tool does not allow Reject: cancelling the whole request is still possible.
               <button
                 type="button"
