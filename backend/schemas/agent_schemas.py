@@ -371,9 +371,9 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin, A2AAgentFieldsMixin):
     # Media processing configuration (playground media upload)
     transcription_service_id: Optional[int] = None
     video_ai_service_id: Optional[int] = None
-    # Optional embedding service used to vectorize media/documents into the
-    # session's temp playground silo. Agents that do not use media/document
-    # processing do not need to configure one.
+    # Embedding service used to vectorize media/documents into the session's
+    # temp playground silo. Required for conversational agents (has_memory),
+    # which rely on that silo to recall documents across turns.
     media_embedding_service_id: Optional[int] = None
     media_forced_language: Optional[str] = None
     media_chunk_min_duration: Optional[int] = Field(default=30, ge=1, le=3600)
@@ -392,6 +392,10 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin, A2AAgentFieldsMixin):
         if ov is not None and mx is not None and ov >= mx:
             raise ValueError(
                 "media_chunk_overlap must be smaller than media_chunk_max_duration"
+            )
+        if self.type == "agent" and self.has_memory and not self.media_embedding_service_id:
+            raise ValueError(
+                "media_embedding_service_id is required for conversational agents (has_memory)"
             )
         return self
 

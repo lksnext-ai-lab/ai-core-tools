@@ -26,8 +26,12 @@ FROM opensandbox/code-interpreter:v1.0.2
 # System tools commonly needed by document-processing Skills and code runs:
 # - poppler-utils: pdftoppm/pdfinfo for PDF rendering/extraction workflows.
 # - libreoffice: headless Office document conversion.
+# - tesseract-ocr (+ eng/spa/eus/cat/fra language data): OCR for scanned PDFs
+#   and images (used by the pdf system skill through pytesseract).
 RUN apt-get update -qq && \
-    apt-get install -y -qq poppler-utils libreoffice && \
+    apt-get install -y -qq poppler-utils libreoffice \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
+        tesseract-ocr-eus tesseract-ocr-cat tesseract-ocr-fra && \
     rm -rf /var/lib/apt/lists/*
 
 # Pre-install kernel specs and create stable runtime symlinks.

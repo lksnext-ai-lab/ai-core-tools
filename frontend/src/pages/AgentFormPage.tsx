@@ -624,11 +624,11 @@ function AgentFormPage() {
       return;
     }
 
-    // Mirror the backend invariant: a media embedding service is required so
-    // uploaded media/documents are always vectorized with a valid model.
-    if (!formData.media_embedding_service_id) {
+    // Mirror the backend invariant: conversational agents keep uploaded documents in a
+    // per-conversation temp silo, which needs an embedding service.
+    if (formData.has_memory && !formData.media_embedding_service_id) {
       setActiveTab('configuration');
-      setError('Select a media embedding service in Media Processing before saving.');
+      setError('Conversational agents require a media embedding service in Media Processing.');
       return;
     }
 
@@ -1269,16 +1269,16 @@ function AgentFormPage() {
 
                     <div className="mb-6">
                       <label htmlFor="media_embedding_service" className="block text-sm font-medium text-gray-700 mb-2">
-                        Embedding Service <span className="text-red-500">*</span>
+                        Embedding Service {formData.has_memory && <span className="text-red-500">*</span>}
                       </label>
                       <select
                         id="media_embedding_service"
-                        required
+                        required={formData.has_memory}
                         value={formData.media_embedding_service_id || ''}
                         onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       >
-                        <option value="">Select Embedding Service</option>
+                        <option value="">None (no temporary knowledge base)</option>
                         {embeddingServices.map((service) => (
                           <option key={service.service_id} value={service.service_id}>
                             {service.name}
@@ -1286,8 +1286,9 @@ function AgentFormPage() {
                         ))}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">
-                        Required. Model used to vectorize uploaded media/documents into the conversation's
-                        temporary knowledge base for retrieval.
+                        Model used to vectorize uploaded media/documents into the conversation's temporary
+                        knowledge base for retrieval. Required for conversational agents; optional otherwise
+                        (documents are then sent in full to the agent, and audio/video uploads are unavailable).
                       </p>
                     </div>
 
