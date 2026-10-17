@@ -27,7 +27,8 @@ function formatRemaining(ms: number): string {
  * Human-in-the-loop review of the tool calls an agent wants to run.
  *
  * Each tool gets its own decision. All decisions are submitted together because the paused
- * middleware resumes the complete batch. Unanswered requests expire and are rejected by the server.
+ * middleware resumes the complete batch; a single tool is decided with one click. Unanswered
+ * requests expire and are rejected by the server.
  */
 function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onExpire }: HitlApprovalCardProps) {
   const { actions } = approval;
@@ -54,10 +55,27 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
   }, [expired, onExpire]);
 
   const locked = disabled || expired;
-  const handleSubmitDecisions = () => {
-    const result = buildHitlDecisions(actions, drafts, choices);
+  const single = actions.length === 1;
+  const canApprove = (a: HitlPendingApproval['actions'][number]) =>
+    a.allowed_decisions.includes('approve') || a.allowed_decisions.includes('edit');
+  const canReject = (a: HitlPendingApproval['actions'][number]) => a.allowed_decisions.includes('reject');
+
+  const submit = (nextChoices: (HitlActionChoice | null)[]) => {
+    const result = buildHitlDecisions(actions, drafts, nextChoices);
     setErrors(result.errors);
     if (result.decisions) onDecide(result.decisions);
+  };
+
+  const choose = (idx: number, choice: HitlActionChoice) => {
+    const next = choices.map((c, i) => (i === idx ? choice : c));
+    setChoices(next);
+    setErrors((prev) => prev.map((error, i) => (i === idx ? null : error)));
+    if (single) submit(next);
+  };
+
+  const chooseAll = (choice: HitlActionChoice) => {
+    setChoices(actions.map(() => choice));
+    setErrors(actions.map(() => null));
   };
 
   const toolsLabel = actions.length === 1 ? 'this tool' : 'these tools';
@@ -121,15 +139,12 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                   <p id={`${fieldId}-error`} className="mt-1 text-xs text-red-600 dark:text-red-400">{errors[idx]}</p>
                 )}
                 <div className="flex flex-wrap items-center gap-2 mt-3">
-                  {(action.allowed_decisions.includes('approve') || action.allowed_decisions.includes('edit')) && (
+                  {canApprove(action) && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setChoices((prev) => prev.map((choice, i) => (i === idx ? 'approve' : choice)));
-                        setErrors((prev) => prev.map((error, i) => (i === idx ? null : error)));
-                      }}
+                      onClick={() => choose(idx, 'approve')}
                       disabled={locked}
-                      aria-pressed={choices[idx] === 'approve'}
+                      aria-pressed={single ? undefined : choices[idx] === 'approve'}
                       className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         choices[idx] === 'approve'
                           ? 'bg-green-700 text-white'
@@ -139,15 +154,12 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                       Approve
                     </button>
                   )}
-                  {action.allowed_decisions.includes('reject') && (
+                  {canReject(action) && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setChoices((prev) => prev.map((choice, i) => (i === idx ? 'reject' : choice)));
-                        setErrors((prev) => prev.map((error, i) => (i === idx ? null : error)));
-                      }}
+                      onClick={() => choose(idx, 'reject')}
                       disabled={locked}
-                      aria-pressed={choices[idx] === 'reject'}
+                      aria-pressed={single ? undefined : choices[idx] === 'reject'}
                       className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         choices[idx] === 'reject'
                           ? 'bg-red-700 text-white'
@@ -163,15 +175,39 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
           })}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleSubmitDecisions}
-              disabled={locked || choices.some((choice) => choice === null)}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {actions.length === 1 ? 'Submit decision' : 'Submit decisions'}
-            </button>
-            {actions.some((action) => !action.allowed_decisions.includes('reject')) && (
+            {!single && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => submit(choices)}
+                  disabled={locked || choices.some((choice) => choice === null)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Submit decisions
+                </button>
+                {actions.every(canApprove) && (
+                  <button
+                    type="button"
+                    onClick={() => chooseAll('approve')}
+                    disabled={locked}
+                    className="px-3 py-2 text-sm font-medium text-green-800 dark:text-green-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    Approve all
+                  </button>
+                )}
+                {actions.every(canReject) && (
+                  <button
+                    type="button"
+                    onClick={() => chooseAll('reject')}
+                    disabled={locked}
+                    className="px-3 py-2 text-sm font-medium text-red-800 dark:text-red-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    Reject all
+                  </button>
+                )}
+              </>
+            )}
+            {!actions.every(canReject) && (
               // Some tool does not allow Reject: cancelling the whole request is still possible.
               <button
                 type="button"
