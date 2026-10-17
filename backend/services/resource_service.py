@@ -1,4 +1,4 @@
-from models.resource import Resource
+from models.resource import Resource, RESOURCE_STATUS_ERROR
 from repositories.resource_repository import ResourceRepository
 from services.folder_service import FolderService
 from typing import List, Tuple, Optional
@@ -326,6 +326,8 @@ class ResourceService:
 
     @staticmethod
     def _index_resources(resources: List[Resource]):
+        # Failures are not raised: index_resource stores them on the resource (status/error_message),
+        # the file is kept and can be reindexed once the cause (e.g. a revoked API key) is fixed.
         indexed_count = 0
         for resource in resources:
             try:
@@ -334,6 +336,22 @@ class ResourceService:
             except Exception as e:
                 logger.error(f"Failed to index resource {resource.resource_id}: {str(e)}")
         logger.info(f"Successfully indexed {indexed_count}/{len(resources)} resources")
+
+    @staticmethod
+    def indexing_failures(resources: List[Resource]) -> List[dict]:
+        """One ``{resource_id, filename, error}`` per resource whose indexing failed.
+
+        index_resource stores the outcome in its own session: refresh ``resources`` first.
+        """
+        return [
+            {
+                'resource_id': r.resource_id,
+                'filename': r.uri,
+                'error': r.error_message or 'Indexing failed',
+            }
+            for r in resources
+            if r.status == RESOURCE_STATUS_ERROR
+        ]
 
     @staticmethod
     def _cleanup_files(resources: List[Resource], repository_path: str):
@@ -397,10 +415,25 @@ class ResourceService:
             files, repository_id, db, folder_id=folder_id
         )
         
-        logger.info(f"Upload completed - {len(created_resources)} resources created, {len(failed_files)} failed")
-        
+        # Indexing stored each outcome in its own session; reload it into ours.
+        if created_resources:
+            db.query(Resource).filter(
+                Resource.resource_id.in_([r.resource_id for r in created_resources])
+            ).populate_existing().all()
+        indexing_failures = ResourceService.indexing_failures(created_resources)
+        logger.info(
+            f"Upload completed - {len(created_resources)} resources created, {len(failed_files)} failed, "
+            f"{len(indexing_failures)} not indexed"
+        )
+
+        message = f"Successfully uploaded {len(created_resources)} files to repository {repository_id}"
+        if indexing_failures:
+            message = (
+                f"Uploaded {len(created_resources)} files to repository {repository_id}, "
+                f"but {len(indexing_failures)} could not be indexed"
+            )
         return {
-            "message": f"Successfully uploaded {len(created_resources)} files to repository {repository_id}",
+            "message": message,
             "created_resources": [
                 {
                     "resource_id": r.resource_id,
@@ -408,10 +441,13 @@ class ResourceService:
                     "repository_id": r.repository_id,
                     "create_date": r.create_date,
                     "size": None,
-                    "content_type": r.type or "unknown"
+                    "content_type": r.type or "unknown",
+                    "status": r.status,
+                    "error_message": r.error_message,
                 } for r in created_resources
             ],
-            "failed_files": failed_files
+            "failed_files": failed_files,
+            "indexing_failures": indexing_failures,
         }
     
     @staticmethod

@@ -345,11 +345,14 @@ class TestSiloMediaTaskSuccess:
         media = SimpleNamespace(media_id=5, silo_id=7, repository_id=None, source_type="upload",
                                 file_path=str(video), forced_language=None, chunk_min_duration=None,
                                 chunk_max_duration=None, chunk_overlap=None,
-                                silo=SimpleNamespace(transcription_service_id=2, video_ai_service_id=None))
+                                silo=SimpleNamespace(transcription_service_id=2, video_ai_service_id=None,
+                                                     transcription_service=None, video_ai_service=None,
+                                                     embedding_service=SimpleNamespace(service_id=3, name="emb")))
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = media
         transcription = {"language": "es", "duration": 10, "segments": [{"text": "hola"}]}
         with patch.object(media_tasks, "SessionLocal", return_value=db), \
+                patch.object(media_tasks, "ServiceHealthService"), \
                 patch.object(media_tasks, "_has_audio_stream", return_value=True), \
                 patch.object(media_tasks, "_extract_audio", return_value=str(tmp_path / "5_audio.wav")), \
                 patch.object(media_tasks.TranscriptionService, "transcribe_audio", return_value=transcription), \

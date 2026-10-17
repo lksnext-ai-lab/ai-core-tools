@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2, AlertTriangle } from 'lucide-react';
+import { Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2 } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -13,6 +13,7 @@ import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
 import type { ConflictMode, ImportResponse } from '../../components/ui/ImportModal';
 
 interface EmbeddingService {
@@ -22,6 +23,8 @@ interface EmbeddingService {
   model_name: string;
   created_at: string;
   needs_api_key?: boolean;
+  last_error?: string | null;
+  last_error_at?: string | null;
   is_system?: boolean;
 }
 
@@ -224,15 +227,7 @@ function EmbeddingServicesPage() {
             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>{service.provider}</span>
           ) },
           { header: 'Status', render: (service: EmbeddingService) => (
-            service.needs_api_key ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> API Key Required
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Ready
-              </span>
-            )
+            <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} />
           ) },
           { header: 'Created', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: EmbeddingService) => (

@@ -450,6 +450,8 @@ export interface Repository {
 export interface UploadResult {
   failed_files?: Array<{ filename: string; error: string }>;
   created_resources?: unknown[];
+  // Uploaded but not indexed (kept; reindex once the cause is fixed)
+  indexing_failures?: Array<{ resource_id: number; filename: string; error: string }>;
 }
 
 export interface DomainListItem {

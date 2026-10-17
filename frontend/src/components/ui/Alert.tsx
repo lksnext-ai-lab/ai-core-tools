@@ -71,7 +71,7 @@ const Alert: React.FC<AlertProps> = ({
           <h3 className={`text-sm font-medium ${styles.titleColor}`}>
             {title || defaultTitle}
           </h3>
-          <p className={`text-sm ${styles.messageColor} mt-1`}>{message}</p>
+          <p className={`text-sm ${styles.messageColor} mt-1 whitespace-pre-line`}>{message}</p>
           {onDismiss && (
             <button
               type="button"

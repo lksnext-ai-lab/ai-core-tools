@@ -275,7 +275,8 @@ class ResourceSchema(BaseModel):
     name: Optional[str] = None
     uri: Optional[str] = None
     type: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[str] = None  # indexed | error (NULL for documents indexed before it was tracked)
+    error_message: Optional[str] = None  # why the last indexing failed
     repository_id: int
     folder_id: Optional[int] = None
     create_date: Optional[datetime] = None
@@ -288,7 +289,10 @@ class MultipleResourceResponseSchema(BaseModel):
     """Multiple resource creation response"""
     message: str
     created_resources: List[Dict[str, Any]]
-    failed_files: List[str]
+    # Files rejected before upload: {filename, error}
+    failed_files: List[Dict[str, Any]]
+    # Uploaded files that could not be indexed (kept; reindex once the cause is fixed): {resource_id, filename, error}
+    indexing_failures: List[Dict[str, Any]] = []
 
 # ==================== COMMON PATH SCHEMAS ====================
 

@@ -29,6 +29,8 @@ class EmbeddingServiceService:
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
+            last_error=service.last_error,
+            last_error_at=service.last_error_at,
         )
 
     @staticmethod

@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Bot, Plug, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Loader2, Upload, CheckCircle2, XCircle, X, Lightbulb, AlertTriangle } from 'lucide-react';
+import { Bot, Plug, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Loader2, Upload, CheckCircle2, XCircle, X, Lightbulb } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
@@ -14,6 +14,7 @@ import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
 
 interface AIService {
   service_id: number;
@@ -22,6 +23,8 @@ interface AIService {
   model_name: string;
   created_at: string;
   needs_api_key?: boolean;
+  last_error?: string | null;
+  last_error_at?: string | null;
 }
 
 function AIServicesPage() {
@@ -224,15 +227,7 @@ function AIServicesPage() {
             </span>
           )},
           { header: 'Status', render: (service: AIService) => (
-            service.needs_api_key ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> API Key Required
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Ready
-              </span>
-            )
+            <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} />
           )},
           { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: AIService) => (

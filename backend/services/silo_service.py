@@ -4,7 +4,8 @@ import re
 import uuid
 from models.media import Media
 from models.silo import Silo
-from models.resource import Resource
+from models.resource import Resource, RESOURCE_STATUS_ERROR, RESOURCE_STATUS_INDEXED
+from models.embedding_service import EmbeddingService
 from db.database import SessionLocal
 from db.database import db as db_obj
 from sqlalchemy import select
@@ -25,6 +26,8 @@ from utils.vector_db_immutability import assert_vector_db_type_immutable, assert
 from schemas.silo_schemas import SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema
 from repositories.silo_repository import SiloRepository
 from services.folder_service import FolderService
+from services.service_health_service import ServiceHealthService
+from utils.provider_errors import classify_provider_error
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv("REPO_BASE_FOLDER"))
 COLLECTION_PREFIX = 'silo_'
@@ -33,6 +36,14 @@ MAX_SEARCH_LIMIT = 200
 
 # Per-chunk marker stamping each indexing run; lets reindex delete only stale chunks.
 INDEX_BATCH_FIELD = 'index_batch'
+
+class ResourceIndexingError(Exception):
+    """Indexing a resource failed. The message is user-facing (stored on the resource)."""
+
+
+class ResourceNotIndexableError(ResourceIndexingError, ValueError):
+    """The resource has nothing that can be indexed (no text, no embedding service)."""
+
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
@@ -528,6 +539,18 @@ class SiloService:
                 session.close()
     
     @staticmethod
+    def service_warnings(silo: Optional[Silo]) -> List[str]:
+        """Recorded failures (rejected key, exhausted quota) of the services this silo indexes with."""
+        if not silo:
+            return []
+        services = (silo.embedding_service, silo.transcription_service, silo.video_ai_service)
+        warnings = []
+        for service in services:
+            if service is not None and service.last_error and service.last_error not in warnings:
+                warnings.append(service.last_error)
+        return warnings
+
+    @staticmethod
     def media_ai_service_options(app_id: int, db: Session) -> List[Dict[str, Any]]:
         """AI services (app + system) selectable as transcription / video services."""
         from repositories.ai_service_repository import AIServiceRepository
@@ -921,10 +944,17 @@ class SiloService:
 
         Every chunk is stamped with ``index_batch`` (generated if not supplied) so a
         later reindex can delete only the stale chunks. Returns the batch used.
+
+        The outcome is stored on the resource (status / error_message) on every path.
+
+        Raises:
+            ResourceNotIndexableError: nothing to index (no text, no embedding service).
+            ResourceIndexingError: indexing failed; the message is safe to show to users.
         """
         index_batch = index_batch or uuid.uuid4().hex
         # For resource operations, we need a fresh session since this might be called from other contexts
         session = SessionLocal()
+        resource_with_relations = None
         try:
             # Load resource with relationships within the session to avoid detached instance issues
             resource_with_relations = session.query(Resource).filter(Resource.resource_id == resource.resource_id).first()
@@ -972,32 +1002,67 @@ class SiloService:
 
             if not docs:
                 logger.warning(f"No content extracted from resource {resource_with_relations.resource_id} ({resource_with_relations.uri}). The file may be empty or contain only images/scans without text.")
-                return index_batch
+                message = "No text could be extracted from this file. It may be empty or a scanned document without a text layer."
+                SiloService._set_index_status(resource_with_relations, session, message)
+                raise ResourceNotIndexableError(message)
 
+            silo_id = resource_with_relations.repository.silo_id
             embedding_service = resource_with_relations.repository.silo.embedding_service
 
             if not embedding_service:
-                logger.warning(f"Silo {resource_with_relations.repository.silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
-                return index_batch
+                logger.warning(f"Silo {silo_id} has no embedding service, skipping indexing for resource {resource_with_relations.resource_id}")
+                message = "The repository's silo has no embedding service configured."
+                SiloService._set_index_status(resource_with_relations, session, message)
+                raise ResourceNotIndexableError(message)
 
-            _get_vector_store(resource_with_relations.repository.silo).index_documents(
-                collection_name,
-                docs,
-                embedding_service
-            )
-            logger.info(f"Successfully indexed resource {resource_with_relations.resource_id} in silo {resource_with_relations.repository.silo_id}")
+            try:
+                _get_vector_store(resource_with_relations.repository.silo).index_documents(
+                    collection_name,
+                    docs,
+                    embedding_service
+                )
+            except Exception as e:
+                error = classify_provider_error(e, f"Embedding service '{embedding_service.name}'", step="Indexing")
+                ServiceHealthService.record_failure(EmbeddingService, embedding_service, error)
+                SiloService._set_index_status(resource_with_relations, session, error.message)
+                raise ResourceIndexingError(error.message) from e
+            # Before the status commit expires the loaded instances.
+            ServiceHealthService.record_success(EmbeddingService, embedding_service)
+            SiloService._set_index_status(resource_with_relations, session, None)
+            logger.info(f"Successfully indexed resource {resource.resource_id} in silo {silo_id}")
             try:
                 from services.metadata_values_cache_service import MetadataValuesCacheService
-                MetadataValuesCacheService.invalidate(resource_with_relations.repository.silo_id)
+                MetadataValuesCacheService.invalidate(silo_id)
             except Exception as _cache_exc:
-                logger.warning("metadata_values_cache: invalidation failed after index_resource for silo=%d: %s", resource_with_relations.repository.silo_id, _cache_exc)
-        except Exception as e:
-            logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}")
+                logger.warning("metadata_values_cache: invalidation failed after index_resource for silo=%d: %s", silo_id, _cache_exc)
+        except ResourceIndexingError as e:
+            # Outcome already stored on the resource.
+            logger.error(f"Error indexing resource {resource.resource_id}: {e} (cause: {e.__cause__!r})")
             raise
+        except Exception as e:
+            logger.error(f"Error indexing resource {resource.resource_id}: {str(e)}", exc_info=True)
+            message = classify_provider_error(e, "Indexing", step="Indexing").message
+            if resource_with_relations is not None:
+                SiloService._set_index_status(resource_with_relations, session, message)
+            raise ResourceIndexingError(message) from e
         finally:
             session.close()
 
         return index_batch
+
+    @staticmethod
+    def _set_index_status(resource: Resource, session: Session, error: Optional[str]) -> None:
+        """Record the outcome of indexing ``resource``: ``error`` is None on success.
+
+        Never raises: failing to store the outcome must not hide the indexing result itself.
+        """
+        try:
+            resource.status = RESOURCE_STATUS_ERROR if error else RESOURCE_STATUS_INDEXED
+            resource.error_message = error
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            logger.warning(f"Could not store indexing status of resource {resource.resource_id}: {exc}")
 
     @staticmethod
     def _delete_resource_chunks(resource_id: int, collection_name: str, silo) -> None:

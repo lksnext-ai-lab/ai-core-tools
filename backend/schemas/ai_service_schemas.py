@@ -15,6 +15,9 @@ class AIServiceListItemSchema(BaseModel):
     created_at: Optional[datetime]
     needs_api_key: bool = False
     is_system: bool = False
+    # Last provider failure needing action on the service (rejected key, quota); None when healthy
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +37,8 @@ class AIServiceDetailSchema(BaseModel):
     # AWS Bedrock identifiers (non-secret). Empty for other providers.
     aws_access_key_id: Optional[str] = None
     aws_region: Optional[str] = None
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

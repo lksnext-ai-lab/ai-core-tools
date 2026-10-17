@@ -3,7 +3,11 @@ from db.database import SessionLocal
 from services.transcription_service import TranscriptionService
 from services.silo_service import SiloService
 from services.video_analysis_service import VideoAnalysisService
+from services.service_health_service import ServiceHealthService
+from models.ai_service import AIService
+from models.embedding_service import EmbeddingService
 from utils.logger import get_logger
+from utils.provider_errors import ProviderError, classify_provider_error
 import json
 import os
 import subprocess
@@ -13,6 +17,18 @@ from datetime import datetime
 
 REPO_BASE_FOLDER = os.path.abspath(os.getenv('REPO_BASE_FOLDER'))
 logger = get_logger(__name__)
+
+
+class MediaStepError(Exception):
+    """A pipeline step failed; the message is the user-facing reason stored on the media."""
+
+
+def _provider_failure(exc: Exception, model, service, step: str, service_kind: str) -> ProviderError:
+    """Classify a failed call to ``service`` and record it on the service when it needs action."""
+    label = f"{service_kind} '{service.name}'" if service is not None else service_kind
+    error = classify_provider_error(exc, label, step=step)
+    ServiceHealthService.record_failure(model, service, error)
+    return error
 
 
 def media_storage_folder(media: Media) -> str:
@@ -90,12 +106,17 @@ def process_media_task_sync(media_id: int):
         media.status = 'transcribing'
         db.commit()
         
-        transcription = TranscriptionService.transcribe_audio(
-            audio_path,
-            language=media.forced_language,  # Use forced language if specified
-            ai_service_id=effective_transcription_id,
-            db=db
-        )
+        try:
+            transcription = TranscriptionService.transcribe_audio(
+                audio_path,
+                language=media.forced_language,  # Use forced language if specified
+                ai_service_id=effective_transcription_id,
+                db=db
+            )
+        except Exception as e:
+            error = _provider_failure(e, AIService, silo.transcription_service, "Transcription", "Transcription service")
+            raise MediaStepError(error.message) from e
+        ServiceHealthService.record_success(AIService, silo.transcription_service)
         
         # Update media with transcription metadata
         media.language = transcription['language']
@@ -150,10 +171,12 @@ def process_media_task_sync(media_id: int):
 
                 media.processing_mode = 'multimodal'
                 db.commit()
+                ServiceHealthService.record_success(AIService, silo.video_ai_service)
                 logger.info(f"Split into {len(chunks_data)} audio+visual chunks for media {media_id}")
                 
             except Exception as e:
                 logger.warning(f"Video analysis failed for media {media_id}, continuing with audio-only chunks: {str(e)}")
+                _provider_failure(e, AIService, silo.video_ai_service, "Video analysis", "Video AI service")
                 media.processing_mode = 'basic'
                 db.commit()
                 # Don't fail the entire pipeline — continue with audio-only chunks
@@ -162,11 +185,20 @@ def process_media_task_sync(media_id: int):
         media.status = 'indexing'
         db.commit()
 
-        for idx, chunk_data in enumerate(chunks_data):
-            # Preserve chunk_index set by split_audio_visual_chunks so audio/visual
-            # pairs from the same time window share the same index for retrieval correlation.
-            chunk_data.setdefault('chunk_index', idx)
-            SiloService.index_media_chunk(chunk_data, media, db)
+        embedding_service = silo.embedding_service
+        if embedding_service is None:
+            # index_media_chunk would skip every chunk and the media would end "ready" with nothing indexed.
+            raise MediaStepError("The silo has no embedding service configured.")
+        try:
+            for idx, chunk_data in enumerate(chunks_data):
+                # Preserve chunk_index set by split_audio_visual_chunks so audio/visual
+                # pairs from the same time window share the same index for retrieval correlation.
+                chunk_data.setdefault('chunk_index', idx)
+                SiloService.index_media_chunk(chunk_data, media, db)
+        except Exception as e:
+            error = _provider_failure(e, EmbeddingService, embedding_service, "Indexing", "Embedding service")
+            raise MediaStepError(error.message) from e
+        ServiceHealthService.record_success(EmbeddingService, embedding_service)
 
         logger.info(f"Indexed {len(chunks_data)} chunks for media {media_id}")
         

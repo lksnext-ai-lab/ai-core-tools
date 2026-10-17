@@ -7,7 +7,7 @@ import asyncio
 import json
 import time
 
-from services.silo_service import SiloService
+from services.silo_service import SiloService, ResourceIndexingError
 from services.silo_export_service import SiloExportService
 from services.silo_import_service import SiloImportService
 from models.silo import Silo
@@ -536,7 +536,11 @@ async def reindex_silo_resource(
         await asyncio.to_thread(SiloService.reindex_resource, resource)
         return {"message": f"Resource {resource_id} reindexed successfully", "resource_id": resource_id}
     except ValueError as e:
+        # Includes ResourceNotIndexableError (no text / no embedding service): previous chunks are kept.
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except ResourceIndexingError as e:
+        # User-facing reason, also stored on the resource (e.g. the embedding service rejected its key).
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except Exception as e:
         logger.error(f"Error reindexing resource {resource_id}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reindex resource")

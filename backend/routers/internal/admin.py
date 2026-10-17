@@ -740,6 +740,8 @@ async def list_system_ai_services(
             created_at=svc.create_date,
             aws_access_key_id=parse_extra_config(svc.extra_config).get("aws_access_key_id"),
             aws_region=parse_extra_config(svc.extra_config).get("aws_region"),
+            last_error=svc.last_error,
+            last_error_at=svc.last_error_at,
         )
         for svc in services
     ]
@@ -867,6 +869,8 @@ async def list_system_embedding_services(
             created_at=svc.create_date,
             aws_access_key_id=parse_extra_config(svc.extra_config).get("aws_access_key_id"),
             aws_region=parse_extra_config(svc.extra_config).get("aws_region"),
+            last_error=svc.last_error,
+            last_error_at=svc.last_error_at,
         )
         for svc in services
     ]

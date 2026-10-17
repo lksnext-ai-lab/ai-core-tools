@@ -18,6 +18,8 @@ interface Resource {
   created_at: string;
   folder_id?: number;
   folder_path?: string;
+  status?: string | null;
+  error_message?: string | null;
 }
 
 interface RepositoryDetail {
@@ -43,6 +45,7 @@ interface RepositoryDetail {
   media: Media[];
   transcription_service_id?: number | null;
   video_ai_service_id?: number | null;
+  service_warnings?: string[];
 }
 
   interface Media {
@@ -246,24 +249,20 @@ const RepositoryDetailPage: React.FC = () => {
       
       console.log('Upload result:', result);
       
-      // Check if there are any failed files
+      const problems: string[] = [];
+      // Files rejected before upload
       if (result.failed_files && result.failed_files.length > 0) {
-        console.log('Failed files detected:', result.failed_files);
-        const failedMessages = result.failed_files.map((failed: any) => 
-          `${failed.filename}: ${failed.error}`
-        ).join('\n');
-        
-        console.log('Failed messages:', failedMessages);
-        
-        if (result.created_resources && result.created_resources.length > 0) {
-          // Some files succeeded, some failed
-          setError(`Some files failed to upload:\n${failedMessages}`);
-        } else {
-          // All files failed
-          setError(`Upload failed:\n${failedMessages}`);
-        }
-      } else {
-        console.log('No failed files detected');
+        const failedMessages = result.failed_files.map((failed) => `${failed.filename}: ${failed.error}`).join('\n');
+        const allFailed = !result.created_resources || result.created_resources.length === 0;
+        problems.push(`${allFailed ? 'Upload failed' : 'Some files failed to upload'}:\n${failedMessages}`);
+      }
+      // Uploaded but not indexed (e.g. the embedding service rejected its API key)
+      if (result.indexing_failures && result.indexing_failures.length > 0) {
+        const indexingMessages = result.indexing_failures.map((failed) => `${failed.filename}: ${failed.error}`).join('\n');
+        problems.push(`Uploaded, but indexing failed (not searchable until reindexed):\n${indexingMessages}`);
+      }
+      if (problems.length > 0) {
+        setError(problems.join('\n\n'));
       }
       
       // Reload repository to get updated file list (even if some files failed)
@@ -498,6 +497,7 @@ const RepositoryDetailPage: React.FC = () => {
     } catch (err) {
       setReindexNotice({ type: 'error', text: err instanceof Error ? err.message : 'Reindex failed' });
     } finally {
+      await loadRepository(false);
       setReindexingId(null);
       setTimeout(() => setReindexNotice(null), 4000);
     }
@@ -710,6 +710,15 @@ const RepositoryDetailPage: React.FC = () => {
       {/* Error Message */}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} className="mb-6" />}
       {reindexNotice && <Alert type={reindexNotice.type} message={reindexNotice.text} onDismiss={() => setReindexNotice(null)} className="mb-6" />}
+      {repository?.service_warnings?.map((warning) => (
+        <Alert
+          key={warning}
+          type="warning"
+          title="A service used by this repository is failing"
+          message={`${warning} Check the service settings (or ask your platform administrator for system services), then reindex the affected files.`}
+          className="mb-6"
+        />
+      ))}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -800,6 +809,14 @@ const RepositoryDetailPage: React.FC = () => {
                               {(resource.file_type || 'unknown').toUpperCase()} • Uploaded{' '}
                               {formatDate(resource.created_at)}
                             </p>
+                            {resource.status === 'error' && (
+                              <p className="text-sm text-red-600 mt-1 flex items-start gap-2">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 whitespace-nowrap">
+                                  indexing failed<span className="sr-only">:</span>
+                                </span>
+                                <span>{resource.error_message || 'Indexing failed.'}{canEdit ? ' Fix the cause, then reindex.' : ''}</span>
+                              </p>
+                            )}
                           </div>
                         </div>
 

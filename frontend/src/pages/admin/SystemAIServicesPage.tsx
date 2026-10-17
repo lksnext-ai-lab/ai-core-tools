@@ -7,6 +7,7 @@ import type { ServiceFormData } from '../../types/services';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import ActionDropdown from '../../components/ui/ActionDropdown';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage, MESSAGES } from '../../constants/messages';
@@ -19,6 +20,8 @@ interface SystemAIService {
   readonly api_key: string;
   readonly base_url: string;
   readonly is_system: boolean;
+  readonly last_error?: string | null;
+  readonly last_error_at?: string | null;
   readonly supports_video: boolean;
   readonly created_at: string;
   readonly available_providers: { value: string; name: string }[];
@@ -154,6 +157,9 @@ const SystemAIServicesPage: React.FC = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Model
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -162,7 +168,7 @@ const SystemAIServicesPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {services.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
+                <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">
                   No system AI services configured.
                 </td>
               </tr>
@@ -175,6 +181,9 @@ const SystemAIServicesPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {svc.model_name}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <ServiceStatusBadge lastError={svc.last_error} lastErrorAt={svc.last_error_at} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="inline-flex justify-end">

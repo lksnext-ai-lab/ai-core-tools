@@ -311,7 +311,9 @@ class RepositoryService:
                 "uri": resource.uri,
                 "file_type": resource.type or "unknown",
                 "created_at": resource.create_date,
-                "folder_id": resource.folder_id
+                "folder_id": resource.folder_id,
+                "status": resource.status,
+                "error_message": resource.error_message,
             })
         
         # Get embedding services for form data
@@ -398,7 +400,8 @@ class RepositoryService:
             media=media_list,
             ai_services=ai_services,
             transcription_service_id=repo.transcription_service_id,
-            video_ai_service_id=repo.video_ai_service_id
+            video_ai_service_id=repo.video_ai_service_id,
+            service_warnings=SiloService.service_warnings(repo.silo),
         )
 
     @staticmethod

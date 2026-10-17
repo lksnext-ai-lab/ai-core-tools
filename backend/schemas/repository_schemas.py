@@ -43,6 +43,8 @@ class RepositoryDetailSchema(BaseModel):
     ai_services: List[Dict[str, Any]] = []
     transcription_service_id: Optional[int] = None
     video_ai_service_id: Optional[int] = None
+    # Recorded failures of the services the repository's silo uses (e.g. a revoked API key)
+    service_warnings: List[str] = []
     
     model_config = ConfigDict(from_attributes=True)
 
