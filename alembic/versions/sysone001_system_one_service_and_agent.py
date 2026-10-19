@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "sysone001"
-down_revision = "output001_output_channels"
+down_revision = "indexerr001"
 branch_labels = None
 depends_on = None
 
