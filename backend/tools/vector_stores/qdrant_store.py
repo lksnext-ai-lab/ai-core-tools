@@ -559,6 +559,8 @@ class QdrantStore(VectorStoreInterface):
         limit: int = 100,
         filter_metadata: Optional[Dict[str, Any]] = None,
         contains: Optional[str] = None,
+        after: Optional[str] = None,
+        raise_errors: bool = False,
     ) -> List[str]:
         seen: set = set()
         offset = None
@@ -566,7 +568,9 @@ class QdrantStore(VectorStoreInterface):
         scroll_filter = self._build_qdrant_filter(filter_metadata) if filter_metadata else None
 
         try:
-            while len(seen) < limit:
+            # Stopping early is only sound without a cursor: a page after ``after``
+            # needs every value of the scope to know which ones sort first.
+            while after is not None or len(seen) < limit:
                 results, next_offset = self.client.scroll(
                     collection_name=collection_name,
                     scroll_filter=scroll_filter,
@@ -584,7 +588,11 @@ class QdrantStore(VectorStoreInterface):
                 "Qdrant get_distinct_metadata_values for %s.%s failed; partial results: %s",
                 collection_name, field, exc,
             )
+            if raise_errors:
+                raise
 
+        if after is not None:
+            return sorted(v for v in seen if v > after)[:limit]
         return sorted(seen)[:limit]
 
     @staticmethod

@@ -1843,11 +1843,15 @@ class SiloService:
         db: Session = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
         contains: Optional[str] = None,
+        after: Optional[str] = None,
+        raise_errors: bool = False,
     ) -> List[str]:
         """
         Return distinct values for a metadata field in the silo's vector collection.
         Sorted alphabetically, filtered by optional case-insensitive prefix or
         substring (``contains``) and by an optional PGVector-style metadata filter.
+        ``after`` pages with a keyset cursor (values strictly after it) and
+        ``raise_errors`` propagates store failures instead of returning [].
         limit is clamped to 1–MAX_METADATA_VALUES_LIMIT.
         Raises ValueError for invalid field names, NotFoundError for missing silo.
         """
@@ -1865,4 +1869,5 @@ class SiloService:
         return _get_vector_store(silo).get_distinct_metadata_values(
             collection_name, field, prefix=prefix, limit=limit,
             filter_metadata=filter_metadata, contains=contains,
+            after=after, raise_errors=raise_errors,
         )

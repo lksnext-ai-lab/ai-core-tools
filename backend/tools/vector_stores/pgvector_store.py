@@ -452,6 +452,8 @@ class PGVectorStore(VectorStoreInterface):
         limit: int = 100,
         filter_metadata: Optional[Dict[str, Any]] = None,
         contains: Optional[str] = None,
+        after: Optional[str] = None,
+        raise_errors: bool = False,
     ) -> List[str]:
         # The embedding table is aliased ``e`` because _build_filter_sql always
         # emits fragments prefixed with it.
@@ -464,6 +466,11 @@ class PGVectorStore(VectorStoreInterface):
             "contains_pattern": f"%{self._escape_like(contains)}%" if contains else None,
             "limit": limit,
         }
+        # Keyset cursor: ``>`` uses the same collation as the ORDER BY below.
+        after_sql = ""
+        if after is not None:
+            after_sql = "AND e.cmetadata->>:field > :after"
+            params["after"] = after
         where_extra = self._build_filter_sql(filter_metadata, params) if filter_metadata else ""
 
         sql = text(
@@ -476,6 +483,7 @@ class PGVectorStore(VectorStoreInterface):
               AND e.cmetadata->>:field != ''
               AND (:prefix IS NULL OR LOWER(e.cmetadata->>:field) LIKE LOWER(:prefix_pattern))
               AND (:contains IS NULL OR e.cmetadata->>:field ILIKE :contains_pattern ESCAPE '\\')
+              {after_sql}
               {where_extra}
             ORDER BY val
             LIMIT :limit
@@ -488,6 +496,8 @@ class PGVectorStore(VectorStoreInterface):
                 return [str(row[0]) for row in result if row[0] is not None]
         except Exception as exc:
             logger.error("PGVector get_distinct_metadata_values error: %s", exc)
+            if raise_errors:
+                raise
             return []
 
     @staticmethod

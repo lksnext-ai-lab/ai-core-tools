@@ -190,6 +190,8 @@ class MetadataValuesRequestSchema(BaseModel):
     filter_metadata: Optional[Dict[str, Any]] = None
     prefix: Optional[str] = None
     limit: Optional[int] = None
+    # Keyset cursor: pass the last value of the previous page to get the next one.
+    after: Optional[str] = None
 
 class MetadataValuesResponseSchema(BaseModel):
     """Distinct values of a metadata field"""

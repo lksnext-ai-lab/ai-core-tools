@@ -591,6 +591,50 @@ class TestDocOperations:
         )
         assert mock_values.call_args.kwargs["limit"] == DEFAULT_METADATA_VALUES_LIMIT
 
+    @patch("routers.public.v1.silos.SiloService.get_metadata_field_values")
+    def test_metadata_values_forwards_the_cursor_and_asks_for_errors(
+        self, mock_values, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_values.return_value = ["kj8awv5r"]
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={"field": "ticket_id", "limit": 5000, "after": "5iq8vw2t"},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 200
+        assert mock_values.call_args.kwargs["after"] == "5iq8vw2t"
+        # Callers decide what to delete or re-index from the list, so a failed
+        # query must not be reported as an empty one.
+        assert mock_values.call_args.kwargs["raise_errors"] is True
+
+    @patch("routers.public.v1.silos.SiloService.get_metadata_field_values")
+    def test_metadata_values_without_cursor_sends_none(
+        self, mock_values, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_values.return_value = []
+
+        client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={"field": "ticket_id"},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert mock_values.call_args.kwargs["after"] is None
+
+    @patch("routers.public.v1.silos.SiloService.get_metadata_field_values")
+    def test_metadata_values_store_failure_is_an_error_not_an_empty_list(
+        self, mock_values, client, fake_app, fake_silo, fake_api_key, db
+    ):
+        mock_values.side_effect = RuntimeError("connection reset")
+
+        resp = client.post(
+            silos_url(fake_app.app_id, fake_silo.silo_id, "docs/metadata-values"),
+            json={"field": "ticket_id"},
+            headers=api_headers(fake_api_key.key),
+        )
+        assert resp.status_code == 400
+        assert "values" not in resp.json()
+
     def test_metadata_values_empty_field_returns_400(
         self, client, fake_app, fake_silo, fake_api_key, db
     ):

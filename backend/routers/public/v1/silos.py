@@ -533,6 +533,9 @@ async def list_metadata_values(
     collection, so there is no embedding call and no similarity ranking. Use it
     to find out what a silo already holds for a target — `docs/find` is a
     top-k semantic search and its result cap makes it unfit for that.
+
+    Paginate with `after`: send the last value of a page to get the next one,
+    until a page comes back shorter than `limit`.
     """
     validate_api_key_for_app(app_id, api_key, db)
     validate_silo_ownership(db, silo_id, app_id)
@@ -551,6 +554,10 @@ async def list_metadata_values(
             limit=request.limit or DEFAULT_METADATA_VALUES_LIMIT,
             db=db,
             filter_metadata=request.filter_metadata,
+            after=request.after,
+            # An empty list must mean "nothing there", never "the query failed":
+            # callers decide what to delete or re-index from it.
+            raise_errors=True,
         )
         return MetadataValuesResponseSchema(values=values)
     except HTTPException:

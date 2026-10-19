@@ -296,3 +296,87 @@ class TestPGVectorStoreDistinctMetadataValues:
         self.mock_conn.execute.side_effect = RuntimeError("boom")
 
         assert store.get_distinct_metadata_values("silo_3", "source_url") == []
+
+    def test_failure_raises_when_asked_to(self):
+        store = self._make_store()
+        self.mock_conn.execute.side_effect = RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            store.get_distinct_metadata_values("silo_3", "ticket_id", raise_errors=True)
+
+    def test_without_after_the_sql_has_no_cursor(self):
+        store = self._make_store()
+
+        store.get_distinct_metadata_values("silo_3", "ticket_id", limit=5000)
+
+        sql_arg, params = self.mock_conn.execute.call_args.args
+        assert ":after" not in str(sql_arg)
+        assert "after" not in params
+
+    def test_after_adds_a_keyset_condition_before_the_order_by(self):
+        store = self._make_store()
+
+        store.get_distinct_metadata_values("silo_3", "ticket_id", limit=5000, after="kj8awv5r")
+
+        sql_arg, params = self.mock_conn.execute.call_args.args
+        sql = str(sql_arg)
+        assert "AND e.cmetadata->>:field > :after" in sql
+        assert sql.index(":after") < sql.index("ORDER BY val")
+        assert params["after"] == "kj8awv5r"
+
+
+class TestQdrantStoreDistinctMetadataValues:
+    """QdrantStore.get_distinct_metadata_values paging and error modes.
+
+    The store scrolls in batches of 200 and treats a shorter batch as the end.
+    """
+
+    def _make_store(self, pages):
+        from tools.vector_stores.qdrant_store import QdrantStore
+
+        store = QdrantStore.__new__(QdrantStore)
+        store.client = MagicMock()
+        store.client.scroll.side_effect = pages
+        return store
+
+    @staticmethod
+    def _points(start, stop):
+        return [MagicMock(payload={"metadata": {"ticket_id": f"v{i:03d}"}}) for i in range(start, stop)]
+
+    def _two_pages(self):
+        # Scroll order is not value order: the alphabetically first values come last.
+        return [(self._points(100, 300), "next"), (self._points(0, 100), None)]
+
+    def test_without_after_it_still_stops_once_the_limit_is_reached(self):
+        # Unchanged behaviour for the UI callers: no full scan when not paging.
+        store = self._make_store(self._two_pages())
+
+        values = store.get_distinct_metadata_values("silo_1", "ticket_id", limit=50)
+
+        assert values == [f"v{i:03d}" for i in range(100, 150)]
+        assert store.client.scroll.call_count == 1
+
+    def test_after_scans_the_whole_scope_and_returns_the_next_sorted_page(self):
+        store = self._make_store(self._two_pages())
+
+        values = store.get_distinct_metadata_values(
+            "silo_1", "ticket_id", limit=50, after="v049"
+        )
+
+        assert values == [f"v{i:03d}" for i in range(50, 100)]
+        assert store.client.scroll.call_count == 2
+
+    def test_failure_returns_partial_results_by_default(self):
+        store = self._make_store([(self._points(0, 200), "next"), RuntimeError("boom")])
+
+        values = store.get_distinct_metadata_values("silo_1", "ticket_id", limit=500)
+
+        assert len(values) == 200
+
+    def test_failure_raises_when_asked_to(self):
+        store = self._make_store([(self._points(0, 200), "next"), RuntimeError("boom")])
+
+        with pytest.raises(RuntimeError):
+            store.get_distinct_metadata_values(
+                "silo_1", "ticket_id", limit=500, raise_errors=True
+            )
