@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Layers, Pencil, Trash2, Lightbulb, Upload, ArrowDownToLine } from 'lucide-react';
+import { Layers, Pencil, Trash2, Upload, ArrowDownToLine, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '../../components/ui/Modal';
 import MiddlewareForm from '../../components/forms/MiddlewareForm';
@@ -11,12 +11,16 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import type { Middleware, MiddlewarePayload } from '../../core/types';
 import { MIDDLEWARE_TYPES, MIDDLEWARE_TYPE_INFO, middlewareTypeLabel } from '../../constants/middlewares';
 import Alert from '../../components/ui/Alert';
+import { Badge } from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
+import ButtonApp from '../../components/ui/ButtonApp';
 import ImportModal, { type ConflictMode, type ImportResponse } from '../../components/ui/ImportModal';
 import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
+import { BackgroundImage, LoadingState } from '../..';
+import Title from '../../components/ui/Title';
 
 function MiddlewaresPage() {
     const { appId } = useParams();
@@ -170,10 +174,14 @@ function MiddlewaresPage() {
 
     if (loading) {
         return (
-            <div className="p-6 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-2 text-gray-600">Loading middlewares...</p>
-            </div>
+                    <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant='titPrincipal' titulo='Middlewares' subtitulo='Reusable safety, approval and cost controls for your agents'></Title>
+        </div>
+
+        <LoadingState variant="page" message="Loading silos..." />
+      </div>
         );
     }
 
@@ -189,27 +197,23 @@ function MiddlewaresPage() {
         <div className="p-6">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Middlewares</h2>
-                    <p className="text-gray-600">Reusable safety, approval and cost controls for your agents</p>
-                </div>
+               <Title variant='titPrincipal' titulo='Middlewares' subtitulo='Reusable safety, approval and cost controls for your agents'></Title>
                 {canEdit && (
                     <div className="flex gap-2">
-                        <button
-                            type="button"
+                        <ButtonApp
+                            label="Import"
                             onClick={() => setShowImportModal(true)}
-                            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
-                        >
-                            <Upload className="w-4 h-4 mr-2" aria-hidden="true" />Import
-                        </button>
-                        <button
-                            type="button"
+                            variant="secondary"
+                            size="medium"
+                            icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+                        />
+                        <ButtonApp
+                            label="Add Middleware"
                             onClick={handleCreateMiddleware}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center"
-                        >
-                            <span className="mr-2">+</span>
-                            {' '}Add Middleware
-                        </button>
+                            variant="primary"
+                            size="medium"
+                            icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+                        />
                     </div>
                 )}
             </div>
@@ -226,17 +230,17 @@ function MiddlewaresPage() {
                         header: 'Name',
                         render: (mw) => (
                             <div className="flex items-center">
-                                <Layers className="w-5 h-5 text-indigo-400 mr-3 shrink-0" />
+                                <BackgroundImage icon={Layers} variant='marron' className="mr-2" />
                                 {canEdit ? (
                                     <button
                                         type="button"
-                                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                                        className="text-sm font-medium text-fg dark:text-fg-dark text-left"
                                         onClick={() => void handleEditMiddleware(mw.middleware_id)}
                                     >
                                         {mw.name}
                                     </button>
                                 ) : (
-                                    <span className="text-sm font-medium text-gray-900">
+                                    <span className="text-sm font-medium text-fg dark:text-fg-dark">
                                         {mw.name}
                                     </span>
                                 )}
@@ -246,16 +250,14 @@ function MiddlewaresPage() {
                     {
                         header: 'Type',
                         render: (mw) => (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                {middlewareTypeLabel(mw.middleware_type)}
-                            </span>
+                            <Badge label={middlewareTypeLabel(mw.middleware_type)} variant="info" />
                         ),
                         className: 'px-6 py-4'
                     },
                     {
                         header: 'Description',
                         render: (mw) => (
-                            <div className="text-sm text-gray-600 max-w-xs truncate">
+                            <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs truncate">
                                 {mw.description || <span className="text-gray-400 italic">No description</span>}
                             </div>
                         ),
@@ -264,7 +266,7 @@ function MiddlewaresPage() {
                     {
                         header: 'Created',
                         render: (mw) => mw.created_at ? new Date(mw.created_at).toLocaleDateString() : 'N/A',
-                        className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+                        className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
                     },
                     {
                         header: 'Actions',
@@ -306,33 +308,27 @@ function MiddlewaresPage() {
                 loading={loading}
             />
 
-            {/* Info Box */}
-            <div className="mt-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <div className="flex">
-                    <div className="flex-shrink-0">
-                        <Lightbulb className="w-5 h-5 text-indigo-400" />
-                    </div>
-                    <div className="ml-3">
-                        <h3 className="text-sm font-medium text-indigo-800">
-                            About Middlewares
-                        </h3>
-                        <div className="mt-2 text-sm text-indigo-700">
-                            <p>
-                                Middlewares run around every model and tool call of the agents that use them.
-                                Create them here once, then select them in each agent&apos;s <strong>Advanced</strong> tab.
-                                An agent can use one middleware of each type.
-                            </p>
-                            <ul className="list-disc list-inside mt-2 space-y-1">
-                                {MIDDLEWARE_TYPES.map((type) => (
-                                    <li key={type}>
-                                        <strong>{MIDDLEWARE_TYPE_INFO[type].label}</strong> — {MIDDLEWARE_TYPE_INFO[type].description}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <Alert
+                type="info"
+                title="About Middlewares"
+                className="mt-6"
+                message={(
+                    <>
+                        <p>
+                            Middlewares run around every model and tool call of the agents that use them.
+                            Create them here once, then select them in each agent&apos;s <strong>Advanced</strong> tab.
+                            An agent can use one middleware of each type.
+                        </p>
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                            {MIDDLEWARE_TYPES.map((type) => (
+                                <li key={type}>
+                                    <strong>{MIDDLEWARE_TYPE_INFO[type].label}</strong> — {MIDDLEWARE_TYPE_INFO[type].description}
+                                </li>
+                            ))}
+                        </ul>
+                    </>
+                )}
+            />
 
             {/* Create/Edit Modal */}
             <Modal

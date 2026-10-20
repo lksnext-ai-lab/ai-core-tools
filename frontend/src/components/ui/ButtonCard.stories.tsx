@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
 import { BookOpen, Bot } from 'lucide-react';
@@ -5,6 +6,7 @@ import { BookOpen, Bot } from 'lucide-react';
 import { Badge } from './Badge';
 import { ButtonApp } from './ButtonApp';
 import { ButtonCard } from './ButtonCard';
+import { FormCheckbox } from './FormField';
 
 const meta = {
   title: 'UI/ButtonCard',
@@ -13,6 +15,18 @@ const meta = {
     layout: 'centered',
   },
   tags: ['autodocs'],
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['default', 'selectable', 'selectable-radio'],
+    },
+    selected: {
+      control: 'boolean',
+    },
+    interactiveChildren: {
+      control: 'boolean',
+    },
+  },
   decorators: [
     (Story) => (
       <div className="w-[340px] max-w-full">
@@ -149,6 +163,110 @@ export const AgentCard: Story = {
       />
     ),
   },
+};
+
+function ToolCardContent({ selected }: Readonly<{ selected: boolean }>) {
+  return (
+    <>
+      <div className="mb-1 flex items-center gap-2">
+        <span className="text-base"><Bot className="h-4 w-4" /></span>
+        <span className={`text-sm font-medium ${selected ? 'text-fg-primary dark:text-fg-primary-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`}>
+          Web Search
+        </span>
+        {selected && (
+          <span className="ml-auto rounded-full bg-fg px-1.5 py-0.5 text-xs font-medium text-ink-on shadow-sm dark:bg-fg-dark dark:text-ink-on-dark">
+            ON
+          </span>
+        )}
+      </div>
+      <p className="mb-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">Real-time internet search</p>
+      <div className="flex flex-wrap gap-1">
+        <Badge label="OpenAI" variant="default" />
+        <Badge label="Anthropic" variant="default" />
+        <Badge label="Google" variant="default" />
+      </div>
+    </>
+  );
+}
+
+export const Selectable: Story = {
+  args: {
+    variant: 'selectable',
+    selected: false,
+    ariaLabel: 'Toggle Web Search',
+    children: <ToolCardContent selected={false} />,
+  },
+};
+
+export const SelectableActive: Story = {
+  args: {
+    variant: 'selectable',
+    selected: true,
+    ariaLabel: 'Toggle Web Search',
+    children: <ToolCardContent selected />,
+  },
+};
+
+function SelectableCheckboxDemo() {
+  const [selected, setSelected] = useState(false);
+
+  return (
+    <ButtonCard
+      variant="selectable"
+      selected={selected}
+      interactiveChildren
+      ariaLabel="Toggle Web Search"
+      onClick={() => setSelected((value) => !value)}
+    >
+      <FormCheckbox
+        id="button-card-web-search"
+        label="Web Search"
+        checked={selected}
+        onChange={(event) => setSelected(event.target.checked)}
+        helpText="Real-time internet search"
+      />
+    </ButtonCard>
+  );
+}
+
+export const SelectableWithCheckbox: Story = {
+  render: () => <SelectableCheckboxDemo />,
+};
+
+function SelectableRadioDemo() {
+  const [selected, setSelected] = useState('guardrails');
+  const options = [
+    { value: 'guardrails', label: 'Guardrails', description: 'Apply safety rules to model calls.' },
+    { value: 'pii', label: 'PII protection', description: 'Detect and protect personal data.' },
+    { value: 'human', label: 'Human approval', description: 'Require approval for selected tools.' },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {options.map((option) => (
+        <ButtonCard
+          key={option.value}
+          variant="selectable-radio"
+          radioName="middleware-type-story"
+          radioValue={option.value}
+          selected={selected === option.value}
+          ariaLabel={option.label}
+          onClick={() => setSelected(option.value)}
+        >
+          <span className="text-sm font-medium text-fg dark:text-fg-dark">
+            {option.label}
+            <span className="block text-xs font-normal text-fg-tertiary dark:text-fg-tertiary-dark">
+              {option.description}
+            </span>
+          </span>
+        </ButtonCard>
+      ))}
+    </div>
+  );
+}
+
+export const SelectableRadio: Story = {
+  render: () => <SelectableRadioDemo />,
 };
 
 export const Grid: Story = {

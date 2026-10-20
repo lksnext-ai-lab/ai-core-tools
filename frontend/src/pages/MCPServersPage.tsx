@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Eye, Pencil, Plus, Trash2, Plug } from 'lucide-react';
 import { apiService } from '../services/api';
@@ -18,6 +18,8 @@ import type { MCPServerListItem } from '../core/types';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
 import Title from '../components/ui/Title';
+import { SidePanel } from '../components/ui/SidePanel';
+import MCPServerDetailPage from './MCPServerDetailPage';
 
 function MCPServersPage() {
   const { appId } = useParams();
@@ -30,6 +32,8 @@ function MCPServersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
+  const handleClosePanel = useCallback(() => setSelectedServerId(null), []);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -52,8 +56,8 @@ function MCPServersPage() {
     }
   }
 
-  async function handleDelete(serverId: number) {
-    if (!appId) return;
+  async function handleDelete(serverId: number): Promise<boolean> {
+    if (!appId) return false;
 
     const target = servers.find((s) => s.server_id === serverId);
     const ok = await confirm({
@@ -64,7 +68,7 @@ function MCPServersPage() {
       variant: 'danger',
       confirmLabel: 'Delete',
     });
-    if (!ok) return;
+    if (!ok) return false;
 
     const result = await mutate(
       () => apiService.deleteMCPServer(Number.parseInt(appId), serverId),
@@ -74,9 +78,10 @@ function MCPServersPage() {
         error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('MCP server')),
       },
     );
-    if (result === undefined) return;
+    if (result === undefined) return false;
 
     setServers(servers.filter((s) => s.server_id !== serverId));
+    return true;
   }
 
   function copyToClipboard(text: string, serverId: number) {
@@ -178,6 +183,12 @@ function MCPServersPage() {
                       <Link
                         to={`/apps/${appId}/mcp-servers/${server.server_id}`}
                         className="text-sm font-medium text-fg dark:text-fg-dark"
+                        onClick={(event) => {
+                          // Keep native behaviour for new tab / new window clicks.
+                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                          event.preventDefault();
+                          setSelectedServerId(server.server_id);
+                        }}
                       >
                         {server.name}
                       </Link>
@@ -267,6 +278,35 @@ function MCPServersPage() {
           emptySubMessage="Create an MCP server to expose your agents as tools."
           loading={loading}
         />
+      )}
+
+      {/* Server detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
+      {selectedServerId !== null && (
+        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title="MCP Servers"
+            headerActions={(
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+                Vista de detalle
+              </span>
+            )}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <MCPServerDetailPage
+              key={selectedServerId}
+              serverId={selectedServerId}
+              variant="panel"
+              onDelete={() => {
+                void handleDelete(selectedServerId).then((deleted) => {
+                  if (deleted) handleClosePanel();
+                });
+              }}
+            />
+          </SidePanel>
+        </div>
       )}
     </div>
   );

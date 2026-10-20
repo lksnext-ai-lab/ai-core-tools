@@ -1,17 +1,20 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Search, Clock, History, Bot, SplitSquareHorizontal } from 'lucide-react';
+import { Search, Clock, History, Bot, SplitSquareHorizontal } from 'lucide-react';
 import SearchControls from '../components/playground/SearchControls';
 import SiloAPISnippets from '../components/playground/SiloAPISnippets';
 import SearchFilters from '../components/playground/SearchFilters';
 import ResultCard from '../components/playground/ResultCard';
 import Modal from '../components/ui/Modal';
+import { FormField } from '../components/ui/FormField';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { useSiloSearch } from '../hooks/useSiloSearch';
 import type { PanelState } from '../hooks/useSiloSearch';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ButtonApp } from '../components/ui/ButtonApp';
 import Alert from '../components/ui/Alert';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
 
 function SiloPlaygroundPage() {
   const { appId, siloId } = useParams();
@@ -194,26 +197,14 @@ function SiloPlaygroundPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Silo Playground: {silo.name}
-          </h1>
-          <p className="text-gray-600">
-            Test semantic search and explore documents in this silo
-          </p>
-        </div>
-        <button
-          onClick={handleBack}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-        >
-          <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
-        </button>
+        <Title variant='titPrincipal' titulo={`Silo Playground: ${silo.name}`} subtitulo="Test semantic search and explore documents in this silo" />
+        
       </div>
 
       <ServiceLifecycleAlert warnings={silo.lifecycle_warnings} variant="full" className="max-h-48 overflow-y-auto" />
 
       {/* Silo Info */}
-      <div className="bg-white shadow rounded-lg p-6">
+      <CardApp className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <h3 className="text-sm font-medium text-gray-500">Silo Type</h3>
@@ -234,7 +225,7 @@ function SiloPlaygroundPage() {
             </p>
           </div>
         </div>
-      </div>
+      </CardApp>
 
       {/* Search Interface */}
       <div className="bg-white shadow rounded-lg p-6">
@@ -260,42 +251,44 @@ function SiloPlaygroundPage() {
           />
 
           {/* Content-length filter */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium text-gray-700">Content length (chars):</span>
-            <div className="flex items-center gap-1">
-              <label htmlFor="minContentLength" className="text-xs text-gray-500">Min</label>
-              <input
+          <div className="flex items-center gap-3 flex-nowrap overflow-x-auto">
+            <span className="shrink-0 text-sm font-medium text-gray-700">Content length (chars):</span>
+            <div className="flex shrink-0 items-center gap-1">
+              <FormField
+                label="Min"
+                labelClassName="text-xs text-fg-terciry dark:text-fg-terciry-dark mb-0 whitespace-nowrap"
                 type="number"
                 id="minContentLength"
                 min={0}
                 placeholder="–"
                 value={minContentLength ?? ''}
                 onChange={(e) => setMinContentLength(e.target.value === '' ? null : Number(e.target.value))}
-                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                className="flex shrink-0 items-center gap-1"
+                inputClassName="!w-20 px-2 py-1"
                 disabled={isSearching}
               />
             </div>
-            <div className="flex items-center gap-1">
-              <label htmlFor="maxContentLength" className="text-xs text-gray-500">Max</label>
-              <input
-                type="number"
-                id="maxContentLength"
-                min={0}
-                placeholder="–"
-                value={maxContentLength ?? ''}
-                onChange={(e) => setMaxContentLength(e.target.value === '' ? null : Number(e.target.value))}
-                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                disabled={isSearching}
-              />
-            </div>
+            <FormField
+              label="Max"
+              labelClassName="text-xs text-fg-terciry dark:text-fg-terciry-dark mb-0 whitespace-nowrap"
+              type="number"
+              id="maxContentLength"
+              min={0}
+              placeholder="–"
+              value={maxContentLength ?? ''}
+              onChange={(e) => setMaxContentLength(e.target.value === '' ? null : Number(e.target.value))}
+              className="flex shrink-0 items-center gap-1"
+              inputClassName="!w-20 px-2 py-1"
+              disabled={isSearching}
+            />
             {(minContentLength != null || maxContentLength != null) && (
-              <button
+              <ButtonApp
                 type="button"
                 onClick={() => { setMinContentLength(null); setMaxContentLength(null); }}
-                className="text-xs text-gray-400 hover:text-gray-600 underline"
-              >
-                Clear
-              </button>
+                label="Clear"
+                variant="secondary"
+                size="medium"
+              />
             )}
           </div>
 
@@ -305,13 +298,13 @@ function SiloPlaygroundPage() {
               Search Query
             </label>
             <div className="flex gap-2">
-              <input
+              <FormField
                 type="text"
                 id="searchQuery"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Enter your search query (leave empty to browse all documents)..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                className="flex-1"
                 disabled={isSearching}
               />
               <ButtonApp

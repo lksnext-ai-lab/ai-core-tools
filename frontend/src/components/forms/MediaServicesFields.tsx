@@ -1,5 +1,7 @@
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../ui/ServiceOptionStatus';
+import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus';
 import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
+import { selectableServiceOptions, serviceOptionLabel } from '../../utils/serviceLifecycle';
+import { FormSelect } from '../ui/FormField';
 
 export interface MediaAIServiceOption extends ServiceOptionLike {
   supports_video?: boolean;
@@ -17,9 +19,6 @@ interface Props {
   scope: 'repository' | 'silo';
   disabled?: boolean;
 }
-
-const selectClass =
-  'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100';
 
 /**
  * Transcription + video-analysis services used to index video/audio.
@@ -43,22 +42,24 @@ export function MediaServicesFields({
   return (
     <>
       <div>
-        <label htmlFor="transcription_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-          Transcription Service (Whisper)
-        </label>
-        <select
+        <FormSelect
+          label="Transcription Service (Whisper)"
           id="transcription_service_id"
           value={transcriptionServiceId ?? ''}
           disabled={disabled}
           onChange={(e) => onChange('transcription_service_id', parse(e.target.value))}
-          className={selectClass}
-          aria-describedby={transcriptionDescribedBy}
-        >
-          <option value="">None (video and audio are not indexed)</option>
-          <ServiceSelectOptions options={aiServices} savedValue={savedTranscriptionServiceId} />
-        </select>
+          ariaDescribedBy={transcriptionDescribedBy}
+          options={[
+            { value: '', label: 'None (video and audio are not indexed)' },
+            ...selectableServiceOptions(aiServices, savedTranscriptionServiceId).map((service) => ({
+              value: service.service_id,
+              label: serviceOptionLabel(service),
+            })),
+          ]}
+          labelClassName="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
+        />
         <ServiceOptionStatus selectId="transcription_service_id" options={aiServices} selectedId={transcriptionServiceId} />
-        <p id="transcription_service_id_help" className="text-sm text-gray-500 mt-1">
+        <p id="transcription_service_id_help" className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
           {scope === 'repository'
             ? 'Transcribes the video and audio uploaded to this repository. Stored on its silo.'
             : 'Optional. Needed to index video and audio into this silo (for example through the public API).'}
@@ -67,22 +68,24 @@ export function MediaServicesFields({
 
       {videoServices.length > 0 && (
         <div>
-          <label htmlFor="video_ai_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-            Video Analysis Service (Gemini)
-          </label>
-          <select
+          <FormSelect
+            label="Video Analysis Service (Gemini)"
             id="video_ai_service_id"
             value={videoServiceId ?? ''}
             disabled={disabled}
             onChange={(e) => onChange('video_ai_service_id', parse(e.target.value))}
-            className={selectClass}
-            aria-describedby={videoDescribedBy}
-          >
-            <option value="">None (no visual analysis)</option>
-            <ServiceSelectOptions options={videoServices} savedValue={savedVideoServiceId} />
-          </select>
+            ariaDescribedBy={videoDescribedBy}
+            options={[
+              { value: '', label: 'None (no visual analysis)' },
+              ...selectableServiceOptions(videoServices, savedVideoServiceId).map((service) => ({
+                value: service.service_id,
+                label: serviceOptionLabel(service),
+              })),
+            ]}
+            labelClassName="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
+          />
           <ServiceOptionStatus selectId="video_ai_service_id" options={videoServices} selectedId={videoServiceId} />
-          <p id="video_ai_service_id_help" className="text-sm text-gray-500 mt-1">
+          <p id="video_ai_service_id_help" className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
             Optional. Adds a description of what is seen in the video to each transcribed chunk.
           </p>
         </div>

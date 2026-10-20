@@ -103,7 +103,7 @@ function SiloFormPage() {
   
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  
@@ -121,7 +121,7 @@ function SiloFormPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  subtitulo={isEditing 

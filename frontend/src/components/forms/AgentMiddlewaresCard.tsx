@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Layers } from 'lucide-react';
 import type { MiddlewareType } from '../../core/types';
 import { MIDDLEWARE_TYPE_INFO, middlewareTypeLabel } from '../../constants/middlewares';
+import { ButtonApp, CardApp } from '../..';
 
 export interface AgentMiddlewareOption {
   middleware_id: number;
@@ -47,30 +48,22 @@ function AgentMiddlewaresCard({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-          <Layers className="w-5 h-5 mr-3" />
-          {' '}Middlewares
-        </h3>
-        <p className="text-gray-600 mt-1">Add safety, approval and cost controls that run around every model and tool call</p>
-      </div>
-
-      {middlewares.length === 0 ? (
+    <CardApp className="p-8" titulo="Middlewares" icon={Layers} subtitulo="Add safety, approval and cost controls that run around every model and tool call">
+       {middlewares.length === 0 ? (
         <div className="text-center py-8">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Layers className="w-8 h-8 text-gray-400" />
+          <div className="w-16 h-16 rounded-full bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark  flex items-center justify-center mx-auto mb-4">
+            <Layers className="w-8 h-8 text-bronze dark:text-bronze-dark" />
           </div>
-          <h4 className="text-lg font-medium text-gray-900 mb-2">No Middlewares Available</h4>
-          <p className="text-gray-500 mb-4">Create middlewares in this app to reuse them across agents.</p>
-          <button
-            type="button"
+          <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No Middlewares Available</h4>
+          <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">Create middlewares in this app to reuse them across agents.</p>
+          <ButtonApp
+            label="Manage Middlewares"
             onClick={onManage}
-            className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            <Layers className="w-4 h-4 mr-2" />
-            {' '}Manage Middlewares
-          </button>
+            variant="primary"
+            size="medium"
+            icon={<Layers className="w-4 h-4" />}
+            className="mx-auto mb-4"
+          />
         </div>
       ) : (
         <>
@@ -160,7 +153,7 @@ function AgentMiddlewaresCard({
           )}
         </>
       )}
-    </div>
+    </CardApp>
   );
 }
 

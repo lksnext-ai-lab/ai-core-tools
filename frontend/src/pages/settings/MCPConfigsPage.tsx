@@ -24,6 +24,7 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
 import { Title } from '../../components/ui/Title';
 import ButtonApp from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
@@ -351,7 +352,7 @@ function MCPConfigsPage() {
               header: 'Name',
               render: (config) => (
                 <div className="flex items-center">
-                  <Plug className="w-5 h-5 text-purple-400 mr-3 shrink-0" />
+                  <BackgroundImage icon={Plug} size={28} iconSize={14} variant="marron" className="mr-2" />
                   {canEdit ? (
                     <button
                       type="button"

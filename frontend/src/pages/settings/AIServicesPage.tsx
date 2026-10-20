@@ -213,11 +213,11 @@ function AIServicesPage() {
               <span className="flex items-center gap-1.5">
                 <BackgroundImage icon={Bot} variant="marron" />
                 {canEdit && !service.is_system ? (
-                  <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
+                  <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark text-left" onClick={() => handleEdit(service.service_id)}>
                     {service.name}
                   </button>
                 ) : (
-                  <span className="text-sm font-medium text-gray-900">{service.name}</span>
+                  <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
                 )}
                 {service.is_system && <SystemServiceBadge />}
               </span>

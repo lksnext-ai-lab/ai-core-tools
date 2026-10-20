@@ -62,6 +62,8 @@ export { ButtonTab } from './components/ui/ButtonTab';
 export type { ButtonTabProps } from './components/ui/ButtonTab';
 export { ButtonTabItem } from './components/ui/ButtonTabItem';
 export type { ButtonTabItemProps, ButtonTabItemVariant } from './components/ui/ButtonTabItem';
+export { SegmentedTabs } from './components/ui/SegmentedTabs';
+export type { SegmentedTab, SegmentedTabsProps } from './components/ui/SegmentedTabs';
 export { BackgroundImage } from './components/ui/BackgroundImage';
 export type { BackgroundImageProps, BackgroundImageVariant } from './components/ui/BackgroundImage';
 export { CardApp } from './components/ui/CardApp';

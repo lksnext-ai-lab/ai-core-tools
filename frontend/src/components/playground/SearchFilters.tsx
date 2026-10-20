@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { apiService } from '../../services/api';
 import ButtonApp from '../ui/ButtonApp';
-import { FormSelect } from '../ui/FormField';
+import { FormField, FormSelect } from '../ui/FormField';
 
 export type MetadataOperator = '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte' | '$in';
 export type SupportedDbType = 'PGVECTOR' | 'QDRANT';
@@ -380,19 +380,19 @@ export function SearchFilters({
           Filter by Metadata
         </h3>
         <div className="flex items-center gap-2">
-          <label htmlFor="logicalOperator" className="text-sm text-gray-600">
-            Match:
-          </label>
-          <select
+          <FormSelect
+            label="Match:"
+            labelClassName="text-sm text-gray-600 mb-0 whitespace-nowrap"
             id="logicalOperator"
             value={logicalOperator}
             onChange={(e) => setLogicalOperator(e.target.value as '$and' | '$or')}
-            className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium bg-white"
             disabled={disabled}
-          >
-            <option value="$and">ALL filters (AND)</option>
-            <option value="$or">ANY filter (OR)</option>
-          </select>
+            options={[
+              { value: '$and', label: 'ALL filters (AND)' },
+              { value: '$or', label: 'ANY filter (OR)' },
+            ]}
+            className="flex items-center gap-2"
+          />
         </div>
       </div>
 
@@ -412,24 +412,23 @@ export function SearchFilters({
                 <span className="text-xs text-gray-500 ml-1">({field.type})</span>
               </label>
               <div className="flex items-center gap-2">
-                <select
+                <FormSelect
+                  label={`Operator for ${field.name}`}
+                  labelClassName="sr-only"
+                  id={`filter_operator_${field.name}`}
                   value={currentOp}
                   onChange={(e) => {
                     const newOp = e.target.value as MetadataOperator;
                     handleMetadataFilterChange(field.name, metadataFilters[field.name] || '', newOp);
                   }}
-                  className="px-2 py-1 border border-gray-300 rounded-lg text-sm shrink-0"
                   disabled={disabled}
-                >
-                  {allowedOps.map((op) => (
-                    <option key={op} value={op}>
-                      {OPERATOR_LABELS[op]}
-                    </option>
-                  ))}
-                </select>
+                  options={allowedOps.map((op) => ({ value: op, label: OPERATOR_LABELS[op] }))}
+                  className="w-44 shrink-0"
+                />
                 <div className="relative w-full">
-                  <input
-                    type="text"
+                  <FormField
+                    label={field.name}
+                    labelClassName="hidden"
                     id={`filter_${field.name}`}
                     value={metadataFilters[field.name] || ''}
                     onChange={(e) => {
@@ -445,9 +444,7 @@ export function SearchFilters({
                       if (fieldSuggestions.length > 0) setOpenSuggestionField(field.name);
                     }}
                     placeholder={currentOp === '$in' ? 'value1, value2, value3' : `Filter by ${field.name}`}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent ${
-                      disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
-                    }`}
+                    className="w-full"
                     disabled={disabled}
                   />
                   {showSuggestions && (
@@ -499,8 +496,10 @@ export function SearchFilters({
         )}
         {showSaveForm && (
           <div className="flex items-center gap-1">
-            <input
-              type="text"
+            <FormField
+              label="Filter name"
+              labelClassName="sr-only"
+              id="save-filter-name"
               value={saveFilterName}
               onChange={(e) => setSaveFilterName(e.target.value)}
               onKeyDown={(e) => {
@@ -508,8 +507,7 @@ export function SearchFilters({
                 if (e.key === 'Escape') { setShowSaveForm(false); setSaveFilterName(''); }
               }}
               placeholder="Filter name..."
-              className="w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
-              autoFocus
+              className="w-full"
             />
             <ButtonApp
               type="button"

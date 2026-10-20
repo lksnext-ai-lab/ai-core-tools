@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import FormActions from './FormActions';
 import { apiService, type AIService } from '../../services/api';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../ui/ServiceOptionStatus';
+import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus';
 import type { MCPConfig, Middleware, MiddlewarePayload, MiddlewareType } from '../../core/types';
 import { MIDDLEWARE_TYPES, MIDDLEWARE_TYPE_INFO, agentToolName } from '../../constants/middlewares';
+import { selectableServiceOptions, serviceOptionLabel } from '../../utils/serviceLifecycle';
+import FormActions from '../ui/FormActions';
+import { ButtonCard } from '../ui/ButtonCard';
+import { FormField, FormSelect, FormTextArea } from '../ui/FormField';
+import CardApp from '../ui/CardApp';
 
 // Limits mirror backend/schemas/middleware_schemas.py so errors show before saving.
 const PII_TYPES = [
@@ -67,9 +71,9 @@ interface MiddlewareFormProps {
   onCancel: () => void;
 }
 
+const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 const inputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500';
-const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 
 const inRange = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
 const inOptionalRange = (v: unknown, min: number, max: number) => v == null || inRange(v, min, max);
@@ -245,20 +249,23 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
     }
   };
 
-  const serviceSelect = (id: string, value: string, savedValue: unknown, onChange: (v: string) => void) => (
+  const serviceSelect = (id: string, label: string, value: string, savedValue: unknown, onChange: (v: string) => void) => (
     <>
-      <select
-        id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}
-        disabled={isSubmitting} aria-describedby={serviceStatusId(aiServices, savedServiceId(value), id)}
-      >
-        <option value="agent_llm">The agent's own model</option>
-        <ServiceSelectOptions
-          options={aiServices}
-          savedValue={savedServiceId(savedValue)}
-          getValue={(svc) => `ai_service:${svc.service_id}`}
-          getLabel={(svc) => `${svc.name} (${svc.provider} · ${svc.model_name})`}
-        />
-      </select>
+      <FormSelect
+        id={id}
+        label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        options={[
+          { value: 'agent_llm', label: "The agent's own model" },
+          ...selectableServiceOptions(aiServices, savedServiceId(savedValue)).map((service) => ({
+            value: `ai_service:${service.service_id}`,
+            label: serviceOptionLabel(service, `${service.name} (${service.provider} · ${service.model_name})`),
+          })),
+        ]}
+        disabled={isSubmitting}
+        ariaDescribedBy={serviceStatusId(aiServices, savedServiceId(value), id)}
+      />
       <ServiceOptionStatus selectId={id} options={aiServices} selectedId={savedServiceId(value)} />
     </>
   );
@@ -289,25 +296,22 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
           <legend className={labelClass}>What should it do?</legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {MIDDLEWARE_TYPES.map((value) => (
-              <label
+              <ButtonCard
                 key={value}
-                className={`flex gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
-                  type === value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'
-                }`}
+                variant="selectable-radio"
+                selected={type === value}
+                radioName="middleware_type"
+                radioValue={value}
+                ariaLabel={MIDDLEWARE_TYPE_INFO[value].label}
+                onClick={() => {
+                  if (type !== value) selectType(value);
+                }}
               >
-                <input
-                  type="radio"
-                  name="middleware_type"
-                  value={value}
-                  checked={type === value}
-                  onChange={() => selectType(value)}
-                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="min-w-0 text-sm font-medium text-gray-900">
+                <span className="min-w-0 text-sm font-medium text-fg dark:text-fg-dark">
                   {MIDDLEWARE_TYPE_INFO[value].label}
-                  <span className="block text-xs font-normal text-gray-500">{MIDDLEWARE_TYPE_INFO[value].description}</span>
+                  <span className="block text-xs font-normal text-fg-secondary   dark:text-fg-secondary-dark">{MIDDLEWARE_TYPE_INFO[value].description}</span>
                 </span>
-              </label>
+              </ButtonCard>
             ))}
           </div>
         </fieldset>
@@ -315,45 +319,41 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
 
       {/* Name / description */}
       <div className="grid grid-cols-1 gap-4">
-        <div>
-          <label htmlFor="mw-name" className={labelClass}>Name <span className="text-red-500">*</span></label>
-          <input
-            id="mw-name"
-            value={name}
-            maxLength={100}
-            onChange={(e) => { setName(e.target.value); setNameTouched(true); }}
-            className={inputClass}
-            disabled={isSubmitting}
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="mw-description" className={labelClass}>Description</label>
-          <input
-            id="mw-description"
-            value={description}
-            maxLength={1000}
-            onChange={(e) => setDescription(e.target.value)}
-            className={inputClass}
-            placeholder="Shown when choosing middlewares for an agent"
-            disabled={isSubmitting}
-          />
-        </div>
+        <FormField
+          id="mw-name"
+          label="Name"
+          value={name}
+          maxLength={100}
+          onChange={(e) => { setName(e.target.value); setNameTouched(true); }}
+          disabled={isSubmitting}
+          required
+        />
+        <FormField
+          id="mw-description"
+          label="Description"
+          value={description}
+          maxLength={1000}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Shown when choosing middlewares for an agent"
+          disabled={isSubmitting}
+        />
       </div>
 
       {/* Call limits */}
       {(type === 'model_call_limit' || type === 'tool_call_limit') && (
         <div>
-          <label htmlFor="mw-limit" className={labelClass}>
-            {type === 'model_call_limit' ? 'Maximum LLM calls per run' : 'Maximum tool calls per run'}
-          </label>
-          <input
-            id="mw-limit" type="number" min={1} max={10000} step={1}
+          <FormField
+            id="mw-limit"
+            type="number"
+            label={type === 'model_call_limit' ? 'Maximum LLM calls per run' : 'Maximum tool calls per run'}
+            min={1}
+            max={10000}
+            step={1}
             value={config.max_calls}
             onChange={(e) => patch({ max_calls: numberValue(e.target.value) })}
-            className={inputClass} disabled={isSubmitting}
+            disabled={isSubmitting}
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
             {type === 'model_call_limit'
               ? 'When reached, the run stops and the user gets the answer produced so far.'
               : 'Calls over the limit are not executed; the agent is told the limit was reached.'}
@@ -365,29 +365,25 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
       {type === 'summarization' && (
         <div className="space-y-4">
           <div>
-            <label htmlFor="mw-sum-model" className={labelClass}>Model used to summarize</label>
-            {serviceSelect('mw-sum-model', config.summarization_model, middleware?.config?.summarization_model, (v) => patch({ summarization_model: v }))}
+            {serviceSelect('mw-sum-model', 'Model used to summarize', config.summarization_model, middleware?.config?.summarization_model, (v) => patch({ summarization_model: v }))}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label htmlFor="mw-trigger" className={labelClass}>Summarize after (tokens)</label>
-              <input id="mw-trigger" type="number" min={500} step={500} value={config.trigger_tokens ?? ''} placeholder="Automatic"
-                aria-describedby="mw-sum-help"
-                onChange={(e) => patch({ trigger_tokens: optionalNumberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
+              <FormField id="mw-trigger" type="number" label="Summarize after (tokens)" min={500} step={500}
+                value={config.trigger_tokens ?? ''} placeholder="Automatic" ariaDescribedBy="mw-sum-help"
+                onChange={(e) => patch({ trigger_tokens: optionalNumberValue(e.target.value) })} disabled={isSubmitting} />
             </div>
             <div>
-              <label htmlFor="mw-keep" className={labelClass}>Recent messages to keep</label>
-              <input id="mw-keep" type="number" min={1} max={500} value={config.keep_messages}
-                onChange={(e) => patch({ keep_messages: numberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
+              <FormField id="mw-keep" type="number" label="Recent messages to keep" min={1} max={500} value={config.keep_messages}
+                onChange={(e) => patch({ keep_messages: numberValue(e.target.value) })} disabled={isSubmitting} />
             </div>
             <div>
-              <label htmlFor="mw-trim" className={labelClass}>Max tokens to summarize</label>
-              <input id="mw-trim" type="number" min={500} step={500} value={config.trim_tokens ?? ''} placeholder="No limit"
-                aria-describedby="mw-sum-help"
-                onChange={(e) => patch({ trim_tokens: optionalNumberValue(e.target.value) })} className={inputClass} disabled={isSubmitting} />
+              <FormField id="mw-trim" type="number" label="Max tokens to summarize" min={500} step={500}
+                value={config.trim_tokens ?? ''} placeholder="No limit" ariaDescribedBy="mw-sum-help"
+                onChange={(e) => patch({ trim_tokens: optionalNumberValue(e.target.value) })} disabled={isSubmitting} />
             </div>
           </div>
-          <p id="mw-sum-help" className="text-xs text-gray-500">
+          <p id="mw-sum-help" className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
             Leave the trigger empty to summarize at 85% of the model's context window (at most 150,000 tokens),
             and the last field empty to summarize the whole older history. Agents with memory and no summarization
             middleware use these same defaults.
@@ -399,21 +395,27 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
       {type === 'pii' && (
         <div className="space-y-4">
           <fieldset>
+            <CardApp className="space-y-4">
             <legend className={labelClass}>Personal data to detect</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {PII_TYPES.map((t) => (
-                <label key={t.value} className="flex items-center gap-2 text-sm text-gray-800">
-                  <input type="checkbox" checked={config.pii_types.includes(t.value)} disabled={isSubmitting}
-                    onChange={() => patch({
+                <FormField
+                  key={t.value}
+                  id={`mw-pii-type-${t.value}`}
+                  type="checkbox"
+                  label={t.label}
+                  checked={config.pii_types.includes(t.value)}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2"
+                  onChange={() => patch({
                       pii_types: config.pii_types.includes(t.value)
                         ? config.pii_types.filter((v: string) => v !== t.value)
                         : [...config.pii_types, t.value],
-                    })}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                  {t.label}
-                </label>
+                  })}
+                />
               ))}
             </div>
+            </CardApp>
           </fieldset>
           <div>
             <label htmlFor="mw-strategy" className={labelClass}>When found</label>
@@ -423,6 +425,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
             </select>
           </div>
           <fieldset>
+            <CardApp className="space-y-4">
             <legend className={labelClass}>Apply to</legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {[
@@ -430,36 +433,43 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
                 ['apply_to_tool_results', 'Tool results'],
                 ['apply_to_output', 'Agent answers'],
               ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-gray-800">
-                  <input type="checkbox" checked={!!config[key]} onChange={(e) => patch({ [key]: e.target.checked })}
-                    disabled={isSubmitting} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                  {label}
-                </label>
+                <FormField
+                  key={key}
+                  id={`mw-${key}`}
+                  type="checkbox"
+                  label={label}
+                  checked={!!config[key]}
+                  onChange={(e) => patch({ [key]: e.target.checked })}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2"
+                />
               ))}
             </div>
             {config.apply_to_output && (
-              <p className="mt-1 text-xs text-gray-500">Answers are shown once complete instead of word by word, so nothing is displayed before it is checked.</p>
+              <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">Answers are shown once complete instead of word by word, so nothing is displayed before it is checked.</p>
             )}
+            </CardApp>
           </fieldset>
+          
           <div className="rounded-lg border border-gray-200 p-3 space-y-3">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
-              <input type="checkbox" checked={!!config.llm_detector?.enabled} disabled={isSubmitting}
-                onChange={(e) => patchGroup('llm_detector', { enabled: e.target.checked })}
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-              <span>Also detect names, addresses and other data with an LLM</span>
-            </label>
+            <FormField
+              id="mw-pii-llm-detector"
+              type="checkbox"
+              label="Also detect names, addresses and other data with an LLM"
+              checked={!!config.llm_detector?.enabled}
+              disabled={isSubmitting}
+              onChange={(e) => patchGroup('llm_detector', { enabled: e.target.checked })}
+              className="flex items-center gap-2"
+            />
             {config.llm_detector?.enabled && (
               <>
-                <p className="text-xs text-gray-500">Adds one extra model call per message checked.</p>
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Adds one extra model call per message checked.</p>
                 <div>
-                  <label htmlFor="mw-pii-model" className={labelClass}>Detection model</label>
-                  {serviceSelect('mw-pii-model', config.llm_detector.ai_service, middleware?.config?.llm_detector?.ai_service, (v) => patchGroup('llm_detector', { ai_service: v }))}
+                  {serviceSelect('mw-pii-model', 'Detection model', config.llm_detector.ai_service, middleware?.config?.llm_detector?.ai_service, (v) => patchGroup('llm_detector', { ai_service: v }))}
                 </div>
                 <div>
-                  <label htmlFor="mw-pii-entities" className={labelClass}>Extra data types (comma separated)</label>
-                  <input id="mw-pii-entities" className={inputClass} disabled={isSubmitting}
-                    placeholder="person name, postal address, national ID"
-                    value={entitiesText}
+                  <FormField id="mw-pii-entities" label="Extra data types (comma separated)" disabled={isSubmitting}
+                    placeholder="person name, postal address, national ID" value={entitiesText}
                     onChange={(e) => setEntitiesText(e.target.value)} />
                 </div>
               </>
@@ -476,9 +486,9 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
             Approvals are given from the chat, or by the application calling the agent through the API.
           </p>
           <div>
-            <label htmlFor="mw-approval-timeout" className={labelClass}>Time to answer (minutes)</label>
-            <input
+            <FormField
               id="mw-approval-timeout" type="number" min={1} max={10080} step={1}
+              label="Time to answer (minutes)"
               value={
                 typeof config.approval_timeout_seconds === 'number'
                   ? Math.round(config.approval_timeout_seconds / 60)
@@ -488,7 +498,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
                 const minutes = numberValue(e.target.value);
                 patch({ approval_timeout_seconds: minutes === '' ? '' : minutes * 60 });
               }}
-              className={inputClass} disabled={isSubmitting} aria-describedby="mw-approval-timeout-help"
+              disabled={isSubmitting} ariaDescribedBy="mw-approval-timeout-help"
             />
             <p id="mw-approval-timeout-help" className="mt-1 text-xs text-gray-500">
               Requests nobody answers in time are rejected: the tool is not executed and the agent answers without it.
@@ -498,11 +508,16 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
             <legend className={labelClass}>Agents used as tools</legend>
             {agentTools.length === 0 && <p className="text-xs text-gray-500">No agents in this app are marked as tools.</p>}
             {agentTools.map((tool) => (
-              <label key={tool.name} className="flex items-center gap-2 text-sm text-gray-800">
-                <input type="checkbox" checked={!!interruptOn[tool.name]} onChange={() => toggleTool(tool.name)}
-                  disabled={isSubmitting} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                {tool.label} <code className="text-xs text-gray-500">{tool.name}</code>
-              </label>
+              <FormField
+                key={tool.name}
+                id={`mw-agent-tool-${tool.name}`}
+                type="checkbox"
+                label={<>{tool.label} <code className="text-xs text-gray-500">{tool.name}</code></>}
+                checked={!!interruptOn[tool.name]}
+                onChange={() => toggleTool(tool.name)}
+                disabled={isSubmitting}
+                className="flex items-center gap-2"
+              />
             ))}
           </fieldset>
           <fieldset className="space-y-2">
@@ -524,33 +539,41 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
                   {typeof tools === 'string' && <p className="mt-1 text-xs text-red-600">{tools}</p>}
                   {Array.isArray(tools) && tools.length === 0 && <p className="mt-1 text-xs text-gray-500">This server exposes no tools.</p>}
                   {Array.isArray(tools) && tools.map((tool) => (
-                    <label key={tool.name} className="mt-1 flex items-center gap-2 text-sm text-gray-800">
-                      <input type="checkbox" checked={!!interruptOn[tool.name]} onChange={() => toggleTool(tool.name)}
-                        disabled={isSubmitting} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                      <code className="text-xs">{tool.name}</code>
-                    </label>
+                    <FormField
+                      key={tool.name}
+                      id={`mw-mcp-tool-${cfg.config_id}-${tool.name}`}
+                      type="checkbox"
+                      label={<code className="text-xs">{tool.name}</code>}
+                      checked={!!interruptOn[tool.name]}
+                      onChange={() => toggleTool(tool.name)}
+                      disabled={isSubmitting}
+                      className="mt-1 flex items-center gap-2"
+                    />
                   ))}
                 </div>
               );
             })}
           </fieldset>
           <div>
-            <label htmlFor="mw-custom-tool" className={labelClass}>Other tool (by exact name)</label>
             <div className="flex gap-2">
-              <input id="mw-custom-tool" value={customTool} onChange={(e) => setCustomTool(e.target.value)}
+              <FormField id="mw-custom-tool" label="Other tool (by exact name)" className="min-w-0 flex-1" value={customTool} onChange={(e) => setCustomTool(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomTool(); } }}
-                className={inputClass} placeholder="e.g. send_email" disabled={isSubmitting} />
+                placeholder="e.g. send_email" disabled={isSubmitting} />
               <button type="button" onClick={addCustomTool} disabled={!customTool.trim() || isSubmitting}
                 className="shrink-0 px-3 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                 Add
               </button>
             </div>
             {extraSelected.map((toolName) => (
-              <label key={toolName} className="mt-2 flex items-center gap-2 text-sm text-gray-800">
-                <input type="checkbox" checked onChange={() => toggleTool(toolName)}
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                <code className="text-xs">{toolName}</code>
-              </label>
+              <FormField
+                key={toolName}
+                id={`mw-extra-tool-${toolName}`}
+                type="checkbox"
+                label={<code className="text-xs">{toolName}</code>}
+                checked
+                onChange={() => toggleTool(toolName)}
+                className="mt-2 flex items-center gap-2"
+              />
             ))}
           </div>
 
@@ -572,10 +595,15 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
                       <td className="py-1 pr-4"><code className="text-xs">{toolName}</code></td>
                       {DECISIONS.map((d) => (
                         <td key={d} className="text-center px-2">
-                          <input type="checkbox" checked={rule.allowed_decisions.includes(d)}
-                            onChange={() => toggleDecision(toolName, d)} disabled={isSubmitting}
-                            aria-label={`${d} ${toolName}`}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                          <FormField
+                            id={`mw-decision-${d}-${toolName}`}
+                            type="checkbox"
+                            checked={rule.allowed_decisions.includes(d)}
+                            onChange={() => toggleDecision(toolName, d)}
+                            disabled={isSubmitting}
+                            ariaLabel={`${d} ${toolName}`}
+                            className="flex justify-center"
+                          />
                         </td>
                       ))}
                     </tr>
@@ -590,22 +618,32 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
       {/* Guardrails */}
       {type === 'guardrails' && (
         <div className="space-y-4">
-          <fieldset className="space-y-2">
+          <fieldset className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             <legend className={labelClass}>Rules added to every model call</legend>
             {GUARDRAIL_RULES.map((rule) => (
-              <label key={rule.key} className="flex items-center gap-2 text-sm text-gray-800">
-                <input type="checkbox" checked={config[rule.group]?.[rule.key] !== false} disabled={isSubmitting}
-                  onChange={(e) => patchGroup(rule.group, { [rule.key]: e.target.checked })}
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                {rule.label}
-              </label>
+              <FormField
+                key={rule.key}
+                id={`mw-guardrail-${rule.key}`}
+                type="checkbox"
+                label={rule.label}
+                checked={config[rule.group]?.[rule.key] !== false}
+                disabled={isSubmitting}
+                onChange={(e) => patchGroup(rule.group, { [rule.key]: e.target.checked })}
+                className="flex items-center gap-2"
+              />
             ))}
           </fieldset>
           <div>
-            <label htmlFor="mw-custom-prompt" className={labelClass}>Additional rules</label>
-            <textarea id="mw-custom-prompt" rows={4} maxLength={4000} value={config.custom_prompt ?? ''}
-              onChange={(e) => patch({ custom_prompt: e.target.value })} className={inputClass} disabled={isSubmitting}
-              placeholder="e.g. Only answer questions about our products." />
+            <FormTextArea
+              id="mw-custom-prompt"
+              label="Additional rules"
+              rows={4}
+              maxLength={4000}
+              value={config.custom_prompt ?? ''}
+              onChange={(e) => patch({ custom_prompt: e.target.value })}
+              disabled={isSubmitting}
+              placeholder="e.g. Only answer questions about our products."
+            />
           </div>
           <p className="text-xs text-gray-500">
             These are instructions to the model, not a hard block: combine them with PII protection or human approval

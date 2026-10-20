@@ -1,15 +1,20 @@
 import React from 'react';
 
 interface FormFieldProps {
-  label: React.ReactNode;
+  label?: React.ReactNode;
   id: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file' | 'date' ;
+  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file' | 'date' | 'radio' | 'checkbox';
+  name?: string;
+  ariaLabel?: string;
   value?: string | number;
+  checked?: boolean;
   accept?: string;
   autoComplete?: string;
+  ariaDescribedBy?: string;
   'data-lpignore'?: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   min?: number;
   max?: number;
@@ -34,12 +39,17 @@ export function FormField({
   label,
   id,
   type = 'text',
+  name,
+  ariaLabel,
   value,
+  checked,
   accept,
   autoComplete,
+  ariaDescribedBy,
   'data-lpignore': dataLpignore,
   onChange,
   onFocus,
+  onBlur,
   onKeyDown,
   min,
   max,
@@ -56,34 +66,45 @@ export function FormField({
   labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1',
   ref
 }: Readonly<FormFieldProps>) {
+  const inlineLabel = type === 'radio' || type === 'checkbox';
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [errorId, helpTextId].filter(Boolean).join(' ') || undefined;
-  const inputBaseClassName = type === 'file'
+  const describedBy = [ariaDescribedBy, errorId, helpTextId].filter(Boolean).join(' ') || undefined;
+  const inputBaseClassName = type === 'radio' || type === 'checkbox'
+    ? 'h-4 w-4 shrink-0 accent-ink dark:accent-ink-dark border-line-strong rounded focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 disabled:cursor-not-allowed'
+    : type === 'file'
     ? 'block w-full text-sm text-fg-secondary dark:text-fg-secondary-dark file:mr-3 file:py-2 file:px-4 file:rounded-md file:border file:border-ink file:text-sm file:font-medium file:bg-surface file:text-fg hover:file:bg-surface-hover dark:file:border-ink-dark dark:file:bg-surface-dark dark:file:text-fg-dark dark:hover:file:bg-surface-hover-dark disabled:opacity-50 disabled:cursor-not-allowed'
     : 'w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark';
+  const resolvedLabelClassName = labelClassName ?? (inlineLabel
+    ? 'text-sm font-medium text-fg dark:text-fg-dark'
+    : 'block text-sm font-medium text-fg dark:text-fg-dark mb-1');
 
   return (
     <div className={className}>
-      <label
-        htmlFor={id}
-        className={labelClassName}
-      >
-        {label}
-        {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
-      </label>
+      {label !== undefined && !inlineLabel && (
+        <label
+          htmlFor={id}
+          className={resolvedLabelClassName}
+        >
+          {label}
+          {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
+        </label>
+      )}
 
       <input
         ref={ref}
         id={id}
-        name={id}
+        name={name ?? id}
         type={type}
         {...(type === 'file' ? {} : { value })}
+        checked={checked}
+        aria-label={ariaLabel}
         accept={accept}
         autoComplete={autoComplete}
         data-lpignore={dataLpignore}
         onChange={onChange}
         onFocus={onFocus}
+        onBlur={onBlur}
         onKeyDown={onKeyDown}
         min={min}
         max={max}
@@ -100,9 +121,16 @@ export function FormField({
             ? 'border-error focus:outline-none focus:border-error dark:border-error-dark dark:focus:border-error-dark'
             : 'focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
-          disabled && type !== 'file' ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
+          disabled && type !== 'file' && !inlineLabel ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${inputClassName}`}
       />
+
+      {label !== undefined && inlineLabel && (
+        <label htmlFor={id} className={resolvedLabelClassName}>
+          {label}
+          {required && <span className="text-error dark:text-error-dark ml-1">*</span>}
+        </label>
+      )}
 
       {helpText && !error && (
         <p id={helpTextId} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
@@ -204,7 +232,7 @@ interface FormSelectProps {
   disabled?: boolean;
   required?: boolean;
   error?: string;
-  helpText?: string;
+  helpText?: React.ReactNode;
   ariaDescribedBy?: string;
   className?: string;
   labelClassName?: string;

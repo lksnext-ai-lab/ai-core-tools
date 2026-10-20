@@ -9,6 +9,8 @@ import { FormActions } from '../components/ui/FormActions';
 import Alert from '../components/ui/Alert';
 import Title from '../components/ui/Title';
 import { FormCheckbox, FormField, FormTextArea } from '../components/ui/FormField';
+import { CardApp } from '../components/ui/CardApp';
+import { ButtonCard } from '../components/ui/ButtonCard';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
@@ -150,9 +152,7 @@ function MCPServerFormPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
-        <div>
-          <h2 className="text-[11px] font-semibold text-bronze dark:text-bronze-dark uppercase mb-4">Basic Information</h2>
-
+        <CardApp titulo="Basic Information">
           <div className="space-y-4">
             <FormField
               label="Name"
@@ -213,22 +213,15 @@ function MCPServerFormPage() {
               helpText="0 = unlimited"
             />
           </div>
-        </div>
+        </CardApp>
 
         {/* Agent Selection */}
-        <div className="border-t border-line-strong dark:border-line-strong-dark py-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-[11px] font-semibold text-bronze dark:text-bronze-dark uppercase mb-4">Select Agents to Expose</h2>
-              <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
-                Choose which agents (marked as tools) to expose through this MCP server.
-                These agents will be available as MCP tools for external clients.
-              </p>
-            </div>
-            <span className="shrink-0 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+        <CardApp titulo="Select Agents to Expose" subtitulo="Choose which agents (marked as tools) to expose through this MCP server.
+                These agents will be available as MCP tools for external clients.">
+          <span className="ml-auto block w-fit shrink-0 text-right text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
               {formData.agent_ids.length} agent{formData.agent_ids.length === 1 ? '' : 's'} selected
             </span>
-          </div>
+          
 
           {toolAgents.length === 0 ? (
             <div className="text-center py-8 bg-gray-50 rounded-lg">
@@ -241,18 +234,13 @@ function MCPServerFormPage() {
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {toolAgents.map((agent) => (
-                <div
+                <ButtonCard
                   key={agent.agent_id}
-                  onClick={(event) => {
-                    const target = event.target;
-                    if (target instanceof HTMLElement && target.closest('input, label')) return;
-                    handleAgentToggle(agent.agent_id);
-                  }}
-                  className={`flex items-start p-3 rounded-lg border cursor-pointer transition-colors ${
-                    formData.agent_ids.includes(agent.agent_id)
-                      ? 'bg-surface-tint dark:bg-surface-tint-dark border border-fg dark:border-fg'
-                      : 'border-in-line  hover:bg-tableCab dark:bg-btCard-dark'
-                  }`}
+                  onClick={() => handleAgentToggle(agent.agent_id)}
+                  ariaLabel={`Select ${agent.name}`}
+                  variant="selectable"
+                  selected={formData.agent_ids.includes(agent.agent_id)}
+                  interactiveChildren
                 >
                   <FormCheckbox
                     label={agent.name}
@@ -261,12 +249,12 @@ function MCPServerFormPage() {
                     onChange={() => handleAgentToggle(agent.agent_id)}
                     helpText={agent.description}
                   />
-                </div>
+                </ButtonCard>
               ))}
             </div>
           )}
 
-        </div>
+        </CardApp>
 
         {/* Form Actions */}
         <FormActions

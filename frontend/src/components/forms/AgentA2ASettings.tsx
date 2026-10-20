@@ -1,5 +1,5 @@
 import { useCallback, useId, useRef, useState } from 'react';
-import { Copy, Plus, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Copy, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { TagInput } from '../ui/TagInput';
 import Alert from '../ui/Alert';
@@ -388,7 +388,7 @@ export function AgentA2ASettings({
         />
         {!cardUrl && (
           <Link to={slugSettingsUrl} className="text-sm text-bronze  dark:text-bronze-dark inline-block">
-            Go to App Settings to set a slug
+            Go to App Settings to set a slug{''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
           </Link>
         )}
 

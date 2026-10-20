@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  ArrowUpRight,
   CalendarClock,
   LoaderCircle,
   Pause,
@@ -8,7 +9,7 @@ import {
   PlayCircle,
   Trash2,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { apiService, type ScheduledTask } from "../services/api";
 import Title from "../components/ui/Title";
@@ -16,15 +17,21 @@ import LoadingState from "../components/ui/LoadingState";
 import Table, { type TableColumn } from "../components/ui/Table";
 import Badge from "../components/ui/Badge";
 import ButtonLink from "../components/ui/ButtonLink";
+import ActionDropdown from "../components/ui/ActionDropdown";
 import ServiceLifecycleAlert from "../components/services/ServiceLifecycleAlert";
+import { SidePanel } from "../components/ui/SidePanel";
+import ScheduledTaskDetailPage from "./ScheduledTaskDetailPage";
 
 export default function ScheduledTasksPage() {
   const { appId } = useParams();
+  const navigate = useNavigate();
   const numericAppId = Number.parseInt(appId ?? "0", 10);
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [agentNames, setAgentNames] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [runningTaskId, setRunningTaskId] = useState<number | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const handleClosePanel = useCallback(() => setSelectedTaskId(null), []);
 
   const load = useCallback(async () => {
     try {
@@ -103,8 +110,14 @@ export default function ScheduledTasksPage() {
       render: (task) => (
         <>
           <Link
-            className="font-medium text-fg hover:text-accent dark:text-fg-dark dark:hover:text-accent-dark"
+            className="font-medium text-fg dark:text-fg-dark"
             to={`/apps/${appId}/scheduled-tasks/${task.id}`}
+            onClick={(event) => {
+              // Keep native behaviour for new tab / new window clicks.
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+              event.preventDefault();
+              setSelectedTaskId(task.id);
+            }}
           >
             {task.name}
           </Link>
@@ -126,16 +139,17 @@ export default function ScheduledTasksPage() {
       className: "px-5 py-4",
       render: (task) => (
         <Link
-          className="text-accent hover:underline dark:text-accent-dark"
+          className="text-sm text-bronze  dark:text-bronze-dark inline-block"
           to={`/apps/${appId}/agents/${task.agent_id}`}
         >
-          {agentNames[task.agent_id] ?? `Agente #${task.agent_id}`}
+          {agentNames[task.agent_id] ?? `Agente #${task.agent_id}`}{''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+
         </Link>
       ),
     },
     {
       header: "Próxima ejecución",
-      className: "px-5 py-4",
+      className: "px-5 py-4  text-fg-tertiary dark:text-fg-tertiary-dark text-xs",
       render: (task) => (
         <span className="inline-flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-fg-tertiary dark:text-fg-tertiary-dark" />
@@ -158,62 +172,43 @@ export default function ScheduledTasksPage() {
     {
       header: "Acciones",
       headerClassName: "text-right",
-      className: "px-5 py-4 text-right",
+      className: "px-5 py-4 text-right ",
       render: (task) => (
-        <div className="flex items-center justify-end gap-1">
-          <Link
-            aria-label="Editar tarea"
-            title="Editar tarea"
-            to={`/apps/${appId}/scheduled-tasks/${task.id}/edit`}
-            className="inline-flex rounded p-2 text-fg-tertiary hover:bg-surface-hover hover:text-accent dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-accent-dark"
-          >
-            <Pencil className="h-4 w-4" />
-          </Link>
-          {task.status === "active" && (
-            <button
-              type="button"
-              aria-label="Ejecutar ahora"
-              title="Ejecutar ahora"
-              disabled={runningTaskId === task.id}
-              onClick={() => {
-                void runNow(task);
-              }}
-              className="rounded p-2 text-fg-tertiary hover:bg-surface-hover hover:text-accent disabled:opacity-50 dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-accent-dark"
-            >
-              {runningTaskId === task.id ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <PlayCircle className="h-4 w-4" />
-              )}
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label={task.status === "active" ? "Pausar tarea" : "Reanudar tarea"}
-            title={task.status === "active" ? "Pausar tarea" : "Reanudar tarea"}
-            onClick={() => {
-              void toggle(task);
-            }}
-            className="rounded p-2 text-fg-tertiary hover:bg-surface-hover hover:text-accent dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-accent-dark"
-          >
-            {task.status === "active" ? (
-              <Pause className="h-4 w-4" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-          </button>
-          <button
-            type="button"
-            aria-label="Eliminar tarea"
-            title="Eliminar tarea"
-            onClick={() => {
-              void remove(task);
-            }}
-            className="rounded p-2 text-fg-tertiary hover:bg-error-bg hover:text-error dark:text-fg-tertiary-dark dark:hover:bg-error-bg-dark dark:hover:text-error-dark"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        <ActionDropdown
+          triggerText="Acciones"
+          triggerAriaLabel={`Acciones para ${task.name}`}
+          size="sm"
+          actions={[
+            {
+              label: "Editar tarea",
+              onClick: () => navigate(`/apps/${appId}/scheduled-tasks/${task.id}/edit`),
+              icon: <Pencil className="h-4 w-4" />,
+            },
+            ...(task.status === "active"
+              ? [{
+                  label: "Ejecutar ahora",
+                  onClick: () => { void runNow(task); },
+                  icon: runningTaskId === task.id
+                    ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                    : <PlayCircle className="h-4 w-4" />,
+                  disabled: runningTaskId === task.id,
+                }]
+              : []),
+            {
+              label: task.status === "active" ? "Pausar tarea" : "Reanudar tarea",
+              onClick: () => { void toggle(task); },
+              icon: task.status === "active"
+                ? <Pause className="h-4 w-4" />
+                : <Play className="h-4 w-4" />,
+            },
+            {
+              label: "Eliminar tarea",
+              onClick: () => { void remove(task); },
+              icon: <Trash2 className="h-4 w-4" />,
+              variant: "danger",
+            },
+          ]}
+        />
       ),
     },
   ];
@@ -239,6 +234,26 @@ export default function ScheduledTasksPage() {
           emptyMessage="No hay tareas programadas en este workspace."
           emptyIcon={<CalendarClock className="h-10 w-10 text-fg-faint2 dark:text-fg-faint2-dark" />}
         />
+      )}
+
+      {/* Task detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
+      {selectedTaskId !== null && (
+        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title="Scheduled Tasks"
+            headerActions={(
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+                Vista de detalle
+              </span>
+            )}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <ScheduledTaskDetailPage key={selectedTaskId} taskId={selectedTaskId} variant="panel" />
+          </SidePanel>
+        </div>
       )}
     </div>
   );

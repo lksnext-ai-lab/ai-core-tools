@@ -8,7 +8,6 @@ import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus'
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
 import { MediaServicesFields, type MediaAIServiceOption } from './MediaServicesFields';
 import { FormField, FormSelect } from '../ui/FormField';
-import { LoadingState } from '../ui/LoadingState';
 
 interface VectorDbOption {
   code: string;
@@ -69,8 +68,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
   const [outputParsers, setOutputParsers] = useState<any[]>([]);
   const [embeddingServices, setEmbeddingServices] = useState<(ServiceOptionLike & { provider?: string; is_system?: boolean })[]>([]);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
-  const [loadingFormData, setLoadingFormData] = useState(true);
-
+  
   const isEditing = !!silo && silo.silo_id !== 0;
   let submitButtonLabel = isEditing ? 'Update Silo' : 'Create Silo';
   if (isSubmitting) {
@@ -113,7 +111,6 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
     if (!appId) return;
     
     try {
-      setLoadingFormData(true);
       setError(null);
       
       const appIdNumber = Number.parseInt(appId, 10);
@@ -145,9 +142,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load form data');
       console.error('Error loading form data:', err);
-    } finally {
-      setLoadingFormData(false);
-    }
+    } 
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -195,14 +190,9 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
     }
   };
 
-  if (loadingFormData) {
-    return (
-      <LoadingState variant="section" message="Loading form data..." />
-    );
-  }
-
+  
   return (
-    <div className="max-w-2xl">
+    <div>
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="">
@@ -269,11 +259,11 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
               />
               <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
               {isEditing ? (
-                <p className="mt-1 text-sm text-amber-600">
+                <p className="mt-1 text-xs text-accent dark:text-accent-dark">
                   The embedding service cannot be changed after a silo is created.
                 </p>
               ) : (
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                   Required: Choose the embedding service for vector generation.
                 </p>
               )}
@@ -297,28 +287,26 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                   })),
                 ]}
                 disabled={isSubmitting || vectorDbOptions.length === 0 || isEditing}
+                helpText={isEditing ? (
+                  <span className="flex items-center gap-1 text-fg-secondary dark:text-fg-secondary-dark">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    The vector database cannot be changed after a silo is created.
+                  </span>
+                ) : vectorDbOptions.length === 0 ? (
+                  <span className="text-error dark:text-error-dark">
+                    No vector databases available. Configure a silo backend before proceeding.
+                  </span>
+                ) : (
+                  'Required: Select the storage engine that will persist vectors for this silo.'
+                )}
               />
-              {isEditing ? (
-                <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark flex items-center gap-1">
-                  <Info className="w-3.5 h-3.5 shrink-0" />
-                  The vector database cannot be changed after a silo is created.
-                </p>
-              ) : vectorDbOptions.length === 0 ? (
-                <p className="mt-1 text-sm text-error dark:text-error-dark">
-                  No vector databases available. Configure a silo backend before proceeding.
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
-                  Required: Select the storage engine that will persist vectors for this silo.
-                </p>
-              )}
             </div>
           </div>
 
           {/* Media (video/audio) indexing */}
           {(silo?.ai_services?.length ?? 0) > 0 && (
-            <fieldset className="space-y-4 border-t border-gray-200 pt-6">
-              <legend className="text-sm font-semibold text-gray-900">Video and audio</legend>
+            <fieldset className="space-y-4 border-t border-gray-200 pt-6 mt-5">
+              <legend className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Video and audio</legend>
               <MediaServicesFields
                 scope="silo"
                 aiServices={silo?.ai_services ?? []}

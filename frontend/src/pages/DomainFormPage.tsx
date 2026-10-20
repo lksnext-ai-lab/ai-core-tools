@@ -10,6 +10,7 @@ import Alert from '../components/ui/Alert';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
+import CardApp from '../components/ui/CardApp';
 
 interface EmbeddingService extends ServiceOptionLike {
   is_system?: boolean;
@@ -259,16 +260,18 @@ if (loading) {
             selectId="embedding-service"
           />
           {embeddingServices.length === 0 && (
-            <p className="text-sm text-error dark:text-error-dark mt-1">
+            <p className="text-xs text-error dark:text-error-dark mt-1">
               No embedding services available. Please create one first.
             </p>
           )}
           {!isNewDomain && (
-            <p className="text-sm text-accent dark:text-accent-dark mt-1">
+            <p className="text-xs text-accent dark:text-accent-dark mt-1">
               The embedding service cannot be changed after a domain is created.
             </p>
           )}
         </div>
+
+        
 
         {/* Vector Database Selection */}
         <div>
@@ -282,20 +285,19 @@ if (loading) {
             options={vectorDbOptions.map((option) => ({ value: option.code, label: option.label }))}
           />
           {vectorDbOptions.length === 0 && isNewDomain && (
-            <p className="text-sm text-accent dark:text-accent-dark mt-1">
+            <p className="text-xs text-accent dark:text-accent-dark mt-1">
               No vector databases available. Please configure a silo with vector support first.
             </p>
           )}
           {!isNewDomain && (
-            <p className="text-sm text-accent dark:text-accent-dark mt-1">
+            <p className="text-xs text-accent dark:text-accent-dark mt-1">
               The vector database cannot be changed after a domain is created.
             </p>
           )}
         </div>
 
         {/* Content Extraction Configuration */}
-        <div className="border-t pt-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Content Extraction Settings</h3>
+        <CardApp titulo="Content Extraction Configuration" className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <FormField
               label="Content Tag"
@@ -327,7 +329,7 @@ if (loading) {
               helpText="HTML ID to filter content (optional)"
             />
           </div>
-        </div>
+        </CardApp>
 
         {/* Form Actions */}
         <FormActions

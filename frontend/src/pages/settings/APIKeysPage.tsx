@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { KeyRound, Pencil, PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
+import { KeyRound, Pencil, PauseCircle, PlayCircle, Plus, Trash2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import APIKeyForm from '../../components/forms/APIKeyForm';
 import APIKeyDisplayModal from '../../components/ui/APIKeyDisplayModal';
@@ -12,10 +12,14 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import ButtonApp from '../../components/ui/ButtonApp';
+import { Badge } from '../../components/ui/Badge';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
+import Title from '../../components/ui/Title';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 interface APIKey {
   key_id: number;
@@ -219,16 +223,30 @@ function APIKeysPage() {
   if (loading) {
     return (
       
+     <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titSecundario" titulo="API Keys" subtitulo="Manage API keys for external application access" />
+        </div>
+
         <LoadingState variant="page" message="Loading API keys..." />
+      </div>
+
       
     );
   }
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titSecundario" titulo="API Keys" subtitulo="Manage API keys for external application access" />
+        </div>
+
         <Alert type="error" message={error} onDismiss={() => loadAPIKeys()} />
       </div>
+
     );
   }
 
@@ -237,18 +255,15 @@ function APIKeysPage() {
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">API Keys</h2>
-            <p className="text-gray-600">Manage API keys for external application access</p>
-          </div>
+          <Title variant="titSecundario" titulo="API Keys" subtitulo="Manage API keys for external application access" />
           {canEdit && (
-            <button 
+            <ButtonApp
+              label="Create New API Key"
               onClick={handleCreateKey}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}Create New API Key
-            </button>
+              variant="primary"
+              size="medium"
+              icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            />
           )}
         </div>
         
@@ -264,17 +279,17 @@ function APIKeysPage() {
               header: 'Name',
               render: (apiKey) => (
                 <div className="flex items-center">
-                  <KeyRound className="w-5 h-5 text-blue-400 mr-3 shrink-0" />
+                  <BackgroundImage icon={KeyRound} size={28} iconSize={14} variant="marron" className="mr-2" />
                   {canEdit ? (
                     <button
                       type="button"
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      className="text-sm font-medium text-fg dark:text-fg-dark transition-colors text-left"
                       onClick={() => void handleEditKey(apiKey.key_id)}
                     >
                       {apiKey.name}
                     </button>
                   ) : (
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-fg dark:text-fg-dark">
                       {apiKey.name}
                     </span>
                   )}
@@ -283,32 +298,22 @@ function APIKeysPage() {
             },
             {
               header: 'Key',
-              render: (apiKey) => (
-                <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                  {maskApiKey(apiKey.key_preview)}
-                </code>
-              )
+              render: (apiKey) => <Badge label={maskApiKey(apiKey.key_preview)} variant="default" />
             },
             {
               header: 'Created',
               render: (apiKey) => apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Last Used',
               render: (apiKey) => apiKey.last_used_at ? new Date(apiKey.last_used_at).toLocaleDateString() : 'Never',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              className: 'px-6 py-4 whitespace-nowrap text-sm text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Status',
               render: (apiKey) => (
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  apiKey.is_active 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {apiKey.is_active ? 'Active' : 'Inactive'}
-                </span>
+                <Badge label={apiKey.is_active ? 'Active' : 'Inactive'} variant={apiKey.is_active ? 'success' : 'error'} />
               )
             },
             {
@@ -353,15 +358,16 @@ function APIKeysPage() {
 
         {!loading && apiKeys.length === 0 && (
           <div className="text-center py-6">
-            <p className="text-gray-600 mb-6">
+            <p className="text-fg-secondary dark:text-fg-secondary-dark mb-6">
               Create your first API key to allow external applications to access your agents.
             </p>
-            <button 
+            <ButtonApp
+              label="Create First API Key"
               onClick={handleCreateKey}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-            >
-              Create First API Key
-            </button>
+              variant="primary"
+              size="medium"
+              icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            />
           </div>
         )}
 

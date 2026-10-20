@@ -15,15 +15,12 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { AgentMCPUsage } from '../core/types';
-<<<<<<< HEAD
-import BackgroundImage from '../components/ui/BackgroundImage';
-import ButtonApp from '../components/ui/ButtonApp';
-import Title from '../components/ui/Title';
-import { LoadingState } from '../components/ui/LoadingState';
-=======
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
->>>>>>> develop
+import Title from '../components/ui/Title';
+import LoadingState from '../components/ui/LoadingState';
+import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
 // Define the Agent type
 interface Agent {
@@ -259,12 +256,7 @@ function AgentsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          {/*<div>
-            <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-            <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
-          </div>*/}
-
-          <Title
+         <Title
             titulo="Agents"
             subtitulo={`Manage your AI agents for app ${app?.name || appId}`}
             variant="titSecundario"

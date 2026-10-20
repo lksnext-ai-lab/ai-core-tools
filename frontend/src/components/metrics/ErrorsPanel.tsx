@@ -12,9 +12,9 @@ interface Props {
 export function ErrorsPanel({ errors, showApp = false }: Props) {
   return (
     <ChartCard title="Errors" subtitle="Failed executions grouped by error type, and the latest failures">
-      {!errors && <p className="py-6 text-center text-sm text-gray-400">Loading…</p>}
+      {!errors && <p className="py-6 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark">Loading…</p>}
       {errors && errors.groups.length === 0 && (
-        <p className="py-6 text-center text-sm text-gray-400 dark:text-gray-500">No failed executions in this period.</p>
+        <p className="py-6 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark ">No failed executions in this period.</p>
       )}
       {errors && errors.groups.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
@@ -26,29 +26,29 @@ export function ErrorsPanel({ errors, showApp = false }: Props) {
                     <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden />
                     {g.error_code}
                   </span>
-                  <span className="whitespace-nowrap text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                  <span className="whitespace-nowrap text-xs tabular-nums  text-fg-secondary dark:text-fg-secondary-dark">
                     {formatCount(g.count)} · last {formatDateTime(g.last_seen)}
                   </span>
                 </div>
                 {g.sample_message && (
-                  <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{g.sample_message}</p>
+                  <p className="mt-1 line-clamp-2 text-xs :text-fg-secondary dark:text-fg-secondary-dark">{g.sample_message}</p>
                 )}
               </li>
             ))}
           </ul>
           <div>
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Latest failures</h4>
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-secondary dark:text-fg-secondary-dark">Latest failures</h4>
             <ul className="divide-y divide-gray-100 text-sm dark:divide-gray-700">
               {errors.recent.map((r, i) => (
                 <li key={`${r.started_at}-${i}`} className="py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-medium text-gray-800 dark:text-gray-100">
+                    <span className="truncate font-medium text-fg dark:text-fg-dark">
                       {r.agent_name ?? `Agent #${r.agent_id}`}
-                      {showApp && <span className="font-normal text-gray-500 dark:text-gray-400"> · {r.app_name ?? `App #${r.app_id}`}</span>}
+                      {showApp && <span className="font-normal text-fg-secondary dark:text-fg-secondary-dark"> · {r.app_name ?? `App #${r.app_id}`}</span>}
                     </span>
-                    <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{formatDateTime(r.started_at)}</span>
+                    <span className="whitespace-nowrap text-xs ext-fg-secondary dark:text-fg-secondary-dark">{formatDateTime(r.started_at)}</span>
                   </div>
-                  <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={r.error_message ?? undefined}>
+                  <p className="truncate text-xs text-fg-secondary dark:text-fg-secondary-dark" title={r.error_message ?? undefined}>
                     <span className="font-mono">{r.error_code ?? 'UNKNOWN'}</span>
                     {r.error_message ? ` — ${r.error_message}` : ''}
                   </p>

@@ -459,12 +459,12 @@ function AppsPage() {
 
       {!loading && apps.length === 0 && isEditor && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label="Create App"
             onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create App
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 

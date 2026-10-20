@@ -14,25 +14,25 @@ export function ToolsTable({ tools }: { tools: ToolStats[] | null }) {
   return (
     <ChartCard title="Tools" subtitle="Direct tool calls made by the agents">
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-              <th className="py-2 pr-4 font-medium">Tool</th>
-              <th className="py-2 pr-4 font-medium">Type</th>
-              <th className="py-2 pr-4 text-right font-medium">Calls</th>
-              <th className="whitespace-nowrap py-2 pr-4 text-right font-medium">Error rate</th>
-              <th className="py-2 pr-4 text-right font-medium">Avg</th>
-              <th className="py-2 text-right font-medium">p95</th>
+        <table className="min-w-full divide-y divide-line text-sm dark:divide-line-dark">
+          <thead className="bg-tableCab dark:bg-tableCab-dark">
+            <tr>
+              <th className="px-6 py-3 text-left text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">Tool</th>
+              <th className="px-6 py-3 text-left text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">Type</th>
+              <th className="px-6 py-3 text-right text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">Calls</th>
+              <th className="whitespace-nowrap px-6 py-3 text-right text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">Error rate</th>
+              <th className="px-6 py-3 text-right text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">Avg</th>
+              <th className="px-6 py-3 text-right text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">p95</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {!tools && <EmptyRow text="Loading…" />}
             {tools && tools.length === 0 && <EmptyRow text="No tool calls in this period." />}
             {tools?.map((t) => (
-              <tr key={`${t.tool_type}:${t.tool_name}`} className="text-gray-700 dark:text-gray-200">
-                <td className="max-w-[16rem] truncate py-2 pr-4 font-mono text-xs text-gray-900 dark:text-gray-100" title={t.tool_name}>{t.tool_name}</td>
+              <tr key={`${t.tool_type}:${t.tool_name}`} className="text-fg-secondary dark:text-fg-secondary-dark">
+                <td className="max-w-[16rem] truncate py-2 pr-4 font-mono text-xs text-fg dark:text-fg-dark" title={t.tool_name}>{t.tool_name}</td>
                 <td className="py-2 pr-4">
-                  <span className="whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                  <span className="whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs text-fg-secondary dark:bg-gray-700 dark:text-fg-secondary-dark">
                     {TYPE_LABELS[t.tool_type] ?? t.tool_type}
                   </span>
                 </td>

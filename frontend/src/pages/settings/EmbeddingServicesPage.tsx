@@ -1,10 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-<<<<<<< HEAD
-import { Upload, ArrowDownToLine, Pencil, Trash2, BarChart2, AlertTriangle, Globe } from 'lucide-react';
-=======
-import { Users, Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2 } from 'lucide-react';
->>>>>>> develop
+import { Users, Upload, ArrowDownToLine, Pencil, Trash2,  BarChart2, Globe } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -15,7 +11,7 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
-import { Badge, ProviderBadge } from '../../components/ui/Badge';
+import { ProviderBadge } from '../../components/ui/Badge';
 import { AppRole } from '../../types/roles';
 import type { ServiceLifecycleFields } from '../../types/services';
 import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
@@ -24,16 +20,13 @@ import SystemServiceBadge from '../../components/services/SystemServiceBadge';
 import ServiceUsageModal from '../../components/services/ServiceUsageModal';
 import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 import type { ConflictMode, ImportResponse } from '../../components/ui/ImportModal';
-<<<<<<< HEAD
-import { LoadingState } from '../../components/ui/LoadingState';
-import { Spinner } from '../../components/ui/Spinner';
-import Title from '../../components/ui/Title';
-import { ButtonApp } from '../../components/ui/ButtonApp';
-import BackgroundImage from '../../components/ui/BackgroundImage';
-=======
 import { getServiceApiClient } from '../../components/services/serviceApi';
 import { useServiceConnectionTest } from '../../components/services/useServiceConnectionTest';
->>>>>>> develop
+import Title from '../../components/ui/Title';
+import LoadingState from '../../components/ui/LoadingState';
+import ButtonApp from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
+import Spinner from '../../components/ui/Spinner';
 
 interface EmbeddingService extends Partial<ServiceLifecycleFields> {
   service_id: number;
@@ -256,11 +249,7 @@ function EmbeddingServicesPage() {
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
               )}
               {service.is_system && (
-<<<<<<< HEAD
-                <span className="ml-1 text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark px-1.5 py-0.5 rounded">System</span>
-=======
                 <SystemServiceBadge />
->>>>>>> develop
               )}
             </div>
           ) },
@@ -269,19 +258,7 @@ function EmbeddingServicesPage() {
             <ProviderBadge provider={service.provider} />
           ) },
           { header: 'Status', render: (service: EmbeddingService) => (
-<<<<<<< HEAD
-            service.needs_api_key ? (
-              <Badge
-                label="API Key Required"
-                variant="warning"
-                icon={<AlertTriangle className="w-3 h-3" aria-hidden="true" />}
-              />
-            ) : (
-              <Badge label="Ready" variant="success" />
-            )
-=======
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
->>>>>>> develop
           ) },
           { header: 'Created', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: EmbeddingService) => (

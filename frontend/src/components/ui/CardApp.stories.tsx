@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Settings } from 'lucide-react';
 
 import { CardApp } from './CardApp';
-import BackgroundImage from './BackgroundImage';
 
 const meta = {
   title: 'UI/CardApp',
@@ -85,16 +84,21 @@ export const SectionWithHeader: Story = {
   args: {
     variant: 'white',
     className: 'p-8',
-    children: (
-      <>
-        <div className="mb-6 flex items-center">
-          <BackgroundImage icon={Settings} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
-          <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Configuration</h3>
-        </div>
-        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-          Form fields for this section go here.
-        </p>
-      </>
-    ),
+    icon: Settings,
+    titulo: 'Configuration',
+    subtitulo: 'Configure the services and behavior used by this agent.',
+    children: <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Form fields for this section go here.</p>,
+  },
+};
+
+export const TitleOnly: Story = {
+  args: {
+    titulo: 'Title only',
+  },
+};
+
+export const SubtitleOnly: Story = {
+  args: {
+    subtitulo: 'A subtitle can be used without an icon or title.',
   },
 };

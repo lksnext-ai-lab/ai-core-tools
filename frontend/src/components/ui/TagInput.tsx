@@ -63,14 +63,14 @@ export function TagInput({
   return (
     <div>
       <div
-        className={`flex flex-wrap items-center gap-2 p-2 border dark:border-line-strong-dark rounded-md min-h-[44px] transition-all duration-200 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${
-          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
+        className={`flex flex-wrap items-center gap-2 w-full px-3 py-2 text-sm border rounded-lg focus-within:outline-none focus-within:border-accent dark:border-line-strong-dark dark:focus-within:border-accent ${
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'bg-surface text-fg dark:bg-surface-dark dark:text-fg-dark'
         }`}
       >
         {tags.map((tag, idx) => (
           <span
             key={tag}
-            className={`inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full  ${
+            className={`inline-flex items-center gap-1 text-sm px-2.5 py-0.5 rounded-full ${
               disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]'
             }`}
           >
@@ -96,7 +96,7 @@ export function TagInput({
           placeholder={tags.length === 0 && !atLimit ? placeholder : ''}
           disabled={disabled}
           readOnly={!disabled && atLimit}
-          className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
+          className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent p-0 text-fg dark:text-fg-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
         />
       </div>
       <p className="text-xs text-fg-secondary mt-1 dark:text-fg-secondary-dark" aria-live="polite">

@@ -30,7 +30,6 @@ export default function MarketplaceScheduledTaskPage() {
   if (error) return <div className="mx-auto max-w-4xl">{back}<div role="alert" className="rounded-xl bg-white p-8 text-center text-gray-600 dark:bg-gray-800">{error}</div></div>;
   if (!task) return <div className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800">Cargando tarea…</div>;
 
-  const base = `/marketplace/scheduled-tasks/${task.id}`;
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="min-w-0">
@@ -56,8 +55,7 @@ export default function MarketplaceScheduledTaskPage() {
       <ScheduledTaskResults
         conversationMode={task.conversation_mode}
         runs={runs}
-        runHref={(run) => `${base}/runs/${run.id}`}
-        conversationHref={`${base}/conversation`}
+        resolveFileUrl={(runId, fileId) => apiService.getMarketplaceScheduledTaskRunFileUrl(task.id, runId, fileId)}
       />
     </div>
   );

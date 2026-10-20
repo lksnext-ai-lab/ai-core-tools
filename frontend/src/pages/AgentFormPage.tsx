@@ -14,6 +14,7 @@ import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOp
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 import type { TabItem } from '../components/ui/Tabs';
 import { FormCheckbox, FormField, FormSelect, FormTextArea } from '../components/ui/FormField';
+import ButtonCard from '../components/ui/ButtonCard';
 import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
 import type { RagConfigValue, RagFixedFilter, RagSearchType } from '../components/forms/RagConfigSection';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
@@ -898,12 +899,7 @@ function AgentFormPage() {
 
           {/* TAB 2: PROMPTS */}
           {activeTab === 'prompts' && (
-            <CardApp variant="white" className="p-8">
-              <div className="flex items-center mb-6">
-                <BackgroundImage icon={MessageSquare} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
-                <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Prompts & Instructions</h3>
-              </div>
-              
+            <CardApp variant="white" className="p-8" icon={MessageSquare} titulo="Prompts & Instructions">
               <div className="space-y-6">
                 <FormTextArea
                   label="System Prompt"
@@ -935,12 +931,7 @@ function AgentFormPage() {
               {/* Configuration for regular agents */}
               {formData.type !== 'ocr_agent' && (
                 <>
-                  <CardApp variant="white" className="p-8">
-                    <div className="flex items-center mb-6">
-                      <BackgroundImage icon={Settings} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
-                      <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Configuration</h3>
-                    </div>
-                    
+                  <CardApp variant="white" className="p-8" icon={Settings} titulo="Configuration">
                     {/* No AI Services Warning */}
                     {agent?.ai_services.length === 0 && renderNoAIServicesWarning(false)}
 
@@ -1036,12 +1027,7 @@ function AgentFormPage() {
                   )}
 
                   {/* Agent Capabilities Card */}
-                  <CardApp variant="white" className="p-8">
-                    <div className="flex items-center mb-6">
-                      <BackgroundImage icon={Zap} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
-                      <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Capabilities</h3>
-                    </div>
-
+                  <CardApp variant="white" className="p-8" icon={Zap} titulo="Capabilities">
                     {/* MCP Warning Dialog */}
                     {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
                       <Alert
@@ -1081,13 +1067,24 @@ function AgentFormPage() {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <CardApp variant="subtle" className="p-4">
+                      <ButtonCard
+                        variant="selectable"
+                        selected={formData.is_tool}
+                        interactiveChildren
+                        ariaLabel="Toggle Tool Agent"
+                        onClick={() => {
+                          if (formData.is_tool && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                            setShowMcpWarning(true);
+                          } else {
+                            handleInputChange('is_tool', !formData.is_tool);
+                          }
+                        }}
+                      >
                         <FormCheckbox
                           id="is_tool"
                           label="Tool Agent"
                           checked={formData.is_tool}
                           onChange={(e) => {
-                            // If unmarking as tool and agent is used in MCP servers, show warning
                             if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
                               setShowMcpWarning(true);
                             } else {
@@ -1096,16 +1093,20 @@ function AgentFormPage() {
                           }}
                           helpText="Can be used by other agents"
                         />
-
                         {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                          <p className="ml-7 mt-1 text-fg-tertiary dark:text-fg-tertiary-dark">
+                          <p className="ml-7 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                             Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
                           </p>
                         )}
-                      </CardApp>
+                      </ButtonCard>
 
-
-                      <CardApp variant="subtle" className="p-4">
+                      <ButtonCard
+                        variant="selectable"
+                        selected={formData.has_memory}
+                        interactiveChildren
+                        ariaLabel="Toggle Conversational"
+                        onClick={() => handleInputChange('has_memory', !formData.has_memory)}
+                      >
                         <FormCheckbox
                           id="has_memory"
                           label="Conversational"
@@ -1113,9 +1114,15 @@ function AgentFormPage() {
                           onChange={(e) => handleInputChange('has_memory', e.target.checked)}
                           helpText="Maintains conversation memory"
                         />
-                      </CardApp>
+                      </ButtonCard>
 
-                      <CardApp variant="subtle" className="p-4">
+                      <ButtonCard
+                        variant="selectable"
+                        selected={formData.enable_code_interpreter}
+                        interactiveChildren
+                        ariaLabel="Toggle Code Interpreter"
+                        onClick={() => handleInputChange('enable_code_interpreter', !formData.enable_code_interpreter)}
+                      >
                         <FormCheckbox
                           id="enable_code_interpreter"
                           label="Code Interpreter"
@@ -1123,9 +1130,15 @@ function AgentFormPage() {
                           onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
                           helpText="Allows the agent to execute Python code (pandas, openpyxl, numpy)"
                         />
-                      </CardApp>
+                      </ButtonCard>
 
-                      <CardApp variant="subtle" className="p-4">
+                      <ButtonCard
+                        variant="selectable"
+                        selected={formData.skill_router_enabled}
+                        interactiveChildren
+                        ariaLabel="Toggle Skill Router"
+                        onClick={() => handleInputChange('skill_router_enabled', !formData.skill_router_enabled)}
+                      >
                         <FormCheckbox
                           id="skill_router_enabled"
                           label="Skill Router"
@@ -1133,7 +1146,7 @@ function AgentFormPage() {
                           onChange={(e) => handleInputChange('skill_router_enabled', e.target.checked)}
                           helpText="Let the model pre-select at most 2 skills per turn; off by default."
                         />
-                      </CardApp>
+                      </ButtonCard>
 
                       {formData.enable_code_interpreter && (
                         <div className="md:col-span-2">
@@ -1207,18 +1220,14 @@ function AgentFormPage() {
                               : [...formData.server_tools, tool.id]
                           );
                           return (
-                            <button
+                            <ButtonCard
                               key={tool.id}
-                              type="button"
+                              variant="selectable"
+                              selected={active}
+                              ariaLabel={`Toggle ${tool.label}`}
                               onClick={toggle}
-                              className={`text-left p-3 rounded-md  transition-colors ${
-                                active 
-                                  ? 'bg-surface-hover dark:bg-btCard-hover border-2 border-bg-soft dark:border-bronze-border-dark'
-                                  : 'bg-surface dark:bg-surface-dark border border-line dark:border-line-dark'
-                              }`}
                             >
-
-                                <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1">
                                 <span className="text-base">{tool.icon}</span>
                                 <span className={`text-sm font-medium ${active ? 'text-fg-primary dark:text-fg-primary-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`}>
                                   {tool.label}
@@ -1233,7 +1242,7 @@ function AgentFormPage() {
                                   <ProviderBadge key={p} provider={p} />
                                 ))}
                               </div>
-                            </button>
+                            </ButtonCard>
                           );
                         })}
                       </div>
@@ -1247,18 +1256,12 @@ function AgentFormPage() {
                   </CardApp>
 
                   {/* Media Processing Card */}
-                  <CardApp className="p-8">
-                    <div className="flex items-center mb-6">
-                      <BackgroundImage icon={Tv} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
-                      <div>
-                        <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Media Processing</h3>
-                        <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
-                          Default configuration used when uploading audio/video or YouTube URLs in the playground.
-                          Set it here once so uploads only require choosing the file or URL.
-                        </p>
-                      </div>
-                    </div>
-
+                  <CardApp
+                    className="p-8"
+                    icon={Tv}
+                    titulo="Media Processing"
+                    subtitulo="Default configuration used when uploading audio/video or YouTube URLs in the playground. Set it here once so uploads only require choosing the file or URL."
+                  >
                     <div className="mb-6">
                       <FormSelect
                         label="Embedding Service"
@@ -1499,62 +1502,52 @@ function AgentFormPage() {
             <div className="space-y-6">
               {/* Tools Card - Only for regular agents */}
               {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
-                <CardApp className="p-8">
-                  <div className="flex items-center mb-6">
-                    <BackgroundImage variant='marron' icon={Wrench} size={40} className="mr-4" />
-                    <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Available Tools</h3>
-                  </div>
-                  
+                <CardApp
+                  className="p-8"
+                  icon={Wrench}
+                  titulo="Available Tools"
+                  headerExtra={formData.tool_ids.length > 0 && (
+                    <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                      <span className="font-medium">{formData.tool_ids.length}</span>{' '}
+                      tool{formData.tool_ids.length === 1 ? '' : 's'} selected
+                    </span>
+                  )}
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {agent.tools.map((tool) => (
-                      <div
-                        key={tool.agent_id}
-                        className={`p-4 rounded-xl text-left w-full ${
-                          formData.tool_ids.includes(tool.agent_id)
-                            ? 'bg-surface-hover dark:bg-btCard-hover border-2 border-bg-soft dark:border-bronze-border-dark'
-                            : 'bg-surface dark:bg-surface-dark border border-line dark:border-line-dark'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
+                    {agent.tools.map((tool) => {
+                      const selected = formData.tool_ids.includes(tool.agent_id);
+                      return (
+                        <ButtonCard
+                          key={tool.agent_id}
+                          variant="selectable"
+                          selected={selected}
+                          interactiveChildren
+                          ariaLabel={`Toggle ${tool.name}`}
+                          onClick={() => handleToolToggle(tool.agent_id)}
+                          className="w-full"
+                        >
                           <FormCheckbox
                             id={`tool-${tool.agent_id}`}
                             label={tool.name}
-                            checked={formData.tool_ids.includes(tool.agent_id)}
+                            checked={selected}
                             onChange={() => handleToolToggle(tool.agent_id)}
                             className="flex-1"
                           />
-                          <div 
-                            className={`w-2 h-2 rounded-full ${
-                            formData.tool_ids.includes(tool.agent_id)
-                              ? 'bg-blue-500'
-                              : 'bg-gray-300'
-                            }`}
-                          />
-                          
-                        </div>
-                      </div>
-                    ))}
+                        </ButtonCard>
+                      );
+                    })}
                   </div>
-                  
-                  {formData.tool_ids.length > 0 && (
-
-                    <CardApp variant="subtle" className="mt-4">
-                      <span className="font-medium text-sm">{formData.tool_ids.length}</span> <span className="font-medium text-sm">tool{formData.tool_ids.length === 1 ? '' : 's'} selected</span>
-                 
-                    </CardApp>
-                  )}
                 </CardApp>
               )}
 
               {/* MCP Configs Card - Only for regular agents */}
               {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
-                <CardApp variant="white">
-                  <div className="flex items-center mb-6">
-                    <BackgroundImage icon={Plug} size={40} variant="marron" className="mr-4" />
-                    <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">MCP Servers</h3>
-                    <Badge variant="primary" label="Model Context Protocol" className="ml-3" />
-                  </div>
-                  
+                <CardApp
+                  variant="white"
+                  icon={Plug}
+                  titulo="MCP Servers"
+                  headerExtra={<Badge variant="primary" label="Model Context Protocol" />}
+                >
                   {agent.mcp_configs.length > 0 ? (
                     <>
                       <div className="mb-4 p-4 bg-purple-50 rounded-xl">
@@ -1637,17 +1630,12 @@ function AgentFormPage() {
 
               {/* Skills Card - Only for regular agents */}
               {agent?.skills && formData.type !== 'ocr_agent' && (
-                <CardApp className="p-8">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h3 className="text-xl font-semibold text-fg dark:text-fg-dark flex items-center">
-                        <Target className="w-5 h-5 mr-3" />
-                        {' '}Skills
-                      </h3>
-                      <p className="text-fg-tertiary dark:text-fg-tertiary-dark mt-1">Assign specialized behaviors that the agent can activate on-demand</p>
-                    </div>
-                  </div>
-
+                <CardApp
+                  className="p-8"
+                  icon={Target}
+                  titulo="Skills"
+                  subtitulo="Assign specialized behaviors that the agent can activate on-demand"
+                >
                   {agent.skills.length > 0 ? (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1729,13 +1717,7 @@ function AgentFormPage() {
 
           {/* TAB 5: MARKETPLACE */}
           {activeTab === 'marketplace' && (
-            <CardApp className="p-8 mb-8">
-              <div className="flex items-center mb-6">
-                 <BackgroundImage icon={Store} size={40} className='mr-4'/>
-                <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Marketplace Publishing</h3>
-              </div>
-
-              
+            <CardApp className="p-8 mb-8" icon={Store} titulo="Marketplace Publishing">
               {/* New agent: prompt user to save first */}
               {isNewAgent ? (
                 <Alert

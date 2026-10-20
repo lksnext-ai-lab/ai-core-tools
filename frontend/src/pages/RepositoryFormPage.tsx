@@ -246,7 +246,7 @@ const RepositoryFormPage: React.FC = () => {
               : vectorDbOptions.map((option) => ({ value: option.code, label: option.label }))}
             required={isNewRepository}
             disabled={!isNewRepository}
-            className={!isNewRepository ? '[&>p]:text-amber-600' : ''}
+            className={!isNewRepository ? '[&>p]:text-accent dark:text-accent-dark' : ''}
             helpText={isNewRepository
               ? 'Select where embeddings for this repository will be stored.'
               : 'The vector database cannot be changed after a repository is created.'}
@@ -279,7 +279,7 @@ const RepositoryFormPage: React.FC = () => {
                 ariaDescribedBy={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding_service_id')}
               />
               <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                 This embedding service will be used for the silo that's automatically created with this repository
               </p>
             </div>

@@ -2,6 +2,7 @@ import { getProvidersForKind } from '../providers';
 import { getProviderBadgeColor } from '../../../ui/providerBadges';
 import type { ServiceKind } from '../../../../types/services';
 
+
 interface ProviderStepProps {
   readonly kind: ServiceKind;
   readonly selected: string;
