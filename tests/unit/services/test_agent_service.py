@@ -275,7 +275,8 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_associations', return_value={
             'tool_ids': [],
             'mcp_ids': [],
-            'skill_ids': []
+            'skill_ids': [],
+            'middleware_ids': []
         })
         mocker.patch.object(service, '_get_silo_info', return_value=None)
         mocker.patch.object(service, '_get_output_parser_info', return_value=None)
@@ -318,7 +319,8 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_associations', return_value={
             'tool_ids': [],
             'mcp_ids': [],
-            'skill_ids': []
+            'skill_ids': [],
+            'middleware_ids': []
         })
         mocker.patch.object(service, '_get_silo_info', return_value=None)
         mocker.patch.object(service, '_get_output_parser_info', return_value=None)
@@ -477,6 +479,7 @@ class TestSandboxServiceIdValidation:
 
         system_sandbox_service = MagicMock()
         system_sandbox_service.app_id = None  # system/platform-scoped
+        system_sandbox_service.end_of_service_at = None
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
@@ -499,6 +502,7 @@ class TestSandboxServiceIdValidation:
 
         same_app_sandbox_service = MagicMock()
         same_app_sandbox_service.app_id = 1
+        same_app_sandbox_service.end_of_service_at = None
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
@@ -568,6 +572,7 @@ class TestReferencedResourceIdValidation:
 
         system_service = MagicMock()
         system_service.app_id = None
+        system_service.end_of_service_at = None
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
@@ -674,6 +679,7 @@ class TestReferencedResourceIdValidation:
 
         system_embedding = MagicMock()
         system_embedding.app_id = None
+        system_embedding.end_of_service_at = None
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(

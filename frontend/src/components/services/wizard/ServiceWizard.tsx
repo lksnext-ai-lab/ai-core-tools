@@ -7,6 +7,8 @@ import CredentialsStep, { type CredentialsState } from './steps/CredentialsStep'
 import ModelSelectionStep from './steps/ModelSelectionStep';
 import ConfirmStep from './steps/ConfirmStep';
 import { getProviderDescriptor } from './providers';
+import ServiceLifecycleInputs from '../ServiceLifecycleInputs';
+import { isoFromDateInput } from '../../../utils/serviceLifecycle';
 import { getServiceApiClient } from '../serviceApi';
 import type { TestConnectionResult } from '../serviceApi';
 import type {
@@ -77,6 +79,8 @@ function ServiceWizard({
   const [selectedModel, setSelectedModel] = useState<ProviderModelInfo | null>(null);
   const [manualModelName, setManualModelName] = useState('');
   const [supportsVideo, setSupportsVideo] = useState(false);
+  const [endOfServiceDate, setEndOfServiceDate] = useState('');
+  const [deprecationNotice, setDeprecationNotice] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -124,6 +128,8 @@ function ServiceWizard({
       setSelectedModel(null);
       setManualModelName('');
       setSupportsVideo(false);
+      setEndOfServiceDate('');
+      setDeprecationNotice('');
       setCurrentStep(0);
       setStepStatuses({});
     }
@@ -201,6 +207,13 @@ function ServiceWizard({
         opensandbox_image: credentials.image?.trim() || undefined,
         daytona_target: credentials.target?.trim() || undefined,
         e2b_template: credentials.template?.trim() || undefined,
+        // Create flow only: in edit-model mode omitting the fields keeps the stored values.
+        ...(mode === 'create'
+          ? {
+              end_of_service_at: isoFromDateInput(endOfServiceDate),
+              deprecation_notice: deprecationNotice.trim() || null,
+            }
+          : {}),
       };
       return sandboxPayload;
     }
@@ -217,6 +230,13 @@ function ServiceWizard({
       supports_video: supportsVideo,
       aws_access_key_id: credentials.aws_access_key_id?.trim() || undefined,
       aws_region: credentials.aws_region?.trim() || undefined,
+      // Create flow only: in edit-model mode omitting the fields keeps the stored values.
+      ...(mode === 'create'
+        ? {
+            end_of_service_at: isoFromDateInput(endOfServiceDate),
+            deprecation_notice: deprecationNotice.trim() || null,
+          }
+        : {}),
     };
   };
 
@@ -334,6 +354,16 @@ function ServiceWizard({
                 testing={testing}
                 testResult={testResult}
               />
+            )}
+            {steps[currentStep].id === 'confirm' && mode === 'create' && (
+              <div className="mt-4">
+                <ServiceLifecycleInputs
+                  date={endOfServiceDate}
+                  notice={deprecationNotice}
+                  onDateChange={setEndOfServiceDate}
+                  onNoticeChange={setDeprecationNotice}
+                />
+              </div>
             )}
             {submitError && (
               <p className="mt-3 text-sm text-red-600 px-2" role="alert">

@@ -19,6 +19,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+
+from models.hitl_approval import ApprovalChannel
 from a2a.server.context import ServerCallContext
 from a2a.types import a2a_pb2 as pb
 from sqlalchemy import func, select
@@ -129,7 +131,7 @@ def _response_text(task: pb.Task) -> str:
 def _happy_path_fake(calls: list, close_state: dict | None = None, gen_holder: dict | None = None):
     async def _stream(
         self, agent_id, message, file_references=None, search_params=None,
-        user_context=None, conversation_id=None, db=None,
+        user_context=None, conversation_id=None, db=None, channel=None, resume=None,
     ):
         try:
             calls.append(
@@ -138,6 +140,7 @@ def _happy_path_fake(calls: list, close_state: dict | None = None, gen_holder: d
                     "message": message,
                     "user_context": dict(user_context or {}),
                     "conversation_id": conversation_id,
+                    "channel": channel,
                 }
             )
             yield AgentStreamEvent("metadata", {"conversation_id": conversation_id})
@@ -186,7 +189,7 @@ def _thinking_flood_fake(state: dict, *, interval_s: float = 0.1, iterations: in
     (remote) cancel is expected to stop it well before `iterations` elapse.
     """
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         try:
             for i in range(iterations):
                 state["count"] = i + 1
@@ -202,7 +205,7 @@ def _thinking_flood_fake(state: dict, *, interval_s: float = 0.1, iterations: in
 def _hangs_fake(state: dict, *, hang_seconds: float):
     """Yields one token, then hangs well past any reasonable turn timeout."""
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         try:
             yield AgentStreamEvent("token", {"content": "stuck"})
             await asyncio.sleep(hang_seconds)
@@ -215,7 +218,7 @@ def _hangs_fake(state: dict, *, hang_seconds: float):
 
 def _input_error_fake(calls: list):
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         calls.append(True)
         return
         yield  # pragma: no cover - never reached; keeps this an async generator
@@ -228,7 +231,7 @@ _SECRET_EXCEPTION_TEXT = "super secret internal stack trace detail"
 
 def _raising_fake(calls: list):
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         calls.append(True)
         yield AgentStreamEvent("metadata", {"conversation_id": conversation_id})
         raise RuntimeError(_SECRET_EXCEPTION_TEXT)
@@ -241,7 +244,7 @@ def _unrelated_timeout_error_fake(calls: list):
     `A2A_TURN_MAX_SECONDS` (fix round 2, item 3's scenario -- e.g. an HTTP
     client or DB driver timing out deep inside a real agent chain)."""
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         calls.append(True)
         yield AgentStreamEvent("metadata", {"conversation_id": conversation_id})
         raise TimeoutError("some unrelated downstream timeout, not ours")
@@ -251,7 +254,7 @@ def _unrelated_timeout_error_fake(calls: list):
 
 def _slow_fake(state: dict, *, chunks: int = 100, delay_s: float = 0.05):
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         try:
             for i in range(chunks):
                 state["count"] = i + 1
@@ -277,7 +280,7 @@ def _slow_fake(state: dict, *, chunks: int = 100, delay_s: float = 0.05):
 
 def _silent_fake(state: dict, *, silent_seconds: float):
     async def _stream(self, agent_id, message, file_references=None, search_params=None,
-                       user_context=None, conversation_id=None, db=None):
+                       user_context=None, conversation_id=None, db=None, channel=None, resume=None):
         try:
             yield AgentStreamEvent("token", {"content": "start"})
             await asyncio.sleep(silent_seconds)
@@ -326,6 +329,8 @@ class TestHappyPath:
 
         assert len(calls) == 1
         assert calls[0]["user_context"]["caller_type_override"] == "A2A"
+        # A2A cannot answer human-approval pauses: the turn runs on its own non-interactive channel.
+        assert calls[0]["channel"] == ApprovalChannel.A2A
         conversation_id = calls[0]["conversation_id"]
         assert conversation_id is not None
 

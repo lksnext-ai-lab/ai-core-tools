@@ -1,6 +1,10 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
+<<<<<<< HEAD
 import { Upload, ArrowDownToLine, Pencil, Trash2, BarChart2, AlertTriangle, Globe } from 'lucide-react';
+=======
+import { Users, Upload, ArrowDownToLine, Loader2, Pencil, Trash2, CheckCircle2, XCircle, X, BarChart2 } from 'lucide-react';
+>>>>>>> develop
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -13,20 +17,33 @@ import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { Badge, ProviderBadge } from '../../components/ui/Badge';
 import { AppRole } from '../../types/roles';
+import type { ServiceLifecycleFields } from '../../types/services';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
+import UsedByButton from '../../components/services/UsedByButton';
+import SystemServiceBadge from '../../components/services/SystemServiceBadge';
+import ServiceUsageModal from '../../components/services/ServiceUsageModal';
+import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 import type { ConflictMode, ImportResponse } from '../../components/ui/ImportModal';
+<<<<<<< HEAD
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
 import Title from '../../components/ui/Title';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import BackgroundImage from '../../components/ui/BackgroundImage';
+=======
+import { getServiceApiClient } from '../../components/services/serviceApi';
+import { useServiceConnectionTest } from '../../components/services/useServiceConnectionTest';
+>>>>>>> develop
 
-interface EmbeddingService {
+interface EmbeddingService extends Partial<ServiceLifecycleFields> {
   service_id: number;
   name: string;
   provider: string;
   model_name: string;
   created_at: string;
   needs_api_key?: boolean;
+  last_error?: string | null;
+  last_error_at?: string | null;
   is_system?: boolean;
 }
 
@@ -67,8 +84,27 @@ function EmbeddingServicesPage() {
   } = useServicesManager<EmbeddingService>(appId, api as any, cache as any, { entity: 'embedding service' });
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [usageService, setUsageService] = useState<{ id: number; name: string } | null>(null);
   const [exportingServiceId, setExportingServiceId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
+  const { testAction, modal: connectionTestModal } = useServiceConnectionTest('embedding');
+
+  async function testConnection(serviceId: number) {
+    if (!appId) throw new Error('App ID not found');
+    const numericAppId = Number.parseInt(appId, 10);
+    const apiService = (await import('../../services/api')).apiService;
+    const detail = await apiService.getEmbeddingService(numericAppId, serviceId);
+    return getServiceApiClient('embedding', 'app', numericAppId).testConnection({
+      name: detail.name,
+      provider: detail.provider,
+      model_name: detail.model_name,
+      api_key: detail.api_key,
+      base_url: detail.base_url,
+      api_version: detail.api_version,
+      aws_access_key_id: detail.aws_access_key_id,
+      aws_region: detail.aws_region,
+    }, serviceId);
+  }
 
   async function handleExport(serviceId: number) {
     if (!appId) return;
@@ -220,7 +256,11 @@ function EmbeddingServicesPage() {
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
               )}
               {service.is_system && (
+<<<<<<< HEAD
                 <span className="ml-1 text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark px-1.5 py-0.5 rounded">System</span>
+=======
+                <SystemServiceBadge />
+>>>>>>> develop
               )}
             </div>
           ) },
@@ -229,6 +269,7 @@ function EmbeddingServicesPage() {
             <ProviderBadge provider={service.provider} />
           ) },
           { header: 'Status', render: (service: EmbeddingService) => (
+<<<<<<< HEAD
             service.needs_api_key ? (
               <Badge
                 label="API Key Required"
@@ -238,13 +279,21 @@ function EmbeddingServicesPage() {
             ) : (
               <Badge label="Ready" variant="success" />
             )
+=======
+            <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
+>>>>>>> develop
           ) },
           { header: 'Created', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: EmbeddingService) => (
             service.is_system ? (
-              <span className="text-gray-400 text-sm">System</span>
+              <span className="inline-flex items-center gap-3">
+                <span className="text-gray-400 text-sm">System</span>
+                <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
+              </span>
             ) : canEdit ? (
-              <ActionDropdown actions={[
+              <ActionDropdown triggerAriaLabel={`Actions for ${service.name}`} actions={[
+                { label: SERVICE_USAGE_STRINGS.action, onClick: () => setUsageService({ id: service.service_id, name: service.name }), icon: <Users className="w-4 h-4" /> },
+                testAction(service.service_id, service.name, () => testConnection(service.service_id)),
                 {
                   label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
                   onClick: () => void handleExport(service.service_id),
@@ -256,7 +305,7 @@ function EmbeddingServicesPage() {
                 { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' }
               ]} size="sm" />
             ) : (
-              <span className="text-gray-400 text-sm">View only</span>
+              <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
             )
           ) }
         ]}
@@ -304,6 +353,20 @@ function EmbeddingServicesPage() {
           onSave={handleSave}
         />
       )}
+
+      {usageService && appId && (
+        <ServiceUsageModal
+          kind="embedding"
+          scope="app"
+          canNavigate={hasMinRole(AppRole.EDITOR)}
+          appId={Number.parseInt(appId, 10)}
+          serviceId={usageService.id}
+          serviceName={usageService.name}
+          onClose={() => setUsageService(null)}
+        />
+      )}
+
+      {connectionTestModal}
 
       {/* Import Modal */}
       <ImportModal

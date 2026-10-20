@@ -13,13 +13,17 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from models.agent import Agent
+from models.ai_service import AIService
 from models.ocr_agent import OCRAgent
 from tools import agentTools
 
 
 def _make_agent(name: str = "Sub Agent") -> Agent:
     """Build a transient (un-persisted) Agent suitable for IACTTool construction."""
-    return Agent(name=name, description=f"{name} description", system_prompt="")
+    agent = Agent(name=name, description=f"{name} description", system_prompt="")
+    # IACTTool builds its LLM lazily but still requires the agent to have an AI service.
+    agent.ai_service = AIService(name="svc", provider="OpenAI", description="m", api_key="k")
+    return agent
 
 
 class _StreamingReactAgent:

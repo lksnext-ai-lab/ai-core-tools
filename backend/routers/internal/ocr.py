@@ -10,6 +10,7 @@ from schemas.ocr_schemas import OCRResponseSchema
 from services.agent_service import AgentService
 from services.agent_execution_service import AgentExecutionService
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -37,6 +38,7 @@ def _get_ocr_agent_or_404(db: Session, agent_id: int, app_id: int):
     response_model=OCRResponseSchema,
     responses={
         404: {"description": "OCR agent not found"},
+        409: {"description": "A service used by this resource was retired"},
         500: {
             "description": "OCR processing failed",
             "content": {
@@ -83,7 +85,7 @@ async def process_ocr_internal(
         logger.info(f"OCR processing completed for agent {agent_id} by user {int(auth_context.identity.id)}")
         return OCRResponseSchema(**result)
 
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error in OCR processing endpoint: {str(e)}")

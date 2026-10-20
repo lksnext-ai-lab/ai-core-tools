@@ -1,6 +1,8 @@
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, ConfigDict, Field
+from typing import List, Literal, Optional, Dict, Any, Union
 from datetime import datetime
+
+from schemas.hitl_approval_schemas import PendingApprovalSchema
 
 # ==================== BASE SCHEMAS ====================
 
@@ -18,10 +20,17 @@ class CountResponseSchema(BaseModel):
 # Parameters: message, files, file_references, search_params, conversation_id
 
 class AgentResponseSchema(BaseModel):
-    """Agent response - supports both string responses and structured JSON from output parsers"""
+    """Agent response - supports both string responses and structured JSON from output parsers.
+
+    ``status="requires_approval"`` means the agent paused before running a tool that needs
+    human approval: ``response`` is empty and ``pending_approval`` says what to answer via
+    ``POST /approvals/{approval_id}/decisions`` before ``expires_at``.
+    """
+    status: Literal["completed", "requires_approval"] = "completed"
     response: Union[str, Dict[str, Any]]
     conversation_id: Optional[int] = None
     usage: Optional[Dict[str, Any]] = None
+    pending_approval: Optional[PendingApprovalSchema] = None
 
 # ==================== FILE OPERATION SCHEMAS ====================
 
@@ -127,6 +136,9 @@ class PublicSiloSchema(BaseModel):
     docs_count: int = 0
     vector_db_type: Optional[str] = None
     embedding_service_id: Optional[int] = None
+    # Media (video/audio) indexing: transcription is required, video analysis optional
+    transcription_service_id: Optional[int] = None
+    video_ai_service_id: Optional[int] = None
 
 
 class PublicSiloResponseSchema(BaseModel):
@@ -180,9 +192,49 @@ class DocsResponseSchema(BaseModel):
     docs: List[DocumentSchema]
 
 class FileIndexResponseSchema(BaseModel):
-    """File indexing response"""
+    """File indexing response.
+
+    Video/audio files are transcribed and indexed asynchronously: the response is 202 with
+    ``num_documents=0`` and the ``media_id`` to poll at ``GET /silos/{silo_id}/media/{media_id}``.
+    """
     message: str
     num_documents: int
+    media_id: Optional[int] = None
+    status: Optional[str] = None
+
+
+class SiloMediaSchema(BaseModel):
+    """Video/audio indexed in a silo, with its processing status."""
+    model_config = ConfigDict(from_attributes=True)
+
+    media_id: int
+    silo_id: int
+    repository_id: Optional[int] = None
+    name: str
+    source_type: str
+    source_url: Optional[str] = None
+    status: str  # pending | downloading | processing | transcribing | analyzing_video | indexing | ready | error
+    error_message: Optional[str] = None
+    duration: Optional[float] = None
+    language: Optional[str] = None
+    processing_mode: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None, validation_alias="custom_metadata")
+    create_date: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
+
+
+class SiloMediaListResponseSchema(BaseModel):
+    media: List[SiloMediaSchema]
+
+
+class SiloYouTubeIndexRequestSchema(BaseModel):
+    """Index a YouTube video into a silo."""
+    url: str
+    metadata: Optional[Dict[str, Any]] = None
+    forced_language: Optional[str] = None
+    chunk_min_duration: Optional[int] = None
+    chunk_max_duration: Optional[int] = None
+    chunk_overlap: Optional[int] = None
 
 # ==================== REPOSITORY SCHEMAS ====================
 
@@ -223,7 +275,8 @@ class ResourceSchema(BaseModel):
     name: Optional[str] = None
     uri: Optional[str] = None
     type: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[str] = None  # indexed | error (NULL for documents indexed before it was tracked)
+    error_message: Optional[str] = None  # why the last indexing failed
     repository_id: int
     folder_id: Optional[int] = None
     create_date: Optional[datetime] = None
@@ -236,7 +289,10 @@ class MultipleResourceResponseSchema(BaseModel):
     """Multiple resource creation response"""
     message: str
     created_resources: List[Dict[str, Any]]
-    failed_files: List[str]
+    # Files rejected before upload: {filename, error}
+    failed_files: List[Dict[str, Any]]
+    # Uploaded files that could not be indexed (kept; reindex once the cause is fixed): {resource_id, filename, error}
+    indexing_failures: List[Dict[str, Any]] = []
 
 # ==================== COMMON PATH SCHEMAS ====================
 
@@ -287,7 +343,7 @@ class MediaSchema(BaseModel):
     create_date: Optional[datetime] = None
     processed_at: Optional[datetime] = None
     folder_id: Optional[int] = None
-    repository_id: int
+    repository_id: Optional[int] = None
 
 class MediaListResponseSchema(BaseModel):
     """List of media"""

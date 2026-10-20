@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CalendarClock,
+  LoaderCircle,
   Pause,
   Pencil,
   Play,
@@ -15,7 +16,7 @@ import LoadingState from "../components/ui/LoadingState";
 import Table, { type TableColumn } from "../components/ui/Table";
 import Badge from "../components/ui/Badge";
 import ButtonLink from "../components/ui/ButtonLink";
-import { Spinner } from "../components/ui/Spinner";
+import ServiceLifecycleAlert from "../components/services/ServiceLifecycleAlert";
 
 export default function ScheduledTasksPage() {
   const { appId } = useParams();
@@ -98,16 +99,21 @@ export default function ScheduledTasksPage() {
   const columns: TableColumn<ScheduledTask>[] = [
     {
       header: "Tarea",
-      className: "px-5 py-4 font-medium text-gray-900",
+      className: "px-5 py-4",
       render: (task) => (
         <>
           <Link
-            className="text-sm font-medium text-fg dark:text-fg-dark"
+            className="font-medium text-fg hover:text-accent dark:text-fg-dark dark:hover:text-accent-dark"
             to={`/apps/${appId}/scheduled-tasks/${task.id}`}
           >
             {task.name}
           </Link>
-          <div className="text-xs font-normal text-fg-secondary dark:text-fg-secondary-dark">
+          <ServiceLifecycleAlert
+            warnings={task.lifecycle_warnings}
+            variant="compact"
+            className="mt-0.5"
+          />
+          <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
             {task.conversation_mode === "continuous"
               ? "Conversación continua"
               : "Conversación nueva por ejecución"}
@@ -120,7 +126,7 @@ export default function ScheduledTasksPage() {
       className: "px-5 py-4",
       render: (task) => (
         <Link
-          className="text-sm font-medium text-fg dark:text-fg-dark"
+          className="text-accent hover:underline dark:text-accent-dark"
           to={`/apps/${appId}/agents/${task.agent_id}`}
         >
           {agentNames[task.agent_id] ?? `Agente #${task.agent_id}`}
@@ -131,8 +137,8 @@ export default function ScheduledTasksPage() {
       header: "Próxima ejecución",
       className: "px-5 py-4",
       render: (task) => (
-        <span className="inline-flex items-center gap-2 text-xs text-fg-secondary dark:text-fg-secondary-dark">
-          <CalendarClock className="h-4 w-4 text-bronze dark:text-bronze-dark" />
+        <span className="inline-flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-fg-tertiary dark:text-fg-tertiary-dark" />
           {task.next_run_at
             ? new Date(task.next_run_at).toLocaleString()
             : "Sin próxima ejecución"}
@@ -151,15 +157,15 @@ export default function ScheduledTasksPage() {
     },
     {
       header: "Acciones",
-      headerClassName: "text-center",
+      headerClassName: "text-right",
       className: "px-5 py-4 text-right",
       render: (task) => (
-        <>
+        <div className="flex items-center justify-end gap-1">
           <Link
             aria-label="Editar tarea"
             title="Editar tarea"
             to={`/apps/${appId}/scheduled-tasks/${task.id}/edit`}
-            className="mr-2 inline-flex rounded p-2 text-fg-secondary dark:text-fg-secondary-dark"
+            className="inline-flex rounded p-2 text-fg-tertiary hover:bg-surface-hover hover:text-accent dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-accent-dark"
           >
             <Pencil className="h-4 w-4" />
           </Link>
@@ -172,10 +178,10 @@ export default function ScheduledTasksPage() {
               onClick={() => {
                 void runNow(task);
               }}
-              className="mr-2 rounded p-2 text-fg-secondary dark:text-fg-secondary-dark"
+              className="rounded p-2 text-fg-tertiary hover:bg-surface-hover hover:text-accent disabled:opacity-50 dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-accent-dark"
             >
               {runningTaskId === task.id ? (
-                <Spinner size="sm" tone="current" />
+                <LoaderCircle className="h-4 w-4 animate-spin" />
               ) : (
                 <PlayCircle className="h-4 w-4" />
               )}
@@ -183,13 +189,12 @@ export default function ScheduledTasksPage() {
           )}
           <button
             type="button"
-            aria-label={
-              task.status === "active" ? "Pausar tarea" : "Reanudar tarea"
-            }
+            aria-label={task.status === "active" ? "Pausar tarea" : "Reanudar tarea"}
+            title={task.status === "active" ? "Pausar tarea" : "Reanudar tarea"}
             onClick={() => {
               void toggle(task);
             }}
-            className="mr-2 rounded p-2 text-fg-secondary dark:text-fg-secondary-dark"
+            className="rounded p-2 text-fg-tertiary hover:bg-surface-hover hover:text-accent dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-accent-dark"
           >
             {task.status === "active" ? (
               <Pause className="h-4 w-4" />
@@ -200,14 +205,15 @@ export default function ScheduledTasksPage() {
           <button
             type="button"
             aria-label="Eliminar tarea"
+            title="Eliminar tarea"
             onClick={() => {
               void remove(task);
             }}
-            className="rounded p-2 text-fg-secondary dark:text-fg-secondary-dark"
+            className="rounded p-2 text-fg-tertiary hover:bg-error-bg hover:text-error dark:text-fg-tertiary-dark dark:hover:bg-error-bg-dark dark:hover:text-error-dark"
           >
             <Trash2 className="h-4 w-4" />
           </button>
-        </>
+        </div>
       ),
     },
   ];
@@ -215,31 +221,23 @@ export default function ScheduledTasksPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title
-          variant="titSecundario"
-          titulo="Tareas programadas"
-          subtitulo="Automatiza ejecuciones de agentes sin modificar el agente."
-        />
-
+        <Title variant="titSecundario" titulo="Tareas programadas" subtitulo="Gestiona las tareas programadas de tus agentes" />
         <ButtonLink
-          to={`/apps/${appId}/scheduled-tasks/new`}
           label="Nueva tarea programada"
+          to={`/apps/${appId}/scheduled-tasks/new`}
           variant="primary"
           size="medium"
         />
       </div>
       {loading ? (
-        <LoadingState variant="page" message="Cargando tareas…" />
-      ) : tasks.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center text-fg dark:text-fg-dark">
-          No hay tareas programadas en este workspace.
-        </div>
+        <LoadingState message="Cargando tareas…" variant="section" />
       ) : (
-        <Table
+        <Table<ScheduledTask>
           columns={columns}
           data={tasks}
           keyExtractor={(task) => task.id}
           emptyMessage="No hay tareas programadas en este workspace."
+          emptyIcon={<CalendarClock className="h-10 w-10 text-fg-faint2 dark:text-fg-faint2-dark" />}
         />
       )}
     </div>

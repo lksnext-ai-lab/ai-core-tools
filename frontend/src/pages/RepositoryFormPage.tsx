@@ -8,6 +8,9 @@ import Alert from '../components/ui/Alert';
 import { FormField, FormSelect } from '../components/ui/FormField';
 import { FormActions } from '../components/ui/FormActions';
 import { LoadingState } from '../components/ui/LoadingState';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
+import { MediaServicesFields } from '../components/forms/MediaServicesFields';
 
 interface RepositoryFormData {
   name: string;
@@ -17,9 +20,7 @@ interface RepositoryFormData {
   video_ai_service_id?: number;
 }
 
-interface EmbeddingService {
-  service_id: number;
-  name: string;
+interface EmbeddingService extends ServiceOptionLike {
   provider?: string;
   model_name?: string;
   is_system?: boolean;
@@ -30,9 +31,7 @@ interface VectorDbOption {
   label: string;
 }
 
-interface AIService {
-  service_id: number;
-  name: string;
+interface AIService extends ServiceOptionLike {
   supports_video?: boolean;
 }
 
@@ -45,6 +44,8 @@ const RepositoryFormPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
   const [aiServices, setAiServices] = useState<AIService[]>([]);
+  // Values saved on the loaded repository (D-4): the only retired services that stay selectable.
+  const [savedMedia, setSavedMedia] = useState<{ transcription?: number | null; video?: number | null }>({});
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
   const [formData, setFormData] = useState<RepositoryFormData>({
     name: '',
@@ -89,6 +90,7 @@ const RepositoryFormPage: React.FC = () => {
         setEmbeddingServices(servicesToUse);
         setVectorDbOptions(availableVectorDbOptions);
         setAiServices(repository.ai_services ?? []);
+        setSavedMedia({ transcription: repository.transcription_service_id, video: repository.video_ai_service_id });
 
         const normalizedVectorDbType = (repository.vector_db_type || 'PGVECTOR').toUpperCase();
         const resolvedVectorDbType = availableVectorDbOptions.some((option) => option.code === normalizedVectorDbType)
@@ -96,7 +98,9 @@ const RepositoryFormPage: React.FC = () => {
           : (availableVectorDbOptions[0]?.code || 'PGVECTOR');
 
         const nextEmbeddingServiceId = repository.embedding_service_id
-          ?? (isNewRepository && servicesToUse.length === 1 ? servicesToUse[0].service_id : undefined);
+          ?? (isNewRepository && servicesToUse.length === 1 && servicesToUse[0].lifecycle_status !== 'retired'
+            ? servicesToUse[0].service_id
+            : undefined);
 
         setFormData({
           name: repository.name ?? '',
@@ -250,66 +254,46 @@ const RepositoryFormPage: React.FC = () => {
 
           {/* Embedding Service (only for new repositories) */}
           {isNewRepository && (
-            <FormSelect
-              label="Embedding Service"
-              id="embedding_service_id"
-              value={formData.embedding_service_id || ''}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                embedding_service_id: e.target.value ? Number.parseInt(e.target.value, 10) : undefined 
-              })}
-              options={[
-                { value: '', label: 'Select an embedding service' },
-                ...embeddingServices.map((service) => ({
-                  value: service.service_id,
-                  label: `${service.is_system ? '[System] ' : ''}${service.provider && service.model_name
-                    ? `${service.name} (${service.provider} - ${service.model_name})`
-                    : service.name}`,
-                })),
-              ]}
-              required
-              helpText="This embedding service will be used for the silo that's automatically created with this repository"
-            />
+            <div>
+              <FormSelect
+                label="Embedding Service"
+                id="embedding_service_id"
+                value={formData.embedding_service_id || ''}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  embedding_service_id: e.target.value ? Number.parseInt(e.target.value, 10) : undefined 
+                })}
+                required
+                options={[
+                  { value: '', label: 'Select an embedding service' },
+                  ...selectableServiceOptions(embeddingServices, undefined).map((service) => ({
+                    value: service.service_id,
+                    label: serviceOptionLabel(service, [
+                      service.is_system ? '[System]' : '',
+                      service.provider && service.model_name
+                        ? `${service.name} (${service.provider} - ${service.model_name})`
+                        : service.name,
+                    ].filter(Boolean).join(' ')),
+                  })),
+                ]}
+                ariaDescribedBy={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding_service_id')}
+              />
+              <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
+              <p className="text-sm text-gray-500 mt-1">
+                This embedding service will be used for the silo that's automatically created with this repository
+              </p>
+            </div>
           )}
 
-          {/* Transcription Service */}
-          {aiServices.length > 0 && (
-            <FormSelect
-              label="Transcription Service (Whisper)"
-              id="transcription_service_id"
-              value={formData.transcription_service_id || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                transcription_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
-              })}
-              options={[
-                { value: '', label: 'None (no transcription analysis) ' },
-                ...aiServices.map((service) => ({ value: service.service_id, label: service.name })),
-              ]}
-              helpText="Transcription service used for all media uploads in this repository."
-            />
-          )}
-
-          {/* Video AI Service */}
-          {aiServices.filter(s => s.supports_video).length > 0 && (
-            <FormSelect
-              label="Video Analysis Service (Gemini)"
-              id="video_ai_service_id"
-              value={formData.video_ai_service_id || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                video_ai_service_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
-              })}
-              options={[
-                { value: '', label: 'None (no visual analysis)' },
-                ...aiServices.filter(s => s.supports_video).map((service) => ({
-                  value: service.service_id,
-                  label: service.name,
-                })),
-              ]}
-              helpText="When set, media uploaded in multimodal mode will use this service for visual frame analysis."
-            />
-          )}
+          <MediaServicesFields
+            scope="repository"
+            aiServices={aiServices}
+            transcriptionServiceId={formData.transcription_service_id}
+            videoServiceId={formData.video_ai_service_id}
+            savedTranscriptionServiceId={savedMedia.transcription}
+            savedVideoServiceId={savedMedia.video}
+            onChange={(field, value) => setFormData({ ...formData, [field]: value ?? undefined })}
+          />
 
           {/* Action Buttons */}
           <FormActions

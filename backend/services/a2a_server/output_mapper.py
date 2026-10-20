@@ -12,13 +12,16 @@ module asserts this with a source grep (no ``"data: "`` literal, no
 Error mapping (RB-7, carried into this step by the orchestrator): errors are
 sanitized on ``extra["error_kind"]`` -- the stable, closed vocabulary
 ``AgentStreamingService`` documents (``connection``, ``incomplete_turn``,
-``http``, ``serialization``, ``agent_failure``) -- never on
+``http``, ``serialization``, ``agent_failure``, ``approval``, ``pii_blocked``,
+``service_retired``) -- never on
 ``extra["error_code"]`` (a raw exception class name / internal code, not a
 vocabulary a switch should be written against). ``extra["detail"]`` is only
 ever surfaced to the A2A caller when ``error_kind == "http"`` **and** the
 status code is in the 4xx range (a caller-facing detail written by our own
 ``_prepare_turn``); 5xx and every other kind fall back to a fixed generic
-message, never the exception text or a stack trace.
+message, never the exception text or a stack trace. The one extra exception is
+``service_retired``: its ``detail`` is built by our own lifecycle helper (service
+name, retirement date, admin notice), so it is surfaced (length-capped).
 
 Final-text authority (AD-5, also carried into this step): the ``done``
 event's ``data["response"]`` is authoritative over this mapper's own running
@@ -130,6 +133,11 @@ _ERROR_KIND_MESSAGES: dict[str, str] = {
     "incomplete_turn": _GENERIC_ERROR_MESSAGE,
     "serialization": _GENERIC_ERROR_MESSAGE,
     "agent_failure": _GENERIC_ERROR_MESSAGE,
+    "approval": (
+        "This agent needs human approval before running one of its tools, which A2A "
+        "cannot provide. The tool was not executed."
+    ),
+    "pii_blocked": "The message was blocked because it contains personal data.",
     # "http" is handled separately below -- its message depends on the
     # status code, not a fixed string.
 }
@@ -157,6 +165,9 @@ def sanitize_error(extra: Optional[dict]) -> str:
         if isinstance(status_code, int) and 400 <= status_code < 500 and detail:
             return str(detail)[:_MAX_HTTP_DETAIL_CHARS]
         return _GENERIC_ERROR_MESSAGE
+
+    if kind == "service_retired":
+        return str(extra.get("detail") or _GENERIC_ERROR_MESSAGE)[:_MAX_HTTP_DETAIL_CHARS]
 
     return _ERROR_KIND_MESSAGES.get(kind, _GENERIC_ERROR_MESSAGE)
 

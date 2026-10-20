@@ -59,6 +59,7 @@ from utils.provider import initialize_provider, shutdown_provider, get_provider
 from lks_idprovider_fastapi.dependencies import get_default_provider
 
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 from utils.auth_config import AuthConfig
 from utils.secret_key import validate_secret_key
 from deployment_mode import is_saas_mode, validate_saas_env
@@ -179,6 +180,9 @@ async def lifespan(app: FastAPI):
         from services.sharepoint.worker import start_sharepoint_worker
         app.state.sharepoint_tasks = await start_sharepoint_worker()
 
+        from services.hitl_expiry_worker import start_hitl_expiry_worker
+        app.state.hitl_expiry_task = start_hitl_expiry_worker()
+
         print("✅ Application startup complete")
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
@@ -221,6 +225,12 @@ async def lifespan(app: FastAPI):
                 await stop_sharepoint_worker(sharepoint_tasks)
         except Exception as exc:
             logger.warning("SharePoint worker shutdown failed: %s", exc, exc_info=True)
+
+        try:
+            from services.hitl_expiry_worker import stop_hitl_expiry_worker
+            await stop_hitl_expiry_worker(getattr(app.state, 'hitl_expiry_task', None))
+        except Exception as exc:
+            logger.warning("HITL expiry worker shutdown failed: %s", exc, exc_info=True)
 
         try:
             a2a_maintenance_task = getattr(app.state, 'a2a_maintenance_task', None)
@@ -371,6 +381,12 @@ async def _db_pool_timeout_handler(_request: Request, exc: SQLAlchemyPoolTimeout
         content={"detail": "Service temporarily unavailable, please retry shortly."},
         headers={"Retry-After": "5"},
     )
+
+
+@app.exception_handler(ServiceRetiredError)
+async def _service_retired_handler(_request: Request, exc: ServiceRetiredError) -> JSONResponse:
+    """Map a retired service to 409 with its message (the guard already logged it)."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message, "error_code": exc.error_code})
 
 
 # Mount routers - clean structure with no nesting

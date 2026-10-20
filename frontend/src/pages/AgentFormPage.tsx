@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Settings, FileText, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
+import { AlertTriangle, Settings, FileText, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
-import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
+import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
-import { Badge, ProviderBadge } from '../components/ui/Badge';
+import AgentMiddlewaresCard, { type AgentMiddlewareOption } from '../components/forms/AgentMiddlewaresCard';
+import { Badge,ProviderBadge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 import type { TabItem } from '../components/ui/Tabs';
 import { FormCheckbox, FormField, FormSelect, FormTextArea } from '../components/ui/FormField';
 import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
@@ -29,6 +32,8 @@ import { FormActions } from '../components/ui/FormActions';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
 import { LoadingState } from '../components/ui/LoadingState';
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
 // Define the Agent types
 interface Agent {
@@ -41,10 +46,8 @@ interface Agent {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  lifecycle_warnings?: ServiceLifecycleWarning[];
   skill_router_enabled?: boolean;
-  memory_max_messages: number;
-  memory_max_tokens: number;
-  memory_summarize_threshold: number;
   service_id?: number;
   sandbox_service_id?: number;
   silo_id?: number;
@@ -83,13 +86,14 @@ interface Agent {
   media_chunk_min_duration?: number | null;
   media_chunk_max_duration?: number | null;
   media_chunk_overlap?: number | null;
-  ai_services: Array<{ service_id: number; name: string; supports_video?: boolean }>;
-  sandbox_services: Array<{ service_id: number; name: string }>;
+  ai_services: Array<ServiceOptionLike & { supports_video?: boolean }>;
+  sandbox_services: ServiceOptionLike[];
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean; is_system?: boolean }>;
+  middlewares?: AgentMiddlewareOption[];
 }
 
 interface AgentFormData {
@@ -103,9 +107,6 @@ interface AgentFormData {
   enable_code_interpreter: boolean;
   skill_router_enabled: boolean;
   server_tools: string[];
-  memory_max_messages: number;
-  memory_max_tokens: number;
-  memory_summarize_threshold: number;
   service_id?: number;
   sandbox_service_id?: number;
   silo_id?: number;
@@ -114,6 +115,7 @@ interface AgentFormData {
   tool_ids: number[];
   mcp_config_ids: number[];
   skill_ids: number[];
+  middleware_ids: number[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -302,13 +304,11 @@ function AgentFormPage() {
     enable_code_interpreter: false,
     skill_router_enabled: false,
     server_tools: [],
-    memory_max_messages: 20,
-    memory_max_tokens: 4000,
-    memory_summarize_threshold: DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
     skill_ids: [],
+    middleware_ids: [],
     rag_k: 10,
     rag_search_type: 'similarity',
     rag_score_threshold: null,
@@ -328,7 +328,7 @@ function AgentFormPage() {
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
   const [loadingSiloMetadata, setLoadingSiloMetadata] = useState(false);
-  const [embeddingServices, setEmbeddingServices] = useState<Array<{ service_id: number; name: string }>>([]);
+  const [embeddingServices, setEmbeddingServices] = useState<ServiceOptionLike[]>([]);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -363,9 +363,12 @@ function AgentFormPage() {
         if (cancelled) return;
         const list = Array.isArray(services) ? services : [];
         setEmbeddingServices(
-          list.map((s: { service_id: number; name: string }) => ({
+          list.map((s: ServiceOptionLike) => ({
             service_id: s.service_id,
             name: s.name,
+            lifecycle_status: s.lifecycle_status,
+            end_of_service_at: s.end_of_service_at,
+            deprecation_notice: s.deprecation_notice,
           }))
         );
       })
@@ -424,9 +427,6 @@ function AgentFormPage() {
         enable_code_interpreter: response.enable_code_interpreter || false,
         skill_router_enabled: response.skill_router_enabled || false,
         server_tools: response.server_tools || [],
-        memory_max_messages: response.memory_max_messages || 20,
-        memory_max_tokens: response.memory_max_tokens || 4000,
-        memory_summarize_threshold: response.memory_summarize_threshold || DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
         service_id: response.service_id || undefined,
         sandbox_service_id: response.sandbox_service_id || undefined,
         silo_id: response.silo_id || undefined,
@@ -435,6 +435,7 @@ function AgentFormPage() {
         tool_ids: response.tool_ids || [],
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
+        middleware_ids: response.middleware_ids || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -644,11 +645,11 @@ function AgentFormPage() {
       return;
     }
 
-    // Mirror the backend invariant: a media embedding service is required so
-    // uploaded media/documents are always vectorized with a valid model.
-    if (!formData.media_embedding_service_id) {
+    // Mirror the backend invariant: conversational agents keep uploaded documents in a
+    // per-conversation temp silo, which needs an embedding service.
+    if (formData.has_memory && !formData.media_embedding_service_id) {
       setActiveTab('configuration');
-      setError('Select a media embedding service in Media Processing before saving.');
+      setError('Conversational agents require a media embedding service in Media Processing.');
       return;
     }
 
@@ -683,9 +684,6 @@ function AgentFormPage() {
       enable_code_interpreter: formData.enable_code_interpreter,
       skill_router_enabled: formData.skill_router_enabled,
       server_tools: formData.server_tools,
-      memory_max_messages: formData.memory_max_messages,
-      memory_max_tokens: formData.memory_max_tokens,
-      memory_summarize_threshold: formData.memory_summarize_threshold,
       service_id: formData.service_id,
       sandbox_service_id: formData.enable_code_interpreter ? formData.sandbox_service_id : undefined,
       silo_id: formData.silo_id,
@@ -694,6 +692,7 @@ function AgentFormPage() {
       tool_ids: formData.tool_ids,
       mcp_config_ids: formData.mcp_config_ids,
       skill_ids: formData.skill_ids,
+      middleware_ids: formData.middleware_ids,
       // OCR-specific fields
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
@@ -791,6 +790,8 @@ function AgentFormPage() {
     ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
   ];
 
+  const videoServiceOptions = agent?.ai_services?.filter((service) => service.supports_video);
+
   return (
     <div className="min-h-screen p-6">
       <div className="max-w-4xl mx-auto">
@@ -819,6 +820,10 @@ function AgentFormPage() {
             Back to Agents
           </button>*/}
         </div>
+
+        {agent && (
+          <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="mb-6" />
+        )}
 
         {/* Error Message */}
         {error && (
@@ -900,134 +905,26 @@ function AgentFormPage() {
               </div>
               
               <div className="space-y-6">
-                <div>
-                  <label htmlFor="system_prompt" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                    System Prompt
-                  </label>
-                  <textarea
-                    id="system_prompt"
-                    value={formData.system_prompt}
-                    onChange={(e) => handleInputChange('system_prompt', e.target.value)}
-                    rows={4}
-                    className="w-full px-4 py-3 border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
-                    placeholder="Define the agent's behavior and capabilities..."
-                  />
-                </div>
+                <FormTextArea
+                  label="System Prompt"
+                  id="system_prompt"
+                  value={formData.system_prompt}
+                  onChange={(e) => handleInputChange('system_prompt', e.target.value)}
+                  rows={4}
+                  placeholder="Define the agent's behavior and capabilities..."
+                />
 
                 <div>
-                  <label htmlFor="prompt_template" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                    Prompt Template
-                  </label>
-                  <textarea
+                  <FormTextArea
+                    label="Prompt Template"
                     id="prompt_template"
                     value={formData.prompt_template}
                     onChange={(e) => handleInputChange('prompt_template', e.target.value)}
                     rows={4}
-                    className="w-full px-4 py-3 border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
                     placeholder="Template for user interactions (must include {question})..."
                   />
                   <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
-
-                {/* Memory Management - Conditional */}
-                {formData.has_memory && (
-                  <CardApp>
-                    <div className="flex items-center mb-6">
-                      <BackgroundImage
-                        icon={Brain}
-                        size={40}
-                        variant="marron"
-                        className="mr-4 rounded-xl"
-                      />
-                      <div className="flex-1">
-                        <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Memory Management</h3>
-                        <p className="text-sm text-secondary dark:text-secondary-dark mt-1">Configure the agent's memory management strategy</p>
-                      </div>
-                    </div>
-
-                    <Alert
-                      type="info"
-                      title="Automatic Hybrid Strategy"
-                      className="mb-6"
-                      message="The agent automatically applies a hybrid strategy that removes tool messages, trims the history, and manages token limits to optimize performance and costs."
-                    />
-                    
-                    <div className="space-y-6">
-                      <div>
-                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                          Maximum Messages
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_messages"
-                          min="1"
-                          max="100"
-                          value={formData.memory_max_messages}
-                          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2">
-                          Maximum number of messages to keep in the conversation history (recommended: 20)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                          Token Limit
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_tokens"
-                          min="100"
-                          max="32000"
-                          step="100"
-                          value={formData.memory_max_tokens}
-                          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2">
-                          Maximum number of tokens for the conversation history (recommended: 4000)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                          Summarization Threshold
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_summarize_threshold"
-                          min="1"
-                          max="50"
-                          value={formData.memory_summarize_threshold}
-                          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2">
-                          Number of old messages at which summarization is considered (future implementation, recommended: 10)
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-fg dark:text-fg-dark mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-secondary dark:text-secondary-dark">Messages:</span>
-                          <span className="ml-2 font-medium text-fg dark:text-fg-dark">{formData.memory_max_messages}</span>
-                        </div>
-                        <div>
-                          <span className="text-secondary dark:text-secondary-dark">Tokens:</span>
-                          <span className="ml-2 font-medium text-fg dark:text-fg-dark">{formData.memory_max_tokens.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-secondary dark:text-secondary-dark">Threshold:</span>
-                          <span className="ml-2 font-medium text-fg dark:text-fg-dark">{formData.memory_summarize_threshold}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </CardApp>
-                )}
               </div>
             </CardApp>
           )}
@@ -1052,18 +949,19 @@ function AgentFormPage() {
                         <FormSelect
                           label="AI Service"
                           id="ai_service"
+                          ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.service_id, "ai_service")}
                           value={formData.service_id || ''}
                           onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           required
                           options={[
                             { value: '', label: 'Select AI Service' },
-                            ...(agent?.ai_services.map((service) => ({
+                            ...selectableServiceOptions(agent?.ai_services, agent?.service_id).map((service) => ({
                               value: service.service_id,
-                              label: service.name,
-                            })) ?? []),
+                              label: serviceOptionLabel(service),
+                            })),
                           ]}
-                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                         />
+                        <ServiceOptionStatus selectId="ai_service" options={agent?.ai_services} selectedId={formData.service_id} />
                       </div>
 
                       <div>
@@ -1242,18 +1140,21 @@ function AgentFormPage() {
                           <FormSelect
                             label="Sandbox Service"
                             id="sandbox_service"
+                            ariaDescribedBy={serviceStatusId(agent?.sandbox_services, formData.sandbox_service_id, 'sandbox_service')}
                             value={formData.sandbox_service_id || ''}
                             onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                             options={[
                               { value: '', label: 'Use app/system default' },
-                              ...(agent?.sandbox_services.map((service) => ({
+                              ...selectableServiceOptions(agent?.sandbox_services, agent?.sandbox_service_id).map((service) => ({
                                 value: service.service_id,
-                                label: service.name,
-                              })) ?? []),
+                                label: serviceOptionLabel(service),
+                              })),
                             ]}
-                            helpText="Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service."
-                            labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                           />
+                          <ServiceOptionStatus selectId="sandbox_service" options={agent?.sandbox_services} selectedId={formData.sandbox_service_id} />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1362,19 +1263,25 @@ function AgentFormPage() {
                       <FormSelect
                         label="Embedding Service"
                         id="media_embedding_service"
-                        required
+                        ariaDescribedBy={serviceStatusId(embeddingServices, formData.media_embedding_service_id, "media_embedding_service")}
+                        required={formData.has_memory}
                         value={formData.media_embedding_service_id || ''}
                         onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         options={[
-                          { value: '', label: 'Select Embedding Service' },
-                          ...embeddingServices.map((service) => ({
+                          { value: '', label: 'None (no temporary knowledge base)' },
+                          ...selectableServiceOptions(embeddingServices, agent?.media_embedding_service_id).map((service) => ({
                             value: service.service_id,
-                            label: service.name,
+                            label: serviceOptionLabel(service),
                           })),
                         ]}
-                        helpText="Required. Model used to vectorize uploaded media/documents into the conversation's temporary knowledge base for retrieval."
                         labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                       />
+                      <ServiceOptionStatus selectId="media_embedding_service" options={embeddingServices} selectedId={formData.media_embedding_service_id} />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Model used to vectorize uploaded media/documents into the conversation's temporary
+                        knowledge base for retrieval. Required for conversational agents; optional otherwise
+                        (documents are then sent in full to the agent, and audio/video uploads are unavailable).
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1382,36 +1289,40 @@ function AgentFormPage() {
                         <FormSelect
                           label="Transcription Service"
                           id="transcription_service"
+                          ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.transcription_service_id, "transcription_service")}
                           value={formData.transcription_service_id || ''}
                           onChange={(e) => handleInputChange('transcription_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           options={[
                             { value: '', label: 'Select Transcription Service' },
-                            ...(agent?.ai_services.map((service) => ({
+                            ...selectableServiceOptions(agent?.ai_services, agent?.transcription_service_id).map((service) => ({
                               value: service.service_id,
-                              label: service.name,
-                            })) ?? []),
+                              label: serviceOptionLabel(service),
+                            })),
                           ]}
-                          helpText="Speech-to-text model used to transcribe media."
                           labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                         />
+                        <ServiceOptionStatus selectId="transcription_service" options={agent?.ai_services} selectedId={formData.transcription_service_id} />
+                        <p className="text-xs text-gray-500 mt-1">Speech-to-text model used to transcribe media.</p>
                       </div>
 
                       <div>
                         <FormSelect
                           label="Video Analysis Service (optional)"
                           id="video_ai_service"
+                          ariaDescribedBy={serviceStatusId(videoServiceOptions, formData.video_ai_service_id, "video_ai_service")}
                           value={formData.video_ai_service_id || ''}
                           onChange={(e) => handleInputChange('video_ai_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           options={[
                             { value: '', label: 'None (audio only)' },
-                            ...(agent?.ai_services.filter((service) => service.supports_video).map((service) => ({
+                            ...selectableServiceOptions(videoServiceOptions, agent?.video_ai_service_id).map((service) => ({
                               value: service.service_id,
-                              label: service.name,
-                            })) ?? []),
+                              label: serviceOptionLabel(service),
+                            })),
                           ]}
-                          helpText="Enables multimodal analysis (visual descriptions from video frames)."
                           labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                         />
+                        <ServiceOptionStatus selectId="video_ai_service" options={videoServiceOptions} selectedId={formData.video_ai_service_id} />
+                        <p className="text-xs text-gray-500 mt-1">Enables multimodal analysis (visual descriptions from video frames).</p>
                       </div>
 
                       <div>
@@ -1514,30 +1425,28 @@ function AgentFormPage() {
                       <FormSelect
                         label="Modelo de Visión"
                         id="vision_service"
+                        ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.vision_service_id, "vision_service")}
                         value={formData.vision_service_id || ''}
                         onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         options={[
                           { value: '', label: '-- Seleccionar modelo de visión --' },
-                          ...(agent?.ai_services.map((service) => ({
+                          ...selectableServiceOptions(agent?.ai_services, agent?.vision_service_id).map((service) => ({
                             value: service.service_id,
-                            label: service.name,
-                          })) ?? []),
+                            label: serviceOptionLabel(service),
+                          })),
                         ]}
                         labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
-                        
                       />
+                      <ServiceOptionStatus selectId="vision_service" options={agent?.ai_services} selectedId={formData.vision_service_id} />
                     </div>
 
                     <div>
-                      <label htmlFor="vision_system_prompt" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                        System Prompt (Visión)
-                      </label>
-                      <textarea
+                      <FormTextArea
+                        label="System Prompt (Visión)"
                         id="vision_system_prompt"
                         value={formData.vision_system_prompt || ''}
                         onChange={(e) => handleInputChange('vision_system_prompt', e.target.value)}
                         rows={2}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         placeholder="Añade el system prompt para el modelo de visión..."
                       />
                     </div>
@@ -1546,30 +1455,28 @@ function AgentFormPage() {
                       <FormSelect
                         label="Modelo de Texto"
                         id="text_service"
+                        ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.service_id, "text_service")}
                         value={formData.service_id || ''}
                         onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         options={[
                           { value: '', label: '-- Seleccionar modelo de texto --' },
-                          ...(agent?.ai_services.map((service) => ({
+                          ...selectableServiceOptions(agent?.ai_services, agent?.service_id).map((service) => ({
                             value: service.service_id,
-                            label: service.name,
-                          })) ?? []),
+                            label: serviceOptionLabel(service),
+                          })),
                         ]}
                         labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
-                        
                       />
+                      <ServiceOptionStatus selectId="text_service" options={agent?.ai_services} selectedId={formData.service_id} />
                     </div>
 
                     <div>
-                      <label htmlFor="text_system_prompt" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
-                        System Prompt (Texto)
-                      </label>
-                      <textarea
+                      <FormTextArea
+                        label="System Prompt (Texto)"
                         id="text_system_prompt"
                         value={formData.text_system_prompt || ''}
                         onChange={(e) => handleInputChange('text_system_prompt', e.target.value)}
                         rows={2}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         placeholder="Añade el system prompt para el modelo de texto..."
                       />
                     </div>
@@ -1714,6 +1621,18 @@ function AgentFormPage() {
                     </div>
                   )}
                 </CardApp>
+              )}
+
+              {/* Middlewares Card - Only for regular agents */}
+              {agent?.middlewares && formData.type !== 'ocr_agent' && (
+                <AgentMiddlewaresCard
+                  middlewares={agent.middlewares}
+                  selectedIds={formData.middleware_ids}
+                  hasMemory={formData.has_memory}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, middleware_ids: ids }))}
+                  onRequireMemory={() => setFormData((prev) => ({ ...prev, has_memory: true }))}
+                  onManage={() => navigate(`/apps/${appId}/middlewares`)}
+                />
               )}
 
               {/* Skills Card - Only for regular agents */}

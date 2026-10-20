@@ -7,6 +7,8 @@ import SiloForm from '../components/forms/SiloForm';
 import Title from '../components/ui/Title';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
 // Define the Silo type
 interface VectorDbOption {
@@ -27,6 +29,10 @@ interface Silo {
   output_parsers?: { parser_id: number; name: string }[];
   embedding_services?: { service_id: number; name: string }[];
   vector_db_options?: VectorDbOption[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  ai_services?: { service_id: number; name: string; supports_video?: boolean }[];
+  lifecycle_warnings?: ServiceLifecycleWarning[];
 }
 
 function SiloFormPage() {
@@ -150,6 +156,8 @@ function SiloFormPage() {
             }
           />
 
+
+      {silo && <ServiceLifecycleAlert warnings={silo.lifecycle_warnings} variant="full" />}
 
       {/* Silo Form */}
       <SiloForm

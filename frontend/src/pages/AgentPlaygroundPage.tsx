@@ -10,6 +10,8 @@ import ConversationSidebar from '../components/playground/ConversationSidebar';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
 import { ButtonApp } from '../components/ui/ButtonApp';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
+import type { ServiceLifecycleWarning } from '../types/services';
 
 interface Agent {
   agent_id: number;
@@ -20,6 +22,7 @@ interface Agent {
   has_memory?: boolean;
   system_prompt?: string;
   prompt_template?: string;
+  lifecycle_warnings?: ServiceLifecycleWarning[];
   silo?: {
     silo_id: number;
     name: string;
@@ -213,6 +216,8 @@ function AgentPlaygroundPage() {
           </button>
         </div>
       </div>
+
+      <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="flex-shrink-0 max-h-48 overflow-y-auto" />
 
       {/* Agent Info — compact single-line header bar */}
       <div className="pg-glass rounded-xl px-4 py-3 flex items-center justify-between flex-shrink-0">

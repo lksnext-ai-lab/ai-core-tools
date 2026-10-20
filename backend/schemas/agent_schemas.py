@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from models.agent import DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD
+from schemas.service_lifecycle_schemas import ServiceLifecycleWarningSchema
 
 _VALID_RAG_SEARCH_TYPES = {"similarity", "mmr", "similarity_score_threshold"}
 
@@ -245,7 +246,6 @@ class RuntimeSearchParamsSchema(BaseModel):
             raise ValueError("must be between 0 and 1")
         return v
 
-
 # ==================== AGENT SCHEMAS ====================
 
 class AgentListItemSchema(BaseModel):
@@ -262,6 +262,7 @@ class AgentListItemSchema(BaseModel):
     marketplace_visibility: Optional[str] = None
     is_frozen: bool = False
     a2a_enabled: bool = False
+    lifecycle_warnings: List[ServiceLifecycleWarningSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -290,6 +291,7 @@ class AgentDetailSchema(BaseModel):
     tool_ids: List[int] = []
     mcp_config_ids: List[int] = []
     skill_ids: List[int] = []
+    middleware_ids: List[int] = []
     created_at: Optional[datetime] = None
     request_count: int
     # OCR-specific fields
@@ -316,6 +318,7 @@ class AgentDetailSchema(BaseModel):
     tools: List[Dict[str, Any]]
     mcp_configs: List[Dict[str, Any]]
     skills: List[Dict[str, Any]]
+    middlewares: List[Dict[str, Any]] = []
     marketplace_visibility: Optional[str] = None
     marketplace_profile: Optional[Dict[str, Any]] = None
     is_frozen: bool = False
@@ -334,6 +337,7 @@ class AgentDetailSchema(BaseModel):
     a2a_examples: List[str] = []
     a2a_card_url: Optional[str] = None
     a2a_rpc_url: Optional[str] = None
+    lifecycle_warnings: List[ServiceLifecycleWarningSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -361,6 +365,8 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin, A2AAgentFieldsMixin):
     tool_ids: Optional[List[int]] = []
     mcp_config_ids: Optional[List[int]] = []
     skill_ids: Optional[List[int]] = []
+    # None = leave the agent's middlewares untouched; a list replaces them (order = chain order).
+    middleware_ids: Optional[List[int]] = None
     # OCR-specific fields
     vision_service_id: Optional[int] = None
     vision_system_prompt: Optional[str] = None
@@ -368,9 +374,9 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin, A2AAgentFieldsMixin):
     # Media processing configuration (playground media upload)
     transcription_service_id: Optional[int] = None
     video_ai_service_id: Optional[int] = None
-    # Optional embedding service used to vectorize media/documents into the
-    # session's temp playground silo. Agents that do not use media/document
-    # processing do not need to configure one.
+    # Embedding service used to vectorize media/documents into the session's
+    # temp playground silo. Required for conversational agents (has_memory),
+    # which rely on that silo to recall documents across turns.
     media_embedding_service_id: Optional[int] = None
     media_forced_language: Optional[str] = None
     media_chunk_min_duration: Optional[int] = Field(default=30, ge=1, le=3600)
@@ -389,6 +395,10 @@ class CreateUpdateAgentSchema(RagConfigFieldsMixin, A2AAgentFieldsMixin):
         if ov is not None and mx is not None and ov >= mx:
             raise ValueError(
                 "media_chunk_overlap must be smaller than media_chunk_max_duration"
+            )
+        if self.type == "agent" and self.has_memory and not self.media_embedding_service_id:
+            raise ValueError(
+                "media_embedding_service_id is required for conversational agents (has_memory)"
             )
         return self
 

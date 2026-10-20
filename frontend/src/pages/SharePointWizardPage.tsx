@@ -11,6 +11,8 @@ import { ButtonApp } from '../components/ui/ButtonApp';
 import { Spinner } from '../components/ui/Spinner';
 import Title from '../components/ui/Title';
 import { FormField, FormRadio, FormSelect, FormTextArea } from '../components/ui/FormField';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 
 const WIZARD_STEPS: StepDefinition[] = [
   { id: 'connect', label: 'Connect' },
@@ -35,10 +37,7 @@ interface DriveSelection {
   drive_name: string;
 }
 
-interface EmbeddingService {
-  service_id: number;
-  name: string;
-}
+type EmbeddingService = ServiceOptionLike;
 
 function SharePointWizardPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -355,18 +354,29 @@ function SharePointWizardPage() {
                 </p>
               </div>
 
-              <FormSelect
-                label="Embedding Service"
-                id="embedding-service"
-                value={embeddingServiceId ?? ''}
+              <div>
+                <FormSelect
+                  label="Embedding Service"
+                  id="sharepoint-embedding-service"
+                  value={embeddingServiceId ?? ''}
                   onChange={(e) =>
                     setEmbeddingServiceId(e.target.value ? Number(e.target.value) : undefined)
                   }
-                options={[
-                  { value: '', label: '— Use default —' },
-                  ...embeddingServices.map((svc) => ({ value: svc.service_id, label: svc.name })),
-                ]}
-              />
+                  options={[
+                    { value: '', label: '— Use default —' },
+                    ...selectableServiceOptions(embeddingServices, undefined).map((service) => ({
+                      value: service.service_id,
+                      label: serviceOptionLabel(service),
+                    })),
+                  ]}
+                  ariaDescribedBy={serviceStatusId(embeddingServices, embeddingServiceId, 'sharepoint-embedding-service')}
+                />
+                <ServiceOptionStatus
+                  options={embeddingServices}
+                  selectedId={embeddingServiceId}
+                  selectId="sharepoint-embedding-service"
+                />
+              </div>
 
               <FormSelect
                 label="Vector Database"
@@ -380,7 +390,7 @@ function SharePointWizardPage() {
               />
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1">
                   File Extension Filters
                 </label>
                 <TagInput
@@ -389,7 +399,7 @@ function SharePointWizardPage() {
                   maxTags={20}
                   placeholder="e.g. pdf, docx — press Enter to add"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
                   Leave empty to index all supported file types.
                 </p>
               </div>

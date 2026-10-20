@@ -8,6 +8,8 @@ interface AlertProps {
   message: string | ReactNode;
   onDismiss?: () => void;
   className?: string;
+  /** Announce politely (role=status) even for error/warning types. Default: false. */
+  polite?: boolean;
 }
 
 const alertStyles = {
@@ -53,11 +55,12 @@ const Alert: React.FC<AlertProps> = ({
   title,
   message,
   onDismiss,
-  className = ''
+  className = '',
+  polite = false
 }) => {
   const styles = alertStyles[type];
   const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
-  const assertive = type === 'error' || type === 'warning';
+  const assertive = !polite && (type === 'error' || type === 'warning');
 
   return (
     <div
@@ -74,7 +77,7 @@ const Alert: React.FC<AlertProps> = ({
           </h3>
           )}
           
-          <div className={`text-sm ${styles.messageColor} mt-1`}>{message}</div>
+          <div className={`text-sm ${styles.messageColor} mt-1  whitespace-pre-line`}>{message}</div>
           {onDismiss && (
             <button
               type="button"

@@ -1,6 +1,8 @@
 import Alert from '../../ui/Alert';
 import type { AgentImportPreview } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
+import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../../ui/ServiceOptionStatus';
+import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
 
 interface Props {
   preview: AgentImportPreview;
@@ -8,7 +10,7 @@ interface Props {
   onUseExistingAIServiceChange: (val: boolean) => void;
   selectedAIServiceId: number | null;
   onSelectedAIServiceIdChange: (id: number | null) => void;
-  availableAIServices: Array<{ id: number; name: string }>;
+  availableAIServices: readonly ServiceOptionLike[];
   importBundledSilo: boolean;
   onImportBundledSiloChange: (val: boolean) => void;
   importBundledOutputParser: boolean;
@@ -132,17 +134,23 @@ function AgentStepDeps({
                       : null
                   )
                 }
+                id="agent-import-ai-service"
+                aria-label="AI service"
+                aria-describedby={serviceStatusId(availableAIServices, selectedAIServiceId, 'agent-import-ai-service')}
                 className="w-full mt-2 border border-gray-300 rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">
                   -- Select AI Service --
                 </option>
-                {availableAIServices.map((svc) => (
-                  <option key={svc.id} value={svc.id}>
-                    {svc.name}
-                  </option>
-                ))}
+                <ServiceSelectOptions options={availableAIServices} savedValue={undefined} />
               </select>
+            )}
+            {useExistingAIService && (
+              <ServiceOptionStatus
+                options={availableAIServices}
+                selectedId={selectedAIServiceId}
+                selectId="agent-import-ai-service"
+              />
             )}
             {!useExistingAIService && (
               <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
@@ -165,17 +173,21 @@ function AgentStepDeps({
                     : null
                 )
               }
+              id="agent-import-ai-service-required"
+              aria-label="AI service"
+              aria-describedby={serviceStatusId(availableAIServices, selectedAIServiceId, 'agent-import-ai-service-required')}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             >
               <option value="">
                 -- Select AI Service --
               </option>
-              {availableAIServices.map((svc) => (
-                <option key={svc.id} value={svc.id}>
-                  {svc.name}
-                </option>
-              ))}
+              <ServiceSelectOptions options={availableAIServices} savedValue={undefined} />
             </select>
+            <ServiceOptionStatus
+              options={availableAIServices}
+              selectedId={selectedAIServiceId}
+              selectId="agent-import-ai-service-required"
+            />
           </>
         )}
       </DepCard>

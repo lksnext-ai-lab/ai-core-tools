@@ -31,6 +31,7 @@ from schemas.marketplace_schemas import (
 )
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from tools.stream_guard import guard_agent_stream
 from services.file_management_service import FileManagementService, FileReference
 from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from routers.internal.auth_utils import get_current_user_oauth
@@ -39,6 +40,8 @@ from routers.controls.role_authorization import require_min_role, AppRole
 from models.agent import MarketplaceVisibility
 
 from utils.logger import get_logger
+from utils.error_handlers import ValidationError
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -435,6 +438,16 @@ async def create_or_update_agent(
     )
 
     try:
+        # Validate before writing anything so a bad selection leaves the agent untouched.
+        middleware_ids = None
+        if agent_data.middleware_ids is not None:
+            middleware_ids = AgentService.validate_middleware_selection(
+                db, app_id, agent_data.middleware_ids, bool(agent_data.has_memory)
+            )
+        elif agent_id:
+            # Chain not sent: it stays as is, but must still fit the agent's new settings
+            # (e.g. memory cannot be turned off under a human-approval middleware).
+            AgentService.validate_current_middlewares(db, app_id, agent_id, bool(agent_data.has_memory))
         # Create or update agent
         created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
     except ValueError as exc:
@@ -444,6 +457,8 @@ async def create_or_update_agent(
     agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
     agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
     agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+    if middleware_ids is not None:
+        agent_service.update_agent_middlewares(db, created_agent_id, middleware_ids)
 
     # Return updated agent (reuse the GET logic)
     return await get_agent(app_id, created_agent_id, auth_context, role, db, agent_service)
@@ -653,6 +668,7 @@ async def _save_uploaded_file(upload_file: UploadFile) -> str:
     response_model=ChatResponseSchema,
     responses={
         404: {"description": "Agent not found"},
+        409: {"description": "A service used by this resource was retired"},
         429: {"description": "Marketplace call quota exceeded"},
         500: {"description": "Internal server error"},
     },
@@ -734,7 +750,7 @@ async def chat_with_agent(
         logger.info(f"Chat request processed for agent {agent_id} by user {auth_context.identity.id}")
         return ChatResponseSchema(**result)
 
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")
@@ -747,7 +763,10 @@ async def chat_with_agent(
     "/{agent_id}/chat/stream",
     summary="Chat with agent (streaming)",
     tags=["Agents"],
-    responses={500: {"description": "Internal server error"}},
+    responses={
+        409: {"description": "A service used by this resource was retired"},
+        500: {"description": "Internal server error"},
+    },
 )
 async def chat_with_agent_stream(
     app_id: int,
@@ -813,7 +832,7 @@ async def chat_with_agent_stream(
         # streaming, not when the endpoint returns its StreamingResponse.
         async def generator() -> AsyncGenerator[str, None]:
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release the request DB session: get_db teardown runs too late
@@ -832,7 +851,7 @@ async def chat_with_agent_stream(
             },
         )
 
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error in streaming chat endpoint: {str(e)}")
@@ -945,7 +964,10 @@ async def get_conversation_history(
     "/{agent_id}/upload-file",
     summary="Upload file for chat",
     tags=["Agents"],
-    responses={500: {"description": "File upload failed"}},
+    responses={
+        409: {"description": "A service used by this resource was retired"},
+        500: {"description": "File upload failed"},
+    },
 )
 async def upload_file_for_chat(
     app_id: int,
@@ -1013,6 +1035,11 @@ async def upload_file_for_chat(
                         content=file_ref.content,
                         db=db,
                     )
+                except ServiceRetiredError:
+                    await file_service.discard_uploaded_file(
+                        file_ref.file_id, agent_id, user_context, conversation_id
+                    )
+                    raise
                 except Exception as vec_err:
                     logger.warning(f"File vectorization at upload failed: {vec_err}")
 
@@ -1032,7 +1059,7 @@ async def upload_file_for_chat(
             "mime_type": file_ref.mime_type
         }
         
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error in file upload endpoint: {str(e)}")
@@ -1350,9 +1377,9 @@ async def upload_playground_media(
             ],
             "failed_files": result["failed_files"],
         }
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
-    except ValueError as e:
+    except (ValueError, ValidationError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error uploading playground media: {e}", exc_info=True)
@@ -1407,9 +1434,9 @@ async def add_playground_youtube(
             "silo_id": result["silo_id"],
             "media": MR.model_validate(result["media"], from_attributes=True),
         }
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
-    except ValueError as e:
+    except (ValueError, ValidationError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error adding playground YouTube: {e}", exc_info=True)

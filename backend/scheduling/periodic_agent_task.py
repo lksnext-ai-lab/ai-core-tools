@@ -22,6 +22,9 @@ except ImportError:  # Keeps unit tests and local tooling usable before dependen
     DBOSConfig = dict
 
 
+SERVICE_RETIRED_CODE = "SERVICE_RETIRED"
+
+
 async def _invoke_agent(
     agent_id: int,
     input_context: dict[str, Any] | None,
@@ -29,7 +32,11 @@ async def _invoke_agent(
     user_context: dict[str, Any],
 ) -> dict[str, Any]:
     """Run the agent once and return only what the run keeps: its answer and produced files."""
+    from fastapi import HTTPException
+    from models.hitl_approval import ApprovalChannel
     from services.agent_execution_service import AgentExecutionService
+    from services.hitl_approval_service import ApprovalNotSupportedError
+    from utils.service_lifecycle import ServiceRetiredError
 
     context = input_context or {}
     message = context.get("message") or json.dumps(context, ensure_ascii=False, default=str)
@@ -41,7 +48,18 @@ async def _invoke_agent(
             user_context=dict(user_context),
             conversation_id=conversation_id,
             db=db,
+            channel=ApprovalChannel.SCHEDULED,
         )
+    except HTTPException as exc:
+        # Nobody can approve a tool during a scheduled run; the pause was already
+        # rejected, so record why instead of retrying a run that would pause again.
+        if isinstance(exc.detail, dict) and exc.detail.get("code") == ApprovalNotSupportedError.code:
+            return {"response": exc.detail["message"], "files": []}
+        raise
+    except ServiceRetiredError as exc:
+        # Return (never raise) so the DBOS step does not retry a run that cannot succeed.
+        # Already logged once by the lifecycle guard.
+        return {"response": None, "files": [], "error": exc.message, "error_code": SERVICE_RETIRED_CODE}
     finally:
         db.close()
     return {
@@ -144,6 +162,15 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
 
         context = task.input if isinstance(task.input, dict) else {"input": task.input}
         result = await invoke_agent_step(task.agent_id, context, run.conversation_id, task_user_context(task))
+        if (result or {}).get("error_code") == SERVICE_RETIRED_CODE:
+            # A retired service cannot succeed on retry: fail the run with the reason,
+            # deliver nothing, and do not re-raise (DBOS would recover the workflow).
+            run.status = "failed"
+            run.finished_at = datetime.now(timezone.utc)
+            run.error_summary = str(result.get("error") or "")[:4000]
+            db.commit()
+            await _prune(db, task)
+            return result
         agent_completed = True
         completed_output = {
             "response": (result or {}).get("response"),

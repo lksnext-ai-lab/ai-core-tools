@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Upload, ArrowDownToLine, Plug, Pencil, Trash2, Lightbulb } from 'lucide-react';
+import { Upload, ArrowDownToLine, Plug, Pencil, Trash2} from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';

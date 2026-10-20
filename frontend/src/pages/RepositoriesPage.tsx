@@ -15,12 +15,15 @@ import Alert from '../components/ui/Alert';
 import ButtonApp from '../components/ui/ButtonApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { LoadingState } from '../components/ui/LoadingState';
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
 interface Repository {
   repository_id: number;
   name: string;
   created_at: string;
   resource_count: number;
+  lifecycle_warnings?: ServiceLifecycleWarning[];
 }
 
 const RepositoriesPage: React.FC = () => {
@@ -170,6 +173,7 @@ const RepositoriesPage: React.FC = () => {
                   <div className="text-sm font-medium text-fg dark:text-fg-dark transition-colors">
                     {repository.name}
                   </div>
+                  <ServiceLifecycleAlert warnings={repository.lifecycle_warnings} variant="compact" className="mt-0.5" />
                 </div>
               </button>
             )

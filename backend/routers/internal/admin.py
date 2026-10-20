@@ -26,7 +26,10 @@ from schemas.admin_schemas import (
 )
 from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
 from services.marketplace_quota_service import MarketplaceQuotaService
+from schemas.service_lifecycle_schemas import ServiceUsageSchema
+from services.service_lifecycle_service import ServiceLifecycleService
 from services.system_settings_service import SystemSettingsService
+from utils.service_lifecycle import SERVICE_KIND_AI, SERVICE_KIND_EMBEDDING
 from services.user_service import UserService
 from utils.config import is_omniadmin
 from utils.logger import get_logger
@@ -725,24 +728,11 @@ async def list_system_ai_services(
 ):
     """List all platform-level AI Services (OMNIADMIN only, available in all deployment modes)."""
     from repositories.ai_service_repository import AIServiceRepository
-    from utils.secret_utils import mask_api_key
-    from tools.aws_bedrock_utils import parse_extra_config
+    from services.ai_service_service import AIServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     services = AIServiceRepository.get_system_services(db)
-    return [
-        AIServiceDetailSchema(
-            service_id=svc.service_id,
-            name=svc.name,
-            provider=svc.provider.value if hasattr(svc.provider, 'value') else svc.provider,
-            model_name=svc.description or "",
-            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
-            base_url=svc.endpoint or "",
-            supports_video=svc.supports_video or False,
-            created_at=svc.create_date,
-            aws_access_key_id=parse_extra_config(svc.extra_config).get("aws_access_key_id"),
-            aws_region=parse_extra_config(svc.extra_config).get("aws_region"),
-        )
-        for svc in services
-    ]
+    warning_days = ServiceLifecycleService.warning_days(db)
+    return [AIServiceService.to_detail(svc, warning_days) for svc in services]
 
 
 @router.get("/system-ai-services/{service_id}", response_model=AIServiceDetailSchema)
@@ -753,25 +743,13 @@ async def get_system_ai_service(
 ):
     """Get a single platform-level AI Service by ID (OMNIADMIN only)."""
     from repositories.ai_service_repository import AIServiceRepository
-    from utils.secret_utils import mask_api_key
-    from tools.aws_bedrock_utils import parse_extra_config
+    from services.ai_service_service import AIServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
 
     svc = AIServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail=SYSTEM_AI_SERVICE_NOT_FOUND)
-    extra_cfg = parse_extra_config(svc.extra_config)
-    return AIServiceDetailSchema(
-        service_id=svc.service_id,
-        name=svc.name,
-        provider=svc.provider.value if hasattr(svc.provider, 'value') else svc.provider,
-        model_name=svc.description or "",
-        api_key=mask_api_key(svc.api_key) if svc.api_key else "",
-        base_url=svc.endpoint or "",
-        supports_video=svc.supports_video or False,
-        created_at=svc.create_date,
-        aws_access_key_id=extra_cfg.get("aws_access_key_id"),
-        aws_region=extra_cfg.get("aws_region"),
-    )
+    return AIServiceService.to_detail(svc, ServiceLifecycleService.warning_days(db))
 
 
 @router.post("/system-ai-services", response_model=AIServiceListItemSchema, status_code=201)
@@ -784,7 +762,9 @@ async def create_system_ai_service(
     from models.ai_service import AIService
     from repositories.ai_service_repository import AIServiceRepository
     from services.ai_service_service import AIServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     from tools.aws_bedrock_utils import build_extra_config
+    from utils.service_lifecycle import SERVICE_KIND_AI
     from datetime import datetime
 
     svc = AIService()
@@ -796,9 +776,14 @@ async def create_system_ai_service(
     svc.endpoint = body.base_url or ""
     svc.supports_video = body.supports_video
     svc.extra_config = build_extra_config(body.aws_access_key_id, body.aws_region)
+    AIServiceService.apply_lifecycle_fields(svc, body, int(auth_context.identity.id))
     svc.create_date = datetime.now()
     svc = AIServiceRepository.create(db, svc)
-    return AIServiceService._to_list_item(svc, is_system=True)
+    if svc.end_of_service_at is not None:
+        ServiceLifecycleService.log_change(
+            svc, SERVICE_KIND_AI, None, svc.end_of_service_at, int(auth_context.identity.id)
+        )
+    return AIServiceService._to_list_item(svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db))
 
 
 @router.put("/system-ai-services/{service_id}", response_model=AIServiceListItemSchema)
@@ -811,6 +796,7 @@ async def update_system_ai_service(
     """Update a platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
     from repositories.ai_service_repository import AIServiceRepository
     from services.ai_service_service import AIServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     from utils.secret_utils import is_masked_key
     from tools.aws_bedrock_utils import build_extra_config
 
@@ -826,8 +812,9 @@ async def update_system_ai_service(
     svc.endpoint = body.base_url or ""
     svc.supports_video = body.supports_video
     svc.extra_config = build_extra_config(body.aws_access_key_id, body.aws_region)
+    AIServiceService.apply_lifecycle_fields(svc, body, int(auth_context.identity.id))
     svc = AIServiceRepository.update(db, svc)
-    return AIServiceService._to_list_item(svc, is_system=True)
+    return AIServiceService._to_list_item(svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db))
 
 
 @router.delete("/system-ai-services/{service_id}", status_code=204)
@@ -852,24 +839,11 @@ async def list_system_embedding_services(
 ):
     """List all platform-level Embedding Services (OMNIADMIN only)."""
     from repositories.embedding_service_repository import EmbeddingServiceRepository
-    from utils.secret_utils import mask_api_key
-    from tools.aws_bedrock_utils import parse_extra_config
+    from services.embedding_service_service import EmbeddingServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     services = EmbeddingServiceRepository.get_system_services(db)
-    return [
-        EmbeddingServiceDetailSchema(
-            service_id=svc.service_id,
-            name=svc.name,
-            provider=svc.provider,
-            model_name=svc.description or "",
-            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
-            base_url=svc.endpoint or "",
-            api_version=svc.api_version,
-            created_at=svc.create_date,
-            aws_access_key_id=parse_extra_config(svc.extra_config).get("aws_access_key_id"),
-            aws_region=parse_extra_config(svc.extra_config).get("aws_region"),
-        )
-        for svc in services
-    ]
+    warning_days = ServiceLifecycleService.warning_days(db)
+    return [EmbeddingServiceService.to_detail(svc, warning_days) for svc in services]
 
 
 @router.post("/system-embedding-services", response_model=EmbeddingServiceListItemSchema, status_code=201)
@@ -882,7 +856,9 @@ async def create_system_embedding_service(
     from models.embedding_service import EmbeddingService
     from repositories.embedding_service_repository import EmbeddingServiceRepository
     from services.embedding_service_service import EmbeddingServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     from tools.aws_bedrock_utils import build_extra_config
+    from utils.service_lifecycle import SERVICE_KIND_EMBEDDING
     from datetime import datetime
 
     svc = EmbeddingService()
@@ -894,9 +870,16 @@ async def create_system_embedding_service(
     svc.endpoint = body.base_url or ""
     svc.api_version = body.api_version
     svc.extra_config = build_extra_config(body.aws_access_key_id, body.aws_region)
+    EmbeddingServiceService.apply_lifecycle_fields(svc, body, int(auth_context.identity.id))
     svc.create_date = datetime.now()
     svc = EmbeddingServiceRepository.create(db, svc)
-    return EmbeddingServiceService._to_list_item(svc, is_system=True)
+    if svc.end_of_service_at is not None:
+        ServiceLifecycleService.log_change(
+            svc, SERVICE_KIND_EMBEDDING, None, svc.end_of_service_at, int(auth_context.identity.id)
+        )
+    return EmbeddingServiceService._to_list_item(
+        svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db)
+    )
 
 
 @router.put("/system-embedding-services/{service_id}", response_model=EmbeddingServiceListItemSchema)
@@ -909,6 +892,7 @@ async def update_system_embedding_service(
     """Update a platform-level Embedding Service (OMNIADMIN only)."""
     from repositories.embedding_service_repository import EmbeddingServiceRepository
     from services.embedding_service_service import EmbeddingServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     from utils.secret_utils import is_masked_key
     from tools.aws_bedrock_utils import build_extra_config
 
@@ -924,8 +908,37 @@ async def update_system_embedding_service(
     svc.endpoint = body.base_url or ""
     svc.api_version = body.api_version
     svc.extra_config = build_extra_config(body.aws_access_key_id, body.aws_region)
+    EmbeddingServiceService.apply_lifecycle_fields(svc, body, int(auth_context.identity.id))
     svc = EmbeddingServiceRepository.update(db, svc)
-    return EmbeddingServiceService._to_list_item(svc, is_system=True)
+    return EmbeddingServiceService._to_list_item(
+        svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db)
+    )
+
+
+@router.get("/system-ai-services/{service_id}/used-by", response_model=ServiceUsageSchema)
+async def get_system_ai_service_used_by(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """What depends on a platform-level AI service, across all apps (platform admin only)."""
+    usage = ServiceLifecycleService.get_usage(db, SERVICE_KIND_AI, service_id, None)
+    if usage is None:
+        raise HTTPException(status_code=404, detail="System AI service not found")
+    return usage
+
+
+@router.get("/system-embedding-services/{service_id}/used-by", response_model=ServiceUsageSchema)
+async def get_system_embedding_service_used_by(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """What depends on a platform-level embedding service, across all apps (platform admin only)."""
+    usage = ServiceLifecycleService.get_usage(db, SERVICE_KIND_EMBEDDING, service_id, None)
+    if usage is None:
+        raise HTTPException(status_code=404, detail=SYSTEM_EMBEDDING_SERVICE_NOT_FOUND)
+    return usage
 
 
 @router.get("/system-embedding-services/{service_id}/impact", response_model=SystemEmbeddingServiceImpactSchema)
@@ -1275,20 +1288,10 @@ async def list_system_sandbox_services(
     """List all platform-level Sandbox Services (OMNIADMIN only, available in all deployment modes)."""
     from repositories.sandbox_service_repository import SandboxServiceRepository
     from services.sandbox_service_service import SandboxServiceService
-    from utils.secret_utils import mask_api_key
+    from services.service_lifecycle_service import ServiceLifecycleService
     services = SandboxServiceRepository.get_system_services(db)
-    return [
-        SandboxServiceDetailSchema(
-            service_id=svc.service_id,
-            name=svc.name,
-            provider=svc.provider,
-            api_key=mask_api_key(svc.api_key) if svc.api_key else "",
-            base_url=svc.endpoint or "",
-            created_at=svc.create_date,
-            **SandboxServiceService._extra_config_fields(svc.provider, svc.extra_config),
-        )
-        for svc in services
-    ]
+    warning_days = ServiceLifecycleService.warning_days(db)
+    return [SandboxServiceService.to_detail(svc, warning_days) for svc in services]
 
 
 @router.get("/system-sandbox-services/{service_id}", response_model=SandboxServiceDetailSchema)
@@ -1300,20 +1303,28 @@ async def get_system_sandbox_service(
     """Get a single platform-level Sandbox Service by ID (OMNIADMIN only)."""
     from repositories.sandbox_service_repository import SandboxServiceRepository
     from services.sandbox_service_service import SandboxServiceService
-    from utils.secret_utils import mask_api_key
+    from services.service_lifecycle_service import ServiceLifecycleService
 
     svc = SandboxServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail=SYSTEM_SANDBOX_SERVICE_NOT_FOUND)
-    return SandboxServiceDetailSchema(
-        service_id=svc.service_id,
-        name=svc.name,
-        provider=svc.provider,
-        api_key=mask_api_key(svc.api_key) if svc.api_key else "",
-        base_url=svc.endpoint or "",
-        created_at=svc.create_date,
-        **SandboxServiceService._extra_config_fields(svc.provider, svc.extra_config),
-    )
+    return SandboxServiceService.to_detail(svc, ServiceLifecycleService.warning_days(db))
+
+
+@router.get("/system-sandbox-services/{service_id}/used-by", response_model=ServiceUsageSchema)
+async def get_system_sandbox_service_used_by(
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """What depends on a platform-level sandbox service, across all apps (platform admin only)."""
+    from services.service_lifecycle_service import ServiceLifecycleService
+    from utils.service_lifecycle import SERVICE_KIND_SANDBOX
+
+    usage = ServiceLifecycleService.get_usage(db, SERVICE_KIND_SANDBOX, service_id, None)
+    if usage is None:
+        raise HTTPException(status_code=404, detail=SYSTEM_SANDBOX_SERVICE_NOT_FOUND)
+    return usage
 
 
 @router.post("/system-sandbox-services", response_model=SandboxServiceListItemSchema, status_code=201)
@@ -1326,8 +1337,10 @@ async def create_system_sandbox_service(
     from models.sandbox_service import SandboxService
     from repositories.sandbox_service_repository import SandboxServiceRepository
     from services.sandbox_service_service import SandboxServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     from tools.sandbox.factory import SandboxProviderUnavailableError
     from tools.sandbox_service_utils import build_extra_config
+    from utils.service_lifecycle import SERVICE_KIND_SANDBOX
     from datetime import datetime
 
     try:
@@ -1335,6 +1348,7 @@ async def create_system_sandbox_service(
     except SandboxProviderUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    actor_id = int(auth_context.identity.id)
     svc = SandboxService()
     svc.app_id = None
     svc.name = body.name
@@ -1351,8 +1365,13 @@ async def create_system_sandbox_service(
         template=body.e2b_template,
     )
     svc.create_date = datetime.now()
+    SandboxServiceService.apply_lifecycle_fields(svc, body, actor_id)
     svc = SandboxServiceRepository.create(db, svc)
-    return SandboxServiceService._to_list_item(svc, is_system=True)
+    if svc.end_of_service_at is not None:
+        ServiceLifecycleService.log_change(svc, SERVICE_KIND_SANDBOX, None, svc.end_of_service_at, actor_id)
+    return SandboxServiceService._to_list_item(
+        svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db)
+    )
 
 
 @router.put("/system-sandbox-services/{service_id}", response_model=SandboxServiceListItemSchema)
@@ -1365,6 +1384,7 @@ async def update_system_sandbox_service(
     """Update a platform-level Sandbox Service (OMNIADMIN only, available in all deployment modes)."""
     from repositories.sandbox_service_repository import SandboxServiceRepository
     from services.sandbox_service_service import SandboxServiceService
+    from services.service_lifecycle_service import ServiceLifecycleService
     from tools.sandbox.factory import SandboxProviderUnavailableError
     from utils.secret_utils import is_masked_key
     from tools.sandbox_service_utils import build_extra_config
@@ -1392,8 +1412,11 @@ async def update_system_sandbox_service(
         memory_gb=body.daytona_memory_gb,
         template=body.e2b_template,
     )
+    SandboxServiceService.apply_lifecycle_fields(svc, body, int(auth_context.identity.id))
     svc = SandboxServiceRepository.update(db, svc)
-    return SandboxServiceService._to_list_item(svc, is_system=True)
+    return SandboxServiceService._to_list_item(
+        svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db)
+    )
 
 
 @router.delete("/system-sandbox-services/{service_id}", status_code=204)

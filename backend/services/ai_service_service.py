@@ -10,19 +10,36 @@ from core.export_constants import PLACEHOLDER_API_KEY
 from utils.secret_utils import mask_api_key, is_masked_key
 from tools.aws_bedrock_utils import build_extra_config, parse_extra_config
 from datetime import datetime
-from typing import List
+from typing import List, Optional, Dict, Any
 from tools.aiServiceTools import create_llm_from_service
 from utils.logger import get_logger
+from utils.service_lifecycle import SERVICE_KIND_AI, compute_lifecycle_status, to_utc
+from services.service_lifecycle_service import ServiceLifecycleService
+from schemas.service_lifecycle_schemas import ServiceLifecycleFieldsMixin
 import asyncio
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from langchain_core.runnables import RunnableConfig
 
 logger = get_logger(__name__)
 
+class AIServiceInUseError(Exception):
+    """The AI service is referenced by middlewares and cannot be deleted."""
+
+    def __init__(self, middleware_names: List[str]):
+        self.middleware_names = middleware_names
+        super().__init__(
+            "This AI service is used by the middleware(s) "
+            + ", ".join(f"'{name}'" for name in middleware_names)
+            + ". Choose another model in them before deleting it."
+        )
+
+
 class AIServiceService:
 
     @staticmethod
-    def _to_list_item(service: "AIService", is_system: bool = False) -> AIServiceListItemSchema:
+    def _to_list_item(
+        service: "AIService", is_system: bool = False, *, warning_days: int
+    ) -> AIServiceListItemSchema:
         """Convert an AIService ORM instance to a list item schema."""
         needs_api_key = (
             not service.api_key
@@ -37,7 +54,49 @@ class AIServiceService:
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
+            last_error=service.last_error,
+            last_error_at=service.last_error_at,
+            end_of_service_at=to_utc(service.end_of_service_at),
+            deprecation_notice=service.deprecation_notice,
+            lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
         )
+
+    @staticmethod
+    def to_detail(
+        service: "AIService", warning_days: int, providers: Optional[List[Dict[str, Any]]] = None
+    ) -> AIServiceDetailSchema:
+        """Convert an AIService ORM instance to the detail schema (masked key, lifecycle status)."""
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
+        extra_cfg = parse_extra_config(service.extra_config)
+        return AIServiceDetailSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",
+            api_key=mask_api_key(service.api_key),
+            base_url=service.endpoint or "",  # Use endpoint as base_url
+            supports_video=service.supports_video or False,
+            created_at=service.create_date,
+            available_providers=providers or [],
+            needs_api_key=needs_api_key,
+            aws_access_key_id=extra_cfg.get("aws_access_key_id"),
+            aws_region=extra_cfg.get("aws_region"),
+            last_error=service.last_error,
+            last_error_at=service.last_error_at,
+            end_of_service_at=to_utc(service.end_of_service_at),
+            deprecation_notice=service.deprecation_notice,
+            lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
+        )
+
+    @staticmethod
+    def apply_lifecycle_fields(
+        service: "AIService", data: ServiceLifecycleFieldsMixin, actor_id: Optional[int] = None
+    ) -> None:
+        """Apply the end-of-service fields present in ``data`` (absent ones keep their value)."""
+        ServiceLifecycleService.apply_lifecycle_fields(service, SERVICE_KIND_AI, data, actor_id)
 
     @staticmethod
     def get_ai_services_by_app_id(db: Session, app_id: int) -> List[AIServiceListItemSchema]:
@@ -45,8 +104,14 @@ class AIServiceService:
         app_services = AIServiceRepository.get_by_app_id(db, app_id)
         system_services = AIServiceRepository.get_system_services(db)
 
-        result = [AIServiceService._to_list_item(svc, is_system=False) for svc in app_services]
-        result += [AIServiceService._to_list_item(svc, is_system=True) for svc in system_services]
+        warning_days = ServiceLifecycleService.warning_days(db)
+
+        result = [
+            AIServiceService._to_list_item(svc, is_system=False, warning_days=warning_days) for svc in app_services
+        ]
+        result += [
+            AIServiceService._to_list_item(svc, is_system=True, warning_days=warning_days) for svc in system_services
+        ]
         return result
     
     @staticmethod
@@ -79,28 +144,13 @@ class AIServiceService:
         # Get available providers for the form
         providers = [{"value": p.value, "name": p.value} for p in ProviderEnum]
         
-        needs_api_key = (
-            not service.api_key
-            or service.api_key == PLACEHOLDER_API_KEY
-        )
-        extra_cfg = parse_extra_config(service.extra_config)
-        return AIServiceDetailSchema(
-            service_id=service.service_id,
-            name=service.name,
-            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-            model_name=service.description or "",
-            api_key=mask_api_key(service.api_key),
-            base_url=service.endpoint or "",  # Use endpoint as base_url
-            supports_video=service.supports_video or False,
-            created_at=service.create_date,
-            available_providers=providers,
-            needs_api_key=needs_api_key,
-            aws_access_key_id=extra_cfg.get("aws_access_key_id"),
-            aws_region=extra_cfg.get("aws_region"),
-        )
-    
+        return AIServiceService.to_detail(service, ServiceLifecycleService.warning_days(db), providers)
+
     @staticmethod
-    def create_or_update_ai_service(db: Session, app_id: int, service_id: int, service_data: CreateUpdateAIServiceSchema) -> AIServiceDetailSchema:
+    def create_or_update_ai_service(
+        db: Session, app_id: int, service_id: int, service_data: CreateUpdateAIServiceSchema,
+        actor_id: Optional[int] = None,
+    ) -> AIServiceDetailSchema:
         """Create a new AI service or update an existing one"""
         if service_id == 0:
             # Enforce Free tier restriction (SaaS mode only — Free users cannot create own AI Services)
@@ -135,10 +185,17 @@ class AIServiceService:
             service_data.aws_access_key_id,
             service_data.aws_region,
         )
+        AIServiceService.apply_lifecycle_fields(
+            service, service_data, actor_id
+        )
         
         # Create or update the service
         if service_id == 0:
             service = AIServiceRepository.create(db, service)
+            if service.end_of_service_at is not None:
+                ServiceLifecycleService.log_change(
+                    service, SERVICE_KIND_AI, None, service.end_of_service_at, actor_id
+                )
         else:
             service = AIServiceRepository.update(db, service)
         
@@ -161,7 +218,8 @@ class AIServiceService:
             new_name = f"{base_name} Copy {counter}"
             counter += 1
 
-        # Create a new service with the same data
+        # Create a new service with the same data. end_of_service_at / deprecation_notice are left
+        # unset on purpose: a copy is a fresh service, not a retired one.
         new_service = AIService(
             app_id=app_id,
             name=new_name,
@@ -180,12 +238,21 @@ class AIServiceService:
 
     @staticmethod
     def delete_ai_service(db: Session, app_id: int, service_id: int) -> bool:
-        """Delete an AI service"""
+        """Delete an AI service.
+
+        Raises AIServiceInUseError while a middleware references it: dropping it would
+        silently switch that middleware (e.g. the PII detector) to the agent's model.
+        """
         service = AIServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
         
         if not service:
             return False
-        
+
+        from services.middleware_service import MiddlewareService
+        middleware_names = MiddlewareService.names_using_ai_service(db, app_id, service_id)
+        if middleware_names:
+            raise AIServiceInUseError(middleware_names)
+
         AIServiceRepository.delete(db, service)
         
         return True

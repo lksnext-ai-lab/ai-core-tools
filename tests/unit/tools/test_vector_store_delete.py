@@ -45,17 +45,19 @@ class TestQdrantStoreDeleteByFilter:
             f"Expected FilterSelector, got {type(points_selector)}"
         )
 
-    def test_delete_by_id_list_does_not_use_filter_selector(self):
-        """Direct list deletion bypasses the filter path (regression guard)."""
+    def test_delete_by_id_list_uses_point_ids_without_building_the_embedding_store(self):
+        """Id deletes use the raw client: building the LangChain store embeds a dummy text."""
+        from qdrant_client.models import PointIdsList
+
         store, mock_client = self._make_store()
 
-        mock_vector_store = MagicMock()
-
-        with patch.object(store, "_get_vector_store", return_value=mock_vector_store):
+        with patch.object(store, "_get_vector_store") as get_store:
             store.delete_documents("silo_1", ids=["id-1", "id-2"])
 
-        mock_client.delete.assert_not_called()
-        mock_vector_store.delete.assert_called_once_with(ids=["id-1", "id-2"])
+        get_store.assert_not_called()
+        selector = mock_client.delete.call_args.kwargs["points_selector"]
+        assert isinstance(selector, PointIdsList)
+        assert list(selector.points) == ["id-1", "id-2"]
 
     def test_delete_skips_on_none_filter(self):
         """None filter must not trigger any client call."""

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { StreamEvent, ActiveTool } from '../types/streaming';
+import type { StreamEvent, ActiveTool, HitlPendingApproval, HitlResume } from '../types/streaming';
 import { getStreamingMessage } from '../i18n/streaming';
 import { randomId } from '../utils/randomId';
 
@@ -12,6 +12,9 @@ export interface ToolOutputLine {
   readonly line: string;
 }
 
+export type ToolExecutionStatus =
+  | 'awaiting_approval' | 'running' | 'complete' | 'rejected' | 'expired' | 'cancelled';
+
 export interface ToolExecutionRecord {
   readonly id: string;
   readonly toolCallId?: string;
@@ -22,9 +25,10 @@ export interface ToolExecutionRecord {
   readonly subagentId?: number;
   readonly startedAt: number;
   readonly endedAt?: number;
-  readonly status: 'running' | 'complete';
+  readonly status: ToolExecutionStatus;
   readonly outputLines: ToolOutputLine[];
   readonly toolInput?: string;     // serialised args from tool_start
+  readonly edited?: boolean;       // a reviewer changed the args before it ran
   readonly toolOutput?: string;    // result from tool_end
 }
 
@@ -43,6 +47,8 @@ interface StreamResult {
   sessionId: string | null;
   files: Array<{ file_id: string; filename: string; file_type: string }>;
   elapsedMs: number;
+  /** Set when the turn paused for human approval (nothing to commit yet). */
+  pendingApproval: HitlPendingApproval | null;
 }
 
 export class StreamingChatError extends Error {
@@ -59,6 +65,8 @@ export interface StreamFnOptions {
   readonly files?: File[];
   readonly searchParams?: any;
   readonly conversationId?: number | null;
+  /** Answer a pending human-in-the-loop approval instead of sending a message. */
+  readonly resume?: HitlResume;
   readonly onEvent: (event: StreamEvent) => void;
   readonly signal?: AbortSignal;
 }
@@ -69,6 +77,7 @@ interface SendOptions {
   readonly files?: File[];
   readonly conversationId?: number | null;
   readonly searchParams?: any;
+  readonly resume?: HitlResume;
 }
 
 interface UseStreamingChatReturn {
@@ -78,10 +87,15 @@ interface UseStreamingChatReturn {
   readonly isStreaming: boolean;
   readonly responseElapsedMs: number;
   readonly streamError: string | null;
+  /** Human-in-the-loop approval the conversation is waiting for. */
+  readonly pendingApproval: HitlPendingApproval | null;
+  readonly setPendingApproval: (approval: HitlPendingApproval | null) => void;
   readonly codeOutputLines: string[];
   readonly isCodeRunning: boolean;
   readonly toolExecutionHistory: ToolExecutionRecord[];
   readonly clearToolHistory: () => void;
+  /** Close tool rows still waiting for approval (the approval was cancelled or expired). */
+  readonly settleAwaitingTools: (status: 'cancelled' | 'expired') => void;
   readonly sendMessage: (message: string, options?: SendOptions) => Promise<StreamResult>;
   readonly abortStream: () => void;
 }
@@ -118,18 +132,32 @@ function markToolComplete(toolName: string, toolCallId?: string) {
     );
 }
 
+function isOpenRecord(record: ToolExecutionRecord): boolean {
+  return record.status === 'running' || record.status === 'awaiting_approval';
+}
+
+function setRecordStatus(from: ToolExecutionStatus, to: ToolExecutionStatus) {
+  return (prev: ToolExecutionRecord[]): ToolExecutionRecord[] =>
+    prev.some((record) => record.status === from)
+      ? prev.map((record) => (record.status === from ? { ...record, status: to } : record))
+      : prev;
+}
+
 function completeMatchingToolRecords(
   prev: ToolExecutionRecord[],
   toolName: string,
   toolCallId?: string,
   toolOutput?: string,
+  rejected = false,
 ): ToolExecutionRecord[] {
   const endedAt = Date.now();
   let changed = false;
 
   const updated = prev.map((record) => {
+    // A rejection is shown as soon as it is sent; its tool_end only adds the reason.
+    const awaitsReason = rejected && record.status === 'rejected' && record.toolOutput === undefined;
     const matches =
-      record.status === 'running' &&
+      (isOpenRecord(record) || awaitsReason) &&
       (
         (toolCallId && record.toolCallId === toolCallId) ||
         (!toolCallId && record.toolName === toolName)
@@ -137,7 +165,7 @@ function completeMatchingToolRecords(
 
     if (!matches) return record;
     changed = true;
-    return { ...record, status: 'complete' as const, endedAt, toolOutput };
+    return { ...record, status: rejected ? 'rejected' as const : 'complete' as const, endedAt, toolOutput };
   });
 
   return changed ? updated : prev;
@@ -175,11 +203,16 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [responseElapsedMs, setResponseElapsedMs] = useState(0);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<HitlPendingApproval | null>(null);
   const [codeOutputLines, setCodeOutputLines] = useState<string[]>([]);
   const [isCodeRunning, setIsCodeRunning] = useState(false);
   const [toolExecutionHistory, setToolExecutionHistory] = useState<ToolExecutionRecord[]>([]);
 
   const clearToolHistory = useCallback(() => setToolExecutionHistory([]), []);
+  const settleAwaitingTools = useCallback(
+    (status: 'cancelled' | 'expired') => setToolExecutionHistory(setRecordStatus('awaiting_approval', status)),
+    [],
+  );
 
   const streamFnRef = useRef(streamFn);
   useEffect(() => {
@@ -223,12 +256,28 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       streamStartedAtRef.current = performance.now();
       setResponseElapsedMs(0);
       setStreamError(null);
+      setPendingApproval(null);
       setCodeOutputLines([]);
       setIsCodeRunning(false);
       contentRef.current = '';
       flushRequestedRef.current = false;
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
+      if (options?.resume) {
+        // Approved/edited calls start running now; rejected ones never run.
+        const rejected = new Set(
+          options.resume.decisions.filter((d) => d.type === 'reject').map((d) => d.action_id),
+        );
+        setToolExecutionHistory((prev) =>
+          prev.map((record) => {
+            if (record.status !== 'awaiting_approval') return record;
+            const isRejected = record.toolCallId !== undefined && rejected.has(record.toolCallId);
+            return isRejected
+              ? { ...record, status: 'rejected' as const, endedAt: Date.now() }
+              : { ...record, status: 'running' as const };
+          }),
+        );
+      }
 
       const scheduleFlush = () => {
         if (!flushRequestedRef.current) {
@@ -248,6 +297,9 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       let finalResponse: string | Record<string, unknown> = '';
       let finalFiles: Array<{ file_id: string; filename: string; file_type: string }> = [];
       let elapsedMs = 0;
+      let approval: HitlPendingApproval | null = null;
+      let errorMessage: string | null = null;
+      let receivedDone = false;
 
       const getElapsedMs = (): number => {
         const startedAt = streamStartedAtRef.current;
@@ -259,6 +311,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
           files: options?.files,
           searchParams: options?.searchParams,
           conversationId: options?.conversationId,
+          resume: options?.resume,
           signal: abortController.signal,
           onEvent: (event: StreamEvent) => {
             switch (event.type) {
@@ -309,6 +362,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   setIsCodeRunning(true);
                 }
                 const toolInput = (event.data as { tool_input?: string }).tool_input ?? undefined;
+                const edited = (event.data as { edited?: boolean }).edited === true;
                 const newRecord: ToolExecutionRecord = {
                   id: buildToolRecordId(toolName, toolCallId),
                   toolCallId,
@@ -325,9 +379,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 setToolExecutionHistory((prev) => {
                   if (!toolCallId) return [...prev, newRecord];
 
-                  const existingIdx = prev.findIndex(
-                    (record) => record.toolCallId === toolCallId && record.status === 'running',
-                  );
+                  // Tool call ids are unique, so a repeated id (e.g. an edited call) updates its row.
+                  const existingIdx = prev.findIndex((record) => record.toolCallId === toolCallId);
                   if (existingIdx === -1) return [...prev, newRecord];
 
                   const updated = [...prev];
@@ -338,7 +391,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                     parentToolName: updated[existingIdx].parentToolName ?? parentToolName,
                     subagentName: updated[existingIdx].subagentName ?? subagentName,
                     subagentId: updated[existingIdx].subagentId ?? subagentId,
-                    toolInput: updated[existingIdx].toolInput ?? toolInput,
+                    toolInput: edited ? toolInput : updated[existingIdx].toolInput ?? toolInput,
+                    edited: updated[existingIdx].edited || edited,
                   };
                   return updated;
                 });
@@ -349,12 +403,13 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 const toolName = (event.data as { tool_name?: string }).tool_name || '';
                 const toolCallId = (event.data as { tool_call_id?: string }).tool_call_id || undefined;
                 const toolOutput = (event.data as { tool_output?: string }).tool_output ?? undefined;
+                const rejected = (event.data as { outcome?: string }).outcome === 'rejected';
                 setActiveTools(markToolComplete(toolName, toolCallId));
                 if (isCodeTool(toolName)) {
                   setIsCodeRunning(false);
                 }
                 setToolExecutionHistory((prev) =>
-                  completeMatchingToolRecords(prev, toolName, toolCallId, toolOutput),
+                  completeMatchingToolRecords(prev, toolName, toolCallId, toolOutput, rejected),
                 );
                 break;
               }
@@ -413,6 +468,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   files?: Array<{ file_id: string; filename: string; file_type: string }>;
                   conversation_id?: number;
                 };
+                receivedDone = true;
                 finalResponse = doneData.response ?? contentRef.current;
                 finalFiles = doneData.files ?? [];
                 if (doneData.conversation_id) {
@@ -428,6 +484,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
 
               case 'error': {
                 const errMsg = (event.data as { message?: string }).message || 'Stream error';
+                errorMessage = errMsg;
                 setStreamError(errMsg);
                 setActiveTools((prev) =>
                   prev.map((tool) => tool.status === 'running' ? { ...tool, status: 'complete' as const } : tool),
@@ -436,9 +493,19 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 setIsCodeRunning(false);
                 break;
               }
+
+              case 'hitl_interrupt': {
+                approval = event.data as unknown as HitlPendingApproval;
+                setPendingApproval(approval);
+                setToolExecutionHistory(setRecordStatus('running', 'awaiting_approval'));
+                break;
+              }
             }
           },
         });
+        if (errorMessage && !receivedDone) {
+          throw new Error(errorMessage);
+        }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {
           setStreamError(null);
@@ -473,6 +540,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
         sessionId,
         files: finalFiles,
         elapsedMs,
+        pendingApproval: approval,
       };
     },
     [],
@@ -485,10 +553,13 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
     isStreaming,
     responseElapsedMs,
     streamError,
+    pendingApproval,
+    setPendingApproval,
     codeOutputLines,
     isCodeRunning,
     toolExecutionHistory,
     clearToolHistory,
+    settleAwaitingTools,
     sendMessage,
     abortStream,
   };

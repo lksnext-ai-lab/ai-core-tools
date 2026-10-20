@@ -21,6 +21,7 @@ from models.enums.sharepoint_file_status import SharePointFileStatus
 def _make_source(**kwargs):
     """Create a minimal mock SharePointSource object."""
     source = MagicMock()
+    source.silo.embedding_service.end_of_service_at = None
     source.id = kwargs.get("id", 1)
     source.app_id = kwargs.get("app_id", 10)
     source.silo_id = kwargs.get("silo_id", 5)

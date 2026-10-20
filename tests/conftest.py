@@ -69,6 +69,8 @@ os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 # transaction completes, which can't happen until the test body (blocked on `client`
 # setup) runs.
 os.environ.setdefault("AUTH_BOOTSTRAP_OMNIADMINS", "false")
+# Same for the HITL expiry sweeper: it reads and resolves approvals with its own sessions.
+os.environ.setdefault("HITL_EXPIRY_SWEEPER_ENABLED", "false")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -251,6 +253,7 @@ def fake_user(db):
         email="testuser@mattin-test.com",
         name="Test User",
         is_active=True,
+        platform_role="editor",
     )
     db.add(user)
     db.flush()  # assigns user_id without committing the outer transaction
@@ -285,6 +288,17 @@ def fake_ai_service(db, fake_app):
         api_key="sk-test-key",  # pragma: allowlist secret
         app_id=fake_app.app_id,
     )
+    db.add(svc)
+    db.flush()
+    return svc
+
+
+@pytest.fixture
+def fake_embedding_service(db, fake_app):
+    """A test EmbeddingService linked to fake_app (required by agents with memory)."""
+    from models.embedding_service import EmbeddingService
+
+    svc = EmbeddingService(name="Test Embedding Service", provider="OpenAI", app_id=fake_app.app_id)
     db.add(svc)
     db.flush()
     return svc

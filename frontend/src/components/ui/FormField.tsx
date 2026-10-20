@@ -3,7 +3,7 @@ import React from 'react';
 interface FormFieldProps {
   label: React.ReactNode;
   id: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file';
+  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file' | 'date' ;
   value?: string | number;
   accept?: string;
   autoComplete?: string;
@@ -205,6 +205,7 @@ interface FormSelectProps {
   required?: boolean;
   error?: string;
   helpText?: string;
+  ariaDescribedBy?: string;
   className?: string;
   labelClassName?: string;
 }
@@ -222,12 +223,13 @@ export function FormSelect({
   required = false,
   error,
   helpText,
+  ariaDescribedBy,
   className = '',
   labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1'
 }: Readonly<FormSelectProps>) {
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [errorId, helpTextId].filter(Boolean).join(' ') || undefined;
+  const describedBy = [ariaDescribedBy, errorId, helpTextId].filter(Boolean).join(' ') || undefined;
 
   return (
     <div className={className}>

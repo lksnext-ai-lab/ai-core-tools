@@ -67,22 +67,24 @@ async def run_file_download(
 @router.post("", response_model=ScheduledTaskResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_task(payload: ScheduledTaskCreateSchema, app_id: int, auth: Auth, role: CanEdit, db: DB):
     try:
-        return _service(db).create(
+        service = _service(db)
+        task = service.create(
             app_id=app_id, created_by=int(auth.identity.id), data=payload.model_dump(),
             output_bindings=payload.output_bindings,
         )
+        return service.to_response(task)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[ScheduledTaskResponseSchema])
 async def list_tasks(app_id: int, role: CanView, db: DB, agent_id: Optional[int] = None):
-    return _service(db).list(app_id, agent_id)
+    return _service(db).list_responses(app_id, agent_id)
 
 
 @router.get("/{task_id}", response_model=ScheduledTaskResponseSchema)
 async def get_task(task_id: int, app_id: int, role: CanView, db: DB):
-    return _task_or_404(db, task_id, app_id)
+    return _service(db).to_response(_task_or_404(db, task_id, app_id))
 
 
 @router.patch("/{task_id}", response_model=ScheduledTaskResponseSchema)
@@ -95,7 +97,7 @@ async def update_task(task_id: int, payload: ScheduledTaskUpdateSchema, app_id: 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if payload.max_runs_retained is not None:
         await service.prune_runs(task)
-    return task
+    return service.to_response(task)
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

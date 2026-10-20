@@ -4,6 +4,11 @@ import Modal from './Modal';
 import { FormSelect } from './FormField';
 import Alert from './Alert';
 import { FormActions } from './FormActions';
+import {
+  selectableServiceOptions,
+  serviceOptionLabel,
+  type ServiceOptionLike,
+} from '../../utils/serviceLifecycle';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -13,7 +18,7 @@ interface ImportModalProps {
   componentLabel: string; // e.g., "AI Service", "Embedding Service"
   // Optional: For silo imports that need embedding service selection
   requiresEmbeddingServiceSelection?: boolean;
-  availableEmbeddingServices?: Array<{ id: number; name: string }>;
+  availableEmbeddingServices?: readonly ServiceOptionLike[];
   selectedEmbeddingServiceId?: number;
   onEmbeddingServiceChange?: (id: number) => void;
 }
@@ -25,6 +30,7 @@ export type ComponentType =
   | 'embedding_service'
   | 'output_parser'
   | 'mcp_config'
+  | 'middleware'
   | 'silo'
   | 'repository'
   | 'agent'
@@ -260,9 +266,9 @@ function ImportModal({
               }}
               options={[
                 { value: '', label: 'Select an embedding service...' },
-                ...availableEmbeddingServices.map((svc) => ({
-                  value: svc.id.toString(),
-                  label: svc.name,
+                ...selectableServiceOptions(availableEmbeddingServices, undefined).map((svc) => ({
+                  value: svc.service_id.toString(),
+                  label: serviceOptionLabel(svc),
                 })),
               ]}
               disabled={importing}

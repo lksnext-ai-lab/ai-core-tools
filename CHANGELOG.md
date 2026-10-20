@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Public API `/call` with human approval**: agents with a human-approval middleware no longer return `409` from `/chat/{agent_id}/call`; the response carries `status: "requires_approval"` and a `pending_approval` to answer through the new `/approvals/{approval_id}/decisions` endpoints. `/call` responses now always include `status`.
+- **Internal resume endpoint replaced**: `POST /internal/apps/{app}/agents/{agent}/chat/resume` is replaced by `POST /internal/approvals/{approval_id}/decisions/stream` (JSON decisions addressed by `action_id`) and `POST /internal/approvals/{approval_id}/cancel`.
+
+### Added
+
+- **Service end of service**: AI, embedding and sandbox services accept an optional `end_of_service_at` date and `deprecation_notice`. Status (active / deprecated / retired) is computed at read time; retired services are blocked with `409 SERVICE_RETIRED` (a retired sandbox service disables the code interpreter for the turn instead). New "Used by" endpoints, bulk move of agents between AI services, `lifecycle_warnings` on agents/silos/repositories/scheduled tasks, setting `service_end_of_service_warning_days` (`AICT_SYSTEM_SERVICE_END_OF_SERVICE_WARNING_DAYS`) and migration `svceos001`. See `docs/guides/chat-bot/kb-ai-services.md`.
+- **Human approvals with expiry**: every human-in-the-loop pause is recorded with its owner and an expiry (`approval_timeout_seconds`, default 1 h). Unanswered approvals are rejected (never approved) by a background sweep, so conversations never stay paused. Answers are accepted once (compare-and-set) and only from the requester.
+- **Approvals in the marketplace chat**, with countdown, cancel and a locked composer while waiting; channels that cannot ask a person (MCP, scheduled tasks, OpenAI-compatible API, platform chatbot) reject the pause and return `409 approval_not_supported_in_channel`.
+- **Agent stream heartbeats and run timeout**: SSE `: ping` comments every 15 s and `AICT_AGENT_RUN_TIMEOUT_SECONDS` (default 600) per turn.
+
+### Changed
+
+- **AI services used by middlewares cannot be deleted**: `DELETE /internal/apps/{app}/ai-services/{id}` returns `409` naming the summarization/PII middlewares that reference it.
+- **Middleware export/import**: middlewares can be exported and imported on their own and travel with agent and full-app exports (AI services by name). `Middleware.is_frozen`, never applied, is dropped.
+- **Agents used as tools run their middlewares**; the tools their approval rules gate are withheld because a sub-agent cannot pause. Renaming an agent moves the approval rules that name it.
+- **Conversation summarization defaults**: agents with memory now summarize at 85% of the model's input window (at most 150,000 tokens; 32,000 for models without a profile), keep the last 20 messages and summarize the whole older history. The summarization middleware uses the same values when its trigger or token limit is left empty. The agent form no longer shows the memory management fields.
+
+### Fixed
+
+- **MCP `tools/list` and `tools/call`** broke after a method rename; both work again.
+- **Cross-app references**: silo and repository `embedding_service_id`, and the media services of a playground temp repository, are now checked for ownership; the internal repository `DELETE` checks the app (a repository of another app returns `404`).
+- **Internal repository and folder routes were not scoped to their app**: every `/internal/apps/{app_id}/repositories/{repository_id}/...` route (detail, search, export, resources, media, folders) now returns `404` for another app's repository, and resources, media and folders must belong to the repository in the path. Before, a viewer could read and an editor could modify or delete another app's repository content by id.
+- **Silo output parsers across apps**: a silo can only reference an output parser of its own app, and deleting a silo or repository no longer deletes another app's parser. Migration `siloparser001` clears existing cross-app links (data fix, not reverted on downgrade).
+- **Deleting an agent with conversations failed** (`Conversation.agent_id` had no ON DELETE action) and **app deletion left invisible agents behind** with their conversations: conversations now cascade (migration `agentdel001`), their checkpoints, media, sandboxes and files are removed, and an app deletion aborts instead of orphaning an agent.
+- **Turn workspace path**: the local workspace built from the caller's identity is now checked to stay under `TMP_BASE_FOLDER` (CodeQL `py/path-injection`).
+- **Full-app import lost tool agents**: agents were imported in name order, so an agent sorted before its tool agent lost the tool silently, and `is_tool` was not exported. Tool agents now import first and keep `is_tool`.
+- **Memory could be turned off under a human-approval middleware** when an agent update omitted `middleware_ids`.
+- **Summaries lost older context**: the default summarization trimmed the history it summarized to 20 tokens (`memory_summarize_threshold`), so each summary only saw the latest message and dropped the previous summary.
+
 ## [0.5.0] - 2026-10-01
 
 ### Breaking Changes

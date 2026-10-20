@@ -8,10 +8,10 @@ import { FormField, FormSelect, FormTextArea } from '../components/ui/FormField'
 import { FormActions } from '../components/ui/FormActions';
 import Alert from '../components/ui/Alert';
 import { LoadingState } from '../components/ui/LoadingState';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 
-interface EmbeddingService {
-  service_id: number;
-  name: string;
+interface EmbeddingService extends ServiceOptionLike {
   is_system?: boolean;
 }
 
@@ -39,6 +39,7 @@ function DomainFormPage() {
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
+  const [savedEmbeddingServiceId, setSavedEmbeddingServiceId] = useState<number | undefined>(undefined);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
 
   const [formData, setFormData] = useState<DomainFormData>({
@@ -90,6 +91,7 @@ function DomainFormPage() {
         || 'PGVECTOR';
 
       setEmbeddingServices(domain.embedding_services || []);
+      setSavedEmbeddingServiceId(domain.embedding_service_id || undefined);
       setVectorDbOptions(availableVectorDbOptions);
 
       if (!isNewDomain) {
@@ -244,11 +246,17 @@ if (loading) {
             disabled={!isNewDomain}
             options={[
               { value: '', label: 'Select an embedding service' },
-              ...embeddingServices.map((service) => ({
+              ...selectableServiceOptions(embeddingServices, savedEmbeddingServiceId).map((service) => ({
                 value: service.service_id,
-                label: service.is_system ? `[System] ${service.name}` : service.name,
+                label: serviceOptionLabel(service, `${service.is_system ? '[System] ' : ''}${service.name}`),
               })),
             ]}
+            ariaDescribedBy={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding-service')}
+          />
+          <ServiceOptionStatus
+            options={embeddingServices}
+            selectedId={formData.embedding_service_id}
+            selectId="embedding-service"
           />
           {embeddingServices.length === 0 && (
             <p className="text-sm text-error dark:text-error-dark mt-1">

@@ -3,6 +3,9 @@ from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
 
+RESOURCE_STATUS_INDEXED = 'indexed'
+RESOURCE_STATUS_ERROR = 'error'
+
 class Resource(Base):
     __tablename__ = 'Resource'
     resource_id = Column(Integer, primary_key=True)
@@ -10,7 +13,8 @@ class Resource(Base):
     create_date = Column(DateTime, default=datetime.now)
     uri = Column(String(1000))
     type = Column(String(45))
-    status = Column(String(45))
+    status = Column(String(45))  # indexed | error (NULL for documents indexed before it was tracked)
+    error_message = Column(Text, nullable=True)  # why the last indexing failed
     repository_id = Column(Integer,
                         ForeignKey('Repository.repository_id'),
                         nullable=True)

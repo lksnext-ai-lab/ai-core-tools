@@ -1064,6 +1064,25 @@ class FileManagementService:
                 "Error loading persistent files for session %s", sanitize_for_log(session_key)
             )
 
+    async def discard_uploaded_file(
+        self,
+        file_id: str,
+        agent_id: int,
+        user_context: Dict = None,
+        conversation_id: Optional[str] = None,
+    ) -> None:
+        """Best-effort removal of an attachment whose upload request is being failed.
+
+        Never raises, and logs only the file id (no error text) so a caller that is about to
+        re-raise a ``ServiceRetiredError`` does not log its admin notice a second time.
+        """
+        try:
+            removed = await self.remove_file(file_id, agent_id, user_context, conversation_id)
+        except Exception:
+            removed = False
+        if not removed:
+            logger.warning("Could not remove attachment %s after a failed upload", sanitize_for_log(file_id))
+
     async def remove_files(
         self,
         file_ids: List[str],
@@ -1095,6 +1114,28 @@ class FileManagementService:
                     shutil.rmtree(path)
             except Exception as e:
                 logger.error(f"Error deleting conversation storage {path}: {e}")
+
+    def delete_agent_storage(self, agent_id: int, conversation_ids: List[int]) -> None:
+        """Delete every file stored for an agent: all its sessions and its conversations' working directories."""
+        # Session keys are "agent_{id}_user_…" / "agent_{id}_anonymous"; the trailing "_" keeps agent 1 from matching 12.
+        prefix = f"agent_{agent_id}_"
+        paths = []
+        if os.path.isdir(self._persistent_dir):
+            paths.extend(
+                os.path.join(self._persistent_dir, name)
+                for name in os.listdir(self._persistent_dir)
+                if name.startswith(prefix)
+            )
+        paths.extend(
+            os.path.join(self._tmp_base_folder, "conversations", str(conversation_id))
+            for conversation_id in conversation_ids
+        )
+        for path in paths:
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+            except OSError:
+                logger.exception("Error deleting agent storage %s", path)
 
     async def _remove_file_from_disk(self, session_key: str, file_id: str):
         """Remove file from disk"""

@@ -748,3 +748,13 @@ def test_module_never_builds_or_parses_sse_text():
     # here -- the raw SSE wire-format prefix `format_sse_event` emits.
     assert not any(literal.startswith("data: ") for literal in string_literals)
     assert "format_sse_event" not in imported_names
+
+
+def test_sanitize_error_service_retired_surfaces_detail():
+    message = "Service old-llm was retired on 2026-01-01. Use new-llm."
+    assert sanitize_error({"error_kind": "service_retired", "detail": message}) == message
+
+
+def test_sanitize_error_service_retired_without_detail_is_generic_and_capped():
+    assert sanitize_error({"error_kind": "service_retired"}) == "Agent execution failed."
+    assert len(sanitize_error({"error_kind": "service_retired", "detail": "x" * 5000})) == 2000

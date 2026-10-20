@@ -6,6 +6,7 @@ import SiloAPISnippets from '../components/playground/SiloAPISnippets';
 import SearchFilters from '../components/playground/SearchFilters';
 import ResultCard from '../components/playground/ResultCard';
 import Modal from '../components/ui/Modal';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { useSiloSearch } from '../hooks/useSiloSearch';
 import type { PanelState } from '../hooks/useSiloSearch';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -208,6 +209,8 @@ function SiloPlaygroundPage() {
           <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
         </button>
       </div>
+
+      <ServiceLifecycleAlert warnings={silo.lifecycle_warnings} variant="full" className="max-h-48 overflow-y-auto" />
 
       {/* Silo Info */}
       <div className="bg-white shadow rounded-lg p-6">

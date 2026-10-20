@@ -1166,6 +1166,21 @@ Agent configuration does not select the sandbox provider directly. Agents inheri
 from their app, which keeps operational policy centralized while still allowing different apps to
 use different sandbox backends.
 
+> **Implementation note (service end of service)**: the final implementation resolves the provider from `agent.sandbox_service`, then `app.default_sandbox_service`, then `SANDBOX_DEFAULT_PROVIDER` (see `backend/tools/sandbox/factory.py`). The section below documents how a retired `SandboxService` behaves.
+
+### Sandbox service end of service
+
+A `SandboxService` can carry `end_of_service_at` / `deprecation_notice` like AI and embedding services (see [Service End of Service](../guides/chat-bot/kb-ai-services.md#service-end-of-service) and [Database](../architecture/database.md#end-of-service-columns)).
+
+- **Retired = code interpreter off for the turn, not a failed turn.** When the agent's own sandbox service, or the App default it inherits, is retired, `resolve_provider_and_service_id` raises `SandboxServiceRetiredError`. Callers handle it like `SandboxProviderUnavailableError`: the agent's code interpreter is disabled for that turn and the chat continues.
+- **No fallback.** A retired service is never replaced by the app default or by `SANDBOX_DEFAULT_PROVIDER`; the user must select another sandbox service.
+- **Logging.** The guard logs a structured WARNING (`service_lifecycle.blocked ... kind=sandbox`). The provider is resolved at three points in a turn, so up to 3 identical WARNINGs per turn are expected (accepted); the caller's fallback logs at DEBUG.
+- **The guard is only in provider resolution.** Sandbox cleanup, the idle reaper (which rebuilds providers from stored credentials) and **test connection** still work on retired services, so live sandboxes are not leaked.
+- **`SANDBOX_DEFAULT_PROVIDER` has no lifecycle** (it is an env/system default, not a `SandboxService` row).
+- **Warnings and Used by.** Agents expose `lifecycle_warnings` with `kind: "sandbox"` (`via: "app default"` when inherited); sandbox "Used by" lists agents (roles `sandbox`, `sandbox_app_default`), scheduled tasks and `apps_using_as_default`.
+- **Copy** of a sandbox service clears the lifecycle fields.
+- **Export/import** of sandbox services is not implemented (501), so the fields are not carried yet; a future implementation should include them.
+
 ---
 
 ## 8. Provider Comparison

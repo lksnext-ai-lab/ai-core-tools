@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useId } from 'react';
+import { type ReactNode, useEffect, useRef, useId, useState } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -18,6 +18,25 @@ const FOCUSABLE_SELECTORS = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
+// Open modals, bottom to top. Only the last one handles Esc/Tab; the others are made inert.
+const openModalStack: string[] = [];
+const stackListeners = new Set<() => void>();
+
+function pushModal(id: string) {
+  openModalStack.push(id);
+  stackListeners.forEach((l) => l());
+}
+
+function removeModal(id: string) {
+  const idx = openModalStack.indexOf(id);
+  if (idx !== -1) openModalStack.splice(idx, 1);
+  stackListeners.forEach((l) => l());
+}
+
+function isTopModal(id: string): boolean {
+  return openModalStack[openModalStack.length - 1] === id;
+}
+
 function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<ModalProps>) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -26,6 +45,7 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
   // when the parent passes a new onClose reference on each render (e.g. while user types).
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [covered, setCovered] = useState(false);
 
   const sizeClasses = {
     small: 'max-w-md max-h-96',
@@ -39,6 +59,11 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
 
     returnFocusRef.current = document.activeElement;
 
+    pushModal(titleId);
+    const syncCovered = () => setCovered(openModalStack.length > 0 && !isTopModal(titleId));
+    stackListeners.add(syncCovered);
+    syncCovered();
+
     const panel = panelRef.current;
     if (panel) {
       const first = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTORS);
@@ -46,6 +71,7 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
     }
 
     function handleKeyDown(e: KeyboardEvent) {
+      if (!isTopModal(titleId)) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
         onCloseRef.current();
@@ -85,16 +111,28 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      if (returnFocusRef.current instanceof HTMLElement) {
-        returnFocusRef.current.focus();
+      stackListeners.delete(syncCovered);
+      removeModal(titleId);
+      const target = returnFocusRef.current;
+      if (target instanceof HTMLElement) {
+        if (openModalStack.length > 0) {
+          // A lower modal is still open but inert until it re-renders; focus afterwards.
+          requestAnimationFrame(() => target.focus());
+        } else {
+          target.focus();
+        }
       }
     };
-  }, [isOpen]);
+  }, [isOpen, titleId]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      aria-hidden={covered ? true : undefined}
+      inert={covered}
+    >
       <div
         className="fixed inset-0 bg-ink/40 dark:bg-black/60 transition-opacity"
         aria-hidden="true"

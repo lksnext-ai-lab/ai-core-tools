@@ -15,7 +15,10 @@ from utils.secret_utils import mask_api_key, is_masked_key
 from utils.ssrf_guard import endpoint_is_disallowed as _shared_endpoint_is_disallowed
 from tools.sandbox_service_utils import build_extra_config, parse_extra_config
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+from schemas.service_lifecycle_schemas import ServiceLifecycleFieldsMixin
+from services.service_lifecycle_service import ServiceLifecycleService
+from utils.service_lifecycle import SERVICE_KIND_SANDBOX, compute_lifecycle_status, to_utc
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +73,9 @@ def _endpoint_is_disallowed(endpoint: Optional[str]) -> bool:
 class SandboxServiceService:
 
     @staticmethod
-    def _to_list_item(service: "SandboxService", is_system: bool = False) -> SandboxServiceListItemSchema:
+    def _to_list_item(
+        service: "SandboxService", is_system: bool = False, *, warning_days: int
+    ) -> SandboxServiceListItemSchema:
         """Convert a SandboxService ORM instance to a list item schema."""
         needs_api_key = (
             not service.api_key
@@ -83,7 +88,38 @@ class SandboxServiceService:
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
+            end_of_service_at=to_utc(service.end_of_service_at),
+            deprecation_notice=service.deprecation_notice,
+            lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
         )
+
+    @staticmethod
+    def to_detail(
+        service: "SandboxService", warning_days: int, providers: Optional[List[Dict[str, Any]]] = None
+    ) -> SandboxServiceDetailSchema:
+        """Convert a SandboxService ORM instance to the detail schema (masked key, lifecycle status)."""
+        needs_api_key = not service.api_key or service.api_key == PLACEHOLDER_API_KEY
+        return SandboxServiceDetailSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider,
+            api_key=mask_api_key(service.api_key) if service.api_key else "",
+            base_url=service.endpoint or "",
+            created_at=service.create_date,
+            available_providers=providers or [],
+            needs_api_key=needs_api_key,
+            end_of_service_at=to_utc(service.end_of_service_at),
+            deprecation_notice=service.deprecation_notice,
+            lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
+            **SandboxServiceService._extra_config_fields(service.provider, service.extra_config),
+        )
+
+    @staticmethod
+    def apply_lifecycle_fields(
+        service: "SandboxService", data: ServiceLifecycleFieldsMixin, actor_id: Optional[int] = None
+    ) -> None:
+        """Apply the end-of-service fields present in ``data`` (absent ones keep their value)."""
+        ServiceLifecycleService.apply_lifecycle_fields(service, SERVICE_KIND_SANDBOX, data, actor_id)
 
     @staticmethod
     def _extra_config_fields(provider: str, extra_config_raw) -> dict:
@@ -105,8 +141,14 @@ class SandboxServiceService:
         app_services = SandboxServiceRepository.get_by_app_id(db, app_id)
         system_services = SandboxServiceRepository.get_system_services(db)
 
-        result = [SandboxServiceService._to_list_item(svc, is_system=False) for svc in app_services]
-        result += [SandboxServiceService._to_list_item(svc, is_system=True) for svc in system_services]
+        warning_days = ServiceLifecycleService.warning_days(db)
+        result = [
+            SandboxServiceService._to_list_item(svc, is_system=False, warning_days=warning_days) for svc in app_services
+        ]
+        result += [
+            SandboxServiceService._to_list_item(svc, is_system=True, warning_days=warning_days)
+            for svc in system_services
+        ]
         return result
 
     @staticmethod
@@ -134,21 +176,7 @@ class SandboxServiceService:
 
         providers = [{"value": p.value, "name": p.value} for p in SandboxProviderEnum]
 
-        needs_api_key = (
-            not service.api_key
-            or service.api_key == PLACEHOLDER_API_KEY
-        )
-        return SandboxServiceDetailSchema(
-            service_id=service.service_id,
-            name=service.name,
-            provider=service.provider,
-            api_key=mask_api_key(service.api_key),
-            base_url=service.endpoint or "",
-            created_at=service.create_date,
-            available_providers=providers,
-            needs_api_key=needs_api_key,
-            **SandboxServiceService._extra_config_fields(service.provider, service.extra_config),
-        )
+        return SandboxServiceService.to_detail(service, ServiceLifecycleService.warning_days(db), providers)
 
     @staticmethod
     def _validate_provider_allowed(provider_name: str) -> None:
@@ -180,7 +208,8 @@ class SandboxServiceService:
 
     @staticmethod
     def create_or_update_sandbox_service(
-        db: Session, app_id: int, service_id: int, service_data: CreateUpdateSandboxServiceSchema
+        db: Session, app_id: int, service_id: int, service_data: CreateUpdateSandboxServiceSchema,
+        actor_id: Optional[int] = None,
     ) -> SandboxServiceDetailSchema:
         """Create a new sandbox service or update an existing one"""
         SandboxServiceService._validate_provider_allowed(service_data.provider)
@@ -224,8 +253,14 @@ class SandboxServiceService:
             template=service_data.e2b_template,
         )
 
+        SandboxServiceService.apply_lifecycle_fields(service, service_data, actor_id)
+
         if service_id == 0:
             service = SandboxServiceRepository.create(db, service)
+            if service.end_of_service_at is not None:
+                ServiceLifecycleService.log_change(
+                    service, SERVICE_KIND_SANDBOX, None, service.end_of_service_at, actor_id
+                )
         else:
             service = SandboxServiceRepository.update(db, service)
 

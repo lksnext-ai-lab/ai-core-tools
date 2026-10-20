@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlalchemy.orm import Session, joinedload, selectinload
+from models.middleware import AgentMiddleware
 from models.agent import Agent, AgentTool, AgentSkill, AgentMCP
 from models.ocr_agent import OCRAgent
 from models.silo import Silo
@@ -37,6 +38,8 @@ class AgentExecutionRepository:
             joinedload(Agent.app),
             # Skill associations with nested skill data
             selectinload(Agent.skill_associations).joinedload(AgentSkill.skill),
+            # Middleware chain (ordered by AgentMiddleware.order on the relationship)
+            selectinload(Agent.middleware_associations).joinedload(AgentMiddleware.middleware),
             # Tool agents and their relationships (critical for IACTTool)
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.ai_service),
             selectinload(Agent.tool_associations).joinedload(AgentTool.tool).joinedload(Agent.silo),

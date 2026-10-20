@@ -1,6 +1,8 @@
 from typing import Optional, List, Dict, Any
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
+from models.middleware import AgentMiddleware
 from models.ocr_agent import OCRAgent
 from models.ai_service import AIService
 from models.sandbox_service import SandboxService
@@ -14,6 +16,11 @@ from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
 from repositories.skill_repository import SkillRepository
+from repositories.middleware_repository import MiddlewareRepository
+from utils.logger import get_logger
+from utils.service_lifecycle import to_utc
+
+logger = get_logger(__name__)
 
 
 class AgentRepository:
@@ -117,8 +124,9 @@ class AgentRepository:
             if agent:
                 return AgentRepository._delete_agent_with_associations(db, agent)
             return False
-        except Exception:
+        except SQLAlchemyError:
             db.rollback()
+            logger.exception("Could not delete agent %s", agent_id)
             return False
 
     @staticmethod
@@ -302,7 +310,7 @@ class AgentRepository:
         # Get metadata definition if it exists
         if silo.metadata_definition_id:
             metadata_parser = AgentRepository.get_output_parser_by_id(db, silo.metadata_definition_id)
-            if metadata_parser and metadata_parser.fields:
+            if metadata_parser and metadata_parser.app_id == silo.app_id and metadata_parser.fields:
                 silo_info["metadata_definition"] = {
                     "fields": metadata_parser.fields
                 }
@@ -335,6 +343,8 @@ class AgentRepository:
                 "service_id": s.service_id,
                 "name": f"[System] {s.name}" if s.app_id is None else s.name,
                 "supports_video": s.supports_video,
+                "end_of_service_at": to_utc(s.end_of_service_at),
+                "deprecation_notice": s.deprecation_notice,
             }
             for s in ai_services
         ]
@@ -342,7 +352,12 @@ class AgentRepository:
         # Get sandbox services
         sandbox_services = AgentRepository.get_sandbox_services_by_app_id(db, app_id)
         sandbox_services_list = [
-            {"service_id": s.service_id, "name": f"[System] {s.name}" if s.app_id is None else s.name}
+            {
+                "service_id": s.service_id,
+                "name": f"[System] {s.name}" if s.app_id is None else s.name,
+                "end_of_service_at": to_utc(s.end_of_service_at),
+                "deprecation_notice": s.deprecation_notice,
+            }
             for s in sandbox_services
         ]
 
@@ -375,6 +390,14 @@ class AgentRepository:
             for s in skills
         ]
 
+        # Get middlewares
+        middlewares = MiddlewareRepository.get_all_by_app_id(db, app_id)
+        middlewares_list = [
+            {"middleware_id": m.middleware_id, "name": m.name, "description": m.description,
+             "middleware_type": m.middleware_type.value}
+            for m in middlewares
+        ]
+
         return {
             'ai_services': ai_services_list,
             'sandbox_services': sandbox_services_list,
@@ -382,14 +405,15 @@ class AgentRepository:
             'output_parsers': output_parsers_list,
             'tools': tools_list,
             'mcp_configs': mcp_configs_list,
-            'skills': skills_list
+            'skills': skills_list,
+            'middlewares': middlewares_list
         }
     
     @staticmethod
     def get_agent_associations_dict(db: Session, agent_id: int) -> Dict[str, List]:
         """Get agent's current associations as a dictionary"""
         if agent_id == 0:
-            return {'tool_ids': [], 'mcp_ids': [], 'skill_ids': []}
+            return {'tool_ids': [], 'mcp_ids': [], 'skill_ids': [], 'middleware_ids': []}
 
         # Get tool associations
         tool_assocs = AgentRepository.get_agent_tool_associations(db, agent_id)
@@ -403,4 +427,13 @@ class AgentRepository:
         skill_assocs = AgentRepository.get_agent_skill_associations(db, agent_id)
         agent_skill_ids = [assoc.skill_id for assoc in skill_assocs]
 
-        return {'tool_ids': agent_tool_ids, 'mcp_ids': agent_mcp_ids, 'skill_ids': agent_skill_ids}
+        # Get middleware associations
+        middleware_assocs = (
+            db.query(AgentMiddleware)
+            .filter(AgentMiddleware.agent_id == agent_id)
+            .order_by(AgentMiddleware.order)
+            .all()
+        )
+        agent_middleware_ids = [assoc.middleware_id for assoc in middleware_assocs]
+
+        return {'tool_ids': agent_tool_ids, 'mcp_ids': agent_mcp_ids, 'skill_ids': agent_skill_ids, 'middleware_ids': agent_middleware_ids}

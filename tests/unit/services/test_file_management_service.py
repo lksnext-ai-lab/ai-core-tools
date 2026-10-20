@@ -239,3 +239,32 @@ async def test_get_session_file_rejects_a_symlink_escaping_tmp_base(tmp_path):
 def test_tmp_base_folder_property_matches_private_attribute(tmp_path):
     fms = _fms(tmp_path)
     assert fms.tmp_base_folder == fms._tmp_base_folder
+
+
+@pytest.mark.asyncio
+async def test_discard_uploaded_file_removes_the_attachment_in_scope():
+    from unittest.mock import AsyncMock
+    from services.file_management_service import FileManagementService
+
+    service = FileManagementService()
+    service.remove_file = AsyncMock(return_value=True)
+    await service.discard_uploaded_file("f1", 4, {"user_id": 1}, "9")
+    service.remove_file.assert_awaited_once_with("f1", 4, {"user_id": 1}, "9")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", [False, RuntimeError("disk")])
+async def test_discard_uploaded_file_never_raises_and_warns_without_error_text(outcome):
+    from unittest.mock import AsyncMock, patch
+    from services import file_management_service as module
+
+    service = module.FileManagementService()
+    service.remove_file = AsyncMock(
+        side_effect=outcome if isinstance(outcome, Exception) else None,
+        return_value=outcome if not isinstance(outcome, Exception) else None,
+    )
+    with patch.object(module, "logger") as log:
+        await service.discard_uploaded_file("f1", 4, {}, None)
+    log.warning.assert_called_once()
+    logged = " ".join(str(a) for a in log.warning.call_args.args)
+    assert "f1" in logged and "disk" not in logged

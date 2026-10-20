@@ -179,3 +179,55 @@ async def test_initialize_dbos_does_nothing_when_disabled(monkeypatch):
         assert await module.initialize_dbos() is False
         dbos.launch.assert_not_called()
     assert module.dbos_running() is False
+
+
+def _retired_error():
+    from utils.service_lifecycle import ServiceRetiredError
+
+    service = SimpleNamespace(
+        service_id=5, name="old-llm", end_of_service_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        deprecation_notice=None,
+    )
+    return ServiceRetiredError(service, "ai")
+
+
+@pytest.mark.asyncio
+async def test_invoke_agent_returns_failure_dict_for_retired_service():
+    error = _retired_error()
+    service = MagicMock()
+    service.execute_agent_chat_with_file_refs = AsyncMock(side_effect=error)
+    db = MagicMock()
+    with (
+        patch.object(module, "SessionLocal", return_value=db),
+        patch("services.agent_execution_service.AgentExecutionService", return_value=service),
+    ):
+        result = await module._invoke_agent(11, {"message": "hi"}, 99, {"user_id": "scheduled_task_7"})
+
+    assert result == {"response": None, "files": [], "error": error.message, "error_code": "SERVICE_RETIRED"}
+    db.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_run_marks_failed_without_retry_or_delivery_for_retired_service():
+    task = _task()
+    db = _db_for(task)
+    failure = {"response": None, "files": [], "error": "Service old-llm was retired on 2026-01-01.",
+               "error_code": "SERVICE_RETIRED"}
+    with (
+        patch.object(module, "SessionLocal", return_value=db),
+        patch.object(module.ConversationService, "create_conversation", return_value=SimpleNamespace(conversation_id=99)),
+        patch.object(module, "invoke_agent_step", new=AsyncMock(return_value=failure)) as invoke,
+        patch("output.service.create_deliveries_for_run") as deliveries,
+        patch.object(module.ScheduledTaskService, "prune_runs", new=AsyncMock()) as prune,
+    ):
+        result = await module._run_scheduled_task(datetime.now(timezone.utc), 7)
+
+    run = db.add.call_args.args[0]
+    assert result == failure
+    assert run.status == "failed"
+    assert run.error_summary == failure["error"]
+    assert run.finished_at is not None
+    assert run.output_text is None
+    invoke.assert_awaited_once()
+    deliveries.assert_not_called()
+    prune.assert_awaited_once()

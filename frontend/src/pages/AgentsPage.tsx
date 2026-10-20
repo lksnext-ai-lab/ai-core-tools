@@ -15,10 +15,15 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { AgentMCPUsage } from '../core/types';
+<<<<<<< HEAD
 import BackgroundImage from '../components/ui/BackgroundImage';
 import ButtonApp from '../components/ui/ButtonApp';
 import Title from '../components/ui/Title';
 import { LoadingState } from '../components/ui/LoadingState';
+=======
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
+>>>>>>> develop
 
 // Define the Agent type
 interface Agent {
@@ -36,6 +41,7 @@ interface Agent {
     model_name: string;
     provider: string;
   };
+  lifecycle_warnings?: ServiceLifecycleWarning[];
 }
 
 // Define the App type
@@ -357,6 +363,7 @@ function AgentsPage() {
                         A2A
                       </span>
                     )}
+                    <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="compact" />
                   </div>
                 </div>
               </div>

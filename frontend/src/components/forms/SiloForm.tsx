@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Info } from 'lucide-react';
 import { apiService } from '../../services/api';
+import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
+import { MediaServicesFields, type MediaAIServiceOption } from './MediaServicesFields';
 import { FormField, FormSelect } from '../ui/FormField';
 import { LoadingState } from '../ui/LoadingState';
 
@@ -24,8 +27,11 @@ interface Silo {
   metadata_definition_id?: number;
   embedding_service_id?: number;
   output_parsers?: { parser_id: number; name: string }[];
-  embedding_services?: { service_id: number; name: string; provider?: string; is_system?: boolean }[];
+  embedding_services?: (ServiceOptionLike & { provider?: string; is_system?: boolean })[];
   vector_db_options?: VectorDbOption[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  ai_services?: MediaAIServiceOption[];
 }
 
 // Define the form data type
@@ -36,6 +42,9 @@ interface SiloFormData {
   output_parser_id?: number;
   embedding_service_id?: number;
   vector_db_type?: string;
+  // null clears the service; the backend keeps a field only when it is omitted
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
 }
 
 // Define the props for the component
@@ -58,7 +67,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputParsers, setOutputParsers] = useState<any[]>([]);
-  const [embeddingServices, setEmbeddingServices] = useState<any[]>([]);
+  const [embeddingServices, setEmbeddingServices] = useState<(ServiceOptionLike & { provider?: string; is_system?: boolean })[]>([]);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
   const [loadingFormData, setLoadingFormData] = useState(true);
 
@@ -94,7 +103,9 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       type: 'CUSTOM',
       output_parser_id: silo?.metadata_definition_id || undefined,
       embedding_service_id: silo?.embedding_service_id || undefined,
-      vector_db_type: vectorDbTypeValue
+      vector_db_type: vectorDbTypeValue,
+      transcription_service_id: silo?.transcription_service_id ?? null,
+      video_ai_service_id: silo?.video_ai_service_id ?? null,
     }));
   }, [silo]);
 
@@ -244,23 +255,28 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 required
                 options={[
                   { value: '', label: 'Select an embedding service' },
-                  ...embeddingServices.map((service) => ({
+                  ...selectableServiceOptions(embeddingServices, silo?.embedding_service_id).map((service) => ({
                     value: service.service_id,
-                    label: [
+                    label: serviceOptionLabel(service, [
                       service.is_system ? '[System]' : '',
                       service.name,
                       service.provider ? `(${service.provider})` : '',
-                    ].filter(Boolean).join(' '),
+                    ].filter(Boolean).join(' ')),
                   })),
                 ]}
                 disabled={isSubmitting || isEditing}
-                className={isEditing ? '[&>p]:text-accent dark:text-accent-dark' : ''}
-                helpText={
-                  isEditing
-                    ? 'The embedding service cannot be changed after a silo is created.'
-                    : 'Required: Choose the embedding service for vector generation.'
-                }
+                ariaDescribedBy={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding_service_id')}
               />
+              <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
+              {isEditing ? (
+                <p className="mt-1 text-sm text-amber-600">
+                  The embedding service cannot be changed after a silo is created.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-500">
+                  Required: Choose the embedding service for vector generation.
+                </p>
+              )}
             </div>
 
             {/* Vector Database */}
@@ -298,6 +314,24 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
               )}
             </div>
           </div>
+
+          {/* Media (video/audio) indexing */}
+          {(silo?.ai_services?.length ?? 0) > 0 && (
+            <fieldset className="space-y-4 border-t border-gray-200 pt-6">
+              <legend className="text-sm font-semibold text-gray-900">Video and audio</legend>
+              <MediaServicesFields
+                scope="silo"
+                aiServices={silo?.ai_services ?? []}
+                transcriptionServiceId={formData.transcription_service_id}
+                videoServiceId={formData.video_ai_service_id}
+                savedTranscriptionServiceId={silo?.transcription_service_id}
+                savedVideoServiceId={silo?.video_ai_service_id}
+                disabled={isSubmitting}
+                onChange={(field, value) => setFormData(prev => ({ ...prev, [field]: value }))}
+              />
+            </fieldset>
+          )}
+
           {/* Error Message */}
           {error && (
             <Alert type="error" message={error} />

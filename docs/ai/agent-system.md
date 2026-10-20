@@ -163,54 +163,28 @@ if agent.silo_id and search_params:
 
 ## Memory Management
 
-### MemoryManagementService
+### Conversation memory
 
-Manages conversation memory with configurable limits:
+Agents with `has_memory` keep their history in the LangGraph PostgreSQL checkpointer and summarize it
+with LangChain's `SummarizationMiddleware` (`backend/tools/middleware/factory.py`). An attached
+`summarization` middleware sets the values; otherwise these defaults apply:
 
-```python
-# backend/models/agent.py
-DEFAULT_MEMORY_SUMMARIZE_THRESHOLD = 20  # centralised constant
+| Setting | Default | Source |
+|---|---|---|
+| Trigger | 85% of the model's `max_input_tokens`, at most 150,000 tokens; 32,000 when the model has no profile (custom endpoints, Ollama) | Deep Agents summarization defaults; Anthropic compaction default trigger |
+| Keep | Last 20 messages | LangChain `SummarizationMiddleware` default |
+| Tokens to summarize | No limit (the whole older history, already bounded by the trigger) | Deep Agents `create_summarization_middleware` default |
 
-class MemoryManagementService:
-    # Default limits (configurable per-agent via Agent fields)
-    MAX_MESSAGES = 20          # Agent.memory_max_messages
-    MAX_TOKENS = 4000          # Agent.memory_max_tokens
-    SUMMARIZATION_THRESHOLD = 20  # Agent.memory_summarize_threshold
-```
+The legacy `memory_max_messages`, `memory_max_tokens` and `memory_summarize_threshold` agent columns are
+kept for export/import compatibility but are no longer read.
 
-> The summarization threshold constant (`DEFAULT_MEMORY_SUMMARIZE_THRESHOLD = 20`) is defined once in `backend/models/agent.py` and used everywhere memory configuration is set or defaulted. Override per-agent via the `memory_summarize_threshold` field.
+## Retired Services
 
-**Methods**:
+When a service an agent needs (main LLM, OCR vision/text model, transcription, video, embedding of a linked silo, middleware LLM, or an agent-as-tool's LLM) is past its end of service, the turn fails with `ServiceRetiredError` (HTTP `409 SERVICE_RETIRED`, SSE `error` with `code: "service_retired"`, scheduled runs failed without retry). The exception is the sandbox service: a retired one disables the code interpreter for the turn instead of failing it ([details](rfc-sandbox-providers.md#sandbox-service-end-of-service)). See [Service End of Service](../guides/chat-bot/kb-ai-services.md#service-end-of-service) for the user-facing behavior.
 
-| Method | Purpose |
-|--------|---------|
-| `trim_conversation(conversation_id, max_tokens, db)` | Trim to fit context window |
-| `summarize_conversation(agent_id, conversation_id, db)` | Summarize old messages |
-| `get_conversation_token_count(conversation_id, db)` | Count tokens in conversation |
-
-**Memory strategies**:
-
-1. **Sliding window**: Keep only recent N messages
-   ```python
-   messages = messages[-MemoryManagementService.MAX_MESSAGES:]
-   ```
-
-2. **Token-based trimming**: Trim to fit max tokens
-   ```python
-   trimmed = await MemoryManagementService.trim_conversation(
-       conversation_id, 
-       max_tokens=4000, 
-       db
-   )
-   ```
-
-3. **Summarization**: Use LLM to summarize old messages when threshold reached
-   ```python
-   if len(messages) > MemoryManagementService.SUMMARIZATION_THRESHOLD:
-       summarized = await MemoryManagementService.summarize_conversation(
-           agent_id, conversation_id, db
-       )
-   ```
+Known limitations:
+- A tool that turns out to be retired mid-turn may leave an unanswered tool call in the agent's memory; the next turn recovers through the existing checkpoint rollback.
+- Users of a published marketplace agent see the retirement message (service name and notice) of the owning App's service. This is accepted.
 
 ## Conversation Persistence
 

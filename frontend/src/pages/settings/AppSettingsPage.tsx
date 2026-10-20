@@ -9,6 +9,8 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
+import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
+import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
 
 type LangsmithTestStatus = 'ok' | 'unauthorized' | 'network' | 'unknown';
 
@@ -18,9 +20,7 @@ interface LangsmithTestResult {
   readonly projectName?: string | null;
 }
 
-interface SandboxServiceOption {
-  readonly service_id: number;
-  readonly name: string;
+interface SandboxServiceOption extends ServiceOptionLike {
   readonly provider: string;
   readonly is_system?: boolean;
 }
@@ -52,6 +52,8 @@ function AppSettingsPage() {
   const [savingSlug, setSavingSlug] = useState(false);
   const [slugSaved, setSlugSaved] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
+  // Saved (loaded) default sandbox: a retired service stays selectable only if it is this one (D-4).
+  const [savedSandboxServiceId, setSavedSandboxServiceId] = useState<number | null>(null);
   const [sandboxServices, setSandboxServices] = useState<SandboxServiceOption[]>([]);
 
   // Load app data on mount
@@ -90,6 +92,7 @@ function AppSettingsPage() {
         enable_openai_api: app.enable_openai_api || false,
         default_sandbox_service_id: app.default_sandbox_service_id ?? null,
       });
+      setSavedSandboxServiceId(app.default_sandbox_service_id ?? null);
       setOriginalLangsmithKey(langsmithKey);
       setLangsmithKeyChanged(false);
     } catch (err) {
@@ -148,6 +151,7 @@ function AppSettingsPage() {
         enable_openai_api: formData.enable_openai_api,
         default_sandbox_service_id: formData.default_sandbox_service_id,
       });
+      setSavedSandboxServiceId(formData.default_sandbox_service_id);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -462,6 +466,7 @@ function AppSettingsPage() {
                   <select
                     id="default_sandbox_service_id"
                     name="default_sandbox_service_id"
+                    aria-describedby={serviceStatusId(sandboxServices, formData.default_sandbox_service_id, 'default_sandbox_service_id')}
                     value={formData.default_sandbox_service_id ?? ''}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
@@ -471,12 +476,13 @@ function AppSettingsPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="">Inherit system default</option>
-                    {sandboxServices.map((service) => (
-                      <option key={service.service_id} value={service.service_id}>
-                        {service.is_system ? `[System] ${service.name}` : service.name} ({service.provider})
-                      </option>
-                    ))}
+                    <ServiceSelectOptions
+                      options={sandboxServices}
+                      savedValue={savedSandboxServiceId}
+                      getLabel={(service) => `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`}
+                    />
                   </select>
+                  <ServiceOptionStatus selectId="default_sandbox_service_id" options={sandboxServices} selectedId={formData.default_sandbox_service_id} />
                   <p className="mt-1 text-sm text-gray-500">
                     Default Sandbox Service used when agents in this app run the Code Interpreter capability.
                     Leave at "Inherit" to use the system default. Manage available services under{' '}

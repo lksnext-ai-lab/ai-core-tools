@@ -39,6 +39,8 @@ def _make_service(
     svc.endpoint = endpoint
     svc.extra_config = extra_config
     svc.create_date = datetime(2024, 1, 1)
+    svc.end_of_service_at = None
+    svc.deprecation_notice = None
     return svc
 
 
@@ -50,17 +52,17 @@ def _make_service(
 class TestToListItem:
     def test_needs_api_key_true_when_missing(self):
         svc = _make_service(api_key=None)
-        item = SandboxServiceService._to_list_item(svc)
+        item = SandboxServiceService._to_list_item(svc, warning_days=30)
         assert item.needs_api_key is True
 
     def test_needs_api_key_false_when_present(self):
         svc = _make_service(api_key="sk-real-secret-key")
-        item = SandboxServiceService._to_list_item(svc)
+        item = SandboxServiceService._to_list_item(svc, warning_days=30)
         assert item.needs_api_key is False
 
     def test_is_system_flag_propagates(self):
         svc = _make_service()
-        item = SandboxServiceService._to_list_item(svc, is_system=True)
+        item = SandboxServiceService._to_list_item(svc, is_system=True, warning_days=30)
         assert item.is_system is True
 
 
@@ -323,8 +325,8 @@ class TestCopySandboxService:
             return service
 
         existing_list_items = [
-            SandboxServiceService._to_list_item(_make_service(service_id=1, name="My Sandbox")),
-            SandboxServiceService._to_list_item(_make_service(service_id=3, name="My Sandbox Copy")),
+            SandboxServiceService._to_list_item(_make_service(service_id=1, name="My Sandbox"), warning_days=30),
+            SandboxServiceService._to_list_item(_make_service(service_id=3, name="My Sandbox Copy"), warning_days=30),
         ]
 
         with (

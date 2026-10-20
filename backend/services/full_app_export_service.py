@@ -26,6 +26,7 @@ from services.silo_export_service import SiloExportService
 from services.repository_export_service import RepositoryExportService
 from services.domain_export_service import DomainExportService
 from services.agent_export_service import AgentExportService
+from services.middleware_export_service import MiddlewareExportService
 from repositories.app_repository import AppRepository
 import logging
 
@@ -66,6 +67,7 @@ class FullAppExportService(BaseExportService):
         self.repository_export = RepositoryExportService(session)
         self.domain_export = DomainExportService(session)
         self.agent_export = AgentExportService(session)
+        self.middleware_export = MiddlewareExportService(session)
 
     def export_full_app(
         self, app_id: int, user_id: Optional[int] = None
@@ -97,6 +99,7 @@ class FullAppExportService(BaseExportService):
         silos = self._export_all_silos(app_id)
         repositories = self._export_all_repositories(app_id)
         domains = self._export_all_domains(app_id)
+        middlewares = self.middleware_export.export_all(app_id)
         agents = self._export_all_agents(app_id)
 
         # Build app metadata
@@ -120,6 +123,7 @@ class FullAppExportService(BaseExportService):
             silos=silos,
             repositories=repositories,
             domains=domains,
+            middlewares=middlewares,
             agents=agents,
         )
 
@@ -132,6 +136,7 @@ class FullAppExportService(BaseExportService):
             f"{len(silos)} silos, "
             f"{len(repositories)} repositories, "
             f"{len(domains)} domains, "
+            f"{len(middlewares)} middlewares, "
             f"{len(agents)} agents"
         )
 

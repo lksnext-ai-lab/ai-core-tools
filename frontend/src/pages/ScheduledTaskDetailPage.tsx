@@ -3,6 +3,7 @@ import { CalendarClock, Pencil, PlayCircle } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { apiService, type Agent, type ScheduledTask, type ScheduledTaskRun } from '../services/api';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { ScheduledTaskResults } from '../components/scheduled-tasks/ScheduledTaskResults';
 import { conversationModeLabel, describeSchedule, formatDateTime } from '../components/scheduled-tasks/format';
 import Title from '../components/ui/Title';
@@ -77,7 +78,8 @@ export default function ScheduledTaskDetailPage() {
 
   const base = `/apps/${appId}/scheduled-tasks/${task.id}`;
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
+      <ServiceLifecycleAlert warnings={task.lifecycle_warnings} variant="full" />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <Title variant="titSecundario" titulo={task.name} subtitulo={task.description || 'Detalle de la tarea programada'} />
         <div className="flex gap-2">

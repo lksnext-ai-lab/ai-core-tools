@@ -1,6 +1,5 @@
 """Application service for first-class scheduled tasks."""
 
-import asyncio
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -13,6 +12,8 @@ from models.agent import Agent, MarketplaceVisibility
 from models.conversation import Conversation
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from models.output_delivery import OutputDelivery
+from schemas.scheduled_task_schemas import ScheduledTaskResponseSchema
+from services.service_lifecycle_service import ServiceLifecycleService
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -24,8 +25,6 @@ _EDITABLE_FIELDS = {
 _FINISHED_STATUSES = ("succeeded", "failed")
 # Covers an hourly task for the full ~7-day notification lifetime.
 _MAX_NOTIFICATION_PROTECTED_RUNS = 200
-# Background history deletions started from sync code (agent/app deletion).
-_pending_cleanups: set = set()
 
 
 def task_user_context(task: ScheduledTask) -> Dict[str, Any]:
@@ -124,6 +123,24 @@ class ScheduledTaskService:
             query = query.filter(ScheduledTask.agent_id == agent_id)
         return query.order_by(ScheduledTask.created_at.desc()).all()
 
+    def to_responses(self, tasks: List[ScheduledTask], app_id: int) -> List[ScheduledTaskResponseSchema]:
+        """Response schemas with ``lifecycle_warnings``; the lookup context is built once for all ``tasks``."""
+        ctx = ServiceLifecycleService.build_context(self.db, app_id, {t.agent_id for t in tasks})
+        responses = []
+        for task in tasks:
+            response = ScheduledTaskResponseSchema.model_validate(task)
+            response.lifecycle_warnings = ServiceLifecycleService.warnings_for_task(task, ctx)
+            responses.append(response)
+        return responses
+
+    def to_response(self, task: ScheduledTask) -> ScheduledTaskResponseSchema:
+        """Response schema of a single task, with its dependency warnings."""
+        return self.to_responses([task], task.app_id)[0]
+
+    def list_responses(self, app_id: int, agent_id: Optional[int] = None) -> List[ScheduledTaskResponseSchema]:
+        """``list`` serialised with dependency warnings."""
+        return self.to_responses(self.list(app_id, agent_id), app_id)
+
     def update(self, task_id: int, app_id: int, changes: Dict[str, Any]) -> ScheduledTask:
         task = self._task(task_id, app_id)
         cron = changes.get("cron_expression") or task.cron_expression
@@ -189,8 +206,8 @@ class ScheduledTaskService:
         threads: List[tuple] = []
         for task in tasks:
             threads.extend(self._purge(task))
-        if threads:
-            _run_in_background(_delete_histories(threads))
+        from services.conversation_service import ConversationService
+        ConversationService.delete_thread_histories_in_background(threads)
 
     def _purge(self, task: ScheduledTask) -> List[tuple]:
         """Remove the task and everything it owns. Returns the checkpointer threads to delete."""
@@ -295,17 +312,3 @@ async def _delete_history(agent_id: int, session_id: str) -> None:
     await ConversationService.delete_thread_history(agent_id, session_id)
 
 
-async def _delete_histories(threads: List[tuple]) -> None:
-    for agent_id, session_id in threads:
-        await _delete_history(agent_id, session_id)
-
-
-def _run_in_background(coro) -> None:
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.run(coro)
-        return
-    task = loop.create_task(coro)
-    _pending_cleanups.add(task)
-    task.add_done_callback(_pending_cleanups.discard)

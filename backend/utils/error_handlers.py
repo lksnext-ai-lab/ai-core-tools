@@ -58,6 +58,19 @@ class NotFoundError(AppError):
         super().__init__(message, 'NOT_FOUND', 404)
 
 
+class ConflictError(AppError):
+    """The request conflicts with the current state of the resource (HTTP 409)."""
+
+    def __init__(self, message: str, error_code: str = 'CONFLICT'):
+        super().__init__(message, error_code, 409)
+
+
+def _is_service_retired(exc: BaseException) -> bool:
+    """True for ServiceRetiredError. Lazy import: service_lifecycle imports this module."""
+    from utils.service_lifecycle import ServiceRetiredError  # noqa: PLC0415
+    return isinstance(exc, ServiceRetiredError)
+
+
 def handle_database_errors(operation: str = None):
     """Decorator to handle database errors consistently"""
     def decorator(func):
@@ -69,6 +82,9 @@ def handle_database_errors(operation: str = None):
                 logger.error(f"Database error in {operation or func.__name__}: {str(e)}", exc_info=True)
                 raise DatabaseError(f"Database operation failed: {str(e)}", operation)
             except Exception as e:
+                if _is_service_retired(e):
+                    # Already logged once (WARNING) where it was raised.
+                    raise
                 logger.error(f"Unexpected error in {operation or func.__name__}: {str(e)}", exc_info=True)
                 raise
         return wrapper

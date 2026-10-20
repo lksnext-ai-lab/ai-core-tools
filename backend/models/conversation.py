@@ -1,7 +1,7 @@
 import enum
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 from datetime import datetime
 from db.database import Base
 
@@ -19,7 +19,7 @@ class Conversation(Base):
     __tablename__ = "Conversation"
 
     conversation_id = Column(Integer, primary_key=True, autoincrement=True)
-    agent_id = Column(Integer, ForeignKey('Agent.agent_id'), nullable=False)
+    agent_id = Column(Integer, ForeignKey('Agent.agent_id', ondelete='CASCADE'), nullable=False)
     user_id = Column(Integer, ForeignKey('User.user_id', ondelete='SET NULL'), nullable=True)
     title = Column(String(255), nullable=True)
     session_id = Column(String(255), nullable=False, unique=True)
@@ -42,7 +42,9 @@ class Conversation(Base):
     # Serialized JSON snapshot of the sandbox state (provider, session_key, sandbox_id, updated_at).
     sandbox_state = Column(Text, nullable=True)
 
-    agent = relationship("Agent", backref="conversations")
+    # The database removes an agent's conversations; AgentService.delete_agent frees their
+    # checkpoints, media and sandboxes first.
+    agent = relationship("Agent", backref=backref("conversations", passive_deletes=True))
     user = relationship("User", backref="conversations", foreign_keys=[user_id])
     
     def __repr__(self):

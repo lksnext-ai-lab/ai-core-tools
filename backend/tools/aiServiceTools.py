@@ -19,6 +19,7 @@ from typing import List
 from langchain_core.documents import Document
 from tools.embeddingTools import get_embeddings_model
 from utils.logger import get_logger
+from utils.service_lifecycle import SERVICE_KIND_AI, SERVICE_KIND_EMBEDDING, ensure_service_active
 
 load_dotenv()
 
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 
 def get_embedding(text, embedding_service=None):
     """Get embeddings using the configured service"""
+    ensure_service_active(embedding_service, SERVICE_KIND_EMBEDDING)
     embeddings = get_embeddings_model(embedding_service)
         
     return embeddings.embed_query(text)
@@ -54,7 +56,10 @@ def create_llm_from_service(ai_service, temperature=0, is_vision=False):
         ai_service: AIService model instance
         temperature: float
         is_vision: boolean
+    Raises:
+        ServiceRetiredError: if the service is past its end of service
     """
+    ensure_service_active(ai_service, SERVICE_KIND_AI)
     provider_builders = {
         ProviderEnum.OpenAI.value: lambda: _build_openai_llm(ai_service, temperature),
         ProviderEnum.Anthropic.value: lambda: _build_anthropic_llm(ai_service, temperature),

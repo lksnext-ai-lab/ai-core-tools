@@ -1,6 +1,8 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
+
+from schemas.service_lifecycle_schemas import ServiceLifecycleFieldsMixin
 
 
 # ==================== EMBEDDING SERVICE SCHEMAS ====================
@@ -14,6 +16,14 @@ class EmbeddingServiceListItemSchema(BaseModel):
     created_at: Optional[datetime] = None
     needs_api_key: bool = False
     is_system: bool = False
+    # Last provider failure needing action on the service (rejected key, quota); None when healthy
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+
+    # End-of-service lifecycle (status is computed at read time)
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: Literal["active", "deprecated", "retired"] = "active"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -33,11 +43,18 @@ class EmbeddingServiceDetailSchema(BaseModel):
     # AWS Bedrock identifiers (non-secret). Empty for other providers.
     aws_access_key_id: Optional[str] = None
     aws_region: Optional[str] = None
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+
+    # End-of-service lifecycle (status is computed at read time)
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: Literal["active", "deprecated", "retired"] = "active"
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateEmbeddingServiceSchema(BaseModel):
+class CreateUpdateEmbeddingServiceSchema(ServiceLifecycleFieldsMixin):
     """Schema for creating or updating an embedding service"""
     name: str
     provider: str
@@ -49,7 +66,6 @@ class CreateUpdateEmbeddingServiceSchema(BaseModel):
     # via ``api_key``; the access key id and region travel here.
     aws_access_key_id: Optional[str] = None
     aws_region: Optional[str] = None
-
     @field_validator("api_key", "base_url", "api_version", "aws_access_key_id", "aws_region", mode="before")
     @classmethod
     def _strip_credentials(cls, v):
@@ -65,6 +81,9 @@ class EmbeddingServiceOptionSchema(BaseModel):
     name: str
     provider: Optional[str] = None
     is_system: bool = False
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: Literal["active", "deprecated", "retired"] = "active"
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -8,6 +8,7 @@ from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -21,6 +22,7 @@ ocr_router = APIRouter()
                  response_model=OCRResponseSchema,
                  responses={
                      400: {"description": "Only PDF files are supported"},
+                     409: {"description": "A service used by this resource was retired"},
                      500: {"description": "OCR processing failed"},
                  })
 async def process_ocr(
@@ -88,6 +90,8 @@ async def process_ocr(
                 confidence=0.8
             )
         
+    except ServiceRetiredError:
+        raise
     except Exception as e:
         logger.error(f"Error in public OCR endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="OCR processing failed") 

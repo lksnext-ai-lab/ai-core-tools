@@ -1,82 +1,112 @@
+# OS and editor files
 .DS_Store
+.idea/
+.vscode
+*.code-workspace
+.serena
+.playwright-mcp/
+
+# Environment files and secrets
 .env
 .env.local
 .env.production
 .env.*.local
-# Local tokens for developer tooling (SonarCloud, Jira)
 .env.sonar
 .env.jira
 .flaskenv
-*.pyc
-*.pyo
-*.wav
+**/secrets.yaml
+**/secret.yaml
+*-secret.yaml
+
+# Python environments, caches, and build artifacts
 ictvenv/
 env/
 *venv/
 .venv/
-dist/
-build/
-*.egg
-*.egg-info/
+__pycache__/
+.pytest_cache/
 .tox/
 .cache/
-.pytest_cache/
-.idea/
-docs/_build/
-.vscode
-uploads/
-static/img/heroes/*
+*.pyc
+*.pyo
+*.egg
+*.egg-info/
+
+# Frontend dependencies and build output
 *node_modules*
-#static/vendor/*
-app/data
-app/demo
-# Coverage reports
+dist/
+build/
+/docs/_build/
+
+# Test and coverage output
 htmlcov/
 .coverage
 .coverage.*
 *,cover
-cosas.txt
-flask_session
-__pycache__
+
+# Application data and generated assets
+# These directory-name rules intentionally match at any depth.
+uploads/
 downloads/
 images/
+qdrant_storage/
+static/img/heroes/*
+#static/vendor/*
+
+# Application-specific data directories at the repository root
+/app/data/
+/app/demo/
+/backend/app/
+/backend/data/
+/data/
+
+# Local runtime files, logs, and temporary output
+*.wav
 agent_process.log
-IA-CORE
-data/
-**/secrets.yaml
-**/secret.yaml
-*-secret.yaml
-*.code-workspace
+flask_session
 logs/
 local/
-clients/
-qdrant_storage/
-.playwright-mcp/
 temp/
-.serena
 tmpclaude*
-plans/
-
+cosas.txt
+IA-CORE
 nginx/
 develop/
 reports/
 
+# Local client projects and plans
+/clients/
+/plans/
+
+# Spec-kit
+.github/agents/speckit.*
+prompts/
+specs/
+.specify/
+
 # Claude Code agent system: ship the agents/commands/skills/hooks,
 # but keep per-run artifacts and personal settings out of git.
-.claude/specs/
-.claude/agent-memory/
+/.claude/specs/
+/.claude/agent-memory/
 **/.claude/agent-memory/
-.claude/settings.local.json
+/.claude/settings.local.json
 
 # Codex agent system: ship AGENTS.md, .codex/agents and .agents/skills,
 # but keep per-run specs and personal config out of git.
-.codex/specs/
-.codex/config.local.toml
+/.codex/specs/
+/.codex/config.local.toml
+
+# Local Docker configuration and database dumps
+/docker/docker-compose.override.yml
 
 # Entornos Docker locales: un .env por entorno, con secretos. Las plantillas
 # .env.example sí se versionan.
-docker/envs/*.env
-!docker/envs/*.env.example
+/docker/envs/*.env
+!/docker/envs/*.env.example
 
 # Dumps de BD locales (docker/mattin.ps1). Nunca al repo.
+<<<<<<< HEAD
 docker/backups/
+=======
+/docker/backups/
+>>>>>>> develop

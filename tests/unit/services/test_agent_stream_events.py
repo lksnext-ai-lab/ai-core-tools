@@ -188,7 +188,7 @@ class TestAgentStreamEventsTyped:
             AgentStreamEvent("token", {"content": " world"}),
             AgentStreamEvent(
                 "done",
-                {"response": "hello world", "conversation_id": 297, "files": []},
+                {"response": "hello world", "conversation_id": 297, "files": [], "status": "completed"},
                 extra={
                     "structured": False,
                     "parsed_response": "hello world",
