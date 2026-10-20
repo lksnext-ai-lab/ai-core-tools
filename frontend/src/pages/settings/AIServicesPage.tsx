@@ -12,10 +12,13 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
-import { getProviderBadgeColor } from '../../components/ui/providerBadges';
+import { Badge, ProviderBadge } from '../../components/ui/Badge';
 import { AppRole } from '../../types/roles';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
+import { Title } from '../../components/ui/Title';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 interface AIService {
   service_id: number;
@@ -176,24 +179,23 @@ function AIServicesPage() {
     <div className="p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">AI Services</h2>
-          <p className="text-gray-600">Manage language models and AI providers for your agents</p>
-        </div>
+        <Title variant='titSecundario' titulo='Ai Services' subtitulo='Manage language models and AI providers for your agents'></Title>
         {canEdit && (
           <div className="flex gap-2">
-            <button
+            <ButtonApp
+              label="Import"
               onClick={() => setShowImportModal(true)}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
-            >
-              <Upload className="w-4 h-4 mr-2" />Import
-            </button>
-            <button
+              icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label="Add AI Service"
               onClick={handleCreate}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>Add AI Service
-            </button>
+              icon={<span aria-hidden="true">+</span>}
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
       </div>
@@ -207,33 +209,35 @@ function AIServicesPage() {
           {
             header: 'Name',
             render: (service: AIService) => (
-              canEdit ? (
-                <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
+              <div className="flex items-center gap-2">
+              <BackgroundImage icon={Bot} variant="marron" />
+              {canEdit ? (
+                
+                <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark text-left" onClick={() => handleEdit(service.service_id)}>
                   {service.name}
                 </button>
               ) : (
-                <span className="text-sm font-medium text-gray-900">{service.name}</span>
-              )
-            )
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
+              )}
+              </div>
+            )            
           },
-          { header: 'Model', accessor: 'model_name' },
+          { header: 'Model', accessor: 'model_name', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark' },
           { header: 'Provider', render: (service: AIService) => (
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>
-              {service.provider}
-            </span>
+            <ProviderBadge provider={service.provider} />
           )},
           { header: 'Status', render: (service: AIService) => (
             service.needs_api_key ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> API Key Required
-              </span>
+              <Badge
+                label="API Key Required"
+                variant="warning"
+                icon={<AlertTriangle className="w-3 h-3" aria-hidden="true" />}
+              />
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Ready
-              </span>
+              <Badge label="Ready" variant="success" />
             )
           )},
-          { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
+          { header: 'Created', className:'text-xs text-fg-secondary dark:text-fg-secondary-dark', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: AIService) => (
             canEdit ? (
               <ActionDropdown actions={[
@@ -323,30 +327,33 @@ function AIServicesPage() {
             <LoadingState variant="section" message="Testing connection to AI service..." />
           ) : testResult && (
             <div>
-              <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                <strong>Status:</strong> {testResult.status === 'success' ? 'Success' : 'Error'}
-                <br />
-                <strong>Message:</strong> {testResult.message}
-              </div>
-              
-              {testResult.response && (
-                <div>
-                  <h4 className="font-semibold mb-2">Response:</h4>
-                  <div className="bg-gray-50 p-3 rounded border text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {testResult.response}
+              <Alert
+                type={testResult.status === 'success' ? 'success' : 'error'}
+                title={`Status: ${testResult.status === 'success' ? 'Success' : 'Error'}`}
+                message={(
+                  <div className="space-y-2">
+                    <p><strong>Message:</strong> {testResult.message}</p>
+                    {testResult.response && (
+                      <div>
+                        <h4 className="font-semibold mb-2">Response:</h4>
+                        <div className="bg-gray-50 p-3 rounded border text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
+                          {testResult.response}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              />
             </div>
           )}
           {!testingServiceId && (
             <div className="mt-4 flex justify-end">
-              <button
+              <ButtonApp
+                label="Close"
                 onClick={() => setIsTestModalOpen(false)}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded"
-              >
-                Close
-              </button>
+                variant="secondary"
+                size="medium"
+              />
             </div>
           )}
         </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, CalendarClock } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, CalendarClock, FileText } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -14,7 +15,7 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { AgentMCPUsage } from '../core/types';
-import BackgroundImage, { type BackgroundImageIconName } from '../components/ui/BackgroundImage';
+import BackgroundImage from '../components/ui/BackgroundImage';
 import ButtonApp from '../components/ui/ButtonApp';
 import Title from '../components/ui/Title';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -227,13 +228,13 @@ function AgentsPage() {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const getAgentTypeIcon = (type: string): BackgroundImageIconName => {
+  const getAgentTypeIcon = (type: string): LucideIcon => {
     switch (type) {
       case 'ocr_agent':
-        return 'FileText';
+        return FileText;
       case 'agent':
       default:
-        return 'Bot';
+        return Bot;
     }
   };
 
@@ -495,12 +496,12 @@ function AgentsPage() {
 
       {!loading && canEdit && agents.length === 0 && (
         <div className="text-center py-6">
-          <button 
+          <ButtonApp
+            label="Create Your First Agent"
             onClick={handleCreateAgent}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First Agent
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 

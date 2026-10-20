@@ -22,6 +22,8 @@ import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
+import { Title } from '../../components/ui/Title';
+import ButtonApp from '../../components/ui/ButtonApp';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
@@ -267,15 +269,24 @@ function MCPConfigsPage() {
 
   if (loading) {
     return (
-      
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titSecundario" titulo="MCP Configs" subtitulo="Manage Model Context Protocol server configurations" />
+        </div>
+
         <LoadingState variant="page" message="Loading MCP configs..." />
-      
+      </div>
     );
   }
 
   if (error) {
     return (
       <div className="p-6">
+      <div className="flex items-center justify-between">
+          <Title variant='titSecundario' titulo="MCP Configs" subtitulo="Manage Model Context Protocol server configurations" />
+        </div>
+
         <Alert type="error" message={error} onDismiss={() => loadMCPConfigs()} />
       </div>
     );
@@ -287,32 +298,24 @@ function MCPConfigsPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">MCP Configs</h2>
-            <p className="text-gray-600">
-              Manage Model Context Protocol server configurations
-            </p>
+            <Title variant="titSecundario" titulo="MCP Configs" subtitulo="Manage Model Context Protocol server configurations" />
           </div>
           {canEdit && (
             <div className="flex gap-2">
-              <button
+              <ButtonApp
+                label="Import"
                 onClick={() => setShowImportModal(true)}
-                className={
-                  "border border-gray-300 hover:bg-gray-50 text-gray-700 " +
-                  "px-4 py-2 rounded-lg flex items-center"
-                }
-              >
-                <Upload className="w-4 h-4 mr-2" />Import
-              </button>
-              <button 
+                icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+                variant="secondary"
+                size="medium"
+              />
+              <ButtonApp
+                label="Add MCP Config"
                 onClick={handleCreateConfig}
-                className={
-                  "bg-purple-600 hover:bg-purple-700 text-white " +
-                  "px-4 py-2 rounded-lg flex items-center"
-                }
-              >
-                <span className="mr-2">+</span>
-                {' '}Add MCP Config
-              </button>
+                icon={<span aria-hidden="true">+</span>}
+                variant="primary"
+                size="medium"
+              />
             </div>
           )}
         </div>
@@ -352,13 +355,13 @@ function MCPConfigsPage() {
                   {canEdit ? (
                     <button
                       type="button"
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      className="text-sm font-medium text-fg dark:text-fg-dark text-left"
                       onClick={() => void handleEditConfig(config.config_id)}
                     >
                       {config.name}
                     </button>
                   ) : (
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-fg dark:text-fg-dark">
                       {config.name}
                     </span>
                   )}
@@ -368,7 +371,7 @@ function MCPConfigsPage() {
             {
               header: 'Description',
               render: (config) => (
-                <div className="text-sm text-gray-600 max-w-xs truncate">
+                <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate">
                   {config.description || <span className="text-gray-400 italic">No description</span>}
                 </div>
               ),
@@ -377,7 +380,7 @@ function MCPConfigsPage() {
             {
               header: 'Created',
               render: (config) => config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Actions',
@@ -431,7 +434,7 @@ function MCPConfigsPage() {
                     size="sm"
                   />
                 ) : (
-                  <span className="text-gray-400 text-sm">View only</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">View only</span>
                 )
               )
             }
@@ -444,44 +447,39 @@ function MCPConfigsPage() {
 
         {!loading && configs.length === 0 && canEdit && (
           <div className="text-center py-6">
-            <button 
+            <ButtonApp
+              label="Add First MCP Config"
               onClick={handleCreateConfig}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-            >
-              Add First MCP Config
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
 
         {/* Info Box */}
-        <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <Lightbulb className="w-5 h-5 text-purple-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-purple-800">
-                About Model Context Protocol (MCP)
-              </h3>
-              <div className="mt-2 text-sm text-purple-700">
-                <p>
-                  MCP enables secure, controlled connections between AI agents and external tools. 
-                  Configure filesystem access, database connections, APIs, web browsers, and custom tools. 
-                  Use STDIO for local processes or SSE for remote services.
-                </p>
-                <div className="mt-2">
-                  <strong>Popular MCP Servers:</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li><code>@modelcontextprotocol/server-filesystem</code> - File system access</li>
-                    <li><code>@modelcontextprotocol/server-sqlite</code> - SQLite database queries</li>
-                    <li><code>@modelcontextprotocol/server-github</code> - GitHub API integration</li>
-                    <li><code>@modelcontextprotocol/server-brave-search</code> - Web search</li>
-                  </ul>
-                </div>
+        <Alert
+          type="info"
+          title="About Model Context Protocol (MCP)"
+          className="mt-6"
+          message={
+            <>
+              <p>
+                MCP enables secure, controlled connections between AI agents and external tools.
+                Configure filesystem access, database connections, APIs, web browsers, and custom tools.
+                Use STDIO for local processes or SSE for remote services.
+              </p>
+              <div className="mt-2">
+                <strong>Popular MCP Servers:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li><code>@modelcontextprotocol/server-filesystem</code> - File system access</li>
+                  <li><code>@modelcontextprotocol/server-sqlite</code> - SQLite database queries</li>
+                  <li><code>@modelcontextprotocol/server-github</code> - GitHub API integration</li>
+                  <li><code>@modelcontextprotocol/server-brave-search</code> - Web search</li>
+                </ul>
               </div>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Create/Edit Modal */}
         <Modal

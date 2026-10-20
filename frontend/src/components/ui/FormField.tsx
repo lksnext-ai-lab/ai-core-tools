@@ -1,16 +1,21 @@
 import React from 'react';
 
 interface FormFieldProps {
-  label: string;
+  label: React.ReactNode;
   id: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time';
-  value: string | number;
+  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file';
+  value?: string | number;
+  accept?: string;
+  autoComplete?: string;
+  'data-lpignore'?: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   min?: number;
   max?: number;
   step?: number;
   maxLength?: number;
+  pattern?: string;
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
@@ -30,12 +35,17 @@ export function FormField({
   id,
   type = 'text',
   value,
+  accept,
+  autoComplete,
+  'data-lpignore': dataLpignore,
   onChange,
+  onFocus,
   onKeyDown,
   min,
   max,
   step,
   maxLength,
+  pattern,
   placeholder,
   disabled = false,
   required = false,
@@ -49,6 +59,9 @@ export function FormField({
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [errorId, helpTextId].filter(Boolean).join(' ') || undefined;
+  const inputBaseClassName = type === 'file'
+    ? 'block w-full text-sm text-fg-secondary dark:text-fg-secondary-dark file:mr-3 file:py-2 file:px-4 file:rounded-md file:border file:border-ink file:text-sm file:font-medium file:bg-surface file:text-fg hover:file:bg-surface-hover dark:file:border-ink-dark dark:file:bg-surface-dark dark:file:text-fg-dark dark:hover:file:bg-surface-hover-dark disabled:opacity-50 disabled:cursor-not-allowed'
+    : 'w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark';
 
   return (
     <div className={className}>
@@ -65,33 +78,38 @@ export function FormField({
         id={id}
         name={id}
         type={type}
-        value={value}
+        {...(type === 'file' ? {} : { value })}
+        accept={accept}
+        autoComplete={autoComplete}
+        data-lpignore={dataLpignore}
         onChange={onChange}
+        onFocus={onFocus}
         onKeyDown={onKeyDown}
         min={min}
         max={max}
         step={step}
         maxLength={maxLength}
+        pattern={pattern}
         placeholder={placeholder}
         disabled={disabled}
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark  ${
+        className={`${inputBaseClassName} ${
           error
-            ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
+            ? 'border-error focus:outline-none focus:border-error dark:border-error-dark dark:focus:border-error-dark'
             : 'focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
-          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
+          disabled && type !== 'file' ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         } ${inputClassName}`}
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
+        <p id={errorId} className="mt-1 text-xs text-error dark:text-error-dark">{error}</p>
       )}
     </div>
   );
@@ -159,7 +177,7 @@ export function FormTextArea({
         aria-describedby={describedBy}
         className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark ${
           error
-            ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
+            ? 'border-error focus:outline-none focus:border-error dark:border-error-dark dark:focus:border-error-dark'
             : 'focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
@@ -167,14 +185,13 @@ export function FormTextArea({
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
+        <p id={errorId} className="mt-1 text-xs text-error dark:text-error-dark">{error}</p>
       )}
     </div>
-
   );
 }
 
@@ -231,10 +248,10 @@ export function FormSelect({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 marketplace-filter-select border border-gray-300 dark:border-btCard-border-dark dark:bg-surface-dark focus:outline-none focus:border-accent rounded-lg text-sm ${
+        className={`w-full px-3 py-2 marketplace-filter-select border rounded-lg text-sm bg-surface text-fg dark:bg-surface-dark dark:text-fg-dark focus:outline-none ${
           error
-            ? 'border-error focus:ring-error focus:border-error dark:border-error-dark dark:focus:ring-error-dark dark:focus:border-error-dark'
-            : 'border-gray-300  focus:border-accent dark:border-btCard-border-dark dark:focus:border-accent '
+            ? 'border-error focus:border-error dark:border-error-dark dark:focus:border-error-dark'
+            : 'border-line-strong focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
         }`}
@@ -246,15 +263,12 @@ export function FormSelect({
         ))}
       </select>
 
-
-      
-
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-error dark:text-error-dark">{error}</p>
+        <p id={errorId} className="mt-1 text-xs text-error dark:text-error-dark">{error}</p>
       )}
     </div>
   );
@@ -298,7 +312,7 @@ export function FormCheckbox({
           onChange={onChange}
           disabled={disabled}
           aria-describedby={describedBy}
-          className="w-4 h-4 accent-ink dark:accent-ink-dark border-line-strong rounded focus-visible:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-4 h-4 accent-ink dark:accent-ink-dark border-line-strong rounded focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       <div className="ml-3">
@@ -309,7 +323,7 @@ export function FormCheckbox({
           {label}
         </label>
         {helpText && (
-          <p id={helpTextId} className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+          <p id={helpTextId} className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
         )}
       </div>
     </div>
@@ -323,6 +337,9 @@ interface FormRadioProps {
   className?: string;
 }
 
+/**
+ * Reusable radio option (label + native radio). Group several inside a fieldset/legend.
+ */
 export function FormRadio({
   label,
   checked,
@@ -330,8 +347,8 @@ export function FormRadio({
   className = '',
 }: Readonly<FormRadioProps>) {
   return (
-    <label className={className}>
-      <input type="radio" checked={checked} onChange={onChange} className="w-4 h-4 accent-ink border-gray-300  dark:accent-ink-dark"/>
+    <label className={`text-fg dark:text-fg-dark ${className}`}>
+      <input type="radio" checked={checked} onChange={onChange} className="w-4 h-4 accent-ink dark:accent-ink-dark" />
       {label}
     </label>
   );

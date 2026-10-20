@@ -5,7 +5,7 @@ import { adminService } from '../../services/admin';
 import type { LocalUserCreated } from '../../services/admin';
 import { ApiError } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
-import { ButtonApp } from './ButtonApp';
+import { FormActions } from './FormActions';
 
 export interface CreateLocalUserModalProps {
   readonly isOpen: boolean;
@@ -158,21 +158,12 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
           />
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <ButtonApp
-            type="submit"
-            label={isSubmitting ? 'Creating…' : 'Create user'}
-            loading={isSubmitting}
-          />
-        </div>
+        <FormActions
+          onCancel={onClose}
+          isSubmitting={isSubmitting}
+          submitLabel="Create user"
+          submittingLabel="Creating…"
+        />
       </form>
     </Modal>
   );

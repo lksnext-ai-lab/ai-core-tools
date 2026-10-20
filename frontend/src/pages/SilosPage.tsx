@@ -206,10 +206,7 @@ function SilosPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
-            <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
-          </div>
+          <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
         </div>
 
         <Alert
@@ -261,19 +258,20 @@ function SilosPage() {
       {silos.length === 0 ? (
         <CardApp className="p-8 text-center">
           
-          <BackgroundImage variant="gris" icon="Database" size={44} className="mx-auto mb-4" />
+          <BackgroundImage variant="gris" icon={Database} size={44} className="mx-auto mb-4" />
           <h3 className="font-display text-[19px] font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-[6px]">No Silos Yet</h3>
           <p className="text-fg-secondary dark:text-fg-secondary-dark text-[13.5px] mb-4">
             Create your first silo to start storing and searching documents with vector embeddings.
           </p>
           {canEdit && (
-            <Link 
+            <ButtonLink
               to={`/apps/${appId}/silos/new`}
-              className="mx-auto w-max rounded-md px-[15px] py-[9px] text-sm border border-transparent bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark hover:bg-ink-hover dark:hover:bg-ink-hover-dark"
-            >
-              <span aria-hidden="true" className="mr-2">+</span>
-              <span>Create Your First Silo</span>
-            </Link>
+              label="Create Your First Silo"
+              variant="primary"
+              size="medium"
+              icon={<span aria-hidden="true">+</span>}
+              className="mx-auto w-max"
+            />
           )}
         </CardApp>
       ) : (
@@ -286,7 +284,7 @@ function SilosPage() {
               render: (silo) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <BackgroundImage variant="marron" icon="Database" size={28}
+                    <BackgroundImage variant="marron" icon={Database} size={28}
                       iconSize={14}
                       className="rounded-lg"/>
                   </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Settings, FileText, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv } from 'lucide-react';
+import { AlertTriangle, Settings, FileText, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -25,6 +25,7 @@ import { AppRole } from '../types/roles';
 import { randomId } from '../utils/randomId';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
+import { FormActions } from '../components/ui/FormActions';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -792,7 +793,7 @@ function AgentFormPage() {
 
   return (
     <div className="min-h-screen p-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
           {/*<div>
@@ -894,7 +895,7 @@ function AgentFormPage() {
           {activeTab === 'prompts' && (
             <CardApp variant="white" className="p-8">
               <div className="flex items-center mb-6">
-                <BackgroundImage icon="MessageSquare" size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
+                <BackgroundImage icon={MessageSquare} size={40} iconSize={20} variant="marron" className="mr-4 rounded-xl" />
                 <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Prompts & Instructions</h3>
               </div>
               
@@ -1593,7 +1594,7 @@ function AgentFormPage() {
               {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
                 <CardApp className="p-8">
                   <div className="flex items-center mb-6">
-                    <BackgroundImage variant='marron' icon='Wrench' size={40} className="mr-4" />
+                    <BackgroundImage variant='marron' icon={Wrench} size={40} className="mr-4" />
                     <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Available Tools</h3>
                   </div>
                   
@@ -1642,7 +1643,7 @@ function AgentFormPage() {
               {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
                 <CardApp variant="white">
                   <div className="flex items-center mb-6">
-                    <BackgroundImage icon="Plug" size={40} variant="marron" className="mr-4" />
+                    <BackgroundImage icon={Plug} size={40} variant="marron" className="mr-4" />
                     <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">MCP Servers</h3>
                     <Badge variant="primary" label="Model Context Protocol" className="ml-3" />
                   </div>
@@ -1698,7 +1699,7 @@ function AgentFormPage() {
                     </>
                   ) : (
                     <div className="text-center py-8">
-                      <BackgroundImage icon='Plug' size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
+                      <BackgroundImage icon={Plug} size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
                       <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No MCP Servers Available</h4>
                       <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
                         You haven't configured any MCP servers yet. Create MCP configurations in the settings to enable external tool access.
@@ -1788,7 +1789,7 @@ function AgentFormPage() {
                     </>
                   ) : (
                     <div className="text-center py-8">
-                      <BackgroundImage icon='Target' size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
+                      <BackgroundImage icon={Target} size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
                       <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No Skills Available</h4>
                       <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
                         You haven't created any skills yet. Create skills in the settings to enable specialized agent behaviors.
@@ -1811,7 +1812,7 @@ function AgentFormPage() {
           {activeTab === 'marketplace' && (
             <CardApp className="p-8 mb-8">
               <div className="flex items-center mb-6">
-                 <BackgroundImage icon='Store' size={40} className='mr-4'/>
+                 <BackgroundImage icon={Store} size={40} className='mr-4'/>
                 <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">Marketplace Publishing</h3>
               </div>
 
@@ -2020,50 +2021,12 @@ function AgentFormPage() {
           )}
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-4 mt-8 pt-6 ">
-            {/*<button
-              type="button"
-              onClick={() => navigate(`/apps/${appId}/agents`)}
-              className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-medium transition-all duration-200"
-              disabled={saving}
-            >
-              Cancel
-            </button>*/}
-
-            <ButtonApp
-              label="Cancel"
-              variant="secondary"
-              size="control"
-              onClick={() => navigate(`/apps/${appId}/agents`)}
-              disabled={saving}
-            />
-            <ButtonApp
-              label={submitButtonLabel}
-              variant="primary"
-              size="control"
-              type="submit"
-              loading={saving}
-              disabled={saving}
-            />
-
-            {/*<button
-              type="submit"
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-              disabled={saving}
-            >
-              {(() => {
-                if (saving) {
-                  return (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Saving...
-                    </div>
-                  );
-                }
-                return isNewAgent ? 'Create Agent' : 'Save Changes';
-              })()}
-            </button>*/}
-          </div>
+          <FormActions
+            onCancel={() => navigate(`/apps/${appId}/agents`)}
+            isSubmitting={saving}
+            submitLabel={submitButtonLabel}
+            containerClassName="mt-8 pt-6"
+          />
         </form>
       </div>
     </div>

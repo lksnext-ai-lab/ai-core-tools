@@ -15,6 +15,8 @@ import OutputChannelWizard from '../../components/output/OutputChannelWizard';
 import { contentModeLabels } from '../../components/output/outputChannelForm';
 import { Spinner } from '../../components/ui/Spinner';
 import { LoadingState } from '../../components/ui/LoadingState';
+import Title from '../../components/ui/Title';
+import { ButtonApp } from '../../components/ui/ButtonApp';
 
 export default function OutputDestinationsPage() {
   const { appId } = useParams();
@@ -93,13 +95,18 @@ export default function OutputDestinationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Output Channels</h2>
-          <p className="mt-1 text-sm text-gray-600">Gestiona los canales de Teams y webhooks disponibles para las tareas programadas.</p>
-        </div>
-        {canEdit && <button type="button" onClick={() => openWizard()} disabled={loading || Boolean(loadError)} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
-          <Plus className="h-4 w-4" />Añadir canal
-        </button>}
+        <Title variant="titSecundario" titulo="Output Channels" subtitulo="Gestiona los canales de Teams y webhooks disponibles para las tareas programadas." /> 
+        {canEdit && (
+          <ButtonApp
+            label="Añadir canal"
+            type="button"
+            onClick={() => openWizard()}
+            disabled={loading || Boolean(loadError)}
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            variant="primary"
+            size="medium"
+          />
+        )}
       </div>
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
       {loadError ? <Alert type="error" message={<>{loadError}<button type="button" onClick={() => setReloadKey((value) => value + 1)} className="mt-2 block font-medium underline">Reintentar</button></>} /> : <Table<OutputDestination>
@@ -123,7 +130,18 @@ export default function OutputDestinationsPage() {
         emptyMessage="No hay canales de salida"
         emptySubMessage="Añade tu primer canal para enviar resultados a Teams o a un webhook."
       />}
-      {!loading && !loadError && destinations.length === 0 && canEdit && <div className="text-center"><button type="button" onClick={() => openWizard()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"><Plus className="h-4 w-4" />Añadir primer canal</button></div>}
+      {!loading && !loadError && destinations.length === 0 && canEdit && 
+        <div className="text-center">
+          <ButtonApp
+            label="Añadir primer canal"
+            type="button"
+            onClick={() => openWizard()}
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            variant="primary"
+            size="medium"
+            className="mx-auto"
+          />
+        </div>}
       <OutputChannelWizard isOpen={isWizardOpen && canEdit} appId={appIdNumber} destination={editingDestination} destinations={destinations} onClose={() => setIsWizardOpen(false)} onSaved={(saved) => {
         setDestinations((items) => editingDestination ? items.map((item) => item.id === saved.id ? saved : item) : [...items, saved]);
         toast.success(editingDestination ? 'Canal de salida actualizado' : 'Canal de salida creado');

@@ -11,7 +11,7 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { apiService, type ScheduledTask } from "../services/api";
 import Title from "../components/ui/Title";
-import { CardApp } from "../components/ui/CardApp";
+import LoadingState from "../components/ui/LoadingState";
 import Table, { type TableColumn } from "../components/ui/Table";
 import Badge from "../components/ui/Badge";
 import ButtonLink from "../components/ui/ButtonLink";
@@ -229,7 +229,7 @@ export default function ScheduledTasksPage() {
         />
       </div>
       {loading ? (
-        <CardApp className="p-8 text-center text-fg">Cargando tareas…</CardApp>
+        <LoadingState variant="page" message="Cargando tareas…" />
       ) : tasks.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center text-fg dark:text-fg-dark">
           No hay tareas programadas en este workspace.

@@ -249,7 +249,7 @@ export default function ScheduledTaskFormPage() {
 
   if (loadState !== "ready" || (editing && task?.id !== Number(taskId))) {
     return;
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-4xl space-y-4">
       <h1 className="text-2xl font-bold text-gray-900">
         {editing ? "Editar tarea programada" : "Nueva tarea programada"}
       </h1>
@@ -287,7 +287,7 @@ export default function ScheduledTaskFormPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <Title variant="titPrincipal" titulo={task ? "Editar tarea programada" : "Nueva tarea programada"} subtitulo="Configura qué agente ejecutar y con qué periodicidad." />
       <div className="space-y-5">
         <FormField

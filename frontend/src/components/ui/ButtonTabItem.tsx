@@ -6,7 +6,6 @@ export type ButtonTabItemVariant = 'edit' | 'link';
 
 export interface ButtonTabItemProps {
   readonly title: string;
-  readonly subtitle?: string;
   readonly description?: string;
   readonly dateTime?: string;
   readonly dateLabel?: string;
@@ -23,6 +22,7 @@ export interface ButtonTabItemProps {
   readonly onCancelEdit?: () => void;
 }
 
+/** Row for a ButtonTab list: icon, title, date and description, with inline rename/delete ('edit') or an Open link ('link'). */
 export function ButtonTabItem({
   title,
   description,
@@ -82,7 +82,6 @@ export function ButtonTabItem({
       <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden">
         {icon}
       </div>
-      
 
       {isTitleEditing ? (
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -150,7 +149,7 @@ export function ButtonTabItem({
               {canEdit && dateLabel && (
                 <time
                   dateTime={dateTime}
-                  className="ml-auto shrink-0 text-xs text-fg-secondary dark:text-fg-tertiary-dark"
+                  className="ml-auto shrink-0 text-xs text-fg-secondary dark:text-fg-secondary-dark"
                 >
                   {dateLabel}
                 </time>
@@ -168,7 +167,7 @@ export function ButtonTabItem({
               onClick={(event) => event.stopPropagation()}
               className="shrink-0 text-xs text-fg underline decoration-accent underline-offset-[3px] dark:text-fg-dark"
             >
-              Abrir
+              Open
             </Link>
           )}
         </div>

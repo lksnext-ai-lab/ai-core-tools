@@ -73,7 +73,7 @@ export function ProviderBadge({ provider, className = '' }: ProviderBadgeProps) 
   );
 }
 
-type StatusType = 'active' | 'inactive' | 'pending' | 'error' | 'success' | 'warning';
+export type StatusType = 'active' | 'inactive' | 'pending' | 'processing' | 'error' | 'success' | 'warning';
 
 interface StatusBadgeProps {
   readonly status: StatusType;
@@ -89,6 +89,7 @@ export function StatusBadge({ status, className = '', customLabel }: StatusBadge
     active: { label: 'Active', color: 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-success dark:bg-success-dark inline-block" /> },
     inactive: { label: 'Inactive', color: 'bg-surface-hover text-fg-tertiary dark:bg-surface-hover-dark dark:text-fg-tertiary-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-fg-faint2 dark:bg-fg-faint2-dark inline-block" /> },
     pending: { label: 'Pending', color: 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-bronze dark:bg-bronze-dark inline-block" /> },
+    processing: { label: 'Processing', color: 'bg-info-bg text-info dark:bg-info-bg-dark dark:text-info-dark', icon: <span className="w-1.5 h-1.5 rounded-full bg-info dark:bg-info-dark inline-block" /> },
     error: { label: 'Error', color: 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark', icon: <X className="w-3 h-3" /> },
     success: { label: 'Success', color: 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark', icon: <Check className="w-3 h-3" /> },
     warning: { label: 'Warning', color: 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark', icon: <AlertTriangle className="w-3 h-3" /> }

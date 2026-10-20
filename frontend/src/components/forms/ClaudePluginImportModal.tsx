@@ -12,6 +12,7 @@ import { apiService } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
 import type { ClaudePluginImportResult, ClaudePluginSkillResult } from '../../core/types';
 import { ButtonApp } from '../ui/ButtonApp';
+import { FormField } from '../ui/FormField';
 
 export interface ClaudePluginImportModalProps {
   readonly appId: number;
@@ -172,37 +173,26 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
 
             {error && <Alert type="error" message={error} />}
 
-            <div>
-              <label
-                htmlFor={fileInputId}
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-              >
-                Plugin package
-              </label>
-              <input
-                ref={fileInputRef}
-                id={fileInputId}
-                type="file"
-                accept=".zip,application/zip"
-                onChange={handleFileChange}
-                disabled={isSubmitting}
-                aria-describedby={`${fileInputId}-help`}
-                className="block w-full text-sm text-gray-700 dark:text-gray-200 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-900/40 dark:file:text-purple-200 dark:hover:file:bg-purple-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <p id={`${fileInputId}-help`} className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Only a .zip archive is accepted.
-              </p>
-            </div>
+            <FormField
+              ref={fileInputRef}
+              id={fileInputId}
+              label="Plugin package"
+              type="file"
+              accept=".zip,application/zip"
+              onChange={handleFileChange}
+              disabled={isSubmitting}
+              helpText="Only a .zip archive is accepted."
+            />
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
+              <ButtonApp
+                label="Cancel"
                 type="button"
                 onClick={handleClose}
                 disabled={isSubmitting}
-                className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
+                variant="secondary"
+                size="medium"
+              />
               <ButtonApp
                 label={isSubmitting ? 'Importing…' : 'Import'}
                 onClick={() => { void handleSubmit(); }}

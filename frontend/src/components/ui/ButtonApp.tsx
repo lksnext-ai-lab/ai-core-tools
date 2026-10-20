@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { Spinner } from './Spinner';
 
-export type ButtonAppVariant = 'primary' | 'secondary' | 'table' | 'muted' | 'danger';
+export type ButtonAppVariant = 'primary' | 'secondary' | 'table' | 'muted' | 'danger' | 'dangerSolid';
 export type ButtonAppSize = 'compact' | 'small' | 'control' | 'medium' | 'spacious' | 'large';
 export type ButtonAppType = 'button' | 'submit' | 'reset';
 
@@ -19,7 +19,7 @@ export interface ButtonAppProps {
   readonly className?: string;
 }
 
-const sizeClasses: Record<ButtonAppSize, string> = {
+export const buttonAppSizeClasses: Record<ButtonAppSize, string> = {
   compact: 'px-3 py-1.5 text-xs',
   small: 'px-[11px] py-[6px] text-[12.5px]',
   control: 'px-4 py-2 text-sm',
@@ -28,12 +28,13 @@ const sizeClasses: Record<ButtonAppSize, string> = {
   large: 'px-[22px] py-3 text-[15px]',
 };
 
-const variantClasses: Record<ButtonAppVariant, string> = {
+export const buttonAppVariantClasses: Record<ButtonAppVariant, string> = {
   primary: 'border border-transparent bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark hover:bg-ink-hover dark:hover:bg-ink-hover-dark',
   secondary: 'border border-ink bg-surface text-fg hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark',
   table: 'border border-ink bg-transparent text-fg hover:bg-surface-hover dark:border-ink-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark',
   muted: 'border border-line bg-transparent text-fg-secondary hover:bg-surface-hover dark:border-line-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark',
   danger: 'border border-error text-error hover:bg-error-bg dark:border-error-dark dark:text-error-dark dark:hover:bg-error-bg-dark',
+  dangerSolid: 'border border-transparent bg-error text-white hover:bg-error-strong dark:bg-error-dark dark:text-ink-on-dark dark:hover:bg-error-strong-dark',
 };
 
 /** Button variants based on the actions used throughout the Mattin app template. */
@@ -58,7 +59,7 @@ export function ButtonApp({
       disabled={disabled || loading}
       aria-pressed={ariaPressed}
       aria-busy={loading}
-      className={`${baseClasses} ${sizeClasses[size]} rounded-md ${variantClasses[variant]} ${className}`}
+      className={`${baseClasses} ${buttonAppSizeClasses[size]} rounded-md ${buttonAppVariantClasses[variant]} ${className}`}
     >
       {loading ? <Spinner size="sm" tone="current" /> : icon}
       {label}

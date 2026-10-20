@@ -11,10 +11,13 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
-import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
+import { Title } from '../../components/ui/Title';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
+import { Badge, ProviderBadge } from '../..';
 
 interface SandboxService {
   service_id: number;
@@ -83,11 +86,19 @@ function SandboxServicesPage() {
   }
 
   if (loading) return (
-    <LoadingState variant="page" message="Loading sandbox services..." />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Title variant='titSecundario' titulo="Sandbox Services" subtitulo="Manage isolated code-execution environments used by the Code Interpreter capability" />
+      </div>
+      <LoadingState variant="page" message="Loading sandbox services..." />
+    </div>
   );
 
   if (error) return (
     <div className="p-6">
+      <div className="flex items-center justify-between">
+        <Title variant='titSecundario' titulo="Sandbox Services" subtitulo="Manage isolated code-execution environments used by the Code Interpreter capability" />
+      </div>
       <Alert type="error" message={error} onDismiss={() => { setIsModalOpen(false); setEditingService(null); }} />
     </div>
   );
@@ -96,18 +107,16 @@ function SandboxServicesPage() {
     <div className="p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Sandbox Services</h2>
-          <p className="text-gray-600">Manage isolated code-execution environments used by the Code Interpreter capability</p>
-        </div>
+        <Title variant='titSecundario' titulo='Sandbox Services' subtitulo='Manage isolated code-execution environments used by the Code Interpreter capability'/>
         {canEdit && (
           <div className="flex gap-2">
-            <button
+            <ButtonApp
+              label="Add Sandbox Service"
               onClick={handleCreate}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>Add Sandbox Service
-            </button>
+              icon={<span aria-hidden="true">+</span>}
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
       </div>
@@ -121,32 +130,32 @@ function SandboxServicesPage() {
           {
             header: 'Name',
             render: (service: SandboxService) => (
-              canEdit ? (
-                <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
-                  {service.name}
-                </button>
-              ) : (
-                <span className="text-sm font-medium text-gray-900">{service.name}</span>
-              )
+              <div className="flex items-center">
+                <BackgroundImage icon={Box} size={28} iconSize={14} variant="marron" className="rounded-lg" />
+                <div className="ml-4">
+                  {canEdit ? (
+                    <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark text-left" onClick={() => handleEdit(service.service_id)}>
+                      {service.name}
+                    </button>
+                  ) : (
+                    <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
+                  )}
+                </div>
+              </div>
             )
           },
           { header: 'Provider', render: (service: SandboxService) => (
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>
-              {service.provider}
-            </span>
+            <ProviderBadge provider={service.provider} />
+            
           )},
           { header: 'Status', render: (service: SandboxService) => (
             service.needs_api_key ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> API Key Required
-              </span>
+              <Badge label="API Key Required" variant="warning" icon={<AlertTriangle className="w-3 h-3" />} />
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Ready
-              </span>
+              <Badge label="Ready" variant="success" />
             )
           )},
-          { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
+          { header: 'Created', className:'text-xs text-fg-secondary dark:text-fg-secondary-dark align-center px-6 py-3', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: SandboxService) => (
             canEdit ? (
               <ActionDropdown actions={[
@@ -173,7 +182,12 @@ function SandboxServicesPage() {
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Add First Sandbox Service</button>
+          <ButtonApp
+            label="Add First Sandbox Service"
+            onClick={handleCreate}
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 

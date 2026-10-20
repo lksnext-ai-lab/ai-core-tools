@@ -10,7 +10,7 @@ import {
   Info,
   X,
 } from 'lucide-react';
-import FormActions from './FormActions';
+import { FormActions } from '../ui/FormActions';
 import { FormField, FormTextArea, FormCheckbox } from '../ui/FormField';
 import Alert from '../ui/Alert';
 import { Badge } from '../ui/Badge';
@@ -707,7 +707,6 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         error={'error' in runtimeOptionsValidation ? runtimeOptionsValidation.error : undefined}
         helpText={runtimeOptionsValidation.valid ? 'Optional JSON object passed to the sandbox runtime. Leave blank for none.' : undefined}
         placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
-        textareaClassName="font-mono text-sm"
       />
 
       <FormCheckbox
@@ -731,7 +730,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
           </div>
           <div className="border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 overflow-hidden">
             <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2 text-sm text-fg dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
-              <FileText className="w-4 h-4 shrink-0 text-purple-500" aria-hidden="true" />
+              <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
               <span className="font-mono text-xs">SKILL.md</span>
               <span className="ml-auto text-xs text-gray-400">instructions</span>
             </div>
@@ -774,8 +773,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
           isSubmitting={isSubmitting}
           isEditing={isEditing}
           submitLabel={isEditing ? 'Update Skill' : 'Create Skill'}
-          submitButtonColor="purple"
-          disabled={!isValid}
+          submitDisabled={!isValid}
         />
       )}
     </form>

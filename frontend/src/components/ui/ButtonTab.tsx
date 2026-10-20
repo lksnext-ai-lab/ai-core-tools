@@ -6,6 +6,7 @@ export interface ButtonTabProps {
   readonly className?: string;
 }
 
+/** Bordered list container for ButtonTabItem rows (e.g. the recent conversations on the Marketplace home). */
 export function ButtonTab({
   children,
   ariaLabel = 'Items',
@@ -15,7 +16,7 @@ export function ButtonTab({
     <div
       role="list"
       aria-label={ariaLabel}
-      className={`overflow-hidden rounded-lg border border-btCard-border bg-btCard-bg dark:border-btCard-border-dark dark:bg-btCard-bg-dark hover:bg-btCard-hover ${className}`}
+      className={`overflow-hidden rounded-lg border border-btCard-border bg-btCard-bg dark:border-btCard-border-dark dark:bg-btCard-bg-dark ${className}`}
     >
       {children}
     </div>

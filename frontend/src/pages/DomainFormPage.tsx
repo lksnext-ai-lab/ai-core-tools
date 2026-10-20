@@ -5,7 +5,7 @@ import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import { FormField, FormSelect, FormTextArea } from '../components/ui/FormField';
-import { ButtonApp } from '../components/ui/ButtonApp';
+import { FormActions } from '../components/ui/FormActions';
 import Alert from '../components/ui/Alert';
 import { LoadingState } from '../components/ui/LoadingState';
 
@@ -322,23 +322,13 @@ if (loading) {
         </div>
 
         {/* Form Actions */}
-        <div className="flex justify-end space-x-4 pt-6 border-t">
-          <ButtonApp
-            type="button"
-            onClick={() => navigate(`/apps/${appId}/domains`)}
-            label="Cancel"
-            variant="secondary"
-            size="medium"
-            disabled={saving}
-          />
-          <ButtonApp
-            type="submit"
-            label={submitButtonLabel}
-            variant="primary"
-            size="medium"
-            disabled={saving || embeddingServices.length === 0 || vectorDbOptions.length === 0}
-          />
-        </div>
+        <FormActions
+          onCancel={() => navigate(`/apps/${appId}/domains`)}
+          isSubmitting={saving}
+          submitLabel={submitButtonLabel}
+          submitDisabled={embeddingServices.length === 0 || vectorDbOptions.length === 0}
+          containerClassName="pt-6"
+        />
       </form>
     </div>
   );

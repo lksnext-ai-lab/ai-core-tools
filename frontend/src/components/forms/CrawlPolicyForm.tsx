@@ -152,7 +152,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
               maxTags={200}
               placeholder="https://example.com/page — press Enter"
             />
-            <p className="mt-1 text-xs text-fg-secondary dark:text-secondary-dark">
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
               Individual URLs to always include. Duplicates are silently ignored.
             </p>
           </div>
@@ -160,9 +160,9 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
 
       {/* ==================== FILTERS ==================== */}
       <ExpansionDetails header="Filters">
-          <p className="text-xs text-fg-secondary dark:text-secondary-dark">
-            Patterns match against the URL path. Use <code className="bg-gray-100 px-1 rounded">**</code> to match
-            any number of path segments (e.g. <code className="bg-gray-100 px-1 rounded">/docs/**</code>).
+          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+            Patterns match against the URL path. Use <code className="bg-tableCab dark:bg-tableCab-dark px-1 rounded">**</code> to match
+            any number of path segments (e.g. <code className="bg-tableCab dark:bg-tableCab-dark px-1 rounded">/docs/**</code>).
           </p>
           <div>
             <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Include globs</label>
@@ -172,7 +172,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
               maxTags={50}
               placeholder="/docs/** — press Enter"
             />
-            <p className="mt-1 text-xs text-fg-secondary dark:text-secondary-dark">Only crawl URLs that match at least one of these patterns. Leave empty to crawl everything.</p>
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">Only crawl URLs that match at least one of these patterns. Leave empty to crawl everything.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Exclude globs</label>
@@ -182,7 +182,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
               maxTags={50}
               placeholder="/admin/** — press Enter"
             />
-            <p className="mt-1 text-xs text-fg-secondary dark:text-secondary-dark">Skip URLs that match any of these patterns.</p>
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">Skip URLs that match any of these patterns.</p>
           </div>
       </ExpansionDetails>
 

@@ -1,5 +1,5 @@
 import Alert from '../ui/Alert';
-import ButtonApp from '../ui/ButtonApp';
+import { FormActions } from '../ui/FormActions';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Info } from 'lucide-react';
@@ -304,24 +304,12 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
           )}
 
           {/* Action Buttons */}
-          <div className="mt-6 flex items-center justify-between">
-            <ButtonApp
-              label="Cancel"
-              type="button"
-              onClick={onCancel}
-              disabled={isSubmitting}
-              variant="secondary"
-              size="medium"
-            />
-            <ButtonApp
-              label={submitButtonLabel}
-              type="submit"
-              disabled={isSubmitting}
-              loading={isSubmitting}
-              variant="primary"
-              size="medium"
-            />
-          </div>
+          <FormActions
+            onCancel={onCancel}
+            isSubmitting={isSubmitting}
+            submitLabel={submitButtonLabel}
+            containerClassName="mt-6"
+          />
         </div>
       </form>
 

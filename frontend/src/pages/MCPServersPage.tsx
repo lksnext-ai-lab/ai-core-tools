@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Plus, Trash2, Plug } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
@@ -171,7 +171,7 @@ function MCPServersPage() {
               render: (server) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <BackgroundImage icon="Plug" size={40} iconSize={20} variant="marron" />
+                    <BackgroundImage icon={Plug} size={40} iconSize={20} variant="marron" />
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">

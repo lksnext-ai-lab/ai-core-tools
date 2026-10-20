@@ -1,8 +1,7 @@
 import { type ReactNode } from 'react';
 import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import Modal from './Modal';
-import ButtonApp from './ButtonApp';
-import { Spinner } from './Spinner';
+import ButtonApp, { type ButtonAppVariant } from './ButtonApp';
 
 export type ConfirmVariant = 'danger' | 'warning' | 'info';
 
@@ -20,26 +19,27 @@ interface ConfirmationModalProps {
 
 const variantStyles: Record<
   ConfirmVariant,
-  { icon: ReactNode; iconBg: string; button: string }
+  { icon: ReactNode; iconBg: string; button: ButtonAppVariant }
 > = {
   // Design v3 action language: red only for destructive, graphite for everything else.
   danger: {
     icon: <AlertTriangle className="w-6 h-6 text-error dark:text-error-dark" />,
     iconBg: 'bg-error-bg dark:bg-error-bg-dark',
-    button: 'bg-error text-white hover:bg-error-strong focus-visible:ring-error dark:bg-error-dark dark:text-ink-on-dark dark:hover:bg-error-strong-dark',
+    button: 'dangerSolid',
   },
   warning: {
     icon: <AlertCircle className="w-6 h-6 text-bronze dark:text-bronze-dark" />,
     iconBg: 'bg-bronze-bg dark:bg-bronze-bg-dark',
-    button: 'bg-ink text-ink-on hover:bg-ink/85 focus-visible:ring-focus dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-dark/85',
+    button: 'primary',
   },
   info: {
     icon: <Info className="w-6 h-6 text-info dark:text-info-dark" />,
     iconBg: 'bg-info-bg dark:bg-info-bg-dark',
-    button: 'bg-ink text-ink-on hover:bg-ink/85 focus-visible:ring-focus dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-dark/85',
+    button: 'primary',
   },
 };
 
+/** Confirmation dialog used by the global confirm() (ConfirmContext). Red solid action only for 'danger'. */
 function ConfirmationModal({
   isOpen,
   title,
@@ -71,15 +71,13 @@ function ConfirmationModal({
           variant="secondary"
           size="medium"
         />
-        <button
-          type="button"
+        <ButtonApp
+          label={confirmLabel}
           onClick={onConfirm}
-          disabled={isLoading}
-          className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-dark disabled:opacity-50 ${styles.button}`}
-        >
-          {isLoading && <Spinner size="sm" tone="current" className="mr-2" />}
-          {confirmLabel}
-        </button>
+          loading={isLoading}
+          variant={styles.button}
+          size="medium"
+        />
       </div>
     </Modal>
   );

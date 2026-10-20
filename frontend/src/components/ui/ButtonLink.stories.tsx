@@ -34,32 +34,32 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = {
-  args: { label: 'Abrir', to: '/', variant: 'primary', size: 'medium' },
+  args: { label: 'Open', to: '/', variant: 'primary', size: 'medium' },
 };
 
 export const Secondary: Story = {
-  args: { label: 'Editar', to: '/', variant: 'secondary', size: 'medium' },
+  args: { label: 'View settings', to: '/', variant: 'secondary', size: 'medium' },
 };
 
 export const Table: Story = {
-  args: { label: 'Ver detalle', to: '/', variant: 'table', size: 'small' },
+  args: { label: 'View details', to: '/', variant: 'table', size: 'small' },
 };
 
 export const Muted: Story = {
-  args: { label: 'Volver', to: '/', variant: 'muted', size: 'control' },
+  args: { label: 'Back', to: '/', variant: 'muted', size: 'control' },
 };
 
 export const Danger: Story = {
-  args: { label: 'Eliminar', to: '/', variant: 'danger', size: 'small' },
+  args: { label: 'View errors', to: '/', variant: 'danger', size: 'small' },
 };
 
 export const WithIcon: Story = {
   args: {
-    label: 'Editar',
+    label: 'Edit',
     to: '/',
     variant: 'secondary',
     size: 'medium',
-    icon: <Pencil className="h-4 w-4" aria-hidden="true" />,
+    icon: <Pencil className="h-[14px] w-[14px]" aria-hidden="true" />,
   },
 };
 
@@ -69,6 +69,41 @@ export const BackLink: Story = {
     to: '/',
     variant: 'secondary',
     size: 'medium',
-    icon: <ChevronLeft className="h-4 w-4" aria-hidden="true" />,
+    icon: <ChevronLeft className="h-[14px] w-[14px]" aria-hidden="true" />,
   },
+};
+
+export const Variants: Story = {
+  args: {
+    label: 'Link',
+    to: '/',
+    size: 'medium',
+  },
+  render: (args) => (
+    <div className="flex items-center gap-3">
+      <ButtonLink {...args} variant="primary" label="Primary" />
+      <ButtonLink {...args} variant="secondary" label="Secondary" />
+      <ButtonLink {...args} variant="table" label="Table" />
+      <ButtonLink {...args} variant="muted" label="Muted" />
+      <ButtonLink {...args} variant="danger" label="Danger" />
+    </div>
+  ),
+};
+
+export const Sizes: Story = {
+  args: {
+    label: 'Link',
+    to: '/',
+    variant: 'primary',
+  },
+  render: (args) => (
+    <div className="flex items-center gap-3">
+      <ButtonLink {...args} size="compact" label="Compact" />
+      <ButtonLink {...args} size="small" label="Small" />
+      <ButtonLink {...args} size="control" label="Control" />
+      <ButtonLink {...args} size="medium" label="Medium" />
+      <ButtonLink {...args} size="spacious" label="Spacious" />
+      <ButtonLink {...args} size="large" label="Large" />
+    </div>
+  ),
 };

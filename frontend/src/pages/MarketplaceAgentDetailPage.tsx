@@ -459,7 +459,7 @@ function MarketplaceAgentPanelView({
             </div>
           ) : (
             <BackgroundImage
-              icon="Bot"
+              icon={Bot}
               alt={agent.display_name}
               size={70}
               variant="vacio"

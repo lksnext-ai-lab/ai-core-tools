@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { FormField, FormCheckbox } from '../ui/FormField';
-import FormActions from '../forms/FormActions';
+import { FormActions } from '../ui/FormActions';
 import Alert from '../ui/Alert';
 import { getProviderBadgeColor } from '../ui/providerBadges';
 import { getProviderDescriptor } from './wizard/providers';
@@ -214,7 +214,7 @@ function CompactServiceEditor({
             <div>
               <label
                 htmlFor="api_key"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
               >
                 {apiKeyLabel}
                 {descriptor?.apiKey === 'optional' && (
@@ -234,9 +234,9 @@ function CompactServiceEditor({
                 }}
                 onFocus={handleApiKeyFocus}
                 placeholder={descriptor?.apiKeyPlaceholder}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
               />
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                 Leave the masked value to keep the existing key.
               </p>
             </div>
@@ -324,13 +324,12 @@ function CompactServiceEditor({
             />
           )}
 
-          <div className="pt-2 border-t border-gray-200">
+          <div className="pt-2">
             <FormActions
               onCancel={onClose}
               isSubmitting={submitting}
               isEditing
-              submitButtonColor={kind === 'ai' ? 'blue' : 'green'}
-              disabled={!name.trim()}
+              submitDisabled={!name.trim()}
             />
           </div>
         </form>

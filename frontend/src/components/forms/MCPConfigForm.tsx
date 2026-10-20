@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import FormActions from './FormActions';
+import { FormActions } from '../ui/FormActions';
 import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 
@@ -276,8 +276,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
           isSubmitting={isSubmitting}
           isEditing={isEditing}
           submitLabel={isEditing ? 'Update Config' : 'Create Config'}
-          submitButtonColor="purple"
-          disabled={!isValid}
+          submitDisabled={!isValid}
         />
       </div>
     </form>

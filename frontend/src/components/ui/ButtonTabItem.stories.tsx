@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
-import { Bot } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { MemoryRouter } from 'react-router-dom';
 
 import ButtonTab from './ButtonTab';
 import ButtonTabItem from './ButtonTabItem';
+import BackgroundImage from './BackgroundImage';
 
 const meta = {
   title: 'UI/ButtonTabItem',
@@ -33,13 +34,16 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const sharedArgs = {
-  title: 'Planificación de producto',
-  subtitle: 'Mattin AI · Asistente de producto',
-  description: 'He preparado una propuesta inicial para el próximo sprint.',
-  dateLabel: '10 min',
+  title: 'Product planning',
+  description: 'Mattin AI · Product assistant — I have drafted an initial proposal for the next sprint.',
+  icon: <BackgroundImage icon={MessageSquare} variant="marron" />,
+};
+
+const editArgs = {
+  ...sharedArgs,
+  variant: 'edit' as const,
+  dateLabel: '10 min ago',
   dateTime: '2026-10-09T10:00:00Z',
-  icon: <Bot className="h-[17px] w-[17px] text-[#816729]" aria-hidden="true" />,
-  editingTitle: 'Planificación de producto',
   onEdit: fn(),
   onDelete: fn(),
   onTitleChange: fn(),
@@ -48,16 +52,19 @@ const sharedArgs = {
 };
 
 export const Edit: Story = {
+  args: editArgs,
+};
+
+export const Clickable: Story = {
   args: {
-    ...sharedArgs,
-    variant: 'edit',
+    ...editArgs,
+    onClick: fn(),
   },
 };
 
 export const EditingTitle: Story = {
   args: {
-    ...sharedArgs,
-    variant: 'edit',
+    ...editArgs,
     isEditing: true,
   },
 };

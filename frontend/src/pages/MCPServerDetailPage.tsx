@@ -5,7 +5,12 @@ import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import type { MCPServer } from '../core/types';
 import { LoadingState } from '../components/ui/LoadingState';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import ButtonLink from '../components/ui/ButtonLink';
+import Badge from '../components/ui/Badge';
 import Alert from '../components/ui/Alert';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
 
 function MCPServerDetailPage() {
   const { appId, serverId } = useParams();
@@ -73,6 +78,7 @@ function MCPServerDetailPage() {
             <h1 className="text-2xl font-bold text-gray-900">MCP Server Details</h1>
             <p className="text-gray-600">Loading...</p>
           </div>
+          <Title variant="titPrincipal" titulo="MCP Server Details"></Title>
         </div>
 
         <LoadingState variant="page" message="Loading MCP server..." />
@@ -85,7 +91,7 @@ function MCPServerDetailPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">MCP Server Details</h1>
+            <Title variant="titPrincipal" titulo="MCP Server Details"></Title>
           </div>
         </div>
 
@@ -109,39 +115,28 @@ function MCPServerDetailPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-gray-900">{server.name}</h1>
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-              server.is_active
-                ? 'bg-green-100 text-green-800'
-                : 'bg-gray-100 text-gray-800'
-            }`}>
-              {server.is_active ? 'Active' : 'Inactive'}
-            </span>
-          </div>
-          <p className="text-gray-600">{server.description || 'No description'}</p>
+          <Title variant="titPrincipal" titulo={server.name} subtitulo={server.description || 'No description'} subtitleMarginBottom={0}></Title>
+        <Badge
+              label={server.is_active ? 'Active' : 'Inactive'}
+              variant={server.is_active ? 'success' : 'default'}
+            />
         </div>
+        
         <div className="flex space-x-2">
-          <Link
-            to={`/apps/${appId}/mcp-servers`}
-            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-          >
-            Back
-          </Link>
           {canEdit && (
             <>
-              <Link
+              <ButtonLink
+                label="Edit"
                 to={`/apps/${appId}/mcp-servers/${serverId}/edit`}
-                className="px-4 py-2 text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg"
-              >
-                Edit
-              </Link>
-              <button
+                variant="primary"
+                size="medium"
+              />
+              <ButtonApp
+                label="Delete"
                 onClick={handleDelete}
-                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg"
-              >
-                Delete
-              </button>
+                variant="danger"
+                size="medium"
+              />
             </>
           )}
         </div>
@@ -150,8 +145,8 @@ function MCPServerDetailPage() {
       {/* Server Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Basic Info Card */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Server Information</h2>
+        <CardApp className="p-6">
+          <h2 className="text-[11px] font-semibold text-bronze dark:text-bronze-dark uppercase mb-4">Server Information</h2>
           <dl className="space-y-3">
             <div>
               <dt className="text-sm text-gray-500">Slug</dt>
@@ -176,11 +171,11 @@ function MCPServerDetailPage() {
               </dd>
             </div>
           </dl>
-        </div>
+        </CardApp>
 
         {/* Agents Card */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Exposed Agents ({server.agents?.length || 0})</h2>
+        <CardApp className="p-6">
+          <h2 className="text-[11px] font-semibold text-bronze dark:text-bronze-dark uppercase mb-4">Exposed Agents ({server.agents?.length || 0})</h2>
 
           {/* Warning for unavailable agents */}
           {server.agents && server.agents.some(a => !a.is_available) && (
@@ -227,11 +222,11 @@ function MCPServerDetailPage() {
           ) : (
             <p className="text-sm text-gray-500">No agents exposed yet.</p>
           )}
-        </div>
+        </CardApp>
       </div>
 
       {/* Endpoint URLs */}
-      <div className="bg-white rounded-lg shadow-md border p-6">
+      <CardApp className="p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Endpoint URLs</h2>
 
         <div className="space-y-4">
@@ -271,11 +266,11 @@ function MCPServerDetailPage() {
             </div>
           )}
         </div>
-      </div>
+      </CardApp>
 
       {/* Connection Hints */}
       {server.connection_hints && (
-        <div className="bg-white rounded-lg shadow-md border p-6">
+        <CardApp className="p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Connection Configuration</h2>
 
           {/* Claude Desktop */}
@@ -335,7 +330,7 @@ function MCPServerDetailPage() {
               </button>
             </div>
           </div>
-        </div>
+        </CardApp>
       )}
 
       {/* Authentication Note */}

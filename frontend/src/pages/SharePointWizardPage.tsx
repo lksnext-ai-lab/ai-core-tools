@@ -201,7 +201,7 @@ function SharePointWizardPage() {
         : 'Next';
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto max-w-4xl space-y-6">
       <Title variant="titPrincipal" titulo="Add SharePoint Source" subtitulo="Connect a Microsoft SharePoint drive to index its documents." />
 
       {error && (

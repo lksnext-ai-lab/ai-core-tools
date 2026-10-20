@@ -63,7 +63,9 @@ export type { ButtonTabProps } from './components/ui/ButtonTab';
 export { ButtonTabItem } from './components/ui/ButtonTabItem';
 export type { ButtonTabItemProps, ButtonTabItemVariant } from './components/ui/ButtonTabItem';
 export { BackgroundImage } from './components/ui/BackgroundImage';
-export type { BackgroundImageIconName, BackgroundImageProps, BackgroundImageVariant } from './components/ui/BackgroundImage';
+export type { BackgroundImageProps, BackgroundImageVariant } from './components/ui/BackgroundImage';
+export { CardApp } from './components/ui/CardApp';
+export type { CardAppProps, CardAppVariant } from './components/ui/CardApp';
 
 // Export route protection components
 export { default as ProtectedRoute } from './components/ProtectedRoute';

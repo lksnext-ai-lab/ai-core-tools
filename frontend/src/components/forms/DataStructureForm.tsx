@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart2 } from 'lucide-react';
 import FieldManager from './FieldManager';
-import FormActions from './FormActions';
+import { FormActions } from '../ui/FormActions';
 import Alert from '../ui/Alert';
 import { randomId } from '../../utils/randomId';
 
@@ -226,7 +226,6 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
         isSubmitting={isSubmitting}
         isEditing={isEditing}
         submitLabel={isEditing ? 'Update Structure' : 'Create Structure'}
-        submitButtonColor="purple"
       />
     </form>
   );

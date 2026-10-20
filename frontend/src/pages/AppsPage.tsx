@@ -7,7 +7,7 @@ import AppForm from '../components/forms/AppForm';
 import Alert from '../components/ui/Alert';
 import AppImportStepper from '../components/import/AppImportStepper';
 import Title from '../components/ui/Title';
-import CardDetailEntidad from '../components/ui/CardDetailEntidad';
+import ButtonCard from '../components/ui/ButtonCard';
 import { Badge } from '../components/ui/Badge';
 import ButtonApp from '../components/ui/ButtonApp';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -142,32 +142,75 @@ function AppsPage() {
           const totalCollaborators = app.collaborator_count + ownerBonus;
 
           return (
-            <CardDetailEntidad
+            <ButtonCard
               key={app.app_id}
-              titleCab={app.name}
-              description={((app) => app.created_at ? new Date(app.created_at).toLocaleDateString() : '-')(app)}
-              badges={[
+              ariaLabel={`Open ${app.name}`}
+              onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-md border-[0.8px] border-[#FF682C] text-sm font-medium">
+                    TP
+                  </div>
+                  <span className="min-w-0 text-[18px] leading-tight text-ink dark:text-ink-dark">{app.name}</span>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
+                  {getAppRoleLabel(app.role)}
+                </span>
+              </div>
+              <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
+                {app.created_at ? new Date(app.created_at).toLocaleDateString() : '-'}
+              </p>
+              <div className="mb-4 flex flex-wrap gap-2">
                 <Badge
                   key="langsmith-configuration"
                   label={app.langsmith_configured ? 'Configured' : 'Not configured'}
                   variant={app.langsmith_configured ? 'success' : 'error'}
-                />,
-              ]}
-              table={[
-                { label: 'AGENTS', value: app.agent_count },
-                { label: 'REPOS', value: app.repository_count },
-                { label: 'DOMAINS', value: app.domain_count },
-                { label: 'SILOS', value: app.silo_count },
-                { label: 'COLLABS', value: totalCollaborators },
-              ]}
-              topRight={(
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
-                  {getAppRoleLabel(app.role)}
-                </span>
-              )}
-              badgeText="TP"
-              onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
-            />
+                />
+              </div>
+              <div className="pointer-events-none relative z-0 mt-auto border-t border-[#e0ddd6] dark:border-line-dark">
+                <div className="overflow-x-auto pt-2">
+                  <table className="table-fixed text-center leading-none">
+                    <thead>
+                      <tr>
+                        {[
+                          { label: 'AGENTS', value: app.agent_count },
+                          { label: 'REPOS', value: app.repository_count },
+                          { label: 'DOMAINS', value: app.domain_count },
+                          { label: 'SILOS', value: app.silo_count },
+                          { label: 'COLLABS', value: totalCollaborators },
+                        ].map((stat, index, stats) => (
+                          <th
+                            key={stat.label}
+                            className={`px-2 py-0 text-[8px] font-medium uppercase tracking-[0.04em] text-fg-tertiary dark:text-fg-tertiary-dark ${index < stats.length - 1 ? 'border-r border-[#e0ddd6] dark:border-line-dark' : ''}`}
+                          >
+                            {stat.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {[
+                          { label: 'AGENTS', value: app.agent_count },
+                          { label: 'REPOS', value: app.repository_count },
+                          { label: 'DOMAINS', value: app.domain_count },
+                          { label: 'SILOS', value: app.silo_count },
+                          { label: 'COLLABS', value: totalCollaborators },
+                        ].map((stat, index, stats) => (
+                          <td
+                            key={stat.label}
+                            className={`px-2 py-0 text-sm font-semibold text-ink dark:text-ink-dark ${index < stats.length - 1 ? 'border-r border-[#e0ddd6] dark:border-line-dark' : ''}`}
+                          >
+                            {stat.value}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </ButtonCard>
           );
         })}
       </div>

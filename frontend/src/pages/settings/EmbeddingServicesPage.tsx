@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Upload, ArrowDownToLine, Pencil, Trash2, BarChart2, AlertTriangle } from 'lucide-react';
+import { Upload, ArrowDownToLine, Pencil, Trash2, BarChart2, AlertTriangle, Globe } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -11,11 +11,14 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
-import { getProviderBadgeColor } from '../../components/ui/providerBadges';
+import { Badge, ProviderBadge } from '../../components/ui/Badge';
 import { AppRole } from '../../types/roles';
 import type { ConflictMode, ImportResponse } from '../../components/ui/ImportModal';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
+import Title from '../../components/ui/Title';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 interface EmbeddingService {
   service_id: number;
@@ -142,11 +145,21 @@ function EmbeddingServicesPage() {
   }
 
   if (loading) return (
-    <LoadingState variant="page" message="Loading embedding services..." />
+    <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant='titSecundario' titulo="Embedding Services" subtitulo="Manage vector embedding models for document processing and search" />
+        </div>
+        <LoadingState variant="page" message="Loading embedding services..." />
+      </div>
   );
 
   if (error) return (
     <div className="p-6">
+      <div className="flex items-center justify-between">
+          <Title variant='titSecundario' titulo="Embedding Services" subtitulo="Manage vector embedding models for document processing and search" />
+        </div>
+
       <Alert
         type="error"
         message={(
@@ -162,21 +175,23 @@ function EmbeddingServicesPage() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Embedding Services</h2>
-          <p className="text-gray-600">Manage vector embedding models for document processing and search</p>
-        </div>
+        <Title variant='titSecundario' titulo="Embedding Services" subtitulo="Manage vector embedding models for document processing and search" />
         {canEdit && (
           <div className="flex gap-2">
-            <button
+            <ButtonApp
+              label="Import"
               onClick={() => setShowImportModal(true)}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
-            >
-              <Upload className="w-4 h-4 mr-2" />Import
-            </button>
-            <button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
-              <span className="mr-2">+</span>Add Embedding Service
-            </button>
+              icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label="Add Embedding Service"
+              onClick={handleCreate}
+              icon={<span aria-hidden="true">+</span>}
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
       </div>
@@ -197,33 +212,34 @@ function EmbeddingServicesPage() {
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           { header: 'Name', render: (service: EmbeddingService) => (
-            <span className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <BackgroundImage icon={Globe} variant='marron' />
               {canEdit && !service.is_system ? (
-                <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>{service.name}</button>
+                <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark text-left" onClick={() => handleEdit(service.service_id)}>{service.name}</button>
               ) : (
-                <span className="text-sm font-medium text-gray-900">{service.name}</span>
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
               )}
               {service.is_system && (
-                <span className="ml-1 text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">System</span>
+                <span className="ml-1 text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark px-1.5 py-0.5 rounded">System</span>
               )}
-            </span>
+            </div>
           ) },
-          { header: 'Model', accessor: 'model_name' },
+          { header: 'Model', accessor: 'model_name', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark' },
           { header: 'Provider', render: (service: EmbeddingService) => (
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>{service.provider}</span>
+            <ProviderBadge provider={service.provider} />
           ) },
           { header: 'Status', render: (service: EmbeddingService) => (
             service.needs_api_key ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> API Key Required
-              </span>
+              <Badge
+                label="API Key Required"
+                variant="warning"
+                icon={<AlertTriangle className="w-3 h-3" aria-hidden="true" />}
+              />
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Ready
-              </span>
+              <Badge label="Ready" variant="success" />
             )
           ) },
-          { header: 'Created', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
+          { header: 'Created', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: EmbeddingService) => (
             service.is_system ? (
               <span className="text-gray-400 text-sm">System</span>
@@ -252,7 +268,13 @@ function EmbeddingServicesPage() {
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg">Add First Embedding Service</button>
+          <ButtonApp
+            label="Add First Embedding Service"
+            onClick={handleCreate}
+            icon={<span aria-hidden="true">+</span>}
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 
@@ -293,6 +315,7 @@ function EmbeddingServicesPage() {
       />
     </div>
   );
+
 }
 
 export default EmbeddingServicesPage;

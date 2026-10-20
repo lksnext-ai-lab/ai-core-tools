@@ -125,7 +125,7 @@ function SharePointSourcesPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex items-center justify-between">
           <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         </div>
@@ -136,7 +136,7 @@ function SharePointSourcesPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex items-center justify-between">
           <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         </div>
@@ -151,7 +151,7 @@ function SharePointSourcesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         {canEdit && (
@@ -175,7 +175,7 @@ function SharePointSourcesPage() {
             render: (source) => (
               <div className="flex items-center">
                 <div className="flex-shrink-0 h-10 w-10">
-                  <BackgroundImage variant="marron" icon="Cloud" size={40} />
+                  <BackgroundImage variant="marron" icon={Cloud} size={40} />
                 </div>
                 <div className="ml-4">
                   <Link

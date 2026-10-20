@@ -5,8 +5,10 @@ import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import type { MCPServer, ToolAgent } from '../core/types';
 import { LoadingState } from '../components/ui/LoadingState';
-import { ButtonApp } from '../components/ui/ButtonApp';
+import { FormActions } from '../components/ui/FormActions';
 import Alert from '../components/ui/Alert';
+import Title from '../components/ui/Title';
+import { FormCheckbox, FormField, FormTextArea } from '../components/ui/FormField';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
@@ -129,12 +131,7 @@ function MCPServerFormPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEditing ? 'Edit MCP Server' : 'Create MCP Server'}
-            </h1>
-            <p className="text-gray-600">Configure your MCP server settings</p>
-          </div>
+          <Title variant="titPrincipal" titulo={isEditing ? 'Edit MCP Server' : 'Create MCP Server'} subtitulo="Configure your MCP server settings" ></Title>
         </div>
 
         <LoadingState variant="page" message="Loading..." />
@@ -143,185 +140,141 @@ function MCPServerFormPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isEditing ? 'Edit MCP Server' : 'Create MCP Server'}
-          </h1>
-          <p className="text-gray-600">Configure your MCP server to expose agents as tools</p>
-        </div>
-        <button
-          onClick={handleCancel}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-        >
-          Back
-        </button>
+        <Title variant="titPrincipal" titulo={isEditing ? 'Edit MCP Server' : 'Create MCP Server'} subtitulo="Configure your MCP server settings" subtitleMarginBottom={20}></Title>
       </div>
 
       {error && <Alert type="error" message={error} />}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
+        <div>
+          <h2 className="text-[11px] font-semibold text-bronze dark:text-bronze-dark uppercase mb-4">Basic Information</h2>
 
           <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                Name *
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                placeholder="My MCP Server"
-              />
-            </div>
+            <FormField
+              label="Name"
+              id="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              required
+              placeholder="My MCP Server"
+            />
 
             <div>
-              <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="slug" className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
                 URL Slug
               </label>
               <div className="flex items-center">
-                <span className="text-gray-500 text-sm mr-2">/mcp/v1/app-slug/</span>
-                <input
-                  type="text"
+                <span className="bg-surface-hover dark:bg-surface-dark border border-line-strong dark:border-line-strong-dark rounded-l-lg border-r-0 px-3 py-2 text-fg-tertiary dark:text-fg-tertiary-dark text-sm">/mcp/v1/app-slug/</span>
+                <FormField
+                  label="URL Slug"
+                  labelClassName="hidden"
                   id="slug"
-                  name="slug"
                   value={formData.slug}
                   onChange={handleInputChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  className="flex-1 min-w-0"
+                  inputClassName="rounded-l-none"
                   placeholder="my-server (auto-generated if empty)"
                   pattern="[a-z0-9-]+"
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
                 URL-safe identifier. Use lowercase letters, numbers, and hyphens only.
               </p>
             </div>
 
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                placeholder="Describe what this MCP server does..."
-              />
-            </div>
+            <FormTextArea
+              label="Description"
+              id="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              rows={3}
+              placeholder="Describe what this MCP server does..."
+            />
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  name="is_active"
-                  checked={formData.is_active}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
-                />
-                <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
-                  Active (server accepts requests)
-                </label>
-              </div>
-            </div>
+            <FormCheckbox
+              label="Active (server accepts requests)"
+              id="is_active"
+              checked={formData.is_active}
+              onChange={handleInputChange}
+            />
 
-            <div>
-              <label htmlFor="rate_limit" className="block text-sm font-medium text-gray-700 mb-1">
-                Rate Limit (requests per minute)
-              </label>
-              <input
-                type="number"
-                id="rate_limit"
-                name="rate_limit"
-                value={formData.rate_limit}
-                onChange={handleInputChange}
-                min={0}
-                className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                0 = unlimited
-              </p>
-            </div>
+            <FormField
+              label="Rate Limit (requests per minute)"
+              id="rate_limit"
+              type="number"
+              value={formData.rate_limit}
+              onChange={handleInputChange}
+              min={0}
+              className="w-[250px]"
+              helpText="0 = unlimited"
+            />
           </div>
         </div>
 
         {/* Agent Selection */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Agents to Expose</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Choose which agents (marked as tools) to expose through this MCP server.
-            These agents will be available as MCP tools for external clients.
-          </p>
+        <div className="border-t border-line-strong dark:border-line-strong-dark py-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-[11px] font-semibold text-bronze dark:text-bronze-dark uppercase mb-4">Select Agents to Expose</h2>
+              <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
+                Choose which agents (marked as tools) to expose through this MCP server.
+                These agents will be available as MCP tools for external clients.
+              </p>
+            </div>
+            <span className="shrink-0 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+              {formData.agent_ids.length} agent{formData.agent_ids.length === 1 ? '' : 's'} selected
+            </span>
+          </div>
 
           {toolAgents.length === 0 ? (
             <div className="text-center py-8 bg-gray-50 rounded-lg">
               <div className="text-4xl mb-2">o</div>
-              <p className="text-gray-600">No agents marked as tools available.</p>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-fg-secondary dark:text-fg-secondary-dark">No agents marked as tools available.</p>
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
                 Create an agent and enable "Use as Tool" to expose it via MCP.
               </p>
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {toolAgents.map(agent => (
-                <label
+              {toolAgents.map((agent) => (
+                <div
                   key={agent.agent_id}
+                  onClick={(event) => {
+                    const target = event.target;
+                    if (target instanceof HTMLElement && target.closest('input, label')) return;
+                    handleAgentToggle(agent.agent_id);
+                  }}
                   className={`flex items-start p-3 rounded-lg border cursor-pointer transition-colors ${
                     formData.agent_ids.includes(agent.agent_id)
-                      ? 'bg-purple-50 border-purple-300'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                      ? 'bg-surface-tint dark:bg-surface-tint-dark border border-fg dark:border-fg'
+                      : 'border-in-line  hover:bg-tableCab dark:bg-btCard-dark'
                   }`}
                 >
-                  <input
-                    type="checkbox"
+                  <FormCheckbox
+                    label={agent.name}
+                    id={`agent-${agent.agent_id}`}
                     checked={formData.agent_ids.includes(agent.agent_id)}
                     onChange={() => handleAgentToggle(agent.agent_id)}
-                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded mt-1"
+                    helpText={agent.description}
                   />
-                  <div className="ml-3">
-                    <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                    {agent.description && (
-                      <div className="text-xs text-gray-500 mt-1">{agent.description}</div>
-                    )}
-                  </div>
-                </label>
+                </div>
               ))}
             </div>
           )}
 
-          <div className="mt-4 text-sm text-gray-500">
-            {formData.agent_ids.length} agent{formData.agent_ids.length === 1 ? '' : 's'} selected
-          </div>
         </div>
 
         {/* Form Actions */}
-        <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-          >
-            Cancel
-          </button>
-          <ButtonApp
-            type="submit"
-            label={saving ? 'Saving...' : submitLabel}
-            disabled={!formData.name}
-            loading={saving}
-          />
-        </div>
+        <FormActions
+          onCancel={handleCancel}
+          isSubmitting={saving}
+          submitLabel={submitLabel}
+          submitDisabled={!formData.name}
+        />
       </form>
     </div>
   );

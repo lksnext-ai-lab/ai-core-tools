@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, Search, Database, Wrench, Zap, Sprout, Building2, Brain } from 'lucide-react';
+import { ButtonLink } from '../components/ui/ButtonLink';
 
 const AboutPage: React.FC = () => {
   return (
@@ -324,18 +325,18 @@ const AboutPage: React.FC = () => {
             Join the community of developers and organizations building the future with AI.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              to="/apps" 
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
-            >
-              Create Your First App
-            </Link>
-            <Link 
-              to="/apps" 
-              className="bg-white hover:bg-gray-50 text-blue-600 px-8 py-3 rounded-lg font-semibold border border-blue-600 transition-colors"
-            >
-              Configure AI Services
-            </Link>
+            <ButtonLink
+              to="/apps"
+              label="Create Your First App"
+              variant="primary"
+              size="medium"
+            />
+            <ButtonLink
+              to="/apps"
+              label="Configure AI Services"
+              variant="secondary"
+              size="medium"
+            />
           </div>
         </div>
       </div>

@@ -142,15 +142,14 @@ function SiloFormPage() {
   }
 
   return (
-    <div>
+    <div className="mx-auto max-w-4xl space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
         <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  subtitulo={isEditing 
                 ? 'Update your silo configuration and settings.'
                 : 'Create a new silo for vector storage and semantic search.'
             }
           />
-      </div>
+
 
       {/* Silo Form */}
       <SiloForm

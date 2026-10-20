@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Clock, MessageCircle, Paperclip, Square, Timer } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, MessageCircle, Paperclip, Square, Timer, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import MessageContent from '../components/playground/MessageContent';
@@ -649,7 +649,7 @@ export default function MarketplaceChatPage() {
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-8 py-[18px] border-b border-line dark:border-line-dark flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <BackgroundImage icon="Bot" size={32} iconSize={17} variant="marron" />
+            <BackgroundImage icon={Bot} size={32} iconSize={17} variant="marron" />
             <div className="min-w-0">
               <h2 className="font-display text-lg font-normal tracking-tight text-fg dark:text-fg-dark truncate">
                 {conversationTitle || 'New conversation'}
@@ -813,7 +813,7 @@ export default function MarketplaceChatPage() {
                 className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
               >
                 <div className="flex items-start gap-4 max-w-[82%]">
-                  <BackgroundImage icon="Bot" size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                  <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                   <div className="min-w-0 flex-1">
                     <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                       <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />

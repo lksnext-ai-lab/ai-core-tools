@@ -4,7 +4,7 @@ import { Clapperboard, Mic, FolderOpen, Folder, Home, ChevronRight, Video, FileT
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
 import FolderTree from '../components/FolderTree';
-import StatusBadge from '../components/StatusBadge';
+import { StatusBadge, type StatusType } from '../components/ui/Badge';
 import Alert from '../components/ui/Alert';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
@@ -67,6 +67,16 @@ interface RepositoryDetail {
 
 function isTerminalMediaStatus(status: string): boolean {
   return status === 'ready' || status === 'error';
+}
+
+const IN_PROGRESS_MEDIA_STATUSES = new Set(['downloading', 'processing', 'transcribing', 'analyzing_video', 'indexing']);
+
+function getMediaStatusBadgeType(status: string): StatusType {
+  if (status === 'ready') return 'success';
+  if (status === 'error') return 'error';
+  if (status === 'pending') return 'pending';
+  if (IN_PROGRESS_MEDIA_STATUSES.has(status)) return 'processing';
+  return 'inactive';
 }
 
 function filterByFolder<T extends { folder_id?: number | null }>(
@@ -840,7 +850,7 @@ const RepositoryDetailPage: React.FC = () => {
                     <tr key={resource.resource_id} className="hover:bg-surface-tint dark:hover:bg-surface-tint-dark">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
-                          <BackgroundImage icon="FileText" size={32} iconSize={16} variant="marron" />
+                          <BackgroundImage icon={FileText} size={32} iconSize={16} variant="marron" />
                           <span className="font-medium">{resource.name}</span>
                         </div>
                       </td>
@@ -927,7 +937,10 @@ const RepositoryDetailPage: React.FC = () => {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <StatusBadge status={media.status} processingMode={media.processing_mode} />
+                          <StatusBadge
+                            status={getMediaStatusBadgeType(media.status)}
+                            customLabel={media.status.replace('_', ' ')}
+                          />
 
                           {canEdit && (
                             <>

@@ -339,7 +339,8 @@ function ImportModal({
         <FormActions
           onCancel={handleClose}
           isSubmitting={importing}
-          submitLabel={importing ? 'Importing...' : 'Import'}
+          submitLabel="Import"
+          submittingLabel="Importing..."
           cancelLabel={importResult?.success ? 'Close' : 'Cancel'}
           showCancel={!importing}
           submitDisabled={!selectedFile || (requiresEmbeddingServiceSelection && !selectedEmbeddingServiceId)}

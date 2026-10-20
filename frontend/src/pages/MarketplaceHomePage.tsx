@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {  MessageCircle, Store, ArrowRight } from 'lucide-react';
+import {  MessageCircle, Store, ArrowRight, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -145,7 +145,7 @@ export default function MarketplaceHomePage() {
       >
         <div className="flex items-center gap-4">
           <BackgroundImage
-            icon="Store"
+            icon={Store}
             size={56}
             variant="marron"
             className="rounded-2xl"
@@ -201,7 +201,7 @@ export default function MarketplaceHomePage() {
                     onError={(event) => { event.currentTarget.style.display = 'none'; }}
                   />
                 ) : (
-                  <BackgroundImage icon="MessageSquare" variant="marron" />
+                  <BackgroundImage icon={MessageSquare} variant="marron" />
                 )}
                 variant="edit"
                 isEditing={editingConvId === conv.conversation_id}

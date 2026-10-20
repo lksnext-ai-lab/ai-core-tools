@@ -6,7 +6,7 @@ import { MESSAGES, errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import Alert from '../components/ui/Alert';
 import { FormField, FormSelect } from '../components/ui/FormField';
-import ButtonApp from '../components/ui/ButtonApp';
+import { FormActions } from '../components/ui/FormActions';
 import { LoadingState } from '../components/ui/LoadingState';
 
 interface RepositoryFormData {
@@ -196,7 +196,7 @@ const RepositoryFormPage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="mx-auto max-w-4xl space-y-6">
       {/* Header */}
 
       <Title variant="titPrincipal"
@@ -312,23 +312,12 @@ const RepositoryFormPage: React.FC = () => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-6">
-            <ButtonApp
-              label="Cancel"
-              type="button"
-              onClick={handleCancel}
-              variant="secondary"
-              size="medium"
-            />
-            <ButtonApp
-              label={isNewRepository ? 'Create Repository' : 'Save Changes'}
-              type="submit"
-              disabled={saving}
-              loading={saving}
-              variant="primary"
-              size="medium"
-            />
-          </div>
+          <FormActions
+            onCancel={handleCancel}
+            isSubmitting={saving}
+            submitLabel={isNewRepository ? 'Create Repository' : 'Save Changes'}
+            containerClassName="pt-6"
+          />
         </form>
       </div>
     </div>

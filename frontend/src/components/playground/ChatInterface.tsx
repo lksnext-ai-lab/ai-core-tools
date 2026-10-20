@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Timer } from 'lucide-react';
+import { Bot, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
@@ -1039,7 +1039,7 @@ function ChatInterface({
                       className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
                       <div className="flex items-start gap-4 max-w-[90%] lg:max-w-[80%] min-w-0">
-                        <BackgroundImage icon="Bot" size={38} iconSize={18} variant="marron" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <BackgroundImage icon={Bot} size={38} iconSize={18} variant="marron" className="mt-0.5 border border-accent dark:border-accent-dark" />
                         <div className="min-w-0 flex-1">
                           <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
                             <MessageContent

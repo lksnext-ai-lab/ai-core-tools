@@ -117,7 +117,7 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
             <button
               onClick={onClose}
               aria-label="Close"
-              className="p-1 text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark rounded-lg"
+              className="p-1 text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark transition-colors focus:outline-none focus-visible:outline-none rounded-lg"
             >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>

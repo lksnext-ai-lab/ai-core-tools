@@ -358,7 +358,7 @@ const DomainDetailPage: React.FC = () => {
           </CardApp>
 
           {/* URL table */}
-          <CardApp className="bg-white border border-gray-200 rounded-lg p-4">
+          <CardApp>
             <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">URLs ({domain.url_count})</h2>
             <DomainUrlsTable
               appId={numericAppId}
@@ -381,7 +381,7 @@ const DomainDetailPage: React.FC = () => {
 
       {/* Tab: Job history */}
       {activeTab === 'job-history' && (
-        <CardApp className="bg-white border border-gray-200 rounded-lg p-4">
+        <CardApp>
           <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Crawl job history</h2>
           <JobHistoryTab appId={numericAppId} domainId={numericDomainId} />
         </CardApp>

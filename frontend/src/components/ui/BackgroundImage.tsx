@@ -1,22 +1,6 @@
-import { Bot, FileText, MessageSquare, Plug, Store, Target, Wrench, Database, CalendarClock, Cloud } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-
-export type BackgroundImageIconName = 'Bot' | 'FileText' | 'MessageSquare' | 'Store' | 'Wrench' | 'Plug' |'Target' |'Database' | 'CalendarClock' | 'Cloud';
 export type BackgroundImageVariant = 'marron' | 'vacio' | 'gris';
-
-const icons: Record<BackgroundImageIconName, LucideIcon> = {
-  Bot,
-  FileText,
-  MessageSquare,
-  Store,
-  Wrench,
-  Plug,
-  Target,
-  Database,
-  CalendarClock,
-  Cloud,
-};
 
 function getVariantBackgroundClass(variant: BackgroundImageVariant): string {
   if (variant === 'marron') return 'bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark';
@@ -33,7 +17,7 @@ function getVariantIconClass(variant: BackgroundImageVariant): string {
 }
 
 export interface BackgroundImageProps {
-  readonly icon?: BackgroundImageIconName | LucideIcon;
+  readonly icon?: LucideIcon;
   readonly alt?: string;
   readonly text?: string;
   readonly size?: number;
@@ -43,9 +27,9 @@ export interface BackgroundImageProps {
   readonly rounded?: string;
 }
 
-/** Small colored icon tile used beside recent conversation rows. */
+/** Colored tile wrapping a Lucide icon (or a short text) — used in list rows, section headers and empty states. */
 export function BackgroundImage({
-  icon,
+  icon: Icon,
   alt = '',
   text,
   size = 34,
@@ -54,8 +38,6 @@ export function BackgroundImage({
   className = '',
   rounded = 'rounded-lg',
 }: BackgroundImageProps) {
-  const Icon: LucideIcon | undefined = typeof icon === 'string' ? icons[icon] : icon;
-
   return (
     <span
       aria-hidden={!text && (!alt || !Icon)}
