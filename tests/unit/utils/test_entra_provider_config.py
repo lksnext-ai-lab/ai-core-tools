@@ -73,8 +73,9 @@ class TestEntraTokenClockSkew:
 
     async def test_token_issued_beyond_leeway_is_rejected(self):
         token = _id_token(issued_at=int(time.time()) + DEFAULT_LEEWAY_SECONDS + 60)
+        provider = _provider()
         with pytest.raises(Exception, match="not yet valid"):
-            await _provider().validate_token(token)
+            await provider.validate_token(token)
 
     async def test_expired_token_beyond_leeway_is_rejected(self):
         token = _id_token(issued_at=int(time.time()) - 3600 - DEFAULT_LEEWAY_SECONDS - 60)
