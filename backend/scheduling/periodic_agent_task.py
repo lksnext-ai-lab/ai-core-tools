@@ -277,6 +277,21 @@ def _system_database_url() -> Optional[str]:
     return os.getenv("DBOS_DATABASE_URL") or os.getenv("SQLALCHEMY_DATABASE_URI")
 
 
+DBOS_MIN_SYS_DB_POOL_SIZE = 5
+
+
+def _sys_db_pool_size() -> Optional[int]:
+    """DBOS_SYS_DB_POOL_SIZE, or None to keep DBOS's default (20 connections per process)."""
+    raw = os.getenv("DBOS_SYS_DB_POOL_SIZE", "").strip()
+    if not raw:
+        return None
+    size = int(raw)
+    # DBOS documents that values below 5 must not be used.
+    if size < DBOS_MIN_SYS_DB_POOL_SIZE:
+        raise ValueError(f"DBOS_SYS_DB_POOL_SIZE must be at least {DBOS_MIN_SYS_DB_POOL_SIZE}, got {size}")
+    return size
+
+
 def dbos_enabled() -> bool:
     """DBOS_ENABLED=false turns scheduling off (e.g. tests); on by default."""
     return os.getenv("DBOS_ENABLED", "true").strip().lower() not in ("false", "0", "no", "off")
@@ -299,6 +314,9 @@ async def initialize_dbos() -> bool:
         "application_version": os.getenv("APP_VERSION", "0.2.37"),
         "system_database_url": system_database_url,
     }
+    sys_db_pool_size = _sys_db_pool_size()
+    if sys_db_pool_size is not None:
+        config["sys_db_pool_size"] = sys_db_pool_size
     DBOS(config=config)
     DBOS.launch()
     await DBOS.register_queue_async(

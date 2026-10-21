@@ -105,6 +105,14 @@ services:
       # ----------------------------------------------------------------------
       UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
       UVICORN_LIMIT_CONCURRENCY: ${UVICORN_LIMIT_CONCURRENCY:-100}
+      # Pools de conexiones a Postgres, POR worker (ver .env.example).
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DB_ASYNC_POOL_SIZE: ${DB_ASYNC_POOL_SIZE:-5}
+      DB_ASYNC_MAX_OVERFLOW: ${DB_ASYNC_MAX_OVERFLOW:-5}
+      CHECKPOINTER_POOL_MIN: ${CHECKPOINTER_POOL_MIN:-2}
+      CHECKPOINTER_POOL_MAX: ${CHECKPOINTER_POOL_MAX:-10}
+      DBOS_SYS_DB_POOL_SIZE: ${DBOS_SYS_DB_POOL_SIZE:-}
       # RB-15: ventana de apagado ordenado tras SIGTERM (debe quedar por
       # debajo de `stop_grace_period` menos el timeout interno de
       # close_runtime, ver ese comentario más abajo en este mismo servicio).
