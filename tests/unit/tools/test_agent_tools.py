@@ -10,6 +10,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 from langchain_core.messages import AIMessage, ToolMessage
 
 from models.agent import Agent
@@ -284,6 +285,100 @@ async def test_iact_tool_arun_forwards_subagent_tool_events():
     }
     assert emitted_events[3]["type"] == "tool_end"
     assert emitted_events[3]["data"]["tool_call_id"] == "Research_Agent:42:call-1"
+
+
+# === Structured output (output parser) in agent-as-tool ===
+
+
+class _Answer(BaseModel):
+    title: str
+    score: int
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_create_applies_sub_agent_output_parser():
+    """A sub-agent with an output parser gets response_format and the format instructions."""
+    agent = _make_agent("Structured Agent")
+    agent.output_parser_id = 7
+    fake_parser = MagicMock()
+    fake_parser.get_format_instructions.return_value = "FORMAT-INSTRUCTIONS"
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.get_parser_model_by_id", return_value=_Answer) as mock_model,
+        patch("tools.agentTools.get_output_parser", return_value=fake_parser),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+    ):
+        await agentTools.IACTTool.create(agent)
+
+    mock_model.assert_called_once_with(7)
+    kwargs = mock_create.call_args.kwargs
+    assert kwargs["response_format"] is _Answer
+    assert "<output_format_instructions>FORMAT-INSTRUCTIONS</output_format_instructions>" in kwargs["system_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_create_without_output_parser_has_no_response_format():
+    agent = _make_agent()
+
+    with (
+        patch("tools.agentTools.get_llm", return_value=object()),
+        patch("tools.agentTools.create_langchain_agent", return_value=MagicMock()) as mock_create,
+        patch.object(agentTools.MCPClientManager, "get_client", new=AsyncMock(return_value=None)),
+    ):
+        await agentTools.IACTTool.create(agent)
+
+    assert "response_format" not in mock_create.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_arun_returns_structured_response_as_json():
+    """Without a stream writer, the tool returns the structured response, not the last message."""
+    agent = _make_agent()
+    agent.output_parser_id = 7
+
+    with patch("tools.agentTools.get_llm", return_value=object()):
+        tool = agentTools.IACTTool(agent)
+    tool.react_agent = MagicMock()
+    tool.react_agent.ainvoke = AsyncMock(return_value={
+        "messages": [AIMessage(content="Returning structured response: ...")],
+        "structured_response": _Answer(title="ok", score=3),
+    })
+
+    with patch("langgraph.config.get_stream_writer", side_effect=RuntimeError):
+        result = await tool._arun("q")
+
+    assert json.loads(result) == {"title": "ok", "score": 3}
+
+
+class _StructuredStreamingReactAgent:
+    async def astream(self, _payload, stream_mode=None):
+        yield (
+            "updates",
+            {
+                "model": {
+                    "messages": [AIMessage(content="Returning structured response: ...")],
+                    "structured_response": _Answer(title="streamed", score=5),
+                }
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_iact_tool_arun_streaming_returns_structured_response_as_json():
+    agent = _make_agent()
+    agent.agent_id = 1
+    agent.output_parser_id = 7
+
+    with patch("tools.agentTools.get_llm", return_value=object()):
+        tool = agentTools.IACTTool(agent)
+    tool.react_agent = _StructuredStreamingReactAgent()
+
+    with patch("langgraph.config.get_stream_writer", return_value=lambda _e: None):
+        result = await tool._arun("q")
+
+    assert json.loads(result) == {"title": "streamed", "score": 5}
 
 
 # === OCR Agent-as-tool tests ===
