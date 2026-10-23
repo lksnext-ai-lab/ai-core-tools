@@ -176,12 +176,25 @@ def _response_output(response: Any) -> str:
             parts.append(str(value))
             break
 
-    stderr = _get_attr(response, "stderr", "error")
+    # Read stderr and error separately: the code interpreter's ExecutionResult
+    # always has a (usually empty) ``stderr`` *and* an ``error`` object, so a
+    # first-match lookup over both silently dropped every Python exception.
+    stderr = _get_attr(response, "stderr")
     if stderr:
         parts.append(f"\n[stderr]\n{stderr}")
 
+    error = _get_attr(response, "error")
+    if error:
+        if isinstance(error, str):
+            parts.append(f"\n[Error]\n{error}")
+        else:
+            name = _get_attr(error, "name", default="Error")
+            value = _get_attr(error, "value", default="")
+            traceback = _get_attr(error, "traceback", default="")
+            parts.append(f"\n[Error] {name}: {value}" + (f"\n{traceback}" if traceback else ""))
+
     exit_code = _get_attr(response, "exit_code", "exitCode", default=0)
-    if isinstance(exit_code, int) and exit_code != 0 and not stderr:
+    if isinstance(exit_code, int) and exit_code != 0 and not stderr and not error:
         parts.append(f"\n[Error] Non-zero exit code: {exit_code}")
     return "\n".join(parts)
 
@@ -549,11 +562,17 @@ class DaytonaProvider(SandboxProvider):
             # Idempotent and cheap to repeat every call rather than relying
             # on interpreter state (e.g. a fresh context via `context=`).
             workspace = _workspace_root()
+            # The interpreter is stateful, so its cwd persists between calls:
+            # a relative chdir would nest (workspace/workspace/...) on every
+            # call after the first. Anchor the (relative) root to the home
+            # directory instead — idempotent regardless of the current cwd.
             code = (
                 f"import os as __mattin_os\n"
-                f"__mattin_os.makedirs({workspace!r}, exist_ok=True)\n"
-                f"__mattin_os.chdir({workspace!r})\n"
-                f"del __mattin_os\n"
+                f"__mattin_ws = __mattin_os.path.join("
+                f"__mattin_os.path.expanduser('~'), {workspace!r})\n"
+                f"__mattin_os.makedirs(__mattin_ws, exist_ok=True)\n"
+                f"__mattin_os.chdir(__mattin_ws)\n"
+                f"del __mattin_os, __mattin_ws\n"
             ) + code
 
             return _call_with_fallbacks(
@@ -591,7 +610,18 @@ class DaytonaProvider(SandboxProvider):
         # goes through this wrapper, so the newline is required regardless of
         # what the caller passes.
         workspace = _workspace_root()
-        wrapped = f"cd {shlex.quote(workspace)} && (\n{code}\n)"
+        # The workspace root is a RELATIVE path (resolved against the sandbox
+        # user's home). When the SDK honours ``cwd=`` the shell already starts
+        # inside it, so a bare ``cd workspace`` would look for
+        # ``workspace/workspace`` and fail ("cd: workspace: No such file or
+        # directory") — which broke every bash call, ensure_skill included.
+        # Try the relative path first (cwd dropped), then the home-anchored
+        # one (cwd honoured), and create it as a last resort.
+        q_ws = shlex.quote(workspace)
+        wrapped = (
+            f'{{ cd {q_ws} 2>/dev/null || cd "$HOME"/{q_ws} 2>/dev/null '
+            f'|| {{ mkdir -p "$HOME"/{q_ws} && cd "$HOME"/{q_ws}; }}; }} && (\n{code}\n)'
+        )
         command = f"bash -lc {shlex.quote(wrapped)}"
         return _call_with_fallbacks(
             proc.exec,

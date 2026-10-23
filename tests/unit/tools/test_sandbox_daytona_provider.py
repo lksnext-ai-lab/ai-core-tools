@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+import os
 import subprocess
 import tarfile
 from types import SimpleNamespace
@@ -190,8 +191,40 @@ class TestDaytonaRunCode:
         provider.run_code(handle, "print('hello')", language="python")
 
         sent_code = sandbox.code_interpreter.run_code.call_args.args[0]
-        assert "chdir('workspace')" in sent_code
         assert sent_code.rstrip().endswith("print('hello')")
+
+        # The interpreter is stateful: running the preamble repeatedly must land in the same
+        # <home>/workspace every time (a relative chdir used to nest workspace/workspace/...).
+        preamble = sent_code.rsplit("print('hello')", 1)[0]
+        script = "\n".join([preamble, preamble, preamble, "import os; print(os.getcwd())"])
+        proc = subprocess.run(
+            ["python3", "-c", script],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path),
+            env={**os.environ, "HOME": str(tmp_path)},
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == str(tmp_path / "workspace")
+
+    def test_python_exception_is_reported_not_swallowed(self, provider_and_sandbox, tmp_path):
+        """Daytona's ExecutionResult always carries an (empty) ``stderr`` next to ``error``; the
+        error must still reach the agent (regression: every Python exception came back as '')."""
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.code_interpreter.run_code.return_value = SimpleNamespace(
+            stdout="",
+            stderr="",
+            error=SimpleNamespace(
+                name="ModuleNotFoundError",
+                value="No module named 'pptx'",
+                traceback="Traceback (most recent call last): ...",
+            ),
+        )
+
+        result = provider.run_code(handle, "import pptx", language="python")
+
+        assert "ModuleNotFoundError: No module named 'pptx'" in result
 
     def test_python_extends_auto_stop_for_execution_then_resets_to_idle(
         self, provider_and_sandbox, monkeypatch, tmp_path
@@ -272,6 +305,30 @@ class TestDaytonaRunCode:
         )
         assert proc.returncode == 0, proc.stderr
         assert "hi" in proc.stdout
+
+    def test_bash_wrapper_works_when_shell_already_starts_in_workspace(
+        self, provider_and_sandbox, tmp_path
+    ):
+        """If the SDK honours ``cwd=workspace`` the shell starts inside it; the wrapper must not
+        try ``workspace/workspace`` (regression: ensure_skill failed with 'cd: workspace: No such
+        file or directory')."""
+        provider, _, sandbox = provider_and_sandbox
+        handle = provider.create_sandbox(str(tmp_path))
+        sandbox.process.exec.return_value = SimpleNamespace(result="ok", exit_code=0)
+
+        provider.run_code(handle, "pwd", language="bash")
+
+        command = sandbox.process.exec.call_args.args[0]
+        (tmp_path / "workspace").mkdir()
+        proc = subprocess.run(
+            ["bash", "-c", command],
+            capture_output=True,
+            text=True,
+            cwd=str(tmp_path / "workspace"),
+            env={**os.environ, "HOME": str(tmp_path)},
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip().endswith("workspace")
 
     def test_bash_extends_auto_stop_for_execution_then_resets_to_idle(
         self, provider_and_sandbox, monkeypatch, tmp_path

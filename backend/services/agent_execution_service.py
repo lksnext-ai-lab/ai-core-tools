@@ -1522,6 +1522,13 @@ class AgentExecutionService:
                     ),
                 ):
                     remote_files = ctx.sandbox_provider.list_files(sandbox_handle)
+                    logger.debug(
+                        "IT4: sandbox lists %d file(s) %s; output candidates=%s; pre-existing=%s",
+                        len(remote_files),
+                        [p for p in remote_files if not str(p).lstrip("/").startswith(".skills")][:40],
+                        [p for p in remote_files if _is_remote_output_file(p)],
+                        sorted(ctx.pre_existing_remote_files),
+                    )
                     for remote_path in remote_files:
                         if not _is_remote_output_file(remote_path):
                             continue
@@ -1545,6 +1552,9 @@ class AgentExecutionService:
                             )
             except Exception as _list_exc:
                 logger.warning("IT4: could not list remote files for pull: %s", _list_exc)
+
+        if sandbox_handle is None and ctx.sandbox_provider is not None:
+            logger.debug("IT4: sandbox was never materialised this turn; no remote pull")
 
         # 1 + 2. Sync output files and inject markers
         if output_dir:

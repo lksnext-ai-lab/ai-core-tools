@@ -3,7 +3,7 @@
 
 Demonstrates a title slide plus several title+bullets content slides using
 the default template's built-in layouts. Run directly to produce
-``output.pptx`` in the current working directory, or import
+``output.pptx`` in the current working directory (pass ``output/<name>.pptx`` in the sandbox so the file is delivered as an attachment), or import
 ``build_presentation()`` and adapt the slide content to the user's request.
 
 Usage:

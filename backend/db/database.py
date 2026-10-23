@@ -11,14 +11,24 @@ DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI')
 if not DATABASE_URL:
     raise EnvironmentError("SQLALCHEMY_DATABASE_URI environment variable is required")
 
-# Total connections per process = (sync pool + async pool + checkpointer pool)
-# x workers x replicas. Keep below Postgres max_connections (default 100).
+# Connection budget: (sync + async + checkpointer + DBOS pools, at their max)
+# x uvicorn workers x (replicas + rollout surge) must stay below Postgres
+# max_connections minus its reserved slots. Each pool is sized on its own env vars.
 # pool_timeout is short on purpose: a saturated pool fails fast as 503 (main.py)
-# rather than blocking 30s. All tunable via env without a code change.
+# rather than blocking 30s.
 DB_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '20'))
 DB_MAX_OVERFLOW = int(os.getenv('DB_MAX_OVERFLOW', '10'))
+# The async engine only serves the A2A store and async pgvector calls.
+DB_ASYNC_POOL_SIZE = int(os.getenv('DB_ASYNC_POOL_SIZE', '5'))
+DB_ASYNC_MAX_OVERFLOW = int(os.getenv('DB_ASYNC_MAX_OVERFLOW', '5'))
 DB_POOL_TIMEOUT = int(os.getenv('DB_POOL_TIMEOUT', '10'))
 DB_POOL_RECYCLE = int(os.getenv('DB_POOL_RECYCLE', '3600'))
+
+# application_name tags each pool's connections in pg_stat_activity.
+SYNC_APPLICATION_NAME = "mattin-api"
+ASYNC_APPLICATION_NAME = "mattin-api-async"
+
+_IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 # Configure synchronous engine with connection pooling for better concurrency
 engine = create_engine(
@@ -29,7 +39,7 @@ engine = create_engine(
     pool_pre_ping=True,               # Verify connections before using them
     pool_recycle=DB_POOL_RECYCLE,     # Recycle connections (prevent stale connections)
     echo=False,                       # Set to True for SQL debugging
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    connect_args={"check_same_thread": False} if _IS_SQLITE else {"application_name": SYNC_APPLICATION_NAME},
 )
 
 # Configure async engine for async operations (needed for async retrievers in LangGraph)
@@ -48,13 +58,14 @@ engine = create_engine(
 ASYNC_DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://') if DATABASE_URL.startswith('postgresql://') else DATABASE_URL
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
-    pool_size=DB_POOL_SIZE,
-    max_overflow=DB_MAX_OVERFLOW,
+    pool_size=DB_ASYNC_POOL_SIZE,
+    max_overflow=DB_ASYNC_MAX_OVERFLOW,
     pool_timeout=DB_POOL_TIMEOUT,
     pool_pre_ping=True,
     pool_recycle=DB_POOL_RECYCLE,
     echo=False,
     connect_args={
+        "application_name": ASYNC_APPLICATION_NAME,
         "connect_timeout": 5,
         "keepalives": 1,
         "keepalives_idle": 30,

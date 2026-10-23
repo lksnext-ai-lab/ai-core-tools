@@ -42,7 +42,9 @@ acting on it.
 `scripts/build_deck.py` builds a small but complete deck: a title slide plus
 several content slides with a title and bullet list, using python-pptx's
 built-in slide layouts. Adapt the slide titles/bullets to the user's actual
-content, and change the output filename.
+content, and change the output filename. Always save the final file under
+`output/` (e.g. `python scripts/build_deck.py output/presentation.pptx`); files
+saved anywhere else are not delivered to the user as an attachment.
 
 ```bash
 python scripts/build_deck.py
@@ -71,7 +73,7 @@ for point in ("Churn decreased to 3.2%", "Two product lines launched"):
     para.text = point
     para.level = 0                                        # indent level (0-4)
 
-prs.save("output.pptx")
+prs.save("output/presentation.pptx")  # only files under output/ reach the user
 ```
 
 ### 16:9 widescreen

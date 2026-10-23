@@ -56,7 +56,7 @@ System skills are platform-wide skills with `Skill.app_id IS NULL`. They:
 - Are managed exclusively by **omniadmins** through the admin **System Skills** page (`/internal/admin/system-skills/*` — list including disabled, create, edit, delete, import, export, enable/disable). App-level admins cannot create, edit or delete them — any attempt through the app-scoped skill routes is rejected with **403**.
 - Are visible to every app as **read-only, merged entries** in that app's skill listing: `SkillService.list_skills` merges the app's own skills with all currently **enabled** system skills. A **disabled** system skill disappears from every app's listing entirely (an app admin never sees it as an option to attach). If a system skill's normalised name collides with one of the app's own skills, the app's own skill wins and the collision is logged.
 - Are never counted against an app's `skills` tier quota (only app-scoped skill creation is quota'd).
-- Carry a `source` field: `'admin'` (created directly, via the admin UI or an import) or `'yaml'` (seeded from `backend/system_defaults.yaml` at startup — see [Curated system skill packages](#adding-a-curated-system-skill-package) below). A `source='yaml'` system skill **cannot be hard-deleted** — `DELETE .../system-skills/{id}` returns **409** for it, because the seeder would simply recreate it (create-if-missing only) on the next restart. The only way to remove it from use is to **disable** it (`is_enabled=False`), which the seeder always respects and never overrides.
+- Carry a `source` field: `'admin'` (created directly, via the admin UI or an import) or `'yaml'` (seeded from `backend/system_defaults.yaml` at startup — see [Curated system skill packages](#adding-a-curated-system-skill-package) below). A `source='yaml'` system skill **cannot be hard-deleted** — `DELETE .../system-skills/{id}` returns **409** for it, because the seeder would simply recreate it on the next restart. The only way to remove it from use is to **disable** it (`is_enabled=False`), which the seeder always respects and never overrides.
 
 ---
 
@@ -99,7 +99,7 @@ Enable it per agent (agent form toggle, or `PATCH`/`POST` with `skill_router_ena
 
 ## Adding a curated system skill package
 
-Curated system skills ship as real directories under `backend/system_skills/<name>/` and are seeded (create-if-missing only, never updated/restored) on every backend startup, in every deployment mode, by `backend/services/system_skills_seeder.py`.
+Curated system skills ship as real directories under `backend/system_skills/<name>/` and are seeded on every backend startup (created if missing; an existing `source='yaml'` skill that is not frozen is refreshed when its package on disk changed, keeping its `is_enabled` state), in every deployment mode, by `backend/services/system_skills_seeder.py`.
 
 1. **Directory layout** — mirror the shipped examples (`word`, `pdf`, `pptx`, `data-analysis`, `charts`):
    ```

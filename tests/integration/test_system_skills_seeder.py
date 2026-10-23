@@ -268,11 +268,9 @@ def test_corrupted_package_is_isolated_and_lock_stays_held_for_rest_of_run(
         _delete_system_skill(good_name)
 
 
-def test_manual_delete_of_skill_file_row_survives_reseed_ac30(tmp_path, unique_name, monkeypatch, test_engine):
-    """AC-30's second leg (per step_038's task note): the operator deletes one of the seeded
-    skill's ``SkillFile`` rows directly (e.g. cleaning up a resource they don't want) -- a re-run
-    of the seeder must never restore it, since create-if-missing only checks the skill NAME, not
-    its file set."""
+def test_deleted_skill_file_row_is_restored_on_reseed(tmp_path, unique_name, monkeypatch, test_engine):
+    """A yaml-sourced skill's package is the source of truth: a ``SkillFile`` row removed directly
+    from the DB is restored on the next seed run, so the skill matches its on-disk package."""
     pkg_dir = _write_package(
         tmp_path, unique_name, extra_files={"resources/note.txt": "keep me or not"}
     )
@@ -304,8 +302,7 @@ def test_manual_delete_of_skill_file_row_survives_reseed_ac30(tmp_path, unique_n
     finally:
         db2.close()
 
-    # Re-run the seeder: the skill name already exists, so it must be skipped entirely --
-    # the deleted SkillFile row must NOT be restored.
+    # Re-run the seeder: the package differs from the DB, so the file row is restored.
     db3 = SessionLocal()
     try:
         seed_system_skills(db3)
@@ -323,7 +320,7 @@ def test_manual_delete_of_skill_file_row_survives_reseed_ac30(tmp_path, unique_n
             .filter(SkillFile.skill_id == skill.skill_id, SkillFile.path == "resources/note.txt")
             .first()
         )
-        assert remaining is None, "seeder must never restore a manually deleted SkillFile row"
+        assert remaining is not None, "seeder must restore a SkillFile row missing from the package"
     finally:
         check.close()
 
@@ -413,3 +410,52 @@ def test_lock_not_acquired_skips_entire_run(tmp_path, unique_name, monkeypatch, 
     finally:
         check.close()
     assert count == 0, "a run that lost the advisory lock race must not have created anything"
+
+
+def test_changed_package_content_refreshes_existing_yaml_skill_keeping_enabled_state(
+    tmp_path, unique_name, monkeypatch, test_engine
+):
+    """When the on-disk package changes, an existing yaml skill gets the new body and files; an
+    admin's disable is preserved."""
+    pkg_dir = _write_package(tmp_path, unique_name)
+    monkeypatch.setattr(seeder_module, "_PACKAGES_ROOT", tmp_path)
+    monkeypatch.setattr(
+        seeder_module, "_load_skill_entries", lambda: [{"name": unique_name, "path": unique_name}]
+    )
+
+    db1 = SessionLocal()
+    try:
+        seed_system_skills(db1)
+        skill = db1.query(Skill).filter(Skill.app_id.is_(None), Skill.name == unique_name).first()
+        skill.is_enabled = False
+        db1.add(skill)
+        db1.commit()
+    finally:
+        db1.close()
+
+    (pkg_dir / "SKILL.md").write_text(
+        f"---\nname: {unique_name}\ndescription: Test skill {unique_name}\n---\n# {unique_name}\n\nNew body.\n",
+        encoding="utf-8",
+    )
+    (pkg_dir / "extra.txt").write_text("added later", encoding="utf-8")
+
+    db2 = SessionLocal()
+    try:
+        seed_system_skills(db2)
+    finally:
+        db2.close()
+
+    check = SessionLocal()
+    try:
+        skill = check.query(Skill).filter(Skill.app_id.is_(None), Skill.name == unique_name).first()
+        assert "New body." in skill.content
+        assert skill.is_enabled is False
+        added = (
+            check.query(SkillFile)
+            .filter(SkillFile.skill_id == skill.skill_id, SkillFile.path == "extra.txt")
+            .first()
+        )
+        assert added is not None
+    finally:
+        check.close()
+        _delete_system_skill(unique_name)

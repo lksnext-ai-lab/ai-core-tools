@@ -181,10 +181,25 @@ def _build_openrouter_llm(ai_service, temperature):
     )
 
 
+# Anthropic rejects `temperature` (HTTP 400 "`temperature` is deprecated for this model")
+# on the Claude 5 family and on Opus 4.7+; older models still accept it.
+_ANTHROPIC_NO_TEMPERATURE_MODEL = re.compile(
+    r"^claude-(?:[a-z]+-)?(?:[5-9]|\d{2,})(?!\d)|^claude-opus-4-(?:[7-9]|\d{2,})(?!\d)",
+    re.IGNORECASE,
+)
+
+
+def _anthropic_temperature(model, temperature):
+    """The temperature to send to Anthropic, or None (not sent) for models that reject it."""
+    if _ANTHROPIC_NO_TEMPERATURE_MODEL.match(model or ""):
+        return None
+    return temperature
+
+
 def _build_anthropic_llm(ai_service, temperature):
     return ChatAnthropic(
         model=ai_service.description,
-        temperature=temperature,
+        temperature=_anthropic_temperature(ai_service.description, temperature),
         api_key=ai_service.api_key,
     )
 
