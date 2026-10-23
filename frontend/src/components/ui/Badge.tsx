@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, X, AlertTriangle } from 'lucide-react';
 
-export type BadgeVariant ='success' | 'info' | 'warning' | 'error' | 'default' | 'primary' | 'secondary';
+export type BadgeVariant ='success' | 'info' | 'warning' | 'error' | 'default' | 'primary' | 'secondary' | 'custom';
 
 interface BadgeProps {
   readonly label: string;
@@ -26,7 +26,8 @@ export function Badge({
     error: 'bg-error-bg text-error dark:bg-error-bg-dark dark:text-error-dark',
     default: 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
     primary: 'bg-ink text-ink-on dark:bg-ink-dark dark:text-ink-on-dark',
-    secondary: 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark'
+    secondary: 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark',
+    custom: ''
   };
 
   return (
@@ -39,13 +40,14 @@ export function Badge({
 
 interface ProviderBadgeProps {
   readonly provider: string;
+  readonly label?: string;
   readonly className?: string;
 }
 
 /**
  * Badge component specifically for AI/Embedding service providers
  */
-export function ProviderBadge({ provider, className = '' }: ProviderBadgeProps) {
+export function ProviderBadge({ provider, label, className = '' }: ProviderBadgeProps) {
   const providerColors: Record<string, string> = {
     // Provider palette from the v3 design (OpenAI=success, Azure=info, Anthropic=bronze, Mistral=error, rest neutral)
     'openai': 'bg-success-bg text-success dark:bg-success-bg-dark dark:text-success-dark',
@@ -57,18 +59,24 @@ export function ProviderBadge({ provider, className = '' }: ProviderBadgeProps) 
     'ollama': 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark',
     'Ollama': 'bg-bronze-bg-soft text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark',
     'custom': 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
-    'Custom': 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
+    'Custom': 'bg-[#D4D4D4] text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark',
     'anthropic': 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark',
     'Anthropic': 'bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark',
     'google': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
     'Google': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'GoogleCloud': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'googlecloud': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'OpenRouter': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'openrouter': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'Bedrock': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
+    'bedrock': 'bg-info-bg text-info-strong dark:bg-info-bg-dark dark:text-info-strong-dark',
   };
 
   const colorClass = providerColors[provider] || 'bg-surface-hover text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark';
 
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${colorClass} ${className}`}>
-      {provider}
+      {label ?? provider}
     </span>
   );
 }

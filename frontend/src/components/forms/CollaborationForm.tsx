@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Alert from '../ui/Alert';
 import { Spinner } from '../ui/Spinner';
 import { ButtonApp } from '../ui/ButtonApp';
+import FormField, { FormSelect } from '../ui/FormField';
 import { apiService } from '../../services/api';
 
 interface PlatformUser {
@@ -166,13 +167,11 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
       <div className="space-y-4">
         {/* User search */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            User
-          </label>
           <div ref={dropdownRef} className="relative">
             <div className="relative">
-              <input
-                type="text"
+              <FormField
+                label="User"
+                id="collab-user"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); if (selectedUser) setSelectedUser(null); }}
                 onFocus={() => {
@@ -183,15 +182,15 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                 onKeyDown={handleInputKeyDown}
                 placeholder="Search by name or email…"
                 disabled={isSubmitting || loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 pr-10"
+                inputClassName="pr-10"
                 autoComplete="off"
                 role="combobox"
-                aria-expanded={showDropdown}
-                aria-controls="collab-user-listbox"
-                aria-activedescendant={highlightedIndex >= 0 ? `collab-user-option-${results[highlightedIndex]?.user_id}` : undefined}
+                ariaExpanded={showDropdown}
+                ariaControls="collab-user-listbox"
+                ariaActiveDescendant={highlightedIndex >= 0 ? `collab-user-option-${results[highlightedIndex]?.user_id}` : undefined}
               />
               {searching && (
-                <div className="absolute right-3 top-1/2 flex -translate-y-1/2">
+                <div className="absolute right-3 top-[calc(100%-1.1875rem)] flex -translate-y-1/2">
                   <Spinner size="sm" tone="muted" />
                 </div>
               )}
@@ -200,7 +199,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                   type="button"
                   onClick={clearSelection}
                   aria-label="Clear selection"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-[calc(100%-1.1875rem)] -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   ✕
                 </button>
@@ -216,13 +215,16 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                     id={`collab-user-option-${u.user_id}`}
                     role="option"
                     aria-selected={index === highlightedIndex}
+                    className={index > 0 ? "border-t border-line dark:border-line-dark" : ""}
                   >
                     <button
                       type="button"
                       onClick={() => selectUser(u)}
                       onMouseEnter={() => setHighlightedIndex(index)}
-                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 ${
-                        index === highlightedIndex ? "bg-blue-50" : "hover:bg-blue-50"
+                      className={`w-full text-left flex items-center justify-between gap-2 px-4 py-3 transition-colors ${
+                        index === highlightedIndex
+                          ? "bg-surface-hover dark:bg-btCard-hover"
+                          : "bg-surface dark:bg-surface-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark"
                       }`}
                     >
                       <div>
@@ -253,20 +255,20 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
 
         {/* Role selector */}
         <div>
-          <label htmlFor="collab-role" className="block text-sm font-medium text-gray-700 mb-2">
-            Invitation Role
-          </label>
-          <select
+          <FormSelect
             id="collab-role"
+            label="Invitation Role"
             value={role}
             onChange={(e) => setRole(e.target.value)}
             disabled={isViewerLocked || isSubmitting || loading}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-50 disabled:text-gray-500"
-          >
-            {!isViewerLocked && <option value="editor">Editor</option>}
-            {!isViewerLocked && <option value="administrator">Administrator</option>}
-            <option value="viewer">Viewer</option>
-          </select>
+            options={[
+              ...(isViewerLocked ? [] : [
+                { value: 'editor', label: 'Editor' },
+                { value: 'administrator', label: 'Administrator' },
+              ]),
+              { value: 'viewer', label: 'Viewer' },
+            ]}
+          />
           {selectedUser?.is_omniadmin && (
             <p className="mt-1 text-sm text-amber-600">
               This is a protected admin account (configured via server settings).
@@ -278,7 +280,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
             </p>
           )}
           {!isViewerLocked && !selectedUser?.is_omniadmin && (
-            <p className="mt-1 text-sm text-gray-600">{ROLE_DESCRIPTIONS[role]}</p>
+            <p className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{ROLE_DESCRIPTIONS[role]}</p>
           )}
         </div>
       </div>

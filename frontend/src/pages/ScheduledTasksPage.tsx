@@ -21,6 +21,7 @@ import ActionDropdown from "../components/ui/ActionDropdown";
 import ServiceLifecycleAlert from "../components/services/ServiceLifecycleAlert";
 import { SidePanel } from "../components/ui/SidePanel";
 import ScheduledTaskDetailPage from "./ScheduledTaskDetailPage";
+import BackgroundImage from "../components/ui/BackgroundImage";
 
 export default function ScheduledTasksPage() {
   const { appId } = useParams();
@@ -108,30 +109,34 @@ export default function ScheduledTasksPage() {
       header: "Tarea",
       className: "px-5 py-4",
       render: (task) => (
-        <>
-          <Link
-            className="font-medium text-fg dark:text-fg-dark"
-            to={`/apps/${appId}/scheduled-tasks/${task.id}`}
-            onClick={(event) => {
-              // Keep native behaviour for new tab / new window clicks.
-              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
-              event.preventDefault();
-              setSelectedTaskId(task.id);
-            }}
-          >
-            {task.name}
-          </Link>
-          <ServiceLifecycleAlert
-            warnings={task.lifecycle_warnings}
-            variant="compact"
-            className="mt-0.5"
-          />
-          <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-            {task.conversation_mode === "continuous"
-              ? "Conversación continua"
-              : "Conversación nueva por ejecución"}
+        <div className="flex items-start gap-2">
+          <BackgroundImage icon={CalendarClock} variant="marron" />
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <Link
+              className="font-medium text-fg dark:text-fg-dark"
+              to={`/apps/${appId}/scheduled-tasks/${task.id}`}
+              onClick={(event) => {
+                // Keep native behaviour for new tab / new window clicks.
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                event.preventDefault();
+                setSelectedTaskId(task.id);
+              }}
+            >
+              {task.name}
+            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <ServiceLifecycleAlert
+                warnings={task.lifecycle_warnings}
+                variant="compact"
+              />
+              <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                {task.conversation_mode === "continuous"
+                  ? "Conversación continua"
+                  : "Conversación nueva por ejecución"}
+              </div>
+            </div>
           </div>
-        </>
+        </div>
       ),
     },
     {
@@ -139,7 +144,7 @@ export default function ScheduledTasksPage() {
       className: "px-5 py-4",
       render: (task) => (
         <Link
-          className="text-sm text-bronze  dark:text-bronze-dark inline-block"
+          className="text-xs text-bronze  dark:text-bronze-dark inline-block"
           to={`/apps/${appId}/agents/${task.agent_id}`}
         >
           {agentNames[task.agent_id] ?? `Agente #${task.agent_id}`}{''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
@@ -149,7 +154,7 @@ export default function ScheduledTasksPage() {
     },
     {
       header: "Próxima ejecución",
-      className: "px-5 py-4  text-fg-tertiary dark:text-fg-tertiary-dark text-xs",
+      className: "px-5 py-4  text-fg-secondary dark:text-fg-secondary-dark text-xs",
       render: (task) => (
         <span className="inline-flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-fg-tertiary dark:text-fg-tertiary-dark" />

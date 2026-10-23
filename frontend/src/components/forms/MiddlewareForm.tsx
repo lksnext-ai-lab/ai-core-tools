@@ -6,8 +6,11 @@ import { MIDDLEWARE_TYPES, MIDDLEWARE_TYPE_INFO, agentToolName } from '../../con
 import { selectableServiceOptions, serviceOptionLabel } from '../../utils/serviceLifecycle';
 import FormActions from '../ui/FormActions';
 import { ButtonCard } from '../ui/ButtonCard';
+import { ButtonApp } from '../ui/ButtonApp';
 import { FormField, FormSelect, FormTextArea } from '../ui/FormField';
 import CardApp from '../ui/CardApp';
+import Alert from '../ui/Alert';
+import Table from '../ui/Table';
 
 // Limits mirror backend/schemas/middleware_schemas.py so errors show before saving.
 const PII_TYPES = [
@@ -35,6 +38,7 @@ const GUARDRAIL_RULES = [
 
 const DECISIONS = ['approve', 'edit', 'reject'] as const;
 type Decision = typeof DECISIONS[number];
+type InterruptEntry = [string, { allowed_decisions: Decision[] }];
 
 const DEFAULT_CONFIG: Record<MiddlewareType, Record<string, any>> = {
   guardrails: {
@@ -71,9 +75,7 @@ interface MiddlewareFormProps {
   onCancel: () => void;
 }
 
-const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
-const inputClass =
-  'w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500';
+const labelClass = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1';
 
 const inRange = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
 const inOptionalRange = (v: unknown, min: number, max: number) => v == null || inRange(v, min, max);
@@ -279,17 +281,19 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3" role="alert">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
+        <Alert type="error" message={error} />
       )}
 
       {/* Type */}
       {isEditing ? (
         <div>
           <p className={labelClass}>Type</p>
-          <p className="text-sm text-gray-900">{MIDDLEWARE_TYPE_INFO[type].label}</p>
-          <p className="text-xs text-gray-500">{MIDDLEWARE_TYPE_INFO[type].description}</p>
+          <CardApp variant="selected" className="gap-1">
+            <p className="text-sm font-medium text-fg dark:text-fg-dark">{MIDDLEWARE_TYPE_INFO[type].label}</p>
+            <p className="text-xs font-normal text-fg-secondary dark:text-fg-secondary-dark">
+              {MIDDLEWARE_TYPE_INFO[type].description}
+            </p>
+          </CardApp>
         </div>
       ) : (
         <fieldset>
@@ -419,10 +423,17 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
           </fieldset>
           <div>
             <label htmlFor="mw-strategy" className={labelClass}>When found</label>
-            <select id="mw-strategy" value={config.strategy} onChange={(e) => patch({ strategy: e.target.value })}
-              className={inputClass} disabled={isSubmitting}>
-              {PII_STRATEGIES.map((s) => <option key={s.value} value={s.value}>{s.label} — {s.hint}</option>)}
-            </select>
+              <FormSelect
+                id="mw-strategy"
+                label="When found"
+                value={config.strategy}
+                onChange={(e) => patch({ strategy: e.target.value })}
+                options={PII_STRATEGIES.map((strategy) => ({
+                  value: strategy.value,
+                  label: `${strategy.label} — ${strategy.hint}`,
+                }))}
+                disabled={isSubmitting}
+              />
           </div>
           <fieldset>
             <CardApp className="space-y-4">
@@ -481,10 +492,10 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
       {/* Human approval */}
       {type === 'human_in_the_loop' && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-700">
-            Choose the tools that need a person's approval. Agents using this middleware keep conversation memory on.
-            Approvals are given from the chat, or by the application calling the agent through the API.
-          </p>
+          <Alert
+            type="info"
+            message="Choose the tools that need a person's approval. Agents using this middleware keep conversation memory on. Approvals are given from the chat, or by the application calling the agent through the API."
+          />
           <div>
             <FormField
               id="mw-approval-timeout" type="number" min={1} max={10080} step={1}
@@ -559,57 +570,63 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
               <FormField id="mw-custom-tool" label="Other tool (by exact name)" className="min-w-0 flex-1" value={customTool} onChange={(e) => setCustomTool(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomTool(); } }}
                 placeholder="e.g. send_email" disabled={isSubmitting} />
-              <button type="button" onClick={addCustomTool} disabled={!customTool.trim() || isSubmitting}
-                className="shrink-0 px-3 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                Add
-              </button>
-            </div>
-            {extraSelected.map((toolName) => (
-              <FormField
-                key={toolName}
-                id={`mw-extra-tool-${toolName}`}
-                type="checkbox"
-                label={<code className="text-xs">{toolName}</code>}
-                checked
-                onChange={() => toggleTool(toolName)}
-                className="mt-2 flex items-center gap-2"
+              <ButtonApp
+                type="button"
+                label="Add"
+                onClick={addCustomTool}
+                disabled={!customTool.trim() || isSubmitting}
+                variant="primary"
+                size="control"
+                className="shrink-0 self-end"
               />
-            ))}
+            </div>
+            <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-3">
+              {extraSelected.map((toolName) => (
+                <FormField
+                  key={toolName}
+                  id={`mw-extra-tool-${toolName}`}
+                  type="checkbox"
+                  label={toolName}
+                  checked
+                  onChange={() => toggleTool(toolName)}
+                  className="flex items-center gap-2"
+                />
+              ))}
+            </div>
           </div>
 
           {Object.keys(interruptOn).length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <caption className="text-left text-sm font-medium text-gray-700 mb-1">What the reviewer can do</caption>
-                <thead>
-                  <tr className="text-xs text-gray-500">
-                    <th className="text-left font-medium py-1 pr-4">Tool</th>
-                    <th className="font-medium px-2">Approve</th>
-                    <th className="font-medium px-2">Edit arguments</th>
-                    <th className="font-medium px-2">Reject</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(interruptOn).map(([toolName, rule]) => (
-                    <tr key={toolName} className="border-t border-gray-100">
-                      <td className="py-1 pr-4"><code className="text-xs">{toolName}</code></td>
-                      {DECISIONS.map((d) => (
-                        <td key={d} className="text-center px-2">
-                          <FormField
-                            id={`mw-decision-${d}-${toolName}`}
-                            type="checkbox"
-                            checked={rule.allowed_decisions.includes(d)}
-                            onChange={() => toggleDecision(toolName, d)}
-                            disabled={isSubmitting}
-                            ariaLabel={`${d} ${toolName}`}
-                            className="flex justify-center"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              <p className={labelClass}>What the reviewer can do</p>
+              <Table
+                data={Object.entries(interruptOn)}
+                keyExtractor={([toolName]) => toolName}
+                columns={[
+                  {
+                    header: 'Tool',
+                    accessor: ([toolName]) => toolName,
+                    className: 'px-2 py-1 text-left text-xs text-fg dark:text-fg-dark',
+                  },
+                  ...DECISIONS.map((decision) => ({
+                    header: decision === 'edit'
+                      ? 'Edit arguments'
+                      : `${decision[0].toUpperCase()}${decision.slice(1)}`,
+                    headerClassName: 'text-center',
+                    className: 'px-2 py-1 text-center',
+                    render: ([toolName, rule]: InterruptEntry) => (
+                      <FormField
+                        id={`mw-decision-${decision}-${toolName}`}
+                        type="checkbox"
+                        checked={rule.allowed_decisions.includes(decision)}
+                        onChange={() => toggleDecision(toolName, decision)}
+                        disabled={isSubmitting}
+                        ariaLabel={`${decision} ${toolName}`}
+                        className="flex justify-center"
+                      />
+                    ),
+                  })),
+                ]}
+              />
             </div>
           )}
         </div>

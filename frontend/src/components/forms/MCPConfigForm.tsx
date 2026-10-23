@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { FormActions } from '../ui/FormActions';
+import { FormCheckbox, FormField, FormTextArea } from '../ui/FormField';
 import Alert from '../ui/Alert';
+import ButtonApp from '../ui/ButtonApp';
 import { apiService } from '../../services/api';
 
 interface MCPConfigFormData {
@@ -131,79 +133,49 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       {error && <Alert type="error" message={error} />}
 
       {/* Config Name */}
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-          Configuration Name *
-        </label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          placeholder="e.g., Playwright MCP, Filesystem Server"
-          required
-        />
-      </div>
+      <FormField
+        id="name"
+        label="Configuration Name"
+        value={formData.name}
+        onChange={handleChange}
+        placeholder="e.g., Playwright MCP, Filesystem Server"
+        required
+      />
 
       {/* Description */}
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-          Description
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          placeholder="Optional description of this MCP configuration"
-        />
-      </div>
+      <FormTextArea
+        id="description"
+        label="Description"
+        value={formData.description}
+        onChange={handleChange}
+        rows={2}
+        placeholder="Optional description of this MCP configuration"
+      />
 
       {/* Config JSON */}
-      <div>
-        <label htmlFor="config" className="block text-sm font-medium text-gray-700 mb-2">
-          MCP Server Configuration (JSON) *
-        </label>
-        <textarea
-          id="config"
-          name="config"
-          value={formData.config}
-          onChange={handleChange}
-          rows={12}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
-          placeholder='{&#10;  "playwright": {&#10;    "command": "npx",&#10;    "args": ["@playwright/mcp@latest", "--isolated"]&#10;  }&#10;}'
-          required
-        />
-        <p className="mt-2 text-xs text-gray-500">
-          Full MCP server configuration in JSON format. This matches the structure used in your <code className="bg-gray-100 px-1 py-0.5 rounded">mcp.json</code> file.
-        </p>
-      </div>
+      <FormTextArea
+        id="config"
+        label="MCP Server Configuration (JSON)"
+        value={formData.config}
+        onChange={handleChange}
+        rows={12}
+        textareaClassName="font-mono"
+        placeholder={'{\n  "playwright": {\n    "command": "npx",\n    "args": ["@playwright/mcp@latest", "--isolated"]\n  }\n}'}
+        required
+        helpText="Full MCP server configuration in JSON format. This matches the structure used in your mcp.json file."
+      />
 
       {/* SSL Verify */}
-      <div className="flex items-center gap-3">
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={formData.ssl_verify}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, ssl_verify: e.target.checked }))
-            }
-            className="sr-only peer"
-            aria-label="Verify SSL Certificates"
-          />
-          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-        </label>
-        <div>
-          <span className="text-sm font-medium text-gray-700">Verify SSL Certificates</span>
-          <p className="text-xs text-gray-500">
-            Disable this if the MCP server uses a self-signed certificate.
-          </p>
-        </div>
-      </div>
+      <FormCheckbox
+        id="ssl_verify"
+        label="Verify SSL Certificates"
+        checked={formData.ssl_verify}
+        onChange={(e) =>
+          setFormData((prev) => ({ ...prev, ssl_verify: e.target.checked }))
+        }
+        variant="toggle"
+        helpText="Disable this if the MCP server uses a self-signed certificate."
+      />
 
       {/* Test Result */}
       {testResult && (
@@ -258,18 +230,15 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
 
       <div className="flex justify-between items-center pt-4 border-t border-gray-200">
         <div>
-          <button
+          <ButtonApp
             type="button"
+            label={isTesting ? 'Testing...' : 'Test Connection'}
             onClick={handleTestConnection}
             disabled={isTesting || isSubmitting}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border ${
-              isTesting 
-                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {isTesting ? 'Testing...' : 'Test Connection'}
-          </button>
+            loading={isTesting}
+            variant="muted"
+            size="medium"
+          />
         </div>
         <FormActions
           onCancel={onCancel}

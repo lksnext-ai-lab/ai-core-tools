@@ -24,6 +24,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import Title from '../../components/ui/Title';
 import ButtonApp from '../../components/ui/ButtonApp';
 import BackgroundImage from '../../components/ui/BackgroundImage';
+import SidePanel from '../../components/ui/SidePanel';
 import Spinner from '../../components/ui/Spinner';
 
 interface AIService extends Partial<ServiceLifecycleFields> {
@@ -313,19 +314,37 @@ function AIServicesPage() {
 
       {connectionTestModal}
 
+      {/* Service usage side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {usageService && appId && (
-        <ServiceUsageModal
-          kind="ai"
-          scope="app"
-          canNavigate={hasMinRole(AppRole.EDITOR)}
-          appId={Number.parseInt(appId, 10)}
-          serviceId={usageService.id}
-          serviceName={usageService.name}
-          canMove={canEdit}
-          onMoved={() => void forceReload()}
-          onDelete={usageService.deleteRequested ? () => handleDelete(usageService.id) : undefined}
-          onClose={() => setUsageService(null)}
-        />
+        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={() => setUsageService(null)}
+            title="AI Services"
+            headerActions={(
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+                {SERVICE_USAGE_STRINGS.action}
+              </span>
+            )}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <ServiceUsageModal
+              key={usageService.id}
+              variant="panel"
+              kind="ai"
+              scope="app"
+              canNavigate={hasMinRole(AppRole.EDITOR)}
+              appId={Number.parseInt(appId, 10)}
+              serviceId={usageService.id}
+              serviceName={usageService.name}
+              canMove={canEdit}
+              onMoved={() => void forceReload()}
+              onDelete={usageService.deleteRequested ? () => handleDelete(usageService.id) : undefined}
+              onClose={() => setUsageService(null)}
+            />
+          </SidePanel>
+        </div>
       )}
 
       {/* Import Modal */}

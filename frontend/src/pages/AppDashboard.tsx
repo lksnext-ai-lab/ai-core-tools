@@ -24,6 +24,7 @@ import {
 import Speedometer from '../components/ui/Speedometer';
 import Title from '../components/ui/Title';
 import Alert from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
 import ButtonApp from '../components/ui/ButtonApp';
 import ButtonLink from '../components/ui/ButtonLink';
 import BackgroundImage from '../components/ui/BackgroundImage';
@@ -396,7 +397,7 @@ function AppDashboard() {
                 <span className="text-xs text-gray-500 w-10 text-right shrink-0">
                   {agent.request_count ?? 0}
                 </span>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
+                <ChevronRight className="w-3.5 h-3.5 text-fg dark:text-fg-dark shrink-0" />
               </Link>
             );
           })}
@@ -430,12 +431,16 @@ function AppDashboard() {
               </span>
 
               {/* LangSmith */}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium  bg-slate-100 text-slate-600 dark:bg-canvas-alt-dark dark:text-fg-secondary-dark">
-                <span
-                  className={`w-2 h-2 rounded-full ${currentApp.langsmith_configured ? 'bg-green-500' : 'bg-gray-400'}`}
-                />
-                {currentApp.langsmith_configured ? 'LangSmith active' : 'LangSmith not configured'}
-              </span>
+              <Badge
+                label={currentApp.langsmith_configured ? 'LangSmith active' : 'LangSmith not configured'}
+                variant={currentApp.langsmith_configured ? 'success' : 'default'}
+                icon={(
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 rounded-full ${currentApp.langsmith_configured ? 'bg-success dark:bg-success-dark' : 'bg-fg-faint2 dark:bg-fg-faint2-dark'}`}
+                  />
+                )}
+              />
 
               {/* Rate limit */}
               {rateLimitBadge()}

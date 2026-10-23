@@ -93,7 +93,7 @@ export function BreakdownTable({ dimensions, active, onChange, items, loading }:
 export function EmptyRow({ text }: { text: string }) {
   return (
     <tr>
-      <td colSpan={7} className="py-6 text-center text-sm text-gray-400 dark:text-gray-500">{text}</td>
+      <td colSpan={7} className="py-6 text-center text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{text}</td>
     </tr>
   );
 }

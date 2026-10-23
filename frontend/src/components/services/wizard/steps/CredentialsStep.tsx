@@ -75,10 +75,10 @@ function CredentialsStep({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-semibold text-gray-900">
+        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">
           Enter credentials for {descriptor.label}
         </h3>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
           These credentials are used to fetch the available models. They are not
           saved until you confirm the service in the final step.
         </p>
@@ -108,12 +108,13 @@ function CredentialsStep({
               href={descriptor.apiKeyDocUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+              className="text-sm text-bronze  dark:text-bronze-dark inline-block"
             >
-              <ExternalLink className="w-3 h-3" />
+              
               {descriptor.value === 'GoogleCloud'
                 ? 'Open Google Cloud Console'
                 : `Get a ${descriptor.label} key`}
+              <ExternalLink className="w-4 h-4 inline-block ml-1" />
             </a>
           )}
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Bot, Timer } from 'lucide-react';
+import { Bot, MessageCircle, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
@@ -953,18 +953,17 @@ function ChatInterface({
       {/* Chat Interface + File Panel */}
       <div className="flex gap-4 items-start">
         {/* Chat card */}
-        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
+        <div className="flex-1 min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
           {/* Reset button — subtle, top-right corner */}
-          <div className="flex justify-end px-4 pt-3 pb-1">
+          <div className="flex justify-end px-6 pt-3 pb-1">
             <button
               type="button"
               onClick={handleResetConversation}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
-                         text-gray-500 dark:text-gray-400
-                         hover:text-red-600 dark:hover:text-red-400
-                         hover:bg-red-50 dark:hover:bg-red-900/20
-                         border border-transparent hover:border-red-200 dark:hover:border-red-800/40
-                         transition-all duration-150"
+              className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-[13px]
+                         text-fg-secondary dark:text-fg-secondary-dark
+                         hover:text-error dark:hover:text-error-dark
+                         hover:bg-surface-hover dark:hover:bg-surface-hover-dark
+                         transition-colors duration-150"
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -987,9 +986,8 @@ function ChatInterface({
           {/* Messages container */}
           <div
             ref={messagesContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-2 space-y-3
-                       bg-gradient-to-b from-gray-50/50 to-white/30
-                       dark:from-gray-900/50 dark:to-gray-800/30
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-[26px] space-y-[22px]
+                       bg-canvas dark:bg-canvas-dark
                        scroll-smooth"
           >
             {isLoadingHistory ? (
@@ -999,28 +997,19 @@ function ChatInterface({
             ) : (
               <>
                 {messages.length === 0 && !showStreaming && (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-                    <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                      <svg
-                        className="w-6 h-6 text-indigo-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                        Start a conversation with {agentName}
+                  <div className="flex flex-col items-center justify-center h-full py-10 text-center animate-fade-in">
+                    <BackgroundImage
+                      icon={MessageCircle}
+                      size={52}
+                      iconSize={26}
+                      variant="marron"
+                      className="mb-5 rounded-xl"
+                    />
+                    <div className="space-y-2">
+                      <p className="font-display text-[26px] font-normal tracking-tight text-fg dark:text-fg-dark">
+                        Start chatting with {agentName}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      <p className="text-[14.5px] text-fg-secondary dark:text-fg-secondary-dark max-w-[400px] mx-auto">
                         Type a message below to begin
                       </p>
                     </div>
@@ -1035,10 +1024,11 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-end animate-slide-in-right"
+                        className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4"
                       >
-                        <div className="max-w-[85%] lg:max-w-[75%] min-w-0">
-                          <div className="pg-bubble-user">
+                        <BackgroundImage text="YOU" size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <div className="max-w-[82%] min-w-0">
+                          <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                             <MessageContent
                               content={message.content}
                               resolveFileUrl={resolveFileUrl}
@@ -1071,7 +1061,7 @@ function ChatInterface({
                             )}
                           </div>
                           <div className="text-right mt-1">
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
                               {message.timestamp.toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -1087,10 +1077,10 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-start animate-slide-in-left"
+                        className="flex justify-start max-w-[760px] mx-auto animate-slide-in-left"
                       >
-                        <div className="max-w-[85%] lg:max-w-[75%] min-w-0">
-                          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 text-red-700 dark:text-red-300 rounded-2xl rounded-bl-sm px-4 py-3">
+                        <div className="max-w-[82%] min-w-0">
+                          <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                             <div className="flex items-center gap-2 mb-1">
                               <svg
                                 className="w-4 h-4 shrink-0"
@@ -1113,14 +1103,14 @@ function ChatInterface({
                             <p className="text-sm">{message.content}</p>
                           </div>
                           <div className="mt-1">
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
                               {message.timestamp.toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
@@ -1137,12 +1127,12 @@ function ChatInterface({
                   return (
                     <div
                       key={message.id}
-                      className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+                      className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
-                      <div className="flex items-start gap-4 max-w-[90%] lg:max-w-[80%] min-w-0">
-                        <BackgroundImage icon={Bot} size={38} iconSize={18} variant="marron" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                      <div className="flex items-start gap-4 max-w-[82%] min-w-0">
+                        <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                         <div className="min-w-0 flex-1">
-                          <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
+                          <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                             <MessageContent
                               content={stripTimestampLabels(message.content)}
                               resolveFileUrl={resolveFileUrl}
@@ -1168,14 +1158,14 @@ function ChatInterface({
                               );
                             })}
                           <div className="mt-1">
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
                               {message.timestamp.toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
@@ -1244,8 +1234,8 @@ function ChatInterface({
           )}
 
           {/* Input area */}
-          <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
-            <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
+          <div className="w-full max-w-[808px] mx-auto px-4 pb-4 pt-3 flex-shrink-0">
+            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark transition-colors duration-150">
               {/* File attach button */}
               <div>
                 <input
@@ -1261,11 +1251,12 @@ function ChatInterface({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
-                  className="p-2 rounded-xl text-gray-400 dark:text-gray-500
-                             hover:text-indigo-600 dark:hover:text-indigo-400
-                             hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                  className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg
+                             text-fg-tertiary dark:text-fg-tertiary-dark
+                             hover:text-fg dark:hover:text-fg
+                             hover:bg-surface-hover dark:hover:bg-surface-hover-dark
                              disabled:opacity-40 disabled:cursor-not-allowed
-                             transition-all duration-150"
+                             transition-colors duration-150"
                   title="Attach file"
                   aria-label="Attach file"
                 >
@@ -1291,11 +1282,12 @@ function ChatInterface({
                 type="button"
                 onClick={handleMediaButtonClick}
                 disabled={isStreaming}
-                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
-                           hover:text-purple-600 dark:hover:text-purple-400
-                           hover:bg-purple-50 dark:hover:bg-purple-900/20
+                className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                           text-fg-tertiary dark:text-fg-tertiary-dark
+                           hover:text-fg dark:hover:text-fg
+                           hover:bg-surface-hover dark:hover:bg-surface-hover-dark
                            disabled:opacity-40 disabled:cursor-not-allowed
-                           transition-all duration-150"
+                           transition-colors duration-150"
                 title="Attach media (video/audio)"
                 aria-label="Attach media"
               >
@@ -1324,11 +1316,11 @@ function ChatInterface({
                 onPaste={handlePaste}
                 placeholder={approvalBlocksInput ? 'Answer the approval request to continue' : `Message ${agentName}...`}
                 disabled={isStreaming || approvalBlocksInput}
-                className="flex-1 py-2 bg-transparent border-none outline-none resize-none
-                           text-sm text-gray-800 dark:text-gray-100
-                           placeholder:text-gray-400 dark:placeholder:text-gray-500
+                className="flex-1 py-[9px] bg-transparent border-none outline-none resize-none
+                           text-[14.5px] text-fg dark:text-fg-dark
+                           placeholder:text-fg-tertiary dark:placeholder:text-fg-tertiary-dark
                            disabled:opacity-50
-                           focus:outline-none focus:ring-0
+                           focus:outline-none focus:ring-0 focus:border-accent dark:focus:border-accent
                            max-h-40 input-login"
                 rows={1}
                 style={{ minHeight: '1.5rem' }}
@@ -1339,9 +1331,10 @@ function ChatInterface({
                 <button
                   type="button"
                   onClick={abortStream}
-                  className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
-                             hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
-                             active:scale-95 shrink-0"
+                  className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark
+                             text-error dark:text-error-dark
+                             hover:border-error dark:hover:border-error-dark transition-colors duration-150"
                   aria-label="Stop generating"
                   title="Stop generating"
                 >
@@ -1359,7 +1352,10 @@ function ChatInterface({
                   type="button"
                   onClick={handleSendMessage}
                   disabled={!canSend}
-                  className="pg-btn-send shrink-0 !p-2 rounded-xl"
+                  className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
+                             hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
+                             transition-opacity duration-150"
                   aria-label="Send message"
                 >
                   <svg
@@ -1381,7 +1377,7 @@ function ChatInterface({
             </div>
 
             {/* Hint text */}
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">
+            <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
               Press Enter to send, Shift+Enter for new line
             </p>
           </div>

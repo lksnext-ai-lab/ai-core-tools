@@ -22,6 +22,8 @@ export interface OutputChannelForm {
   contentMode: OutputContentMode;
 }
 
+export type ChannelFieldErrors = Partial<Record<'name' | 'contentMode' | 'url' | 'credential', string>>;
+
 export function initialChannelForm(destination: OutputDestination | null): OutputChannelForm {
   return {
     name: destination?.name ?? '',
@@ -35,41 +37,41 @@ export function initialChannelForm(destination: OutputDestination | null): Outpu
   };
 }
 
-export function validateChannelIdentity(form: OutputChannelForm, existing: OutputDestination[], destination: OutputDestination | null): string | null {
-  if (!form.name.trim()) return 'Indica el nombre del canal.';
-  if (form.name.trim().length > 255) return 'El nombre puede tener hasta 255 caracteres.';
+export function validateChannelIdentity(form: OutputChannelForm, existing: OutputDestination[], destination: OutputDestination | null): ChannelFieldErrors | null {
+  if (!form.name.trim()) return { name: 'Indica el nombre del canal.' };
+  if (form.name.trim().length > 255) return { name: 'El nombre puede tener hasta 255 caracteres.' };
   if (existing.some((item) => item.id !== destination?.id && item.name === form.name.trim())) {
-    return 'Ya existe un canal con este nombre.';
+    return { name: 'Ya existe un canal con este nombre.' };
   }
   return null;
 }
 
-export function validateChannelConfiguration(form: OutputChannelForm, destination: OutputDestination | null): string | null {
-  if (!['result', 'excerpt', 'link_only'].includes(form.contentMode)) return 'Selecciona un modo de contenido válido.';
+export function validateChannelConfiguration(form: OutputChannelForm, destination: OutputDestination | null): ChannelFieldErrors | null {
+  if (!['result', 'excerpt', 'link_only'].includes(form.contentMode)) return { contentMode: 'Selecciona un modo de contenido válido.' };
   if (!destination || (form.provider === 'teams_workflow' && form.url.trim())) {
     try {
       const url = new URL(form.url.trim());
       if (url.protocol !== 'https:' || (url.port && url.port !== '443') || url.username || url.password || url.hash) {
-        return 'Usa una URL HTTPS en el puerto 443, sin usuario, contraseña ni fragmento.';
+        return { url: 'Usa una URL HTTPS en el puerto 443, sin usuario, contraseña ni fragmento.' };
       }
     } catch {
-      return 'Indica una URL HTTPS válida.';
+      return { url: 'Indica una URL HTTPS válida.' };
     }
   }
   if (form.provider !== 'webhook' || form.authMode === 'none') return null;
   const credential = form.credential.trim();
   const credentialRequired = !destination || !destination.has_credentials || destination.public_config.auth_mode !== form.authMode;
-  if (!credential) return credentialRequired ? 'Indica la credencial de autenticación del webhook.' : null;
+  if (!credential) return credentialRequired ? { credential: 'Indica la credencial de autenticación del webhook.' } : null;
   if (form.authMode === 'hmac_sha256') {
     try {
       if (!/^[A-Za-z0-9+/]+={0,2}$/.test(credential) || atob(credential).length !== 32 || credential.length % 4 !== 0) {
-        return 'La clave HMAC debe estar en Base64 y contener exactamente 32 bytes.';
+        return { credential: 'La clave HMAC debe estar en Base64 y contener exactamente 32 bytes.' };
       }
     } catch {
-      return 'La clave HMAC debe estar en Base64 y contener exactamente 32 bytes.';
+      return { credential: 'La clave HMAC debe estar en Base64 y contener exactamente 32 bytes.' };
     }
   } else if (credential.length > 4096 || !/^[\x21-\x7e]+$/.test(credential)) {
-    return 'El token debe contener caracteres ASCII imprimibles, sin espacios (máximo 4096).';
+    return { credential: 'El token debe contener caracteres ASCII imprimibles, sin espacios (máximo 4096).' };
   }
   return null;
 }

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { apiService } from '../../services/api';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
 interface BreadcrumbsProps {
@@ -12,113 +13,163 @@ interface Crumb {
   path?: string; // undefined = current page (not clickable)
 }
 
-// Paths that should never show breadcrumbs (no appId context)
-const TOP_LEVEL_PATHS = new Set(['/home', '/marketplace', '/apps', '/about', '/profile']);
+interface NavigationEntry {
+  item: NavigationItem;
+  ancestors: NavigationItem[];
+  path: string;
+}
 
-function buildPathLookup(
-  navigationConfig: NavigationConfig | undefined,
-  appId: string
-): Map<string, string> {
-  const lookup = new Map<string, string>();
+function collectEntries(
+  items: NavigationItem[] | undefined,
+  appId: string,
+  ancestors: NavigationItem[] = []
+): NavigationEntry[] {
+  if (!items) return [];
 
-  const sections: (NavigationItem[] | undefined)[] = [
-    navigationConfig?.mainFeatures,
-    navigationConfig?.appNavigation,
-    navigationConfig?.settingsNavigation,
-    navigationConfig?.settings,
-    navigationConfig?.admin,
-    navigationConfig?.custom,
+  return items.flatMap((item) => [
+    {
+      item,
+      ancestors,
+      path: item.path.replace(':appId', appId),
+    },
+    ...collectEntries(item.children, appId, [...ancestors, item]),
+  ]);
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  new: 'New',
+  edit: 'Edit',
+  playground: 'Playground',
+  detail: 'Detail',
+  runs: 'Runs',
+  files: 'Files',
+  conversation: 'Conversation',
+  general: 'General',
+};
+
+function getSuffixLabels(basePath: string, pathname: string): string[] {
+  const remaining = pathname.slice(basePath.length).split('/').filter(Boolean);
+  const labels = remaining
+    .map((segment) => ACTION_LABELS[segment] ?? (/^\d+$/.test(segment) ? '' : segment))
+    .filter(Boolean);
+
+  if (labels.length > 0) return labels;
+  if (remaining.length === 0) return [];
+
+  return ['/scheduled-tasks', '/mcp-servers', '/sharepoint'].some((suffix) => basePath.endsWith(suffix))
+    ? ['Detail']
+    : ['Edit'];
+}
+
+function findEntry(entries: NavigationEntry[], pathname: string): NavigationEntry | undefined {
+  return entries
+    .filter((entry) => pathname === entry.path || pathname.startsWith(`${entry.path}/`))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+}
+
+function getEntryCrumbs(match: NavigationEntry, pathname: string): Crumb[] {
+  return [
+    ...match.ancestors.map((ancestor) => ({ label: ancestor.name })),
+    { label: match.item.name, path: match.path },
+    ...getSuffixLabels(match.path, pathname).map((label) => ({ label })),
   ];
+}
 
-  for (const section of sections) {
-    if (!section) continue;
-    for (const item of section) {
-      const resolvedPath = item.path.replace(':appId', appId);
-      lookup.set(resolvedPath, item.name);
+function getAdminCrumbs(pathname: string, navigationConfig?: NavigationConfig): Crumb[] | null {
+  if (!pathname.startsWith('/admin/')) return null;
+  const match = findEntry(collectEntries(navigationConfig?.admin, ''), pathname);
+  return [
+    { label: 'Administration' },
+    ...(match ? getEntryCrumbs(match, pathname) : []),
+  ];
+}
+
+function getGlobalCrumbs(pathname: string, navigationConfig?: NavigationConfig): Crumb[] | null {
+  if (pathname !== '/marketplace' && pathname !== '/apps') return null;
+
+  const entry = collectEntries(navigationConfig?.mainFeatures, '')
+    .find((item) => item.path === pathname);
+  const fallbackLabel = pathname === '/apps' ? 'My Apps' : 'Marketplace';
+  return [{ label: entry?.item.name ?? fallbackLabel }];
+}
+
+function getSettingsCrumbs(
+  pathname: string,
+  appId: string,
+  navigationConfig?: NavigationConfig
+): Crumb[] | null {
+  const settingsBase = `/apps/${appId}/settings`;
+  if (pathname !== settingsBase && !pathname.startsWith(`${settingsBase}/`)) return null;
+
+  const crumbs: Crumb[] = [{ label: 'App Settings', path: settingsBase }];
+  if (pathname === settingsBase) return crumbs;
+
+  const entries = [
+    ...collectEntries(navigationConfig?.settingsNavigation, appId),
+    ...collectEntries(navigationConfig?.settings, appId),
+  ];
+  const match = findEntry(entries, pathname);
+  return [
+    ...crumbs,
+    ...(match
+      ? getEntryCrumbs(match, pathname)
+      : getSuffixLabels(settingsBase, pathname).map((label) => ({ label }))),
+  ];
+}
+
+function useAppName(appId?: string): string | null {
+  const [appDetails, setAppDetails] = useState<{ appId: string; name: string } | null>(null);
+
+  useEffect(() => {
+    if (!appId) {
+      setAppDetails(null);
+      return;
     }
-  }
 
-  return lookup;
+    let isCurrent = true;
+    apiService.getApp(Number.parseInt(appId, 10))
+      .then((app) => {
+        if (isCurrent) setAppDetails({ appId, name: app.name });
+      })
+      .catch(() => {
+        if (isCurrent) setAppDetails(null);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [appId]);
+
+  return appDetails && appDetails.appId === appId ? appDetails.name : null;
 }
 
 export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({ navigationConfig }) => {
   const location = useLocation();
   const { appId } = useParams<{ appId?: string }>();
-
+  const appName = useAppName(appId);
   const pathname = location.pathname;
 
-  // No appId: only suppress on known top-level paths
   if (!appId) {
-    if (TOP_LEVEL_PATHS.has(pathname)) return null;
-    // Unknown top-level path outside an app — nothing useful to show
-    return null;
+    const crumbs = getAdminCrumbs(pathname, navigationConfig)
+      ?? getGlobalCrumbs(pathname, navigationConfig);
+    return crumbs ? renderBreadcrumbs(crumbs) : null;
   }
 
-  // Inside an app but on the dashboard itself — header already shows app name
   const dashboardPath = `/apps/${appId}`;
-  if (pathname === dashboardPath) return null;
+  const rootCrumb = { label: appName ?? `App ${appId}`, path: dashboardPath };
+  if (pathname === dashboardPath) return renderBreadcrumbs([rootCrumb]);
 
-  const pathLookup = buildPathLookup(navigationConfig, appId);
+  const settingsCrumbs = getSettingsCrumbs(pathname, appId, navigationConfig);
+  if (settingsCrumbs) return renderBreadcrumbs([rootCrumb, ...settingsCrumbs]);
 
-  const crumbs: Crumb[] = [];
-  const settingsBase = `/apps/${appId}/settings`;
-  const adminPrefixes = ['/admin/users', '/admin/stats', '/admin/settings'];
-
-  // Admin routes: prefix with "Administration"
-  const isAdminRoute = adminPrefixes.some((p) => pathname === p || pathname.startsWith(p + '/'));
-  if (isAdminRoute) {
-    crumbs.push({ label: 'Administration' });
-    const label = pathLookup.get(pathname);
-    if (label) {
-      crumbs.push({ label });
-    }
-    return renderBreadcrumbs(crumbs);
-  }
-
-  // Settings sub-routes: add "App Settings" as parent crumb
-  if (pathname !== settingsBase && pathname.startsWith(settingsBase + '/')) {
-    crumbs.push({ label: 'App Settings', path: settingsBase });
-    const label = pathLookup.get(pathname);
-    if (label) {
-      crumbs.push({ label });
-    } else {
-      // Unknown sub-page inside settings
-      crumbs.push({ label: 'Edit' });
-    }
-    return renderBreadcrumbs(crumbs);
-  }
-
-  // Settings page itself
-  if (pathname === settingsBase) {
-    crumbs.push({ label: 'App Settings' });
-    return renderBreadcrumbs(crumbs);
-  }
-
-  // Direct app-section pages (e.g. /apps/:appId/agents)
-  const directLabel = pathLookup.get(pathname);
-  if (directLabel) {
-    crumbs.push({ label: directLabel });
-    return renderBreadcrumbs(crumbs);
-  }
-
-  // Sub-pages of app sections (e.g. /apps/:appId/agents/new or /apps/:appId/agents/456)
-  // Find the longest matching parent path
-  const parts = pathname.split('/').filter(Boolean);
-  // Walk up one level: remove last segment to get parent
-  const parentPath = '/' + parts.slice(0, parts.length - 1).join('/');
-  const parentLabel = pathLookup.get(parentPath);
-
-  if (parentLabel) {
-    crumbs.push({ label: parentLabel, path: parentPath });
-    const lastSegment = parts[parts.length - 1];
-    // "new" stays as "New", numeric IDs become "Edit"
-    const isNew = lastSegment === 'new';
-    crumbs.push({ label: isNew ? 'New' : 'Edit' });
-    return renderBreadcrumbs(crumbs);
-  }
-
-  // Nothing matched — render nothing
-  return null;
+  const entries = [
+    ...collectEntries(navigationConfig?.appNavigation, appId),
+    ...collectEntries(navigationConfig?.custom, appId),
+  ];
+  const match = findEntry(entries, pathname);
+  return match
+    ? renderBreadcrumbs([rootCrumb, ...getEntryCrumbs(match, pathname)])
+    : null;
 };
 
 function renderBreadcrumbs(crumbs: Crumb[]): React.ReactElement | null {
@@ -136,12 +187,12 @@ function renderBreadcrumbs(crumbs: Crumb[]): React.ReactElement | null {
             {!isLast && crumb.path ? (
               <Link
                 to={crumb.path}
-                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                className="text-[13px] text-fg-tertiary hover:text-fg transition-colors whitespace-nowrap dark:text-fg-tertiary-dark dark:hover:text-fg-dark"
               >
                 {crumb.label}
               </Link>
             ) : (
-              <span className="text-sm text-gray-700 font-medium">
+              <span className="text-[13px] text-fg font-medium whitespace-nowrap dark:text-fg-dark">
                 {crumb.label}
               </span>
             )}

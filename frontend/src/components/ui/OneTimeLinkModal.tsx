@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Copy, Check } from 'lucide-react';
 import Modal from './Modal';
 import Alert from './Alert';
+import FormField from './FormField';
+import { ButtonApp } from './ButtonApp';
 
 export interface OneTimeLinkModalProps {
   readonly isOpen: boolean;
@@ -65,7 +67,7 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={title} size="medium">
+    <Modal isOpen={isOpen} onClose={handleClose} title={title} size="large">
       <div className="space-y-5">
         <Alert
           type="success"
@@ -77,33 +79,27 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
             Set-password link
           </label>
           <div className="flex gap-2">
-            <input
+            <FormField
               ref={inputRef}
               id="onetimelink-value"
               type="text"
               readOnly
               value={link}
-              className="flex-1 min-w-0 px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm font-mono text-gray-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 min-w-0"
+              inputClassName="flex-1 min-w-0 "
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button
-              type="button"
+            <ButtonApp
+              label={copied ? 'Copied' : 'Copy'}
               onClick={handleCopy}
-              aria-label={copied ? 'Link copied to clipboard' : 'Copy link to clipboard'}
-              className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-white text-sm rounded-lg transition-colors"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4" aria-hidden="true" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" aria-hidden="true" />
-                  Copy
-                </>
-              )}
-            </button>
+              ariaLabel={copied ? 'Link copied to clipboard' : 'Copy link to clipboard'}
+              variant="primary"
+              size="medium"
+              icon={copied
+                ? <Check className="w-4 h-4" aria-hidden="true" />
+                : <Copy className="w-4 h-4" aria-hidden="true" />}
+              className="flex-shrink-0"
+            />
           </div>
           {/* Always-rendered so copy status is reliably announced to AT */}
           <p
@@ -129,13 +125,12 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
         />
 
         <div className="flex justify-end border-t border-gray-200 dark:border-slate-700 pt-4">
-          <button
-            type="button"
+          <ButtonApp
+            label="Done"
             onClick={handleClose}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            Done
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       </div>
     </Modal>

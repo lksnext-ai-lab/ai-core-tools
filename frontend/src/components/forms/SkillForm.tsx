@@ -656,7 +656,6 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         rows={12}
         disabled={disabled}
         required
-        textareaClassName="font-mono text-sm"
         helpText="Markdown-formatted instructions loaded when the agent activates this skill."
       />
 

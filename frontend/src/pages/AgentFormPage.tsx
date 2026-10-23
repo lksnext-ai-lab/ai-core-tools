@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Settings, FileText, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
+import { AlertTriangle, Settings, FileText, Lightbulb, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
@@ -1068,10 +1068,11 @@ function AgentFormPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <ButtonCard
-                        variant="selectable"
+                        variant="selectable-check"
                         selected={formData.is_tool}
-                        interactiveChildren
                         ariaLabel="Toggle Tool Agent"
+                        checkboxLabel="Tool Agent"
+                        checkboxHelpText="Can be used by other agents"
                         onClick={() => {
                           if (formData.is_tool && mcpUsage && mcpUsage.mcp_servers.length > 0) {
                             setShowMcpWarning(true);
@@ -1080,19 +1081,6 @@ function AgentFormPage() {
                           }
                         }}
                       >
-                        <FormCheckbox
-                          id="is_tool"
-                          label="Tool Agent"
-                          checked={formData.is_tool}
-                          onChange={(e) => {
-                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
-                              setShowMcpWarning(true);
-                            } else {
-                              handleInputChange('is_tool', e.target.checked);
-                            }
-                          }}
-                          helpText="Can be used by other agents"
-                        />
                         {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
                           <p className="ml-7 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                             Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
@@ -1101,52 +1089,31 @@ function AgentFormPage() {
                       </ButtonCard>
 
                       <ButtonCard
-                        variant="selectable"
+                        variant="selectable-check"
                         selected={formData.has_memory}
-                        interactiveChildren
                         ariaLabel="Toggle Conversational"
+                        checkboxLabel="Conversational"
+                        checkboxHelpText="Maintains conversation memory"
                         onClick={() => handleInputChange('has_memory', !formData.has_memory)}
-                      >
-                        <FormCheckbox
-                          id="has_memory"
-                          label="Conversational"
-                          checked={formData.has_memory}
-                          onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                          helpText="Maintains conversation memory"
-                        />
-                      </ButtonCard>
+                      />
 
                       <ButtonCard
-                        variant="selectable"
+                        variant="selectable-check"
                         selected={formData.enable_code_interpreter}
-                        interactiveChildren
                         ariaLabel="Toggle Code Interpreter"
+                        checkboxLabel="Code Interpreter"
+                        checkboxHelpText="Allows the agent to execute Python code (pandas, openpyxl, numpy)"
                         onClick={() => handleInputChange('enable_code_interpreter', !formData.enable_code_interpreter)}
-                      >
-                        <FormCheckbox
-                          id="enable_code_interpreter"
-                          label="Code Interpreter"
-                          checked={formData.enable_code_interpreter}
-                          onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
-                          helpText="Allows the agent to execute Python code (pandas, openpyxl, numpy)"
-                        />
-                      </ButtonCard>
+                      />
 
                       <ButtonCard
-                        variant="selectable"
+                        variant="selectable-check"
                         selected={formData.skill_router_enabled}
-                        interactiveChildren
                         ariaLabel="Toggle Skill Router"
+                        checkboxLabel="Skill Router"
+                        checkboxHelpText="Let the model pre-select at most 2 skills per turn; off by default."
                         onClick={() => handleInputChange('skill_router_enabled', !formData.skill_router_enabled)}
-                      >
-                        <FormCheckbox
-                          id="skill_router_enabled"
-                          label="Skill Router"
-                          checked={formData.skill_router_enabled}
-                          onChange={(e) => handleInputChange('skill_router_enabled', e.target.checked)}
-                          helpText="Let the model pre-select at most 2 skills per turn; off by default."
-                        />
-                      </ButtonCard>
+                      />
 
                       {formData.enable_code_interpreter && (
                         <div className="md:col-span-2">
@@ -1519,21 +1486,13 @@ function AgentFormPage() {
                       return (
                         <ButtonCard
                           key={tool.agent_id}
-                          variant="selectable"
+                          variant="selectable-check"
                           selected={selected}
-                          interactiveChildren
                           ariaLabel={`Toggle ${tool.name}`}
+                          checkboxLabel={tool.name}
                           onClick={() => handleToolToggle(tool.agent_id)}
                           className="w-full"
-                        >
-                          <FormCheckbox
-                            id={`tool-${tool.agent_id}`}
-                            label={tool.name}
-                            checked={selected}
-                            onChange={() => handleToolToggle(tool.agent_id)}
-                            className="flex-1"
-                          />
-                        </ButtonCard>
+                        />
                       );
                     })}
                   </div>
@@ -1546,56 +1505,40 @@ function AgentFormPage() {
                   variant="white"
                   icon={Plug}
                   titulo="MCP Servers"
-                  headerExtra={<Badge variant="primary" label="Model Context Protocol" />}
+                  headerExtra={(
+                    <div className="flex items-center gap-3">
+                      {formData.mcp_config_ids.length > 0 && (
+                        <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                          <span className="font-medium">{formData.mcp_config_ids.length}</span>{' '}
+                          MCP server{formData.mcp_config_ids.length === 1 ? '' : 's'} selected
+                        </span>
+                      )}
+                      <Badge variant="primary" label="Model Context Protocol" />
+                    </div>
+                  )}
                 >
                   {agent.mcp_configs.length > 0 ? (
                     <>
-                      <div className="mb-4 p-4 bg-purple-50 rounded-xl">
-                        <div className="flex items-start">
-                          <Info className="w-5 h-5 text-purple-500 mr-3 shrink-0" />
-                          <div>
-                            <p className="text-sm text-purple-800 font-medium">What are MCP Servers?</p>
-                            <p className="text-xs text-purple-700 mt-1">
-                              MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources. 
-                              Select the servers this agent should have access to.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      <Alert
+                        type="info"
+                        title="What are MCP Servers?"
+                        message={'MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources.\nSelect the servers this agent should have access to.'}
+                        className="mb-4"
+                      />
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agent.mcp_configs.map((mcp) => (
-                          <div
+                          <ButtonCard
                             key={mcp.config_id}
-                            className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${
-                              formData.mcp_config_ids.includes(mcp.config_id)
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <FormCheckbox
-                                id={`mcp-${mcp.config_id}`}
-                                label={mcp.name}
-                                checked={formData.mcp_config_ids.includes(mcp.config_id)}
-                                onChange={() => handleMCPToggle(mcp.config_id)}
-                                className="flex-1"
-                              />
-                              <div className={`w-2 h-2 rounded-full ${
-                                formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
-                              }`} />
-                            </div>
-                          </div>
+                            variant="selectable-check"
+                            selected={formData.mcp_config_ids.includes(mcp.config_id)}
+                            ariaLabel={`Toggle ${mcp.name}`}
+                            checkboxLabel={mcp.name}
+                            onClick={() => handleMCPToggle(mcp.config_id)}
+                            className="w-full"
+                          />
                         ))}
                       </div>
-                      
-                      {formData.mcp_config_ids.length > 0 && (
-                        <div className="mt-4 p-4 bg-purple-50 rounded-xl">
-                          <p className="text-sm text-purple-800">
-                            <span className="font-medium">{formData.mcp_config_ids.length}</span> MCP server{formData.mcp_config_ids.length === 1 ? '' : 's'} selected
-                          </p>
-                        </div>
-                      )}
                     </>
                   ) : (
                     <div className="text-center py-8">

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { BarChart2 } from 'lucide-react';
 import FieldManager from './FieldManager';
 import { FormActions } from '../ui/FormActions';
 import Alert from '../ui/Alert';
 import { randomId } from '../../utils/randomId';
+import FormField, { FormTextArea } from '../ui/FormField';
 
 interface FieldDefinition {
   name: string;
@@ -145,40 +145,25 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       {/* Basic Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Name */}
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-            Data Structure Name *
-          </label>
-          <input
-            type="text"
-            id="name"
-            name="name"
-            value={formData.name}
-            onChange={handleBasicFieldChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
-            placeholder="e.g., User, Product, Address"
-            required
-          />
-          <p className="mt-2 text-sm text-gray-500">
-            Use PascalCase for structure names (e.g., UserProfile, ProductInfo)
-          </p>
-        </div>
+        <FormField
+          label="Data Structure Name"
+          id="name"
+          value={formData.name}
+          onChange={handleBasicFieldChange}
+          required
+          placeholder="e.g., User, Product, Address"
+          helpText="Use PascalCase for structure names (e.g., UserProfile, ProductInfo)"
+        />
 
         {/* Description */}
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-            Description
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            value={formData.description}
-            onChange={handleBasicFieldChange}
-            rows={4}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base resize-none"
-            placeholder="Describe what this data structure represents..."
-          />
-        </div>
+        <FormTextArea
+          label="Description"
+          id="description"
+          value={formData.description}
+          onChange={handleBasicFieldChange}
+          rows={4}
+          placeholder="Describe what this data structure represents..."
+        />
       </div>
 
       {/* Fields Management */}
@@ -192,33 +177,27 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       </div>
 
       {/* Info Box */}
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <BarChart2 className="w-4 h-4 text-purple-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-purple-800">
-              About Data Structures
-            </h3>
-            <div className="mt-2 text-sm text-purple-700">
-              <p className="mb-2">
-                Data structures define the schema for structured data extraction and processing. 
-                They generate Pydantic models that validate and parse AI agent outputs.
-              </p>
-              <div>
-                <strong>Use cases:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Define agent output schemas for consistent responses</li>
-                  <li>Create metadata structures for document processing</li>
-                  <li>Build complex nested data models with references</li>
-                  <li>Validate and type-check extracted information</li>
-                </ul>
-              </div>
+      <Alert
+        type="info"
+        title="About Data Structures"
+        message={
+          <>
+            <p className="mb-2">
+              Data structures define the schema for structured data extraction and processing.
+              They generate Pydantic models that validate and parse AI agent outputs.
+            </p>
+            <div>
+              <strong>Use cases:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>Define agent output schemas for consistent responses</li>
+                <li>Create metadata structures for document processing</li>
+                <li>Build complex nested data models with references</li>
+                <li>Validate and type-check extracted information</li>
+              </ul>
             </div>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Form Actions */}
       <FormActions

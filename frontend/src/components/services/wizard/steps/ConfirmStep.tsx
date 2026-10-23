@@ -1,7 +1,7 @@
 import { Plug } from 'lucide-react';
 import { FormCheckbox } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
-import { getProviderBadgeColor } from '../../../ui/providerBadges';
+import { ProviderBadge } from '../../../ui/Badge';
 import { getProviderDescriptor } from '../providers';
 import type {
   ProviderModelInfo,
@@ -10,6 +10,7 @@ import type {
 import type { CredentialsState } from './CredentialsStep';
 import type { TestConnectionResult } from '../../serviceApi';
 import { ButtonApp } from '../../../ui/ButtonApp';
+import { CardApp } from '../../../..';
 
 interface ConfirmStepProps {
   readonly kind: ServiceKind;
@@ -49,36 +50,30 @@ function ConfirmStep({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-semibold text-gray-900">Review and save</h3>
-        <p className="text-sm text-gray-600 mt-1">
+        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">Review and save</h3>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
           The service will be saved with the following configuration.
         </p>
       </div>
 
-      <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 bg-white">
+      <CardApp variant="white" className="divide-gray-200">
         <Row label="Name">
-          <span className="text-sm text-gray-900 font-medium">{autoName}</span>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark font-medium">{autoName}</span>
+          <p className="text-xs text-fg dark:text-fg-dark mt-0.5">
             Auto-generated. You can rename it later from the service editor.
           </p>
         </Row>
 
         <Row label="Provider">
-          <span
-            className={`inline-flex text-xs font-medium px-2 py-1 rounded ${getProviderBadgeColor(
-              provider,
-            )}`}
-          >
-            {descriptor?.label || provider}
-          </span>
+          <ProviderBadge provider={provider} label={descriptor?.label || provider} />
         </Row>
 
         {kind !== 'sandbox' && (
           <Row label="Model">
             <div>
-              <p className="text-sm font-medium text-gray-900">{modelLabel}</p>
+              <p className="text-sm font-medium text-secondary dark:text-secondary-dark">{modelLabel}</p>
               {modelId && modelId !== modelLabel && (
-                <p className="text-xs font-mono text-gray-500 mt-0.5">{modelId}</p>
+                <p className="text-xs font-mono text-fg dark:text-fg-dark mt-0.5">{modelId}</p>
               )}
               {model && <ModelCapabilityChips model={model} />}
             </div>
@@ -87,7 +82,7 @@ function ConfirmStep({
 
         {credentials.base_url && (
           <Row label={provider === 'GoogleCloud' ? 'Project ID' : 'Endpoint'}>
-            <span className="text-sm text-gray-700 font-mono break-all">
+            <span className="text-sm text-fg dark:text-fg-dark font-mono break-all">
               {credentials.base_url}
             </span>
           </Row>
@@ -95,7 +90,7 @@ function ConfirmStep({
 
         {credentials.api_version && (
           <Row label={provider === 'GoogleCloud' ? 'Region' : 'API version'}>
-            <span className="text-sm text-gray-700 font-mono">
+            <span className="text-sm text-fg dark:text-fg-dark font-mono">
               {credentials.api_version}
             </span>
           </Row>
@@ -103,30 +98,30 @@ function ConfirmStep({
 
         {credentials.image && (
           <Row label="Container image">
-            <span className="text-sm text-gray-700 font-mono break-all">{credentials.image}</span>
+            <span className="text-sm text-fg dark:text-fg-dark font-mono break-all">{credentials.image}</span>
           </Row>
         )}
 
         {credentials.target && (
           <Row label="Target">
-            <span className="text-sm text-gray-700 font-mono">{credentials.target}</span>
+            <span className="text-sm text-fg dark:text-fg-dark font-mono">{credentials.target}</span>
           </Row>
         )}
 
         {credentials.template && (
           <Row label="Template">
-            <span className="text-sm text-gray-700 font-mono">{credentials.template}</span>
+            <span className="text-sm text-fg dark:text-fg-dark font-mono">{credentials.template}</span>
           </Row>
         )}
 
         {descriptor?.apiKey !== 'none' && credentials.api_key && (
           <Row label="API key">
-            <span className="text-sm font-mono text-gray-700">
+            <span className="text-sm font-mono text-fg dark:text-fg-dark">
               {maskKey(credentials.api_key)}
             </span>
           </Row>
         )}
-      </div>
+      </CardApp>
 
       {showSupportsVideo && (
         <FormCheckbox
@@ -170,8 +165,8 @@ function TestConnectionPanel({
     <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-gray-900">Test connection</p>
-          <p className="text-xs text-gray-500">
+          <p className="text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark">Test connection</p>
+          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
             Make a small request against the provider with these credentials
             to verify everything is set up correctly.
           </p>

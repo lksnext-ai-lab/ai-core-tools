@@ -48,7 +48,7 @@ function StepperHeader({
   const lineColors: Record<StepStatus, string> = {
     pending: 'bg-line dark:bg-line-dark',
     active: 'bg-line dark:bg-line-dark',
-    completed: 'bg-success dark:bg-success-dark',
+    completed: 'bg-fg dark:bg-fg-dark',
     error: 'bg-error dark:bg-error-dark',
     skipped: 'bg-line dark:bg-line-dark',
   };

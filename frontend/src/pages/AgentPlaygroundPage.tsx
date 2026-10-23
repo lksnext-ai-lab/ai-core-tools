@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Gamepad2, Link2, Pencil, ArrowLeft } from 'lucide-react';
+import { Pencil, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
@@ -10,8 +10,10 @@ import ConversationSidebar from '../components/playground/ConversationSidebar';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
 import { ButtonApp } from '../components/ui/ButtonApp';
+import { Tabs } from '../components/ui/Tabs';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import type { ServiceLifecycleWarning } from '../types/services';
+import { Title } from '../components/ui/Title';
 
 interface Agent {
   agent_id: number;
@@ -188,32 +190,24 @@ function AgentPlaygroundPage() {
   const isOCRAgent = agent.type === 'ocr_agent';
 
   const tabs = [
-    { id: 'playground', label: 'Playground', icon: <Gamepad2 className="w-4 h-4" /> },
-    { id: 'api', label: 'API Examples', icon: <Link2 className="w-4 h-4" /> },
+    { id: 'playground', label: 'Playground' },
+    { id: 'api', label: 'API Examples' },
   ];
 
   return (
     <div className="flex flex-col gap-3 h-[calc(100vh-4rem)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Agent Playground</h1>
-        </div>
+        <Title variant="titSecundario" titulo="Agent Playground" />
         <div className="flex items-center space-x-3">
-          <button
+          <ButtonApp
+            label="Edit Prompts"
+            variant="primary"
+            size="medium"
+            icon={<Pencil className="w-4 h-4" />}
             onClick={() => setIsPromptModalOpen(true)}
-            className="pg-glass px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
-          >
-            <Pencil className="w-4 h-4" />
-            <span>Edit Prompts</span>
-          </button>
-          <button
-            onClick={handleBack}
-            className="pg-glass px-4 py-2 rounded-lg text-gray-600 dark:text-gray-300 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Agents</span>
-          </button>
+          />
+          
         </div>
       </div>
 
@@ -252,22 +246,7 @@ function AgentPlaygroundPage() {
 
       {/* Tab Navigation + Content */}
       <div className="flex flex-col flex-1 min-h-0 gap-2">
-        {/* Tab bar */}
-        <div className="pg-glass rounded-xl px-2 py-1.5 flex items-center gap-1 flex-shrink-0">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-white/80 dark:bg-gray-700/80 text-indigo-600 dark:text-indigo-300 border-b-2 border-indigo-500 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white/40 dark:hover:bg-gray-700/40'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">{tab.icon}{tab.label}</span>
-            </button>
-          ))}
-        </div>
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="flex-shrink-0" />
 
         {/* Tab Content */}
         <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl">

@@ -4,7 +4,6 @@ import {
   Target,
   Pencil,
   Trash2,
-  Lightbulb,
   Upload,
   ArrowDownToLine,
   ToggleLeft,
@@ -15,8 +14,8 @@ import SkillForm, { type SkillFormSubmitData } from '../../components/forms/Skil
 import { apiService } from '../../services/api';
 import ActionDropdown, { type ActionItem } from '../../components/ui/ActionDropdown';
 import { LoadingState } from '../../components/ui/LoadingState';
-import { ErrorState } from '../../components/ui/ErrorState';
 import Alert from '../../components/ui/Alert';
+import { Badge } from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
@@ -24,6 +23,8 @@ import { MESSAGES, errorMessage } from '../../constants/messages';
 import type { Skill } from '../../core/types';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
+import Title from '../../components/ui/Title';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 function SystemSkillsPage() {
   const confirm = useConfirm();
@@ -200,17 +201,21 @@ function SystemSkillsPage() {
     }
   }
 
-  if (isLoading) return <LoadingState message="Loading system skills..." />;
-  if (error) return <ErrorState error={error} onRetry={fetchSkills} />;
+  if (isLoading) return(
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <Title variant="titPrincipal" titulo="System Skills" subtitulo="Shared prompt-driven specializations, including disabled ones, available to every app." />
+          </div>
+          <LoadingState message="Loading system skills..." />
+        </div>
+      ) ;
+  if (error) return;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">System Skills</h1>
-          <p className="text-gray-600">
-            Shared prompt-driven specializations, including disabled ones, available to every app.
-          </p>
+          <Title variant="titPrincipal" titulo="System Skills" subtitulo="Shared prompt-driven specializations, including disabled ones, available to every app." />
         </div>
         <div className="flex gap-2">
           <ButtonApp
@@ -220,13 +225,12 @@ function SystemSkillsPage() {
             variant="secondary"
             icon={<Upload className="w-4 h-4" />}
           />
-          <button
-            type="button"
+          <ButtonApp
+            label='Add service'
             onClick={handleOpenCreate}
-            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700"
-          >
-            Add skill
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       </div>
 
@@ -249,22 +253,19 @@ function SystemSkillsPage() {
         />
       )}
 
-      <div className="bg-white shadow rounded-lg overflow-x-auto overflow-visible">
+      <div className="">
         <Table
           data={skills}
           keyExtractor={(skill) => skill.skill_id.toString()}
-          rowClassName={(skill) =>
-            skill.is_enabled === false ? 'bg-gray-50 hover:bg-gray-100' : 'hover:bg-gray-50'
-          }
           columns={[
             {
               header: 'Name',
               render: (skill) => (
                 <div className="flex items-center">
-                  <Target className="w-5 h-5 text-purple-400 mr-3 shrink-0" aria-hidden="true" />
+                  <BackgroundImage icon={Target} variant="marron" className="mr-2"/>
                   <button
                     type="button"
-                    className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                    className="text-sm font-medium text-fg dark:text-fg-dark text-left"
                     onClick={() => { void handleOpenEdit(skill); }}
                   >
                     {skill.name}
@@ -275,8 +276,8 @@ function SystemSkillsPage() {
             {
               header: 'Description',
               render: (skill) => (
-                <div className="text-sm text-gray-600 max-w-xs truncate">
-                  {skill.description || <span className="text-gray-400 italic">No description</span>}
+                <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs truncate">
+                  {skill.description || "No description"}
                 </div>
               ),
               className: 'px-6 py-4',
@@ -288,19 +289,12 @@ function SystemSkillsPage() {
                 return (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {skill.source === 'yaml' && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                        Seeded
-                      </span>
+                      <Badge label="Seeded" variant="default" />
                     )}
-                    <span
-                      className={
-                        isEnabled
-                          ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200'
-                          : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-200'
-                      }
-                    >
-                      {isEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
+                    <Badge
+                      label={isEnabled ? 'Enabled' : 'Disabled'}
+                      variant={isEnabled ? 'success' : 'error'}
+                    />
                   </div>
                 );
               },
@@ -309,7 +303,7 @@ function SystemSkillsPage() {
             {
               header: 'Created',
               render: (skill) => (skill.created_at ? new Date(skill.created_at).toLocaleDateString() : 'N/A'),
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500',
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
             },
             {
               header: 'Actions',
@@ -374,24 +368,17 @@ function SystemSkillsPage() {
         />
       </div>
 
-      {/* Info Box */}
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Lightbulb className="w-5 h-5 text-purple-400" aria-hidden="true" />
-          </div>
-          <div className="ml-3">
-            <h2 className="text-sm font-medium text-purple-800">About system skills</h2>
-            <div className="mt-2 text-sm text-purple-700">
-              <p>
-                System skills are shared across every app. Skills marked <strong>Seeded</strong> come from
-                <code className="bg-purple-100 px-1 rounded ml-1">system_defaults.yaml</code> and are
-                recreated on startup — they can&apos;t be deleted, only disabled.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title="About system skills"
+        message={(
+          <p>
+            System skills are shared across every app. Skills marked <strong>Seeded</strong> come from
+            <code className="px-1 rounded ml-1 font-mono">system_defaults.yaml</code> and are
+            recreated on startup — they can&apos;t be deleted, only disabled.
+          </p>
+        )}
+      />
 
       {/* Create/Edit Modal */}
       <Modal

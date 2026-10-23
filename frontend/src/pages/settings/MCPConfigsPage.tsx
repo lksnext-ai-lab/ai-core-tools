@@ -539,12 +539,13 @@ function MCPConfigsPage() {
             )}
             {!testingConfigId && (
               <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setIsTestModalOpen(false)}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded"
-                >
-                  Close
-                </button>
+                <ButtonApp
+                              label="Close"
+                              type="button"
+                              onClick={() => setIsTestModalOpen(false)}
+                              variant="secondary"
+                              size="medium"
+                            />
               </div>
             )}
           </div>

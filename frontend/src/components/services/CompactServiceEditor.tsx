@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { FormField, FormCheckbox } from '../ui/FormField';
 import { FormActions } from '../ui/FormActions';
@@ -189,10 +189,10 @@ function CompactServiceEditor({
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <Alert type="error" message={error} />}
 
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+          <div className="rounded-md border border-line-strong dark:border-line-strong-dark bg-canvas-alt dark:bg-canvas-alt-dark p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase font-semibold text-gray-500 tracking-wide">
+                <p className="text-[11px] uppercase font-semibold text-bronze-dark tracking-wide">
                   Provider
                 </p>
                 <span
@@ -205,10 +205,10 @@ function CompactServiceEditor({
               </div>
               {!isSandbox && (
                 <div className="text-right">
-                  <p className="text-[11px] uppercase font-semibold text-gray-500 tracking-wide">
+                  <p className="text-[11px] uppercase font-semibold text-bronze-dark tracking-wide">
                     Model
                   </p>
-                  <p className="text-sm font-mono text-gray-800 mt-1">
+                  <p className="text-sm font-mono text-fg dark:text-fg-dark mt-1">
                     {aiService?.model_name}
                   </p>
                 </div>
@@ -216,9 +216,11 @@ function CompactServiceEditor({
               <button
                 type="button"
                 onClick={() => setShowWizard(true)}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                className="text-sm font-medium text-bronze  dark:text-bronze-dark inline-block items-center gap-1"
               >
-                <Pencil className="w-3.5 h-3.5" /> {isSandbox ? 'Edit configuration' : 'Change model'}
+                 {isSandbox ? 'Edit configuration' : 'Change model'}
+                 <ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+
               </button>
             </div>
           </div>
@@ -233,35 +235,26 @@ function CompactServiceEditor({
           />
 
           {descriptor?.apiKey !== 'none' && (
-            <div>
-              <label
-                htmlFor="api_key"
-                className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
-              >
+            <FormField
+              id="api_key"
+              type="password"
+              label={<>
                 {apiKeyLabel}
                 {descriptor?.apiKey === 'optional' && (
                   <span className="text-gray-400 font-normal"> (optional)</span>
                 )}
-              </label>
-              <input
-                id="api_key"
-                name="api_key"
-                type="password"
-                autoComplete="off"
-                data-lpignore="true"
-                value={apiKey}
-                onChange={(e) => {
-                  setApiKey(e.target.value);
-                  setApiKeyChanged(true);
-                }}
-                onFocus={handleApiKeyFocus}
-                placeholder={descriptor?.apiKeyPlaceholder}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent"
-              />
-              <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                Leave the masked value to keep the existing key.
-              </p>
-            </div>
+              </>}
+              autoComplete="off"
+              data-lpignore="true"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setApiKeyChanged(true);
+              }}
+              onFocus={handleApiKeyFocus}
+              placeholder={descriptor?.apiKeyPlaceholder}
+              helpText="Leave the masked value to keep the existing key."
+            />
           )}
 
           {descriptor?.needsBaseUrl && (

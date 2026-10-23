@@ -10,10 +10,13 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { Badge, StatusBadge, type StatusType } from '../../components/ui/Badge';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
+import { Title } from '../../components/ui/Title';
+import { CardApp } from '../..';
 
 interface Collaborator {
   id: number;
@@ -256,16 +259,16 @@ function CollaborationPage() {
     settingsCache.setCollaborators(appId, newCollaborators);
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusType = (status: string): StatusType => {
     switch (status.toLowerCase()) {
       case 'accepted':
-        return 'bg-green-100 text-green-800';
+        return 'active';
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'pending';
       case 'declined':
-        return 'bg-red-100 text-red-800';
+        return 'error';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'inactive';
     }
   };
 
@@ -304,20 +307,19 @@ function CollaborationPage() {
   let inviteCollaboratorSection;
   if (canManage) {
     inviteCollaboratorSection = (
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900 flex items-center">
-            <Users className="w-5 h-5 text-indigo-400 mr-2" />
+      <CardApp className="px-6 py-4">
+        <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
+            <Users className="w-5 h-5 text-bronze dark:text-bronze-dark mr-2" />
             {' '}Invite Collaborator
           </h3>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
             Invite users to collaborate on this app. They'll receive an email invitation.
           </p>
-        </div>
-        <div className="p-6">
+      
+        <div className="py-6">
           <CollaborationForm onSubmit={handleInviteUser} />
         </div>
-      </div>
+      </CardApp>
     );
   } else {
     inviteCollaboratorSection = (
@@ -333,28 +335,24 @@ function CollaborationPage() {
     
       <div className="p-6 space-y-8">
         {/* Header */}
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Collaboration</h2>
-          <p className="text-gray-600">Manage team access and permissions for this app</p>
-        </div>
+        <Title variant='titSecundario' titulo='Collaboration' subtitulo='Manage team access and permissions for this app'/>
 
         {!canManage && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
         {inviteCollaboratorSection}
 
         {/* Current Collaborators */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <Handshake className="w-5 h-5 text-indigo-400 mr-2" />
-              Team Members ({allMembers.length})
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {canManage ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
-            </p>
-          </div>
+        <div>
+          <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
+            <Handshake className="w-5 h-5 text-bronze dark:text-bronze-dark mr-2" />
+            Team Members ({allMembers.length})
+          </h3>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
+            {canManage ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
+          </p>
           
           <Table
+            className="mt-4"
             data={allMembers}
             keyExtractor={(member) => member.id.toString()}
             columns={[
@@ -363,23 +361,23 @@ function CollaborationPage() {
                 render: (member) => (
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-8 w-8">
-                      <div className={`h-8 w-8 rounded-full ${member.role === 'owner' ? 'bg-blue-600' : 'bg-indigo-500'} flex items-center justify-center`}>
-                        <span className="text-sm font-medium text-white">
+                      <div className={`h-8 w-8 rounded-full bg-ink-on-dark dark:bg-ink-on flex items-center justify-center`}>
+                        <span className="text-sm font-medium text-ink-on dark:text-ink-on-dark">
                           {member.user_email.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     </div>
                     <div className="ml-3">
-                      <div className="text-sm font-medium text-gray-900 flex items-center">
+                      <div className="text-sm font-medium text-fg dark:text-fg-dark flex items-center">
                         {member.user_name || member.user_email}
                         {user?.user_id === member.user_id && (
-                          <span className={`ml-2 text-xs font-semibold ${member.role === 'owner' ? 'text-blue-600' : 'text-indigo-600'}`}>
+                          <span className="ml-2 text-xs font-semibold text-fg dark:text-fg-dark">
                             (You)
                           </span>
                         )}
                       </div>
                       {member.user_name && (
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
                           {member.user_email}
                         </div>
                       )}
@@ -392,13 +390,17 @@ function CollaborationPage() {
                 render: (member) => (
                   <div className="flex items-center gap-1">
                     {member.role === 'owner' ? (
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
-                        <Crown className="w-3 h-3 mr-1" /> Owner
-                      </span>
+                      <Badge
+                        label="Owner"
+                        variant="secondary"
+                        icon={<Crown className="w-3 h-3" />}
+                      />
                     ) : (
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
-                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                      </span>
+                      <Badge
+                        label={member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                        variant="custom"
+                        className={getRoleBadge(member.role)}
+                      />
                     )}
                     {member.platform_role === 'viewer' && member.role !== 'viewer' && member.role !== 'owner' && (
                       <span className="relative group inline-flex items-center">
@@ -416,13 +418,12 @@ function CollaborationPage() {
                 header: 'Status',
                 render: (member) => (
                   member.role === 'owner' ? (
-                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                      Active
-                    </span>
+                    <StatusBadge status="active" customLabel="Active" />
                   ) : (
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(member.status)}`}>
-                      {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                    </span>
+                    <StatusBadge
+                      status={getStatusType(member.status)}
+                      customLabel={member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                    />
                   )
                 )
               },
@@ -430,15 +431,13 @@ function CollaborationPage() {
                 header: 'Since',
                 render: (member) => (
                   member.role === 'owner' ? (
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                       App creator
                     </div>
                   ) : (
                     <>
-                      <div>
-                        {new Date(member.invited_at).toLocaleDateString()}
-                      </div>
-                      <div className="text-xs">
+                      <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                        {new Date(member.invited_at).toLocaleDateString()}<br />
                         by {member.invited_by_name || 'Unknown'}
                       </div>
                     </>
@@ -480,7 +479,7 @@ function CollaborationPage() {
                 className: 'px-6 py-4 whitespace-nowrap text-sm font-medium'
               }] : [])
             ]}
-            rowClassName={(member) => member.role === 'owner' ? "bg-blue-50" : "hover:bg-gray-50"}
+            rowClassName={(member) => member.role === 'owner' ? "bg-surface-tint dark:bg-surface-tint-dark" : ""}
             emptyIcon={<Users className="w-10 h-10 text-gray-300" />}
             emptyMessage="No Collaborators Yet"
             emptySubMessage={canManage 

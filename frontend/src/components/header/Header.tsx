@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { Moon, Search, Sun } from 'lucide-react';
+import { ChevronRight, Moon, Search, Sun } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { useUser } from '../../contexts/UserContext';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
@@ -22,7 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
   children,
   title,
   logoUrl,
-  organization
+  organization = { name: 'LKS NEXT', logo: '/LKS-NEXT-02.png' }
 }) => {
   const { appId } = useParams();
   const { user } = useUser();
@@ -35,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   const location = useLocation();
   // Header search is visual only for now (design v3 placeholder) — shown on Home, no behaviour.
   const isHome = location.pathname === '/home';
+  const hasBreadcrumb = Boolean(appId) || ['/apps', '/marketplace'].includes(location.pathname) || location.pathname.startsWith('/admin/');
 
   const getUserInitials = (name?: string, email?: string) => {
     if (name) {
@@ -78,26 +79,23 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="w-px h-[22px] bg-line flex-shrink-0 dark:bg-line-dark" />
 
       <div className="flex-1 min-w-0 flex items-center justify-between pl-4 pr-3 gap-4">
-        {/* Organization chip = breadcrumb level 1; a "›" separates it from the page crumbs when both exist */}
-        <div className="flex-1 min-w-0 flex items-center gap-[9px] [&>a+div]:before:content-['›'] [&>a+div]:before:text-fg-faint2 dark:[&>a+div]:before:text-fg-faint2-dark">
+        {/* Organization chip = breadcrumb level 1 */}
+        <div className="flex-1 min-w-0 flex items-center gap-2">
           {organization && (
             <Link
               to="/home"
               title={`${organization.name} · Organization`}
-              className="flex-shrink-0 flex items-center gap-[9px] py-1 pl-1 pr-2 rounded-lg hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark"
+              className="flex-shrink-0 flex items-center gap-1 py-1 pl-1 pr-2 rounded-lg hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark"
             >
-              {organization.logo ? (
-                <img src={organization.logo} alt="" className="w-[26px] h-[26px] rounded-full object-contain flex-shrink-0" />
-              ) : (
-                <span aria-hidden="true" className="w-[26px] h-[26px] flex-shrink-0 rounded-full bg-ink text-ink-on font-display text-[11px] font-medium flex items-center justify-center dark:bg-ink-dark dark:text-ink-on-dark">
-                  {organization.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                </span>
-              )}
+              <img src={organization.logo || '/LKS-NEXT-02.png'} alt="" className="w-[26px] h-[26px] object-contain flex-shrink-0" />
               <span className="hidden md:flex flex-col items-start leading-[1.12]">
                 <span className="text-[13px] font-medium text-fg whitespace-nowrap dark:text-fg-dark">{organization.name}</span>
                 <span className="text-[9px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">Organization</span>
               </span>
             </Link>
+          )}
+          {hasBreadcrumb && children && (
+            <ChevronRight size={12} className="flex-shrink-0 text-gray-400" aria-hidden="true" />
           )}
           {children}
         </div>

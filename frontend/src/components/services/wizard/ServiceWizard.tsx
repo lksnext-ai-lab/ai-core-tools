@@ -280,7 +280,7 @@ function ServiceWizard({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="xlarge">
-      <div className="flex flex-col" style={{ minHeight: '500px' }}>
+      <div className="flex flex-col">
         <StepperContainer
           steps={steps}
           currentStep={currentStep}

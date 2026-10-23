@@ -6,6 +6,7 @@ import type { LocalUserCreated } from '../../services/admin';
 import { ApiError } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
 import { FormActions } from './FormActions';
+import FormField from './FormField';
 
 export interface CreateLocalUserModalProps {
   readonly isOpen: boolean;
@@ -117,46 +118,38 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
           )}
         </div>
 
-        <div>
-          <label htmlFor="create-user-email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
-            Email <span aria-hidden="true">*</span>
-          </label>
-          <input
-            ref={emailInputRef}
-            id="create-user-email"
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setEmailTaken(false); }}
-            required
-            aria-required="true"
-            aria-invalid={emailTaken || (formError !== null && (!email.trim() || !EMAIL_PATTERN.test(email.trim())))}
-            aria-describedby="create-user-error"
-            autoComplete="email"
-            disabled={isSubmitting}
-            placeholder="user@example.com"
-            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
+        <FormField
+          ref={emailInputRef}
+          label="Email"
+          labelClassName="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5"
+          id="create-user-email"
+          type="email"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setEmailTaken(false); }}
+          required
+          ariaRequired
+          ariaInvalid={emailTaken || (formError !== null && (!email.trim() || !EMAIL_PATTERN.test(email.trim())))}
+          ariaDescribedBy="create-user-error"
+          autoComplete="email"
+          disabled={isSubmitting}
+          placeholder="user@example.com"
+        />
 
-        <div>
-          <label htmlFor="create-user-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
-            Full name <span aria-hidden="true">*</span>
-          </label>
-          <input
-            id="create-user-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            aria-required="true"
-            aria-invalid={formError !== null && !name.trim()}
-            aria-describedby="create-user-error"
-            autoComplete="name"
-            disabled={isSubmitting}
-            placeholder="Jane Doe"
-            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
+        <FormField
+          label="Full name"
+          labelClassName="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5"
+          id="create-user-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          ariaRequired
+          ariaInvalid={formError !== null && !name.trim()}
+          ariaDescribedBy="create-user-error"
+          autoComplete="name"
+          disabled={isSubmitting}
+          placeholder="Jane Doe"
+        />
 
         <FormActions
           onCancel={onClose}

@@ -6,7 +6,6 @@ import { BookOpen, Bot } from 'lucide-react';
 import { Badge } from './Badge';
 import { ButtonApp } from './ButtonApp';
 import { ButtonCard } from './ButtonCard';
-import { FormCheckbox } from './FormField';
 
 const meta = {
   title: 'UI/ButtonCard',
@@ -18,7 +17,7 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['default', 'selectable', 'selectable-radio'],
+      options: ['default', 'selectable', 'selectable-radio', 'selectable-check'],
     },
     selected: {
       control: 'boolean',
@@ -207,30 +206,23 @@ export const SelectableActive: Story = {
   },
 };
 
-function SelectableCheckboxDemo() {
+function SelectableCheckDemo() {
   const [selected, setSelected] = useState(false);
 
   return (
     <ButtonCard
-      variant="selectable"
+      variant="selectable-check"
       selected={selected}
-      interactiveChildren
       ariaLabel="Toggle Web Search"
+      checkboxLabel="Web Search"
+      checkboxHelpText="Real-time internet search"
       onClick={() => setSelected((value) => !value)}
-    >
-      <FormCheckbox
-        id="button-card-web-search"
-        label="Web Search"
-        checked={selected}
-        onChange={(event) => setSelected(event.target.checked)}
-        helpText="Real-time internet search"
-      />
-    </ButtonCard>
+    />
   );
 }
 
-export const SelectableWithCheckbox: Story = {
-  render: () => <SelectableCheckboxDemo />,
+export const SelectableCheck: Story = {
+  render: () => <SelectableCheckDemo />,
 };
 
 function SelectableRadioDemo() {

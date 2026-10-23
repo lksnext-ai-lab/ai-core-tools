@@ -2,12 +2,13 @@ import type { HTMLAttributes, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import BackgroundImage from './BackgroundImage';
 
-export type CardAppVariant = 'white' | 'canvas' | 'subtle';
+export type CardAppVariant = 'white' | 'canvas' | 'subtle' | 'selected';
 
 const variantClasses: Record<CardAppVariant, string> = {
   white: 'bg-surface dark:bg-surface-dark border border-line dark:border-btCard-border-dark',
   canvas: 'bg-canvas-alt dark:bg-canvas-alt-dark border border-bg-soft dark:border-bronze-border-dark',
   subtle: 'bg-tableCab dark:bg-btCard-dark',
+  selected: 'bg-surface-hover dark:bg-btCard-hover border-2 border-bg-soft dark:border-bronze-border-dark',
 };
 
 export interface CardAppProps extends HTMLAttributes<HTMLDivElement> {
@@ -33,7 +34,7 @@ export function CardApp({
   return (
     <div
       {...divProps}
-      className={`group relative flex h-full flex-col rounded-md p-4 text-left ${variantClasses[variant]} ${className}`}
+      className={`group relative flex h-full flex-col rounded-md ${variant === 'selected' ? 'p-3 transition-colors' : 'p-4'} text-left ${variantClasses[variant]} ${className}`}
     >
       {(icon || titulo || subtitulo || headerExtra) && (
         <div className="mb-6 flex items-center">

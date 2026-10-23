@@ -13,7 +13,7 @@ const meta = {
   argTypes: {
     variant: {
       control: 'inline-radio',
-      options: ['white', 'canvas', 'subtle'],
+      options: ['white', 'canvas', 'subtle', 'selected'],
     },
   },
   decorators: [
@@ -57,6 +57,20 @@ export const Subtle: Story = {
   },
 };
 
+export const Selected: Story = {
+  args: {
+    variant: 'selected',
+    children: (
+      <>
+        <p className="text-sm font-medium text-fg dark:text-fg-dark">Guardrails</p>
+        <p className="text-xs font-normal text-fg-secondary dark:text-fg-secondary-dark">
+          Apply safety policies to model inputs and outputs.
+        </p>
+      </>
+    ),
+  },
+};
+
 export const Variants: Story = {
   render: (args) => (
     <div className="flex flex-col gap-4">
@@ -68,6 +82,9 @@ export const Variants: Story = {
       </CardApp>
       <CardApp {...args} variant="subtle">
         <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Subtle</p>
+      </CardApp>
+      <CardApp {...args} variant="selected">
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Selected</p>
       </CardApp>
     </div>
   ),

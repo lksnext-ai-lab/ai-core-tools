@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 import { Spinner } from './Spinner';
 
@@ -8,8 +8,10 @@ export type ButtonAppType = 'button' | 'submit' | 'reset';
 
 export interface ButtonAppProps {
   readonly label: string;
+  readonly ref?: Ref<HTMLButtonElement>;
   readonly type?: ButtonAppType;
   readonly onClick?: () => void;
+  readonly ariaLabel?: string;
   readonly variant?: ButtonAppVariant;
   readonly size?: ButtonAppSize;
   readonly icon?: ReactNode;
@@ -40,8 +42,10 @@ export const buttonAppVariantClasses: Record<ButtonAppVariant, string> = {
 /** Button variants based on the actions used throughout the Mattin app template. */
 export function ButtonApp({
   label,
+  ref,
   type = 'button',
   onClick,
+  ariaLabel,
   variant = 'primary',
   size = 'medium',
   icon,
@@ -54,9 +58,11 @@ export function ButtonApp({
 
   return (
     <button
+      ref={ref}
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
+      aria-label={ariaLabel}
       aria-pressed={ariaPressed}
       aria-busy={loading}
       className={`${baseClasses} ${buttonAppSizeClasses[size]} rounded-md ${buttonAppVariantClasses[variant]} ${className}`}

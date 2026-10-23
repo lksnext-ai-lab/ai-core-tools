@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
+import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2} from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import DataStructureForm from '../../components/forms/DataStructureForm';
 import { apiService } from '../../services/api';
@@ -18,6 +18,10 @@ import { useApiMutation } from '../../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
+import { Title } from '../../components/ui/Title';
+import ButtonApp from '../../components/ui/ButtonApp';
+import Badge from '../../components/ui/Badge';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 interface DataStructure {
   parser_id: number;
@@ -235,24 +239,29 @@ function DataStructuresPage() {
     }
   }
 
-  const getFieldCountBadge = (count: number) => {
-    if (count === 0) return 'bg-gray-100 text-gray-800';
-    if (count <= 3) return 'bg-green-100 text-green-800';
-    if (count <= 7) return 'bg-blue-100 text-blue-800';
-    return 'bg-purple-100 text-purple-800';
-  };
-
   if (loading) {
     return (
       
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titSecundario" titulo="Data Structures" subtitulo='Define schemas for structured data extraction and validation'/>
+        </div>
+
         <LoadingState variant="page" message="Loading data structures..." />
-      
+      </div>
+
     );
   }
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titSecundario" titulo="Data Structures" subtitulo='Define schemas for structured data extraction and validation'/>
+        </div>
+
         <Alert type="error" message={error} onDismiss={() => loadDataStructures()} />
       </div>
     );
@@ -264,24 +273,24 @@ function DataStructuresPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Data Structures</h2>
-            <p className="text-gray-600">Define schemas for structured data extraction and validation</p>
+            <Title variant="titSecundario" titulo="Data Structures" subtitulo='Define schemas for structured data extraction and validation'/>
           </div>
           {canEdit && (
             <div className="flex gap-2">
-              <button
+              <ButtonApp
+                label="Import"
                 onClick={() => setShowImportModal(true)}
-                className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
-              >
-                <Upload className="w-4 h-4 mr-2" />Import
-              </button>
-              <button 
+                icon={<Upload className="w-4 h-4" />}
+                variant="secondary"
+                size="medium"
+              />
+              <ButtonApp
+                label="Create Data Structure"
                 onClick={handleCreateStructure}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-              >
-                <span className="mr-2">+</span>
-                {' '}Create Data Structure
-              </button>
+                icon={<span aria-hidden="true">+</span>}
+                variant="primary"
+                size="medium"
+              />
             </div>
           )}
         </div>
@@ -298,17 +307,17 @@ function DataStructuresPage() {
               header: 'Name',
               render: (structure) => (
                 <div className="flex items-center">
-                  <BarChart2 className="w-5 h-5 text-purple-400 mr-3 shrink-0" />
+                 <BackgroundImage icon={BarChart2} iconSize={20} size={40} className="mr-2"/>
                   {canEdit ? (
                     <button
                       type="button"
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      className="text-sm font-medium text-fg dark:text-fg-dark transition-colors text-left"
                       onClick={() => void handleEditStructure(structure.parser_id)}
                     >
                       {structure.name}
                     </button>
                   ) : (
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-fg dark:text-fg-dark">
                       {structure.name}
                     </span>
                   )}
@@ -318,7 +327,7 @@ function DataStructuresPage() {
             {
               header: 'Description',
               render: (structure) => (
-                <div className="text-sm text-gray-900 max-w-xs truncate">
+                <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs truncate">
                   {structure.description || 'No description'}
                 </div>
               ),
@@ -327,15 +336,13 @@ function DataStructuresPage() {
             {
               header: 'Fields',
               render: (structure) => (
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getFieldCountBadge(structure.field_count)}`}>
-                  {structure.field_count} field{structure.field_count === 1 ? '' : 's'}
-                </span>
+                <Badge variant='success' label={`${structure.field_count} field${structure.field_count === 1 ? '' : 's'}`} />
               )
             },
             {
               header: 'Created',
               render: (structure) => structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Actions',
@@ -379,12 +386,12 @@ function DataStructuresPage() {
 
         {!loading && dataStructures.length === 0 && (
           <div className="text-center py-6">
-            <button 
+            <ButtonApp
+              label="Create First Data Structure"
               onClick={handleCreateStructure}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-            >
-              Create First Data Structure
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
 

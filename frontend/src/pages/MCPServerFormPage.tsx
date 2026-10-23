@@ -238,18 +238,11 @@ function MCPServerFormPage() {
                   key={agent.agent_id}
                   onClick={() => handleAgentToggle(agent.agent_id)}
                   ariaLabel={`Select ${agent.name}`}
-                  variant="selectable"
+                  variant="selectable-check"
                   selected={formData.agent_ids.includes(agent.agent_id)}
-                  interactiveChildren
-                >
-                  <FormCheckbox
-                    label={agent.name}
-                    id={`agent-${agent.agent_id}`}
-                    checked={formData.agent_ids.includes(agent.agent_id)}
-                    onChange={() => handleAgentToggle(agent.agent_id)}
-                    helpText={agent.description}
-                  />
-                </ButtonCard>
+                  checkboxLabel={agent.name}
+                  checkboxHelpText={agent.description}
+                />
               ))}
             </div>
           )}

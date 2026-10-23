@@ -23,6 +23,7 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import type { Skill } from '../../core/types';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
@@ -31,6 +32,7 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
 import Title from '../../components/ui/Title';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 function SkillsPage() {
   const { appId } = useParams();
@@ -304,10 +306,10 @@ function SkillsPage() {
           const canManageSkill = canEdit && !skill.is_system;
           return (
             <div className="flex items-center">
-              <Target className="w-5 h-5 text-purple-400 mr-3 shrink-0" aria-hidden="true" />
+              <BackgroundImage icon={Target} iconSize={20} size={40} className="mr-2" />
               <button
                 type="button"
-                className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                className="text-sm font-medium text-fg dark:text-fg-dark text-left"
                 onClick={() => void handleEditSkill(skill.skill_id)}
                 aria-label={canManageSkill ? `Edit skill ${skill.name}` : `View skill ${skill.name}`}
               >
@@ -320,8 +322,8 @@ function SkillsPage() {
       {
         header: 'Description',
         render: (skill: Skill) => (
-          <div className="text-sm text-gray-600 max-w-xs truncate">
-            {skill.description || <span className="text-gray-400 italic">No description</span>}
+          <div className="text-xs text-secondary dark:text-secondary-dark max-w-xs truncate">
+            {skill.description || <span className="text-secondary dark:text-secondary-dark italic">No description</span>}
           </div>
         ),
         className: 'px-6 py-4'
@@ -333,19 +335,12 @@ function SkillsPage() {
           return (
             <div className="flex flex-wrap items-center gap-1.5">
               {skill.is_system && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                  System
-                </span>
+                <Badge label="System" variant="default" />
               )}
-              <span
-                className={
-                  isEnabled
-                    ? 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200'
-                    : 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-200'
-                }
-              >
-                {isEnabled ? 'Enabled' : 'Disabled'}
-              </span>
+              <StatusBadge
+                status={isEnabled ? 'active' : 'inactive'}
+                customLabel={isEnabled ? 'Enabled' : 'Disabled'}
+              />
             </div>
           );
         },
@@ -354,7 +349,7 @@ function SkillsPage() {
       {
         header: 'Created',
         render: (skill: Skill) => skill.created_at ? new Date(skill.created_at).toLocaleDateString() : 'N/A',
-        className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+        className: 'px-6 py-4 whitespace-nowrap text-xs text-secondary dark:text-secondary-dark'
       },
       {
         header: 'Actions',
@@ -433,13 +428,26 @@ function SkillsPage() {
 
   if (loading) {
     return (
-      <LoadingState variant="page" message="Loading skills..." />
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titPrincipal" titulo='Skills' subtitulo='Manage prompt-driven specializations for your agents' />
+        </div>
+
+        <LoadingState variant="page" message="Loading skills..." />
+      </div>
+
     );
   }
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <Title variant="titPrincipal" titulo='Skills' subtitulo='Manage prompt-driven specializations for your agents' />
+        </div>
+
         <Alert type="error" message={error} onDismiss={() => loadSkills()} />
       </div>
     );
@@ -506,7 +514,6 @@ function SkillsPage() {
       <Table
         data={skills}
         keyExtractor={(skill) => skill.skill_id.toString()}
-        rowClassName={(skill) => skill.is_enabled === false ? 'bg-gray-50 hover:bg-gray-100' : 'hover:bg-gray-50'}
         columns={columns}
         emptyIcon={<Target className="w-10 h-10 text-gray-300" />}
         emptyMessage="No Skills"
