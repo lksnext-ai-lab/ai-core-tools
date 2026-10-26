@@ -63,7 +63,7 @@ function AppsPage() {
     // Auto-refresh only usage stats every 30 seconds (not full page)
     const interval = setInterval(() => {
       void loadUsageStats();
-    }, 3000);
+    }, 30000);
     
     return () => clearInterval(interval);
   }, []);

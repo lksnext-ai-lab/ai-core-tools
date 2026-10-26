@@ -1,14 +1,16 @@
 """
-API endpoint to get app usage statistics and stress levels.
-Provides real-time rate limiting metrics for admin dashboard.
+API endpoints for authenticated users to read accessible app usage statistics.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Annotated
+from lks_idprovider.models.auth import AuthContext
 
 from db.database import get_db
 from services.app_service import AppService
 from services.rate_limit_service import rate_limit_service
+from routers.controls.role_authorization import AppRole, require_min_role
+from .auth_utils import get_current_user_oauth
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -17,16 +19,19 @@ router = APIRouter()
 
 
 @router.get("/", responses={500: {"description": "Internal server error"}})
-async def get_apps_usage_stats(db: Annotated[Session, Depends(get_db)]) -> List[Dict[str, Any]]:
+async def get_apps_usage_stats(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+) -> List[Dict[str, Any]]:
     """
-    Get usage statistics for all apps to display stress levels.
+    Get usage statistics for apps accessible to the authenticated user.
     
     Returns:
-        List of app usage statistics with stress metrics
+        List of accessible app usage statistics with stress metrics
     """
     try:
-        # Get all apps with their rate limits
-        apps = AppService(db).get_all_apps()
+        user_id = int(auth_context.identity.id)
+        apps = AppService(db).get_apps(user_id)
         
         usage_stats = []
         
@@ -61,7 +66,8 @@ async def get_apps_usage_stats(db: Annotated[Session, Depends(get_db)]) -> List[
 @router.get("/{app_id}", responses={404: {"description": "App not found"}, 500: {"description": "Internal server error"}})
 async def get_app_usage_stats(
     app_id: int, 
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    role: Annotated[AppRole, Depends(require_min_role(AppRole.VIEWER))],
 ) -> Dict[str, Any]:
     """
     Get usage statistics for a specific app.
