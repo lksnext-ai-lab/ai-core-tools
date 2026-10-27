@@ -109,6 +109,7 @@ export interface ServiceFormData {
   /** ISO datetime (00:00 UTC of the picked day) or null to clear. Omitted = keep on update. */
   end_of_service_at?: string | null;
   deprecation_notice?: string | null;
+  auto_move_to_service_id?: number | null;
 }
 
 /** Existing service shape returned by getAIService / getEmbeddingService. */
@@ -123,6 +124,7 @@ export interface ExistingService extends Partial<ServiceLifecycleFields> {
   readonly api_version?: string;
   readonly aws_access_key_id?: string;
   readonly aws_region?: string;
+  readonly auto_move_to_service_id?: number | null;
 }
 
 /**

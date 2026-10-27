@@ -80,6 +80,13 @@ export const SERVICE_LIFECYCLE_STRINGS = {
   endOfServiceLabel: 'End of service',
   endOfServiceHelp:
     'From this date the service stops working. Deprecated warnings start before it.',
+  autoMoveLabel: 'Move agents to another AI service',
+  autoMoveHelp:
+    'On this date, agents using this service as their main LLM will be moved automatically to the selected service.',
+  autoMoveTargetHelp: 'The target must remain active after this service ends.',
+  autoMoveTargetUnavailable: (date: string) => `(ends on or before ${date})`,
+  noAutoMove: 'Do not move agents automatically',
+  noAutoMoveTargets: 'No eligible AI services are available.',
   clearDate: 'Clear',
   clearDateAria: 'Clear end of service date',
   deprecationNoticeLabel: 'Deprecation notice',

@@ -47,6 +47,9 @@ AI, embedding and sandbox (code interpreter) services can have a planned **end o
 |-------|-------------|
 | **End of service** | Optional date. The service is retired from 00:00 UTC of that day |
 | **Deprecation notice** | Optional text (max 1000 characters) shown to users, e.g. which service to migrate to |
+| **Move agents to another AI service** | For App AI services, optionally choose an active destination. On the end-of-service date, agents using the service as their main LLM are moved automatically. |
+
+The destination must remain active after the source service ends and cannot be deleted while selected by a pending migration. Automatic migration is checked by the periodic scheduler (normally within one minute of the selected date; requires DBOS scheduling to be enabled). It moves main LLM assignments, not OCR, transcription, video, or middleware references. System AI services do not have this option because they are shared across Apps, though they can be selected as a destination.
 
 Who can edit them: app administrators (Administrator and above) for the App's services, platform administrators for system services. Leaving a field empty clears it.
 
@@ -76,6 +79,8 @@ Use **Used by** on a service to list the agents (with the role the service plays
 
 For AI services, **Move agents** (Administrator and above) points all agents that use the service as their main LLM at another service in one step. If the number of agents changed since you opened the dialog, nothing is moved and you are asked to review again.
 
+When an App AI service has an end-of-service date, you can also configure this same main-LLM migration to happen automatically on that date. Leaving the destination empty keeps the existing behavior: agents remain assigned to the retiring service and will stop working after retirement.
+
 ### Copy, export and import
 
-Copying a service does not carry the end-of-service fields. App export/import does for AI and embedding services (see [App Export/Import](../app-export-import.md)).
+Copying a service does not carry the end-of-service fields or its automatic migration destination. App export/import carries the end-of-service fields for AI and embedding services, but not the App-specific migration destination (see [App Export/Import](../app-export-import.md)).

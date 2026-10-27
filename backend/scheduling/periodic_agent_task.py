@@ -25,6 +25,25 @@ except ImportError:  # Keeps unit tests and local tooling usable before dependen
 SERVICE_RETIRED_CODE = "SERVICE_RETIRED"
 
 
+if DBOS is not None:
+    @DBOS.workflow(max_recovery_attempts=1)
+    async def ai_service_auto_migration_reconciler(
+        scheduled_time: datetime, context: Any = None
+    ) -> None:
+        from services.ai_service_auto_migration_service import AIServiceAutoMigrationService
+
+        db = SessionLocal()
+        try:
+            AIServiceAutoMigrationService.process_due_migrations(db)
+        finally:
+            db.close()
+else:
+    async def ai_service_auto_migration_reconciler(
+        scheduled_time: datetime, context: Any = None
+    ) -> None:
+        raise RuntimeError("DBOS is not installed")
+
+
 async def _invoke_agent(
     agent_id: int,
     input_context: dict[str, Any] | None,
@@ -328,6 +347,7 @@ async def initialize_dbos() -> bool:
         global_concurrency=int(os.getenv("AICT_OUTPUT_DELIVERY_CONCURRENCY", "10")),
     )
     await DBOS.register_queue_async("output-delivery-reconciler", global_concurrency=1)
+    await DBOS.register_queue_async("ai-service-auto-migration", global_concurrency=1)
     from scheduling.output_delivery import output_delivery_reconciler
     DBOS.apply_schedules([{
         "schedule_name": "output-delivery-reconciler",
@@ -336,8 +356,16 @@ async def initialize_dbos() -> bool:
         "cron_timezone": "UTC",
         "context": None,
         "queue_name": "output-delivery-reconciler",
+    }, {
+        "schedule_name": "ai-service-auto-migration",
+        "workflow_fn": ai_service_auto_migration_reconciler,
+        "schedule": "* * * * *",
+        "cron_timezone": "UTC",
+        "context": None,
+        "queue_name": "ai-service-auto-migration",
     }])
     DBOS.resume_schedule("output-delivery-reconciler")
+    DBOS.resume_schedule("ai-service-auto-migration")
     # Reconcile application-active schedules with DBOS after a restart. DBOS
     # persists a paused state, while the application row can still be active.
     db = SessionLocal()

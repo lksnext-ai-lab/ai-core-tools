@@ -8,6 +8,7 @@ import { getProviderBadgeColor } from '../ui/providerBadges';
 import { getProviderDescriptor } from './wizard/providers';
 import ServiceWizard from './wizard/ServiceWizard';
 import { dateInputValueFromIso, isoFromDateInput } from '../../utils/serviceLifecycle';
+import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
 import ServiceLifecycleInputs from './ServiceLifecycleInputs';
 import type {
   ExistingSandboxService,
@@ -33,6 +34,7 @@ interface CompactServiceEditorProps {
   readonly appId?: number;
   readonly service: ExistingService | ExistingSandboxService;
   readonly existingNames?: readonly string[];
+  readonly availableAiServices?: readonly ServiceOptionLike[];
   readonly onClose: () => void;
   /**
    * Method shorthand on purpose — see the identical note on
@@ -49,6 +51,7 @@ function CompactServiceEditor({
   appId,
   service,
   existingNames = [],
+  availableAiServices = [],
   onClose,
   onSave,
 }: Readonly<CompactServiceEditorProps>) {
@@ -80,6 +83,9 @@ function CompactServiceEditor({
     dateInputValueFromIso(storedEndOfService),
   );
   const [deprecationNotice, setDeprecationNotice] = useState(service.deprecation_notice || '');
+  const [autoMoveTargetServiceId, setAutoMoveTargetServiceId] = useState(
+    aiService?.auto_move_to_service_id ? String(aiService.auto_move_to_service_id) : '',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -99,6 +105,9 @@ function CompactServiceEditor({
     setTemplate(sandboxService?.e2b_template || '');
     setEndOfServiceDate(dateInputValueFromIso(storedEndOfService));
     setDeprecationNotice(service.deprecation_notice || '');
+    setAutoMoveTargetServiceId(
+      aiService?.auto_move_to_service_id ? String(aiService.auto_move_to_service_id) : '',
+    );
     setError(null);
   }, [service.service_id]);
 
@@ -167,6 +176,9 @@ function CompactServiceEditor({
           aws_region: showAwsFields ? awsRegion.trim() || undefined : undefined,
           end_of_service_at: resolvedEndOfService,
           deprecation_notice: resolvedNotice,
+          auto_move_to_service_id: autoMoveTargetServiceId
+            ? Number.parseInt(autoMoveTargetServiceId, 10)
+            : null,
         };
     try {
       await onSave(payload);
@@ -340,8 +352,14 @@ function CompactServiceEditor({
           <ServiceLifecycleInputs
             date={endOfServiceDate}
             notice={deprecationNotice}
+            kind={kind}
+            scope={scope}
+            availableAiServices={availableAiServices}
+            currentServiceId={service.service_id}
+            autoMoveTargetServiceId={autoMoveTargetServiceId}
             onDateChange={setEndOfServiceDate}
             onNoticeChange={setDeprecationNotice}
+            onAutoMoveTargetChange={setAutoMoveTargetServiceId}
           />
 
           {showSupportsVideo && (

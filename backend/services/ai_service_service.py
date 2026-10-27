@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models.ai_service import AIService, ProviderEnum
 from repositories.ai_service_repository import AIServiceRepository
@@ -34,6 +35,17 @@ class AIServiceInUseError(Exception):
         )
 
 
+class AIServiceMigrationTargetError(Exception):
+    """The AI service is the configured destination for a scheduled migration."""
+
+    def __init__(self, source_services: List[str]):
+        super().__init__(
+            "This AI service is the scheduled migration target for "
+            + ", ".join(f"'{name}'" for name in source_services)
+            + ". Change those migration destinations before deleting it."
+        )
+
+
 class AIServiceService:
 
     @staticmethod
@@ -58,6 +70,7 @@ class AIServiceService:
             last_error_at=service.last_error_at,
             end_of_service_at=to_utc(service.end_of_service_at),
             deprecation_notice=service.deprecation_notice,
+            auto_move_to_service_id=service.auto_move_to_service_id,
             lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
         )
 
@@ -88,6 +101,7 @@ class AIServiceService:
             last_error_at=service.last_error_at,
             end_of_service_at=to_utc(service.end_of_service_at),
             deprecation_notice=service.deprecation_notice,
+            auto_move_to_service_id=service.auto_move_to_service_id,
             lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
         )
 
@@ -188,6 +202,23 @@ class AIServiceService:
         AIServiceService.apply_lifecycle_fields(
             service, service_data, actor_id
         )
+        if "auto_move_to_service_id" in service_data.model_fields_set:
+            service.auto_move_to_service_id = service_data.auto_move_to_service_id
+        elif service_id == 0:
+            service.auto_move_to_service_id = None
+        if service.end_of_service_at is None:
+            service.auto_move_to_service_id = None
+        ServiceLifecycleService.validate_auto_move_target(
+            db,
+            app_id,
+            service.service_id if service_id != 0 else None,
+            service.end_of_service_at,
+            service.auto_move_to_service_id,
+        )
+        if service_id != 0:
+            ServiceLifecycleService.validate_auto_move_dependents(
+                db, service.service_id, service.end_of_service_at
+            )
         
         # Create or update the service
         if service_id == 0:
@@ -248,6 +279,7 @@ class AIServiceService:
         if not service:
             return False
 
+        AIServiceService.ensure_not_auto_migration_target(db, service_id)
         from services.middleware_service import MiddlewareService
         middleware_names = MiddlewareService.names_using_ai_service(db, app_id, service_id)
         if middleware_names:
@@ -256,6 +288,17 @@ class AIServiceService:
         AIServiceRepository.delete(db, service)
         
         return True
+
+    @staticmethod
+    def ensure_not_auto_migration_target(db: Session, service_id: int) -> None:
+        source_services = db.execute(
+            select(AIService.name).where(
+                AIService.auto_move_to_service_id == service_id,
+                AIService.service_id != service_id,
+            )
+        ).scalars().all()
+        if source_services:
+            raise AIServiceMigrationTargetError(source_services)
 
     @staticmethod
     def test_connection_with_config(config: dict) -> dict:

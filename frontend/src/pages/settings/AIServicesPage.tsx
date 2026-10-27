@@ -31,6 +31,7 @@ interface AIService extends Partial<ServiceLifecycleFields> {
   is_system?: boolean;
   last_error?: string | null;
   last_error_at?: string | null;
+  auto_move_to_service_id?: number | null;
 }
 
 function AIServicesPage() {
@@ -313,6 +314,7 @@ function AIServicesPage() {
           scope="app"
           appId={appId ? Number.parseInt(appId) : undefined}
           existingNames={services.map((s) => s.name)}
+          availableAiServices={services}
           onClose={handleClose}
           onSave={handleSave}
         />
@@ -326,6 +328,7 @@ function AIServicesPage() {
           appId={appId ? Number.parseInt(appId) : undefined}
           service={editingService}
           existingNames={services.map((s) => s.name)}
+          availableAiServices={services}
           onClose={handleClose}
           onSave={handleSave}
         />

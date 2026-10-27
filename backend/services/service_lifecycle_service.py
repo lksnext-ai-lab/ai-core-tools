@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -418,6 +419,58 @@ class ServiceLifecycleService:
         if snapshot is None or (snapshot.app_id is not None and snapshot.app_id != app_id):
             return None
         return snapshot
+
+    @staticmethod
+    def validate_auto_move_target(
+        db: Session, app_id: int, source_service_id: Optional[int], end_of_service_at: Optional[datetime],
+        target_service_id: Optional[int], now: Optional[datetime] = None,
+    ) -> None:
+        """Ensure an automatic agent migration points to a visible service that outlives its source."""
+        if target_service_id is None:
+            return
+        if end_of_service_at is None:
+            raise AppValidationError("Set an end-of-service date to schedule an automatic migration", "auto_move_to_service_id")
+        if source_service_id is not None and target_service_id == source_service_id:
+            raise AppValidationError("The target service must be different from the source service", "auto_move_to_service_id")
+
+        target = ServiceLifecycleService._visible_ai_service(db, app_id, target_service_id)
+        if target is None:
+            raise AppValidationError("Target AI service not found", "auto_move_to_service_id")
+        if is_retired(target, now):
+            raise AppValidationError("The target AI service is retired and cannot be selected", "auto_move_to_service_id")
+        target_end = to_utc(target.end_of_service_at)
+        source_end = to_utc(end_of_service_at)
+        if target_end is not None and source_end is not None and target_end <= source_end:
+            raise AppValidationError(
+                "The target AI service must remain active after the source service ends",
+                "auto_move_to_service_id",
+            )
+
+    @staticmethod
+    def validate_auto_move_dependents(
+        db: Session, target_service_id: int, end_of_service_at: Optional[datetime]
+    ) -> None:
+        """Prevent ending a target service before any source service scheduled to move into it."""
+        target_end = to_utc(end_of_service_at)
+        if target_end is None:
+            return
+        dependents = db.execute(
+            select(AIService.name, AIService.end_of_service_at).where(
+                AIService.auto_move_to_service_id == target_service_id
+            )
+        ).all()
+        if target_end <= datetime.now(timezone.utc) and dependents:
+            raise AppValidationError(
+                "Cannot retire this service while it is the destination of scheduled migrations",
+                "end_of_service_at",
+            )
+        for name, source_end in dependents:
+            source_end_utc = to_utc(source_end)
+            if source_end_utc is not None and target_end <= source_end_utc:
+                raise AppValidationError(
+                    f"Cannot end this service before the scheduled migration from '{name}'",
+                    "end_of_service_at",
+                )
 
     @staticmethod
     def _visible_sandbox_service(db: Session, app_id: int, service_id: int) -> Optional[ServiceSnapshot]:

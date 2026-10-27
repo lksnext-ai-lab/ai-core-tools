@@ -24,6 +24,7 @@ class AIServiceListItemSchema(BaseModel):
     # End-of-service lifecycle (status is computed at read time)
     end_of_service_at: Optional[datetime] = None
     deprecation_notice: Optional[str] = None
+    auto_move_to_service_id: Optional[int] = None
     lifecycle_status: Literal["active", "deprecated", "retired"] = "active"
 
     model_config = ConfigDict(from_attributes=True)
@@ -50,6 +51,7 @@ class AIServiceDetailSchema(BaseModel):
     # End-of-service lifecycle (status is computed at read time)
     end_of_service_at: Optional[datetime] = None
     deprecation_notice: Optional[str] = None
+    auto_move_to_service_id: Optional[int] = None
     lifecycle_status: Literal["active", "deprecated", "retired"] = "active"
 
     model_config = ConfigDict(from_attributes=True)
@@ -67,6 +69,7 @@ class CreateUpdateAIServiceSchema(ServiceLifecycleFieldsMixin):
     # via ``api_key``; the access key id and region travel here.
     aws_access_key_id: Optional[str] = None
     aws_region: Optional[str] = None
+    auto_move_to_service_id: Optional[int] = None
     @field_validator("api_key", "base_url", "aws_access_key_id", "aws_region", mode="before")
     @classmethod
     def _strip_credentials(cls, v):

@@ -767,6 +767,11 @@ async def create_system_ai_service(
     from utils.service_lifecycle import SERVICE_KIND_AI
     from datetime import datetime
 
+    if body.auto_move_to_service_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Automatic model migration is only available for App AI services",
+        )
     svc = AIService()
     svc.app_id = None
     svc.name = body.name
@@ -803,6 +808,11 @@ async def update_system_ai_service(
     svc = AIServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail=SYSTEM_AI_SERVICE_NOT_FOUND)
+    if body.auto_move_to_service_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Automatic model migration is only available for App AI services",
+        )
 
     svc.name = body.name
     svc.provider = body.provider
@@ -813,6 +823,13 @@ async def update_system_ai_service(
     svc.supports_video = body.supports_video
     svc.extra_config = build_extra_config(body.aws_access_key_id, body.aws_region)
     AIServiceService.apply_lifecycle_fields(svc, body, int(auth_context.identity.id))
+    from utils.error_handlers import AppError
+    try:
+        ServiceLifecycleService.validate_auto_move_dependents(
+            db, svc.service_id, svc.end_of_service_at
+        )
+    except AppError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
     svc = AIServiceRepository.update(db, svc)
     return AIServiceService._to_list_item(svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db))
 
@@ -825,10 +842,15 @@ async def delete_system_ai_service(
 ):
     """Delete a platform-level AI Service (OMNIADMIN only, available in all deployment modes)."""
     from repositories.ai_service_repository import AIServiceRepository
+    from services.ai_service_service import AIServiceMigrationTargetError, AIServiceService
 
     svc = AIServiceRepository.get_by_id(db, service_id)
     if not svc or svc.app_id is not None:
         raise HTTPException(status_code=404, detail=SYSTEM_AI_SERVICE_NOT_FOUND)
+    try:
+        AIServiceService.ensure_not_auto_migration_target(db, service_id)
+    except AIServiceMigrationTargetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     AIServiceRepository.delete(db, svc)
 
 

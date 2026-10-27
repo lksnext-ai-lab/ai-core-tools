@@ -9,6 +9,7 @@ import ConfirmStep from './steps/ConfirmStep';
 import { getProviderDescriptor } from './providers';
 import ServiceLifecycleInputs from '../ServiceLifecycleInputs';
 import { isoFromDateInput } from '../../../utils/serviceLifecycle';
+import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
 import { getServiceApiClient } from '../serviceApi';
 import type { TestConnectionResult } from '../serviceApi';
 import type {
@@ -52,6 +53,7 @@ interface ServiceWizardProps {
   readonly initialService?: ExistingService | ExistingSandboxService | null;
   /** Existing service names in scope, used to disambiguate auto-generated names. */
   readonly existingNames?: readonly string[];
+  readonly availableAiServices?: readonly ServiceOptionLike[];
   readonly onClose: () => void;
   /**
    * Declared with method shorthand (not an arrow-typed property) on purpose:
@@ -71,6 +73,7 @@ function ServiceWizard({
   mode = 'create',
   initialService = null,
   existingNames = [],
+  availableAiServices = [],
   onClose,
   onSave,
 }: Readonly<ServiceWizardProps>) {
@@ -81,6 +84,7 @@ function ServiceWizard({
   const [supportsVideo, setSupportsVideo] = useState(false);
   const [endOfServiceDate, setEndOfServiceDate] = useState('');
   const [deprecationNotice, setDeprecationNotice] = useState('');
+  const [autoMoveTargetServiceId, setAutoMoveTargetServiceId] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +97,11 @@ function ServiceWizard({
     if (!isOpen) return;
     if (mode === 'edit-model' && initialService) {
       setProvider(initialService.provider || '');
+      setAutoMoveTargetServiceId(
+        'auto_move_to_service_id' in initialService && initialService.auto_move_to_service_id
+          ? String(initialService.auto_move_to_service_id)
+          : '',
+      );
       if (kind === 'sandbox') {
         const svc = initialService as ExistingSandboxService;
         setCredentials({
@@ -130,6 +139,7 @@ function ServiceWizard({
       setSupportsVideo(false);
       setEndOfServiceDate('');
       setDeprecationNotice('');
+      setAutoMoveTargetServiceId('');
       setCurrentStep(0);
       setStepStatuses({});
     }
@@ -235,6 +245,9 @@ function ServiceWizard({
         ? {
             end_of_service_at: isoFromDateInput(endOfServiceDate),
             deprecation_notice: deprecationNotice.trim() || null,
+            auto_move_to_service_id: autoMoveTargetServiceId
+              ? Number.parseInt(autoMoveTargetServiceId, 10)
+              : null,
           }
         : {}),
     };
@@ -360,8 +373,13 @@ function ServiceWizard({
                 <ServiceLifecycleInputs
                   date={endOfServiceDate}
                   notice={deprecationNotice}
+                  kind={kind}
+                  scope={scope}
+                  availableAiServices={availableAiServices}
+                  autoMoveTargetServiceId={autoMoveTargetServiceId}
                   onDateChange={setEndOfServiceDate}
                   onNoticeChange={setDeprecationNotice}
+                  onAutoMoveTargetChange={setAutoMoveTargetServiceId}
                 />
               </div>
             )}
