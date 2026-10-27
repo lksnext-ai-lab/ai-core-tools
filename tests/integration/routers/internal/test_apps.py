@@ -101,18 +101,43 @@ class TestListApps:
         response = client.get("/internal/apps")
         assert response.status_code in (401, 403)
 
-    def test_list_apps_shows_usage_stats(self, client, fake_app, auth_headers, db):
-        """Apps include usage stats for rate limit display."""
+    def test_list_apps_omits_aggregate_usage_stats(self, client, fake_app, auth_headers, db):
+        """App list no longer exposes aggregate usage statistics."""
         db.flush()
         response = client.get("/internal/apps", headers=auth_headers)
         apps = response.json()
         app = next((a for a in apps if a["app_id"] == fake_app.app_id), None)
 
-        assert "usage_stats" in app
-        usage = app["usage_stats"]
-        assert "current_usage" in usage
-        assert "limit" in usage
-        assert "usage_percentage" in usage
+        assert app is not None
+        assert "usage_stats" not in app
+
+    def test_agent_usage_endpoint_returns_per_agent_counters(
+        self, client, fake_app, fake_agent, owner_headers, db, monkeypatch
+    ):
+        fake_app.agent_rate_limit = 10
+        db.flush()
+
+        from services.rate_limit_service import RateLimitService
+
+        rate_limit_service = RateLimitService()
+        monkeypatch.setattr(
+            "routers.internal.apps_usage.rate_limit_service", rate_limit_service
+        )
+        rate_limit_service.check_and_consume_for_agent(
+            fake_app.app_id, fake_agent.agent_id, fake_app.agent_rate_limit
+        )
+
+        response = client.get(
+            f"/internal/usage-stats/{fake_app.app_id}", headers=owner_headers
+        )
+
+        assert response.status_code == 200
+        agent_usage = response.json()
+        assert len(agent_usage) == 1
+        assert agent_usage[0]["agent_id"] == fake_agent.agent_id
+        assert agent_usage[0]["current_usage"] == 1
+        assert agent_usage[0]["limit"] == 10
+        assert agent_usage[0]["remaining"] == 9
 
 
 # ---------------------------------------------------------------------------

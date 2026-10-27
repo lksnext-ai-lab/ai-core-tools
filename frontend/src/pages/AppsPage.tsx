@@ -2,25 +2,13 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
-import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, BarChart2, Check } from 'lucide-react';
+import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, Check } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
 import ActionDropdown from '../components/ui/ActionDropdown';
-import Speedometer from '../components/ui/Speedometer';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
 import AppImportStepper from '../components/import/AppImportStepper';
-
-// Define the App type (like your Pydantic models!)
-interface UsageStats {
-  usage_percentage: number;
-  stress_level: 'low' | 'moderate' | 'high' | 'critical' | 'unlimited';
-  current_usage: number;
-  limit: number;
-  remaining: number;
-  reset_in_seconds: number;
-  is_over_limit: boolean;
-}
 
 interface App {
   app_id: number;
@@ -38,8 +26,6 @@ interface App {
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
-  // Usage statistics for speedometer
-  usage_stats?: UsageStats;
 }
 
 // React Component = Function that returns HTML-like JSX
@@ -53,19 +39,11 @@ function AppsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [usageStats, setUsageStats] = useState<Record<number, UsageStats>>({});
   const [showImportModal, setShowImportModal] = useState(false);
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
     void loadApps();
-    
-    // Auto-refresh only usage stats every 30 seconds (not full page)
-    const interval = setInterval(() => {
-      void loadUsageStats();
-    }, 30000);
-    
-    return () => clearInterval(interval);
   }, []);
 
   // Function to load apps from API
@@ -76,15 +54,6 @@ function AppsPage() {
       setSuccess(null);
       const response = await apiService.getApps();
       setApps(response);
-      
-      // Extract usage stats from response
-      const stats: Record<number, UsageStats> = {};
-      response.forEach((app: App) => {
-        if (app.usage_stats) {
-          stats[app.app_id] = app.usage_stats;
-        }
-      });
-      setUsageStats(stats);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load apps');
     } finally {
@@ -97,43 +66,9 @@ function AppsPage() {
     try {
       const response = await apiService.getApps();
       setApps(response);
-      
-      // Extract usage stats from response
-      const stats: Record<number, UsageStats> = {};
-      response.forEach((app: App) => {
-        if (app.usage_stats) {
-          stats[app.app_id] = app.usage_stats;
-        }
-      });
-      setUsageStats(stats);
     } catch (err) {
       // Silently fail to avoid disrupting user experience
       console.error('Failed to refresh apps:', err);
-    }
-  }
-
-  // Function to load only usage stats (optimized for auto-refresh)
-  async function loadUsageStats() {
-    try {
-      const response = await apiService.getUsageStats();
-      
-      // Update only the usage stats, not the full apps data
-      const stats: Record<number, UsageStats> = {};
-      response.forEach((stat: UsageStats & { app_id: number }) => {
-        stats[stat.app_id] = {
-          usage_percentage: stat.usage_percentage,
-          stress_level: stat.stress_level,
-          current_usage: stat.current_usage,
-          limit: stat.limit,
-          remaining: stat.remaining,
-          reset_in_seconds: stat.reset_in_seconds,
-          is_over_limit: stat.is_over_limit
-        };
-      });
-      setUsageStats(stats);
-    } catch (err) {
-      // Silently fail for usage stats refresh to avoid disrupting user experience
-      console.warn('Failed to refresh usage stats:', err);
     }
   }
 
@@ -432,44 +367,6 @@ Type the app name to confirm: "${app.name}"`;
               }`}>
                 {app.langsmith_configured ? <span className="flex items-center gap-1"><Check className="w-3 h-3" /> Configured</span> : 'Not configured'}
               </span>
-            )
-          },
-          {
-            header: 'Usage',
-            headerContent: <span className="flex items-center gap-1 justify-center"><BarChart2 className="w-3 h-3" /> Usage</span>,
-            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => (
-              usageStats[app.app_id] ? (
-                <div className="group relative">
-                  <Speedometer 
-                    usageStats={usageStats[app.app_id]} 
-                    size="sm" 
-                    showDetails={false}
-                  />
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                    <div className="font-medium">
-                      {usageStats[app.app_id].stress_level.charAt(0).toUpperCase() + usageStats[app.app_id].stress_level.slice(1)} Stress
-                    </div>
-                    <div className="text-gray-300">
-                      {usageStats[app.app_id].current_usage}/{usageStats[app.app_id].limit === 0 ? '∞' : usageStats[app.app_id].limit} calls
-                    </div>
-                    {usageStats[app.app_id].limit > 0 && (
-                      <div className="text-gray-300">
-                        Resets in {Math.ceil(usageStats[app.app_id].reset_in_seconds)}s
-                      </div>
-                    )}
-                    {usageStats[app.app_id].is_over_limit && (
-                      <div className="text-red-300 font-medium">
-                        Over limit!
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-gray-400 text-xs">No data</div>
-              )
             )
           },
           {

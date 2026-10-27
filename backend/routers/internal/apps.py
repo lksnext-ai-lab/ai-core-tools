@@ -10,10 +10,9 @@ from db.database import get_db
 
 from services.app_service import AppService
 from services.app_collaboration_service import AppCollaborationService
-from services.rate_limit_service import rate_limit_service
 
 from schemas.apps_schemas import (
-    AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema, AppUsageStatsSchema,
+    AppListItemSchema, AppDetailSchema, CreateAppSchema, UpdateAppSchema,
     LangSmithTestRequestSchema, LangSmithTestResponseSchema,
     OwnershipOfferRequest, OwnershipOfferResponse, OwnershipAcceptResponse,
 )
@@ -590,11 +589,6 @@ async def list_apps(
     for app in apps:
         role = collaboration_service.get_user_app_role(user_id, app.app_id) or "owner"
         counts = calculate_app_entity_counts(app.app_id, db, collaboration_service)
-        usage_stats = rate_limit_service.get_app_usage_stats(
-            app.app_id, 
-            app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT
-        )
-        usage_stats_schema = AppUsageStatsSchema(**usage_stats)
         owner_name = None
         owner_email = None
         if app.owner:
@@ -612,7 +606,6 @@ async def list_apps(
             agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
             max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
             agent_cors_origins=app.agent_cors_origins,
-            usage_stats=usage_stats_schema,
             **counts
         )
         app_list.append(app_item)
@@ -1058,4 +1051,3 @@ async def export_full_app(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Export failed: {str(e)}",
         )
-

@@ -78,19 +78,15 @@ export interface SystemSkillWriteData {
   is_enabled?: boolean | null;
 }
 
-/** Rate-limit usage snapshot for a single app (also the per-item shape returned by getUsageStats()). */
-export interface UsageStats {
+/** Current rate-limit usage snapshot for one active agent. */
+export interface AgentRateLimitUsage {
+  agent_id: number;
   usage_percentage: number;
-  stress_level: 'low' | 'moderate' | 'high' | 'critical' | 'unlimited';
   current_usage: number;
   limit: number;
   remaining: number;
   reset_in_seconds: number;
   is_over_limit: boolean;
-}
-
-export interface AppUsageStat extends UsageStats {
-  app_id: number;
 }
 
 export interface App {
@@ -116,7 +112,6 @@ export interface App {
   silo_count: number;
   collaborator_count: number;
   onboarding_dismissed?: boolean;
-  usage_stats?: UsageStats;
 }
 
 /** RAG retrieval-time filter applied on top of an agent's fixed silo. Mirrors RagConfigSection's RagFixedFilter shape. */
@@ -882,11 +877,7 @@ class ApiService {
     });
   }
 
-  async getUsageStats(): Promise<AppUsageStat[]> {
-    return this.request('/internal/usage-stats/');
-  }
-
-  async getAppUsageStats(appId: number): Promise<UsageStats> {
+  async getAppAgentUsageStats(appId: number): Promise<AgentRateLimitUsage[]> {
     return this.request(`/internal/usage-stats/${appId}`);
   }
 

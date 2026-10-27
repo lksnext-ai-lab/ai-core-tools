@@ -5,7 +5,7 @@ Uses in-memory fixed-window counters with thread-safe access.
 import os
 import time
 import threading
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 from utils.logger import get_logger
@@ -286,84 +286,48 @@ class RateLimitService:
         
         for counter_key in stale_counters:
             del self._counters[counter_key]
-    
-    def get_app_usage_stats(self, app_id: int, max_per_minute: int) -> Dict[str, any]:
-        """
-        Get detailed usage statistics based on the busiest agent in an app.
-        
-        Args:
-            app_id: The app identifier
-            max_per_minute: Maximum requests per minute
-            
-        Returns:
-            Dictionary with usage statistics and stress metrics
-        """
+
+    def get_app_agent_usage_stats(
+        self, app_id: int, max_per_minute: int
+    ) -> List[Dict[str, Any]]:
+        """Return current-window usage for agents with activity in an app."""
         if max_per_minute <= 0:
-            return {
-                'usage_percentage': 0,
-                'stress_level': 'unlimited',
-                'current_usage': 0,
-                'limit': max_per_minute,
-                'remaining': -1,
-                'reset_in_seconds': 60,
-                'is_over_limit': False
-            }
-        
+            return []
+
         current_time = time.time()
         current_minute = int(current_time // 60)
-        
+        reset_in_seconds = max(
+            0, (current_minute + 1) * 60 - int(current_time)
+        )
+        agent_stats = []
+
         with self._lock:
-            app_counters = [
-                counter
-                for (tracked_app_id, _), counter in self._counters.items()
-                if tracked_app_id == app_id
-            ]
-            if not app_counters:
-                return {
-                    'usage_percentage': 0,
-                    'stress_level': 'low',
-                    'current_usage': 0,
-                    'limit': max_per_minute,
-                    'remaining': max_per_minute,
-                    'reset_in_seconds': 60,
-                    'is_over_limit': False
-                }
-            
-            current_usage = 0
-            for counter in app_counters:
-                if counter['window_start'] < current_minute:
-                    counter['window_start'] = current_minute
-                    counter['count'] = 0
-                current_usage = max(current_usage, counter['count'])
+            for (tracked_app_id, agent_id), counter in self._counters.items():
+                if tracked_app_id != app_id:
+                    continue
+                if counter["window_start"] < current_minute:
+                    counter["window_start"] = current_minute
+                    counter["count"] = 0
 
-            remaining = max(0, max_per_minute - current_usage)
-            usage_percentage = (current_usage / max_per_minute) * 100
-            is_over_limit = current_usage > max_per_minute
-            
-            # Calculate stress level
-            if usage_percentage >= 95:
-                stress_level = 'critical'
-            elif usage_percentage >= 80:
-                stress_level = 'high'
-            elif usage_percentage >= 50:
-                stress_level = 'moderate'
-            else:
-                stress_level = 'low'
-            
-            # Calculate seconds until reset
-            reset_epoch = (current_minute + 1) * 60
-            reset_in_seconds = max(0, reset_epoch - int(current_time))
-            
-            return {
-                'usage_percentage': round(usage_percentage, 1),
-                'stress_level': stress_level,
-                'current_usage': current_usage,
-                'limit': max_per_minute,
-                'remaining': remaining,
-                'reset_in_seconds': reset_in_seconds,
-                'is_over_limit': is_over_limit
-            }
+                current_usage = counter["count"]
+                if current_usage == 0:
+                    continue
 
+                agent_stats.append({
+                    "agent_id": agent_id,
+                    "usage_percentage": round(
+                        (current_usage / max_per_minute) * 100, 1
+                    ),
+                    "current_usage": current_usage,
+                    "limit": max_per_minute,
+                    "remaining": max(0, max_per_minute - current_usage),
+                    "reset_in_seconds": reset_in_seconds,
+                    "is_over_limit": current_usage > max_per_minute,
+                })
 
+        return sorted(
+            agent_stats,
+            key=lambda stats: (-stats["current_usage"], stats["agent_id"]),
+        )
 # Global instance
 rate_limit_service = RateLimitService()

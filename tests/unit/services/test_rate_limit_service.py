@@ -157,64 +157,29 @@ class TestWindowReset:
         assert fresh_state.remaining == 2  # 3 - 1
 
 
-# ---------------------------------------------------------------------------
-# get_app_usage_stats
-# ---------------------------------------------------------------------------
-
-
-class TestGetAppUsageStats:
-    def test_untracked_app_returns_zero_usage(self):
-        svc = fresh()
-        stats = svc.get_app_usage_stats(app_id=99, max_per_minute=10)
-        assert stats["current_usage"] == 0
-        assert stats["remaining"] == 10
-        assert stats["is_over_limit"] is False
-
-    def test_usage_stats_report_the_busiest_agent_not_app_total(self):
+class TestGetAppAgentUsageStats:
+    def test_usage_stats_are_separate_and_sorted_per_agent(self):
         svc = fresh()
         for _ in range(8):
             svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         for _ in range(2):
             svc.check_and_consume_for_agent(app_id=1, agent_id=12, max_per_minute=10)
+        for _ in range(5):
+            svc.check_and_consume_for_agent(app_id=2, agent_id=21, max_per_minute=10)
 
-        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
+        stats = svc.get_app_agent_usage_stats(app_id=1, max_per_minute=10)
 
-        assert stats["current_usage"] == 8
-        assert stats["usage_percentage"] == 80
+        assert [item["agent_id"] for item in stats] == [11, 12]
+        assert stats[0]["current_usage"] == 8
+        assert stats[0]["usage_percentage"] == 80
+        assert stats[0]["remaining"] == 2
+        assert stats[1]["current_usage"] == 2
 
-    def test_stress_level_low_below_50pct(self):
+    def test_unlimited_or_untracked_app_returns_no_agent_usage(self):
         svc = fresh()
-        for _ in range(3):
-            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
-        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
-        assert stats["stress_level"] == "low"
 
-    def test_stress_level_moderate_between_50_and_80pct(self):
-        svc = fresh()
-        for _ in range(6):
-            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
-        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
-        assert stats["stress_level"] == "moderate"
-
-    def test_stress_level_high_between_80_and_95pct(self):
-        svc = fresh()
-        for _ in range(8):
-            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
-        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
-        assert stats["stress_level"] == "high"
-
-    def test_stress_level_critical_above_95pct(self):
-        svc = fresh()
-        for _ in range(10):
-            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
-        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
-        assert stats["stress_level"] == "critical"
-
-    def test_unlimited_returns_zero_usage_percentage(self):
-        svc = fresh()
-        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=0)
-        assert stats["usage_percentage"] == 0
-        assert stats["stress_level"] == "unlimited"
+        assert svc.get_app_agent_usage_stats(app_id=99, max_per_minute=10) == []
+        assert svc.get_app_agent_usage_stats(app_id=99, max_per_minute=0) == []
 
 
 # ---------------------------------------------------------------------------
