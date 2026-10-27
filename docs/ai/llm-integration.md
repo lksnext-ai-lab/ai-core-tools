@@ -268,14 +268,14 @@ DEFAULT_AGENT_TEMPERATURE = 0.7
 
 ## Rate Limiting
 
-LLM usage can be rate-limited at the **App** level:
+External agent executions can be rate-limited per agent within an **App**:
 
 ```python
 class App(Base):
-    agent_rate_limit = Column(Integer, default=0)  # Requests per minute (0 = unlimited)
+    agent_rate_limit = Column(Integer, default=0)  # Requests per agent per minute (0 = unlimited)
 ```
 
-Rate limits are enforced by the `rate_limit` control (see [Backend Architecture](../architecture/backend.md#controls)).
+Each agent has an independent budget. The limit applies to external calls (Public API, marketplace, and A2A), not Playground usage. Rate limits are enforced by the rate-limit control (see [Backend Architecture](../architecture/backend.md#controls)).
 
 ## Error Handling
 

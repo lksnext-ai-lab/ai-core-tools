@@ -1,15 +1,16 @@
 import json
 import math
 import os
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from utils.security import generate_signature
 
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import AsyncGenerator, List, Optional, Dict, Annotated
+from typing import AsyncGenerator, List, Optional, Dict, MutableMapping, Annotated
 
 from db.database import get_db
+from routers.controls.rate_limit import apply_agent_rate_limit
 from routers.internal.auth_utils import get_current_user_oauth
 from services.marketplace_service import MarketplaceService
 from services.conversation_service import ConversationService
@@ -566,19 +567,18 @@ def _extract_jwt_token(request: Request) -> Optional[str]:
 
 
 
-def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
+def _validate_marketplace_agent(
+    agent: Optional[Agent],
+    response_headers: MutableMapping[str, str],
+) -> None:
     """Raise if agent is missing or unpublished."""
     if not agent or agent.marketplace_visibility == MarketplaceVisibility.UNPUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This agent is no longer available in the marketplace",
         )
-    if agent.app and agent.app.agent_rate_limit and agent.app.agent_rate_limit > 0:
-        if agent.request_count and agent.request_count >= agent.app.agent_rate_limit:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="This agent is temporarily unavailable due to high demand. Please try again later.",
-            )
+    if agent.app:
+        apply_agent_rate_limit(agent.app, agent.agent_id, response_headers)
 
 
 def _enforce_marketplace_quota(user_id: int, db: Session) -> None:
@@ -618,6 +618,7 @@ def _prepare_marketplace_chat(
     conversation_id: int,
     user_id: int,
     db: Session,
+    response_headers: MutableMapping[str, str],
 ) -> tuple[Conversation, Agent]:
     """Validate the conversation/agent/quota for a marketplace chat call."""
     conversation = ConversationService.get_marketplace_conversation(
@@ -631,7 +632,7 @@ def _prepare_marketplace_chat(
             detail=CONVERSATION_NOT_FOUND,
         )
     agent = _get_agent_or_404(db, conversation.agent_id)
-    _validate_marketplace_agent(agent)
+    _validate_marketplace_agent(agent, response_headers)
     _enforce_marketplace_quota(user_id, db)
     return conversation, agent
 
@@ -648,12 +649,15 @@ async def marketplace_chat(
     message: Annotated[str, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    response: Response,
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
-    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+    _, agent = _prepare_marketplace_chat(
+        conversation_id, user_id, db, response.headers
+    )
 
     fms = FileManagementService()
     all_file_references: list = []
@@ -723,6 +727,7 @@ async def marketplace_chat_stream(
     message: Annotated[str, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    response: Response,
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
 ):
@@ -732,7 +737,9 @@ async def marketplace_chat_stream(
     metadata → thinking/tool_start/tool_end → token… → done|error.
     """
     user_id = int(current_user.identity.id)
-    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+    _, agent = _prepare_marketplace_chat(
+        conversation_id, user_id, db, response.headers
+    )
 
     try:
         parsed_refs = _parse_file_references_json(file_references)

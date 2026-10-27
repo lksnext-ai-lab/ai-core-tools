@@ -55,7 +55,7 @@ from models.app import App
 from routers.controls.body_limit import BodyReadAborted, make_replay_request, read_body_capped
 from routers.controls.ip_rate_limit import client_ip_from_request, enforce_ip_rate_limit
 from routers.controls.origins import check_allowed_origin
-from routers.controls.rate_limit import apply_app_rate_limit
+from routers.controls.rate_limit import apply_agent_rate_limit
 from routers.public.v1.auth import api_key_header
 from services.a2a_server.card_service import build_public_card, card_to_json, catalog_entry
 from services.a2a_server.identity import A2ACallScope, A2ARequestLog, context_for_owner, owner_for
@@ -401,7 +401,7 @@ def _attach_rate_limit_headers(resp: Response, response_headers: Dict[str, str])
     """MEDIUM-12 (fix round 1): the single funnel every return path -- the
     three early-reject ones (RB-12 shape, RB-5 terminal, RB-3 bulkhead) and
     the final dispatch one -- uses to copy the `X-RateLimit-*` headers
-    `apply_app_rate_limit` already set, so a caller whose send consumed
+    `apply_agent_rate_limit` already set, so a caller whose send consumed
     budget always sees its remaining-budget headers, including on a
     response this router built itself rather than the dispatcher."""
     for header_name, header_value in response_headers.items():
@@ -509,7 +509,7 @@ async def rpc_endpoint(app_slug: str, agent_id: str, request: Request) -> Respon
         # `agent_rate_limit`); every other method skips this query entirely.
         app_row = await run_in_threadpool(_run_load_app, snapshot.app_id)
         if app_row is not None:
-            apply_app_rate_limit(app_row, response_headers)
+            apply_agent_rate_limit(app_row, agent_id_int, response_headers)
 
     request_log = A2ARequestLog(method=_safe_method_for_log(method) if method else "(unparsed)")
     task_id_param, context_id_param = _peek_ids(method, params)

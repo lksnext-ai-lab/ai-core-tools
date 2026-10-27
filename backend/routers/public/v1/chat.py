@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -30,6 +30,7 @@ from models.hitl_approval import ApprovalChannel
 from tools.stream_guard import guard_agent_stream
 from services.conversation_service import ConversationService
 from services.file_management_service import FileManagementService
+from routers.controls.rate_limit import apply_agent_rate_limit
 
 from utils.logger import get_logger
 from utils.service_lifecycle import ServiceRetiredError
@@ -96,6 +97,7 @@ async def call_agent(
     message: Annotated[str, Form(..., description="The user message to send to the agent")],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
     files: Annotated[List[UploadFile], File(description="Optional files to attach (images, PDFs, text files)")] = None,
     file_references: Annotated[Optional[str], Form(description="JSON array of existing file_ids to include. If not provided, all files are included.")] = None,
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters for silo-based agents")] = None,
@@ -131,6 +133,7 @@ async def call_agent(
     """
     validate_api_key_for_app(app_id, api_key, db)
     agent = validate_agent_ownership(db, agent_id, app_id)
+    apply_agent_rate_limit(agent.app, agent_id, response.headers)
 
     fms = FileManagementService()
     all_file_references: List = []
@@ -206,6 +209,7 @@ async def call_agent_stream(
     message: Annotated[str, Form(..., description="The user message to send to the agent")],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
     files: Annotated[List[UploadFile], File(description="Optional files to attach")] = None,
     file_references: Annotated[Optional[str], Form(description="JSON array of existing file_ids to include")] = None,
     search_params: Annotated[Optional[str], Form(description="JSON object with search parameters")] = None,
@@ -235,6 +239,7 @@ async def call_agent_stream(
     """
     validate_api_key_for_app(app_id, api_key, db)
     agent = validate_agent_ownership(db, agent_id, app_id)
+    apply_agent_rate_limit(agent.app, agent_id, response.headers)
 
     try:
         parsed_search_params = _validate_search_params(_parse_json_param(search_params, "search_params"))

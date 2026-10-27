@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Annotated
 
 from .schemas import OCRResponseSchema
 from .auth import get_api_key_auth, validate_api_key_for_app, validate_agent_ownership
 from db.database import get_db
+from routers.controls.rate_limit import apply_agent_rate_limit
 
 # Import logger
 from utils.logger import get_logger
@@ -31,13 +32,15 @@ async def process_ocr(
     pdf: Annotated[UploadFile, File(...)],
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
 ):
     """Process OCR on a PDF file using the specified agent."""
     # Validate API key for this app
     validate_api_key_for_app(app_id, api_key, db)
 
     # Validate agent belongs to this app
-    validate_agent_ownership(db, agent_id, app_id)
+    agent = validate_agent_ownership(db, agent_id, app_id)
+    apply_agent_rate_limit(agent.app, agent_id, response.headers)
 
     # Validate file type
     if not pdf.filename.lower().endswith('.pdf'):

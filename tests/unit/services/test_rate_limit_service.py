@@ -22,81 +22,107 @@ def fresh() -> RateLimitService:
 
 
 # ---------------------------------------------------------------------------
-# check_and_consume — unlimited mode
+# check_and_consume_for_agent — unlimited mode
 # ---------------------------------------------------------------------------
 
 
 class TestUnlimited:
     def test_unlimited_when_max_zero(self):
         svc = fresh()
-        state = svc.check_and_consume(app_id=1, max_per_minute=0)
+        state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=0)
         assert state.remaining == -1
 
     def test_unlimited_when_max_negative(self):
         svc = fresh()
-        state = svc.check_and_consume(app_id=1, max_per_minute=-5)
+        state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=-5)
         assert state.remaining == -1
 
     def test_unlimited_never_blocks(self):
         svc = fresh()
         for _ in range(1000):
-            state = svc.check_and_consume(app_id=1, max_per_minute=0)
+            state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=0)
             assert state.remaining == -1
 
 
 # ---------------------------------------------------------------------------
-# check_and_consume — limited mode
+# check_and_consume_for_agent — limited mode
 # ---------------------------------------------------------------------------
 
 
 class TestLimited:
     def test_first_request_consumes_one(self):
         svc = fresh()
-        state = svc.check_and_consume(app_id=1, max_per_minute=10)
+        state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         assert state.remaining == 9
         assert state.limit == 10
 
     def test_remaining_decrements_per_call(self):
         svc = fresh()
         for expected_remaining in range(4, -1, -1):
-            state = svc.check_and_consume(app_id=1, max_per_minute=5)
+            state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=5)
             assert state.remaining == expected_remaining
 
     def test_blocks_at_limit(self):
         svc = fresh()
         for _ in range(3):
-            svc.check_and_consume(app_id=1, max_per_minute=3)
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
         # 4th call should be blocked
-        state = svc.check_and_consume(app_id=1, max_per_minute=3)
+        state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
         assert state.remaining == 0
 
     def test_blocked_state_remaining_is_zero(self):
         svc = fresh()
         limit = 2
         for _ in range(limit + 5):
-            state = svc.check_and_consume(app_id=1, max_per_minute=limit)
+            state = svc.check_and_consume_for_agent(
+                app_id=1, agent_id=11, max_per_minute=limit
+            )
         assert state.remaining == 0
 
     def test_reset_epoch_is_next_minute(self):
         svc = fresh()
-        state = svc.check_and_consume(app_id=1, max_per_minute=10)
+        state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         current_minute = int(time.time() // 60)
         expected_reset = (current_minute + 1) * 60
         # Allow 1s tolerance for slow machines
         assert abs(state.reset_epoch - expected_reset) <= 1
 
-    def test_different_apps_are_independent(self):
+    def test_different_agents_in_the_same_app_have_independent_limits(self):
         svc = fresh()
-        for _ in range(5):
-            svc.check_and_consume(app_id=1, max_per_minute=5)
-        # app_id=2 should still be fresh
-        state = svc.check_and_consume(app_id=2, max_per_minute=5)
-        assert state.remaining == 4
+        for _ in range(3):
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
+
+        blocked = svc.check_and_consume_for_agent(
+            app_id=1, agent_id=11, max_per_minute=3
+        )
+        other_agent = svc.check_and_consume_for_agent(
+            app_id=1, agent_id=12, max_per_minute=3
+        )
+
+        assert blocked.exceeded
+        assert other_agent.remaining == 2
+        assert not other_agent.exceeded
+
+    def test_same_agent_in_different_apps_has_independent_limits(self):
+        svc = fresh()
+        for _ in range(3):
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
+
+        other_app = svc.check_and_consume_for_agent(
+            app_id=2, agent_id=11, max_per_minute=3
+        )
+
+        assert other_app.remaining == 2
+        assert not other_app.exceeded
 
     def test_limit_one_allows_exactly_one(self):
         svc = fresh()
-        first = svc.check_and_consume(app_id=1, max_per_minute=1)
-        second = svc.check_and_consume(app_id=1, max_per_minute=1)
+        first = svc.check_and_consume_for_agent(
+            app_id=1, agent_id=11, max_per_minute=1
+        )
+        second = svc.check_and_consume_for_agent(
+            app_id=1, agent_id=11, max_per_minute=1
+        )
         assert first.remaining == 0
         assert second.remaining == 0  # blocked
 
@@ -119,47 +145,16 @@ class TestWindowReset:
         monkeypatch.setattr("services.rate_limit_service.time.time", mock_time)
 
         for _ in range(3):
-            svc.check_and_consume(app_id=1, max_per_minute=3)
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
 
-        blocked = svc.check_and_consume(app_id=1, max_per_minute=3)
+        blocked = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
         assert blocked.remaining == 0
 
         # Advance to minute 1
         fake_time[0] = 61.0
 
-        fresh_state = svc.check_and_consume(app_id=1, max_per_minute=3)
+        fresh_state = svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=3)
         assert fresh_state.remaining == 2  # 3 - 1
-
-
-# ---------------------------------------------------------------------------
-# get_app_state
-# ---------------------------------------------------------------------------
-
-
-class TestGetAppState:
-    def test_returns_none_for_untracked_app(self):
-        svc = fresh()
-        assert svc.get_app_state(app_id=99, max_per_minute=10) is None
-
-    def test_returns_state_after_first_request(self):
-        svc = fresh()
-        svc.check_and_consume(app_id=1, max_per_minute=10)
-        state = svc.get_app_state(app_id=1, max_per_minute=10)
-        assert state is not None
-        assert state.remaining == 9
-
-    def test_does_not_consume_a_request(self):
-        svc = fresh()
-        svc.check_and_consume(app_id=1, max_per_minute=10)
-        before = svc.get_app_state(app_id=1, max_per_minute=10)
-        after = svc.get_app_state(app_id=1, max_per_minute=10)
-        assert before.remaining == after.remaining
-
-    def test_unlimited_returns_state_with_minus_one(self):
-        svc = fresh()
-        state = svc.get_app_state(app_id=1, max_per_minute=0)
-        assert state is not None
-        assert state.remaining == -1
 
 
 # ---------------------------------------------------------------------------
@@ -175,31 +170,43 @@ class TestGetAppUsageStats:
         assert stats["remaining"] == 10
         assert stats["is_over_limit"] is False
 
+    def test_usage_stats_report_the_busiest_agent_not_app_total(self):
+        svc = fresh()
+        for _ in range(8):
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
+        for _ in range(2):
+            svc.check_and_consume_for_agent(app_id=1, agent_id=12, max_per_minute=10)
+
+        stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
+
+        assert stats["current_usage"] == 8
+        assert stats["usage_percentage"] == 80
+
     def test_stress_level_low_below_50pct(self):
         svc = fresh()
         for _ in range(3):
-            svc.check_and_consume(app_id=1, max_per_minute=10)
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
         assert stats["stress_level"] == "low"
 
     def test_stress_level_moderate_between_50_and_80pct(self):
         svc = fresh()
         for _ in range(6):
-            svc.check_and_consume(app_id=1, max_per_minute=10)
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
         assert stats["stress_level"] == "moderate"
 
     def test_stress_level_high_between_80_and_95pct(self):
         svc = fresh()
         for _ in range(8):
-            svc.check_and_consume(app_id=1, max_per_minute=10)
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
         assert stats["stress_level"] == "high"
 
     def test_stress_level_critical_above_95pct(self):
         svc = fresh()
         for _ in range(10):
-            svc.check_and_consume(app_id=1, max_per_minute=10)
+            svc.check_and_consume_for_agent(app_id=1, agent_id=11, max_per_minute=10)
         stats = svc.get_app_usage_stats(app_id=1, max_per_minute=10)
         assert stats["stress_level"] == "critical"
 
@@ -222,8 +229,10 @@ class TestThreadSafety:
         results = []
 
         def make_request():
-            state = svc.check_and_consume(app_id=1, max_per_minute=limit)
-            results.append(state.remaining >= 0)
+            state = svc.check_and_consume_for_agent(
+                app_id=1, agent_id=11, max_per_minute=limit
+            )
+            results.append(not state.exceeded)
 
         threads = [threading.Thread(target=make_request) for _ in range(50)]
         for t in threads:
@@ -231,12 +240,7 @@ class TestThreadSafety:
         for t in threads:
             t.join()
 
-        # After 50 requests against a limit of 10, at most 10 should have
-        # received remaining >= 0 (non-blocked), the rest should have remaining == 0
-        final_state = svc.get_app_state(app_id=1, max_per_minute=limit)
-        assert final_state is not None
-        # The counter should not have gone negative
-        assert final_state.remaining >= 0
+        assert sum(results) == limit
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +253,10 @@ class TestCleanup:
         svc = fresh()
         svc._cleanup_threshold = 5
 
-        for app_id in range(10):
-            svc.check_and_consume(app_id=app_id, max_per_minute=100)
+        for agent_id in range(10):
+            svc.check_and_consume_for_agent(
+                app_id=1, agent_id=agent_id, max_per_minute=100
+            )
 
         # Should not raise
-        svc.check_and_consume(app_id=999, max_per_minute=100)
+        svc.check_and_consume_for_agent(app_id=1, agent_id=999, max_per_minute=100)

@@ -5,7 +5,7 @@ Uses in-memory fixed-window counters with thread-safe access.
 import os
 import time
 import threading
-from typing import Dict, NamedTuple, Optional, Any
+from typing import Dict, Optional
 from dataclasses import dataclass
 
 from utils.logger import get_logger
@@ -52,7 +52,7 @@ _OVERFLOW_KEY = "__overflow__"
 
 @dataclass
 class RateLimitState:
-    """Rate limit state for an app"""
+    """Rate limit state for a request budget."""
     remaining: int
     reset_epoch: int
     limit: int
@@ -62,7 +62,7 @@ class RateLimitState:
 class RateLimitService:
     """
     Thread-safe in-memory rate limiter using fixed-window approach.
-    Each app has a separate counter that resets every minute.
+    Each app-agent pair has a separate counter that resets every minute.
     """
     
     def __init__(
@@ -70,16 +70,16 @@ class RateLimitService:
         key_namespace_max_tracked_keys: int = DEFAULT_KEY_NAMESPACE_MAX_TRACKED_KEYS,
         key_namespace_overflow_multiplier: int = DEFAULT_KEY_NAMESPACE_OVERFLOW_MULTIPLIER,
     ):
-        # app_id -> {window_start_epoch_minute, count}
-        self._counters: Dict[int, Dict[str, int]] = {}
+        # (app_id, agent_id) -> {window_start_epoch_minute, count}
+        self._counters: Dict[tuple[int, int], Dict[str, int]] = {}
         self._lock = threading.RLock()
-        self._cleanup_threshold = 100  # Clean up when we have this many apps
+        self._cleanup_threshold = 100  # Clean up when we have this many counters
 
         # Separate namespace for arbitrary string keys (e.g. per-IP discovery limits),
         # with its OWN lock so this traffic can never contend with, block, or in any
-        # way interact with the per-app `_lock`/`_counters` above.
+        # way interact with the per-agent `_lock`/`_counters` above.
         #
-        # Unlike `_counters` (one window_start per app_id, swept entry-by-entry),
+        # Unlike `_counters` (one window_start per app-agent pair, swept entry-by-entry),
         # all keys in this namespace share a single global window. On rollover the
         # whole dict is replaced in O(1) (the old dict is simply dropped and garbage
         # collected), instead of scanning every entry — so cleanup cost is paid at
@@ -103,17 +103,10 @@ class RateLimitService:
         self._key_overflow_logged_window: Optional[int] = None
         self._key_overflow_denied_count = 0
 
-    def check_and_consume(self, app_id: int, max_per_minute: int) -> RateLimitState:
-        """
-        Check if app can make a request and consume one if allowed.
-        
-        Args:
-            app_id: The app identifier
-            max_per_minute: Maximum requests per minute (0 = unlimited)
-            
-        Returns:
-            RateLimitState with remaining count and reset time
-        """
+    def check_and_consume_for_agent(
+        self, app_id: int, agent_id: int, max_per_minute: int
+    ) -> RateLimitState:
+        """Check and consume the per-minute budget for one agent in an app."""
         if max_per_minute <= 0:
             # Unlimited - return a state indicating no limits
             return RateLimitState(
@@ -124,16 +117,17 @@ class RateLimitService:
         
         current_time = time.time()
         current_minute = int(current_time // 60)
+        counter_key = (app_id, agent_id)
         
         with self._lock:
-            # Get or create counter for this app
-            if app_id not in self._counters:
-                self._counters[app_id] = {
+            # Get or create counter for this app-agent pair.
+            if counter_key not in self._counters:
+                self._counters[counter_key] = {
                     'window_start': current_minute,
                     'count': 0
                 }
             
-            counter = self._counters[app_id]
+            counter = self._counters[counter_key]
             
             # Reset window if we're in a new minute
             if counter['window_start'] < current_minute:
@@ -172,7 +166,7 @@ class RateLimitService:
         Check if an arbitrary string key can make a request and consume one if allowed.
 
         This uses a separate counter namespace (own lock, own dict) from
-        `check_and_consume` (app_id-keyed), so callers such as the A2A discovery
+        the agent execution counters, so callers such as the A2A discovery
         limiter (per client IP) can never drain, collide with, or contend on the lock
         for an app's `agent_rate_limit` budget.
 
@@ -271,64 +265,24 @@ class RateLimitService:
             )
 
     def _cleanup_if_needed(self):
-        """Clean up stale entries if we have too many apps tracked"""
+        """Clean up stale app-agent counters when the tracked-key count grows."""
         if len(self._counters) <= self._cleanup_threshold:
             return
         
         current_minute = int(time.time() // 60)
-        stale_apps = []
+        stale_counters = []
         
-        for app_id, counter in self._counters.items():
+        for counter_key, counter in self._counters.items():
             # Remove entries older than 2 minutes
             if counter['window_start'] < current_minute - 1:
-                stale_apps.append(app_id)
+                stale_counters.append(counter_key)
         
-        for app_id in stale_apps:
-            del self._counters[app_id]
-    
-    def get_app_state(self, app_id: int, max_per_minute: int) -> Optional[RateLimitState]:
-        """
-        Get current rate limit state without consuming a request.
-        
-        Args:
-            app_id: The app identifier
-            max_per_minute: Maximum requests per minute
-            
-        Returns:
-            RateLimitState or None if app not tracked
-        """
-        if max_per_minute <= 0:
-            return RateLimitState(
-                remaining=-1,
-                reset_epoch=int(time.time()) + 60,
-                limit=max_per_minute
-            )
-        
-        current_minute = int(time.time() // 60)
-        
-        with self._lock:
-            if app_id not in self._counters:
-                return None
-            
-            counter = self._counters[app_id]
-            
-            # Reset window if we're in a new minute
-            if counter['window_start'] < current_minute:
-                counter['window_start'] = current_minute
-                counter['count'] = 0
-            
-            remaining = max_per_minute - counter['count']
-            reset_epoch = (current_minute + 1) * 60
-            
-            return RateLimitState(
-                remaining=max(0, remaining),
-                reset_epoch=reset_epoch,
-                limit=max_per_minute
-            )
+        for counter_key in stale_counters:
+            del self._counters[counter_key]
     
     def get_app_usage_stats(self, app_id: int, max_per_minute: int) -> Dict[str, any]:
         """
-        Get detailed usage statistics for an app to calculate stress level.
+        Get detailed usage statistics based on the busiest agent in an app.
         
         Args:
             app_id: The app identifier
@@ -352,7 +306,12 @@ class RateLimitService:
         current_minute = int(current_time // 60)
         
         with self._lock:
-            if app_id not in self._counters:
+            app_counters = [
+                counter
+                for (tracked_app_id, _), counter in self._counters.items()
+                if tracked_app_id == app_id
+            ]
+            if not app_counters:
                 return {
                     'usage_percentage': 0,
                     'stress_level': 'low',
@@ -363,16 +322,15 @@ class RateLimitService:
                     'is_over_limit': False
                 }
             
-            counter = self._counters[app_id]
-            
-            # Reset window if we're in a new minute
-            if counter['window_start'] < current_minute:
-                counter['window_start'] = current_minute
-                counter['count'] = 0
-            
-            current_usage = counter['count']
+            current_usage = 0
+            for counter in app_counters:
+                if counter['window_start'] < current_minute:
+                    counter['window_start'] = current_minute
+                    counter['count'] = 0
+                current_usage = max(current_usage, counter['count'])
+
             remaining = max(0, max_per_minute - current_usage)
-            usage_percentage = (current_usage / max_per_minute) * 100 if max_per_minute > 0 else 0
+            usage_percentage = (current_usage / max_per_minute) * 100
             is_over_limit = current_usage > max_per_minute
             
             # Calculate stress level

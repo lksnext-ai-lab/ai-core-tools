@@ -5,7 +5,7 @@ import mimetypes
 import time
 import uuid
 import json
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Annotated
@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from db.database import get_db
 from models.app import App
+from routers.controls.rate_limit import apply_agent_rate_limit
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from models.hitl_approval import ApprovalChannel
@@ -175,7 +176,8 @@ async def chat_completions(
     app_id: str,
     request: OpenAIChatCompletionRequest,
     api_key: Annotated[str, Depends(get_openai_api_key_auth)],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    response: Response,
 ):
     app = get_app_by_identifier(db, app_id)
     validate_api_key_for_app(app.app_id, api_key, db)
@@ -228,6 +230,8 @@ async def chat_completions(
     
     if not request.messages:
         raise HTTPException(status_code=400, detail="Messages array cannot be empty")
+
+    apply_agent_rate_limit(app, agent_id, response.headers)
         
     # Process multipart messages and accumulate file references
     formatted_message = ""
