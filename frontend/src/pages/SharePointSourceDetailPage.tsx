@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { RefreshCw, SquareArrowOutUpRight, Trash2 } from 'lucide-react';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
 import { useAppRole } from '../hooks/useAppRole';
@@ -12,8 +12,11 @@ import { MESSAGES, errorMessage } from '../constants/messages';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ButtonApp } from '../components/ui/ButtonApp';
+import { FormField, FormTextArea } from '../components/ui/FormField';
 import { Spinner } from '../components/ui/Spinner';
 import { Badge, type BadgeVariant } from '../components/ui/Badge';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
 
 const STATUS_BADGE: Record<SharePointSyncStatus, { label: string; variant: BadgeVariant }> = {
   IDLE: { label: 'Idle', variant: 'default' },
@@ -234,13 +237,10 @@ function SharePointSourceDetailPage() {
   const statusBadge = STATUS_BADGE[source.last_sync_status] ?? STATUS_BADGE.IDLE;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{source.name}</h1>
-          {source.description && <p className="text-gray-500">{source.description}</p>}
-        </div>
+        <Title variant="titSecundario" titulo={source.name} subtitulo={source.description?source.description:''} />
         {canEdit && (
           <ButtonApp
             label={isRunning ? 'Syncing...' : 'Sync now'}
@@ -256,11 +256,11 @@ function SharePointSourceDetailPage() {
       )}
 
       {/* Sync status panel */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">Sync Status</h2>
-        <div className="flex flex-wrap gap-6">
+      <CardApp className="p-5">
+        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">Sync Status</h3>
+        <div className="flex flex-wrap justify-between gap-6">
           <div>
-            <span className="text-xs text-gray-500">Status</span>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Status</span>
             <div className="mt-1">
               <Badge
                 label={statusBadge.label}
@@ -270,9 +270,9 @@ function SharePointSourceDetailPage() {
             </div>
           </div>
           <div>
-            <span className="text-xs text-gray-500">Last synced</span>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Last synced</span>
             <p
-              className="text-sm text-gray-700 mt-1"
+              className="text-sm text-fg dark:text-fg-dark mt-1"
               title={
                 source.last_synced_at
                   ? new Date(source.last_synced_at).toLocaleString()
@@ -283,21 +283,24 @@ function SharePointSourceDetailPage() {
             </p>
           </div>
           <div>
-            <span className="text-xs text-gray-500">Files indexed</span>
-            <p className="text-sm text-gray-700 mt-1">{source.file_count}</p>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Files indexed</span>
+            <p className="text-sm text-fg dark:text-fg-dark mt-1">{source.file_count}</p>
           </div>
         </div>
         {source.last_sync_error && (
-          <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-700">
-            {source.last_sync_error}
-          </div>
+          <Alert
+            type="error"
+            title="Sync error"
+            message={source.last_sync_error}
+            className="mt-3"
+          />
         )}
-      </div>
+      </CardApp>
 
       {/* General section */}
       {canEdit && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-base font-semibold text-gray-900 mb-3">General</h2>
+        <CardApp className="p-5">
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">General</h3>
           {generalError && (
             <Alert
               type="error"
@@ -308,70 +311,61 @@ function SharePointSourceDetailPage() {
             />
           )}
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input
-                type="text"
-                value={generalName}
-                onChange={(e) => setGeneralName(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={generalDesc}
-                onChange={(e) => setGeneralDesc(e.target.value)}
-                rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            <FormField
+              label="Name"
+              id="general-name"
+              value={generalName}
+              onChange={(e) => setGeneralName(e.target.value)}
+            />
+            <FormTextArea
+              label="Description"
+              id="general-description"
+              value={generalDesc}
+              onChange={(e) => setGeneralDesc(e.target.value)}
+              rows={2}
+            />
             <div className="flex justify-end">
-              <button
+              <ButtonApp
+                label={generalSaving ? 'Saving...' : 'Save'}
                 onClick={() => { void handleSaveGeneral(); }}
                 disabled={generalSaving}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
-              >
-                {generalSaving ? 'Saving...' : 'Save'}
-              </button>
+                variant="primary"
+                size="medium"
+              />
             </div>
           </div>
-        </div>
+        </CardApp>
       )}
 
       {/* SharePoint connection section */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">SharePoint Connection</h2>
+      <CardApp className="p-5">
+        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">SharePoint Connection</h3>
 
         {/* Read-only site/drive info */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <span className="text-xs text-gray-500">Site</span>
-            <p className="text-sm text-gray-800 mt-0.5">{source.site_name ?? source.site_id}</p>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Site</span>
+            <p className="text-sm text-fg dark:text-fg-dark mt-0.5">{source.site_name ?? source.site_id}</p>
             {source.site_url && (
               <a
                 href={source.site_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:underline"
-              >
-                {source.site_url}
+                className="text-xs text-bronze  dark:text-bronze-dark inline-block">
+                {source.site_url}{''}<SquareArrowOutUpRight className="w-3 h-3 inline-block ml-1" aria-hidden="true" />
+
               </a>
             )}
           </div>
           <div>
-            <span className="text-xs text-gray-500">Drive</span>
-            <p className="text-sm text-gray-800 mt-0.5">{source.drive_name ?? source.drive_id}</p>
+            <span className="text-xs text-fg dark:text-fg-dark">Drive</span>
+            <p className="text-sm text-fg dark:text-fg-dark mt-0.5">{source.drive_name ?? source.drive_id}</p>
           </div>
         </div>
 
         {/* Editable credentials */}
         {canEdit && (
           <>
-            <p className="text-xs text-gray-500 mb-3">
-              Leave credential fields blank to keep the current values. All three fields must be
-              provided together if you want to update credentials.
-            </p>
             {credError && (
               <Alert
                 type="error"
@@ -382,59 +376,50 @@ function SharePointSourceDetailPage() {
               />
             )}
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
-                <input
-                  type="text"
-                  value={credTenantId}
-                  onChange={(e) => setCredTenantId(e.target.value)}
-                  placeholder={`Current: ${source.tenant_id}`}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
-                <input
-                  type="text"
-                  value={credClientId}
-                  onChange={(e) => setCredClientId(e.target.value)}
-                  placeholder={`Current: ${source.client_id}`}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
-                <input
-                  type="password"
-                  value={credSecret}
-                  onChange={(e) => setCredSecret(e.target.value)}
-                  placeholder="Leave blank to keep current"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              {(credTenantId || credClientId || credSecret) && (
-                <p className="text-xs text-amber-600">
-                  Credentials will be validated against Microsoft Graph on save.
-                </p>
-              )}
+              <FormField
+                label="Tenant ID"
+                id="tenant-id"
+                value={credTenantId}
+                onChange={(e) => setCredTenantId(e.target.value)}
+                placeholder={`Current: ${source.tenant_id}`}
+                helpText="Leave credential fields blank to keep the current values. All three fields must be provided together if you want to update credentials."
+              />
+              <FormField
+                label="Client ID"
+                id="client-id"
+                value={credClientId}
+                onChange={(e) => setCredClientId(e.target.value)}
+                placeholder={`Current: ${source.client_id}`}
+              />
+              <FormField
+                label="Client Secret"
+                id="client-secret"
+                type="password"
+                value={credSecret}
+                onChange={(e) => setCredSecret(e.target.value)}
+                placeholder="Leave blank to keep current"
+                helpText={(credTenantId || credClientId || credSecret)
+                  ? 'Credentials will be validated against Microsoft Graph on save.'
+                  : undefined}
+              />
               <div className="flex justify-end">
-                <button
+                <ButtonApp
+                  label={credSaving ? 'Validating...' : 'Update Credentials'}
                   onClick={() => { void handleSaveCredentials(); }}
                   disabled={credSaving || (!credTenantId && !credClientId && !credSecret)}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
-                >
-                  {credSaving ? 'Validating...' : 'Update Credentials'}
-                </button>
+                  variant="primary"
+                  size="medium"
+                />
               </div>
             </div>
           </>
         )}
-      </div>
+      </CardApp>
 
       {/* Indexing config section */}
       {canEdit && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Indexing Config</h2>
+        <CardApp className="p-5">
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">Indexing Config</h3>
           {filtersError && (
             <Alert
               type="error"
@@ -458,34 +443,34 @@ function SharePointSourceDetailPage() {
               <p className="text-xs text-gray-500 mt-1">Empty = index all supported types.</p>
             </div>
             <div className="flex justify-end">
-              <button
+              <ButtonApp
+                label={filtersSaving ? 'Saving...' : 'Save Filters'}
                 onClick={() => { void handleSaveFilters(); }}
                 disabled={filtersSaving}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
-              >
-                {filtersSaving ? 'Saving...' : 'Save Filters'}
-              </button>
+                variant="primary"
+                size="medium"
+              />
             </div>
           </div>
-        </div>
+        </CardApp>
       )}
 
       {/* Danger zone */}
       {canDelete && (
-        <div className="border border-red-200 rounded-xl p-5">
-          <h2 className="text-base font-semibold text-red-700 mb-2">Danger Zone</h2>
+        <CardApp className="border-error p-5">
+          <h3 className="text-lg font-semibold text-error mb-3">Danger Zone</h3>
           <p className="text-sm text-gray-600 mb-3">
             Deleting this source will permanently remove all indexed documents from the associated
             silo. This action cannot be undone.
           </p>
-          <button
+          <ButtonApp
+            label="Delete Source"
             onClick={() => { void handleDelete(); }}
-            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Source
-          </button>
-        </div>
+            variant="dangerSolid"
+            size="medium"
+            icon={<Trash2 className="w-4 h-4" />}
+          />
+        </CardApp>
       )}
     </div>
   );

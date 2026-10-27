@@ -73,7 +73,6 @@ interface FeatureCard {
   icon: LucideIcon;
   href: string;
   label: string;
-  accentColor: string;
 }
 
 const EDITOR_ROLES = new Set(['owner', 'administrator', 'editor']);
@@ -182,7 +181,6 @@ function AppDashboard() {
       icon: Bot,
       href: `/apps/${appId}/agents`,
       label: 'Manage agents',
-      accentColor: 'text-blue-600 hover:text-blue-700',
     },
     {
       title: 'Repositories',
@@ -191,7 +189,6 @@ function AppDashboard() {
       icon: FolderOpen,
       href: `/apps/${appId}/repositories`,
       label: 'Manage repositories',
-      accentColor: 'text-emerald-600 hover:text-emerald-700',
     },
     {
       title: 'Silos',
@@ -200,7 +197,6 @@ function AppDashboard() {
       icon: Database,
       href: `/apps/${appId}/silos`,
       label: 'Manage silos',
-      accentColor: 'text-amber-600 hover:text-amber-700',
     },
     {
       title: 'Domains',
@@ -209,7 +205,6 @@ function AppDashboard() {
       icon: Globe,
       href: `/apps/${appId}/domains`,
       label: 'Manage domains',
-      accentColor: 'text-violet-600 hover:text-violet-700',
     },
     {
       title: 'App Settings',
@@ -218,7 +213,6 @@ function AppDashboard() {
       icon: Settings,
       href: `/apps/${appId}/settings`,
       label: 'Open settings',
-      accentColor: 'text-slate-600 hover:text-slate-700',
     },
   ];
 
@@ -387,9 +381,10 @@ function AppDashboard() {
                   {agent.name}
                 </span>
                 <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+
                   {hasActivity && (
                     <div
-                      className="h-full bg-blue-400 rounded-full transition-all duration-300"
+                      className="h-full bg-fg dark:bg-fg-dark rounded-full transition-all duration-300"
                       style={{ width: `${pct}%` }}
                     />
                   )}

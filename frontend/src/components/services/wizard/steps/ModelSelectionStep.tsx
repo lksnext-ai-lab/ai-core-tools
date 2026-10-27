@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ExternalLink, Search } from 'lucide-react';
+import { ExternalLink, Filter, Search } from 'lucide-react';
 import { FormField } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
+import { Badge } from '../../../ui/Badge';
 import { ButtonApp } from '../../../ui/ButtonApp';
+import { ButtonCard } from '../../../ui/ButtonCard';
 import { useProviderModels } from '../../../../hooks/useProviderModels';
 import { getProviderDescriptor } from '../providers';
 import type {
@@ -186,7 +188,7 @@ function ModelSelectionStep({
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint dark:text-fg-faint-dark pointer-events-none" />
           <FormField
             id="model-search"
             type="text"
@@ -206,7 +208,8 @@ function ModelSelectionStep({
                   key={f.id}
                   label={f.label}
                   onClick={() => toggleFilter(f.id)}
-                  variant="primary"
+                  icon={<Filter className="w-4 h-4" aria-hidden="true" />}
+                  variant="muted"
                   size="medium"
                   ariaPressed={active}
                   className={`rounded-full ${active ? '' : 'opacity-60'}`}
@@ -246,14 +249,11 @@ interface ModelCardProps {
 function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
   const recent = isRecent(model.created_at);
   return (
-    <button
-      type="button"
+    <ButtonCard
+      variant="selectable"
+      selected={selected}
+      ariaLabel={`Select ${model.display_name}`}
       onClick={onSelect}
-      className={`text-left p-3 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-        selected
-          ? 'border-blue-600 ring-2 ring-blue-200 bg-blue-50'
-          : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-      }`}
     >
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-2">
@@ -262,26 +262,22 @@ function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
           </span>
           <div className="flex flex-wrap gap-1 flex-shrink-0">
             {recent && (
-              <span className="text-[10px] uppercase font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                New
-              </span>
+              <Badge label="New" variant="success" className="uppercase" />
             )}
             {model.deprecated && (
-              <span className="text-[10px] uppercase font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-                Deprecated
-              </span>
+              <Badge label="Deprecated" variant="warning" className="uppercase" />
             )}
           </div>
         </div>
-        <p className="text-xs font-mono text-gray-500 truncate">{model.id}</p>
+        <p className="text-xs font-mono text-fg-secondary dark:text-fg-secondary-dark truncate">{model.id}</p>
         <CapabilityChips info={model} />
         {model.context_window != null && (
-          <p className="text-[11px] text-gray-500 pt-0.5">
+          <p className="text-[11px] text-fg-secondary dark:text-fg-secondary-dark pt-0.5">
             {Intl.NumberFormat().format(model.context_window)} ctx tokens
           </p>
         )}
       </div>
-    </button>
+    </ButtonCard>
   );
 }
 

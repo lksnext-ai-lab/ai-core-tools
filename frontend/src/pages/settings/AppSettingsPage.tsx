@@ -9,8 +9,9 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
-import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
+import { FormCheckbox, FormField, FormSelect } from '../../components/ui/FormField';
+import { ServiceOptionStatus, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
 
 type LangsmithTestStatus = 'ok' | 'unauthorized' | 'network' | 'unknown';
 
@@ -245,73 +246,59 @@ function AppSettingsPage() {
             <div className="bg-white shadow rounded-lg p-6">
               <div className="grid grid-cols-1 gap-6">
                 {/* App Name */}
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    App Name
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter app name"
-                  />
-                </div>
+                <FormField
+                  label="App Name"
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  disabled={!canEdit}
+                  placeholder="Enter app name"
+                />
 
                 {/* App Slug */}
-                <div>
-                  <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-2">
-                    App Slug
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      id="slug"
-                      value={slugInput}
-                      onChange={(e) => setSlugInput(e.target.value.toLowerCase().replaceAll(/[^a-z0-9-]/g, ''))}
-                      disabled={!canEdit}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder="my-app"
-                      pattern="[a-z0-9-]+"
+                <div className="flex items-start gap-2">
+                  <FormField
+                    className="flex-1"
+                    label="App Slug"
+                    id="slug"
+                    value={slugInput}
+                    onChange={(e) => setSlugInput(e.target.value.toLowerCase().replaceAll(/[^a-z0-9-]/g, ''))}
+                    disabled={!canEdit}
+                    placeholder="my-app"
+                    pattern="[a-z0-9-]+"
+                    helpText="URL-friendly identifier for your app. Use lowercase letters, numbers, and hyphens only."
+                  />
+                  {canEdit && (
+                    <ButtonApp
+                      label={savingSlug ? 'Saving...' : 'Update Slug'}
+                      onClick={handleSlugSubmit}
+                      disabled={!slugInput.trim()}
+                      loading={savingSlug}
+                      variant="secondary"
+                      className="mt-6 whitespace-nowrap"
                     />
-                    {canEdit && (
-                      <ButtonApp
-                        label={savingSlug ? 'Saving...' : 'Update Slug'}
-                        onClick={handleSlugSubmit}
-                        disabled={!slugInput.trim()}
-                        loading={savingSlug}
-                        variant="secondary"
-                        className="whitespace-nowrap"
-                      />
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-gray-500">
-                    URL-friendly identifier for your app. Use lowercase letters, numbers, and hyphens only.
-                  </p>
+                  )}
                   {slugSaved && (
                     <p className="mt-1 text-sm text-green-600 flex items-center">
                       <Check className="w-4 h-4 mr-1" /> Slug saved successfully
                     </p>
                   )}
                   {slugError && (
-                    <p className="mt-1 text-sm text-red-600">{slugError}</p>
+                    <p className="mt-1 text-sm text-error dark:text-error-dark">{slugError}</p>
                   )}
                 </div>
 
                 {/* Langsmith API Key */}
                 <div>
-                  <label htmlFor="langsmith_api_key" className="block text-sm font-medium text-gray-700 mb-2">
-                    Langsmith API Key
-                  </label>
-                  <div className="flex items-stretch space-x-2">
-                    <input
-                      type="password"
+                  <div className="flex items-start gap-2">
+                    <FormField
+                      className="flex-1"
+                      label="Langsmith API Key"
                       id="langsmith_api_key"
                       name="langsmith_api_key"
+                      type="password"
                       value={formData.langsmith_api_key}
                       onChange={handleChange}
                       onKeyDown={(e) => {
@@ -325,15 +312,21 @@ function AppSettingsPage() {
                       data-lpignore="true"
                       data-form-type="other"
                       disabled={!canEdit}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       placeholder={!langsmithKeyChanged && originalLangsmithKey ? 'Leave empty to keep current key' : 'Enter Langsmith API key'}
+                      helpText={(
+                        <>
+                          Your Langsmith API key for monitoring and tracing. Leave empty to use the global{' '}
+                          <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_API_KEY</code>
+                          environment variable (when <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_TRACING=true</code>).
+                        </>
+                      )}
                     />
                     {canEdit && (
                       <button
                         type="button"
                         onClick={handleTestLangsmith}
                         disabled={testingLangsmith || !canTestLangsmith}
-                        className="inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-ink bg-surface px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-fg transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark"
+                        className="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-ink bg-surface px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-fg transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark"
                         title="Verify the API key against LangSmith"
                       >
                         {testingLangsmith ? (
@@ -345,11 +338,6 @@ function AppSettingsPage() {
                       </button>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Your Langsmith API key for monitoring and tracing. Leave empty to use the global
-                    <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_API_KEY</code>
-                    environment variable (when <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_TRACING=true</code>).
-                  </p>
                   {langsmithTestResult && (
                     <div
                       role="status"
@@ -377,117 +365,86 @@ function AppSettingsPage() {
                 </div>
 
                 {/* Agent rate limit */}
-                <div>
-                    <label htmlFor="agent_rate_limit" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent Rate Limit
-                    </label>
-                    <input
-                    type="number"
-                    id="agent_rate_limit"
-                    name="agent_rate_limit"
-                    value={formData.agent_rate_limit}
-                    onChange={handleChange}
-                    min="0"
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter agent rate limit"
-                    />
-                  <p className="mt-1 text-sm text-gray-500">
-                    This will limit the number of calls your agents can make per minute in your application.
-                  </p>
-                </div>
+                <FormField
+                  label="Agent Rate Limit"
+                  id="agent_rate_limit"
+                  name="agent_rate_limit"
+                  type="number"
+                  value={formData.agent_rate_limit}
+                  onChange={handleChange}
+                  min={0}
+                  disabled={!canEdit}
+                  placeholder="Enter agent rate limit"
+                  helpText="This will limit the number of calls your agents can make per minute in your application."
+                />
 
                 {/* Maximum File Size */}
-                <div>
-                    <label htmlFor="max_file_size_mb" className="block text-sm font-medium text-gray-700 mb-2">
-                    Maximum File Size (MB)
-                    </label>
-                    <input
-                    type="number"
-                    id="max_file_size_mb"
-                    name="max_file_size_mb"
-                    value={formData.max_file_size_mb}
-                    onChange={handleChange}
-                    min="0"
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter maximum file size in MB (0 = no limit)"
-                    />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Maximum size in megabytes for files uploaded to repositories. Set to 0 for no limit.
-                  </p>
-                </div>
+                <FormField
+                  label="Maximum File Size (MB)"
+                  id="max_file_size_mb"
+                  name="max_file_size_mb"
+                  type="number"
+                  value={formData.max_file_size_mb}
+                  onChange={handleChange}
+                  min={0}
+                  disabled={!canEdit}
+                  placeholder="Enter maximum file size in MB (0 = no limit)"
+                  helpText="Maximum size in megabytes for files uploaded to repositories. Set to 0 for no limit."
+                />
 
                 {/* Agent CORS Origins */}
-                <div>
-                    <label htmlFor="agent_cors_origins" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent CORS Origins
-                    </label>
-                    <input
-                    type="text"
-                    id="agent_cors_origins"
-                    name="agent_cors_origins"
-                    value={formData.agent_cors_origins}
-                    onChange={handleChange}
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
-                    />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Comma-separated list of allowed origins for CORS requests to your agents.
-                  </p>
-                </div>
+                <FormField
+                  label="Agent CORS Origins"
+                  id="agent_cors_origins"
+                  name="agent_cors_origins"
+                  value={formData.agent_cors_origins}
+                  onChange={handleChange}
+                  disabled={!canEdit}
+                  placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
+                  helpText="Comma-separated list of allowed origins for CORS requests to your agents."
+                />
 
                 {/* Enable OpenAI-compatible API */}
-                <div>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="enable_openai_api"
-                      name="enable_openai_api"
-                      checked={formData.enable_openai_api}
-                      onChange={handleChange}
-                      disabled={!canEdit}
-                      className="form-checkbox h-5 w-5 text-blue-600 rounded disabled:cursor-not-allowed"
-                    />
-                    <span className="text-sm font-medium text-gray-700">Enable OpenAI-compatible API</span>
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Allow external applications to interact with your agents using the OpenAI API format. 
-                    When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.
-                  </p>
-                </div>
+                <FormCheckbox
+                  label="Enable OpenAI-compatible API"
+                  id="enable_openai_api"
+                  checked={formData.enable_openai_api}
+                  onChange={handleChange}
+                  disabled={!canEdit}
+                  helpText="Allow external applications to interact with your agents using the OpenAI API format. When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints."
+                />
 
                 {/* Sandbox Service */}
                 <div>
-                  <label htmlFor="default_sandbox_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                    Code Interpreter Sandbox Service
-                  </label>
-                  <select
+                  <FormSelect
+                    label="Code Interpreter Sandbox Service"
                     id="default_sandbox_service_id"
-                    name="default_sandbox_service_id"
-                    aria-describedby={serviceStatusId(sandboxServices, formData.default_sandbox_service_id, 'default_sandbox_service_id')}
                     value={formData.default_sandbox_service_id ?? ''}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
                       default_sandbox_service_id: e.target.value ? Number.parseInt(e.target.value) : null,
                     }))}
                     disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Inherit system default</option>
-                    <ServiceSelectOptions
-                      options={sandboxServices}
-                      savedValue={savedSandboxServiceId}
-                      getLabel={(service) => `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`}
-                    />
-                  </select>
+                    ariaDescribedBy={serviceStatusId(sandboxServices, formData.default_sandbox_service_id, 'default_sandbox_service_id')}
+                    options={[
+                      { value: '', label: 'Inherit system default' },
+                      ...selectableServiceOptions(sandboxServices, savedSandboxServiceId).map((service) => ({
+                        value: service.service_id,
+                        label: serviceOptionLabel(
+                          service,
+                          `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`,
+                        ),
+                      })),
+                    ]}
+                    helpText={(
+                      <>
+                        Default Sandbox Service used when agents in this app run the Code Interpreter capability.
+                        Leave at "Inherit" to use the system default. Manage available services under{' '}
+                        <span className="font-medium">Settings → Sandbox Services</span>.
+                      </>
+                    )}
+                  />
                   <ServiceOptionStatus selectId="default_sandbox_service_id" options={sandboxServices} selectedId={formData.default_sandbox_service_id} />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Default Sandbox Service used when agents in this app run the Code Interpreter capability.
-                    Leave at "Inherit" to use the system default. Manage available services under{' '}
-                    <span className="font-medium">Settings → Sandbox Services</span>.
-                  </p>
                 </div>
               </div>
 

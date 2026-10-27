@@ -158,6 +158,7 @@ const RepositoriesPage: React.FC = () => {
       {/* Repositories List */}
       <Table
         data={repositories}
+        stickyEdgeColumns
         keyExtractor={(repository) => repository.repository_id.toString()}
         columns={[
           {
@@ -165,7 +166,7 @@ const RepositoriesPage: React.FC = () => {
             render: (repository) => (
               <button 
                 type="button"
-                className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors w-full text-left"
+                className="flex items-center cursor-pointer  p-2 w-full text-left"
                 onClick={() => handleManageResources(repository.repository_id)}
               >
                 <BackgroundImage icon={FolderOpen} size={40} iconSize={20} variant="marron" />
@@ -181,7 +182,7 @@ const RepositoriesPage: React.FC = () => {
           {
             header: 'Documents',
             render: (repository) => `${repository.resource_count} documents`,
-            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg dark:text-fg-dark'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
             header: 'Created',
@@ -191,6 +192,7 @@ const RepositoriesPage: React.FC = () => {
           {
             header: 'Actions',
             headerClassName: 'text-right tracking-wider',
+            sticky: 'right',
             className: 'px-6 py-4 whitespace-nowrap text-right text-xs text-fg-secondary dark:text-fg-secondary-dark relative',
             render: (repository) => (
               <ActionDropdown
@@ -229,7 +231,7 @@ const RepositoriesPage: React.FC = () => {
             )
           }
         ]}
-        emptyIcon={<FolderOpen className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={FolderOpen} size={64} iconSize={32} />}
         emptyMessage="No Repositories Yet"
         emptySubMessage="Create your first repository to start organizing and searching documents."
         loading={loading}

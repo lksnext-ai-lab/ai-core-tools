@@ -18,6 +18,7 @@ import type { HitlDecision } from '../types/streaming';
 import { formatDuration } from '../utils/duration';
 import { errorMessage } from '../constants/messages';
 import type { MarketplaceAgentDetail, MarketplaceConversation } from '../types/marketplace';
+import CardApp from '../components/ui/CardApp';
 
 interface ChatMessage {
   readonly id: string;
@@ -805,13 +806,12 @@ export default function MarketplaceChatPage() {
                       scroll-smooth"
          >
            {messages.length === 0 && !showStreaming && (
-             <div className="flex flex-col items-center justify-center h-full py-10 text-center animate-fade-in">
+             <CardApp className="flex items-center justify-center h-full py-10 ">
               <BackgroundImage
                 icon={MessageCircle}
-                size={52}
-                iconSize={26}
+                size={64}
+                iconSize={32}
                 variant="marron"
-                className="mb-5 rounded-xl"
               />
 
                <div className="space-y-2">
@@ -847,7 +847,7 @@ export default function MarketplaceChatPage() {
                    ))}
                  </div>
                )}
-            </div>
+            </CardApp>
           )}
 
           {messages.map((message) => {

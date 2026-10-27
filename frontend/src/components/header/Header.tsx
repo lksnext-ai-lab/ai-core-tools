@@ -104,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div role="search" className="hidden md:block flex-1 max-w-[460px] mx-6">
             <label htmlFor="header-search" className="sr-only">Search agents, apps or chats</label>
             <div className="flex items-center gap-[9px] px-[13px] py-2 bg-surface-hover border border-line rounded-lg focus-within:border-ink dark:bg-surface-hover-dark dark:border-line-dark dark:focus-within:border-ink-dark">
-              <Search className="w-[15px] h-[15px] flex-shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
+              <Search className="w-[15px] h-[15px] flex-shrink-0 text-fg-faint dark:text-fg-faint-dark" aria-hidden="true" />
               <input
                 id="header-search"
                 name="search"

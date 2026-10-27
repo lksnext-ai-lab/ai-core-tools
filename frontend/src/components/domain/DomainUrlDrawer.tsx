@@ -7,6 +7,7 @@ import type { DomainUrlDetail, DomainUrlStatus, DiscoverySource } from '../../ty
 import { ButtonApp } from '../ui/ButtonApp';
 import { LoadingState } from '../ui/LoadingState';
 import { Spinner } from '../ui/Spinner';
+import { Badge, type BadgeVariant } from '../ui/Badge';
 
 interface DomainUrlDrawerProps {
   appId: number;
@@ -16,16 +17,16 @@ interface DomainUrlDrawerProps {
   onClose: () => void;
 }
 
-function statusBadgeClass(status: DomainUrlStatus): string {
+function statusBadgeVariant(status: DomainUrlStatus): BadgeVariant {
   switch (status) {
-    case 'INDEXED': return 'bg-green-100 text-green-800';
-    case 'CRAWLING': return 'bg-blue-100 text-blue-800';
-    case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-    case 'FAILED': return 'bg-red-100 text-red-800';
-    case 'SKIPPED': return 'bg-gray-100 text-gray-600';
-    case 'REMOVED': return 'bg-gray-100 text-gray-400';
-    case 'EXCLUDED': return 'bg-orange-100 text-orange-700';
-    default: return 'bg-gray-100 text-gray-600';
+    case 'INDEXED': return 'success';
+    case 'CRAWLING': return 'info';
+    case 'PENDING': return 'warning';
+    case 'FAILED': return 'error';
+    case 'SKIPPED':
+    case 'REMOVED': return 'default';
+    case 'EXCLUDED': return 'secondary';
+    default: return 'default';
   }
 }
 
@@ -131,15 +132,17 @@ export default function DomainUrlDrawer({
                   href={urlDetail.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-mono text-sm break-all"
+                  className="flex items-center gap-1 text-sm text-bronze  dark:text-bronze-dark inline-block font-mono text-sm break-all"
                 >
                   {urlDetail.url}
                   <ExternalLink className="w-3 h-3 flex-shrink-0" />
                 </a>
               </div>
-              <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium ${statusBadgeClass(urlDetail.status as DomainUrlStatus)}`}>
-                {urlDetail.status}
-              </span>
+              <Badge
+                label={urlDetail.status}
+                variant={statusBadgeVariant(urlDetail.status as DomainUrlStatus)}
+                className={`flex-shrink-0 ${urlDetail.status === 'REMOVED' ? 'line-through opacity-70' : ''}`}
+              />
             </div>
 
             {/* Core metadata */}

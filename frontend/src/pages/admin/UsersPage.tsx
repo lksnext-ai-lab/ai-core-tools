@@ -293,6 +293,7 @@ function UsersPage() {
 
         <Table
           data={users}
+          stickyEdgeColumns
           keyExtractor={(user) => user.user_id}
           columns={[
             {
@@ -348,6 +349,7 @@ function UsersPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right' as const,
               render: (user) => user.is_omniadmin ? (
                 <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark italic">Protected account</span>
               ) : user.email === currentUser?.email ? (

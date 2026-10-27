@@ -12,6 +12,7 @@ export interface ButtonAppProps {
   readonly type?: ButtonAppType;
   readonly onClick?: () => void;
   readonly ariaLabel?: string;
+  readonly ariaDescribedBy?: string;
   readonly variant?: ButtonAppVariant;
   readonly size?: ButtonAppSize;
   readonly icon?: ReactNode;
@@ -46,6 +47,7 @@ export function ButtonApp({
   type = 'button',
   onClick,
   ariaLabel,
+  ariaDescribedBy,
   variant = 'primary',
   size = 'medium',
   icon,
@@ -63,6 +65,7 @@ export function ButtonApp({
       onClick={onClick}
       disabled={disabled || loading}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       aria-pressed={ariaPressed}
       aria-busy={loading}
       className={`${baseClasses} ${buttonAppSizeClasses[size]} rounded-md ${buttonAppVariantClasses[variant]} ${className}`}

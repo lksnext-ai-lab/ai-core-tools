@@ -99,7 +99,7 @@ export function TagInput({
           className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent p-0 text-fg dark:text-fg-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
         />
       </div>
-      <p className="text-xs text-fg-secondary mt-1 dark:text-fg-secondary-dark" aria-live="polite">
+      <p className="text-xs text-fg-tertiary mt-1 dark:text-fg-tertiary-dark" aria-live="polite">
         {tags.length}/{maxTags} tags
         {atLimit ? ' (maximum reached)' : ' — press Enter to add'}
       </p>

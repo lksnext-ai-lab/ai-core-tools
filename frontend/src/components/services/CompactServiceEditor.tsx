@@ -4,7 +4,7 @@ import Modal from '../ui/Modal';
 import { FormField, FormCheckbox } from '../ui/FormField';
 import { FormActions } from '../ui/FormActions';
 import Alert from '../ui/Alert';
-import { getProviderBadgeColor } from '../ui/providerBadges';
+import { ProviderBadge } from '../ui/Badge';
 import { getProviderDescriptor } from './wizard/providers';
 import ServiceWizard from './wizard/ServiceWizard';
 import { dateInputValueFromIso, isoFromDateInput } from '../../utils/serviceLifecycle';
@@ -195,13 +195,11 @@ function CompactServiceEditor({
                 <p className="text-[11px] uppercase font-semibold text-bronze-dark tracking-wide">
                   Provider
                 </p>
-                <span
-                  className={`inline-flex mt-1 text-xs font-medium px-2 py-1 rounded ${getProviderBadgeColor(
-                    service.provider,
-                  )}`}
-                >
-                  {descriptor?.label || service.provider}
-                </span>
+                <ProviderBadge
+                  provider={service.provider}
+                  label={descriptor?.label || service.provider}
+                  className="mt-1"
+                />
               </div>
               {!isSandbox && (
                 <div className="text-right">

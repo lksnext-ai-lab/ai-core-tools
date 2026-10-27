@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { TagInput } from '../ui/TagInput';
 import Alert from '../ui/Alert';
 import CardApp from '../ui/CardApp';
-import FormField from '../ui/FormField';
+import FormField, { FormTextArea } from '../ui/FormField';
 import ButtonApp from '../ui/ButtonApp';
 
 export type A2ACardVisibility = 'public' | 'api_key';
@@ -70,14 +70,7 @@ function CopyableField({
 
       {value ? (
         <div className="flex items-center gap-2">
-          {/*<input
-            id={id}
-            type="text"
-            readOnly
-            value={value}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />*/}
-          <FormField
+         <FormField
             label={label}
             id={id}
             disabled
@@ -85,14 +78,6 @@ function CopyableField({
             onChange={() => undefined}
             className="flex-1"
           />
-          {/*<button
-            type="button"
-            onClick={() => onCopy(value, label)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-          >
-            <Copy className="w-4 h-4" aria-hidden="true" />
-            Copy
-          </button>*/} 
           <ButtonApp variant="secondary" label="Copy" type="button" onClick={() => onCopy('bton', 'Label')} icon={<Copy className="w-4 h-4" aria-hidden="true" />} />
         </div>
       ) : (
@@ -122,10 +107,8 @@ export function AgentA2ASettings({
   const enableHintId = useId();
   const enableErrorId = useId();
   const nameId = useId();
-  const nameCounterId = useId();
   const nameErrorId = useId();
   const descriptionId = useId();
-  const descriptionCounterId = useId();
   const descriptionErrorId = useId();
   const visibilityErrorId = useId();
   const skillTagsErrorId = useId();
@@ -209,15 +192,15 @@ export function AgentA2ASettings({
       </p>
 
       <div className="flex items-start gap-3">
-        <input
+        <FormField
           id={enableId}
           type="checkbox"
+          className="mt-1"
           checked={value.a2a_enabled}
           disabled={disabled}
-          aria-invalid={!!enableError}
-          aria-describedby={enableError ? `${enableHintId} ${enableErrorId}` : enableHintId}
+          ariaInvalid={!!enableError}
+          ariaDescribedBy={enableError ? `${enableHintId} ${enableErrorId}` : enableHintId}
           onChange={(e) => onChange({ a2a_enabled: e.target.checked })}
-          className="mt-1 w-5 h-5 accent-ink dark:accent-ink-dark border-line-strong rounded focus-visible:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <div>
           <label htmlFor={enableId} className="text-sm font-medium text-fg dark:text-fg-dark">
@@ -233,73 +216,67 @@ export function AgentA2ASettings({
       <fieldset disabled={disabled} aria-describedby={visibilityError ? visibilityErrorId : undefined}>
         <legend className="text-sm font-medium text-fg dark:text-fg-dark mb-2">Agent card visibility</legend>
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-fg-secondary dark:text-fg-secondary-dark">
-            <input
-              type="radio"
-              name="a2a_card_visibility"
-              value="public"
-              checked={value.a2a_card_visibility === 'public'}
-              onChange={() => onChange({ a2a_card_visibility: 'public' })}
-              className="w-4 h-4 accent-ink border-gray-300  dark:accent-ink-dark"
-            />
-            <span>Public card — anyone with the URL can read the agent card</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm text-fg-secondary dark:text-fg-secondary-dark">
-            <input
-              type="radio"
-              name="a2a_card_visibility"
-              value="api_key"
-              checked={value.a2a_card_visibility === 'api_key'}
-              onChange={() => onChange({ a2a_card_visibility: 'api_key' })}
-              className="w-4 h-4 accent-ink border-gray-300  dark:accent-ink-dark"
-            />
-            <span>API key required — the card is only served to callers with a valid X-API-KEY</span>
-          </label>
+          <FormField
+            id={`${visibilityErrorId}-public`}
+            type="radio"
+            name="a2a_card_visibility"
+            value="public"
+            label="Public card — anyone with the URL can read the agent card"
+            labelClassName="text-sm text-fg-secondary dark:text-fg-secondary-dark"
+            className="flex items-center gap-2"
+            checked={value.a2a_card_visibility === 'public'}
+            disabled={disabled}
+            onChange={() => onChange({ a2a_card_visibility: 'public' })}
+          />
+          <FormField
+            id={`${visibilityErrorId}-api-key`}
+            type="radio"
+            name="a2a_card_visibility"
+            value="api_key"
+            label="API key required — the card is only served to callers with a valid X-API-KEY"
+            labelClassName="text-sm text-fg-secondary dark:text-fg-secondary-dark"
+            className="flex items-center gap-2"
+            checked={value.a2a_card_visibility === 'api_key'}
+            disabled={disabled}
+            onChange={() => onChange({ a2a_card_visibility: 'api_key' })}
+          />
         </div>
         <FieldError id={visibilityErrorId} message={visibilityError} />
       </fieldset>
 
       <div>
-        <label htmlFor={nameId} className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
-          Name override
-        </label>
-        <input
+        <FormField
+          label="Name override"
           id={nameId}
           type="text"
           value={value.a2a_name_override ?? ''}
           disabled={disabled}
           maxLength={MAX_NAME_LENGTH}
-          aria-invalid={!!nameError}
-          aria-describedby={nameError ? `${nameCounterId} ${nameErrorId}` : nameCounterId}
+          helpText={`${(value.a2a_name_override ?? '').length}/${MAX_NAME_LENGTH} characters`}
+          helpTextAriaLive="polite"
+          ariaInvalid={!!nameError}
+          ariaDescribedBy={nameError ? nameErrorId : undefined}
           onChange={(e) => onChange({ a2a_name_override: e.target.value || null })}
           placeholder="Defaults to the agent's name"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark"
         />
-        <p id={nameCounterId} aria-live="polite" className="text-xs text-fg-tertiary dark:text-gray-400 mt-1">
-          {(value.a2a_name_override ?? '').length}/{MAX_NAME_LENGTH} characters
-        </p>
         <FieldError id={nameErrorId} message={nameError} />
       </div>
 
       <div>
-        <label htmlFor={descriptionId} className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-          Description override
-        </label>
-        <textarea
+        <FormTextArea
+          label="Description override"
           id={descriptionId}
           value={value.a2a_description_override ?? ''}
           disabled={disabled}
           maxLength={MAX_DESCRIPTION_LENGTH}
+          helpText={`${(value.a2a_description_override ?? '').length}/${MAX_DESCRIPTION_LENGTH} characters`}
+          helpTextAriaLive="polite"
           rows={3}
-          aria-invalid={!!descriptionError}
-          aria-describedby={descriptionError ? `${descriptionCounterId} ${descriptionErrorId}` : descriptionCounterId}
+          ariaInvalid={!!descriptionError}
+          ariaDescribedBy={descriptionError ? descriptionErrorId : undefined}
           onChange={(e) => onChange({ a2a_description_override: e.target.value || null })}
           placeholder="Defaults to the agent's description"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark"
         />
-        <p id={descriptionCounterId} aria-live="polite" className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
-          {(value.a2a_description_override ?? '').length}/{MAX_DESCRIPTION_LENGTH} characters
-        </p>
         <FieldError id={descriptionErrorId} message={descriptionError} />
       </div>
 
@@ -328,27 +305,23 @@ export function AgentA2ASettings({
           {value.a2a_examples.map((example, idx) => (
             <div key={`${exampleKeyPrefix}-${idx}`} className="flex items-start gap-2">
               <div className="flex-1">
-                <textarea
+                <FormTextArea
                   ref={(el) => {
                     exampleTextareaRefs.current[idx] = el;
                   }}
+                  id={`${exampleKeyPrefix}-example-${idx}`}
+                  label={`Example prompt ${idx + 1}`}
+                  labelClassName="sr-only"
+                  ariaLabel={`Example prompt ${idx + 1}`}
                   value={example}
                   disabled={disabled}
                   maxLength={MAX_EXAMPLE_LENGTH}
+                  helpText={`${example.length}/${MAX_EXAMPLE_LENGTH}`}
+                  helpTextAriaLive="polite"
                   rows={2}
                   onChange={(e) => updateExample(idx, e.target.value)}
-                  aria-label={`Example prompt ${idx + 1}`}
-                  aria-describedby={`${exampleKeyPrefix}-counter-${idx}`}
                   placeholder="Enter an example prompt..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark"
                 />
-                <p
-                  id={`${exampleKeyPrefix}-counter-${idx}`}
-                  aria-live="polite"
-                  className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1"
-                >
-                  {example.length}/{MAX_EXAMPLE_LENGTH}
-                </p>
               </div>
               <button
                 type="button"

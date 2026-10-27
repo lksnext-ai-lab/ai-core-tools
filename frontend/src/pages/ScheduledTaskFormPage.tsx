@@ -429,9 +429,9 @@ export default function ScheduledTaskFormPage() {
                 onChange={(event) => setMonthDay(event.target.value)}
               />
             )}
-            <p className="text-sm text-secondary dark:text-secondary-dark">
+            <p className="text-sm text-tertiary dark:text-tertiary-dark">
               Se guardará como{" "}
-              <code className="rounded bg-white px-1 font-mono">
+              <code className="px-1 font-mono">
                 {simpleCron()}
               </code>.
             </p>
@@ -531,10 +531,8 @@ export default function ScheduledTaskFormPage() {
                 { value: "private", label: "Privada · miembros de la app" },
                 { value: "public", label: "Pública · todos los usuarios" },
               ]}
+              helpText="En el marketplace solo se muestran los resultados, nunca el input."
             />
-            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
-              En el marketplace solo se muestran los resultados, nunca el input.
-            </p>
           </div>
         </div>
         <div className="flex justify-end gap-3">

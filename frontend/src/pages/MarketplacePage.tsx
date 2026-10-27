@@ -14,7 +14,9 @@ import type {
 } from '../types/marketplace';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
+import { FormSelect } from '../components/ui/FormField';
 import { SidePanel } from '../components/ui/SidePanel';
+import { Tabs } from '../components/ui/Tabs';
 import MarketplaceAgentDetailPage from './MarketplaceAgentDetailPage';
 
 const PAGE_SIZE = 12;
@@ -29,9 +31,9 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 type MarketplaceTab = 'agents' | 'tasks';
 
-const TABS: { value: MarketplaceTab; label: string }[] = [
-  { value: 'agents', label: 'Agents' },
-  { value: 'tasks', label: 'Scheduled tasks' },
+const TABS: { id: MarketplaceTab; label: string }[] = [
+  { id: 'agents', label: 'Agents' },
+  { id: 'tasks', label: 'Scheduled tasks' },
 ];
 
 /**
@@ -57,25 +59,13 @@ export default function MarketplacePage() {
         subtitulo="Discover and interact with AI agents and scheduled tasks across the platform."
         variant="titPrincipal"
       />
-      <div role="tablist" aria-label="Marketplace sections" className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-        {TABS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.value}
-            onClick={() => setSearchParams(item.value === 'agents' ? {} : { tab: item.value })}
-            className={`-mb-px inline cursor-pointer border-b-2 px-4 py-2 font-display text-[14.5px] font-medium text-fg-primary transition-colors ${
-              tab === item.value
-                ? 'border-fg text-fg dark:text-fg-dark dark:border-fg-dark'
-                : 'border-transparent text-fg-tertiary hover:text-fg-primary dark:text-fg-tertiary-dark dark:hover:text-fg-primary-dark'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel">
+      <Tabs
+        tabs={TABS}
+        activeTab={tab}
+        onChange={(tabId) => setSearchParams(tabId === 'agents' ? {} : { tab: tabId })}
+        className="border-gray-200 dark:border-gray-700"
+      />
+      <div id={`${tab}-panel`} role="tabpanel" aria-labelledby={tab}>
         {tab === 'agents' ? <MarketplaceAgentsTab /> : <MarketplaceScheduledTasksTab />}
       </div>
     </div>
@@ -165,7 +155,7 @@ function MarketplaceAgentsTab() {
     }
     return (
       <>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
           Showing {agents.length} of {total} agent{total === 1 ? '' : 's'}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -191,44 +181,40 @@ function MarketplaceAgentsTab() {
       <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 pointer-events-none">
-            <Search className="w-4 h-4" />
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-fg-faint dark:text-fg-faint-dark pointer-events-none">
+            <Search className="w-4 h-4  text-fg-faint dark:text-fg-faint-dark" />
           </span>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search agents..."
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:bg-surface-dark dark:border-btCard-border-dark"
+            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:bg-surface-dark dark:border-btCard-border-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark"
           />
         </div>
 
         {/* Category */}
-        <select
+        <FormSelect
+          id="marketplace-category"
+          label="Category"
+          labelClassName="sr-only"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="marketplace-filter-select border border-gray-300 dark:border-btCard-border-dark dark:bg-surface-dark focus:outline-none focus:border-accent rounded-lg text-sm py-2 px-3"
-        >
-          <option value="">All Categories</option>
-          {MARKETPLACE_CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: '', label: 'All Categories' },
+            ...MARKETPLACE_CATEGORIES.map((cat) => ({ value: cat, label: cat })),
+          ]}
+        />
 
         {/* Sort */}
-        <select
+        <FormSelect
+          id="marketplace-sort"
+          label="Sort by"
+          labelClassName="sr-only"
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          className="marketplace-filter-select border border-gray-300 dark:border-btCard-border-dark dark:bg-surface-dark rounded-lg text-sm py-2 px-3 focus:outline-none focus:border-accent"
-        >
-          {SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          options={SORT_OPTIONS}
+        />
 
         {/* My Apps toggle */}
         <ButtonApp

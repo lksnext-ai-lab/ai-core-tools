@@ -136,6 +136,7 @@ function DomainsPage() {
       {/* Domains List */}
       <Table
         data={domains || []}
+        stickyEdgeColumns
         keyExtractor={(domain) => domain.domain_id.toString()}
         columns={[
           {
@@ -211,7 +212,7 @@ function DomainsPage() {
             )
           }
         ]}
-        emptyIcon={<Globe className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={Globe} size={64} iconSize={32} />}
         emptyMessage="No Domains Yet"
         emptySubMessage="Create your first domain to start extracting content from websites."
         loading={loading}

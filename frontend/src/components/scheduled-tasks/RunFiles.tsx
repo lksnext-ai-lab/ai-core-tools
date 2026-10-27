@@ -14,13 +14,13 @@ interface Props {
 export function RunFiles({ runs, resolveFileUrl, showRunDate = false }: Readonly<Props>) {
   const files = runs.flatMap((run) => (run.output_files ?? []).map((file) => ({ run, file })));
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
-      <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-        <FileText className="h-4 w-4 text-blue-600" aria-hidden="true" />
+    <section className="rounded-md border border-line bg-surface-tint p-4 dark:border-line-dark dark:bg-surface-tint-dark">
+      <h2 className="mb-3 flex items-center gap-2 text-[15px] font-medium text-fg dark:text-fg-dark">
+        <FileText className="h-4 w-4 text-bronze dark:text-bronze-dark" aria-hidden="true" />
         Archivos generados
       </h2>
       {files.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Esta ejecución no generó archivos.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Esta ejecución no generó archivos.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {files.map(({ run, file }) => (
@@ -31,7 +31,7 @@ export function RunFiles({ runs, resolveFileUrl, showRunDate = false }: Readonly
                 resolveUrl={(fileId) => resolveFileUrl(run.id, fileId)}
               />
               {showRunDate && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">{formatDateTime(run.scheduled_time)}</span>
+                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDateTime(run.scheduled_time)}</span>
               )}
             </li>
           ))}

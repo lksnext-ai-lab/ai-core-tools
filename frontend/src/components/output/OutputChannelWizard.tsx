@@ -174,7 +174,7 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
                   </ButtonCard>
                 ))}
               </fieldset>
-              {destination && <p className="text-xs text-gray-500">El tipo de canal se conserva. Para usar otro tipo, crea un nuevo canal.</p>}
+              {destination && <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">El tipo de canal se conserva. Para usar otro tipo, crea un nuevo canal.</p>}
               <FormField
                 id="channel-name"
                 label="Nombre del canal"

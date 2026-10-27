@@ -161,14 +161,13 @@ function SystemSettingsPage() {
     const currentValue = editingValues[setting.key] ?? '';
     const isReadOnly = setting.source === 'env';
 
-    
     if (setting.type === 'boolean') {
       const boolValue = currentValue.toLowerCase() === 'true';
       return (
         <FormField
           id={setting.key}
           type="checkbox"
-          ariaLabel={setting.description || setting.key}
+          ariaLabel='{setting.description || setting.key}'
           checked={boolValue}
           onChange={(e) =>
             setEditingValues((prev) => ({

@@ -301,6 +301,7 @@ function DataStructuresPage() {
         {/* Data Structures Table */}
         <Table
           data={dataStructures}
+          stickyEdgeColumns
           keyExtractor={(structure) => structure.parser_id.toString()}
           columns={[
             {
@@ -346,6 +347,7 @@ function DataStructuresPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right',
               render: (structure) => (
                 canEdit ? (
                   <ActionDropdown
@@ -378,7 +380,7 @@ function DataStructuresPage() {
               )
             }
           ]}
-          emptyIcon={<BarChart2 className="w-10 h-10 text-gray-300" />}
+          emptyIcon={<BackgroundImage icon={BarChart2} size={64} iconSize={32} />}
           emptyMessage="No Data Structures"
           emptySubMessage="Create your first data structure to define schemas for structured data extraction."
           loading={loading}

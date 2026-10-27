@@ -89,7 +89,7 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
             <div className="flex items-center gap-1">
               <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="sm" />
               {agent.rating_avg === null ? (
-                <span className="text-gray-400">No ratings</span>
+                <span className="text-fg-tertiary dark:text-fg-tertiary-dark">No ratings</span>
               ) : (
                 <span>{agent.rating_avg.toFixed(1)} ({agent.rating_count})</span>
               )}

@@ -224,6 +224,7 @@ function MiddlewaresPage() {
             {/* Middlewares Table */}
             <Table
                 data={middlewares}
+                stickyEdgeColumns
                 keyExtractor={(mw) => mw.middleware_id.toString()}
                 columns={[
                     {
@@ -270,6 +271,7 @@ function MiddlewaresPage() {
                     },
                     {
                         header: 'Actions',
+                        sticky: 'right',
                         className: 'relative',
                         render: (mw) => (
                             canEdit ? (
@@ -302,7 +304,7 @@ function MiddlewaresPage() {
                         )
                     }
                 ]}
-                emptyIcon={<Layers className="w-10 h-10 text-gray-300" />}
+                emptyIcon={<BackgroundImage icon={Layers} size={64} iconSize={32} />}
                 emptyMessage="No Middlewares"
                 emptySubMessage="Create one, then turn it on from an agent's Advanced tab."
                 loading={loading}

@@ -125,6 +125,7 @@ function SandboxServicesPage() {
 
       <Table
         data={services}
+        stickyEdgeColumns
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           {
@@ -151,11 +152,11 @@ function SandboxServicesPage() {
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           )},
           { header: 'Created', className:'text-xs text-fg-secondary dark:text-fg-secondary-dark align-center px-6 py-3', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
-          { header: 'Actions', className: 'relative', render: (service: SandboxService) => (
+          { header: 'Actions', sticky: 'right', className: 'relative', render: (service: SandboxService) => (
             service.is_system ? (
               // System services are managed by platform admins; the app can only see where they are used.
-              <span className="inline-flex items-center gap-3">
-                <span className="text-gray-400 text-sm">System</span>
+              <span className="flex flex-col items-center gap-1">
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">System</span>
                 <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
               </span>
             ) : canEdit ? (
@@ -171,7 +172,7 @@ function SandboxServicesPage() {
             )
           ) }
         ]}
-        emptyIcon={<Box className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={Box} size={64} iconSize={32} />}
         emptyMessage="No Sandbox Services"
         emptySubMessage="Add a sandbox service to let agents run the Code Interpreter capability."
         loading={loading}

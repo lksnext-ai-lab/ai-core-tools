@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Terminal } from 'lucide-react';
+import { Badge } from '../ui/Badge';
 
 interface CodeExecutionPanelProps {
   lines: string[];
@@ -41,14 +42,16 @@ const CodeExecutionPanel: React.FC<CodeExecutionPanelProps> = ({ lines, isRunnin
           Code output
         </span>
         {isRunning ? (
-          <span className="flex items-center gap-1 rounded-full bg-blue-900/50 px-2 py-0.5 text-blue-300 text-[10px]">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            running
-          </span>
+          <Badge
+            label="running"
+            variant="info"
+            icon={<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-info dark:bg-info-dark" />}
+          />
         ) : (
-          <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-neutral-400 text-[10px]">
-            {lines.length} {lines.length === 1 ? 'line' : 'lines'}
-          </span>
+          <Badge
+            label={`${lines.length} ${lines.length === 1 ? 'line' : 'lines'}`}
+            variant="default"
+          />
         )}
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 text-neutral-500" />

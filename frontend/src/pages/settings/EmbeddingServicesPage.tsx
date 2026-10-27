@@ -239,6 +239,7 @@ function EmbeddingServicesPage() {
 
       <Table
         data={services}
+        stickyEdgeColumns
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           { header: 'Name', render: (service: EmbeddingService) => (
@@ -262,10 +263,10 @@ function EmbeddingServicesPage() {
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           ) },
           { header: 'Created', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
-          { header: 'Actions', className: 'relative', render: (service: EmbeddingService) => (
+          { header: 'Actions', sticky: 'right', className: 'relative', render: (service: EmbeddingService) => (
             service.is_system ? (
-              <span className="inline-flex items-center gap-3">
-                <span className="text-gray-400 text-sm">System</span>
+              <span className="flex flex-col items-center gap-1">
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">System</span>
                 <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
               </span>
             ) : canEdit ? (
@@ -287,7 +288,7 @@ function EmbeddingServicesPage() {
             )
           ) }
         ]}
-        emptyIcon={<BarChart2 className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={BarChart2} size={64} iconSize={32} />}
         emptyMessage="No Embedding Services"
         emptySubMessage="Add your first embedding service to enable vector search and document processing."
         loading={loading}

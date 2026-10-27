@@ -17,7 +17,6 @@ import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
 import Alert from '../components/ui/Alert';
 import ButtonLink from '../components/ui/ButtonLink';
-import CardApp from '../components/ui/CardApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { LoadingState } from '../components/ui/LoadingState';
 import type { ServiceLifecycleWarning } from '../types/services';
@@ -257,28 +256,9 @@ function SilosPage() {
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
 
       {/* Silos List */}
-      {silos.length === 0 ? (
-        <CardApp className="p-8 text-center">
-          
-          <BackgroundImage variant="gris" icon={Database} size={44} className="mx-auto mb-4" />
-          <h3 className="font-display text-[19px] font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-[6px]">No Silos Yet</h3>
-          <p className="text-fg-secondary dark:text-fg-secondary-dark text-[13.5px] mb-4">
-            Create your first silo to start storing and searching documents with vector embeddings.
-          </p>
-          {canEdit && (
-            <ButtonLink
-              to={`/apps/${appId}/silos/new`}
-              label="Create Your First Silo"
-              variant="primary"
-              size="medium"
-              icon={<span aria-hidden="true">+</span>}
-              className="mx-auto w-max"
-            />
-          )}
-        </CardApp>
-      ) : (
-        <Table
+      <Table
           data={silos}
+          stickyEdgeColumns
           keyExtractor={(silo) => silo.silo_id.toString()}
           columns={[
             {
@@ -341,6 +321,7 @@ function SilosPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right',
               headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
               className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark',
               render: (silo) => (
@@ -378,11 +359,22 @@ function SilosPage() {
               )
             }
           ]}
-          emptyIcon={<Database className="w-10 h-10 text-gray-300" />}
+          emptyIcon={<BackgroundImage icon={Database} size={64} iconSize={32} />}
           emptyMessage="No Silos Yet"
           emptySubMessage="Create your first silo to start storing and searching documents with vector embeddings."
           loading={loading}
-        />
+      />
+
+      {!loading && canEdit && silos.length === 0 && (
+        <div className="text-center py-6">
+          <ButtonLink
+            to={`/apps/${appId}/silos/new`}
+            label="Create Your First Silo"
+            variant="primary"
+            size="medium"
+            icon={<span aria-hidden="true">+</span>}
+          />
+        </div>
       )}
 
       {/* Import Modal */}

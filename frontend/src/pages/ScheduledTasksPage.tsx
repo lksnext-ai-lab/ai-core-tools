@@ -176,6 +176,7 @@ export default function ScheduledTasksPage() {
     },
     {
       header: "Acciones",
+      sticky: 'right',
       headerClassName: "text-right",
       className: "px-5 py-4 text-right ",
       render: (task) => (
@@ -233,12 +234,24 @@ export default function ScheduledTasksPage() {
         <LoadingState message="Cargando tareas…" variant="section" />
       ) : (
         <Table<ScheduledTask>
+          stickyEdgeColumns
           columns={columns}
           data={tasks}
           keyExtractor={(task) => task.id}
           emptyMessage="No hay tareas programadas en este workspace."
-          emptyIcon={<CalendarClock className="h-10 w-10 text-fg-faint2 dark:text-fg-faint2-dark" />}
+          emptyIcon={<BackgroundImage icon={CalendarClock} size={64} iconSize={32} />}
         />
+      )}
+
+      {!loading && tasks.length === 0 && (
+        <div className="text-center py-6">
+          <ButtonLink
+            label="Crear primera tarea programada"
+            to={`/apps/${appId}/scheduled-tasks/new`}
+            variant="primary"
+            size="medium"
+          />
+        </div>
       )}
 
       {/* Task detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}

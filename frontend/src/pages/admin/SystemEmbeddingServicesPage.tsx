@@ -259,6 +259,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
     },
     {
       header: 'Actions',
+      sticky: 'right' as const,
       headerClassName: 'text-right',
       className: 'px-6 py-4 whitespace-nowrap text-right',
       render: (svc) => (
@@ -319,10 +320,23 @@ const SystemEmbeddingServicesPage: React.FC = () => {
 
       <Table
         columns={columns}
+        stickyEdgeColumns
         data={services}
         keyExtractor={(svc) => svc.service_id}
+        emptyIcon={<BackgroundImage icon={Brain} size={64} iconSize={32} />}
         emptyMessage="No system embedding services configured."
       />
+
+      {services.length === 0 && (
+        <div className="text-center py-6">
+          <ButtonApp
+            label="Add First Embedding Service"
+            onClick={handleOpenCreate}
+            variant="primary"
+            size="medium"
+          />
+        </div>
+      )}
 
       {showForm && !editingService && (
         <ServiceWizard

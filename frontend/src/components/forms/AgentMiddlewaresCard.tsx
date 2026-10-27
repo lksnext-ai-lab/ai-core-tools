@@ -1,6 +1,8 @@
 import { ArrowDown, ArrowUp, Layers } from 'lucide-react';
 import type { MiddlewareType } from '../../core/types';
 import { MIDDLEWARE_TYPE_INFO, middlewareTypeLabel } from '../../constants/middlewares';
+import { Badge } from '../ui/Badge';
+import { ButtonCard } from '../ui/ButtonCard';
 import { ButtonApp, CardApp } from '../..';
 
 export interface AgentMiddlewareOption {
@@ -72,58 +74,46 @@ function AgentMiddlewaresCard({
               const isSelected = selectedIds.includes(mw.middleware_id);
               // LangChain allows one middleware of each type per agent.
               const blocked = !isSelected && selectedTypes.has(mw.middleware_type);
-              const hintId = `mw-hint-${mw.middleware_id}`;
-              let stateClass = 'border-gray-200 bg-gray-50 hover:border-gray-300 cursor-pointer';
-              if (blocked) stateClass = 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed';
-              else if (isSelected) stateClass = 'border-indigo-500 bg-indigo-50 cursor-pointer';
+              const typeLabel = middlewareTypeLabel(mw.middleware_type);
+              const helpText = [
+                blocked
+                  ? `Only one ${typeLabel.toLowerCase()} middleware per agent.`
+                  : mw.description || MIDDLEWARE_TYPE_INFO[mw.middleware_type]?.description,
+                mw.middleware_type === 'human_in_the_loop' && !isSelected && !blocked && !hasMemory
+                  ? 'Selecting it turns on conversation memory.'
+                  : undefined,
+              ].filter(Boolean).join(' ');
               return (
-                <label
+                <ButtonCard
                   key={mw.middleware_id}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${stateClass}`}
+                  onClick={() => toggle(mw)}
+                  ariaLabel={`Select ${mw.name}`}
+                  disabled={blocked}
+                  variant="selectable-check"
+                  selected={isSelected}
+                  checkboxLabel={mw.name}
+                  checkboxHelpText={helpText}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        disabled={blocked}
-                        onChange={() => toggle(mw)}
-                        aria-describedby={hintId}
-                        className="w-4 h-4 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="ml-3 text-sm font-medium text-gray-900 truncate">{mw.name}</span>
-                    </div>
-                    {mw.name !== middlewareTypeLabel(mw.middleware_type) && (
-                      <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                        {middlewareTypeLabel(mw.middleware_type)}
-                      </span>
-                    )}
-                  </div>
-                  <p id={hintId} className="mt-2 ml-7 text-xs text-gray-500">
-                    {blocked
-                      ? `Only one ${middlewareTypeLabel(mw.middleware_type).toLowerCase()} middleware per agent.`
-                      : mw.description || MIDDLEWARE_TYPE_INFO[mw.middleware_type]?.description}
-                  </p>
-                  {mw.middleware_type === 'human_in_the_loop' && !isSelected && !blocked && !hasMemory && (
-                    <p className="mt-1 ml-7 text-xs text-indigo-700">Selecting it turns on conversation memory.</p>
+                  {mw.name !== typeLabel && (
+                    <Badge label={typeLabel} variant="default" className="mt-2 self-start" />
                   )}
-                </label>
+                </ButtonCard>
               );
             })}
           </div>
 
           {selected.length > 1 && (
             <div className="mt-6">
-              <h4 className="text-sm font-semibold text-gray-900">Execution order</h4>
-              <p className="text-xs text-gray-500 mb-2">Middlewares run top to bottom around each model call (summarization always runs first).</p>
+              <h4 className="text-sm font-semibold text-fg dark:text-fg-dark">Execution order</h4>
+              <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mb-2">Middlewares run top to bottom around each model call (summarization always runs first).</p>
               <ol className="space-y-2">
                 {selected.map((mw, index) => (
                   <li
                     key={mw.middleware_id}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                    className="flex items-center justify-between gap-2 rounded-lg bg-surface dark:bg-surface-dark border border-line dark:border-line-dark p-3"
                   >
-                    <span className="text-sm text-gray-900 min-w-0 truncate">
-                      <span className="text-gray-500 tabular-nums mr-2">{index + 1}.</span>
+                    <span className="text-sm text-fg dark:text-fg-dark min-w-0 truncate">
+                      <span className="text-fg-secondary dark:text-fg-secondary-dark tabular-nums mr-2">{index + 1}.</span>
                       {mw.name}
                     </span>
                     <span className="flex shrink-0 gap-1">
@@ -132,7 +122,7 @@ function AgentMiddlewaresCard({
                         onClick={() => move(index, -1)}
                         disabled={index === 0}
                         aria-label={`Move ${mw.name} up`}
-                        className="p-1 rounded text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                        className="p-1 rounded text-fg-secondary dark:text-fg-secondary-dark  hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ArrowUp className="w-4 h-4" />
                       </button>
@@ -141,7 +131,7 @@ function AgentMiddlewaresCard({
                         onClick={() => move(index, 1)}
                         disabled={index === selected.length - 1}
                         aria-label={`Move ${mw.name} down`}
-                        className="p-1 rounded text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                        className="p-1 rounded text-fg-secondary dark:text-fg-secondary-dark hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ArrowDown className="w-4 h-4" />
                       </button>

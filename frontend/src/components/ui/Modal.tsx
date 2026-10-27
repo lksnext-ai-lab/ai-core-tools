@@ -5,6 +5,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: string;
   children: ReactNode;
   size?: 'small' | 'medium' | 'large' | 'xlarge';
 }
@@ -37,7 +38,7 @@ function isTopModal(id: string): boolean {
   return openModalStack[openModalStack.length - 1] === id;
 }
 
-function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<ModalProps>) {
+function Modal({ isOpen, onClose, title, subtitle, children, size = 'large' }: Readonly<ModalProps>) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<Element | null>(null);
@@ -52,6 +53,12 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
     medium: 'max-w-2xl max-h-[70vh]',
     large: 'max-w-4xl max-h-[80vh]',
     xlarge: 'max-w-6xl max-h-[90vh]',
+  };
+  const contentMaxHeights = {
+    small: 'calc(24rem - 88px)',
+    medium: 'calc(70vh - 88px)',
+    large: 'calc(80vh - 88px)',
+    xlarge: 'calc(90vh - 88px)',
   };
 
   useEffect(() => {
@@ -149,9 +156,16 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
           className={`relative bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg shadow-[0_14px_40px_rgba(32,28,20,0.14)] dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)] w-full overflow-hidden focus:outline-none ${sizeClasses[size]}`}
         >
           <div className="flex items-center justify-between px-6 py-5 border-b border-line dark:border-line-dark bg-surface dark:bg-surface-dark sticky top-0 z-10">
-            <h3 id={titleId} className="font-display text-lg font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
-              {title}
-            </h3>
+            <div>
+              <h3 id={titleId} className="font-display text-lg font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
+                {title}
+              </h3>
+              {subtitle && (
+                <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                  {subtitle}
+                </p>
+              )}
+            </div>
             <button
               onClick={onClose}
               aria-label="Close"
@@ -161,7 +175,7 @@ function Modal({ isOpen, onClose, title, children, size = 'large' }: Readonly<Mo
             </button>
           </div>
 
-          <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 88px)' }}>
+          <div className="p-6 overflow-y-auto" style={{ maxHeight: contentMaxHeights[size] }}>
             {children}
           </div>
         </div>

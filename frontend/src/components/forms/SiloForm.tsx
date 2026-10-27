@@ -288,7 +288,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 ]}
                 disabled={isSubmitting || vectorDbOptions.length === 0 || isEditing}
                 helpText={isEditing ? (
-                  <span className="flex items-center gap-1 text-fg-secondary dark:text-fg-secondary-dark">
+                  <span className="flex items-center gap-1 ">
                     <Info className="w-3.5 h-3.5 shrink-0" />
                     The vector database cannot be changed after a silo is created.
                   </span>

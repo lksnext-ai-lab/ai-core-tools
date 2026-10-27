@@ -151,7 +151,7 @@ function SharePointSourcesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Title variant="titSecundario" titulo="SharePoint Sources" subtitulo="Sync documents from Microsoft SharePoint" />
         {canEdit && (
@@ -168,6 +168,7 @@ function SharePointSourcesPage() {
 
       <Table
         data={sources}
+        stickyEdgeColumns
         keyExtractor={(s) => s.id.toString()}
         columns={[
           {
@@ -231,6 +232,7 @@ function SharePointSourcesPage() {
           },
           {
             header: 'Actions',
+            sticky: 'right',
             headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative',
             render: (source) => {
@@ -273,7 +275,7 @@ function SharePointSourcesPage() {
             },
           },
         ]}
-        emptyIcon={<Cloud className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={Cloud} size={64} iconSize={32} />}
         emptyMessage="No SharePoint Sources Yet"
         emptySubMessage="Add your first SharePoint source to start syncing documents."
         loading={loading}

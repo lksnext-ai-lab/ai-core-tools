@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Bot, MessageCircle, Timer } from 'lucide-react';
+import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
@@ -18,6 +18,7 @@ import { useApprovalExpiryWatch } from '../../hooks/useApprovalExpiryWatch';
 import type { HitlDecision } from '../../types/streaming';
 import type { VideoTimestamp } from './VideoPlayer';
 import { LoadingState } from '../ui/LoadingState';
+import ButtonApp from '../ui/ButtonApp';
 
 interface Message {
   id: string;
@@ -956,31 +957,13 @@ function ChatInterface({
         <div className="flex-1 min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
           {/* Reset button — subtle, top-right corner */}
           <div className="flex justify-end px-6 pt-3 pb-1">
-            <button
-              type="button"
+            <ButtonApp
+              label="Reset"
+              variant="secondary"
+              size="compact"
               onClick={handleResetConversation}
-              className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-[13px]
-                         text-fg-secondary dark:text-fg-secondary-dark
-                         hover:text-error dark:hover:text-error-dark
-                         hover:bg-surface-hover dark:hover:bg-surface-hover-dark
-                         transition-colors duration-150"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Reset
-            </button>
+              icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+            />
           </div>
 
           {/* Messages container */}
@@ -1338,14 +1321,7 @@ function ChatInterface({
                   aria-label="Stop generating"
                   title="Stop generating"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <rect x="6" y="6" width="12" height="12" rx="2" />
-                  </svg>
+                  <Square className="w-4 h-4" />
                 </button>
               ) : (
                 <button
@@ -1358,20 +1334,7 @@ function ChatInterface({
                              transition-opacity duration-150"
                   aria-label="Send message"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                    />
-                  </svg>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               )}
             </div>

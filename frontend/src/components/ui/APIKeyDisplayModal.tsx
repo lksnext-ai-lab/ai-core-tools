@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import Alert from './Alert';
+import { ButtonApp } from './ButtonApp';
+import CardApp from './CardApp';
 
 interface APIKeyDisplayModalProps {
   isOpen: boolean;
@@ -44,17 +46,17 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
 
         {/* API Key Details */}
         <div>
-          <p className="block text-sm font-medium text-gray-700 mb-2">
+          <p className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
             API Key Name
           </p>
-          <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm">
+          <CardApp className="px-3 py-2">
             {apiKey?.name}
-          </div>
+          </CardApp>
         </div>
 
         {/* API Key Value */}
         <div>
-          <label htmlFor="api-key-value" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="api-key-value" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
             API Key
           </label>
           <div className="relative">
@@ -62,15 +64,16 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
               id="api-key-value"
               readOnly
               value={apiKey?.key_value || ''}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono resize-none"
+              className="w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent font-mono resize-none"
               rows={3}
             />
-            <button
+            <ButtonApp
+              label={copied ? 'Copied!' : 'Copy'}
+              variant="primary"
+              size="medium"
               onClick={copyToClipboard}
-              className="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-            >
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
+              className="absolute top-2 right-2"
+            />
           </div>
         </div>
 
@@ -90,12 +93,12 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
 
         {/* Close Button */}
         <div className="flex justify-end pt-4 border-t border-gray-200">
-          <button
+          <ButtonApp
+            label="I've Saved the Key"
+            variant="primary"
+            size="medium"
             onClick={handleClose}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-          >
-            I've Saved the Key
-          </button>
+          />
         </div>
       </div>
     </Modal>

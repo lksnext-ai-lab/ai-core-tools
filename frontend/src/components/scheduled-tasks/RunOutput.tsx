@@ -13,13 +13,13 @@ interface Props {
 export function RunOutput({ run, resolveFileUrl }: Readonly<Props>) {
   const duration = runDuration(run);
   return (
-    <article className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+    <article className="rounded-md border border-line bg-surface-tint p-4 dark:border-line-dark dark:bg-surface-tint-dark">
       <header className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <time dateTime={run.scheduled_time} className="font-medium text-gray-900 dark:text-gray-100">
+        <time dateTime={run.scheduled_time} className="font-medium text-fg dark:text-fg-dark">
           {formatDateTime(run.scheduled_time)}
         </time>
         <RunStatusBadge status={run.status} />
-        {duration && <span className="text-xs text-gray-500 dark:text-gray-400">Duración {duration}</span>}
+        {duration && <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Duración {duration}</span>}
       </header>
       {run.status === 'failed' && (
         <Alert
@@ -32,7 +32,7 @@ export function RunOutput({ run, resolveFileUrl }: Readonly<Props>) {
         <MessageContent content={run.output_text} resolveFileUrl={(fileId) => resolveFileUrl(run.id, fileId)} />
       ) : (
         run.status !== 'failed' && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
             {run.status === 'succeeded' ? 'El agente no devolvió texto.' : 'La ejecución todavía no ha terminado.'}
           </p>
         )

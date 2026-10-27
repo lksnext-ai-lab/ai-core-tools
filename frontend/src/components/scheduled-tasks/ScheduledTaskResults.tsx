@@ -91,7 +91,7 @@ function ContinuousEntry({
   return (
     <details className={accordionClass}>
       <summary className={accordionSummaryClass}>
-        <MessagesSquare className="h-5 w-5 flex-shrink-0 text-bronze dark:text-bronze-dark" aria-hidden="true" />
+        <MessagesSquare className="h-5 w-5 flex-shrink-0 text-bronze dark:text-bronze dark:text-bronze-dark" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-fg dark:text-fg-dark">
@@ -122,7 +122,7 @@ function ContinuousEntry({
 
 function FileCount({ count }: Readonly<{ count: number }>) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+    <span className="inline-flex items-center gap-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
       <Paperclip className="h-3 w-3" aria-hidden="true" />
       {count} archivo{count === 1 ? '' : 's'}
     </span>

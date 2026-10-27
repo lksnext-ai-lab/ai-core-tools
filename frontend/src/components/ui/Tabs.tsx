@@ -6,7 +6,8 @@ import React, { useRef, useEffect } from 'react';
 export interface TabItem {
   id: string;
   label: string;
-  icon?: string;
+  icon?: React.ReactNode;
+  description?: string;
   /** When true, the tab is shown but cannot be activated (e.g. "save first"). */
   disabled?: boolean;
   /** Tooltip/accessible hint shown when the tab is disabled. */
@@ -129,6 +130,7 @@ export function Tabs({
             <React.Fragment key={tab.id}>
               <button
                 type="button"
+                id={tab.id}
                 ref={(el) => {
                   tabRefs.current[index] = el;
                 }}
@@ -150,8 +152,15 @@ export function Tabs({
                   ${tabStateClasses}
                 `}
               >
-                {tab.icon && <span className="mr-2">{tab.icon}</span>}
-                {tab.label}
+                <span className="flex items-center justify-center gap-2">
+                  {tab.icon}
+                  {tab.label}
+                </span>
+                {tab.description && (
+                  <span className="mt-1 block text-xs font-normal text-fg-secondary dark:text-fg-secondary-dark">
+                    {tab.description}
+                  </span>
+                )}
               </button>
               {isDisabled && tab.disabledReason && (
                 <span id={disabledReasonId} className="sr-only">

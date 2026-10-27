@@ -6,6 +6,7 @@ import {
   SERVICE_LIFECYCLE_STRINGS,
   isDateInputRetiredNow,
 } from '../../utils/serviceLifecycle';
+import CardApp from '../ui/CardApp';
 
 interface ServiceLifecycleInputsProps {
   /** `YYYY-MM-DD` or empty string. */
@@ -23,7 +24,7 @@ function ServiceLifecycleInputs({
   onNoticeChange,
 }: Readonly<ServiceLifecycleInputsProps>) {
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+    <CardApp className="space-y-3 p-3">
       <div className="space-y-2">
         <FormField
           id="end_of_service_at"
@@ -63,7 +64,7 @@ function ServiceLifecycleInputs({
           </p>
         </div>
       </div>
-    </div>
+    </CardApp>
   );
 }
 

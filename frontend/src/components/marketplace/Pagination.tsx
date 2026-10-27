@@ -45,8 +45,8 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           onClick={() => onPageChange(p)}
           className={`px-3 py-2 text-sm rounded-lg border ${
             p === page
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'border-gray-300 hover:bg-gray-50'
+              ? 'bg-fg text-white border-fg dark:bg-fg-dark dark:text-ink-on-dark dark:border-fg-dark'
+              : 'border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark'
           }`}
         >
           {p}

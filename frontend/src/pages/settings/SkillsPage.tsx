@@ -353,6 +353,7 @@ function SkillsPage() {
       },
       {
         header: 'Actions',
+        sticky: 'right' as const,
         className: 'relative',
         render: (skill: Skill) => {
           const canManageSkill = canEdit && !skill.is_system;
@@ -513,9 +514,10 @@ function SkillsPage() {
       {/* Skills Table */}
       <Table
         data={skills}
+        stickyEdgeColumns
         keyExtractor={(skill) => skill.skill_id.toString()}
         columns={columns}
-        emptyIcon={<Target className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={Target} size={64} iconSize={32} />}
         emptyMessage="No Skills"
         emptySubMessage="Add your first skill to create specialized behaviors for your agents."
         loading={loading}

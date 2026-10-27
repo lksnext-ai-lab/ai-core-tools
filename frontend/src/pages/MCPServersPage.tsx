@@ -149,26 +149,9 @@ function MCPServersPage() {
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
       {/* MCP Servers List */}
-      {servers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md border p-8 text-center">
-          <div className="text-6xl mb-4">-o-</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No MCP Servers Yet</h3>
-          <p className="text-gray-600 mb-4">
-            Create an MCP server to expose your agents as tools for external MCP clients like Claude Desktop and Cursor.
-          </p>
-          {canEdit && (
-            <ButtonLink
-              label="Create Your First MCP Server"
-              to={`/apps/${appId}/mcp-servers/new`}
-              variant="primary"
-              size="large"
-              icon={<Plus className="h-4 w-4" aria-hidden="true" />}
-            />
-          )}
-        </div>
-      ) : (
-        <Table
+      <Table
           data={servers}
+          stickyEdgeColumns
           keyExtractor={(server) => server.server_id.toString()}
           columns={[
             {
@@ -242,6 +225,7 @@ function MCPServersPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right',
               headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
               className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
               render: (server) => (
@@ -273,11 +257,22 @@ function MCPServersPage() {
               )
             }
           ]}
-          emptyIcon="-o-"
+          emptyIcon={<BackgroundImage icon={Plug} size={64} iconSize={32} />}
           emptyMessage="No MCP Servers Yet"
           emptySubMessage="Create an MCP server to expose your agents as tools."
           loading={loading}
-        />
+      />
+
+      {!loading && canEdit && servers.length === 0 && (
+        <div className="text-center py-6">
+          <ButtonLink
+            label="Create Your First MCP Server"
+            to={`/apps/${appId}/mcp-servers/new`}
+            variant="primary"
+            size="medium"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+          />
+        </div>
       )}
 
       {/* Server detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}

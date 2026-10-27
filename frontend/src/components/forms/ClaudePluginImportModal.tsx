@@ -1,10 +1,7 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import {
-  AlertTriangle,
-  CheckCircle2,
   ShieldAlert,
   Upload,
-  XCircle,
 } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Alert from '../ui/Alert';
@@ -13,6 +10,7 @@ import { errorMessage } from '../../constants/messages';
 import type { ClaudePluginImportResult, ClaudePluginSkillResult } from '../../core/types';
 import { ButtonApp } from '../ui/ButtonApp';
 import { FormField } from '../ui/FormField';
+import { StatusBadge } from '../ui/Badge';
 
 export interface ClaudePluginImportModalProps {
   readonly appId: number;
@@ -25,28 +23,9 @@ export interface ClaudePluginImportModalProps {
 type Phase = 'idle' | 'submitting' | 'done';
 
 function statusBadge(status: ClaudePluginSkillResult['status']) {
-  if (status === 'imported') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">
-        <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-        Imported
-      </span>
-    );
-  }
-  if (status === 'skipped') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800">
-        <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-        Skipped
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
-      <XCircle className="w-3.5 h-3.5" aria-hidden="true" />
-      Failed
-    </span>
-  );
+  if (status === 'imported') return <StatusBadge status="success" customLabel="Imported" />;
+  if (status === 'skipped') return <StatusBadge status="warning" customLabel="Skipped" />;
+  return <StatusBadge status="error" customLabel="Failed" />;
 }
 
 /**
@@ -156,7 +135,7 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
           role="status"
           aria-live="polite"
           tabIndex={-1}
-          className={result ? 'text-sm text-gray-700 dark:text-gray-300 outline-none' : 'sr-only'}
+          className={result ? 'text-sm text-fg dark:text-fg-dark outline-none' : 'sr-only'}
         >
           {result
             ? `${result.imported_count} imported, ${result.skipped_count} skipped, ${result.failed_count} failed.`
@@ -165,8 +144,8 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
 
         {!result && (
           <>
-            <p ref={uploadIntroRef} tabIndex={-1} className="text-sm text-gray-600 dark:text-gray-400 outline-none">
-              Upload a Claude Code plugin package (.zip). Each <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">skills/&lt;name&gt;/SKILL.md</code>{' '}
+            <p ref={uploadIntroRef} tabIndex={-1} className="text-sm text-fg-secondary dark:text-fg-secondary-dark outline-none">
+              Upload a Claude Code plugin package (.zip). Each <code className="bg-fg-tertiary dark:bg-tertiary-dark px-1 rounded">skills/&lt;name&gt;/SKILL.md</code>{' '}
               found in the archive is imported as a disabled skill so an administrator can review
               it — including any bootstrap script it carries — before enabling it.
             </p>
@@ -184,7 +163,7 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
               helpText="Only a .zip archive is accepted."
             />
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-line dark:border-line-dark bg-surface dark:bg-surface-dark">
               <ButtonApp
                 label="Cancel"
                 type="button"
@@ -219,11 +198,11 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
               />
             )}
 
-            <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <ul className="divide-y divide-line dark:divide-btCard-border-dark border dark:border-btCard-border-dark rounded-md overflow-hidden">
               {result.skills.map((skill) => (
-                <li key={skill.name} className="p-3 bg-white dark:bg-gray-800">
+                <li key={skill.name} className="p-3 bg-surface dark:bg-surface-dark">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">
+                    <span className="text-sm font-mono font-medium text-fg dark:text-fg-dark">
                       {skill.name}
                     </span>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -237,10 +216,10 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
                     </div>
                   </div>
                   {skill.reason && (skill.status === 'skipped' || skill.status === 'failed') && (
-                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{skill.reason}</p>
+                    <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">{skill.reason}</p>
                   )}
                   {skill.has_bootstrap && skill.bootstrap_script_path && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">
+                    <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark font-mono">
                       {skill.bootstrap_script_path}
                       {skill.runtime ? ` (${skill.runtime})` : ''}
                     </p>
@@ -249,21 +228,21 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
               ))}
             </ul>
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-line dark:border-line-dark ">
+              <ButtonApp
+                label="Import another"
                 type="button"
+                variant="secondary"
+                size="control"
                 onClick={handleRetry}
-                className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                Import another
-              </button>
-              <button
+              />
+              <ButtonApp
+                label="Done"
                 type="button"
+                variant="primary"
+                size="control"
                 onClick={handleClose}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-              >
-                Done
-              </button>
+              />
             </div>
           </div>
         )}

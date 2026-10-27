@@ -8,16 +8,20 @@ interface FormFieldProps {
   ariaLabel?: string;
   ariaInvalid?: boolean;
   ariaRequired?: boolean;
+  ariaHidden?: boolean;
+  tabIndex?: number;
   value?: string | number;
   checked?: boolean;
   accept?: string;
   autoComplete?: string;
+  inputMode?: React.InputHTMLAttributes<HTMLInputElement>['inputMode'];
   ariaDescribedBy?: string;
   role?: string;
   ariaExpanded?: boolean;
   ariaControls?: string;
   ariaActiveDescendant?: string;
   'data-lpignore'?: string;
+  'data-form-type'?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void;
   onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
@@ -32,7 +36,8 @@ interface FormFieldProps {
   disabled?: boolean;
   required?: boolean;
   error?: string;
-  helpText?: string;
+  helpText?: React.ReactNode;
+  helpTextAriaLive?: 'off' | 'polite' | 'assertive';
   className?: string;
   inputClassName?: string;
   labelClassName?: string;
@@ -50,16 +55,20 @@ export function FormField({
   ariaLabel,
   ariaInvalid,
   ariaRequired,
+  ariaHidden,
+  tabIndex,
   value,
   checked,
   accept,
   autoComplete,
+  inputMode,
   ariaDescribedBy,
   role,
   ariaExpanded,
   ariaControls,
   ariaActiveDescendant,
   'data-lpignore': dataLpignore,
+  'data-form-type': dataFormType,
   onChange,
   onFocus,
   onBlur,
@@ -75,6 +84,7 @@ export function FormField({
   required = false,
   error,
   helpText,
+  helpTextAriaLive,
   className = '',
   inputClassName = '',
   labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1',
@@ -123,7 +133,11 @@ export function FormField({
           <span className="min-w-0 flex-1 truncate px-3">
             {selectedFileName || 'No file selected'}
           </span>
-          <span className="inline-flex min-h-10 shrink-0 items-center border-l border-ink bg-ink px-4 font-medium text-ink-on group-hover:bg-ink/90 dark:border-ink-dark dark:bg-ink-dark dark:text-ink-on-dark">
+          <span
+            className={`inline-flex min-h-10 shrink-0 items-center justify-center border-l border-transparent bg-ink px-4 font-display font-normal tracking-[-0.02em] text-ink-on transition-colors dark:bg-ink-dark dark:text-ink-on-dark ${
+              disabled ? 'opacity-50' : 'group-hover:bg-ink-hover dark:group-hover:bg-ink-hover-dark'
+            }`}
+          >
             Choose file
           </span>
           <input
@@ -133,7 +147,11 @@ export function FormField({
             type={type}
             accept={accept}
             aria-label={ariaLabel}
+            aria-hidden={ariaHidden}
+            tabIndex={tabIndex}
+            inputMode={inputMode}
             data-lpignore={dataLpignore}
+            data-form-type={dataFormType}
             onChange={handleInputChange}
             onFocus={onFocus}
             onBlur={onBlur}
@@ -154,12 +172,16 @@ export function FormField({
           value={value}
           checked={checked}
           aria-label={ariaLabel}
+          aria-hidden={ariaHidden}
+          tabIndex={tabIndex}
+          inputMode={inputMode}
           role={role}
           aria-expanded={ariaExpanded}
           aria-controls={ariaControls}
           aria-activedescendant={ariaActiveDescendant}
           autoComplete={autoComplete}
           data-lpignore={dataLpignore}
+          data-form-type={dataFormType}
           onChange={handleInputChange}
           onFocus={onFocus}
           onBlur={onBlur}
@@ -194,7 +216,7 @@ export function FormField({
       )}
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+        <p id={helpTextId} aria-live={helpTextAriaLive} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
@@ -207,6 +229,8 @@ export function FormField({
 interface FormTextAreaProps {
   label: string;
   id: string;
+  ariaLabel?: string;
+  ariaInvalid?: boolean;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   maxLength?: number;
@@ -216,10 +240,12 @@ interface FormTextAreaProps {
   required?: boolean;
   error?: string;
   helpText?: string;
+  helpTextAriaLive?: 'off' | 'polite' | 'assertive';
   rows?: number;
   className?: string;
   textareaClassName?: string;
   labelClassName?: string;
+  ref?: React.Ref<HTMLTextAreaElement>;
 }
 
 /**
@@ -228,6 +254,8 @@ interface FormTextAreaProps {
 export function FormTextArea({
   label,
   id,
+  ariaLabel,
+  ariaInvalid,
   value,
   onChange,
   maxLength,
@@ -237,10 +265,12 @@ export function FormTextArea({
   required = false,
   error,
   helpText,
+  helpTextAriaLive,
   rows = 3,
   className = '',
   textareaClassName = '',
-  labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1'
+  labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1',
+  ref
 }: Readonly<FormTextAreaProps>) {
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
@@ -257,8 +287,10 @@ export function FormTextArea({
       </label>
 
       <textarea
+        ref={ref}
         id={id}
         name={id}
+        aria-label={ariaLabel}
         value={value}
         onChange={onChange}
         maxLength={maxLength}
@@ -266,7 +298,7 @@ export function FormTextArea({
         disabled={disabled}
         required={required}
         rows={rows}
-        aria-invalid={!!error}
+        aria-invalid={ariaInvalid ?? !!error}
         aria-describedby={describedBy}
         className={`w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark ${
           error
@@ -278,7 +310,7 @@ export function FormTextArea({
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
+        <p id={helpTextId} aria-live={helpTextAriaLive} className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{helpText}</p>
       )}
 
       {error && (
@@ -298,6 +330,7 @@ interface FormSelectProps {
   required?: boolean;
   error?: string;
   helpText?: React.ReactNode;
+  title?: string;
   ariaDescribedBy?: string;
   className?: string;
   labelClassName?: string;
@@ -316,6 +349,7 @@ export function FormSelect({
   required = false,
   error,
   helpText,
+  title,
   ariaDescribedBy,
   className = '',
   labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1'
@@ -340,6 +374,7 @@ export function FormSelect({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        title={title}
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}

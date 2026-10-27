@@ -175,6 +175,7 @@ export default function OutputDestinationsPage() {
       ) : (
         <Table<OutputDestination>
           data={destinations}
+          stickyEdgeColumns
           loading={loading}
           keyExtractor={(destination) => destination.id}
           columns={[
@@ -258,6 +259,7 @@ export default function OutputDestinationsPage() {
             },
             {
               header: "Acciones",
+              sticky: "right",
               className: "relative px-6 py-4 whitespace-nowrap",
               render: (destination) =>
                 canEdit ? (
@@ -302,7 +304,7 @@ export default function OutputDestinationsPage() {
                 ),
             },
           ]}
-          emptyIcon={<Webhook className="mx-auto h-12 w-12 text-gray-300" />}
+          emptyIcon={<BackgroundImage icon={Webhook} size={64} iconSize={32} />}
           emptyMessage="No hay canales de salida"
           emptySubMessage="Añade tu primer canal para enviar resultados a Teams o a un webhook."
         />

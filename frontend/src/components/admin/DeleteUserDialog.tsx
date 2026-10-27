@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Trash2, ArrowRightLeft } from 'lucide-react';
 import Modal from '../ui/Modal';
 import Alert from '../ui/Alert';
+import { ButtonCard } from '../ui/ButtonCard';
+import { ButtonApp } from '../ui/ButtonApp';
+import FormField from '../ui/FormField';
 import UserPicker from '../ui/UserPicker';
 import { adminService } from '../../services/admin';
 import type { User } from '../../services/admin';
 import { errorMessage } from '../../constants/messages';
-import { Spinner } from '../ui/Spinner';
 
 type DialogBranch = 'choose' | 'transfer' | 'cascade';
 
@@ -125,54 +127,59 @@ function DeleteUserDialog({
               Choose an option:
             </p>
 
-            <button
-              type="button"
+            <ButtonCard
+              variant="selectable"
+              className="w-full"
+              ariaLabel={`Transfer ${appWord} to another user`}
               onClick={() => setBranch('transfer')}
-              className="w-full flex items-start gap-4 p-4 text-left border border-gray-200 dark:border-slate-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
             >
-              <ArrowRightLeft
-                className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5"
-                aria-hidden="true"
-              />
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                  Transfer {appWord} to another user
-                </p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                  Reassign ownership of all {appCount} {appWord} to a user you choose, then
-                  delete this account.
-                </p>
+              <div className="flex items-start gap-4">
+                <ArrowRightLeft
+                  className="w-5 h-5 text-fg dark:text-fg-dark flex-shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-fg dark:text-fg-dark">
+                    Transfer {appWord} to another user
+                  </p>
+                  <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-0.5">
+                    Reassign ownership of all {appCount} {appWord} to a user you choose, then
+                    delete this account.
+                  </p>
+                </div>
               </div>
-            </button>
+            </ButtonCard>
 
-            <button
-              type="button"
+            <ButtonCard
+              variant="selectable"
+              className="w-full"
+              ariaLabel={`Delete user and all their ${appWord}`}
               onClick={() => setBranch('cascade')}
-              className="w-full flex items-start gap-4 p-4 text-left border border-gray-200 dark:border-slate-600 rounded-lg hover:border-red-400 dark:hover:border-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
             >
-              <Trash2
-                className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
-                aria-hidden="true"
-              />
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                  Delete user and all their {appWord}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                  Permanently delete all {appCount} {appWord} and all their data (agents,
-                  silos, vector collections). This cannot be undone.
-                </p>
+              <div className="flex items-start gap-4">
+                <Trash2
+                  className="w-5 h-5 text-fg dark:text-fg-dark flex-shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-fg dark:text-fg-dark">
+                    Delete user and all their {appWord}
+                  </p>
+                  <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-0.5">
+                    Permanently delete all {appCount} {appWord} and all their data (agents,
+                    silos, vector collections). This cannot be undone.
+                  </p>
+                </div>
               </div>
-            </button>
+            </ButtonCard>
 
             <div className="flex justify-end pt-2">
-              <button
-                type="button"
+              <ButtonApp
+                label="Cancel"
+                variant="secondary"
+                size="medium"
                 onClick={handleClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-              >
-                Cancel
-              </button>
+              />
             </div>
           </div>
         )}
@@ -210,85 +217,84 @@ function DeleteUserDialog({
             )}
 
             <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
-              <button
-                type="button"
-                aria-label="Back to options"
+              <ButtonApp
+                label="Back"
+                ariaLabel="Back to options"
+                variant="secondary"
+                size="medium"
                 onClick={() => {
                   setBranch('choose');
                   setTransferTarget(null);
                   setSubmitError(null);
                 }}
                 disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-              >
-                Back
-              </button>
-              <button
-                type="button"
+              />
+              <ButtonApp
+                label={isSubmitting ? 'Transferring…' : `Transfer ${appWord} and delete user`}
                 onClick={() => { void handleTransferAndDelete(); }}
-                disabled={!transferTarget || isSubmitting}
-                aria-busy={isSubmitting}
-                aria-describedby={!transferTarget ? TRANSFER_PICKER_ID : undefined}
-                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent bg-ink px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-ink-on transition-colors hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-50 dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-hover-dark"
-              >
-                {isSubmitting && <Spinner size="sm" tone="current" />}
-                {isSubmitting ? 'Transferring…' : `Transfer ${appWord} and delete user`}
-              </button>
+                disabled={!transferTarget}
+                loading={isSubmitting}
+                ariaDescribedBy={!transferTarget ? TRANSFER_PICKER_ID : undefined}
+                variant="dangerSolid"
+                size="medium"
+              />
             </div>
           </div>
         )}
 
         {branch === 'cascade' && (
           <div className="space-y-4">
-            {/* tabIndex={-1} allows programmatic focus on branch entry; dark:border-red-600 meets 3:1 non-text contrast */}
             <div
               ref={cascadeFocusRef}
               tabIndex={-1}
-              className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-600 rounded-lg space-y-2 focus:outline-none"
+              className="focus:outline-none"
             >
-              <p className="text-sm font-semibold text-red-800 dark:text-red-200">
-                This will permanently delete:
-              </p>
-              <ul className="text-sm text-red-700 dark:text-red-300 list-disc list-inside space-y-0.5">
-                <li>
-                  All {appCount} {appWord} owned by {targetLabel}
-                </li>
-                <li>All agents, silos, vector collections, and API keys in those {appWord}</li>
-                <li>The user account itself</li>
-              </ul>
-              <p className="text-sm text-red-800 dark:text-red-200 font-medium mt-2">
-                This action cannot be undone.
-              </p>
+              <Alert
+                type="info"
+                message={(
+                  <>
+                    <p className="font-medium">This will permanently delete:</p>
+                    <ul className="mt-1 list-inside list-disc space-y-0.5">
+                      <li>All {appCount} {appWord} owned by {targetLabel}</li>
+                      <li>All agents, silos, vector collections, and API keys in those {appWord}</li>
+                      <li>The user account itself</li>
+                    </ul>
+                    <p className="mt-2 font-medium">This action cannot be undone.</p>
+                  </>
+                )}
+              />
             </div>
 
             <div>
               <label
                 htmlFor={CASCADE_INPUT_ID}
-                className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5"
+                className="block text-sm font-medium text-fg dark:text-fg-dark mb-1.5"
               >
                 Type{' '}
-                <code className="px-1 py-0.5 bg-gray-100 dark:bg-slate-700 rounded text-xs font-mono text-gray-800 dark:text-slate-200">
+                <code className="px-1 py-0.5 bg-canvas-alt dark:bg-canvas-alt-dark rounded text-xs font-mono text-fg-secondary dark:text-fg-secondary-dark">
                   {CASCADE_CONFIRM_PHRASE}
                 </code>{' '}
                 to confirm:
               </label>
-              <input
+              <FormField
                 id={CASCADE_INPUT_ID}
                 type="text"
                 value={cascadeConfirm}
                 onChange={(e) => setCascadeConfirm(e.target.value)}
                 disabled={isSubmitting}
-                aria-required="true"
-                aria-invalid={showCascadeInputError}
-                aria-describedby={showCascadeInputError ? CASCADE_ERROR_ID : undefined}
+                ariaRequired
+                ariaInvalid={showCascadeInputError}
+                ariaDescribedBy={showCascadeInputError ? CASCADE_ERROR_ID : undefined}
                 placeholder={CASCADE_CONFIRM_PHRASE}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                inputClassName={showCascadeInputError
+                  ? 'border-error focus:border-error dark:border-error-dark dark:focus:border-error-dark'
+                  : ''}
               />
               {showCascadeInputError && (
                 <p
                   id={CASCADE_ERROR_ID}
                   role="alert"
-                  className="mt-1 text-xs text-red-600 dark:text-red-400"
+                  className="mt-1 text-xs text-error dark:text-error-dark"
                 >
                   Type exactly: {CASCADE_CONFIRM_PHRASE}
                 </p>
@@ -296,30 +302,27 @@ function DeleteUserDialog({
             </div>
 
             <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
-              <button
-                type="button"
-                aria-label="Back to options"
+              <ButtonApp
+                label="Back"
+                ariaLabel="Back to options"
+                variant="secondary"
+                size="medium"
                 onClick={() => {
                   setBranch('choose');
                   setCascadeConfirm('');
                   setSubmitError(null);
                 }}
                 disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-              >
-                Back
-              </button>
-              <button
-                type="button"
+              />
+              <ButtonApp
+                label={isSubmitting ? 'Deleting…' : `Delete user and all ${appWord}`}
+                variant="dangerSolid"
+                size="medium"
                 onClick={() => { void handleCascadeDelete(); }}
-                disabled={!cascadeConfirmPhraseMatches || isSubmitting}
-                aria-busy={isSubmitting}
-                aria-describedby={CASCADE_INPUT_ID}
-                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-error px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-error transition-colors hover:bg-error-bg disabled:cursor-not-allowed disabled:opacity-50 dark:border-error-dark dark:text-error-dark dark:hover:bg-error-bg-dark"
-              >
-                {isSubmitting && <Spinner size="sm" tone="current" />}
-                {isSubmitting ? 'Deleting…' : `Delete user and all ${appWord}`}
-              </button>
+                disabled={!cascadeConfirmPhraseMatches}
+                loading={isSubmitting}
+                ariaDescribedBy={CASCADE_INPUT_ID}
+              />
             </div>
           </div>
         )}

@@ -190,7 +190,6 @@ const OutputParserField = ({
             label: parser.name,
           })) ?? []),
         ]}
-        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
       />
     )}
   </div>
@@ -236,7 +235,6 @@ function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: nu
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
   return <section className="mb-6 rounded-md border border-line bg-surface dark:border-line-dark dark:bg-surface-dark p-6 "><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-fg dark:text-fg-dark">Scheduled tasks using this agent</h3><p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Scheduling is managed independently from the agent.</p></div>
-    {/*<button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button>*/}
     <ButtonApp
       type="button"
       onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)}
@@ -244,7 +242,7 @@ function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: nu
       label="Create scheduled task"
     ></ButtonApp>
     
-    </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-fg-tertiary dark:text-fg-tertiary-dark">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
+    </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-md bg-surface dark:bg-surface-dark border border-line dark:border-btCard-border-dark px-3 py-2 text-sm"><span>{task.name}</span><span className="text-fg-tertiary dark:text-fg-tertiary-dark">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
 }
 
 function AgentFormPage() {
@@ -968,7 +966,6 @@ function AgentFormPage() {
                               label: silo.name,
                             })) ?? []),
                           ]}
-                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                         />
                       </div>
 
@@ -1130,11 +1127,9 @@ function AgentFormPage() {
                                 label: serviceOptionLabel(service),
                               })),
                             ]}
+                            helpText="Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service."
                           />
                           <ServiceOptionStatus selectId="sandbox_service" options={agent?.sandbox_services} selectedId={formData.sandbox_service_id} />
-                          <p className="text-xs text-gray-500 mt-1">
-                            Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
-                          </p>
                         </div>
                       )}
                     </div>
@@ -1244,14 +1239,9 @@ function AgentFormPage() {
                             label: serviceOptionLabel(service),
                           })),
                         ]}
-                        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                        helpText="Model used to vectorize uploaded media/documents into the conversation's temporary knowledge base for retrieval. Required for conversational agents; optional otherwise (documents are then sent in full to the agent, and audio/video uploads are unavailable)."
                       />
                       <ServiceOptionStatus selectId="media_embedding_service" options={embeddingServices} selectedId={formData.media_embedding_service_id} />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Model used to vectorize uploaded media/documents into the conversation's temporary
-                        knowledge base for retrieval. Required for conversational agents; optional otherwise
-                        (documents are then sent in full to the agent, and audio/video uploads are unavailable).
-                      </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1269,10 +1259,9 @@ function AgentFormPage() {
                               label: serviceOptionLabel(service),
                             })),
                           ]}
-                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                          helpText="Speech-to-text model used to transcribe media."
                         />
                         <ServiceOptionStatus selectId="transcription_service" options={agent?.ai_services} selectedId={formData.transcription_service_id} />
-                        <p className="text-xs text-gray-500 mt-1">Speech-to-text model used to transcribe media.</p>
                       </div>
 
                       <div>
@@ -1289,10 +1278,9 @@ function AgentFormPage() {
                               label: serviceOptionLabel(service),
                             })),
                           ]}
-                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
+                          helpText="Enables multimodal analysis (visual descriptions from video frames)."
                         />
                         <ServiceOptionStatus selectId="video_ai_service" options={videoServiceOptions} selectedId={formData.video_ai_service_id} />
-                        <p className="text-xs text-gray-500 mt-1">Enables multimodal analysis (visual descriptions from video frames).</p>
                       </div>
 
                       <div>
@@ -1308,7 +1296,6 @@ function AgentFormPage() {
                             { value: 'eu', label: 'Basque' },
                             { value: 'fr', label: 'French' },
                           ]}
-                          labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                         />
                       </div>
                     </div>
@@ -1347,45 +1334,42 @@ function AgentFormPage() {
               )}
               {/* Configuration for OCR agents */}
               {formData.type === 'ocr_agent' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                <CardApp   className="p-8">
                   <div className="flex items-center mb-6">
-                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                      <FileText className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">OCR Configuration</h3>
+                    <BackgroundImage icon={FileText} size={40} iconSize={20} className='mr-2'/>
+                      <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">OCR Configuration</h3>
                   </div>
 
                   {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
-                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 mb-6">
+                  <CardApp variant="canvas" className="p-6 mb-6">
                     <div className="flex items-center mb-4">
-                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                        <Zap className="w-4 h-4 text-green-600" />
-                      </div>
+                      <BackgroundImage icon={Zap} size={40} iconSize={20} className='mr-2'/>
                       <h4 className="text-base font-semibold text-fg dark:text-fg-dark">Capabilities</h4>
                     </div>
                     <div className="space-y-4">
-                      <div className="p-3 bg-white rounded-lg border border-gray-200">
-                        <FormCheckbox
-                          id="is_tool_ocr"
-                          label="Tool Agent"
-                          checked={formData.is_tool}
-                          onChange={(e) => {
-                            if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
-                              setShowMcpWarning(true);
-                            } else {
-                              handleInputChange('is_tool', e.target.checked);
-                            }
-                          }}
-                          helpText="Can be used by other agents (including OCR tools)"
-                        />
+                      <ButtonCard
+                        variant="selectable-check"
+                        selected={formData.is_tool}
+                        ariaLabel="Toggle Tool Agent"
+                        checkboxLabel="Tool Agent"
+                        checkboxHelpText="Can be used by other agents (including OCR tools)"
+                        onClick={() => {
+                          if (formData.is_tool && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                            setShowMcpWarning(true);
+                          } else {
+                            handleInputChange('is_tool', !formData.is_tool);
+                          }
+                        }}
+                        className="w-full"
+                      >
                         {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                          <p className="ml-7 mt-1 text-xs text-purple-600">
+                          <p className="ml-7 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                             Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
                           </p>
                         )}
-                      </div>
+                      </ButtonCard>
                     </div>
-                  </div>
+                  </CardApp>
 
                   {/* No AI Services Warning */}
                   {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
@@ -1405,7 +1389,6 @@ function AgentFormPage() {
                             label: serviceOptionLabel(service),
                           })),
                         ]}
-                        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                       />
                       <ServiceOptionStatus selectId="vision_service" options={agent?.ai_services} selectedId={formData.vision_service_id} />
                     </div>
@@ -1435,7 +1418,6 @@ function AgentFormPage() {
                             label: serviceOptionLabel(service),
                           })),
                         ]}
-                        labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                       />
                       <ServiceOptionStatus selectId="text_service" options={agent?.ai_services} selectedId={formData.service_id} />
                     </div>
@@ -1459,7 +1441,7 @@ function AgentFormPage() {
                       agent={agent}
                     />
                   </div>
-                </div>
+                </CardApp>
               )}
             </div>
           )}
@@ -1583,56 +1565,44 @@ function AgentFormPage() {
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agent.skills.map((skill) => {
-                          const descriptionId = skill.description ? `skill-desc-${skill.skill_id}` : undefined;
-                          const disabledBadgeId = skill.is_enabled === false ? `skill-disabled-${skill.skill_id}` : undefined;
-                          const systemBadgeId = skill.is_system ? `skill-system-${skill.skill_id}` : undefined;
-                          const describedBy = [systemBadgeId, disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
+                          const selected = formData.skill_ids.includes(skill.skill_id);
+                          const checkboxHelpText = [
+                            skill.description,
+                            skill.is_system ? 'System skill.' : undefined,
+                            skill.is_enabled === false ? 'Disabled; ignored at execution until re-enabled.' : undefined,
+                          ].filter(Boolean).join(' ') || undefined;
                           return (
-                            <div
+                            <ButtonCard
                               key={skill.skill_id}
-                              className={`p-4 rounded-xl border-2 transition-all duration-200 text-left w-full ${
-                                formData.skill_ids.includes(skill.skill_id)
-                                  ? 'border-purple-500 bg-purple-50'
-                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                              }`}
+                              onClick={() => handleSkillToggle(skill.skill_id)}
+                              ariaLabel={`Toggle ${skill.name}`}
+                              variant="selectable-check"
+                              selected={selected}
+                              checkboxLabel={skill.name}
+                              checkboxHelpText={checkboxHelpText}
+                              className="w-full"
                             >
-                              <div className="flex items-center justify-between">
-                                <FormCheckbox
-                                  id={`skill-${skill.skill_id}`}
-                                  label={skill.name}
-                                  checked={formData.skill_ids.includes(skill.skill_id)}
-                                  onChange={() => handleSkillToggle(skill.skill_id)}
-                                  ariaDescribedBy={describedBy}
-                                  className="flex-1"
-                                />
-                                <div className={`w-2 h-2 rounded-full ${
-                                  formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
-                                }`} />
-                              </div>
                               {skill.is_system && (
-                                <p id={systemBadgeId} className="mt-2 ml-7">
-                                  <Badge label="System" variant="secondary" />
-                                </p>
+                                <Badge label="System" variant="info" className="mt-2 self-start" />
                               )}
                               {skill.is_enabled === false && (
-                                <p id={disabledBadgeId} className="mt-2 ml-7 inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
-                                  <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                                  Disabled — ignored at execution until re-enabled
-                                </p>
+                                <Badge
+                                  label="Disabled — ignored at execution until re-enabled"
+                                  variant="warning"
+                                  icon={<AlertTriangle className="w-3 h-3" aria-hidden="true" />}
+                                  className="mt-2 self-start"
+                                />
                               )}
-                              {skill.description && (
-                                <p id={descriptionId} className="mt-2 ml-7 text-xs text-fg-tertiary dark:text-fg-tertiary-dark truncate">{skill.description}</p>
-                              )}
-                            </div>
+                            </ButtonCard>
                           );
                         })}
                       </div>
 
                       {formData.skill_ids.length > 0 && (
-                        <div className="mt-4 p-4 bg-purple-50 rounded-xl">
-                          <p className="text-sm text-purple-800">
+                        <div className="mt-4 rounded-md border border-line bg-surface-hover p-4 dark:border-line-dark dark:bg-surface-hover-dark">
+                          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
                             <span className="font-medium">{formData.skill_ids.length}</span> skill{formData.skill_ids.length === 1 ? '' : 's'} selected.
-                            The agent will have a <code className="bg-purple-100 px-1 rounded">load_skill</code> tool to activate these skills.
+                            The agent will have a <code className="rounded bg-surface-ash px-1 dark:bg-surface-dark">load_skill</code> tool to activate these skills.
                           </p>
                         </div>
                       )}
@@ -1686,7 +1656,6 @@ function AgentFormPage() {
                       { value: 'public', label: 'Public (visible to all users)' },
                     ]}
                     className="w-fit"
-                    labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                     
                   />
                   {formData.is_tool && (
@@ -1694,7 +1663,6 @@ function AgentFormPage() {
                   )}
                 </div>
               </div>
-
               {/* Profile Metadata (expandable) */}
               {showMarketplace && (
                 <div className="space-y-6">
@@ -1735,10 +1703,9 @@ function AgentFormPage() {
                         label: category,
                       })),
                     ]}
-                    labelClassName="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2"
                   />
                   <div>
-                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">Tags</label>
+                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">Tags</label>
                     <TagInput
                       id="marketplace-tags"
                       tags={marketplaceProfile.tags ?? []}

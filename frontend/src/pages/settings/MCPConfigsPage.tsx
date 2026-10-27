@@ -346,6 +346,7 @@ function MCPConfigsPage() {
         {/* Configs Table */}
         <Table
           data={configs}
+          stickyEdgeColumns
           keyExtractor={(config) => config.config_id.toString()}
           columns={[
             {
@@ -385,6 +386,7 @@ function MCPConfigsPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right',
               className: 'relative',
               render: (config) => (
                 canEdit ? (
@@ -440,7 +442,7 @@ function MCPConfigsPage() {
               )
             }
           ]}
-          emptyIcon={<Plug className="w-10 h-10 text-gray-300" />}
+          emptyIcon={<BackgroundImage icon={Plug} size={64} iconSize={32} />}
           emptyMessage="No MCP Configs"
           emptySubMessage="Add your first MCP configuration to connect agents with external tools and data sources."
           loading={loading}

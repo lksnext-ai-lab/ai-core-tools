@@ -14,6 +14,7 @@ import SkillForm, { type SkillFormSubmitData } from '../../components/forms/Skil
 import { apiService } from '../../services/api';
 import ActionDropdown, { type ActionItem } from '../../components/ui/ActionDropdown';
 import { LoadingState } from '../../components/ui/LoadingState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import Alert from '../../components/ui/Alert';
 import { Badge } from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -209,7 +210,7 @@ function SystemSkillsPage() {
           <LoadingState message="Loading system skills..." />
         </div>
       ) ;
-  if (error) return;
+  if (error) return <ErrorState error={error} onRetry={fetchSkills} />;
 
   return (
     <div className="space-y-6">
@@ -226,7 +227,7 @@ function SystemSkillsPage() {
             icon={<Upload className="w-4 h-4" />}
           />
           <ButtonApp
-            label='Add service'
+            label="Add System Skill"
             onClick={handleOpenCreate}
             variant="primary"
             size="medium"
@@ -256,6 +257,7 @@ function SystemSkillsPage() {
       <div className="">
         <Table
           data={skills}
+          stickyEdgeColumns
           keyExtractor={(skill) => skill.skill_id.toString()}
           columns={[
             {
@@ -307,6 +309,7 @@ function SystemSkillsPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right' as const,
               className: 'relative',
               render: (skill) => {
                 const isExporting = exportingSkillId === skill.skill_id;
@@ -361,12 +364,23 @@ function SystemSkillsPage() {
               },
             },
           ]}
-          emptyIcon={<Target className="w-10 h-10 text-gray-300" />}
+          emptyIcon={<BackgroundImage icon={Target} size={64} iconSize={32} />}
           emptyMessage="No system skills"
           emptySubMessage="Add the first system skill to make it available across every app."
           loading={isLoading}
         />
       </div>
+
+      {!isLoading && skills.length === 0 && (
+        <div className="text-center py-6">
+          <ButtonApp
+            label="Add First System Skill"
+            onClick={handleOpenCreate}
+            variant="primary"
+            size="medium"
+          />
+        </div>
+      )}
 
       <Alert
         type="info"

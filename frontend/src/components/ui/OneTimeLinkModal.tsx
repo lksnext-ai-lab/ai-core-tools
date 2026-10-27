@@ -124,11 +124,11 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
           )}
         />
 
-        <div className="flex justify-end border-t border-gray-200 dark:border-slate-700 pt-4">
+        <div className="flex justify-end border-t border-line dark:border-line-dark pt-4">
           <ButtonApp
-            label="Done"
+            label="Cancel"
             onClick={handleClose}
-            variant="primary"
+            variant="secondary"
             size="medium"
           />
         </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, CalendarClock, FileText } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, FileText, ArrowUpRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -313,6 +313,7 @@ function AgentsPage() {
 
       <Table
         data={agents}
+        stickyEdgeColumns
         keyExtractor={(agent) => agent.agent_id.toString()}
         columns={[
           {
@@ -418,11 +419,12 @@ function AgentsPage() {
                 <button
                   type="button"
                   onClick={() => navigate(`/apps/${appId}/scheduled-tasks?agent_id=${agent.agent_id}`)}
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800"
+                  className="text-xs text-bronze  dark:text-bronze-dark inline-block"
                   title="Abrir las tareas programadas que usan este agente"
                 >
-                  <CalendarClock className="w-3 h-3" />
                   Usado por {count} tarea{count === 1 ? '' : 's'} programada{count === 1 ? '' : 's'}
+                  {''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+
                 </button>
               );
             }
@@ -450,6 +452,7 @@ function AgentsPage() {
           },
           {
             header: 'Actions',
+            sticky: 'right',
             headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
             render: (agent) => (
@@ -487,7 +490,7 @@ function AgentsPage() {
             )
           }
         ]}
-        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={Bot} size={64} iconSize={32} />}
         emptyMessage="No Agents Yet"
         emptySubMessage="Create your first AI agent to get started with intelligent automation."
         loading={loading}
@@ -569,21 +572,23 @@ function AgentsPage() {
             />
 
             <div className="flex space-x-3">
-              <button
+              <ButtonApp
+                label="Cancel"
+                variant="secondary"
+                size="medium"
                 onClick={() => {
                   setShowExportDialog(false);
                   setAgentToExport(null);
                 }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
+                className="flex-1"
+              />
+              <ButtonApp
+                label="Export"
+                variant="primary"
+                size="medium"
                 onClick={handleExport}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
-              >
-                Export
-              </button>
+                className="flex-1"
+              />
             </div>
           </div>
         </div>

@@ -172,19 +172,19 @@ function UserPicker({
     <div data-user-picker className="relative">
       <label
         htmlFor={comboboxId}
-        className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5"
+        className="block text-sm font-medium text-fg dark:text-fg-dark mb-1.5"
       >
         {label}
       </label>
 
       {value ? (
-        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg">
+        <div className="flex items-center gap-2 px-3 py-2 text-sm border border-line-strong rounded-lg bg-surface text-fg dark:border-line-strong-dark dark:bg-surface-dark dark:text-fg-dark">
           <div className="flex-1 min-w-0">
-            <span className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate block">
+            <span className="font-medium text-fg dark:text-fg-dark truncate block">
               {value.name || value.email}
             </span>
             {value.name && (
-              <span className="text-xs text-gray-500 dark:text-slate-400 truncate block">
+              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate block">
                 {value.email}
               </span>
             )}
@@ -194,7 +194,7 @@ function UserPicker({
             onClick={handleClear}
             disabled={disabled}
             aria-label={`Remove selected user ${value.name || value.email}`}
-            className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded disabled:opacity-50"
+            className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none  disabled:opacity-50"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -205,7 +205,7 @@ function UserPicker({
             {isLoading ? (
               <Spinner size="sm" tone="muted" />
             ) : (
-              <Search className="w-4 h-4 text-gray-400 dark:text-slate-500" aria-hidden="true" />
+              <Search className="w-4 h-4 text-fg-faint dark:text-fg-faint-dark" aria-hidden="true" />
             )}
           </span>
           <span role="status" aria-live="polite" className="sr-only">
@@ -231,7 +231,7 @@ function UserPicker({
               if (candidates.length > 0) setIsOpen(true);
             }}
             placeholder="Search by name or email…"
-            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 pl-9 pr-3 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent disabled:bg-surface-hover disabled:text-fg-tertiary disabled:cursor-not-allowed dark:disabled:bg-surface-hover-dark dark:disabled:text-fg-tertiary-dark"
           />
         </div>
       )}
@@ -268,10 +268,12 @@ function UserPicker({
                   handleSelect(user);
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
-                className={`px-4 py-2.5 cursor-pointer select-none ${
+                className={`cursor-pointer select-none px-4 py-3 transition-colors ${
+                  index > 0 ? 'border-t border-line dark:border-line-dark' : ''
+                } ${
                   isActive
-                    ? 'bg-blue-50 dark:bg-blue-900/40'
-                    : 'hover:bg-gray-50 dark:hover:bg-slate-700/50'
+                    ? 'bg-surface-hover dark:bg-btCard-hover'
+                    : 'bg-surface dark:bg-surface-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">

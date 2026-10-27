@@ -10,6 +10,8 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { FormSelect } from '../../components/ui/FormField';
+import ButtonApp from '../../components/ui/ButtonApp';
 import { Badge, StatusBadge, type StatusType } from '../../components/ui/Badge';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
@@ -353,6 +355,7 @@ function CollaborationPage() {
           
           <Table
             className="mt-4"
+            stickyEdgeColumns
             data={allMembers}
             keyExtractor={(member) => member.id.toString()}
             columns={[
@@ -389,6 +392,7 @@ function CollaborationPage() {
                 header: 'Role',
                 render: (member) => (
                   <div className="flex items-center gap-1">
+                    
                     {member.role === 'owner' ? (
                       <Badge
                         label="Owner"
@@ -401,13 +405,14 @@ function CollaborationPage() {
                         variant="custom"
                         className={getRoleBadge(member.role)}
                       />
+                      
                     )}
                     {member.platform_role === 'viewer' && member.role !== 'viewer' && member.role !== 'owner' && (
                       <span className="relative group inline-flex items-center">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 cursor-help flex-shrink-0" />
-                        <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block w-56 rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs shadow-md z-50">
-                          <span className="block font-semibold text-amber-700 mb-1">Platform viewer</span>
-                          <span className="block text-gray-600 leading-relaxed whitespace-normal">This user can only see agents published in the marketplace. They cannot edit app content.</span>
+                        <AlertTriangle className="w-3.5 h-3.5 text-bronze dark:text-bronze-dark cursor-help flex-shrink-0" />
+                        <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block w-56 rounded-lg bg-bronze-bg border border-bronze-border dark:bg-bronze-bg-dark dark:border-bronze-border-dark px-3 py-2.5 text-xs shadow-md z-50">
+                          <span className="block font-semibold text-bronze-strong dark:text-bronze-strong-dark mb-1">Platform viewer</span>
+                          <span className="text-bronze dark:text-bronze-dark leading-relaxed whitespace-normal">This user can only see agents published in the marketplace. They cannot edit app content.</span>
                         </span>
                       </span>
                     )}
@@ -447,31 +452,40 @@ function CollaborationPage() {
               },
               ...(canManage ? [{
                 header: 'Actions',
+                sticky: 'right' as const,
                 render: (member: Collaborator) => (
                   member.role === 'owner' ? (
                     <span className="text-gray-400">-</span>
                   ) : (
                     <div className="flex space-x-2">
                       {member.status === 'accepted' && member.role !== 'owner' && (
-                        <select
+                        <FormSelect
+                          label="Role"
+                          labelClassName="sr-only"
+                          id={`collaborator-role-${member.user_id}`}
                           value={member.role}
                           onChange={(e) => void handleUpdateRole(member.user_id, e.target.value)}
                           disabled={member.platform_role === 'viewer'}
                           title={member.platform_role === 'viewer' ? 'Viewer platform role — cannot be promoted' : undefined}
-                          className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
-                        >
-                          {member.platform_role !== 'viewer' && <option value="editor">Editor</option>}
-                          {member.platform_role !== 'viewer' && <option value="administrator">Administrator</option>}
-                          <option value="viewer">Viewer</option>
-                        </select>
+                          className="min-w-32"
+                          options={[
+                            ...(member.platform_role !== 'viewer'
+                              ? [
+                                  { value: 'editor', label: 'Editor' },
+                                  { value: 'administrator', label: 'Administrator' },
+                                ]
+                              : []),
+                            { value: 'viewer', label: 'Viewer' },
+                          ]}
+                        />
                       )}
                       {member.role !== 'owner' && (
-                        <button 
+                        <ButtonApp
+                          label="Remove"
                           onClick={() => void handleRemoveCollaborator(member.user_id)}
-                          className="text-red-600 hover:text-red-900 transition-colors"
-                        >
-                          Remove
-                        </button>
+                          variant="dangerSolid"
+                          size="small"
+                        />
                       )}
                     </div>
                   )

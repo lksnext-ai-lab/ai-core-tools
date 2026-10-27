@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import Alert from '../ui/Alert';
+import ButtonApp from '../ui/ButtonApp';
 import { LoadingState } from '../ui/LoadingState';
 
 interface Conversation {
@@ -146,15 +148,22 @@ export default function ConversationSidebar({
 
     if (error) {
       return (
-        <div className="p-4 text-center text-red-600">
-          <p>{error}</p>
-          <button 
-            onClick={loadConversations}
-            className="mt-2 text-sm text-blue-600 hover:underline"
-          >
-            Reintentar
-          </button>
-        </div>
+        <Alert
+          type="error"
+          message={(
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => void loadConversations()}
+                className="font-medium text-error underline hover:text-error-strong dark:text-error-dark dark:hover:text-error-strong-dark"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+          className="m-3"
+        />
       );
     }
 
@@ -171,83 +180,82 @@ export default function ConversationSidebar({
     }
 
     return (
-      <div className="divide-y divide-white/10 dark:divide-gray-700/30">
+      <div className="overflow-hidden rounded-md border border-line dark:border-line-dark">
         {conversations.map((conversation) => {
           const isActive = conversation.conversation_id === currentConversationId;
+          const isEditing = editingConvId === conversation.conversation_id;
 
           return (
-            <button
+            <div
               key={conversation.conversation_id}
-              onClick={(e) => {
-                if (editingConvId === conversation.conversation_id) return;
-                if ((e.target as HTMLElement).closest('button[data-action]')) return;
-                onConversationSelect(conversation.conversation_id);
-              }}
-              className={`group w-full text-left p-4 cursor-pointer transition-colors ${
-                isActive
-                  ? 'pg-sidebar-active'
-                  : 'hover:bg-white/40 dark:hover:bg-gray-800/40 border-l-2 border-transparent'
+              className={`group flex items-start gap-2 border-b border-line bg-white px-2.5 py-[9px] transition-colors duration-150 last:border-b-0 hover:bg-surface-hover dark:border-line-dark dark:bg-surface-dark dark:hover:bg-surface-hover-dark ${
+                isActive ? 'bg-surface-hover dark:bg-surface-hover-dark' : ''
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  {editingConvId === conversation.conversation_id ? (
-                    <input
-                      autoFocus
-                      type="text"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onBlur={() => handleRenameSave(conversation.conversation_id)}
-                      onKeyDown={(e) => handleRenameKeyDown(e, conversation.conversation_id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className={`text-sm font-medium border-b outline-none bg-transparent w-full ${
-                        isActive ? 'border-indigo-300 text-indigo-900 dark:text-indigo-200' : 'border-gray-400 text-gray-700 dark:text-gray-200'
-                      }`}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <h4 className={`text-sm font-medium truncate ${
-                        isActive ? 'text-indigo-900 dark:text-indigo-200' : 'text-gray-700 dark:text-gray-200'
-                      }`}>
-                        {conversation.title}
-                      </h4>
-                      <button
-                        type="button"
-                        data-action="rename"
-                        onClick={(e) => handleRenameStart(e, conversation)}
-                        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-indigo-500 transition-all"
-                        title="Renombrar conversación"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
+              <div className="min-w-0 flex-1">
+                {isEditing ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onBlur={() => handleRenameSave(conversation.conversation_id)}
+                    onKeyDown={(e) => handleRenameKeyDown(e, conversation.conversation_id)}
+                    className="w-full min-w-0 border-b border-bronze bg-transparent py-1 text-sm font-medium text-fg outline-none dark:text-fg-dark"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onConversationSelect(conversation.conversation_id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className="w-full text-left"
+                  >
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-fg dark:text-fg-dark">
+                        {conversation.title || 'New conversation'}
+                      </span>
+                      <time className="flex-none text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {formatDate(conversation.updated_at)}
+                      </time>
+                    </span>
+                    {conversation.last_message && (
+                      <span className="mt-[3px] block max-w-full truncate text-[12.5px] leading-snug text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {conversation.last_message}
+                      </span>
+                    )}
+                  </button>
+                )}
 
-                  {conversation.last_message && (
-                    <p className="text-xs text-gray-500 truncate mt-1">
-                      {conversation.last_message}
-                    </p>
-                  )}
-
-                  <div className="flex items-center space-x-2 mt-2 text-xs text-gray-400">
-                    <span>{formatDate(conversation.updated_at)}</span>
-                    <span>•</span>
-                    <span>{conversation.message_count} mensajes</span>
-                  </div>
+                <div className="mt-1 text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                  {conversation.message_count} mensajes
                 </div>
-
-                <button
-                  data-action="delete"
-                  onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
-                  className="ml-2 p-1 rounded transition-colors text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50/60 dark:hover:bg-red-900/20"
-                  title="Delete conversation"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
               </div>
-            </button>
+
+              {!isEditing && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    data-action="rename"
+                    onClick={(e) => handleRenameStart(e, conversation)}
+                    aria-label="Renombrar conversación"
+                    title="Renombrar conversación"
+                    className="flex h-8 w-8 items-center justify-center text-fg-tertiary opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-fg-secondary dark:text-fg-tertiary-dark dark:hover:text-fg-secondary-dark"
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    data-action="delete"
+                    onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
+                    aria-label="Eliminar conversación"
+                    title="Eliminar conversación"
+                    className="flex h-8 w-8 items-center justify-center text-fg-tertiary opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-error dark:text-fg-tertiary-dark dark:hover:text-error-dark"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -256,26 +264,28 @@ export default function ConversationSidebar({
 
   if (isCollapsed) {
     return (
-      <div className="w-14 h-full pg-glass border-r border-white/10 flex flex-col items-center py-4">
+      <div className="w-14 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] items-center py-4">
         <button
           onClick={() => setIsCollapsed(false)}
-          className="p-2 hover:bg-white/30 dark:hover:bg-gray-700/40 rounded-lg transition-colors"
+          className="shrink-0 p-2 hover:bg-white/30 dark:hover:bg-gray-700/40 rounded-lg transition-colors"
           title="Expandir conversaciones"
         >
-          <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6 text-fg dark:text-fg-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </button>
-        
-        <div className="mt-4 text-xs text-gray-500 whitespace-nowrap" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center'}}>
-          {conversations.length} conversaciones
+
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+          <div className="whitespace-nowrap text-xs text-fg dark:text-fg-dark" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}>
+            {conversations.length} conversaciones
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-80 h-full pg-glass rounded-1-xl rounded-r-none border-r border-white/10 flex flex-col animate-fade-in">
+    <div className="w-80 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] animate-fade-in">
       {/* Header */}
       <div className="p-4 border-b border-white/10 dark:border-gray-700/30">
         <div className="flex items-center justify-between mb-3">
@@ -285,39 +295,37 @@ export default function ConversationSidebar({
             className="p-1 hover:bg-white/30 dark:hover:bg-gray-700/40 rounded transition-colors"
             title="Contraer"
           >
-            <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-fg dark:text-fg-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         </div>
         
-        <button
+        <ButtonApp
+          label="Nueva Conversación"
+          variant="primary"
+          size="medium"
           onClick={onNewConversation}
-          className="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md flex items-center justify-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Nueva Conversación</span>
-        </button>
+          icon={<Plus className="h-5 w-5" aria-hidden="true" />}
+          className="w-full shadow-sm hover:shadow-md"
+        />
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto p-2">
         {renderContent()}
       </div>
       
       {/* Footer */}
       <div className="p-3 border-t border-white/10 dark:border-gray-700/30">
-        <button
+        <ButtonApp
+          label="Actualizar"
+          variant="secondary"
+          size="compact"
           onClick={loadConversations}
-          className="w-full text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex items-center justify-center space-x-1 py-1 rounded hover:bg-white/20 dark:hover:bg-gray-700/30"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span>Actualizar</span>
-        </button>
+          icon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
+          className="w-full"
+        />
       </div>
     </div>
   );

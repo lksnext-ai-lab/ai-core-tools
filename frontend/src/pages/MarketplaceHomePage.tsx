@@ -14,6 +14,7 @@ import BackgroundImage from '../components/ui/BackgroundImage';
 import ButtonApp from '../components/ui/ButtonApp';
 import ButtonTab from '../components/ui/ButtonTab';
 import ButtonTabItem from '../components/ui/ButtonTabItem';
+import { CardApp } from '../components/ui/CardApp';
 
 /** Simple relative-time formatter — no external dependency needed. */
 function formatRelativeTime(dateStr: string): string {
@@ -151,10 +152,10 @@ export default function MarketplaceHomePage() {
             className="rounded-2xl"
           />
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white ">
+            <h2 className="text-xl font-semibold text-fg dark:text-fg-dark ">
               Browse Agents
             </h2>
-            <p className="text-gray-500 dark:text-[#9d978a] text-sm mt-0.5">
+            <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mt-0.5">
               Discover and chat with AI agents published by your organisation
             </p>
           </div>
@@ -167,12 +168,10 @@ export default function MarketplaceHomePage() {
         <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">My Recent Conversations</h2>
 
         {conversations.length === 0 ? (
-          <div className="bg-btCard dark:bg-btCard-dark rounded-2xl shadow-sm border border-btCard-border dark:border-btCard-border-dark p-10 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-gray-400" aria-hidden="true" />
-            </div>
-            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)] dark:text-white">No conversations yet</h3>
-            <p className="text-gray-500 dark:text-[#9d978a] text-sm mt-0.5 mb-6">
+          <CardApp className="p-10 flex items-center justify-center ">
+            <BackgroundImage icon={MessageCircle} size={64} iconSize={32} variant="marron" className="mx-auto mb-4"></BackgroundImage>
+            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-fg dark:text-fg-dark">No conversations yet</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mt-0.5 mb-6">
               You haven't chatted with any agents yet. Browse the marketplace to get started!
             </p>
             <ButtonApp
@@ -182,7 +181,7 @@ export default function MarketplaceHomePage() {
               icon={<Store className="h-4 w-4" aria-hidden="true" />}
               onClick={() => navigate('/marketplace')}
             />
-          </div>
+          </CardApp>
         ) : (
           <ButtonTab ariaLabel="Recent conversations">
             {conversations.map((conv) => (
@@ -216,17 +215,6 @@ export default function MarketplaceHomePage() {
           </ButtonTab>
         )}
 
-       {/*} {conversations.length > 0 && (
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/marketplace')}
-              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
-            >
-              Browse more agents <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}*/}
       </section>
     </div>
   );

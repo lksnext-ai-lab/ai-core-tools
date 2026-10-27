@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Pencil, ArrowLeft } from 'lucide-react';
+import { Pencil} from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
@@ -11,6 +11,7 @@ import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
 import { ButtonApp } from '../components/ui/ButtonApp';
 import { Tabs } from '../components/ui/Tabs';
+import { Badge } from '../components/ui/Badge';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import type { ServiceLifecycleWarning } from '../types/services';
 import { Title } from '../components/ui/Title';
@@ -102,10 +103,6 @@ function AgentPlaygroundPage() {
     await loadAgent();
   };
 
-  function handleBack() {
-    navigate(`/apps/${appId}/agents`);
-  }
-
   const handleConversationSelect = (conversationId: number) => {
     setCurrentConversationId(conversationId);
     setConversationKey(prev => prev + 1); // Force remount to load new conversation
@@ -150,7 +147,12 @@ function AgentPlaygroundPage() {
 
   if (loading) {
     return (
-      <LoadingState variant="page" />
+      <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <Title variant="titSecundario" titulo="Agent Playground"/>
+              </div>
+              <LoadingState variant="page" message="Loading agent playground..." />
+            </div>
     );
   }
 
@@ -198,7 +200,21 @@ function AgentPlaygroundPage() {
     <div className="flex flex-col gap-3 h-[calc(100vh-4rem)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
-        <Title variant="titSecundario" titulo="Agent Playground" />
+        <Title
+          variant="titSecundario"
+          titulo="Agent Playground"
+          subtitulo={`Agent: ${agent.name}`}
+          subtitleRight={(
+            <div className="flex flex-wrap items-center gap-2">
+              {agent.status && (
+                <Badge label={agent.status} variant={agent.status === 'active' ? 'success' : 'warning'} />
+              )}
+              <Badge label={agent.type} variant="info" />
+              {agent.has_memory && <Badge label="Memory" variant="secondary" />}
+              {agent.silo && <Badge label="RAG" variant="custom" className="bg-teal-100/80 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300" />}
+            </div>
+          )}
+        />
         <div className="flex items-center space-x-3">
           <ButtonApp
             label="Edit Prompts"
@@ -213,43 +229,12 @@ function AgentPlaygroundPage() {
 
       <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="flex-shrink-0 max-h-48 overflow-y-auto" />
 
-      {/* Agent Info — compact single-line header bar */}
-      <div className="pg-glass rounded-xl px-4 py-3 flex items-center justify-between flex-shrink-0">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white truncate mr-4">
-          {agent.name}
-        </h2>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            agent.status !== undefined
-              ? agent.status === 'active'
-                ? 'bg-green-100/80 text-green-800 dark:bg-green-900/40 dark:text-green-300'
-                : 'bg-yellow-100/80 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
-              : ''
-          }`}>
-            {agent.status}
-          </span>
-          <span className="px-2.5 py-0.5 bg-blue-100/80 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 rounded-full text-xs font-medium">
-            {agent.type}
-          </span>
-          {agent.has_memory && (
-            <span className="px-2.5 py-0.5 bg-purple-100/80 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full text-xs font-medium">
-              Memory
-            </span>
-          )}
-          {agent.silo && (
-            <span className="px-2.5 py-0.5 bg-teal-100/80 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 rounded-full text-xs font-medium">
-              RAG
-            </span>
-          )}
-        </div>
-      </div>
-
       {/* Tab Navigation + Content */}
       <div className="flex flex-col flex-1 min-h-0 gap-2">
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="flex-shrink-0" />
 
         {/* Tab Content */}
-        <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Conversation Sidebar - Only show for non-OCR agents with memory */}
           {activeTab === 'playground' && !isOCRAgent && agent.has_memory && (
             <ConversationSidebar

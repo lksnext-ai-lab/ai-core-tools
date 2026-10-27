@@ -327,7 +327,7 @@ function FileTreeView({
                 onClick={() => onToggleFolder(node.path)}
                 aria-expanded={isOpen}
                 aria-controls={contentId}
-                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
+                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-fg-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 {isOpen ? (
@@ -335,7 +335,7 @@ function FileTreeView({
                 ) : (
                   <ChevronRight className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 )}
-                <Folder className="w-4 h-4 shrink-0 text-amber-500" aria-hidden="true" />
+                <Folder className="w-4 h-4 shrink-0 text-bronze dark:text-bronze-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
               </button>
               {isOpen && node.children.length > 0 && (
@@ -372,29 +372,29 @@ function FileTreeView({
                 onClick={() => onToggleFile(node)}
                 aria-expanded={isOpen}
                 aria-controls={previewId}
-                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-fg-dark hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
+                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-fg-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 {isOpen ? (
                   <ChevronDown className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 )}
-                <FileText className="w-4 h-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
                 {sizeLabel && (
-                  <span className="ml-auto shrink-0 text-xs text-gray-400">{sizeLabel}</span>
+                  <span className="ml-auto shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{sizeLabel}</span>
                 )}
               </button>
             ) : (
               <div
-                className={`flex items-center gap-2 py-1 pr-2 text-sm text-gray-500 dark:text-gray-400 ${paddingClassForDepth(depth)}`}
+                className={`flex items-center gap-2 py-1 pr-2 text-sm text-fg-secondary dark:text-fg-secondary-dark ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 <span className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                <File className="w-4 h-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <File className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
-                <span className="ml-auto shrink-0 text-xs text-gray-400 italic">
+                <span className="ml-auto shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark italic">
                   binary — {info?.size_bytes?.toLocaleString() ?? 0} bytes
                 </span>
               </div>
@@ -414,13 +414,13 @@ function FileTreeView({
                   </div>
                 )}
                 {preview.status === 'error' && (
-                  <p className="flex items-start gap-1 text-xs text-red-600 dark:text-red-400 py-1">
+                  <p className="flex items-start gap-1 text-xs text-error dark:text-error-dark py-1">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
                     <span>{preview.message}</span>
                   </p>
                 )}
                 {preview.status === 'loaded' && (
-                  <pre className="max-h-56 overflow-auto rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-mono text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+                  <pre className="max-h-56 overflow-auto rounded border border-line dark:border-line-dark bg-black p-2 text-xs font-mono text-white whitespace-pre-wrap break-words">
                     {preview.content}
                   </pre>
                 )}
@@ -720,15 +720,15 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
       {isEditing && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="block text-sm font-medium text-fg dark:text-gray-300">Package Resources</span>
-            <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <span className="block text-sm font-medium text-fg dark:text-fg-dark">Package Resources</span>
+            <span className="flex items-center gap-1.5 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
               {skill?.is_system && <Badge label="System" variant="secondary" />}
               {skill?.is_enabled === false && <Badge label="Disabled" variant="warning" />}
               {files.length === 0 ? 'SKILL.md only' : `${files.length} bundled ${files.length === 1 ? 'file' : 'files'}`}
             </span>
           </div>
-          <div className="border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2 text-sm text-fg dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
+          <div className="border border-line dark:border-line-dark rounded-md bg-surface dark:bg-surface-dark overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-line dark:border-line-dark px-3 py-2 text-sm text-fg dark:text-fg-dark bg-surface-tint dark:bg-surface-tint-dark">
               <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
               <span className="font-mono text-xs">SKILL.md</span>
               <span className="ml-auto text-xs text-gray-400">instructions</span>
@@ -745,12 +745,12 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
                 />
               </div>
             ) : (
-              <p className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+              <p className="px-3 py-4 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
                 This skill does not include bundled resources.
               </p>
             )}
           </div>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
             Read-only. Text file previews are fetched only when a file is expanded.
           </p>
         </div>

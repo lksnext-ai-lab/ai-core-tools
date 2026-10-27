@@ -8,6 +8,7 @@ export interface TableColumn<T = any> {
   readonly accessor?: keyof T | ((row: T) => ReactNode);
   readonly className?: string;
   readonly headerClassName?: string;
+  readonly sticky?: 'left' | 'right';
   readonly render?: (row: T) => ReactNode;
 }
 
@@ -19,6 +20,7 @@ export interface TableProps<T = any> {
   readonly emptySubMessage?: string;
   readonly emptyIcon?: ReactNode;
   readonly loading?: boolean;
+  readonly stickyEdgeColumns?: boolean;
   readonly onRowClick?: (row: T) => void;
   readonly rowClassName?: string | ((row: T) => string);
   readonly className?: string;
@@ -32,6 +34,7 @@ function Table<T = any>({
   emptySubMessage,
   emptyIcon = <FileText className="w-10 h-10 text-fg-faint2 dark:text-fg-faint2-dark" />,
   loading = false,
+  stickyEdgeColumns = false,
   onRowClick,
   rowClassName = 'hover:bg-surface-tint dark:hover:bg-surface-tint-dark',
   className = '',
@@ -67,14 +70,14 @@ function Table<T = any>({
 
   return (
     <div className={`bg-surface border border-line rounded-lg overflow-visible dark:bg-surface-dark dark:border-line-dark ${className}`}>
-      <div className="overflow-x-auto overflow-visible">
+      <div className={stickyEdgeColumns ? 'overflow-x-auto' : 'overflow-x-auto overflow-visible'}>
         <table className="min-w-full divide-y divide-line dark:divide-line-dark">
           <thead className="bg-tableCab dark:bg-tableCab-dark">
             <tr>
-              {columns.map((column) => (
+              {columns.map((column, index) => (
                 <th
                   key={column.header}
-                  className={`px-6 py-3 ${/\btext-(left|center|right)\b/.test(column.headerClassName ?? '') ? '' : 'text-left'} text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark ${column.headerClassName ?? ''}`}
+                  className={`${stickyEdgeColumns && (index === 0 || column.sticky === 'left') ? 'sticky left-0 z-20 bg-tableCab dark:bg-tableCab-dark' : ''} ${stickyEdgeColumns && column.sticky === 'right' ? 'sticky right-0 z-20 bg-tableCab dark:bg-tableCab-dark' : ''} px-6 py-3 ${/\btext-(left|center|right)\b/.test(column.headerClassName ?? '') ? '' : 'text-left'} text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark ${column.headerClassName ?? ''}`}
                 >
                   {column.headerContent ?? column.header}
                 </th>
@@ -95,23 +98,26 @@ function Table<T = any>({
                 </td>
               </tr>
             ) : (
-              data.map((row) => (
-                <tr
-                  key={keyExtractor(row)}
-                  className={getRowClassName(row)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  style={onRowClick ? { cursor: 'pointer' } : undefined}
-                >
-                  {columns.map((column) => (
-                    <td
-                      key={column.header}
-                      className={column.className || 'px-6 py-4 whitespace-nowrap'}
-                    >
-                      {getCellValue(row, column)}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((row) => {
+                const rowClasses = getRowClassName(row);
+                return (
+                  <tr
+                    key={keyExtractor(row)}
+                    className={`${rowClasses} ${stickyEdgeColumns ? 'group' : ''}`}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    style={onRowClick ? { cursor: 'pointer' } : undefined}
+                  >
+                    {columns.map((column, index) => (
+                      <td
+                        key={column.header}
+                        className={`${stickyEdgeColumns ? 'group-hover:bg-surface-tint dark:group-hover:bg-surface-tint-dark' : ''} ${stickyEdgeColumns && (index === 0 || column.sticky === 'left') ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''} ${stickyEdgeColumns && column.sticky === 'right' ? 'sticky right-0 z-10 bg-surface dark:bg-surface-dark' : ''} ${stickyEdgeColumns && (index === 0 || column.sticky === 'left' || column.sticky === 'right') ? rowClasses : ''} ${column.className || 'px-6 py-4 whitespace-nowrap'}`}
+                      >
+                        {getCellValue(row, column)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

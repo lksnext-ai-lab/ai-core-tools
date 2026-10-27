@@ -228,7 +228,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
         )}
       />
 
-      <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+      <div className="flex justify-between items-center pt-4 border-t border-line dark:border-line-dark">
         <div>
           <ButtonApp
             type="button"
@@ -246,6 +246,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
           isEditing={isEditing}
           submitLabel={isEditing ? 'Update Config' : 'Create Config'}
           submitDisabled={!isValid}
+          containerClassName="!border-t-0 !pt-0"
         />
       </div>
     </form>

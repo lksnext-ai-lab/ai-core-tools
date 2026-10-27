@@ -40,13 +40,13 @@ function getExtractableLabel(fileType?: string, hasExtractableContent?: boolean)
 
 function getFileIcon(fileType?: string) {
   switch (fileType) {
-    case 'pdf': return <FileText className="w-4 h-4 text-gray-500" />;
-    case 'image': return <Image className="w-4 h-4 text-gray-500" />;
-    case 'text': return <FileType className="w-4 h-4 text-gray-500" />;
-    case 'document': return <FileText className="w-4 h-4 text-gray-500" />;
-    case 'output': return <ArrowDown className="w-4 h-4 text-gray-500" />;
-    case 'media': return <Film className="w-4 h-4 text-purple-500" />;
-    default: return <FolderOpen className="w-4 h-4 text-gray-500" />;
+    case 'pdf': return <FileText className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
+    case 'image': return <Image className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
+    case 'text': return <FileType className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
+    case 'document': return <FileText className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
+    case 'output': return <ArrowDown className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
+    case 'media': return <Film className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
+    default: return <FolderOpen className="w-4 h-4 text-bronze dark:text-bronze-dark" />;
   }
 }
 
@@ -119,14 +119,14 @@ export default function AttachedFilesPanel({
                       getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3" /> Ready</>}
-                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3" /> Error</>}
-                    {getDisplayStatus(file.processing_status) === 'pending' && <><Spinner size="xs" tone="current" /> Pending</>}
-                    {getDisplayStatus(file.processing_status) === 'processing' && <><Spinner size="xs" tone="current" /> Processing</>}
-                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Spinner size="xs" tone="current" /> Transcribing</>}
-                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Spinner size="xs" tone="current" /> Analyzing video</>}
-                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Spinner size="xs" tone="current" /> Downloading</>}
-                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Spinner size="xs" tone="current" /> Indexing</>}
+                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-bronze dark:text-bronze-dark" /> Ready</>}
+                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-bronze dark:text-bronze-dark" /> Error</>}
+                    {getDisplayStatus(file.processing_status) === 'pending' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Pending</>}
+                    {getDisplayStatus(file.processing_status) === 'processing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Processing</>}
+                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Transcribing</>}
+                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Analyzing video</>}
+                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Downloading</>}
+                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Indexing</>}
                   </span>
                 )}
               </div>
@@ -135,7 +135,7 @@ export default function AttachedFilesPanel({
                 {file.has_extractable_content !== undefined && (
                   <>
                     {file.file_size_display && <span>·</span>}
-                    <span className={file.has_extractable_content || file.file_type === 'image' ? 'text-green-600' : 'text-gray-400'}>
+                    <span className='text-fg-secondary dark:text-fg-secondary-dark'>
                       {getExtractableLabel(file.file_type, file.has_extractable_content)}
                     </span>
                   </>
@@ -165,7 +165,7 @@ export default function AttachedFilesPanel({
                 <button
                   type="button"
                   onClick={() => onDownloadFile(file.id)}
-                  className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded p-0.5 transition-colors"
+                  className="text-bronze dark:text-bronze-dark hover:text-fg dark:hover:text-fg-dark  rounded p-0.5 transition-colors"
                   title="Download file"
                   aria-label={`Download ${file.filename}`}
                 >
@@ -177,7 +177,7 @@ export default function AttachedFilesPanel({
               <button
                 type="button"
                 onClick={() => onRemoveFile(file.id)}
-                className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded p-0.5 transition-colors"
+                className="text-bronze dark:text-bronze-dark hover:text-error hover:bg-bg-error rounded p-0.5 transition-colors"
                 title="Remove file"
                 aria-label={`Remove ${file.filename}`}
               >

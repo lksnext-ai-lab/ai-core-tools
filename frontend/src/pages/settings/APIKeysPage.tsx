@@ -273,6 +273,7 @@ function APIKeysPage() {
         {/* API Keys Table */}
         <Table
           data={apiKeys}
+          stickyEdgeColumns
           keyExtractor={(apiKey) => apiKey.key_id.toString()}
           columns={[
             {
@@ -303,12 +304,12 @@ function APIKeysPage() {
             {
               header: 'Created',
               render: (apiKey) => apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-fg-secondary dark:text-fg-secondary-dark'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Last Used',
               render: (apiKey) => apiKey.last_used_at ? new Date(apiKey.last_used_at).toLocaleDateString() : 'Never',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-fg-secondary dark:text-fg-secondary-dark'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
               header: 'Status',
@@ -318,6 +319,7 @@ function APIKeysPage() {
             },
             {
               header: 'Actions',
+              sticky: 'right',
               className: 'relative',
               render: (apiKey) => (
                 canEdit ? (
@@ -350,7 +352,7 @@ function APIKeysPage() {
               )
             }
           ]}
-          emptyIcon={<KeyRound className="w-10 h-10 text-gray-300" />}
+          emptyIcon={<BackgroundImage icon={KeyRound} size={64} iconSize={32} />}
           emptyMessage="No API Keys"
           emptySubMessage="Create your first API key to enable programmatic access to your application."
           loading={loading}
@@ -358,9 +360,6 @@ function APIKeysPage() {
 
         {!loading && apiKeys.length === 0 && (
           <div className="text-center py-6">
-            <p className="text-fg-secondary dark:text-fg-secondary-dark mb-6">
-              Create your first API key to allow external applications to access your agents.
-            </p>
             <ButtonApp
               label="Create First API Key"
               onClick={handleCreateKey}

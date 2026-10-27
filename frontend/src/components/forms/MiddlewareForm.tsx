@@ -662,7 +662,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel }: Readonly<Midd
               placeholder="e.g. Only answer questions about our products."
             />
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark-dark">
             These are instructions to the model, not a hard block: combine them with PII protection or human approval
             where you need guarantees.
           </p>

@@ -206,6 +206,7 @@ function AIServicesPage() {
 
       <Table
         data={services}
+        stickyEdgeColumns
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           {
@@ -232,11 +233,11 @@ function AIServicesPage() {
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           )},
           { header: 'Created', className:'text-xs text-fg-secondary dark:text-fg-secondary-dark', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
-          { header: 'Actions', className: 'relative', render: (service: AIService) => (
+          { header: 'Actions', sticky: 'right', className: 'relative', render: (service: AIService) => (
             service.is_system ? (
               // System services are managed by platform admins; the app can only see where they are used.
-              <span className="inline-flex items-center gap-3">
-                <span className="text-gray-400 text-sm">System</span>
+              <span className="flex flex-col items-center gap-1">
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">System</span>
                 <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
               </span>
             ) : canEdit ? (
@@ -259,7 +260,7 @@ function AIServicesPage() {
             )
           ) }
         ]}
-        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
+        emptyIcon={<BackgroundImage icon={Bot} size={64} iconSize={32} />}
         emptyMessage="No AI Services"
         emptySubMessage="Add your first AI service to start using language models in your agents."
         loading={loading}
@@ -267,7 +268,12 @@ function AIServicesPage() {
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Add First AI Service</button>
+          <ButtonApp
+            label="Add First AI Service"
+            onClick={handleCreate}
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 
