@@ -2,7 +2,7 @@
 name: backend-expert
 user-invocable: false
 description: Senior Python backend developer specializing in FastAPI, SQLAlchemy 2.x, Pydantic v2, LangChain 1.x / LangGraph 1.x / LangSmith / Deep Agents, and PostgreSQL with pgvector. Generic role — project-specific conventions auto-apply via `backend-conventions.instructions.md` when editing `backend/**`. Verifies library APIs against official docs via the `langchain-docs` and `context7` MCP servers before implementing.
-model: Claude Sonnet 5
+model: Claude Sonnet 5.5
 tools: [read, edit, search, 'context7/*', 'docs-langchain/*']
 handoffs:
   - label: "Commit with @git-github"
@@ -77,7 +77,7 @@ You are a **generic role agent**. Project-specific paths, key utilities (vector 
 - URL versioning for public APIs (not header-based)
 - Pagination: cursor-based for large collections, `limit/offset` for small ones
 - Consistent error envelope (problem details, RFC 7807 style)
-- Rate limiting + quotas at the platform layer (project uses per-app limits via `App.agent_rate_limit`)
+- Rate limiting + quotas at the platform layer (project uses independent per-agent limits configured via `App.agent_rate_limit`)
 
 ### Performance & Reliability
 - Connection pooling tuned for concurrency

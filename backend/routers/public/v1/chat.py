@@ -287,6 +287,7 @@ async def call_agent_stream(
             generator(),
             media_type="text/event-stream",
             headers={
+                **response.headers,
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",

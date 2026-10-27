@@ -175,4 +175,8 @@ async def decide_approval_stream(
             # get_db teardown runs too late for a StreamingResponse.
             db.close()
 
-    return StreamingResponse(generator(), media_type="text/event-stream", headers=STREAM_HEADERS)
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={**response.headers, **STREAM_HEADERS},
+    )

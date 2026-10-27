@@ -569,7 +569,6 @@ def _extract_jwt_token(request: Request) -> Optional[str]:
 
 def _validate_marketplace_agent(
     agent: Optional[Agent],
-    response_headers: MutableMapping[str, str],
 ) -> None:
     """Raise if agent is missing or unpublished."""
     if not agent or agent.marketplace_visibility == MarketplaceVisibility.UNPUBLISHED:
@@ -577,6 +576,13 @@ def _validate_marketplace_agent(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This agent is no longer available in the marketplace",
         )
+
+
+def _apply_marketplace_agent_rate_limit(
+    agent: Agent,
+    response_headers: MutableMapping[str, str],
+) -> None:
+    """Consume the per-agent rate-limit budget for a marketplace chat."""
     if agent.app:
         apply_agent_rate_limit(agent.app, agent.agent_id, response_headers)
 
@@ -632,8 +638,9 @@ def _prepare_marketplace_chat(
             detail=CONVERSATION_NOT_FOUND,
         )
     agent = _get_agent_or_404(db, conversation.agent_id)
-    _validate_marketplace_agent(agent, response_headers)
+    _validate_marketplace_agent(agent)
     _enforce_marketplace_quota(user_id, db)
+    _apply_marketplace_agent_rate_limit(agent, response_headers)
     return conversation, agent
 
 
@@ -801,6 +808,7 @@ async def marketplace_chat_stream(
             generator(),
             media_type="text/event-stream",
             headers={
+                **response.headers,
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",

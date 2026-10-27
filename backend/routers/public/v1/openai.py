@@ -469,7 +469,11 @@ async def chat_completions(
                 # Release request session; get_db teardown is too late for streaming.
                 db.close()
 
-        return StreamingResponse(_stream_with_cleanup(), media_type="text/event-stream")
+        return StreamingResponse(
+            _stream_with_cleanup(),
+            media_type="text/event-stream",
+            headers=response.headers,
+        )
         
     else:
         execution_service = AgentExecutionService(db)

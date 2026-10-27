@@ -1,7 +1,7 @@
 ---
 name: pr-verifier
 description: Verification gate between @pr-triager and @pr-integrator. For each integrable PR it checks out the branch merged onto the latest develop (locally, never pushed), confirms the change does what its goal/linked issue asks, and runs DIFFERENTIAL targeted tests (baseline on develop vs the PR) so it flags only NEW failures — the repo has known always-failing tests. Emits a per-PR PASS / RISK / FAIL verdict with evidence, then hands the PASS ones to @pr-integrator. Never pushes, merges, or edits code.
-model: Claude Sonnet 5
+model: Claude Sonnet 5.5
 tools: [read, search, execute, agent]
 agents:
   - backend-expert

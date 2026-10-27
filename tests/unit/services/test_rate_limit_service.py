@@ -260,3 +260,38 @@ class TestCleanup:
 
         # Should not raise
         svc.check_and_consume_for_agent(app_id=1, agent_id=999, max_per_minute=100)
+
+    def test_cleanup_scans_counters_at_most_once_per_minute(self, monkeypatch):
+        class CountingDict(dict):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.items_calls = 0
+
+            def items(self):
+                self.items_calls += 1
+                return super().items()
+
+        svc = fresh()
+        svc._cleanup_threshold = 5
+        svc._counters = CountingDict(
+            {
+                (1, agent_id): {"window_start": 2, "count": 0}
+                for agent_id in range(10)
+            }
+        )
+        fake_time = [120.0]
+        monkeypatch.setattr("services.rate_limit_service.time.time", lambda: fake_time[0])
+
+        for agent_id in range(10, 13):
+            svc.check_and_consume_for_agent(
+                app_id=1, agent_id=agent_id, max_per_minute=100
+            )
+
+        assert svc._counters.items_calls == 1
+
+        fake_time[0] = 180.0
+        svc.check_and_consume_for_agent(
+            app_id=1, agent_id=13, max_per_minute=100
+        )
+
+        assert svc._counters.items_calls == 2

@@ -1,5 +1,5 @@
 """
-Rate limiting service for per-app agent execution limits.
+Rate limiting service for per-agent execution limits scoped to an app.
 Uses in-memory fixed-window counters with thread-safe access.
 """
 import os
@@ -74,6 +74,7 @@ class RateLimitService:
         self._counters: Dict[tuple[int, int], Dict[str, int]] = {}
         self._lock = threading.RLock()
         self._cleanup_threshold = 100  # Clean up when we have this many counters
+        self._cleanup_last_run_minute: Optional[int] = None
 
         # Separate namespace for arbitrary string keys (e.g. per-IP discovery limits),
         # with its OWN lock so this traffic can never contend with, block, or in any
@@ -148,7 +149,7 @@ class RateLimitService:
             # Consume one request
             counter['count'] += 1
             
-            # Cleanup old entries if we have too many
+            # Cleanup old entries at most once per minute when the map is large.
             self._cleanup_if_needed()
             
             # Calculate remaining requests
@@ -265,11 +266,17 @@ class RateLimitService:
             )
 
     def _cleanup_if_needed(self):
-        """Clean up stale app-agent counters when the tracked-key count grows."""
+        """Clean up stale app-agent counters at most once per minute."""
+        current_minute = int(time.time() // 60)
+        if (
+            self._cleanup_last_run_minute is not None
+            and current_minute <= self._cleanup_last_run_minute
+        ):
+            return
         if len(self._counters) <= self._cleanup_threshold:
             return
-        
-        current_minute = int(time.time() // 60)
+
+        self._cleanup_last_run_minute = current_minute
         stale_counters = []
         
         for counter_key, counter in self._counters.items():
