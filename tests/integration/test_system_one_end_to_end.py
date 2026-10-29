@@ -55,12 +55,20 @@ def world(test_engine):
                            app_id=app.app_id, create_date=datetime.now())
     db.add(svc)
     db.flush()
+    # Upstream's IACTTool requires the agent to carry an AI service at construction.
+    # The real LLM build is patched away in build_parent; this only satisfies the check.
+    from models.ai_service import AIService
+    ai = AIService(name="e2e-llm", provider="OpenAI", description="e2e", api_key="k",
+                   app_id=app.app_id, create_date=datetime.now())
+    db.add(ai)
+    db.flush()
     so_agent = SystemOneAgent(name="Triage", description="Classifies tickets", app_id=app.app_id,
                               system_one_service_id=svc.service_id, questions=QUESTIONS, max_state_chars=6000,
                               is_tool=True, create_date=datetime.now())
     sub_agent = Agent(name="Helper", app_id=app.app_id, is_tool=True, system_prompt="help", has_memory=False,
-                      create_date=datetime.now())
-    parent = Agent(name="Boss", app_id=app.app_id, system_prompt="boss", has_memory=False, create_date=datetime.now())
+                      service_id=ai.service_id, create_date=datetime.now())
+    parent = Agent(name="Boss", app_id=app.app_id, system_prompt="boss", has_memory=False,
+                   service_id=ai.service_id, create_date=datetime.now())
     db.add_all([so_agent, sub_agent, parent])
     db.flush()
     db.add_all([AgentTool(agent_id=parent.agent_id, tool_id=so_agent.agent_id),
@@ -71,6 +79,7 @@ def world(test_engine):
     w = World()
     w.db, w.app_id, w.user_id = db, app.app_id, user.user_id
     w.service_id, w.so_id, w.sub_id, w.parent_id = svc.service_id, so_agent.agent_id, sub_agent.agent_id, parent.agent_id
+    w.ai_id = ai.service_id
     yield w
     try:
         db.rollback()
@@ -79,7 +88,8 @@ def world(test_engine):
 
         for agent_id in (w.parent_id, w.sub_id, w.so_id):
             AgentRepository.delete_by_id(db, agent_id)
-        for model, pk in ((SystemOneService, w.service_id), (App, w.app_id), (User, w.user_id)):
+        for model, pk in ((SystemOneService, w.service_id), (AIService, w.ai_id),
+                          (App, w.app_id), (User, w.user_id)):
             obj = db.get(model, pk)
             if obj is not None:
                 db.delete(obj)
