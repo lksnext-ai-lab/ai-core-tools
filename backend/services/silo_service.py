@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from utils.logger import get_logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from tools.pdf_loader import PdfLoader
 from tools.vector_store_factory import VectorStoreFactory
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from models.silo import SiloType
@@ -67,6 +68,7 @@ class ResourceNotIndexableError(ResourceIndexingError, ValueError):
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
+_STRUCTURED_PDF_CHUNK_FIELD = "_aict_structured_pdf_chunk"
 
 logger = get_logger(__name__)
 
@@ -796,16 +798,20 @@ class SiloService:
     def _create_documents_for_indexing(silo_id: int, contents: List[dict]) -> List[Document]:
         """Split each content item into chunks and attach metadata.
 
-        File-upload callers pre-split via ``extract_documents_from_file`` before
-        calling ``index_multiple_content``, so chunks already ≤ CHUNK_SIZE produce
-        exactly one chunk per input item (idempotent).
+        Structured PDF chunks carry ``pdf_blocks`` and must remain intact even
+        when they exceed the ordinary target size. Other content is split normally.
         """
         splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
         documents: List[Document] = []
         for item in contents:
+            metadata = dict(item.get('metadata', {}))
+            preserve_pdf_chunk = metadata.pop(_STRUCTURED_PDF_CHUNK_FIELD, False) is True
             # silo_id last — a caller-supplied key must not override the parameter.
-            base_metadata = {**(item.get('metadata', {})), "silo_id": silo_id}
-            chunks = splitter.split_text(item['content'])
+            base_metadata = {**metadata, "silo_id": silo_id}
+            if preserve_pdf_chunk:
+                chunks = [item['content']]
+            else:
+                chunks = splitter.split_text(item['content'])
             for chunk in chunks:
                 documents.append(Document(page_content=chunk, metadata=dict(base_metadata)))
         return documents
@@ -861,14 +867,13 @@ class SiloService:
             List[Document]: List of Document objects
         """
         from langchain_core.documents import Document
-        from langchain_community.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader
+        from langchain_community.document_loaders import Docx2txtLoader, TextLoader
 
         if base_metadata is None:
             base_metadata = {}
 
-        # Determine file type and use appropriate loader
         if file_extension == '.pdf':
-            loader = PyMuPDFLoader(file_path)
+            loader = PdfLoader(file_path, chunk_size=CHUNK_SIZE)
         elif file_extension == '.docx':
             loader = Docx2txtLoader(file_path)
         elif file_extension in ('.txt', '.md'):
@@ -877,9 +882,14 @@ class SiloService:
             logger.error(f"Unsupported file type: {file_extension}")
             raise ValueError(f"Unsupported file type: {file_extension}")
 
-        pages = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
-        docs = text_splitter.split_documents(pages)
+        docs = loader.load()
+        structured_pdf = file_extension == '.pdf' and loader.structured
+        if not structured_pdf:
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP,
+            )
+            docs = text_splitter.split_documents(docs)
 
         # Clean known PDF extraction artifacts (e.g. @@@@, 64/64/64/...) from
         # each chunk's content, then discard chunks that are empty or still
@@ -895,6 +905,9 @@ class SiloService:
 
         for doc in docs:
             doc.metadata.update(base_metadata)
+            doc.metadata.pop(_STRUCTURED_PDF_CHUNK_FIELD, None)
+            if structured_pdf:
+                doc.metadata[_STRUCTURED_PDF_CHUNK_FIELD] = True
             # Only add page number if it exists (PDFs have page metadata, DOCX/TXT don't)
             if "page" in doc.metadata:
                 doc.metadata["page"] = doc.metadata["page"] + 1
