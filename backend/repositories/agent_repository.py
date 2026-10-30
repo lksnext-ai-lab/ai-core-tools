@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.middleware import AgentMiddleware
 from models.ocr_agent import OCRAgent
@@ -81,8 +81,17 @@ class AgentRepository:
     
     @staticmethod
     def get_by_app_id(db: Session, app_id: int) -> List[Agent]:
-        """Get all agents for a specific app"""
-        return db.query(Agent).filter(Agent.app_id == app_id).order_by(Agent.create_date.desc()).all()
+        """Get all agents for a specific app; subclass rows and System One services are batch-loaded (no N+1)."""
+        return (
+            db.query(Agent)
+            .options(
+                selectin_polymorphic(Agent, [OCRAgent, SystemOneAgent]),
+                selectinload(SystemOneAgent.system_one_service),
+            )
+            .filter(Agent.app_id == app_id)
+            .order_by(Agent.create_date.desc())
+            .all()
+        )
     
     @staticmethod
     def get_tool_agents_by_app_id(db: Session, app_id: int, exclude_agent_id: Optional[int] = None) -> List[Agent]:
