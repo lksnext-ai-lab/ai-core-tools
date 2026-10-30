@@ -92,7 +92,7 @@ interface Agent {
   media_chunk_overlap?: number | null;
   ai_services: Array<ServiceOptionLike & { supports_video?: boolean; is_system?: boolean }>;
   sandbox_services: ServiceOptionLike[];
-  system_one_services?: Array<{ service_id: number; name: string }>;
+  system_one_services?: ServiceOptionLike[];
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
@@ -1019,8 +1019,10 @@ function AgentFormPage() {
               systemOneServices={agent?.system_one_services ?? []}
               aiServices={(agent?.ai_services ?? []).filter((s) => !s.is_system)}
               serviceId={formData.system_one_service_id}
+              savedServiceId={agent?.system_one_service_id}
               onServiceChange={(id) => handleInputChange('system_one_service_id', id)}
               summarizationServiceId={formData.summarization_service_id}
+              savedSummarizationServiceId={agent?.summarization_service_id}
               onSummarizationChange={(id) => handleInputChange('summarization_service_id', id)}
               maxStateChars={formData.max_state_chars}
               onMaxStateCharsChange={(value) => handleInputChange('max_state_chars', value)}

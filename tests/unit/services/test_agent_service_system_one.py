@@ -1,12 +1,18 @@
 """AgentService.create_or_update_agent for System One agents (repositories mocked: no database)."""
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from models.agent import Agent
+from models.ai_service import AIService
 from models.system_one_agent import SystemOneAgent
+from models.system_one_service import SystemOneService
 from services.agent_service import AgentService
+from utils.service_lifecycle import RetiredServiceAssignmentError
+
+PAST = datetime.now(timezone.utc) - timedelta(days=3)
 
 QUESTIONS = [
     {"key": "urgent", "type": "noul", "instructions": "Is this urgent?"},
@@ -43,9 +49,11 @@ def repos(mocker):
         create=mocker.patch("services.agent_service.AgentRepository.create", side_effect=create),
         update=mocker.patch("services.agent_service.AgentRepository.update", side_effect=lambda db, a: a),
         so_service=mocker.patch("services.agent_service.SystemOneServiceRepository.get_by_id_and_app_id",
-                                return_value=MagicMock(service_id=7, app_id=1)),
-        ai_services=mocker.patch("services.agent_service.AgentRepository.get_ai_services_by_app_id",
-                                 return_value=[MagicMock(service_id=11, app_id=1), MagicMock(service_id=12, app_id=None)]),
+                                return_value=MagicMock(service_id=7, app_id=1, end_of_service_at=None)),
+        ai_services=mocker.patch(
+            "services.agent_service.AgentRepository.get_ai_services_by_app_id",
+            return_value=[MagicMock(service_id=11, app_id=1, end_of_service_at=None),
+                          MagicMock(service_id=12, app_id=None, end_of_service_at=None)]),
     )
     return r
 
@@ -207,3 +215,80 @@ def test_the_agents_list_carries_the_system_one_service_of_a_system_one_agent(mo
     (item,) = AgentService().get_agents_list(MagicMock(), 1)
     assert item.system_one_service == {"service_id": 7, "name": "System One lab", "model": "nimble-latest"}
     assert item.ai_service is None
+
+
+def _retired_s1(service_id: int) -> SystemOneService:
+    return SystemOneService(service_id=service_id, app_id=1, name=f"S1 {service_id}", endpoint="http://so.test",
+                            end_of_service_at=PAST)
+
+
+def _retired_llm(service_id: int) -> AIService:
+    return AIService(service_id=service_id, app_id=1, name=f"LLM {service_id}", provider="OpenAI",
+                     end_of_service_at=PAST)
+
+
+def _existing(repos, service_id=7, summarization_id=None) -> SystemOneAgent:
+    """A stored System One agent of app 1 that the update path will load."""
+    existing = SystemOneAgent(agent_id=5, app_id=1, name="Triage", system_one_service_id=service_id,
+                              summarization_service_id=summarization_id, questions=QUESTIONS,
+                              max_state_chars=6000, is_tool=True)
+    existing.type = "system_one_agent"
+    repos.by_type.return_value = existing
+    repos.get_by_id.return_value = existing
+    return existing
+
+
+class TestRetiredAssignment:
+    def test_new_agent_with_retired_system_one_service_rejected(self, repos):
+        repos.so_service.return_value = _retired_s1(7)
+        with pytest.raises(RetiredServiceAssignmentError, match="system_one_service_id"):
+            run(repos, data())
+        repos.create.assert_not_called()
+
+    def test_keeping_the_same_retired_system_one_service_on_update_is_allowed(self, repos):
+        existing = _existing(repos, service_id=7)
+        repos.so_service.return_value = _retired_s1(7)
+        assert run(repos, data(agent_id=5)) == 5
+        assert existing.system_one_service_id == 7
+        repos.update.assert_called_once()
+
+    def test_switching_to_another_retired_system_one_service_rejected(self, repos):
+        existing = _existing(repos, service_id=7)
+        repos.so_service.return_value = _retired_s1(8)
+        with pytest.raises(RetiredServiceAssignmentError, match="system_one_service_id"):
+            run(repos, data(agent_id=5, system_one_service_id=8))
+        assert existing.system_one_service_id == 7
+        repos.update.assert_not_called()
+
+    def test_switching_from_retired_to_an_active_system_one_service_allowed(self, repos):
+        existing = _existing(repos, service_id=7)
+        repos.so_service.return_value = MagicMock(service_id=8, app_id=1, end_of_service_at=None)
+        run(repos, data(agent_id=5, system_one_service_id=8))
+        assert existing.system_one_service_id == 8
+
+    def test_new_agent_with_retired_summarization_llm_rejected(self, repos):
+        repos.ai_services.return_value = [_retired_llm(11)]
+        with pytest.raises(RetiredServiceAssignmentError, match="summarization_service_id"):
+            run(repos, data(summarization_service_id=11))
+        repos.create.assert_not_called()
+
+    def test_keeping_the_same_retired_summarization_llm_on_update_is_allowed(self, repos):
+        existing = _existing(repos, summarization_id=11)
+        repos.ai_services.return_value = [_retired_llm(11)]
+        assert run(repos, data(agent_id=5, summarization_service_id=11)) == 5
+        assert existing.summarization_service_id == 11
+        repos.update.assert_called_once()
+
+    def test_switching_to_another_retired_summarization_llm_rejected(self, repos):
+        existing = _existing(repos, summarization_id=11)
+        repos.ai_services.return_value = [_retired_llm(11), _retired_llm(13)]
+        with pytest.raises(RetiredServiceAssignmentError, match="summarization_service_id"):
+            run(repos, data(agent_id=5, summarization_service_id=13))
+        assert existing.summarization_service_id == 11
+        repos.update.assert_not_called()
+
+    def test_clearing_a_retired_summarization_llm_is_allowed(self, repos):
+        existing = _existing(repos, summarization_id=11)
+        repos.ai_services.return_value = [_retired_llm(11)]
+        run(repos, data(agent_id=5, summarization_service_id=None))
+        assert existing.summarization_service_id is None

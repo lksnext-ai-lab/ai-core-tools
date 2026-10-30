@@ -17,6 +17,7 @@ def _service(service_id=1, app_id=10, name="Nimble", endpoint="http://so.test", 
     s.service_id, s.app_id, s.name, s.endpoint = service_id, app_id, name, endpoint
     s.api_key, s.description, s.extra_config = api_key, description, extra_config
     s.create_date = datetime(2026, 10, 9)
+    s.end_of_service_at, s.deprecation_notice = None, None   # a MagicMock would read as a planned end of service
     return s
 
 

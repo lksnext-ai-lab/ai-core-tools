@@ -26,6 +26,15 @@ export function isoFromDateInput(value: string): string | null {
   return value ? `${value}T00:00:00Z` : null;
 }
 
+/**
+ * Value to send for `end_of_service_at` on save. A stored non-midnight timestamp is kept untouched unless
+ * the picked day was changed, so saving an unrelated field never rewrites it. `stored` must be the loaded
+ * entity's value, not the form's.
+ */
+export function endOfServiceForSave(stored: string | null | undefined, dateInput: string): string | null {
+  return stored && dateInputValueFromIso(stored) === dateInput ? stored : isoFromDateInput(dateInput);
+}
+
 /** Minimal shape of a service offered in a selection dropdown (AI, embedding or sandbox). */
 export interface ServiceOptionLike {
   readonly service_id: number;
@@ -106,11 +115,15 @@ export const SERVICE_WARNING_STRINGS = {
     embedding: 'Embedding',
     sandbox: 'Code interpreter sandbox',
     sandbox_app_default: 'Code interpreter sandbox (app default)',
+    system_one: 'System One',
+    summarization: 'Summarization LLM',
   },
   silo_embedding: (via: string) => `Embedding (via silo ${via})`,
   middleware: (via: string) => `Middleware ${via}`,
   sandboxWarning: (date: string) =>
     `The code interpreter stops working on ${date}. Select another sandbox service before then.`,
+  systemOneWarning: (date: string) =>
+    `Agents using this System One service stop working on ${date}. Assign them another System One service before then.`,
   compactRetired: (n: number) => `Retired ${n === 1 ? 'service' : 'services'} (${n})`,
   compactDeprecated: (n: number) => `Deprecated ${n === 1 ? 'service' : 'services'} (${n})`,
   compactAria: (items: string) => `Service lifecycle: ${items}`,

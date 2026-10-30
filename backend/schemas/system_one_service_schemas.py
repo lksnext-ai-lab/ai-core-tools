@@ -3,6 +3,8 @@ from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from schemas.service_lifecycle_schemas import ServiceLifecycleFieldsMixin, ServiceLifecycleStatusLiteral
+
 
 Provider = Literal["system_one", "openai_decisions"]
 
@@ -17,6 +19,9 @@ class SystemOneServiceListItemSchema(BaseModel):
     max_concurrency: int = 1
     agent_count: int = 0          # agents that would be left without a service if this one were deleted
     created_at: Optional[datetime] = None
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: ServiceLifecycleStatusLiteral = "active"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -31,6 +36,9 @@ class SystemOneServiceDetailSchema(BaseModel):
     model: str = ""
     max_concurrency: int = 1
     created_at: Optional[datetime] = None
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: ServiceLifecycleStatusLiteral = "active"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,7 +57,7 @@ class SystemOneConnectionConfigSchema(BaseModel):
         return v.strip() if isinstance(v, str) else v
 
 
-class CreateUpdateSystemOneServiceSchema(BaseModel):
+class CreateUpdateSystemOneServiceSchema(ServiceLifecycleFieldsMixin):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     endpoint: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
     api_key: Optional[str] = ""    # optional Bearer token; "****…" = keep the stored one, "" = no token

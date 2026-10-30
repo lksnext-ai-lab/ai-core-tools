@@ -157,6 +157,11 @@ class AgentService:
                 SimpleNamespace(**option), lifecycle_ctx.warning_days)}
             for option in form_data['sandbox_services']
         ]
+        system_one_service_options = [
+            {**option, **ServiceLifecycleService.option_fields(
+                SimpleNamespace(**option), lifecycle_ctx.warning_days)}
+            for option in form_data.get('system_one_services', [])
+        ]
         lifecycle_warnings = (
             ServiceLifecycleService.warnings_for_agent(lifecycle_ctx.agent_refs.get(agent_id), lifecycle_ctx)
             if agent_id != 0 else []
@@ -245,7 +250,7 @@ class AgentService:
             # Form data
             ai_services=ai_service_options,
             sandbox_services=sandbox_service_options,
-            system_one_services=form_data.get('system_one_services', []),
+            system_one_services=system_one_service_options,
             silos=form_data['silos'],
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
@@ -547,7 +552,13 @@ class AgentService:
             raise ValueError("An agent's type cannot be changed once it is created")
 
     def _apply_system_one_fields(self, db: Session, agent: SystemOneAgent, data: dict) -> None:
-        """System One fields (service, questions, summarization LLM, size) and neutral values for the rest."""
+        """System One fields (service, questions, summarization LLM, size) and neutral values for the rest.
+
+        A retired System One service or summarization LLM cannot be newly assigned: keeping the one the agent
+        already has is allowed (``ensure_assignable``). The current values are read before they are overwritten.
+        """
+        from utils.service_lifecycle import ensure_assignable, SERVICE_KIND_AI, SERVICE_KIND_SYSTEM_ONE
+
         app_id = data['app_id']
         creating = agent.agent_id is None
         if data.get('a2a_enabled'):
@@ -556,10 +567,15 @@ class AgentService:
 
         service_id = data.get('system_one_service_id')
         if service_id is not None:
-            if SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id) is None:
+            service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
+            if service is None:
                 raise ValueError(
                     f"System One service {service_id} does not exist or does not belong to this app"
                 )
+            ensure_assignable(
+                service, None if creating else agent.system_one_service_id,
+                'system_one_service_id', SERVICE_KIND_SYSTEM_ONE,
+            )
             agent.system_one_service_id = service_id
         elif creating:
             raise ValueError("system_one_service_id is required for System One agents")
@@ -578,11 +594,19 @@ class AgentService:
             summarization_id = data['summarization_service_id'] or None
             if summarization_id is not None:
                 # App-level services only: a platform-level LLM would run unmetered (the chat path meters it).
-                own = {s.service_id for s in AgentRepository.get_ai_services_by_app_id(db, app_id) if s.app_id == app_id}
-                if summarization_id not in own:
+                own = {
+                    s.service_id: s for s in AgentRepository.get_ai_services_by_app_id(db, app_id)
+                    if s.app_id == app_id
+                }
+                summarization = own.get(summarization_id)
+                if summarization is None:
                     raise ValueError(
                         f"summarization_service_id {summarization_id} does not exist or does not belong to this app"
                     )
+                ensure_assignable(
+                    summarization, None if creating else agent.summarization_service_id,
+                    'summarization_service_id', SERVICE_KIND_AI,
+                )
             agent.summarization_service_id = summarization_id
 
         max_chars = data.get('max_state_chars')

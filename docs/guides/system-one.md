@@ -42,6 +42,10 @@ If the database cannot be reached, the call goes ahead without the global limit 
 
 A service can be deleted even if agents use it, like an AI service. The agents are **not** deleted: they keep their questions but cannot run (evaluating them answers `409`, and as a tool they tell the calling LLM that their service is gone) until you choose another service in their settings. The UI warns before deleting and says how many agents are affected.
 
+### End of service
+
+Like AI, embedding and sandbox services, a System One service can have a planned **end of service** date and a deprecation notice (set them in the service wizard). Before the date the service is shown as deprecated and agents using it show a warning; from that date it is **retired**: its agents cannot evaluate (`409 SERVICE_RETIRED`; as a tool they tell the calling LLM why), and it can no longer be chosen for an agent that did not already have it. Test connection, copy and delete keep working. The same rule applies to the agent's summarization LLM: a retired AI service cannot be newly chosen, and an agent that already has one truncates long texts instead of summarizing them (with a warning in the log). Export/import carries the date and notice.
+
 ## Defining questions
 
 Every System One agent holds at least one question; the maximum is the one the chosen server reports in `/v1/limits` (the form reads it and checks against it). All of them are answered, in one call, for every text.

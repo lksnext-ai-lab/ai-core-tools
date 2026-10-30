@@ -68,7 +68,7 @@ export interface ServiceLifecycleFields {
   readonly lifecycle_status: LifecycleStatus;
 }
 
-export type ServiceLifecycleWarningKind = 'ai' | 'embedding' | 'sandbox';
+export type ServiceLifecycleWarningKind = 'ai' | 'embedding' | 'sandbox' | 'system_one';
 export type ServiceLifecycleWarningRole =
   | 'llm'
   | 'ocr_vision'
@@ -78,7 +78,9 @@ export type ServiceLifecycleWarningRole =
   | 'silo_embedding'
   | 'middleware'
   | 'embedding'
-  | 'sandbox';
+  | 'sandbox'
+  | 'system_one'
+  | 'summarization';
 
 /** Mirrors `ServiceLifecycleWarningSchema` (backend/schemas/service_lifecycle_schemas.py). */
 export interface ServiceLifecycleWarning {

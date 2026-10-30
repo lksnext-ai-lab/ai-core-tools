@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship
 from models.base_service import BaseService
+from models.service_lifecycle import ServiceLifecycleMixin
 
 
-class SystemOneService(BaseService):
+class SystemOneService(ServiceLifecycleMixin, BaseService):
     """Per-app connection to a System One server.
 
     Reuses BaseService: ``endpoint`` = base URL, ``api_key`` = optional Bearer token,

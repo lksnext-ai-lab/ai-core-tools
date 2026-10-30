@@ -10,7 +10,9 @@ import { ensureUnique } from './wizard/ServiceWizard';
 import ProviderStep from './wizard/steps/ProviderStep';
 import { ModelCard } from './wizard/steps/ModelSelectionStep';
 import { getProviderDescriptor } from './wizard/providers';
+import ServiceLifecycleInputs from './ServiceLifecycleInputs';
 import { checkConcurrency } from '../../utils/systemOneLimits';
+import { dateInputValueFromIso, endOfServiceForSave } from '../../utils/serviceLifecycle';
 import type { ProviderModelInfo } from '../../types/services';
 import type {
   SystemOneConnectionResult,
@@ -72,6 +74,8 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
 
   const [name, setName] = useState(service?.name ?? '');
   const [concurrency, setConcurrency] = useState<string>(service ? String(service.max_concurrency) : '');
+  const [endOfServiceDate, setEndOfServiceDate] = useState(dateInputValueFromIso(service?.end_of_service_at));
+  const [deprecationNotice, setDeprecationNotice] = useState(service?.deprecation_notice ?? '');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<SystemOneConnectionResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -169,6 +173,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
       api_key: apiKey.trim(),
       model: model.trim(),
       max_concurrency: parsedConcurrency,
+      // Always sent: an explicit null clears the date and the notice.
+      end_of_service_at: endOfServiceForSave(service?.end_of_service_at, endOfServiceDate),
+      deprecation_notice: deprecationNotice.trim() || null,
     };
   }
 
@@ -364,6 +371,15 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   {testing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plug className="h-4 w-4" aria-hidden="true" />}
                   {testing ? 'Testing...' : 'Test connection'}
                 </button>
+
+                <div className="mt-4">
+                  <ServiceLifecycleInputs
+                    date={endOfServiceDate}
+                    notice={deprecationNotice}
+                    onDateChange={setEndOfServiceDate}
+                    onNoticeChange={setDeprecationNotice}
+                  />
+                </div>
               </div>
             )}
 

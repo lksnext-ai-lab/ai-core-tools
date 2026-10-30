@@ -21,11 +21,13 @@ from models.repository import Repository
 from models.sandbox_service import SandboxService
 from models.scheduled_task import ScheduledTask
 from models.silo import Silo
+from models.system_one_agent import SystemOneAgent
+from models.system_one_service import SystemOneService
 
 
 @dataclass(frozen=True)
 class ServiceSnapshot:
-    """The lifecycle-relevant columns of an AI / embedding / sandbox service."""
+    """The lifecycle-relevant columns of an AI / embedding / sandbox / System One service."""
 
     service_id: int
     name: str
@@ -47,7 +49,8 @@ class SiloRefs:
 
 @dataclass(frozen=True)
 class AgentRefs:
-    """The service ids an agent points at (``vision_service_id`` only exists on OCR agents)."""
+    """The service ids an agent points at (``vision_service_id`` only exists on OCR agents; the System One
+    fields only on System One agents)."""
 
     agent_id: int
     service_id: Optional[int]
@@ -58,6 +61,8 @@ class AgentRefs:
     silo_id: Optional[int]
     sandbox_service_id: Optional[int] = None
     enable_code_interpreter: bool = False
+    system_one_service_id: Optional[int] = None
+    summarization_service_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,11 @@ class ServiceUsageRepository:
     def sandbox_service_snapshots(db: Session, app_id: int) -> Dict[int, ServiceSnapshot]:
         """Sandbox services visible to the app (its own + system), keyed by id. One query."""
         return ServiceUsageRepository._snapshots(db, SandboxService, app_id)
+
+    @staticmethod
+    def system_one_service_snapshots(db: Session, app_id: int) -> Dict[int, ServiceSnapshot]:
+        """System One services of the app, keyed by id. One query."""
+        return ServiceUsageRepository._snapshots(db, SystemOneService, app_id)
 
     @staticmethod
     def app_default_sandbox_service_id(db: Session, app_id: int) -> Optional[int]:
@@ -145,23 +155,27 @@ class ServiceUsageRepository:
 
     @staticmethod
     def agent_refs(db: Session, app_id: int, agent_ids: Optional[Iterable[int]] = None) -> Dict[int, AgentRefs]:
-        """Service ids of the app's agents (OCR vision service included). One query.
+        """Service ids of the app's agents (OCR vision and System One services included). One query.
 
         ``agent_ids=None`` means every agent of the app; an empty iterable runs no query.
         """
         ids = None if agent_ids is None else list(agent_ids)
         if ids is not None and not ids:
             return {}
-        # The OCRAgent *table* is joined directly: joining the mapped subclass would drag the Agent table in twice.
+        # The OCRAgent / SystemOneAgent *tables* are joined directly: joining the mapped subclasses would drag
+        # the Agent table in twice.
         ocr = OCRAgent.__table__
+        s1 = SystemOneAgent.__table__
         stmt = (
             select(
                 Agent.agent_id, Agent.service_id, ocr.c.vision_service_id, Agent.transcription_service_id,
                 Agent.video_ai_service_id, Agent.media_embedding_service_id, Agent.silo_id,
                 Agent.sandbox_service_id, Agent.enable_code_interpreter,
+                s1.c.system_one_service_id, s1.c.summarization_service_id,
             )
             .select_from(Agent)
             .outerjoin(ocr, ocr.c.agent_id == Agent.agent_id)
+            .outerjoin(s1, s1.c.agent_id == Agent.agent_id)
             .where(Agent.app_id == app_id)
         )
         if ids is not None:
