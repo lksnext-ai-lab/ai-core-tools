@@ -1,6 +1,6 @@
-from typing import Annotated, AsyncGenerator
+from typing import Annotated, AsyncGenerator, MutableMapping
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,8 @@ from schemas.hitl_approval_schemas import ApprovalDecisionsRequestSchema, Approv
 from services import hitl_approval_service as approvals
 from services.agent_execution_service import AgentExecutionService, approval_http_exception
 from services.agent_streaming_service import AgentStreamingService
+from services.agent_service import AgentService
+from routers.controls.rate_limit import apply_agent_rate_limit
 from tools.stream_guard import guard_agent_stream
 from utils.logger import get_logger
 
@@ -31,6 +33,43 @@ APPROVAL_ERROR_RESPONSES = {
     422: {"description": "`invalid_decision`: decisions do not match the approval's actions"},
 }
 STREAM_HEADERS = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+
+
+def _apply_approval_agent_rate_limit(
+    db: Session,
+    app_id: int,
+    agent_id: int,
+    response_headers: MutableMapping[str, str],
+) -> None:
+    agent = AgentService().get_agent(db, agent_id)
+    if not agent or agent.app_id != app_id:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    apply_agent_rate_limit(agent.app, agent_id, response_headers)
+
+
+def _prepare_rate_limited_approval_resume(
+    db: Session,
+    app_id: int,
+    approval_id: str,
+    body: ApprovalDecisionsRequestSchema,
+    requester: approvals.Requester,
+    response_headers: MutableMapping[str, str],
+) -> approvals.ResumeRequest:
+    try:
+        approval = approvals.get_for_requester(db, approval_id, requester, app_id)
+        approvals.prepare_decisions(approval, body.decisions)
+    except approvals.ApprovalError as exc:
+        raise approval_http_exception(exc) from exc
+
+    _apply_approval_agent_rate_limit(
+        db, app_id, approval.agent_id, response_headers
+    )
+    try:
+        return approvals.prepare_resume(
+            db, approval_id, body.decisions, requester, app_id
+        )
+    except approvals.ApprovalError as exc:
+        raise approval_http_exception(exc) from exc
 
 
 @approvals_router.get(
@@ -72,6 +111,7 @@ async def decide_approval(
     body: ApprovalDecisionsRequestSchema,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
 ):
     """Approve, edit or reject every pending action and run the rest of the agent turn.
 
@@ -83,11 +123,9 @@ async def decide_approval(
     validate_api_key_for_app(app_id, api_key, db)
     user_context = create_api_key_user_context(app_id, api_key)
     requester = approvals.Requester.from_user_context(user_context)
-    try:
-        resume = approvals.prepare_resume(db, approval_id, body.decisions, requester, app_id)
-    except approvals.ApprovalError as exc:
-        raise approval_http_exception(exc) from exc
-
+    resume = _prepare_rate_limited_approval_resume(
+        db, app_id, approval_id, body, requester, response.headers
+    )
     result = await AgentExecutionService().resume_approval(db, resume, user_context, ApprovalChannel.PUBLIC_API)
     return AgentResponseSchema(
         status=result.get("status", "completed"),
@@ -110,16 +148,15 @@ async def decide_approval_stream(
     body: ApprovalDecisionsRequestSchema,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
 ):
     """Same as ``/decisions`` but streams the rest of the turn with the ``/call/stream`` SSE contract."""
     validate_api_key_for_app(app_id, api_key, db)
     user_context = create_api_key_user_context(app_id, api_key)
     requester = approvals.Requester.from_user_context(user_context)
-    try:
-        resume = approvals.prepare_resume(db, approval_id, body.decisions, requester, app_id)
-    except approvals.ApprovalError as exc:
-        raise approval_http_exception(exc) from exc
-
+    resume = _prepare_rate_limited_approval_resume(
+        db, app_id, approval_id, body, requester, response.headers
+    )
     base_generator = AgentStreamingService(db).stream_agent_chat(
         agent_id=resume.approval.agent_id,
         message="",
@@ -138,4 +175,8 @@ async def decide_approval_stream(
             # get_db teardown runs too late for a StreamingResponse.
             db.close()
 
-    return StreamingResponse(generator(), media_type="text/event-stream", headers=STREAM_HEADERS)
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={**response.headers, **STREAM_HEADERS},
+    )

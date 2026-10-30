@@ -282,7 +282,7 @@ def get_a2a_config() -> A2AConfig:
         ),
         # MEDIUM-7 (fix round 1): a target-independent, per-IP limiter that
         # runs before any DB/auth work on the RPC route -- generous on
-        # purpose (it is not meant to replace the per-app `agent_rate_limit`
+        # purpose (it is not meant to replace the per-agent `agent_rate_limit`
         # budget, only to bound raw request volume from one caller).
         rpc_preauth_rate_limit_per_minute=_get_int(
             "A2A_RPC_PREAUTH_RATE_LIMIT_PER_MINUTE", 300

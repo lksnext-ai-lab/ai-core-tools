@@ -166,6 +166,6 @@ POST /internal/marketplace/conversations/{conversation_id}/chat
 
 **LLM Calls**: All marketplace agent executions use the agent's original App's AIService configuration. The agent owner's API keys and LLM credits are consumed.
 
-**Rate Limits**: Rate limits apply at the App level (configured in `App.agent_rate_limit`).
+**Rate Limits**: `App.agent_rate_limit` is a per-minute limit for each agent in the App. It applies to external agent executions (Public API, marketplace, and A2A), not to Playground use.
 
 **Usage Tracking**: Marketplace conversations are tracked separately from playground conversations via the `source` field in the Conversation model.

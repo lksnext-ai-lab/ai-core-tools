@@ -482,7 +482,9 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
 
 ## A2A (Agent2Agent protocol)
 
-Agents can also be opted into the **A2A** (Agent2Agent) protocol, a separate JSON-RPC surface at `/a2a/v1/apps/{app_slug}/agents/{agent_id}` that lets external A2A-compliant clients and agent frameworks call Mattin agents as peers. It reuses the same app API keys and `agent_rate_limit`/origin controls described above, but is opt-in per agent (disabled by default) and uses its own task lifecycle (send/stream/get/list/cancel/subscribe) instead of the `/chat` endpoint.
+External agent executions are limited independently per agent within each App by `App.agent_rate_limit` (requests per minute; `0` means unlimited). The limit applies to chat, OCR, OpenAI-compatible, approval resumptions, marketplace, and A2A executions; non-execution API operations and Playground use do not consume this budget.
+
+Agents can also be opted into the **A2A** (Agent2Agent) protocol, a separate JSON-RPC surface at `/a2a/v1/apps/{app_slug}/agents/{agent_id}` that lets external A2A-compliant clients and agent frameworks call Mattin agents as peers. It reuses the same app API keys and per-agent `agent_rate_limit`/origin controls described above, but is opt-in per agent (disabled by default) and uses its own task lifecycle (send/stream/get/list/cancel/subscribe) instead of the `/chat` endpoint.
 
 See [A2A Integration](../ai/a2a-integration.md) for the full reference: URLs, visibility modes, auth semantics, supported methods, input/output handling, rate limits, env vars, and the deployment runbook.
 

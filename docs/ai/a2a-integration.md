@@ -109,7 +109,7 @@ Their v0.3-compat equivalents (`message/send`, `message/stream`, `tasks/get`, `t
 
 ## Limits & rate limiting
 
-- The app's `agent_rate_limit` execution budget is consumed **only** by `SendMessage`/`SendStreamingMessage` (and their v0.3 equivalents). `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask` and `GetExtendedAgentCard` still require a valid key but never touch that budget, so a client polling for task status cannot drain it.
+- The app's `agent_rate_limit` execution budget is tracked independently for each app-agent pair and consumed **only** by `SendMessage`/`SendStreamingMessage` (and their v0.3 equivalents). `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask` and `GetExtendedAgentCard` still require a valid key but never touch that budget, so a client polling for task status cannot drain it.
 - Card and catalog requests are rate-limited **per client IP**, before any auth or DB work, through a separate budget (`A2A_DISCOVERY_RATE_LIMIT_PER_MINUTE`, default 60/min) that never shares a bucket with an app's execution budget.
 - The RPC endpoint also has its own pre-auth, per-IP limiter (`A2A_RPC_PREAUTH_RATE_LIMIT_PER_MINUTE`, default 300/min) that bounds raw request volume before any app/agent resolution — it doesn't replace the execution budget above, only bounds abuse against it.
 - Concurrent **streams** (`SendStreamingMessage`/`SubscribeToTask`) are bounded by a bulkhead: per app (`A2A_MAX_CONCURRENT_STREAMS_PER_APP`, default 10), per API key (`A2A_MAX_CONCURRENT_STREAMS_PER_KEY`, default 5) and per worker process (`A2A_MAX_CONCURRENT_STREAMS_WORKER`, default 40, auto-clamped below `UVICORN_LIMIT_CONCURRENCY`). Exceeding any of them returns a retryable JSON-RPC error with a retry hint instead of a raw failure.

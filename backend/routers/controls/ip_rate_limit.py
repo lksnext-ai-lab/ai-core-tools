@@ -1,9 +1,9 @@
 """
 Per-client-IP rate limiting for anonymous/discovery endpoints.
 
-Unlike `rate_limit.py` (which enforces a per-app execution budget keyed by
-`app.agent_rate_limit`), this module enforces a budget keyed by an arbitrary
-string namespace plus the caller's IP address, backed by
+Unlike `rate_limit.py` (which enforces a per-agent execution budget keyed by
+`(app_id, agent_id)` and configured by `app.agent_rate_limit`), this module
+enforces a budget keyed by an arbitrary string namespace plus the caller's IP address, backed by
 `rate_limit_service.check_and_consume_key`. The counters live in a separate
 dict in `RateLimitService`, so this traffic can never touch, and can never be
 drained by, an app's execution budget.
@@ -32,7 +32,7 @@ def enforce_ip_rate_limit(namespace: str, client_ip: str, limit_per_minute: int)
     The budget is per **worker process** (in-memory counters, no shared backing
     store), so the effective rate limit across a multi-worker deployment is
     approximately `limit_per_minute * worker_count`, not a single global cap. This
-    mirrors `apply_app_rate_limit`'s existing behavior for the per-app budget.
+    mirrors `apply_agent_rate_limit`'s behavior for per-agent execution budgets.
 
     A correct client IP behind a reverse proxy (e.g. Caddy) requires uvicorn to be
     configured with proxy headers (`--proxy-headers` / `forwarded_allow_ips`), so that
@@ -53,7 +53,7 @@ def enforce_ip_rate_limit(namespace: str, client_ip: str, limit_per_minute: int)
 
     Raises:
         HTTPException: 429 if the limit is exceeded, with `Retry-After` and
-            `X-RateLimit-*` headers, mirroring the shape used by `apply_app_rate_limit`.
+            `X-RateLimit-*` headers, mirroring the shape used by `apply_agent_rate_limit`.
     """
     key = f"{namespace}:{client_ip}"
     state = rate_limit_service.check_and_consume_key(key, limit_per_minute)
