@@ -80,19 +80,20 @@ class AgentRepository:
             return agent
     
     @staticmethod
-    def get_by_app_id(db: Session, app_id: int) -> List[Agent]:
-        """Get all agents for a specific app; subclass rows and System One services are batch-loaded (no N+1)."""
-        return (
-            db.query(Agent)
-            .options(
+    def get_by_app_id(db: Session, app_id: int, with_subclasses: bool = False) -> List[Agent]:
+        """Get all agents for a specific app.
+
+        ``with_subclasses`` batch-loads the OCR / System One rows and the System One service (no N+1) for
+        callers that read them; the others only need the base columns.
+        """
+        query = db.query(Agent)
+        if with_subclasses:
+            query = query.options(
                 selectin_polymorphic(Agent, [OCRAgent, SystemOneAgent]),
                 selectinload(SystemOneAgent.system_one_service),
             )
-            .filter(Agent.app_id == app_id)
-            .order_by(Agent.create_date.desc())
-            .all()
-        )
-    
+        return query.filter(Agent.app_id == app_id).order_by(Agent.create_date.desc()).all()
+
     @staticmethod
     def get_tool_agents_by_app_id(db: Session, app_id: int, exclude_agent_id: Optional[int] = None) -> List[Agent]:
         """Get agents that are marked as tools for a specific app"""

@@ -79,7 +79,7 @@ class AgentService:
 
     def get_agents_list(self, db: Session, app_id: int) -> List[AgentListItemSchema]:
         """Get list of agents with AI service details for display"""
-        agents = AgentRepository.get_by_app_id(db, app_id)
+        agents = AgentRepository.get_by_app_id(db, app_id, with_subclasses=True)
         
         # Get AI services for this app
         ai_services_dict = AgentRepository.get_ai_services_dict_by_app_id(db, app_id)
