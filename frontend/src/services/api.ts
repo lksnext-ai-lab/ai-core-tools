@@ -149,6 +149,7 @@ export interface Agent {
   skill_ids?: number[];
   middleware_ids?: number[];
   created_at: string;
+  last_used_date: string | null;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
   a2a_enabled?: boolean;

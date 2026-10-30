@@ -25,6 +25,7 @@ interface Agent {
   is_tool: boolean;
   a2a_enabled?: boolean;
   created_at: string;
+  last_used_date: string | null;
   request_count: number;
   description?: string;
   service_id?: number;
@@ -421,9 +422,14 @@ function AgentsPage() {
                   <span className="font-medium">{agent.request_count}</span>
                   <span className="text-gray-500 ml-1">requests</span>
                 </div>
-                {agent.request_count > 0 && (
+                {agent.last_used_date && (
                   <div className="text-xs text-gray-500">
-                    Last used: {formatDate(agent.created_at)}
+                    Last used: {formatDate(agent.last_used_date)}
+                  </div>
+                )}
+                {!agent.last_used_date && (
+                  <div className="text-xs text-gray-500">
+                    Created on {formatDate(agent.created_at)} (Never used)
                   </div>
                 )}
               </div>
