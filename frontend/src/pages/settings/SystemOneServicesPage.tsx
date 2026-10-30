@@ -8,6 +8,7 @@ import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { apiService } from '../../services/api';
 import { AppRole } from '../../types/roles';
@@ -168,7 +169,20 @@ function SystemOneServicesPage() {
           },
           { header: 'Status', render: (service: SystemOneService) => {
             const kind = serviceStatus(service.model, checks[service.service_id]);
-            return <StatusBadge kind={kind} detail={checks[service.service_id]?.message} />;
+            // Live reachability first; the lifecycle badge only when the service is deprecated or retired ("Ready" would mislead).
+            const lifecycle = service.lifecycle_status === 'deprecated' || service.lifecycle_status === 'retired';
+            return (
+              <div className="space-y-1">
+                <StatusBadge kind={kind} detail={checks[service.service_id]?.message} />
+                {lifecycle && (
+                  <ServiceStatusBadge
+                    lifecycleStatus={service.lifecycle_status}
+                    endOfServiceAt={service.end_of_service_at}
+                    deprecationNotice={service.deprecation_notice}
+                  />
+                )}
+              </div>
+            );
           }},
           { header: 'Agents', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.agent_count ?? 0}</span> },
           { header: 'Concurrency', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.max_concurrency}</span> },

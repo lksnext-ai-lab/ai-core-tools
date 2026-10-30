@@ -50,7 +50,10 @@ def test_create_and_read_back(client, fake_app, owner_headers, so_service):
     assert created["questions"][0]["threshold"] == 0.5
     got = client.get(agents(fake_app, str(created["agent_id"])), headers=owner_headers).json()
     assert got["questions"] == created["questions"]
-    assert got["system_one_services"] == [{"service_id": so_service.service_id, "name": "Nimble"}]
+    assert got["system_one_services"] == [{
+        "service_id": so_service.service_id, "name": "Nimble", "end_of_service_at": None, "deprecation_notice": None,
+        "lifecycle_status": "active",
+    }]
 
 
 def test_blank_form_lists_the_apps_system_one_services(client, fake_app, owner_headers, so_service):

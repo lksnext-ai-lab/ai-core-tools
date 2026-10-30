@@ -28,6 +28,7 @@ from tools.aiServiceTools import create_llm_from_service
 from tools.system_one_client import Endpoint, SystemOneError
 from tools.system_one_decisions import decide_all
 from utils.logger import get_logger
+from utils.service_lifecycle import SERVICE_KIND_SYSTEM_ONE, ensure_service_active
 
 logger = get_logger(__name__)
 
@@ -164,6 +165,8 @@ class SystemOneEvaluator:
                 status_code=409,
                 detail="This agent has no System One service: choose one in the agent's settings",
             )
+        # Raises ServiceRetiredError (409 SERVICE_RETIRED over HTTP) once the service is past its end of service.
+        ensure_service_active(service, SERVICE_KIND_SYSTEM_ONE)
         if not service.description:
             raise HTTPException(
                 status_code=409,

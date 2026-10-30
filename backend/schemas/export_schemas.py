@@ -44,7 +44,7 @@ class ExportAIServiceSchema(ServiceLifecycleFieldsMixin):
 # ==================== SYSTEM ONE SERVICE ====================
 
 
-class ExportSystemOneServiceSchema(BaseModel):
+class ExportSystemOneServiceSchema(ServiceLifecycleFieldsMixin):
     """System One service export schema (full-app export only)"""
 
     name: str = Field(..., min_length=1, max_length=255)

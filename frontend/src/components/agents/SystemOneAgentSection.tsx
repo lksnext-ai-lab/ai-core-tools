@@ -4,22 +4,23 @@ import { AlertTriangle, Gauge } from 'lucide-react';
 import SystemOneQuestionsEditor from './SystemOneQuestionsEditor';
 import { validateMaxStateChars, type EditorQuestion } from '../../utils/systemOneQuestions';
 import { textLengthHint, type QuestionLimits } from '../../utils/systemOneLimits';
+import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
+import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../ui/ServiceOptionStatus';
 
 const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200';
 
-interface ServiceOption {
-  readonly service_id: number;
-  readonly name: string;
-}
-
 interface SystemOneAgentSectionProps {
   readonly appId: string;
-  readonly systemOneServices: ServiceOption[];
-  readonly aiServices: ServiceOption[];
+  readonly systemOneServices: readonly ServiceOptionLike[];
+  readonly aiServices: readonly ServiceOptionLike[];
   readonly serviceId?: number;
+  /** Saved System One service of the loaded agent (a retired one stays listed only when saved). */
+  readonly savedServiceId?: number | null;
   readonly onServiceChange: (id: number | undefined) => void;
   readonly summarizationServiceId?: number;
+  /** Saved summarization LLM of the loaded agent (a retired one stays listed only when saved). */
+  readonly savedSummarizationServiceId?: number | null;
   readonly onSummarizationChange: (id: number | undefined) => void;
   readonly maxStateChars: number;
   readonly onMaxStateCharsChange: (value: number) => void;
@@ -77,10 +78,12 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
           <div>
             <label htmlFor="so-service" className="block text-sm font-medium text-gray-700 mb-2">System One service *</label>
             <select id="so-service" className={inputClass} value={props.serviceId ?? ''} required
+                    aria-describedby={serviceStatusId(systemOneServices, props.serviceId, 'so-service')}
                     onChange={(e) => props.onServiceChange(toId(e.target.value))}>
               <option value="">Select a service...</option>
-              {systemOneServices.map((s) => <option key={s.service_id} value={s.service_id}>{s.name}</option>)}
+              <ServiceSelectOptions options={systemOneServices} savedValue={props.savedServiceId} />
             </select>
+            <ServiceOptionStatus selectId="so-service" options={systemOneServices} selectedId={props.serviceId} />
             {props.serviceId == null && systemOneServices.length > 0 && (
               <p className="mt-1 text-xs text-amber-700">
                 No service selected (it may have been deleted): this agent cannot evaluate anything until you choose one.
@@ -93,10 +96,12 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
               Summarization LLM <span className="font-normal text-gray-500">(optional)</span>
             </label>
             <select id="so-summarizer" className={inputClass} value={props.summarizationServiceId ?? ''}
+                    aria-describedby={serviceStatusId(aiServices, props.summarizationServiceId, 'so-summarizer')}
                     onChange={(e) => props.onSummarizationChange(toId(e.target.value))}>
               <option value="">None: truncate long texts</option>
-              {aiServices.map((s) => <option key={s.service_id} value={s.service_id}>{s.name}</option>)}
+              <ServiceSelectOptions options={aiServices} savedValue={props.savedSummarizationServiceId} />
             </select>
+            <ServiceOptionStatus selectId="so-summarizer" options={aiServices} selectedId={props.summarizationServiceId} />
             <p className="mt-1 text-xs text-gray-500">Used to shorten a text that does not fit. Without it the text is cut. The result always says which happened.</p>
           </div>
 

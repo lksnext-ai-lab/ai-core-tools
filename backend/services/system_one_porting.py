@@ -51,6 +51,8 @@ def export_system_one_service(service: SystemOneService) -> ExportSystemOneServi
         model_name=service.description or "",
         max_concurrency=max_concurrency_of(service),
         provider=provider_of(service),
+        end_of_service_at=service.end_of_service_at,
+        deprecation_notice=service.deprecation_notice,
     )
 
 
@@ -77,6 +79,8 @@ def import_system_one_service(session: Session, item: ExportSystemOneServiceSche
         description=item.model_name or None,
         extra_config=json.dumps({"max_concurrency": max(1, item.max_concurrency or 1), "provider": item.provider}),
         create_date=datetime.now(),
+        end_of_service_at=item.end_of_service_at,
+        deprecation_notice=item.deprecation_notice,
     )
     session.add(service)
     session.flush()

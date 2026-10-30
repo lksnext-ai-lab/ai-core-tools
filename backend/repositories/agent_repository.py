@@ -411,7 +411,12 @@ class AgentRepository:
 
         # System One services (per app only)
         system_one_services_list = [
-            {"service_id": s.service_id, "name": s.name}
+            {
+                "service_id": s.service_id,
+                "name": s.name,
+                "end_of_service_at": to_utc(s.end_of_service_at),
+                "deprecation_notice": s.deprecation_notice,
+            }
             for s in SystemOneServiceRepository.get_by_app_id(db, app_id)
         ]
 

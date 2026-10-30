@@ -15,6 +15,7 @@ from schemas.system_one_schemas import ChoiceAnswer, NoulAnswer, ScoreAnswer, Sy
 from services.system_one_evaluator import SystemOneEvaluator, SystemOneSnapshot
 from utils.logger import get_logger
 from utils.schema_utils import sanitize_identifier
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -105,14 +106,16 @@ class IACTSystemOneTool(BaseTool):
                      user_message: Optional[str] = None) -> "IACTSystemOneTool":
         try:
             snapshot = SystemOneEvaluator.snapshot(agent)
-        except HTTPException as exc:
-            # Its service was deleted. The calling agent still gets the tool so that its LLM can tell the user
-            # why it cannot be used, instead of the whole turn failing while the tools are built.
+        except (HTTPException, ServiceRetiredError) as exc:
+            # Its service was deleted or retired. The calling agent still gets the tool so that its LLM can tell
+            # the user why it cannot be used, instead of the whole turn failing while the tools are built.
+            # (A retired service was already logged by the guard.)
+            reason = exc.message if isinstance(exc, ServiceRetiredError) else str(exc.detail)
             return cls(
                 name=sanitize_identifier(agent.name),
-                description=f"{agent.description or agent.name} (currently unavailable: {exc.detail})",
+                description=f"{agent.description or agent.name} (currently unavailable: {reason})",
                 agent_id=agent.agent_id,
-                unavailable=str(exc.detail),
+                unavailable=reason,
                 user_context=user_context,
             )
         return cls(
