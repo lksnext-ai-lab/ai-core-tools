@@ -1127,6 +1127,9 @@ class SiloService:
                 SiloService._set_index_status(resource_with_relations, session, message)
                 raise ResourceNotIndexableError(message)
 
+            for doc in docs:
+                doc.metadata.pop(_STRUCTURED_PDF_CHUNK_FIELD, None)
+
             silo_id = resource_with_relations.repository.silo_id
             embedding_service = resource_with_relations.repository.silo.embedding_service
 
