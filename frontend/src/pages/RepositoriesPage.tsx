@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { FolderOpen, Gamepad2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -9,7 +10,7 @@ import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import Alert from '../components/ui/Alert';
 import ButtonApp from '../components/ui/ButtonApp';
@@ -32,6 +33,7 @@ const RepositoriesPage: React.FC = () => {
   const canEdit = hasMinRole(AppRole.EDITOR);
   const confirm = useConfirm();
   const mutate = useApiMutation();
+  const { t, i18n } = useTranslation('common');
 
   const navigate = useNavigate();
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -52,7 +54,7 @@ const RepositoriesPage: React.FC = () => {
       setError(null);
     } catch (err) {
       console.error('Error loading repositories:', err);
-      setError('Failed to load repositories');
+      setError(t('repositoriesPage.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -72,19 +74,19 @@ const RepositoriesPage: React.FC = () => {
 
   const handleDeleteRepository = async (repository: Repository) => {
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('repository'),
-      message: `Are you sure you want to delete "${repository.name}"? This action cannot be undone and will remove all associated documents.`,
+      title: t('repositoriesPage.confirmDeleteTitle'),
+      message: t('repositoriesPage.confirmDeleteMessage', { name: repository.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('repositoriesPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteRepository(Number.parseInt(appId!), repository.repository_id),
       {
-        loading: MESSAGES.DELETING('repository'),
-        success: MESSAGES.DELETED('repository'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('repository')),
+        loading: t('repositoriesPage.deleting'),
+        success: t('repositoriesPage.deleted'),
+        error: (err) => errorMessage(err, t('repositoriesPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -93,7 +95,7 @@ const RepositoriesPage: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString(i18n.resolvedLanguage);
   };
 
   if (loading) {
@@ -101,10 +103,10 @@ const RepositoriesPage: React.FC = () => {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="Repositories" subtitulo="Manage your document repositories" />
+          <Title variant="titSecundario" titulo={t('repositoriesPage.title')} subtitulo={t('repositoriesPage.subtitle')} />
         </div>
 
-        <LoadingState variant="page" message="Loading repositories..." />
+        <LoadingState variant="page" message={t('repositoriesPage.loading')} />
       </div>
     );
   }
@@ -114,12 +116,12 @@ const RepositoriesPage: React.FC = () => {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="Repositories" subtitulo="Manage your document repositories" />
+          <Title variant="titSecundario" titulo={t('repositoriesPage.title')} subtitulo={t('repositoriesPage.subtitle')} />
         </div>
 
         <Alert
           type="error"
-          title="Error Loading Repositories"
+          title={t('repositoriesPage.loadErrorTitle')}
           message={(
             <>
               {error}
@@ -128,7 +130,7 @@ const RepositoriesPage: React.FC = () => {
                 onClick={() => loadRepositories()}
                 className="mt-2 block text-sm underline"
               >
-                Try again
+                {t('repositoriesPage.tryAgain')}
               </button>
             </>
           )}
@@ -141,10 +143,10 @@ const RepositoriesPage: React.FC = () => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <Title variant="titSecundario" titulo="Repositories" subtitulo="Manage your document repositories" />
+        <Title variant="titSecundario" titulo={t('repositoriesPage.title')} subtitulo={t('repositoriesPage.subtitle')} />
         {canEdit && (
           <ButtonApp
-            label="Create Repository"
+            label={t('repositoriesPage.actions.create')}
             onClick={handleCreateRepository}
             icon={<Plus className="w-4 h-4" aria-hidden="true" />}
             variant="primary"
@@ -162,7 +164,7 @@ const RepositoriesPage: React.FC = () => {
         keyExtractor={(repository) => repository.repository_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('repositoriesPage.columns.name'),
             render: (repository) => (
               <button 
                 type="button"
@@ -180,17 +182,17 @@ const RepositoriesPage: React.FC = () => {
             )
           },
           {
-            header: 'Documents',
-            render: (repository) => `${repository.resource_count} documents`,
+            header: t('repositoriesPage.columns.documents'),
+            render: (repository) => t('repositoriesPage.documents', { count: repository.resource_count }),
             className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Created',
+            header: t('repositoriesPage.columns.created'),
             render: (repository) => formatDate(repository.created_at),
             className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Actions',
+            header: t('repositoriesPage.columns.actions'),
             headerClassName: 'text-right tracking-wider',
             sticky: 'right',
             className: 'px-6 py-4 whitespace-nowrap text-right text-xs text-fg-secondary dark:text-fg-secondary-dark relative',
@@ -199,27 +201,27 @@ const RepositoriesPage: React.FC = () => {
                 actions={[
                   ...(canEdit ? [
                     {
-                      label: 'Manage Resources',
+                      label: t('repositoriesPage.actions.manageResources'),
                       onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`),
                       icon: <FolderOpen className="w-4 h-4" />,
                       variant: 'success' as const
                     }
                   ] : []),
                   {
-                    label: 'Playground',
+                    label: t('repositoriesPage.actions.playground'),
                     onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`),
                     icon: <Gamepad2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
-                      label: 'Edit',
+                      label: t('repositoriesPage.actions.edit'),
                       onClick: () => handleEditRepository(repository.repository_id),
                       icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
-                      label: 'Delete',
+                      label: t('repositoriesPage.actions.delete'),
                       onClick: () => { void handleDeleteRepository(repository); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
@@ -232,8 +234,8 @@ const RepositoriesPage: React.FC = () => {
           }
         ]}
         emptyIcon={<BackgroundImage icon={FolderOpen} size={64} iconSize={32} />}
-        emptyMessage="No Repositories Yet"
-        emptySubMessage="Create your first repository to start organizing and searching documents."
+        emptyMessage={t('repositoriesPage.emptyTitle')}
+        emptySubMessage={t('repositoriesPage.emptyDescription')}
         loading={loading}
       />
 
@@ -241,7 +243,7 @@ const RepositoriesPage: React.FC = () => {
       {!loading && repositories.length === 0 && canEdit && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Create Your First Repository"
+            label={t('repositoriesPage.actions.createFirst')}
             onClick={handleCreateRepository}
             variant="primary"
             size="medium"

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowUpDown, ChevronDown, ChevronRight, Folder, Home, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { LoadingState } from './ui/LoadingState';
@@ -54,6 +55,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
   dropdownRefs,
   canEdit = true
 }) => {
+  const { t } = useTranslation('common');
   const hasChildren = folder.subfolders && folder.subfolders.length > 0;
   const isSelected = selectedFolderId === folder.folder_id;
   const folderPath = folder.folder_path || folder.name;
@@ -82,6 +84,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
         >
           <button
             type="button"
+            aria-label={t(isExpanded ? 'folderTree.collapseFolder' : 'folderTree.expandFolder', { name: folder.name })}
             onClick={(e) => {
               e.stopPropagation();
               onToggle(folder.folder_id);
@@ -113,7 +116,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
               type="button"
               onClick={(e) => onToggleDropdown(folder.folder_id, e)}
               className="ml-2 p-1 text-fg-tertiary hover:text-fg hover:bg-surface-ash rounded transition-all duration-200 dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-tint-dark"
-              title="Folder actions"
+              title={t('folderTree.actions')}
             >
               <MoreVertical className="w-4 h-4" aria-hidden="true" />
             </button>
@@ -133,7 +136,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
                 className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
               >
                 <Plus className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
-                Create subfolder
+                {t('folderTree.createSubfolder')}
               </button>
               
               <button
@@ -141,7 +144,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
                 className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
               >
                 <Pencil className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
-                Rename folder
+                {t('folderTree.renameFolder')}
               </button>
               
               <button
@@ -149,7 +152,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
                 className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
               >
                 <ArrowUpDown className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
-                Move folder
+                {t('folderTree.moveFolder')}
               </button>
               
               <div className="border-t border-line dark:border-line-dark"></div>
@@ -159,7 +162,7 @@ const FolderNode: React.FC<FolderNodeProps> = ({
                 className="flex items-center w-full px-4 py-2 text-sm text-error hover:bg-error-bg dark:text-error-dark dark:hover:bg-error-bg-dark"
               >
                 <Trash2 className="w-4 h-4 mr-3 text-error dark:text-error-dark" aria-hidden="true" />
-                Delete folder
+                {t('folderTree.deleteFolder')}
               </button>
             </div>
           </div>
@@ -200,6 +203,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
   onFolderMove,
   canEdit = true
 }) => {
+  const { t } = useTranslation('common');
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
@@ -294,21 +298,21 @@ const FolderTree: React.FC<FolderTreeProps> = ({
 
   if (loading) {
     return (
-      <LoadingState variant="section" message="Loading folders..." />
+      <LoadingState variant="section" message={t('folderTree.loading')} />
     );
   }
 
   return (
     <div>
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h3 className="text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Folders</h3>
+        <h3 className="text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('folderTree.heading')}</h3>
         {canEdit && onFolderCreate && (
           <button
             type="button"
             onClick={() => onFolderCreate()}
             className="p-1 rounded text-fg-tertiary hover:text-fg hover:bg-surface-ash transition-colors dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
-            title="Create folder"
-            aria-label="Create folder"
+            title={t('folderTree.createFolder')}
+            aria-label={t('folderTree.createFolder')}
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -329,7 +333,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
               onClick={() => onFolderSelect(null, '')}
             >
               <Home className={`w-4 h-4 mr-2 ${selectedFolderId === null ? 'text-accent dark:text-accent-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`} aria-hidden="true" />
-              <span className="text-sm font-medium">Repository Root</span>
+              <span className="text-sm font-medium">{t('folderTree.root')}</span>
             </button>
 
             {/* Dropdown Menu Button for Root */}
@@ -338,7 +342,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
                 type="button"
                 onClick={(e) => toggleDropdown(0, e)}
                 className="ml-2 p-1 text-fg-tertiary hover:text-fg hover:bg-surface-ash rounded transition-all duration-200 dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-tint-dark"
-                title="Root folder actions"
+                title={t('folderTree.rootActions')}
               >
                 <MoreVertical className="w-4 h-4" aria-hidden="true" />
               </button>
@@ -358,7 +362,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
                   className="flex items-center w-full px-4 py-2 text-sm text-fg-secondary hover:bg-surface-hover dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
                 >
                   <Plus className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
-                  Create folder
+                  {t('folderTree.createFolder')}
                 </button>
               </div>
             </div>
@@ -388,8 +392,8 @@ const FolderTree: React.FC<FolderTreeProps> = ({
         {folders.length === 0 && (
           <div className="text-center py-6 px-2 text-fg-tertiary dark:text-fg-tertiary-dark">
             <Folder className="w-10 h-10 mx-auto mb-3 text-fg-faint2 dark:text-fg-faint2-dark" aria-hidden="true" />
-            <p className="text-sm">No folders yet</p>
-            <p className="text-xs text-fg-faint dark:text-fg-faint-dark mt-1">Create your first folder to organize files</p>
+            <p className="text-sm">{t('folderTree.noFolders')}</p>
+            <p className="text-xs text-fg-faint dark:text-fg-faint-dark mt-1">{t('folderTree.createFirstFolder')}</p>
           </div>
         )}
       </div>

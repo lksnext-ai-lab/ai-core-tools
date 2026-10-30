@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { RefreshCw, SquareArrowOutUpRight, Trash2 } from 'lucide-react';
 import Alert from '../components/ui/Alert';
 import { TagInput } from '../components/ui/TagInput';
@@ -8,7 +9,7 @@ import { AppRole } from '../types/roles';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { sharepointApi } from '../services/sharepoint';
 import type { SharePointSourceDetail, SharePointSyncStatus } from '../types/sharepoint';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ButtonApp } from '../components/ui/ButtonApp';
@@ -19,27 +20,17 @@ import Title from '../components/ui/Title';
 import CardApp from '../components/ui/CardApp';
 
 const STATUS_BADGE: Record<SharePointSyncStatus, { label: string; variant: BadgeVariant }> = {
-  IDLE: { label: 'Idle', variant: 'default' },
-  RUNNING: { label: 'Running', variant: 'info' },
-  SUCCESS: { label: 'Success', variant: 'success' },
-  PARTIAL: { label: 'Partial', variant: 'warning' },
-  ERROR: { label: 'Error', variant: 'error' },
+  IDLE: { label: 'sharePointSourcesPage.statuses.idle', variant: 'default' },
+  RUNNING: { label: 'sharePointSourcesPage.statuses.running', variant: 'info' },
+  SUCCESS: { label: 'sharePointSourcesPage.statuses.success', variant: 'success' },
+  PARTIAL: { label: 'sharePointSourcesPage.statuses.partial', variant: 'warning' },
+  ERROR: { label: 'sharePointSourcesPage.statuses.error', variant: 'error' },
 };
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return 'Never';
-  const diff = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 function SharePointSourceDetailPage() {
   const { appId, sourceId } = useParams<{ appId: string; sourceId: string }>();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation('common');
   const { hasMinRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
   const canDelete = hasMinRole(AppRole.ADMINISTRATOR);
@@ -72,6 +63,17 @@ function SharePointSourceDetailPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function formatRelativeTime(iso: string | null): string {
+    if (!iso) return t('sharePointSourcesPage.relativeTime.never');
+    const diff = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return t('sharePointSourcesPage.relativeTime.justNow');
+    if (minutes < 60) return t('sharePointSourcesPage.relativeTime.minutesAgo', { count: minutes });
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t('sharePointSourcesPage.relativeTime.hoursAgo', { count: hours });
+    return t('sharePointSourcesPage.relativeTime.daysAgo', { count: Math.floor(hours / 24) });
+  }
 
   useEffect(() => {
     void loadSource();
@@ -109,7 +111,7 @@ function SharePointSourceDetailPage() {
         setFileExtensions(data.file_extension_filters ?? []);
       }
     } catch (err: any) {
-      if (!silent) setError(err?.message ?? 'Failed to load source');
+      if (!silent) setError(errorMessage(err, t('sharePointSourceDetailPage.loadFailed')));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -126,7 +128,7 @@ function SharePointSourceDetailPage() {
       });
       setSource((prev) => prev ? { ...prev, ...updated } : prev);
     } catch (err: any) {
-      setGeneralError(err?.message ?? 'Failed to save changes.');
+      setGeneralError(errorMessage(err, t('sharePointSourceDetailPage.errors.saveGeneral')));
     } finally {
       setGeneralSaving(false);
     }
@@ -148,7 +150,7 @@ function SharePointSourceDetailPage() {
       setCredClientId('');
       setCredSecret('');
     } catch (err: any) {
-      setCredError(err?.message ?? 'Failed to update credentials. Check values and try again.');
+      setCredError(errorMessage(err, t('sharePointSourceDetailPage.errors.updateCredentials')));
     } finally {
       setCredSaving(false);
     }
@@ -164,7 +166,7 @@ function SharePointSourceDetailPage() {
       });
       setSource((prev) => prev ? { ...prev, ...updated } : prev);
     } catch (err: any) {
-      setFiltersError(err?.message ?? 'Failed to save filters.');
+      setFiltersError(errorMessage(err, t('sharePointSourceDetailPage.errors.saveFilters')));
     } finally {
       setFiltersSaving(false);
     }
@@ -186,7 +188,7 @@ function SharePointSourceDetailPage() {
           prev ? { ...prev, last_sync_status: 'RUNNING' as const } : prev,
         );
       } else {
-        setSyncError(msg || 'Failed to trigger sync.');
+        setSyncError(msg || t('sharePointSourceDetailPage.errors.triggerSync'));
       }
     } finally {
       setSyncing(false);
@@ -196,20 +198,19 @@ function SharePointSourceDetailPage() {
   async function handleDelete() {
     if (!appId || !sourceId) return;
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('SharePoint source'),
-      message:
-        'This will delete all indexed content from the associated silo. This action cannot be undone.',
+      title: t('sharePointSourcesPage.confirmDeleteTitle'),
+      message: t('sharePointSourceDetailPage.confirmDeleteMessage'),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('sharePointSourcesPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => sharepointApi.deleteSource(Number(appId), Number(sourceId)),
       {
-        loading: MESSAGES.DELETING('SharePoint source'),
-        success: MESSAGES.DELETED('SharePoint source'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('SharePoint source')),
+        loading: t('sharePointSourcesPage.notifications.deleting'),
+        success: t('sharePointSourcesPage.notifications.deleted'),
+        error: (err) => errorMessage(err, t('sharePointSourcesPage.notifications.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -218,7 +219,7 @@ function SharePointSourceDetailPage() {
 
   if (loading) {
     return (
-      <LoadingState variant="page" message="Loading..." />
+      <LoadingState variant="page" message={t('sharePointSourceDetailPage.loading')} />
     );
   }
 
@@ -226,8 +227,8 @@ function SharePointSourceDetailPage() {
     return (
       <Alert
         type="error"
-        title="Failed to load source"
-        message={error ?? 'Source not found'}
+        title={t('sharePointSourceDetailPage.loadErrorTitle')}
+        message={error ?? t('sharePointSourceDetailPage.notFound')}
         onDismiss={() => navigate(`/apps/${appId}/sharepoint`)}
       />
     );
@@ -243,7 +244,7 @@ function SharePointSourceDetailPage() {
         <Title variant="titSecundario" titulo={source.name} subtitulo={source.description?source.description:''} />
         {canEdit && (
           <ButtonApp
-            label={isRunning ? 'Syncing...' : 'Sync now'}
+            label={t(isRunning ? 'sharePointSourcesPage.actions.syncing' : 'sharePointSourcesPage.actions.syncNow')}
             onClick={() => { void handleSync(); }}
             loading={isRunning}
             icon={<RefreshCw className="w-4 h-4" />}
@@ -252,45 +253,45 @@ function SharePointSourceDetailPage() {
       </div>
 
       {syncError && (
-        <Alert type="error" title="Sync Error" message={syncError} onDismiss={() => setSyncError(null)} />
+        <Alert type="error" title={t('sharePointSourceDetailPage.syncErrorTitle')} message={syncError} onDismiss={() => setSyncError(null)} />
       )}
 
       {/* Sync status panel */}
       <CardApp className="p-5">
-        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">Sync Status</h3>
+        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.syncStatus')}</h3>
         <div className="flex flex-wrap justify-between gap-6">
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Status</span>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.status')}</span>
             <div className="mt-1">
               <Badge
-                label={statusBadge.label}
+                label={t(statusBadge.label)}
                 variant={statusBadge.variant}
                 icon={source.last_sync_status === 'RUNNING' ? <Spinner size="xs" tone="current" /> : undefined}
               />
             </div>
           </div>
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Last synced</span>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.lastSynced')}</span>
             <p
               className="text-sm text-fg dark:text-fg-dark mt-1"
               title={
                 source.last_synced_at
-                  ? new Date(source.last_synced_at).toLocaleString()
-                  : 'Never'
+                  ? new Date(source.last_synced_at).toLocaleString(i18n.resolvedLanguage)
+                  : t('sharePointSourcesPage.relativeTime.never')
               }
             >
-              {relativeTime(source.last_synced_at)}
+              {formatRelativeTime(source.last_synced_at)}
             </p>
           </div>
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Files indexed</span>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.filesIndexed')}</span>
             <p className="text-sm text-fg dark:text-fg-dark mt-1">{source.file_count}</p>
           </div>
         </div>
         {source.last_sync_error && (
           <Alert
             type="error"
-            title="Sync error"
+            title={t('sharePointSourceDetailPage.syncErrorTitle')}
             message={source.last_sync_error}
             className="mt-3"
           />
@@ -300,11 +301,11 @@ function SharePointSourceDetailPage() {
       {/* General section */}
       {canEdit && (
         <CardApp className="p-5">
-          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">General</h3>
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.general')}</h3>
           {generalError && (
             <Alert
               type="error"
-              title="Save failed"
+              title={t('sharePointSourceDetailPage.errors.saveFailedTitle')}
               message={generalError}
               onDismiss={() => setGeneralError(null)}
               className="mb-3"
@@ -312,13 +313,13 @@ function SharePointSourceDetailPage() {
           )}
           <div className="space-y-3">
             <FormField
-              label="Name"
+              label={t('sharePointSourceDetailPage.fields.name')}
               id="general-name"
               value={generalName}
               onChange={(e) => setGeneralName(e.target.value)}
             />
             <FormTextArea
-              label="Description"
+              label={t('sharePointSourceDetailPage.fields.description')}
               id="general-description"
               value={generalDesc}
               onChange={(e) => setGeneralDesc(e.target.value)}
@@ -326,7 +327,7 @@ function SharePointSourceDetailPage() {
             />
             <div className="flex justify-end">
               <ButtonApp
-                label={generalSaving ? 'Saving...' : 'Save'}
+                label={t(generalSaving ? 'sharePointSourceDetailPage.actions.saving' : 'sharePointSourceDetailPage.actions.save')}
                 onClick={() => { void handleSaveGeneral(); }}
                 disabled={generalSaving}
                 variant="primary"
@@ -339,12 +340,12 @@ function SharePointSourceDetailPage() {
 
       {/* SharePoint connection section */}
       <CardApp className="p-5">
-        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">SharePoint Connection</h3>
+        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.connection')}</h3>
 
         {/* Read-only site/drive info */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Site</span>
+            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.site')}</span>
             <p className="text-sm text-fg dark:text-fg-dark mt-0.5">{source.site_name ?? source.site_id}</p>
             {source.site_url && (
               <a
@@ -358,7 +359,7 @@ function SharePointSourceDetailPage() {
             )}
           </div>
           <div>
-            <span className="text-xs text-fg dark:text-fg-dark">Drive</span>
+            <span className="text-xs text-fg dark:text-fg-dark">{t('sharePointSourceDetailPage.fields.drive')}</span>
             <p className="text-sm text-fg dark:text-fg-dark mt-0.5">{source.drive_name ?? source.drive_id}</p>
           </div>
         </div>
@@ -369,7 +370,7 @@ function SharePointSourceDetailPage() {
             {credError && (
               <Alert
                 type="error"
-                title="Credential update failed"
+                title={t('sharePointSourceDetailPage.errors.updateCredentialsTitle')}
                 message={credError}
                 onDismiss={() => setCredError(null)}
                 className="mb-3"
@@ -377,34 +378,34 @@ function SharePointSourceDetailPage() {
             )}
             <div className="space-y-3">
               <FormField
-                label="Tenant ID"
+                label={t('sharePointSourceDetailPage.fields.tenantId')}
                 id="tenant-id"
                 value={credTenantId}
                 onChange={(e) => setCredTenantId(e.target.value)}
-                placeholder={`Current: ${source.tenant_id}`}
-                helpText="Leave credential fields blank to keep the current values. All three fields must be provided together if you want to update credentials."
+                placeholder={t('sharePointSourceDetailPage.fields.currentCredential', { value: source.tenant_id })}
+                helpText={t('sharePointSourceDetailPage.help.credentials')}
               />
               <FormField
-                label="Client ID"
+                label={t('sharePointSourceDetailPage.fields.clientId')}
                 id="client-id"
                 value={credClientId}
                 onChange={(e) => setCredClientId(e.target.value)}
-                placeholder={`Current: ${source.client_id}`}
+                placeholder={t('sharePointSourceDetailPage.fields.currentCredential', { value: source.client_id })}
               />
               <FormField
-                label="Client Secret"
+                label={t('sharePointSourceDetailPage.fields.clientSecret')}
                 id="client-secret"
                 type="password"
                 value={credSecret}
                 onChange={(e) => setCredSecret(e.target.value)}
-                placeholder="Leave blank to keep current"
+                placeholder={t('sharePointSourceDetailPage.fields.keepCurrent')}
                 helpText={(credTenantId || credClientId || credSecret)
-                  ? 'Credentials will be validated against Microsoft Graph on save.'
+                  ? t('sharePointSourceDetailPage.help.validateCredentials')
                   : undefined}
               />
               <div className="flex justify-end">
                 <ButtonApp
-                  label={credSaving ? 'Validating...' : 'Update Credentials'}
+                  label={t(credSaving ? 'sharePointSourceDetailPage.actions.validating' : 'sharePointSourceDetailPage.actions.updateCredentials')}
                   onClick={() => { void handleSaveCredentials(); }}
                   disabled={credSaving || (!credTenantId && !credClientId && !credSecret)}
                   variant="primary"
@@ -419,11 +420,11 @@ function SharePointSourceDetailPage() {
       {/* Indexing config section */}
       {canEdit && (
         <CardApp className="p-5">
-          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">Indexing Config</h3>
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.indexingConfig')}</h3>
           {filtersError && (
             <Alert
               type="error"
-              title="Save failed"
+              title={t('sharePointSourceDetailPage.errors.saveFailedTitle')}
               message={filtersError}
               onDismiss={() => setFiltersError(null)}
               className="mb-3"
@@ -432,19 +433,19 @@ function SharePointSourceDetailPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                File Extension Filters
+                {t('sharePointSourceDetailPage.fields.fileExtensionFilters')}
               </label>
               <TagInput
                 tags={fileExtensions}
                 onChange={setFileExtensions}
                 maxTags={20}
-                placeholder="e.g. pdf, docx — press Enter"
+                placeholder={t('sharePointSourceDetailPage.fields.fileExtensionsPlaceholder')}
               />
-              <p className="text-xs text-gray-500 mt-1">Empty = index all supported types.</p>
+              <p className="text-xs text-gray-500 mt-1">{t('sharePointSourceDetailPage.help.emptyExtensions')}</p>
             </div>
             <div className="flex justify-end">
               <ButtonApp
-                label={filtersSaving ? 'Saving...' : 'Save Filters'}
+                label={t(filtersSaving ? 'sharePointSourceDetailPage.actions.saving' : 'sharePointSourceDetailPage.actions.saveFilters')}
                 onClick={() => { void handleSaveFilters(); }}
                 disabled={filtersSaving}
                 variant="primary"
@@ -458,13 +459,12 @@ function SharePointSourceDetailPage() {
       {/* Danger zone */}
       {canDelete && (
         <CardApp className="border-error p-5">
-          <h3 className="text-lg font-semibold text-error mb-3">Danger Zone</h3>
+          <h3 className="text-lg font-semibold text-error mb-3">{t('sharePointSourceDetailPage.sections.dangerZone')}</h3>
           <p className="text-sm text-gray-600 mb-3">
-            Deleting this source will permanently remove all indexed documents from the associated
-            silo. This action cannot be undone.
+            {t('sharePointSourceDetailPage.help.deleteWarning')}
           </p>
           <ButtonApp
-            label="Delete Source"
+            label={t('sharePointSourceDetailPage.actions.deleteSource')}
             onClick={() => { void handleDelete(); }}
             variant="dangerSolid"
             size="medium"

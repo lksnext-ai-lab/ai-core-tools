@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface UsageStats {
   usage_percentage: number;
@@ -21,6 +22,7 @@ const Speedometer: React.FC<SpeedometerProps> = ({
   size = 'md', 
   showDetails = false 
 }) => {
+  const { t } = useTranslation('common');
   const { 
     usage_percentage, 
     stress_level, 
@@ -72,11 +74,11 @@ const Speedometer: React.FC<SpeedometerProps> = ({
   };
 
   const formatTime = (seconds: number) => {
-    if (seconds <= 0) return '0s';
-    if (seconds < 60) return `${seconds}s`;
+    if (seconds <= 0) return t('appDashboard.speedometer.seconds', { count: 0 });
+    if (seconds < 60) return t('appDashboard.speedometer.seconds', { count: seconds });
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
+    return t('appDashboard.speedometer.minutesAndSeconds', { minutes, seconds: remainingSeconds });
   };
 
   const stressColors: Record<string, string> = {
@@ -100,6 +102,7 @@ const Speedometer: React.FC<SpeedometerProps> = ({
           width={config.size}
           height={config.size}
           className="transform -rotate-90"
+          aria-hidden="true"
         >
           {/* Background circle */}
           <circle
@@ -132,7 +135,7 @@ const Speedometer: React.FC<SpeedometerProps> = ({
           </div>
           {size !== 'sm' && (
             <div className={`text-xs ${getTextColor()} opacity-75`}>
-              {stress_level === 'unlimited' ? 'Unlimited' : stress_level}
+              {t(`appDashboard.speedometer.stressLevels.${stress_level}`)}
             </div>
           )}
         </div>
@@ -142,19 +145,23 @@ const Speedometer: React.FC<SpeedometerProps> = ({
       {showDetails && (
         <div className="mt-2 text-center">
           <div className={`text-xs ${getTextColor()} font-medium`}>
-            {getStressIcon()} {stress_level.charAt(0).toUpperCase() + stress_level.slice(1)}
+            {getStressIcon()} {t(`appDashboard.speedometer.stressLevels.${stress_level}`)}
           </div>
           <div className="text-xs text-gray-600 mt-1">
-            {current_usage}/{limit === 0 ? '∞' : limit} calls
+            {t('appDashboard.speedometer.calls', {
+              count: current_usage,
+              usage: current_usage,
+              limit: limit === 0 ? '∞' : limit,
+            })}
           </div>
           {limit > 0 && (
             <div className="text-xs text-gray-500">
-              Resets in {formatTime(reset_in_seconds)}
+              {t('appDashboard.speedometer.resetsIn', { time: formatTime(reset_in_seconds) })}
             </div>
           )}
           {is_over_limit && (
             <div className="text-xs text-red-600 font-medium">
-              Over limit!
+              {t('appDashboard.speedometer.overLimit')}
             </div>
           )}
         </div>

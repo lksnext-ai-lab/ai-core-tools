@@ -11,6 +11,7 @@ import ButtonCard from '../components/ui/ButtonCard';
 import { Badge } from '../components/ui/Badge';
 import ButtonApp from '../components/ui/ButtonApp';
 import { LoadingState } from '../components/ui/LoadingState';
+import { useTranslation } from 'react-i18next';
 
 interface App {
   app_id: number;
@@ -29,12 +30,12 @@ interface App {
   collaborator_count: number;
 }
 
-function getAppRoleLabel(role: string) {
-  if (role === 'owner') return 'Owner';
-  if (role === 'administrator') return 'Administrator';
-  if (role === 'editor') return 'Editor';
-  if (role === 'viewer') return 'Viewer';
-  return role;
+function getAppRoleTranslationKey(role: string) {
+  if (role === 'owner') return 'appsPage.roles.owner';
+  if (role === 'administrator') return 'appsPage.roles.administrator';
+  if (role === 'editor') return 'appsPage.roles.editor';
+  if (role === 'viewer') return 'appsPage.roles.viewer';
+  return null;
 }
 
 function AppsPage() {
@@ -46,6 +47,7 @@ function AppsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const { t, i18n } = useTranslation('common');
 
   useEffect(() => {
     void loadApps();
@@ -59,7 +61,7 @@ function AppsPage() {
       const response = await apiService.getApps();
       setApps(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load apps');
+      setError(err instanceof Error ? err.message : t('appsPage.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -77,7 +79,7 @@ function AppsPage() {
   async function handleCreateApp(data: { name: string }) {
     await apiService.createApp(data);
     setShowCreateModal(false);
-    setSuccess(`App "${data.name}" created successfully!`);
+    setSuccess(t('appsPage.appCreatedSuccessfully', { name: data.name }));
     setError(null);
     void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
@@ -86,7 +88,7 @@ function AppsPage() {
   // Function to handle import completion
   function handleImportComplete() {
     setShowImportModal(false);
-    setSuccess('App imported successfully!');
+    setSuccess(t('appsPage.appImportedSuccessfully'));
     void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
   }
@@ -94,7 +96,7 @@ function AppsPage() {
   // Show loading spinner while fetching data
   if (loading) {
     return (
-      <LoadingState variant="page" message="Loading apps..." />
+      <LoadingState variant="page" message={t('appsPage.loading')} />
     );
   }
 
@@ -111,14 +113,14 @@ function AppsPage() {
           <p className="text-gray-600">Manage your AI applications and workspaces</p>
         </div>*/}
         <Title
-          titulo="My Apps"
-          subtitulo="Manage your AI applications and workspaces"
+          titulo={t('appsPage.title')}
+          subtitulo={t('appsPage.subtitle')}
           variant="titPrincipal"
         />
         {isEditor && (
           <div className="flex gap-3">
             <ButtonApp
-              label="Import App"
+              label={t('appsPage.importApp')}
               variant="secondary"
               size="medium"
               icon={<Download className="h-4 w-4" aria-hidden="true" />}
@@ -126,7 +128,7 @@ function AppsPage() {
               onClick={() => setShowImportModal(true)}
             />
             <ButtonApp
-              label="+ New App"
+              label={`+ ${t('appsPage.newApp')}`}
               variant="primary"
               size="spacious"
               className="h-[41px] !py-2"
@@ -144,7 +146,7 @@ function AppsPage() {
           return (
             <ButtonCard
               key={app.app_id}
-              ariaLabel={`Open ${app.name}`}
+              ariaLabel={t('appsPage.openApp', { name: app.name })}
               onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
             >
               <div className="mb-3 flex items-start justify-between gap-3">
@@ -155,16 +157,18 @@ function AppsPage() {
                   <span className="min-w-0 text-[18px] leading-tight text-ink dark:text-ink-dark">{app.name}</span>
                 </div>
                 <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
-                  {getAppRoleLabel(app.role)}
+                  {getAppRoleTranslationKey(app.role)
+                    ? t(getAppRoleTranslationKey(app.role)!)
+                    : app.role}
                 </span>
               </div>
               <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
-                {app.created_at ? new Date(app.created_at).toLocaleDateString() : '-'}
+                {app.created_at ? new Date(app.created_at).toLocaleDateString(i18n.resolvedLanguage) : '-'}
               </p>
               <div className="mb-4 flex flex-wrap gap-2">
                 <Badge
                   key="langsmith-configuration"
-                  label={app.langsmith_configured ? 'Configured' : 'Not configured'}
+                  label={app.langsmith_configured ? t('appsPage.configured') : t('appsPage.notConfigured')}
                   variant={app.langsmith_configured ? 'success' : 'error'}
                 />
               </div>
@@ -174,11 +178,11 @@ function AppsPage() {
                     <thead>
                       <tr>
                         {[
-                          { label: 'AGENTS', value: app.agent_count },
-                          { label: 'REPOS', value: app.repository_count },
-                          { label: 'DOMAINS', value: app.domain_count },
-                          { label: 'SILOS', value: app.silo_count },
-                          { label: 'COLLABS', value: totalCollaborators },
+                          { label: t('appsPage.stats.agents'), value: app.agent_count },
+                          { label: t('appsPage.stats.repositories'), value: app.repository_count },
+                          { label: t('appsPage.stats.domains'), value: app.domain_count },
+                          { label: t('appsPage.stats.silos'), value: app.silo_count },
+                          { label: t('appsPage.stats.collaborators'), value: totalCollaborators },
                         ].map((stat, index, stats) => (
                           <th
                             key={stat.label}
@@ -192,11 +196,11 @@ function AppsPage() {
                     <tbody>
                       <tr>
                         {[
-                          { label: 'AGENTS', value: app.agent_count },
-                          { label: 'REPOS', value: app.repository_count },
-                          { label: 'DOMAINS', value: app.domain_count },
-                          { label: 'SILOS', value: app.silo_count },
-                          { label: 'COLLABS', value: totalCollaborators },
+                          { label: t('appsPage.stats.agents'), value: app.agent_count },
+                          { label: t('appsPage.stats.repositories'), value: app.repository_count },
+                          { label: t('appsPage.stats.domains'), value: app.domain_count },
+                          { label: t('appsPage.stats.silos'), value: app.silo_count },
+                          { label: t('appsPage.stats.collaborators'), value: totalCollaborators },
                         ].map((stat, index, stats) => (
                           <td
                             key={stat.label}
@@ -218,7 +222,7 @@ function AppsPage() {
       {!loading && apps.length === 0 && isEditor && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Create App"
+            label={t('appsPage.createApp')}
             onClick={() => setShowCreateModal(true)}
             variant="primary"
             size="medium"
@@ -230,7 +234,7 @@ function AppsPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Create New App"
+        title={t('appsPage.createNewApp')}
       >
         <AppForm
           onSubmit={handleCreateApp}

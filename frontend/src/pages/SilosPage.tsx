@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
@@ -12,7 +13,7 @@ import ImportModal, { type ConflictMode, type ImportResponse } from '../componen
 import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
 import Alert from '../components/ui/Alert';
@@ -35,6 +36,7 @@ interface Silo {
 }
 
 function SilosPage() {
+  const { t, i18n } = useTranslation('common');
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
@@ -64,7 +66,7 @@ function SilosPage() {
       const response = await apiService.getSilos(Number.parseInt(appId));
       setSilos(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load silos');
+      setError(err instanceof Error ? err.message : t('silosPage.loadFailed'));
       console.error('Error loading silos:', err);
     } finally {
       setLoading(false);
@@ -76,21 +78,21 @@ function SilosPage() {
 
     const target = silos.find((s) => s.silo_id === siloId);
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('silo'),
+      title: t('silosPage.confirmDeleteTitle'),
       message: target
-        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone and removes all stored vectors.`
-        : MESSAGES.CONFIRM_DELETE_MESSAGE('silo'),
+        ? t('silosPage.confirmDeleteMessage', { name: target.name })
+        : t('silosPage.confirmDeleteFallback'),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('silosPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteSilo(Number.parseInt(appId), siloId),
       {
-        loading: MESSAGES.DELETING('silo'),
-        success: MESSAGES.DELETED('silo'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('silo')),
+        loading: t('silosPage.deleting'),
+        success: t('silosPage.deleted'),
+        error: (err) => errorMessage(err, t('silosPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -122,12 +124,9 @@ function SilosPage() {
       globalThis.URL.revokeObjectURL(url);
       a.remove();
 
-      toast.warning(
-        'Silo exported successfully. Note: Vector data excluded. Re-upload documents after import.',
-        { duration: 7000 },
-      );
+      toast.warning(t('silosPage.exported'), { duration: 7000 });
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('silo')));
+      toast.error(errorMessage(err, t('silosPage.exportFailed')));
       console.error('Error exporting silo:', err);
     }
   }
@@ -138,7 +137,7 @@ function SilosPage() {
     newName?: string
   ): Promise<ImportResponse> {
     if (!appId) {
-      throw new Error('App ID is required');
+      throw new Error(t('silosPage.appIdRequired'));
     }
 
     try {
@@ -156,7 +155,7 @@ function SilosPage() {
           
           return {
             success: false,
-            message: 'Please select an embedding service to continue',
+            message: t('silosPage.selectEmbeddingService'),
           };
         }
       }
@@ -172,7 +171,7 @@ function SilosPage() {
 
       if (result.success) {
         setShowImportModal(false);
-        toast.success(result.message || MESSAGES.IMPORTED('silo'));
+        toast.success(result.message || t('silosPage.imported'));
         void loadSilos();
 
         // Reset embedding service selection state
@@ -184,7 +183,7 @@ function SilosPage() {
     } catch (err: any) {
       return {
         success: false,
-        message: err?.message || 'Import failed',
+        message: err?.message || t('silosPage.importFailed'),
       };
     }
   } 
@@ -194,10 +193,10 @@ function SilosPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
+          <Title variant='titSecundario' titulo={t('silosPage.title')} subtitulo={t('silosPage.subtitle')}></Title>
         </div>
 
-        <LoadingState variant="page" message="Loading silos..." />
+        <LoadingState variant="page" message={t('silosPage.loading')} />
       </div>
     );
   }
@@ -207,17 +206,17 @@ function SilosPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
+          <Title variant='titSecundario' titulo={t('silosPage.title')} subtitulo={t('silosPage.subtitle')}></Title>
         </div>
 
         <Alert
           type="error"
-          title="Error Loading Silos"
+          title={t('silosPage.loadErrorTitle')}
           message={(
             <>
               {error}
               <button type="button" onClick={() => loadSilos()} className="mt-2 block underline">
-                Try again
+                {t('silosPage.retry')}
               </button>
             </>
           )}
@@ -230,11 +229,11 @@ function SilosPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <Title variant='titSecundario' titulo='Silos' subtitulo='Vector storage and retrieval systems for semantic search'></Title>
+        <Title variant='titSecundario' titulo={t('silosPage.title')} subtitulo={t('silosPage.subtitle')}></Title>
         <div className="flex items-center space-x-3">
           {hasMinRole(AppRole.ADMINISTRATOR) && (
             <ButtonApp
-              label='Import Silo'
+              label={t('silosPage.importSilo')}
               icon={<Upload className="w-4 h-4" />}
               onClick={() => setShowImportModal(true)}
               variant="secondary"
@@ -244,7 +243,7 @@ function SilosPage() {
           {canEdit && (
             <ButtonLink
               to={`/apps/${appId}/silos/new`}
-              label="Create Silo"
+              label={t('silosPage.createSilo')}
               variant="primary"
               size="medium"
               icon={<span aria-hidden="true">+</span>}
@@ -262,7 +261,7 @@ function SilosPage() {
           keyExtractor={(silo) => silo.silo_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('silosPage.columns.name'),
               render: (silo) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
@@ -291,36 +290,36 @@ function SilosPage() {
               )
             },
             {
-              header: 'Description',
+              header: t('silosPage.columns.description'),
               accessor: 'description',
               className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Type',
+              header: t('silosPage.columns.type'),
               render: (silo) => (
                 <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                  {silo.type || 'Custom'}
+                  {silo.type || t('silosPage.custom')}
                 </span>
               )
             },
             {
-              header: 'Vector DB',
+              header: t('silosPage.columns.vectorDb'),
               accessor: 'vector_db_type',
-              render: (silo) => silo.vector_db_type || 'Unknown',
+              render: (silo) => silo.vector_db_type || t('silosPage.unknown'),
               className: "text-xs text-fg-secondary dark:text-fg-secondary-dark"
             },
             {
-              header: 'Documents',
-              render: (silo) => `${silo.docs_count} documents`,
+              header: t('silosPage.columns.documents'),
+              render: (silo) => t('silosPage.documentCount', { count: silo.docs_count }),
               className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Created',
-              render: (silo) => silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'N/A',
+              header: t('silosPage.columns.created'),
+              render: (silo) => silo.created_at ? new Date(silo.created_at).toLocaleDateString(i18n.language) : t('silosPage.notAvailable'),
               className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Actions',
+              header: t('silosPage.columns.actions'),
               sticky: 'right',
               headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
               className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark',
@@ -328,26 +327,26 @@ function SilosPage() {
                 <ActionDropdown
                   actions={[
                     {
-                      label: 'Playground',
+                      label: t('silosPage.actions.playground'),
                       onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}/playground`),
                       icon: <Gamepad2 className="w-4 h-4" />,
                       variant: 'warning'
                     },
                     {
-                      label: 'Export',
+                      label: t('silosPage.actions.export'),
                       onClick: () => { void handleExport(silo.silo_id); },
                       icon: <ArrowDownToLine className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     ...(canEdit ? [
                       {
-                        label: 'Edit',
+                        label: t('silosPage.actions.edit'),
                         onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
                         icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary' as const
                       },
                       {
-                        label: 'Delete',
+                        label: t('silosPage.actions.delete'),
                         onClick: () => { void handleDelete(silo.silo_id); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger' as const
@@ -360,8 +359,8 @@ function SilosPage() {
             }
           ]}
           emptyIcon={<BackgroundImage icon={Database} size={64} iconSize={32} />}
-          emptyMessage="No Silos Yet"
-          emptySubMessage="Create your first silo to start storing and searching documents with vector embeddings."
+          emptyMessage={t('silosPage.emptyTitle')}
+          emptySubMessage={t('silosPage.emptyDescription')}
           loading={loading}
       />
 
@@ -369,7 +368,7 @@ function SilosPage() {
         <div className="text-center py-6">
           <ButtonLink
             to={`/apps/${appId}/silos/new`}
-            label="Create Your First Silo"
+            label={t('silosPage.createFirst')}
             variant="primary"
             size="medium"
             icon={<span aria-hidden="true">+</span>}
@@ -387,7 +386,7 @@ function SilosPage() {
         }}
         onImport={handleImport}
         componentType="silo"
-        componentLabel="Silo"
+        componentLabel={t('silosPage.silo')}
         requiresEmbeddingServiceSelection={requiresEmbeddingServiceSelection}
         availableEmbeddingServices={availableEmbeddingServices}
         selectedEmbeddingServiceId={selectedEmbeddingServiceId}

@@ -2,6 +2,7 @@ import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus'
 import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
 import { selectableServiceOptions, serviceOptionLabel } from '../../utils/serviceLifecycle';
 import { FormSelect } from '../ui/FormField';
+import { useTranslation } from 'react-i18next';
 
 export interface MediaAIServiceOption extends ServiceOptionLike {
   supports_video?: boolean;
@@ -27,6 +28,7 @@ interface Props {
 export function MediaServicesFields({
   aiServices, transcriptionServiceId, videoServiceId, savedTranscriptionServiceId, savedVideoServiceId, onChange, scope, disabled = false,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
   if (aiServices.length === 0) return null;
   const videoServices = aiServices.filter((s) => s.supports_video);
   const transcriptionDescribedBy = [
@@ -43,14 +45,14 @@ export function MediaServicesFields({
     <>
       <div>
         <FormSelect
-          label="Transcription Service (Whisper)"
+          label={t('siloFormPage.media.transcriptionService')}
           id="transcription_service_id"
           value={transcriptionServiceId ?? ''}
           disabled={disabled}
           onChange={(e) => onChange('transcription_service_id', parse(e.target.value))}
           ariaDescribedBy={transcriptionDescribedBy}
           options={[
-            { value: '', label: 'None (video and audio are not indexed)' },
+            { value: '', label: t('siloFormPage.media.noTranscription') },
             ...selectableServiceOptions(aiServices, savedTranscriptionServiceId).map((service) => ({
               value: service.service_id,
               label: serviceOptionLabel(service),
@@ -61,22 +63,22 @@ export function MediaServicesFields({
         <ServiceOptionStatus selectId="transcription_service_id" options={aiServices} selectedId={transcriptionServiceId} />
         <p id="transcription_service_id_help" className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
           {scope === 'repository'
-            ? 'Transcribes the video and audio uploaded to this repository. Stored on its silo.'
-            : 'Optional. Needed to index video and audio into this silo (for example through the public API).'}
+            ? t('siloFormPage.media.repositoryTranscriptionHelp')
+            : t('siloFormPage.media.transcriptionHelp')}
         </p>
       </div>
 
       {videoServices.length > 0 && (
         <div>
           <FormSelect
-            label="Video Analysis Service (Gemini)"
+            label={t('siloFormPage.media.videoAnalysisService')}
             id="video_ai_service_id"
             value={videoServiceId ?? ''}
             disabled={disabled}
             onChange={(e) => onChange('video_ai_service_id', parse(e.target.value))}
             ariaDescribedBy={videoDescribedBy}
             options={[
-              { value: '', label: 'None (no visual analysis)' },
+              { value: '', label: t('siloFormPage.media.noVideoAnalysis') },
               ...selectableServiceOptions(videoServices, savedVideoServiceId).map((service) => ({
                 value: service.service_id,
                 label: serviceOptionLabel(service),
@@ -86,7 +88,7 @@ export function MediaServicesFields({
           />
           <ServiceOptionStatus selectId="video_ai_service_id" options={videoServices} selectedId={videoServiceId} />
           <p id="video_ai_service_id_help" className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-            Optional. Adds a description of what is seen in the video to each transcribed chunk.
+            {t('siloFormPage.media.videoAnalysisHelp')}
           </p>
         </div>
       )}

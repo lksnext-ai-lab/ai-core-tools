@@ -3,8 +3,10 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
+import { useTranslation } from 'react-i18next';
 import { apiService, type App } from '../../services/api';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
+import { defaultNavigation } from '../../core/defaultNavigation';
 
 interface SidebarProps {
   navigationConfig?: NavigationConfig;
@@ -12,11 +14,25 @@ interface SidebarProps {
   children?: React.ReactNode;
 }
 
+function flattenNavigationItems(items: NavigationItem[] | undefined): NavigationItem[] {
+  return items?.flatMap((item) => [item, ...flattenNavigationItems(item.children)]) ?? [];
+}
+
+const DEFAULT_NAVIGATION_ITEMS = [
+  ...flattenNavigationItems(defaultNavigation.mainFeatures),
+  ...flattenNavigationItems(defaultNavigation.appNavigation),
+  ...flattenNavigationItems(defaultNavigation.settingsNavigation),
+  ...flattenNavigationItems(defaultNavigation.settings),
+  ...flattenNavigationItems(defaultNavigation.admin),
+  ...flattenNavigationItems(defaultNavigation.custom),
+];
+
 export const Sidebar: React.FC<SidebarProps> = ({
   navigationConfig,
   className = "",
   children,
 }) => {
+  const { t, i18n } = useTranslation('common');
   const location = useLocation();
   const { appId } = useParams();
   const { user } = useUser();
@@ -83,6 +99,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return location.pathname.startsWith(path);
   };
 
+  const getNavigationLabel = (item: NavigationItem): string => {
+    const isDefaultItem = DEFAULT_NAVIGATION_ITEMS.some(
+      (defaultItem) => defaultItem.path === item.path && defaultItem.name === item.name
+    );
+    if (!isDefaultItem) return item.name;
+
+    const words = item.name.match(/[a-zA-Z0-9]+/g) ?? [];
+    const preservedCaseKey = words
+      .map((word, index) => index === 0
+        ? word.charAt(0).toLowerCase() + word.slice(1)
+        : word.charAt(0).toUpperCase() + word.slice(1))
+      .join('');
+    const normalizedKey = words
+      .map((word, index) => index === 0
+        ? word.toLowerCase()
+        : word.charAt(0).toUpperCase() + word.slice(1))
+      .join('');
+    const translationKey = [preservedCaseKey, normalizedKey]
+      .map((key) => `breadcrumbs.navigation.${key}`)
+      .find((key) => i18n.exists(key, { ns: 'common' }));
+
+    return translationKey ? t(translationKey) : item.name;
+  };
+
   // Design v3 — global rail item: icon over a tiny label, ember bar on the left when active
   const globalItemClass = (active: boolean) =>
     `relative flex flex-col items-center gap-1 py-3 text-[9.5px] leading-tight text-center transition-colors before:absolute before:left-0 before:top-[9px] before:bottom-[9px] before:w-[2.5px] before:rounded-[3px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus dark:focus-visible:ring-focus-dark ${
@@ -106,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }> = ({ item, resolvedPath, useAppStyle }) => {
     const cls = useAppStyle ? appItemClass : globalItemClass;
     return (
-      <Link to={resolvedPath} title={item.name} className={cls(isItemActive(resolvedPath))}>
+      <Link to={resolvedPath} title={getNavigationLabel(item)} className={cls(isItemActive(resolvedPath))}>
         {item.icon && (
           <span className={useAppStyle
             ? 'flex items-center justify-center w-[18px] h-[18px] shrink-0 text-current [&>svg]:w-[18px] [&>svg]:h-[18px]'
@@ -114,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {item.icon}
           </span>
         )}
-        <span className={useAppStyle ? 'flex-1 min-w-0 truncate' : 'max-w-[64px] px-1 break-words'}>{item.name}</span>
+        <span className={useAppStyle ? 'flex-1 min-w-0 truncate' : 'max-w-[64px] px-1 break-words'}>{getNavigationLabel(item)}</span>
       </Link>
     );
   };
@@ -150,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {item.icon}
                     </span>
                   )}
-                  {item.name}
+                  {getNavigationLabel(item)}
                 </span>
                 {isOpen
                   ? <ChevronDown size={14} className="flex-shrink-0 text-fg-faint dark:text-fg-faint-dark" />
@@ -216,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {appId && (appNavItems.length > 0 || settingsTrigger) && (
                 <div className="col-start-2 row-start-1 row-span-2 w-[236px] flex flex-col min-h-0 overflow-y-auto bg-surface border-r border-line dark:bg-surface-dark dark:border-line-dark">
                   <div className="relative px-4 pt-4 pb-3.5 border-b border-line dark:border-line-dark">
-                    <div className="mb-1 text-[10px] uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">App</div>
+                    <div className="mb-1 text-[10px] uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('sidebar.app')}</div>
                     <button
                       type="button"
                       onClick={() => setSwitcherOpen((open) => !open)}
@@ -289,7 +329,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 {settingsTrigger.icon}
                               </span>
                             )}
-                            {settingsTrigger.name}
+                            {getNavigationLabel(settingsTrigger)}
                           </span>
                           {settingsOpen
                             ? <ChevronDown size={14} className="flex-shrink-0 text-fg-faint dark:text-fg-faint-dark" />
@@ -309,7 +349,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                         {item.icon}
                                       </span>
                                     )}
-                                    {item.name}
+                                    {getNavigationLabel(item)}
                                   </Link>
                                 </li>
                               );
@@ -333,7 +373,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="col-start-1 row-start-2 z-10 border-t border-line dark:border-line-dark">
                   <Link
                     to={firstAdminItem?.path ?? '/admin/users'}
-                    title="Global admin"
+                    title={t('sidebar.globalAdmin')}
                     className={globalItemClass(isAdminRoute)}
                   >
                     <span className="flex items-center justify-center w-[23px] h-[23px] shrink-0 text-current">
@@ -342,7 +382,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <path d="M9.2 11.9l2 2 3.6-3.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </span>
-                    <span className="max-w-[64px] px-1 text-[9px] leading-[1.15]">Global admin</span>
+                    <span className="max-w-[64px] px-1 text-[9px] leading-[1.15]">{t('sidebar.globalAdmin')}</span>
                   </Link>
                 </div>
 
@@ -351,7 +391,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="col-start-2 row-start-1 row-span-2 w-[236px] flex flex-col min-h-0 overflow-y-auto bg-surface border-r border-line dark:bg-surface-dark dark:border-line-dark">
                     <div className="px-4 pt-4 pb-3.5 border-b border-line dark:border-line-dark">
                       <h4 className="truncate font-display text-[17px] font-normal leading-tight tracking-[-0.02em] text-fg dark:text-fg-dark">
-                        Global admin
+                        {t('sidebar.globalAdmin')}
                       </h4>
                     </div>
                     <ul className="flex flex-col gap-px p-2.5">

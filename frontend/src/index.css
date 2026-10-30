@@ -288,11 +288,11 @@
 /* Scroll-to-bottom fab */
 .pg-scroll-fab {
   @apply absolute bottom-20 left-1/2 -translate-x-1/2
-         bg-white/80 dark:bg-gray-800/80 backdrop-blur-md
-         border border-gray-200 dark:border-gray-700
-         rounded-full p-2 shadow-lg cursor-pointer
-         hover:bg-white dark:hover:bg-gray-800
-         transition-all duration-200;
+         inline-flex cursor-pointer items-center justify-center gap-2
+         font-display font-normal tracking-[-0.02em] transition-colors
+         border border-line bg-surface text-fg-secondary hover:bg-surface-hover
+         dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark
+         rounded-full p-2 shadow-lg;
 }
 
 /* Conversation sidebar active item */

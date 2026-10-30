@@ -1,5 +1,6 @@
 import { useCallback, useId, useRef, useState } from 'react';
 import { ArrowUpRight, Copy, Plus, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { TagInput } from '../ui/TagInput';
 import Alert from '../ui/Alert';
@@ -54,12 +55,14 @@ function CopyableField({
   label,
   value,
   hint,
+  copyLabel,
   onCopy,
 }: {
   readonly id: string;
   readonly label: string;
   readonly value: string | null;
   readonly hint: string;
+  readonly copyLabel: string;
   readonly onCopy: (value: string, label: string) => void;
 }) {
   return (
@@ -74,11 +77,11 @@ function CopyableField({
             label={label}
             id={id}
             disabled
-            value="La casa es bonita"
+            value={value}
             onChange={() => undefined}
             className="flex-1"
           />
-          <ButtonApp variant="secondary" label="Copy" type="button" onClick={() => onCopy('bton', 'Label')} icon={<Copy className="w-4 h-4" aria-hidden="true" />} />
+          <ButtonApp variant="secondary" label={copyLabel} type="button" onClick={() => onCopy(value, label)} icon={<Copy className="w-4 h-4" aria-hidden="true" />} />
         </div>
       ) : (
         
@@ -102,6 +105,7 @@ export function AgentA2ASettings({
   disabled,
   fieldErrors,
 }: AgentA2ASettingsProps) {
+  const { t } = useTranslation('common');
   const [copyStatus, setCopyStatus] = useState('');
   const enableId = useId();
   const enableHintId = useId();
@@ -124,9 +128,9 @@ export function AgentA2ASettings({
   const handleCopy = useCallback((text: string, label: string) => {
     navigator.clipboard
       .writeText(text)
-      .then(() => setCopyStatus(`${label} copied`))
-      .catch(() => setCopyStatus(`Could not copy ${label.toLowerCase()}`));
-  }, []);
+      .then(() => setCopyStatus(t('agentA2ASettings.copySucceeded', { label })))
+      .catch(() => setCopyStatus(t('agentA2ASettings.copyFailed', { label })));
+  }, [t]);
 
   const handleSkillTagsChange = useCallback(
     (tags: string[]) => {
@@ -204,24 +208,24 @@ export function AgentA2ASettings({
         />
         <div>
           <label htmlFor={enableId} className="text-sm font-medium text-fg dark:text-fg-dark">
-            Expose this agent over the A2A protocol
+            {t('agentA2ASettings.exposeAgent')}
           </label>
           <p id={enableHintId} className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
-            When enabled, external A2A clients can discover this agent's card and call it over JSON-RPC.
+            {t('agentA2ASettings.exposeAgentHelp')}
           </p>
           <FieldError id={enableErrorId} message={enableError} />
         </div>
       </div>
 
       <fieldset disabled={disabled} aria-describedby={visibilityError ? visibilityErrorId : undefined}>
-        <legend className="text-sm font-medium text-fg dark:text-fg-dark mb-2">Agent card visibility</legend>
+        <legend className="text-sm font-medium text-fg dark:text-fg-dark mb-2">{t('agentA2ASettings.visibility')}</legend>
         <div className="space-y-2">
           <FormField
             id={`${visibilityErrorId}-public`}
             type="radio"
             name="a2a_card_visibility"
             value="public"
-            label="Public card — anyone with the URL can read the agent card"
+            label={t('agentA2ASettings.publicVisibility')}
             labelClassName="text-sm text-fg-secondary dark:text-fg-secondary-dark"
             className="flex items-center gap-2"
             checked={value.a2a_card_visibility === 'public'}
@@ -233,7 +237,7 @@ export function AgentA2ASettings({
             type="radio"
             name="a2a_card_visibility"
             value="api_key"
-            label="API key required — the card is only served to callers with a valid X-API-KEY"
+            label={t('agentA2ASettings.apiKeyVisibility')}
             labelClassName="text-sm text-fg-secondary dark:text-fg-secondary-dark"
             className="flex items-center gap-2"
             checked={value.a2a_card_visibility === 'api_key'}
@@ -246,43 +250,43 @@ export function AgentA2ASettings({
 
       <div>
         <FormField
-          label="Name override"
+          label={t('agentA2ASettings.nameOverride')}
           id={nameId}
           type="text"
           value={value.a2a_name_override ?? ''}
           disabled={disabled}
           maxLength={MAX_NAME_LENGTH}
-          helpText={`${(value.a2a_name_override ?? '').length}/${MAX_NAME_LENGTH} characters`}
+          helpText={t('agentA2ASettings.charactersCount', { count: (value.a2a_name_override ?? '').length, max: MAX_NAME_LENGTH })}
           helpTextAriaLive="polite"
           ariaInvalid={!!nameError}
           ariaDescribedBy={nameError ? nameErrorId : undefined}
           onChange={(e) => onChange({ a2a_name_override: e.target.value || null })}
-          placeholder="Defaults to the agent's name"
+          placeholder={t('agentA2ASettings.namePlaceholder')}
         />
         <FieldError id={nameErrorId} message={nameError} />
       </div>
 
       <div>
         <FormTextArea
-          label="Description override"
+          label={t('agentA2ASettings.descriptionOverride')}
           id={descriptionId}
           value={value.a2a_description_override ?? ''}
           disabled={disabled}
           maxLength={MAX_DESCRIPTION_LENGTH}
-          helpText={`${(value.a2a_description_override ?? '').length}/${MAX_DESCRIPTION_LENGTH} characters`}
+          helpText={t('agentA2ASettings.charactersCount', { count: (value.a2a_description_override ?? '').length, max: MAX_DESCRIPTION_LENGTH })}
           helpTextAriaLive="polite"
           rows={3}
           ariaInvalid={!!descriptionError}
           ariaDescribedBy={descriptionError ? descriptionErrorId : undefined}
           onChange={(e) => onChange({ a2a_description_override: e.target.value || null })}
-          placeholder="Defaults to the agent's description"
+          placeholder={t('agentA2ASettings.descriptionPlaceholder')}
         />
         <FieldError id={descriptionErrorId} message={descriptionError} />
       </div>
 
       <div>
         <label htmlFor="a2a-skill-tags" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
-          Skill tags
+          {t('agentA2ASettings.skillTags')}
         </label>
         <TagInput
           id="a2a-skill-tags"
@@ -290,16 +294,16 @@ export function AgentA2ASettings({
           onChange={handleSkillTagsChange}
           maxTags={MAX_SKILL_TAGS}
           disabled={disabled}
-          placeholder="Type a tag and press Enter"
+          placeholder={t('agentA2ASettings.skillTagsPlaceholder')}
         />
-        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">Each tag is capped at {MAX_SKILL_TAG_LENGTH} characters.</p>
+        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">{t('agentA2ASettings.skillTagLimit', { max: MAX_SKILL_TAG_LENGTH })}</p>
         <FieldError id={skillTagsErrorId} message={skillTagsError} />
       </div>
 
       <div>
-        <span className="block text-sm font-medium text-fg dark:text-fg-dark mb-3">Example prompts</span>
+        <span className="block text-sm font-medium text-fg dark:text-fg-dark mb-3">{t('agentA2ASettings.examples')}</span>
         <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mb-3">
-          Shown to A2A callers as example tasks this agent can handle. Up to {MAX_EXAMPLES}, {MAX_EXAMPLE_LENGTH} characters each.
+          {t('agentA2ASettings.examplesHelp', { maxExamples: MAX_EXAMPLES, maxCharacters: MAX_EXAMPLE_LENGTH })}
         </p>
         <div className="space-y-3">
           {value.a2a_examples.map((example, idx) => (
@@ -310,17 +314,17 @@ export function AgentA2ASettings({
                     exampleTextareaRefs.current[idx] = el;
                   }}
                   id={`${exampleKeyPrefix}-example-${idx}`}
-                  label={`Example prompt ${idx + 1}`}
+                  label={t('agentA2ASettings.exampleLabel', { number: idx + 1 })}
                   labelClassName="sr-only"
-                  ariaLabel={`Example prompt ${idx + 1}`}
+                  ariaLabel={t('agentA2ASettings.exampleLabel', { number: idx + 1 })}
                   value={example}
                   disabled={disabled}
                   maxLength={MAX_EXAMPLE_LENGTH}
-                  helpText={`${example.length}/${MAX_EXAMPLE_LENGTH}`}
+                  helpText={t('agentA2ASettings.charactersCount', { count: example.length, max: MAX_EXAMPLE_LENGTH })}
                   helpTextAriaLive="polite"
                   rows={2}
                   onChange={(e) => updateExample(idx, e.target.value)}
-                  placeholder="Enter an example prompt..."
+                  placeholder={t('agentA2ASettings.examplePlaceholder')}
                 />
               </div>
               <button
@@ -330,7 +334,7 @@ export function AgentA2ASettings({
                   exampleRemoveButtonRefs.current[idx] = el;
                 }}
                 onClick={() => removeExample(idx)}
-                aria-label={`Remove example prompt ${idx + 1}`}
+                aria-label={t('agentA2ASettings.removeExample', { number: idx + 1 })}
                 className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/30"
               >
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
@@ -345,7 +349,7 @@ export function AgentA2ASettings({
             className="px-4 py-2 rounded-md text-sm border border-ink bg-surface text-fg hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark inline-flex cursor-pointer items-center justify-center gap-2 font-display font-normal tracking-[-0.02em] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-            Add example
+            {t('agentA2ASettings.addExample')}
           </button>
         </div>
         <FieldError id={examplesErrorId} message={examplesError} />
@@ -354,35 +358,37 @@ export function AgentA2ASettings({
       <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
         <CopyableField
           id={cardUrlId}
-          label="Card URL"
+          label={t('agentA2ASettings.cardUrl')}
           value={cardUrl}
-          hint="This app has no slug yet — set one in App Settings to generate the agent card URL."
+          hint={t('agentA2ASettings.cardUrlMissingSlug')}
+          copyLabel={t('agentA2ASettings.copy')}
           onCopy={handleCopy}
         />
         {!cardUrl && (
           <Link to={slugSettingsUrl} className="text-sm text-bronze  dark:text-bronze-dark inline-block">
-            Go to App Settings to set a slug{''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+            {t('agentA2ASettings.setSlugLink')}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
           </Link>
         )}
 
         <CopyableField
           id={rpcUrlId}
-          label="RPC URL"
+          label={t('agentA2ASettings.rpcUrl')}
           value={rpcUrl}
-          hint="This app has no slug yet — set one in App Settings to generate the RPC URL."
+          hint={t('agentA2ASettings.rpcUrlMissingSlug')}
+          copyLabel={t('agentA2ASettings.copy')}
           onCopy={handleCopy}
         />
       </div>
 
       <Alert
         type="info"
-        title="API key required"
+        title={t('agentA2ASettings.apiKeyRequired')}
         className="my-1"
         message={(
           <>
-            Callers must send an app API key in the <code>X-API-KEY</code> header. Create keys in the app's{' '}
+            {t('agentA2ASettings.apiKeyInstructions')}{' '}
             <Link to={apiKeysSettingsUrl} className="inline-block underline">
-              API Keys settings
+              {t('agentA2ASettings.apiKeysSettings')}
             </Link>.
           </>
         )}

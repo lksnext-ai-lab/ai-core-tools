@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 /** Page navigator shared by the marketplace catalogs. */
 interface PaginationProps {
   readonly page: number;
@@ -6,6 +8,7 @@ interface PaginationProps {
 }
 
 export function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
+  const { t } = useTranslation('common');
   // Build a window of page numbers around the current page
   const pages: number[] = [];
   const start = Math.max(1, page - 2);
@@ -15,14 +18,14 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
   }
 
   return (
-    <nav className="flex items-center justify-center gap-1 mt-4" aria-label="Pagination">
+    <nav className="flex items-center justify-center gap-1 mt-4" aria-label={t('pagination.ariaLabel')}>
       <button
         type="button"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
         className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
       >
-        Previous
+        {t('pagination.previous')}
       </button>
 
       {start > 1 && (
@@ -72,7 +75,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
         onClick={() => onPageChange(page + 1)}
         className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
       >
-        Next
+        {t('pagination.next')}
       </button>
     </nav>
   );

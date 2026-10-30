@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Alert from '../ui/Alert';
 import MessageContent from '../playground/MessageContent';
 import type { ScheduledTaskRun } from '../../services/api';
@@ -11,6 +12,7 @@ interface Props {
 
 /** Read-only answer of one run: the agent's text (with inline images/files) or its error. */
 export function RunOutput({ run, resolveFileUrl }: Readonly<Props>) {
+  const { t } = useTranslation('common');
   const duration = runDuration(run);
   return (
     <article className="rounded-md border border-line bg-surface-tint p-4 dark:border-line-dark dark:bg-surface-tint-dark">
@@ -19,13 +21,13 @@ export function RunOutput({ run, resolveFileUrl }: Readonly<Props>) {
           {formatDateTime(run.scheduled_time)}
         </time>
         <RunStatusBadge status={run.status} />
-        {duration && <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Duración {duration}</span>}
+        {duration && <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.results.duration', { duration })}</span>}
       </header>
       {run.status === 'failed' && (
         <Alert
           type="error"
           className="mb-3"
-          message={<span className="whitespace-pre-wrap break-words">{run.error_summary || 'La ejecución falló.'}</span>}
+          message={<span className="whitespace-pre-wrap break-words">{run.error_summary || t('scheduledTaskDetailPage.results.runFailed')}</span>}
         />
       )}
       {run.output_text ? (
@@ -33,7 +35,7 @@ export function RunOutput({ run, resolveFileUrl }: Readonly<Props>) {
       ) : (
         run.status !== 'failed' && (
           <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-            {run.status === 'succeeded' ? 'El agente no devolvió texto.' : 'La ejecución todavía no ha terminado.'}
+            {run.status === 'succeeded' ? t('scheduledTaskDetailPage.results.noOutput') : t('scheduledTaskDetailPage.results.notFinished')}
           </p>
         )
       )}

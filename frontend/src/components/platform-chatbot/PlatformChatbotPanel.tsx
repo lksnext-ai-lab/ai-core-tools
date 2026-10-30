@@ -5,6 +5,7 @@ import { apiService } from '../../services/api';
 import MessageContent from '../playground/MessageContent';
 import StreamingMessage from '../playground/StreamingMessage';
 import type { StreamEvent } from '../../types/streaming';
+import { useTranslation } from 'react-i18next';
 
 interface PlatformChatbotPanelProps {
   agentName: string | null;
@@ -87,6 +88,19 @@ function parseAgentResponse(text: string): { content: string; follow_ups: string
   return { content: unescapeJsonString(contentMatch[1]), follow_ups };
 }
 
+function localizeAuthenticationError(
+  content: string,
+  prefix: string,
+  authenticationFailed: string,
+): string {
+  if (!/authentication failed|error de autenticación/i.test(content)) return content;
+
+  const detail = content
+    .replace(/(?:sorry,\s*something went wrong\.?|lo sentimos,\s*se ha producido un error\.?)\s*/i, '')
+    .replace(/authentication failed|error de autenticación/gi, authenticationFailed);
+  return `${prefix} ${detail}`.trim();
+}
+
 // ---------------------------------------------------------------------------
 
 const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
@@ -94,6 +108,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   onClose,
   onNewConversation,
 }) => {
+  const { t } = useTranslation('common');
   const { messages, addMessage, sessionId } = usePlatformChatbot();
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -170,11 +185,15 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
             setStreamingContent('');
             addMessage({ role: 'assistant', content, follow_ups, timestamp: Date.now() });
           } else if (event.type === 'error') {
-            const errMsg = (event.data as { message?: string }).message || 'Something went wrong.';
+            const errMsg = (event.data as { message?: string }).message || t('errors.generic');
+            const translatedErrMsg = errMsg.replace(
+              /authentication failed/gi,
+              t('errors.authenticationFailed'),
+            );
             setStreamingContent('');
             addMessage({
               role: 'assistant',
-              content: `Sorry, something went wrong. ${errMsg}`,
+              content: `${t('errors.chatbotPrefix')} ${translatedErrMsg}`,
               timestamp: Date.now(),
             });
           }
@@ -186,7 +205,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
       if (err instanceof Error && err.name !== 'AbortError') {
         addMessage({
           role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
+          content: t('errors.chatbotTryAgain'),
           timestamp: Date.now(),
         });
       }
@@ -259,7 +278,13 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
               }`}
             >
               {msg.role === 'assistant' ? (
-                <MessageContent content={msg.content} />
+                <MessageContent
+                  content={localizeAuthenticationError(
+                    msg.content,
+                    t('errors.chatbotPrefix'),
+                    t('errors.authenticationFailed'),
+                  )}
+                />
               ) : (
                 <span className="whitespace-pre-wrap">{msg.content}</span>
               )}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Pencil} from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
@@ -52,6 +53,7 @@ interface Agent {
 }
 
 function AgentPlaygroundPage() {
+  const { t } = useTranslation('common');
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -91,7 +93,7 @@ function AgentPlaygroundPage() {
       const response = await apiService.getAgent(Number.parseInt(appId), Number.parseInt(agentId));
       setAgent(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agent');
+      setError(err instanceof Error ? err.message : t('agentPlayground.loadFailed'));
       console.error('Error loading agent:', err);
     } finally {
       setLoading(false);
@@ -149,9 +151,9 @@ function AgentPlaygroundPage() {
     return (
       <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <Title variant="titSecundario" titulo="Agent Playground"/>
+                <Title variant="titSecundario" titulo={t('agentPlayground.title')}/>
               </div>
-              <LoadingState variant="page" message="Loading agent playground..." />
+              <LoadingState variant="page" message={t('agentPlayground.loading')} />
             </div>
     );
   }
@@ -160,13 +162,13 @@ function AgentPlaygroundPage() {
     return (
       <Alert
         type="error"
-        title="Error Loading Agent"
+        title={t('agentPlayground.loadErrorTitle')}
         className="max-w-2xl mx-auto mt-8"
         message={(
           <>
             {error}
             <span className="mt-4 block">
-              <ButtonApp label="Back to Agents" variant="danger" size="medium" onClick={() => navigate(`/apps/${appId}/agents`)} />
+              <ButtonApp label={t('agentPlayground.backToAgents')} variant="danger" size="medium" onClick={() => navigate(`/apps/${appId}/agents`)} />
             </span>
           </>
         )}
@@ -177,13 +179,13 @@ function AgentPlaygroundPage() {
   if (!agent) {
     return (
       <div className="max-w-2xl mx-auto mt-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">Agent Not Found</h2>
-        <p className="text-gray-600">The requested agent could not be found.</p>
+        <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('agentPlayground.notFoundTitle')}</h2>
+        <p className="text-gray-600">{t('agentPlayground.notFoundMessage')}</p>
         <button
           onClick={() => navigate(`/apps/${appId}/agents`)}
           className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
         >
-          Back to Agents
+          {t('agentPlayground.backToAgents')}
         </button>
       </div>
     );
@@ -192,8 +194,8 @@ function AgentPlaygroundPage() {
   const isOCRAgent = agent.type === 'ocr_agent';
 
   const tabs = [
-    { id: 'playground', label: 'Playground' },
-    { id: 'api', label: 'API Examples' },
+    { id: 'playground', label: t('agentPlayground.tabs.playground') },
+    { id: 'api', label: t('agentPlayground.tabs.apiExamples') },
   ];
 
   return (
@@ -202,22 +204,22 @@ function AgentPlaygroundPage() {
       <div className="flex items-center justify-between flex-shrink-0">
         <Title
           variant="titSecundario"
-          titulo="Agent Playground"
-          subtitulo={`Agent: ${agent.name}`}
+          titulo={t('agentPlayground.title')}
+          subtitulo={t('agentPlayground.agentSubtitle', { name: agent.name })}
           subtitleRight={(
             <div className="flex flex-wrap items-center gap-2">
               {agent.status && (
                 <Badge label={agent.status} variant={agent.status === 'active' ? 'success' : 'warning'} />
               )}
               <Badge label={agent.type} variant="info" />
-              {agent.has_memory && <Badge label="Memory" variant="secondary" />}
+              {agent.has_memory && <Badge label={t('agentPlayground.memory')} variant="secondary" />}
               {agent.silo && <Badge label="RAG" variant="custom" className="bg-teal-100/80 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300" />}
             </div>
           )}
         />
         <div className="flex items-center space-x-3">
           <ButtonApp
-            label="Edit Prompts"
+            label={t('agentPlayground.editPrompts')}
             variant="primary"
             size="medium"
             icon={<Pencil className="w-4 h-4" />}

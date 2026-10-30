@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Activity, Ban, ChevronRight, ChevronLeft, ChevronDown, Clock, Pencil, Terminal, Trash2, Wrench } from 'lucide-react';
 import type { ToolExecutionRecord } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
@@ -67,7 +68,7 @@ function CodeBlock({
 }>) {
   return (
     <div className="mx-2 mb-2">
-      <span className="block text-[9px] font-semibold uppercase tracking-wider text-neutral-400 mb-0.5 px-0.5">
+      <span className="block text-[9px] font-semibold uppercase tracking-wider text-fg dark:text-fg-dark mb-0.5 px-0.5">
         {label}
       </span>
       <pre
@@ -76,7 +77,7 @@ function CodeBlock({
                    px-2.5 py-1.5 text-[10px] leading-[1.5] text-neutral-200
                    whitespace-pre-wrap break-all font-mono"
       >
-        {text}
+        {text}{' '}
         {showCursor && (
           <span className="inline-block h-3 w-0.5 bg-neutral-400 animate-pulse align-middle ml-0.5" />
         )}
@@ -92,6 +93,7 @@ function ToolEntryRow({
   record: ToolExecutionRecord;
   hideSubagentName?: boolean;
 }>) {
+  const { t } = useTranslation('common');
   const [expanded, setExpanded] = useState(record.status === 'running' || record.status === 'awaiting_approval');
   const previousStatusRef = useRef(record.status);
   const stdoutScrollRef = useRef<HTMLPreElement>(null);
@@ -138,44 +140,47 @@ function ToolEntryRow({
   const outputDisplay = record.toolOutput ? prettyJson(record.toolOutput) : null;
 
   return (
-    <div className="border-b border-neutral-100 dark:border-neutral-700/60 last:border-0">
+    <div className="border-b border-line dark:border-line-dark last:border-0">
       {/* Row header */}
       <button
         type="button"
         onClick={() => canExpand && setExpanded((v) => !v)}
         className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors
-          ${canExpand ? 'hover:bg-neutral-50 dark:hover:bg-neutral-800/40 cursor-pointer' : 'cursor-default'}`}
+          ${canExpand ? 'hover:bg-surface-hover dark:hover:bg-surface-hover-dark cursor-pointer' : 'cursor-default'}`}
       >
         {isCode ? (
-          <Terminal className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+          <Terminal className="h-3.5 w-3.5 shrink-0 text-fg-secondary dark:text-fg-secondary-dark" />
         ) : (
-          <Wrench className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+          <Wrench className="h-3.5 w-3.5 shrink-0 text-fg-secondary dark:text-fg-secondary-dark" />
         )}
-        <span className="flex-1 text-[11px] font-medium text-neutral-700 dark:text-neutral-300 truncate">
+        <span className="flex-1 text-[11px] font-medium text-fg-secondary dark:text-fg-secondary-dark truncate">
           {displayName}
         </span>
+        
         {record.edited && (
           <span className="flex items-center gap-0.5 text-[10px] text-violet-600 dark:text-violet-400 shrink-0">
             <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
-            edited
+            {t('toolHistory.edited')}
           </span>
         )}
         {record.status === 'running' && (
           <span className="flex items-center gap-1 text-[10px] text-blue-500 shrink-0">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            running
+            {t('toolHistory.running')}
           </span>
         )}
         {record.status === 'awaiting_approval' && (
           <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
             <Clock className="h-3 w-3" aria-hidden="true" />
-            awaiting approval
+            {t('toolHistory.awaitingApproval')}
           </span>
         )}
         {(record.status === 'rejected' || record.status === 'expired' || record.status === 'cancelled') && (
           <span className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 shrink-0">
             <Ban className="h-3 w-3" aria-hidden="true" />
-            {record.status === 'rejected' ? 'rejected' : `${record.status} · not run`}
+            {record.status === 'rejected'
+              ? t('toolHistory.rejected')
+              : t('toolHistory.notRun', { status: t(`toolHistory.status.${record.status}`) })}
           </span>
         )}
         {record.status === 'complete' && (
@@ -187,8 +192,8 @@ function ToolEntryRow({
         )}
         {canExpand && (
           expanded
-            ? <ChevronDown className="h-3 w-3 text-neutral-400 shrink-0" />
-            : <ChevronRight className="h-3 w-3 text-neutral-400 shrink-0" />
+            ? <ChevronDown className="h-3 w-3 text-fg-secondary dark:text-fg-secondary-dark shrink-0" />
+            : <ChevronRight className="h-3 w-3 text-fg-secondary dark:text-fg-secondary-dark shrink-0" />
         )}
       </button>
 
@@ -230,13 +235,13 @@ function ToolEntryRow({
           {/* Running: show placeholder when no output yet */}
           {record.status === 'running' && !hasStdout && !outputDisplay && (
             <div className="mx-2 mb-2 text-[10px] text-neutral-400 italic px-0.5">
-              waiting for result…
+              {t('toolHistory.waitingForResult')}
             </div>
           )}
 
           {record.status === 'awaiting_approval' && (
             <div className="mx-2 mb-2 text-[10px] text-neutral-400 italic px-0.5">
-              waiting for your approval…
+              {t('toolHistory.waitingForApproval')}
             </div>
           )}
         </div>
@@ -251,6 +256,7 @@ interface ToolHistoryPanelProps {
 }
 
 export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHistoryPanelProps>) {
+  const { t } = useTranslation('common');
   const [panelOpen, setPanelOpen] = useState(true);
   const runningCount = history.filter((r) => r.status === 'running').length;
   const anyRunning = runningCount > 0;
@@ -264,27 +270,29 @@ export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHist
   const groupedHistory = groupHistoryRecords(history);
 
   return (
-    <div className={`shrink-0 transition-all duration-200 ${panelOpen ? 'w-72' : 'w-9'}`}>
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden h-full">
+    <div className="w-full shrink-0 min-h-0">
+      <div className="bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark rounded-md overflow-hidden h-full">
         {/* Header */}
-        <div className="flex items-center gap-1 px-1.5 py-2 border-b border-neutral-100 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60">
+        <div className="flex items-center gap-1 px-1.5 py-2 border-b border-line dark:border-line-dark ">
           <button
             type="button"
             onClick={() => setPanelOpen((v) => !v)}
-            className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors text-neutral-500"
-            aria-label={panelOpen ? 'Collapse tool history panel' : 'Expand tool history panel'}
+            className="p-1 rounded text-fg-secondary dark:text-fg-secondary-dark"
+            aria-label={panelOpen
+              ? t('toolHistory.collapsePanel')
+              : t('toolHistory.expandPanel')}
           >
             {panelOpen
-              ? <ChevronRight className="h-3.5 w-3.5" />
-              : <ChevronLeft className="h-3.5 w-3.5" />
-            }
+              ? <ChevronRight className="h-3.5 w-3.5 rotate-90" />
+              : <ChevronLeft className="h-3.5 w-3.5 rotate-180" />
+            } 
           </button>
 
           {panelOpen && (
             <>
-              <Activity className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
-              <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 select-none">
-                Tool activity
+              <Activity className="h-3.5 w-3.5 text-fg-secondary dark:text-fg-secondary-dark shrink-0" />
+              <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-fg dark:text-fg-dark select-none">
+                {t('toolHistory.title')}
               </span>
               {anyRunning ? (
                 <span className="flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-600 dark:text-blue-400 shrink-0">
@@ -293,13 +301,13 @@ export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHist
                 </span>
               ) : (
                 <>
-                  <span className="text-[10px] text-neutral-400 shrink-0 mr-0.5">{history.length}</span>
+                  <span className="text-[10px] text-fg dark:text-fg-dark shrink-0 mr-0.5">{history.length}</span>
                   <button
                     type="button"
                     onClick={onClear}
-                    className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors text-neutral-400 hover:text-red-500"
-                    aria-label="Clear tool history"
-                    title="Clear history"
+                    className="p-1 rounded  text-fg dark:text-fg-dark hover:text-error"
+                    aria-label={t('toolHistory.clearHistory')}
+                    title={t('toolHistory.clearHistory')}
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>

@@ -2,7 +2,8 @@ import { CalendarClock } from 'lucide-react';
 import type { MarketplaceScheduledTask } from '../../services/api';
 import { ButtonCard } from '../ui/ButtonCard';
 import { RunStatusBadge } from '../scheduled-tasks/RunStatusBadge';
-import { describeSchedule, formatDateTime } from '../scheduled-tasks/format';
+import { describeSchedule } from '../scheduled-tasks/format';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   readonly task: MarketplaceScheduledTask;
@@ -11,10 +12,11 @@ interface Props {
 
 /** Card for a published scheduled task in the marketplace catalog. */
 export function MarketplaceScheduledTaskCard({ task, onClick }: Props) {
+  const { t, i18n } = useTranslation('common');
   return (
     <ButtonCard
       onClick={() => onClick(task.id)}
-      ariaLabel={`Open scheduled task ${task.name}`}
+      ariaLabel={t('marketplacePage.openScheduledTask', { task: task.name })}
     >
 
 
@@ -28,18 +30,29 @@ export function MarketplaceScheduledTaskCard({ task, onClick }: Props) {
         </div>
       </div>
       <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
-        {task.description || 'Sin descripción.'}
+        {task.description || t('marketplacePage.noDescriptionProvided')}
       </p>
       <div className="space-y-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
-        <div>{describeSchedule(task.cron_expression)} · {task.timezone}</div>
+        <div>
+          {describeSchedule(task.cron_expression, (key, options) => t(key, options))} · {task.timezone}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {task.last_run_at ? (
             <>
-              <span>Última: {formatDateTime(task.last_run_at)}</span>
-              <RunStatusBadge status={task.last_run_status} />
+              <span>
+                {t('marketplacePage.lastRun')}: {task.last_run_at
+                  ? new Date(task.last_run_at).toLocaleString(i18n.resolvedLanguage ?? i18n.language)
+                  : '—'}
+              </span>
+              <RunStatusBadge
+                status={task.last_run_status}
+                label={t(`marketplacePage.runStatus.${task.last_run_status}`, {
+                  defaultValue: task.last_run_status ?? '—',
+                })}
+              />
             </>
           ) : (
-            <span>Sin ejecuciones todavía</span>
+            <span>{t('marketplacePage.noRunsYet')}</span>
           )}
         </div>
       </div>

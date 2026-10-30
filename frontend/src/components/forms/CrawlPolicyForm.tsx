@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Save } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { TagInput } from '../ui/TagInput';
@@ -32,6 +33,7 @@ const DEFAULT_POLICY: CrawlPolicyInput = {
 };
 
 export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: Readonly<CrawlPolicyFormProps>) {
+  const { t } = useTranslation('common');
   const [formData, setFormData] = useState<CrawlPolicyInput>(DEFAULT_POLICY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,14 +61,14 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
       } catch (err: any) {
         // 404 means no policy yet — use defaults silently
         if (!String(err?.message ?? '').includes('404')) {
-          setError('Failed to load crawl policy');
+          setError(t('domainDetailPage.policyForm.errors.load'));
         }
       } finally {
         setLoading(false);
       }
     };
     void fetchPolicy();
-  }, [appId, domainId]);
+  }, [appId, domainId, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,11 +77,11 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
       setSaving(true);
       setError(null);
       const saved = await apiService.updateCrawlPolicy(appId, domainId, formData);
-      setSuccessMessage('Crawl policy saved successfully');
+      setSuccessMessage(t('domainDetailPage.policyForm.saved'));
       setTimeout(() => setSuccessMessage(null), 3000);
       onSaved?.(saved);
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to save crawl policy');
+      setError(err?.message ?? t('domainDetailPage.policyForm.errors.save'));
     } finally {
       setSaving(false);
     }
@@ -91,7 +93,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
 
   if (loading) {
     return (
-      <LoadingState variant="section" message="Loading crawl policy..." />
+      <LoadingState variant="section" message={t('domainDetailPage.policyForm.loading')} />
     );
   }
 
@@ -103,95 +105,94 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
       {!canEdit && <ReadOnlyBanner userRole={AppRole.VIEWER} minRole={AppRole.EDITOR} />}
 
       {/* ==================== DISCOVERY ==================== */}
-      <ExpansionDetails header="Discovery">
+      <ExpansionDetails header={t('domainDetailPage.policyForm.discovery')}>
           {/* Sitemap URL */}
           <FormField
             id="sitemap_url"
-            label="Sitemap URL"
+            label={t('domainDetailPage.policyForm.sitemapUrl')}
             type="url"
             value={formData.sitemap_url ?? ''}
             onChange={e => setField('sitemap_url', e.target.value || null)}
             disabled={!canEdit}
             placeholder="https://example.com/sitemap.xml"
-            helpText="Leave empty to skip sitemap discovery."
+            helpText={t('domainDetailPage.policyForm.sitemapHelp')}
           />
 
           {/* Seed URL + max depth */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
               id="seed_url"
-              label="Seed URL"
+              label={t('domainDetailPage.policyForm.seedUrl')}
               type="url"
               value={formData.seed_url ?? ''}
               onChange={e => setField('seed_url', e.target.value || null)}
               disabled={!canEdit}
               placeholder="https://example.com/"
-              helpText="Starting URL for link-following crawl."
+              helpText={t('domainDetailPage.policyForm.seedHelp')}
             />
             <FormField
               id="max_depth"
-              label="Max depth"
+              label={t('domainDetailPage.policyForm.maxDepth')}
               type="number"
               min={0}
               max={5}
               value={formData.max_depth}
               onChange={e => setField('max_depth', Math.max(0, Math.min(5, Number(e.target.value))))}
               disabled={!canEdit}
-              helpText="0–5 link-following levels from the seed URL."
+              helpText={t('domainDetailPage.policyForm.maxDepthHelp')}
             />
           </div>
 
           {/* Manual URLs */}
           <div>
             <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
-              Manual URLs
+              {t('domainDetailPage.policyForm.manualUrls')}
             </label>
             <TagInput
               tags={formData.manual_urls}
               onChange={tags => setField('manual_urls', tags)}
               maxTags={200}
-              placeholder="https://example.com/page — press Enter"
+              placeholder={t('domainDetailPage.policyForm.manualUrlsPlaceholder')}
             />
             <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
-              Individual URLs to always include. Duplicates are silently ignored.
+              {t('domainDetailPage.policyForm.manualUrlsHelp')}
             </p>
           </div>
       </ExpansionDetails>
 
       {/* ==================== FILTERS ==================== */}
-      <ExpansionDetails header="Filters">
+      <ExpansionDetails header={t('domainDetailPage.policyForm.filters')}>
           <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
-            Patterns match against the URL path. Use <code className="bg-tableCab dark:bg-tableCab-dark px-1 rounded">**</code> to match
-            any number of path segments (e.g. <code className="bg-tableCab dark:bg-tableCab-dark px-1 rounded">/docs/**</code>).
+        {t('domainDetailPage.policyForm.filterPatternsBefore')} <code className="bg-tableCab dark:bg-tableCab-dark px-1 rounded">**</code>{t('domainDetailPage.policyForm.filterPatternsAfter')} <code className="bg-tableCab dark:bg-tableCab-dark px-1 rounded">/docs/**</code>).
           </p>
           <div>
-            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Include globs</label>
+            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">{t('domainDetailPage.policyForm.includeGlobs')}</label>
             <TagInput
               tags={formData.include_globs}
               onChange={tags => setField('include_globs', tags)}
               maxTags={50}
-              placeholder="/docs/** — press Enter"
+              placeholder={t('domainDetailPage.policyForm.includeGlobsPlaceholder')}
             />
-            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">Only crawl URLs that match at least one of these patterns. Leave empty to crawl everything.</p>
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('domainDetailPage.policyForm.includeGlobsHelp')}</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Exclude globs</label>
+            <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">{t('domainDetailPage.policyForm.excludeGlobs')}</label>
             <TagInput
               tags={formData.exclude_globs}
               onChange={tags => setField('exclude_globs', tags)}
               maxTags={50}
-              placeholder="/admin/** — press Enter"
+              placeholder={t('domainDetailPage.policyForm.excludeGlobsPlaceholder')}
             />
-            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">Skip URLs that match any of these patterns.</p>
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('domainDetailPage.policyForm.excludeGlobsHelp')}</p>
           </div>
       </ExpansionDetails>
 
       {/* ==================== CRAWL BEHAVIOUR ==================== */}
-      <ExpansionDetails header="Crawl behaviour">
+      <ExpansionDetails header={t('domainDetailPage.policyForm.crawlBehaviour')}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
               id="rate_limit_rps"
-              label="Rate limit (requests/second)"
+              label={t('domainDetailPage.policyForm.rateLimit')}
               type="number"
               min={0.1}
               max={10}
@@ -199,24 +200,24 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
               value={formData.rate_limit_rps}
               onChange={e => setField('rate_limit_rps', parseFloat(e.target.value))}
               disabled={!canEdit}
-              helpText="0.1–10 requests per second."
+              helpText={t('domainDetailPage.policyForm.rateLimitHelp')}
             />
             <FormField
               id="refresh_interval_hours"
-              label="Refresh interval (hours)"
+              label={t('domainDetailPage.policyForm.refreshInterval')}
               type="number"
               min={0}
               max={720}
               value={formData.refresh_interval_hours}
               onChange={e => setField('refresh_interval_hours', Number(e.target.value))}
               disabled={!canEdit}
-              helpText="0 = disabled (never auto-crawl)."
+              helpText={t('domainDetailPage.policyForm.refreshIntervalHelp')}
             />
           </div>
 
           <FormCheckbox
             id="respect_robots_txt"
-            label="Respect robots.txt"
+            label={t('domainDetailPage.policyForm.respectRobots')}
             checked={formData.respect_robots_txt}
             onChange={e => setField('respect_robots_txt', e.target.checked)}
             disabled={!canEdit}
@@ -224,7 +225,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
 
           <FormCheckbox
             id="is_active"
-            label="Enable scheduled crawls"
+            label={t('domainDetailPage.policyForm.enableScheduled')}
             checked={formData.is_active}
             onChange={e => setField('is_active', e.target.checked)}
             disabled={!canEdit}
@@ -235,7 +236,7 @@ export default function CrawlPolicyForm({ appId, domainId, canEdit, onSaved }: R
         <div className="flex justify-end">
           <ButtonApp
             type="submit"
-            label={saving ? 'Saving...' : 'Save policy'}
+            label={saving ? t('domainDetailPage.policyForm.saving') : t('domainDetailPage.policyForm.save')}
             loading={saving}
             icon={<Save className="w-4 h-4" />}
           />

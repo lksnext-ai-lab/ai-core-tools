@@ -1,0 +1,2176 @@
+{
+  "save": "Guardar",
+  "cancel": "Cancelar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "name": "Nombre",
+  "description": "Descripción",
+  "required": "Campo obligatorio",
+  "language": "Idioma",
+  "languageChangeError": "No se ha podido cambiar el idioma. Inténtalo de nuevo.",
+  "sidebar": {
+    "app": "Aplicación",
+    "globalAdmin": "Administración global"
+  },
+  "header": {
+    "organizationTitle": "{{organization}} · Organización",
+    "organization": "Organización",
+    "search": "Buscar agentes, aplicaciones o conversaciones…",
+    "switchToLightMode": "Cambiar al modo claro",
+    "switchToDarkMode": "Cambiar al modo oscuro",
+    "userFallback": "Usuario",
+    "profile": "Perfil",
+    "subscription": "Suscripción",
+    "changePassword": "Cambiar contraseña",
+    "signOut": "Cerrar sesión"
+  },
+  "breadcrumbs": {
+    "ariaLabel": "Ruta de navegación",
+    "administration": "Administración",
+    "appFallback": "Aplicación {{appId}}",
+    "action": {
+      "new": "Nuevo",
+      "edit": "Editar",
+      "playground": "Entorno de pruebas",
+      "detail": "Detalle",
+      "runs": "Ejecuciones",
+      "files": "Archivos",
+      "conversation": "Conversación",
+      "general": "General"
+    },
+    "navigation": {
+      "home": "Inicio",
+      "marketplace": "Marketplace",
+      "myApps": "Mis apps",
+      "about": "Acerca de",
+      "dashboard": "Panel",
+      "agents": "Agentes",
+      "scheduledTasks": "Tareas programadas",
+      "dataSources": "Fuentes de datos",
+      "silos": "Silos",
+      "repositories": "Repositorios",
+      "domains": "Dominios",
+      "sharePoint": "SharePoint",
+      "mcpServers": "Servidores MCP",
+      "metrics": "Métricas",
+      "skills": "Habilidades",
+      "middlewares": "Middlewares",
+      "appSettings": "Configuración App",
+      "outputChannels": "Canales de salida",
+      "aiServices": "Servicios de IA",
+      "embeddingServices": "Servicios de embeddings",
+      "sandboxServices": "Servicios de sandbox",
+      "mcpConfigs": "Configuraciones de MCP",
+      "apiKeys": "Claves de API",
+      "dataStructures": "Estructuras de datos",
+      "collaboration": "Colaboración",
+      "users": "Usuarios",
+      "statistics": "Estadísticas",
+      "agentMetrics": "Métricas de agentes",
+      "settings": "Configuración",
+      "saasUsers": "Usuarios de SaaS",
+      "systemAiServices": "Servicios de IA del sistema",
+      "systemEmbeddingServices": "Servicios de embeddings del sistema",
+      "systemSandboxServices": "Servicios de sandbox del sistema",
+      "systemSkills": "Habilidades del sistema",
+      "tierConfig": "Configuración de niveles"
+    }
+  },
+  "login": {
+    "title": "Te damos la bienvenida de nuevo",
+    "subtitle": "Inicia sesión en <brand>{{brand}}</brand>",
+    "loadingOptions": "Cargando opciones de inicio de sesión",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "usuario@ejemplo.com",
+    "passwordLabel": "Contraseña",
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión...",
+    "signInWithMicrosoft": "Iniciar sesión con Microsoft",
+    "registerPrompt": "¿Aún no tienes una cuenta?",
+    "createAccount": "Crear una cuenta",
+    "forgotPassword": "¿Has olvidado tu contraseña?",
+    "selfHostedPasswordHelp": "¿Has olvidado tu contraseña? Contacta con el administrador.",
+    "termsAgreement": "Al iniciar sesión, aceptas nuestros",
+    "termsOfService": "Términos del servicio",
+    "and": "y",
+    "privacyPolicy": "Política de privacidad",
+    "validation": {
+      "credentialsRequired": "Introduce tu correo electrónico y contraseña"
+    },
+    "error": {
+      "title": "Error de inicio de sesión",
+      "failed": "Error al iniciar sesión"
+    },
+    "robot": {
+      "phrases": [
+        "¡Hola! ¿Listo para crear algo increíble?",
+        "Tus agentes te están esperando...",
+        "¿Sabías que puedes encadenar agentes como herramientas?",
+        "Consejo: conecta cualquier proveedor de LLM en segundos",
+        "Curiosidad: tus documentos se pueden buscar con IA al instante",
+        "Psst... MCP permite que tus agentes usen herramientas externas",
+        "Puedo manejar 6 proveedores de LLM. ¿Y tú?",
+        "¿Sigues aquí? Podría estar automatizando tareas por ti...",
+        "Tu base de conocimiento te echa de menos. Solo digo.",
+        "Giro inesperado: trabajo mientras duermes."
+      ]
+    }
+  },
+  "errors": {
+    "generic": "Algo salió mal.",
+    "authenticationFailed": "Error de autenticación",
+    "chatbotPrefix": "Lo sentimos, se ha producido un error.",
+    "chatbotTryAgain": "Lo sentimos, se ha producido un error. Inténtalo de nuevo."
+  },
+  "pagination": {
+    "ariaLabel": "Paginación",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "pageOf": "Página {{page}} de {{totalPages}}",
+    "pageOfWithTotal": "Página {{page}} de {{totalPages}} ({{total}} en total)"
+  },
+  "appsPage": {
+    "title": "Mis aplicaciones",
+    "subtitle": "Administra tus aplicaciones de IA y espacios de trabajo",
+    "importApp": "Importar aplicación",
+    "newApp": "Nueva aplicación",
+    "createApp": "Crear aplicación",
+    "createNewApp": "Crear nueva aplicación",
+    "loading": "Cargando aplicaciones...",
+    "loadFailed": "No se pudieron cargar las aplicaciones",
+    "appCreatedSuccessfully": "La aplicación \"{{name}}\" se ha creado correctamente.",
+    "appImportedSuccessfully": "La aplicación se ha importado correctamente.",
+    "openApp": "Abrir {{name}}",
+    "configured": "Configurado",
+    "notConfigured": "Sin configurar",
+    "roles": {
+      "owner": "Propietario",
+      "administrator": "Administrador",
+      "editor": "Editor",
+      "viewer": "Lector"
+    },
+    "stats": {
+      "agents": "Agentes",
+      "repositories": "Repos",
+      "domains": "Dominios",
+      "silos": "Silos",
+      "collaborators": "Colabs"
+    }
+  },
+  "domainsPage": {
+    "title": "Dominios",
+    "subtitle": "Dominios de extracción web para obtener contenido",
+    "loading": "Cargando dominios...",
+    "loadFailed": "No se pudieron cargar los dominios",
+    "loadErrorTitle": "Error al cargar los dominios",
+    "confirmDeleteTitle": "¿Eliminar dominio?",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer y eliminará todas las URL y el contenido indexado asociados.",
+    "deleting": "Eliminando dominio…",
+    "deleted": "Dominio eliminado",
+    "deleteFailed": "No se pudo eliminar el dominio",
+    "urlCount_one": "{{count}} URL",
+    "urlCount_other": "{{count}} URL",
+    "emptyTitle": "Todavía no hay dominios",
+    "emptyDescription": "Crea tu primer dominio para empezar a extraer contenido de sitios web.",
+    "columns": {
+      "name": "Nombre",
+      "baseUrl": "URL base",
+      "urls": "URL",
+      "created": "Creado",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "create": "Crear dominio",
+      "createFirst": "Crea tu primer dominio",
+      "urls": "URL",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    }
+  },
+  "skillsPage": {
+    "title": "Skills",
+    "subtitle": "Gestiona especializaciones basadas en prompts para tus agentes",
+    "loading": "Cargando skills...",
+    "loadFailed": "No se pudieron cargar las skills",
+    "loadDetailsFailed": "No se pudieron cargar los detalles de la skill",
+    "confirmDeleteTitle": "¿Eliminar la skill?",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar \"{{name}}\"? Los agentes que la usan perderán esta especialización.",
+    "confirmDeleteFallback": "¿Seguro que quieres eliminar esta skill? Esta acción no se puede deshacer.",
+    "noDescription": "Sin descripción",
+    "notAvailable": "No disponible",
+    "emptyTitle": "No hay skills",
+    "emptyDescription": "Añade tu primera skill para crear comportamientos especializados para tus agentes.",
+    "columns": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "status": "Estado",
+      "created": "Creada",
+      "actions": "Acciones"
+    },
+    "statuses": {
+      "system": "Sistema",
+      "enabled": "Activada",
+      "disabled": "Desactivada"
+    },
+    "actions": {
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "editSkill": "Editar skill {{name}}",
+      "viewSkill": "Ver skill {{name}}",
+      "export": "Exportar",
+      "exporting": "Exportando...",
+      "exportingSkill": "Exportando skill {{name}}...",
+      "updating": "Actualizando...",
+      "updatingSkill": "Actualizando skill {{name}}...",
+      "disable": "Desactivar",
+      "enable": "Activar",
+      "forSkill": "Acciones para la skill {{name}}",
+      "importPackage": "Importar paquete",
+      "importing": "Importando...",
+      "importClaudePlugin": "Importar plugin de Claude",
+      "addSkill": "Añadir skill",
+      "addFirstSkill": "Añadir primera skill"
+    },
+    "notifications": {
+      "deleting": "Eliminando skill...",
+      "deleted": "Skill eliminada",
+      "deleteFailed": "No se pudo eliminar la skill",
+      "creating": "Creando skill...",
+      "updating": "Actualizando skill...",
+      "created": "Skill creada",
+      "updated": "Skill actualizada",
+      "saveFailed": "No se pudo guardar la skill",
+      "imported": "Skill importada",
+      "exported": "Skill exportada",
+      "exportFailed": "No se pudo exportar la skill",
+      "enabled": "Skill activada",
+      "disabled": "Skill desactivada",
+      "statusUpdateFailed": "No se pudo actualizar el estado de la skill"
+    },
+    "import": {
+      "invalidFile": "Selecciona un paquete de skill válido (archivo .zip).",
+      "failed": "No se pudo importar la skill",
+      "failedTitle": "Error al importar",
+      "fileInputLabel": "Importar archivo de paquete de skill"
+    },
+    "about": {
+      "title": "Acerca de las skills",
+      "descriptionBeforeTool": "Las skills son especializaciones guiadas por prompts que los agentes pueden cargar bajo demanda. Cuando un agente tiene skills asignadas, obtiene una",
+      "descriptionAfterTool": "que le permite activar comportamientos especializados cuando los necesita. Las skills marcadas como Sistema se gestionan de forma centralizada y no se pueden editar ni eliminar aquí.",
+      "examplesTitle": "Ejemplos de skills:",
+      "examples": {
+        "codeReview": "Guías de revisión de código - Buenas prácticas para revisar código",
+        "technicalWriting": "Redacción técnica - Formato y estilo para documentación",
+        "dataAnalysis": "Análisis de datos - Pasos para analizar conjuntos de datos",
+        "customerSupport": "Atención al cliente - Tono y proceso para responder consultas"
+      }
+    },
+    "modal": {
+      "viewSkill": "Ver skill",
+      "editSkill": "Editar skill",
+      "createSkill": "Crear skill"
+    }
+  },
+  "skillForm": {
+    "platformAdministrators": "administradores de la plataforma",
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "p. ej., guias_revision_codigo",
+      "displayName": "Nombre visible",
+      "displayNamePlaceholder": "p. ej., Guías de revisión de código",
+      "description": "Descripción",
+      "descriptionPlaceholder": "p. ej., Buenas prácticas para revisar la calidad del código",
+      "whenToUse": "Cuándo usarla",
+      "whenToUsePlaceholder": "p. ej., Úsala cuando el usuario solicite generar o editar un documento de Word.",
+      "instructions": "Instrucciones de la skill",
+      "allowedTools": "Herramientas permitidas",
+      "runtime": "Entorno de ejecución",
+      "runtimePlaceholder": "p. ej., python3.11",
+      "bootstrapScriptPath": "Ruta del script de inicialización",
+      "runtimeOptions": "Opciones del entorno (JSON)",
+      "enabled": "Activada"
+    },
+    "help": {
+      "name": "Identificador breve y único para la skill.",
+      "displayName": "Etiqueta legible que se muestra en la interfaz. Si se deja vacío, se usa el nombre.",
+      "description": "El agente consulta esta descripción para decidir cuándo es pertinente la skill.",
+      "whenToUse": "Instrucciones adicionales para seleccionar la skill, independientes de la descripción.",
+      "instructions": "Instrucciones en formato Markdown que se cargan cuando el agente activa esta skill.",
+      "runtime": "Entorno de ejecución aislado que requiere esta skill, si corresponde.",
+      "bootstrapScriptPath": "Ruta relativa a la raíz del paquete para un script que se ejecuta tras copiar los recursos al entorno aislado.",
+      "runtimeOptions": "Objeto JSON opcional que se envía al entorno de ejecución. Déjalo vacío si no necesitas opciones.",
+      "enabled": "Las skills desactivadas se ignoran durante la ejecución hasta que se vuelvan a activar."
+    },
+    "validation": {
+      "invalidJson": "JSON no válido",
+      "invalidJsonWithMessage": "JSON no válido: {{message}}",
+      "runtimeOptionsObject": "Las opciones del entorno deben ser un objeto JSON; por ejemplo: {\"key\": \"value\"}.",
+      "nameRequired": "El nombre de la skill es obligatorio",
+      "descriptionRequired": "La descripción de la skill es obligatoria",
+      "contentRequired": "El contenido de la skill es obligatorio",
+      "saveFailed": "No se pudo guardar la skill"
+    },
+    "allowedTools": {
+      "added": "Herramienta {{tool}} añadida",
+      "removed": "Herramienta {{tool}} eliminada",
+      "remove": "Eliminar herramienta permitida {{tool}}",
+      "placeholder": "p. ej., Bash, WebSearch; pulsa Intro o coma para añadir",
+      "noneDeclared": "No se han declarado herramientas permitidas",
+      "metadataBefore": "Solo son metadatos informativos: se almacenan, importan/exportan y muestran, pero",
+      "notEnforced": "no se aplican",
+      "metadataAfter": "al conjunto de herramientas del agente."
+    },
+    "files": {
+      "bytes": "{{size}} bytes",
+      "binarySize": "Binario - {{size}} bytes",
+      "loadingPreview": "Cargando vista previa...",
+      "previewUnavailable": "La vista previa de este archivo no está disponible.",
+      "previewFailed": "No se pudo cargar la vista previa del archivo"
+    },
+    "resources": {
+      "title": "Recursos del paquete",
+      "skillFileOnly": "Solo SKILL.md",
+      "bundledFiles_one": "{{count}} archivo incluido",
+      "bundledFiles_other": "{{count}} archivos incluidos",
+      "instructions": "instrucciones",
+      "none": "Esta skill no incluye recursos empaquetados.",
+      "readOnlyDescription": "Solo lectura. Las vistas previas de texto se cargan al expandir cada archivo."
+    },
+    "actions": {
+      "close": "Cerrar",
+      "update": "Actualizar skill",
+      "create": "Crear skill",
+      "saving": "Guardando...",
+      "cancel": "Cancelar"
+    }
+  },
+  "mcpServersPage": {
+    "title": "Servidores MCP",
+    "subtitle": "Expón tus agentes como herramientas MCP para Claude Desktop, Cursor y otros clientes",
+    "loading": "Cargando servidores MCP...",
+    "loadFailed": "No se pudieron cargar los servidores MCP",
+    "loadErrorTitle": "Error al cargar los servidores MCP",
+    "tryAgain": "Reintentar",
+    "confirmDeleteTitle": "¿Eliminar el servidor MCP?",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "confirmDeleteFallback": "¿Seguro que quieres eliminar este servidor MCP? Esta acción no se puede deshacer.",
+    "copyEndpoint": "Copiar URL del endpoint",
+    "detailView": "Vista de detalle",
+    "notAvailable": "No disponible",
+    "emptyTitle": "Todavía no hay servidores MCP",
+    "emptyDescription": "Crea un servidor MCP para exponer tus agentes como herramientas.",
+    "agentCount_one": "{{count}} agente",
+    "agentCount_other": "{{count}} agentes",
+    "columns": {
+      "name": "Nombre",
+      "status": "Estado",
+      "agents": "Agentes",
+      "endpoint": "Endpoint",
+      "created": "Creado",
+      "actions": "Acciones"
+    },
+    "statuses": {
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "actions": {
+      "create": "Crear servidor MCP",
+      "createFirst": "Crea tu primer servidor MCP",
+      "viewDetails": "Ver detalles",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "copy": "Copiar",
+      "copied": "Listo"
+    },
+    "notifications": {
+      "deleting": "Eliminando servidor MCP...",
+      "deleted": "Servidor MCP eliminado",
+      "deleteFailed": "No se pudo eliminar el servidor MCP"
+    }
+  },
+  "mcpServerFormPage": {
+    "createTitle": "Crear servidor MCP",
+    "editTitle": "Editar servidor MCP",
+    "subtitle": "Configura los ajustes del servidor MCP",
+    "loading": "Cargando...",
+    "loadFailed": "No se pudieron cargar los datos",
+    "sections": {
+      "basicInformation": "Información básica",
+      "selectAgents": "Seleccionar agentes para exponer",
+      "selectAgentsDescription": "Elige qué agentes marcados como herramientas quieres exponer a través de este servidor MCP. Estarán disponibles como herramientas MCP para clientes externos."
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Mi servidor MCP",
+      "slug": "Identificador URL",
+      "slugPlaceholder": "mi-servidor (se genera automáticamente si se deja vacío)",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Describe qué hace este servidor MCP...",
+      "active": "Activo (el servidor acepta solicitudes)",
+      "rateLimit": "Límite de solicitudes (por minuto)"
+    },
+    "help": {
+      "slug": "Identificador compatible con URL. Usa solo letras minúsculas, números y guiones.",
+      "rateLimit": "0 = sin límite"
+    },
+    "emptyAgentsTitle": "No hay agentes marcados como herramientas.",
+    "emptyAgentsDescription": "Crea un agente y activa \"Usar como herramienta\" para exponerlo mediante MCP.",
+    "selectedAgents_one": "{{count}} agente seleccionado",
+    "selectedAgents_other": "{{count}} agentes seleccionados",
+    "selectAgent": "Seleccionar {{name}}",
+    "actions": {
+      "create": "Crear servidor MCP",
+      "update": "Actualizar servidor MCP",
+      "saving": "Guardando...",
+      "cancel": "Cancelar"
+    },
+    "notifications": {
+      "creating": "Creando servidor MCP...",
+      "updating": "Actualizando servidor MCP...",
+      "created": "Servidor MCP creado",
+      "updated": "Servidor MCP actualizado",
+      "saveFailed": "No se pudo guardar el servidor MCP"
+    }
+  },
+  "mcpServerDetailPage": {
+    "title": "Detalles del servidor MCP",
+    "loading": "Cargando...",
+    "loadingServer": "Cargando servidor MCP...",
+    "notFound": "No se encontró el servidor MCP",
+    "noDescription": "Sin descripción",
+    "notAvailable": "No disponible",
+    "unlimited": "Sin límite",
+    "requestsPerMinute": "{{count}} solicitudes/min",
+    "confirmDelete": "¿Seguro que quieres eliminar este servidor MCP? Esta acción no se puede deshacer.",
+    "tabs": {
+      "general": "General",
+      "endpoints": "Endpoints",
+      "connection": "Conexión",
+      "testCurl": "Probar con cURL"
+    },
+    "aria": {
+      "detailsTabs": "Detalles del servidor MCP"
+    },
+    "sections": {
+      "serverInformation": "Información del servidor",
+      "exposedAgents": "Agentes expuestos",
+      "exposedAgentsCount_one": "Agente expuesto ({{count}})",
+      "exposedAgentsCount_other": "Agentes expuestos ({{count}})",
+      "endpointUrls": "URLs de endpoint",
+      "connectionConfiguration": "Configuración de conexión",
+      "authenticationRequired": "Autenticación requerida"
+    },
+    "fields": {
+      "slug": "Identificador",
+      "rateLimit": "Límite de solicitudes",
+      "created": "Creado",
+      "updated": "Última actualización",
+      "reason": "Motivo: {{reason}}",
+      "primaryEndpoint": "Endpoint principal (basado en identificador)",
+      "fallbackEndpoint": "Endpoint alternativo (basado en ID)"
+    },
+    "statuses": {
+      "unavailable": "No disponible"
+    },
+    "messages": {
+      "unavailableAgents": "Algunos agentes no están disponibles y no se expondrán como herramientas. Es posible que se hayan eliminado o que ya no estén marcados como herramientas.",
+      "noAgents": "Todavía no hay agentes expuestos.",
+      "selectClient": "Selecciona un cliente para ver las instrucciones de conexión.",
+      "noConnectionInstructions": "No hay instrucciones de conexión disponibles.",
+      "claudeConfig": "Añade esta configuración al archivo de ajustes de Claude Desktop",
+      "cursorConfig": "Añade esto a los ajustes de MCP de Cursor:",
+      "curlConfig": "Prueba el endpoint MCP con curl:",
+      "apiKeyRequired": "Los endpoints MCP requieren autenticación. Usa una clave API de los ajustes de claves API de tu aplicación e inclúyela en la cabecera"
+    },
+    "errors": {
+      "loadFailed": "No se pudo cargar el servidor MCP",
+      "deleteFailed": "No se pudo eliminar el servidor MCP"
+    },
+    "actions": {
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "copy": "Copiar",
+      "copied": "¡Copiado!",
+      "copyEndpoint": "Copiar endpoint",
+      "manageApiKeys": "Administrar claves API",
+      "backToServers": "Volver a los servidores MCP"
+    }
+  },
+  "domainFormPage": {
+    "createTitle": "Crear dominio",
+    "editTitle": "Editar dominio",
+    "loading": "Cargando dominio...",
+    "loadFailed": "No se pudo cargar el dominio",
+    "errorTitle": "Error",
+    "tryAgain": "Reintentar",
+    "system": "Sistema",
+    "contentExtraction": "Configuración de extracción de contenido",
+    "fields": {
+      "name": "Nombre del dominio",
+      "namePlaceholder": "Mi sitio web",
+      "baseUrl": "URL base",
+      "baseUrlPlaceholder": "https://example.com",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción de este dominio...",
+      "embeddingService": "Servicio de embeddings",
+      "selectEmbeddingService": "Selecciona un servicio de embeddings",
+      "vectorDatabase": "Base de datos vectorial",
+      "contentTag": "Etiqueta del contenido",
+      "contentTagHelp": "Etiqueta HTML de la que se extrae el contenido (por defecto: body)",
+      "contentClass": "Clase del contenido",
+      "contentClassHelp": "Clase CSS para filtrar el contenido (opcional)",
+      "contentId": "ID del contenido",
+      "contentIdHelp": "ID HTML para filtrar el contenido (opcional)"
+    },
+    "messages": {
+      "noEmbeddingServices": "No hay servicios de embeddings disponibles. Crea uno primero.",
+      "embeddingServiceLocked": "El servicio de embeddings no se puede cambiar después de crear el dominio.",
+      "noVectorDatabases": "No hay bases de datos vectoriales disponibles. Configura primero un silo con soporte vectorial.",
+      "vectorDatabaseLocked": "La base de datos vectorial no se puede cambiar después de crear el dominio."
+    },
+    "actions": {
+      "create": "Crear dominio",
+      "update": "Actualizar dominio",
+      "saving": "Guardando...",
+      "cancel": "Cancelar"
+    },
+    "notifications": {
+      "creating": "Creando dominio...",
+      "updating": "Actualizando dominio...",
+      "created": "Dominio creado",
+      "updated": "Dominio actualizado",
+      "saveFailed": "No se pudo guardar el dominio"
+    }
+  },
+  "sharePointSourcesPage": {
+    "title": "Orígenes de SharePoint",
+    "subtitle": "Sincroniza documentos desde Microsoft SharePoint",
+    "loading": "Cargando orígenes...",
+    "loadFailed": "No se pudieron cargar los orígenes de SharePoint",
+    "loadErrorTitle": "Error al cargar los orígenes",
+    "confirmDeleteTitle": "¿Eliminar el origen de SharePoint?",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar \"{{name}}\"? También se eliminará todo el contenido indexado del silo asociado. Esta acción no se puede deshacer.",
+    "emptyTitle": "Todavía no hay orígenes de SharePoint",
+    "emptyDescription": "Añade tu primer origen de SharePoint para empezar a sincronizar documentos.",
+    "columns": {
+      "name": "Nombre",
+      "siteDrive": "Sitio / Unidad",
+      "status": "Estado",
+      "lastSynced": "Última sincronización",
+      "files": "Archivos",
+      "actions": "Acciones"
+    },
+    "statuses": {
+      "idle": "Inactivo",
+      "running": "En curso",
+      "success": "Correcto",
+      "partial": "Parcial",
+      "error": "Error"
+    },
+    "relativeTime": {
+      "never": "Nunca",
+      "justNow": "Ahora mismo",
+      "minutesAgo": "Hace {{count}} min",
+      "hoursAgo": "Hace {{count}} h",
+      "daysAgo": "Hace {{count}} d"
+    },
+    "actions": {
+      "addSource": "Añadir origen de SharePoint",
+      "addFirstSource": "Añadir tu primer origen de SharePoint",
+      "syncNow": "Sincronizar ahora",
+      "syncing": "Sincronizando...",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "notifications": {
+      "deleting": "Eliminando origen de SharePoint...",
+      "deleted": "Origen de SharePoint eliminado",
+      "deleteFailed": "No se pudo eliminar el origen de SharePoint"
+    }
+  },
+  "sharePointSourceDetailPage": {
+    "loading": "Cargando...",
+    "loadFailed": "No se pudo cargar el origen",
+    "loadErrorTitle": "No se pudo cargar el origen",
+    "notFound": "No se encontró el origen",
+    "syncErrorTitle": "Error de sincronización",
+    "confirmDeleteMessage": "Se eliminará todo el contenido indexado del silo asociado. Esta acción no se puede deshacer.",
+    "sections": {
+      "syncStatus": "Estado de sincronización",
+      "general": "General",
+      "connection": "Conexión de SharePoint",
+      "indexingConfig": "Configuración de indexación",
+      "dangerZone": "Zona de peligro"
+    },
+    "fields": {
+      "status": "Estado",
+      "lastSynced": "Última sincronización",
+      "filesIndexed": "Archivos indexados",
+      "name": "Nombre",
+      "description": "Descripción",
+      "site": "Sitio",
+      "drive": "Unidad",
+      "tenantId": "ID del tenant",
+      "clientId": "ID del cliente",
+      "clientSecret": "Secreto del cliente",
+      "currentCredential": "Actual: {{value}}",
+      "keepCurrent": "Déjalo en blanco para conservar el actual",
+      "fileExtensionFilters": "Filtros de extensión de archivo",
+      "fileExtensionsPlaceholder": "p. ej., pdf, docx; pulsa Intro"
+    },
+    "help": {
+      "credentials": "Deja los campos de credenciales en blanco para conservar los valores actuales. Para actualizarlas, debes proporcionar los tres campos.",
+      "validateCredentials": "Al guardar, las credenciales se validarán con Microsoft Graph.",
+      "emptyExtensions": "Si se deja vacío, se indexarán todos los tipos de archivo compatibles.",
+      "deleteWarning": "Al eliminar este origen, se borrarán permanentemente todos los documentos indexados del silo asociado. Esta acción no se puede deshacer."
+    },
+    "errors": {
+      "saveFailedTitle": "Error al guardar",
+      "updateCredentialsTitle": "Error al actualizar las credenciales",
+      "saveGeneral": "No se pudieron guardar los cambios.",
+      "updateCredentials": "No se pudieron actualizar las credenciales. Comprueba los valores e inténtalo de nuevo.",
+      "saveFilters": "No se pudieron guardar los filtros.",
+      "triggerSync": "No se pudo iniciar la sincronización."
+    },
+    "actions": {
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saveFilters": "Guardar filtros",
+      "validating": "Validando...",
+      "updateCredentials": "Actualizar credenciales",
+      "deleteSource": "Eliminar origen"
+    }
+  },
+  "domainDetailPage": {
+    "loading": "Cargando dominio...",
+    "loadFailed": "No se pudo cargar el dominio",
+    "notFound": "No se encontró el dominio",
+    "backToApp": "Volver a la aplicación",
+    "editDomain": "Editar dominio",
+    "crawlJobQueued": "Trabajo de rastreo en cola",
+    "crawlPolicy": "Política de rastreo",
+    "crawlPolicySaved": "Política de rastreo guardada",
+    "crawlJob": "Trabajo de rastreo",
+    "crawlJobHistory": "Historial de rastreos",
+    "urlsCount_one": "{{count}} URL",
+    "urlsCount_other": "{{count}} URL",
+    "tabs": {
+      "configuration": "Configuración",
+      "urls": "URLs",
+      "jobHistory": "Historial de rastreos"
+    },
+    "configuration": {
+      "title": "Configuración de extracción",
+      "contentTag": "Etiqueta del contenido",
+      "contentClass": "Clase del contenido",
+      "contentId": "ID del contenido"
+    },
+    "jobStatuses": {
+      "queued": "En cola",
+      "running": "En curso",
+      "completed": "Completado",
+      "failed": "Fallido",
+      "cancelled": "Cancelado"
+    },
+    "crawlProgress": {
+      "noJobs": "Todavía no hay trabajos de rastreo. Usa \"{{action}}\" para iniciar el primero.",
+      "job": "Trabajo n.º {{id}}",
+      "manualTrigger": "Inicio manual",
+      "scheduled": "Programado",
+      "cancel": "Cancelar",
+      "cancelling": "Cancelando...",
+      "discovered": "Descubiertas",
+      "indexed": "Indexadas",
+      "skipped": "Omitidas",
+      "failed": "Fallidas",
+      "removed": "Eliminadas",
+      "duration": "Duración",
+      "started": "Inicio"
+    },
+    "runCrawl": {
+      "runNow": "Rastrear ahora",
+      "starting": "Iniciando...",
+      "alreadyActive": "Ya hay un trabajo de rastreo en cola o en curso."
+    },
+    "jobHistory": {
+      "loading": "Cargando el historial de rastreos...",
+      "loadFailed": "No se pudo cargar el historial de rastreos",
+      "empty": "Todavía no hay trabajos de rastreo.",
+      "manual": "Manual",
+      "scheduled": "Programado",
+      "previous": "Anterior",
+      "pageOf": "Página {{page}} de {{total}}",
+      "next": "Siguiente",
+      "columns": {
+        "id": "ID",
+        "status": "Estado",
+        "triggeredBy": "Iniciado por",
+        "started": "Inicio",
+        "finished": "Finalización",
+        "discovered": "Descubiertas",
+        "indexed": "Indexadas",
+        "skipped": "Omitidas",
+        "failed": "Fallidas"
+      }
+    },
+    "urls": {
+      "loading": "Cargando URLs...",
+      "allStatuses": "Todos los estados",
+      "allSources": "Todos los orígenes",
+      "recrawlQueued": "URL marcada para volver a rastrear",
+      "confirmDelete": "¿Eliminar esta URL y su contenido indexado?",
+      "deleted": "URL eliminada",
+      "emptyFiltered": "Ninguna URL coincide con los filtros actuales.",
+      "empty": "Todavía no hay URLs. Añade URLs manualmente o inicia un rastreo.",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "pageOf": "Página {{page}} de {{totalPages}} ({{total}} en total)",
+      "backoffTooltip": "{{count}} omisiones (espera progresiva activa)",
+      "columns": {
+        "url": "URL",
+        "status": "Estado",
+        "via": "Origen",
+        "depth": "Profundidad",
+        "lastCrawled": "Último rastreo",
+        "nextCrawl": "Próximo rastreo",
+        "failures": "Fallos",
+        "actions": "Acciones"
+      },
+      "statuses": {
+        "pending": "Pendiente",
+        "crawling": "Rastreando",
+        "indexed": "Indexada",
+        "skipped": "Omitida",
+        "failed": "Fallida",
+        "removed": "Eliminada",
+        "excluded": "Excluida"
+      },
+      "sources": {
+        "sitemap": "Mapa del sitio",
+        "crawl": "Rastreo",
+        "manual": "Manual"
+      },
+      "actions": {
+        "viewDetail": "Ver detalle",
+        "forceRecrawl": "Forzar nuevo rastreo",
+        "delete": "Eliminar"
+      },
+      "filters": {
+        "status": "Estado",
+        "source": "Origen",
+        "search": "Buscar URLs",
+        "searchPlaceholder": "Buscar URLs...",
+        "searchButton": "Buscar",
+        "clear": "Limpiar",
+        "refresh": "Actualizar"
+      },
+      "errors": {
+        "load": "No se pudieron cargar las URLs",
+        "recrawl": "No se pudo marcar la URL para volver a rastrearla",
+        "delete": "No se pudo eliminar la URL"
+      }
+    },
+    "urlDrawer": {
+      "title": "Detalle de URL",
+      "loading": "Cargando detalles de la URL...",
+      "discoveredVia": "Descubierta mediante",
+      "depth": "Profundidad",
+      "lastCrawled": "Último rastreo",
+      "lastIndexed": "Última indexación",
+      "nextCrawl": "Próximo rastreo",
+      "failureCount": "Número de fallos",
+      "backoffTooltip": "{{count}} omisiones consecutivas; espera progresiva activa",
+      "backoffShort": "({{count}}× de espera)",
+      "lastError": "Último error",
+      "httpCacheHints": "Indicaciones de caché HTTP",
+      "sitemapLastmod": "Última modificación del mapa del sitio",
+      "marking": "Marcando...",
+      "contentPreview": "Vista previa del contenido indexado",
+      "loadingContent": "Cargando contenido...",
+      "noContent": "No se encontró contenido indexado para esta URL.",
+      "errors": {
+        "loadDetail": "No se pudo cargar el detalle de la URL"
+      }
+    },
+    "policyForm": {
+      "loading": "Cargando la política de rastreo...",
+      "saved": "Política de rastreo guardada correctamente",
+      "discovery": "Descubrimiento",
+      "sitemapUrl": "URL del mapa del sitio",
+      "sitemapHelp": "Déjalo vacío para omitir el descubrimiento mediante el mapa del sitio.",
+      "seedUrl": "URL inicial",
+      "seedHelp": "URL desde la que se inicia el rastreo de enlaces.",
+      "maxDepth": "Profundidad máxima",
+      "maxDepthHelp": "De 0 a 5 niveles de enlaces desde la URL inicial.",
+      "manualUrls": "URLs manuales",
+      "manualUrlsPlaceholder": "https://example.com/page — pulsa Intro",
+      "manualUrlsHelp": "URLs individuales que siempre se incluirán. Las duplicadas se ignoran.",
+      "filters": "Filtros",
+      "filterPatternsBefore": "Los patrones se aplican a la ruta de la URL. Usa",
+      "filterPatternsAfter": "para incluir cualquier número de segmentos de ruta (por ejemplo,",
+      "includeGlobs": "Patrones que incluir",
+      "includeGlobsPlaceholder": "/docs/** — pulsa Intro",
+      "includeGlobsHelp": "Solo se rastrearán URLs que coincidan con alguno de estos patrones. Déjalo vacío para rastrearlas todas.",
+      "excludeGlobs": "Patrones que excluir",
+      "excludeGlobsPlaceholder": "/admin/** — pulsa Intro",
+      "excludeGlobsHelp": "Se omitirán las URLs que coincidan con cualquiera de estos patrones.",
+      "crawlBehaviour": "Comportamiento del rastreo",
+      "rateLimit": "Límite (solicitudes por segundo)",
+      "rateLimitHelp": "De 0,1 a 10 solicitudes por segundo.",
+      "refreshInterval": "Intervalo de actualización (horas)",
+      "refreshIntervalHelp": "0 = desactivado (sin rastreo automático).",
+      "respectRobots": "Respetar robots.txt",
+      "enableScheduled": "Activar rastreos programados",
+      "saving": "Guardando...",
+      "save": "Guardar política",
+      "errors": {
+        "load": "No se pudo cargar la política de rastreo",
+        "save": "No se pudo guardar la política de rastreo"
+      }
+    }
+  },
+  "repositoriesPage": {
+    "title": "Repositorios",
+    "subtitle": "Administra tus repositorios de documentos",
+    "loading": "Cargando repositorios...",
+    "loadFailed": "No se pudieron cargar los repositorios",
+    "loadErrorTitle": "Error al cargar los repositorios",
+    "tryAgain": "Reintentar",
+    "confirmDeleteTitle": "¿Eliminar repositorio?",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer y eliminará todos los documentos asociados.",
+    "deleting": "Eliminando repositorio…",
+    "deleted": "Repositorio eliminado",
+    "deleteFailed": "No se pudo eliminar el repositorio",
+    "documents_one": "{{count}} documento",
+    "documents_other": "{{count}} documentos",
+    "emptyTitle": "Todavía no hay repositorios",
+    "emptyDescription": "Crea tu primer repositorio para organizar y buscar documentos.",
+    "columns": {
+      "name": "Nombre",
+      "documents": "Documentos",
+      "created": "Creado",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "create": "Crear repositorio",
+      "createFirst": "Crea tu primer repositorio",
+      "manageResources": "Administrar recursos",
+      "playground": "Entorno de pruebas",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    }
+  },
+  "repositoryFormPage": {
+    "title": {
+      "create": "Crear repositorio",
+      "edit": "Editar repositorio"
+    },
+    "subtitle": {
+      "create": "Crea un repositorio para organizar tus documentos. Se creará automáticamente un silo para realizar búsquedas vectoriales.",
+      "edit": "Actualiza los ajustes y la configuración del repositorio."
+    },
+    "creating": "Creando repositorio…",
+    "updating": "Actualizando repositorio…",
+    "created": "Repositorio creado",
+    "updated": "Repositorio actualizado",
+    "errors": {
+      "loadRepository": "No se pudo cargar el repositorio",
+      "invalidAppContext": "El contexto de la aplicación no es válido",
+      "nameRequired": "El nombre del repositorio es obligatorio",
+      "vectorDatabaseRequired": "Debes seleccionar una base de datos vectorial",
+      "embeddingServiceRequired": "Los repositorios nuevos requieren un servicio de embeddings",
+      "invalidRepositoryContext": "El contexto del repositorio no es válido",
+      "saveFailed": "No se pudo guardar el repositorio"
+    },
+    "fields": {
+      "name": "Nombre del repositorio",
+      "namePlaceholder": "Escribe el nombre del repositorio",
+      "vectorDatabase": "Base de datos vectorial",
+      "embeddingService": "Servicio de embeddings",
+      "selectEmbeddingService": "Selecciona un servicio de embeddings"
+    },
+    "help": {
+      "name": "Elige un nombre descriptivo para el repositorio.",
+      "vectorDatabase": "Selecciona dónde se almacenarán los embeddings de este repositorio.",
+      "vectorDatabaseImmutable": "La base de datos vectorial no se puede cambiar después de crear el repositorio.",
+      "embeddingService": "Este servicio de embeddings se usará en el silo que se creará automáticamente con el repositorio."
+    },
+    "actions": {
+      "create": "Crear repositorio",
+      "saveChanges": "Guardar cambios"
+    }
+  },
+  "repositoryDetailPage": {
+    "notFound": "No se encontró el repositorio",
+    "backToRepositories": "Volver a los repositorios",
+    "unknownType": "Desconocido",
+    "createdSummary_one": "Creado el {{date}} · {{count}} archivo",
+    "createdSummary_other": "Creado el {{date}} · {{count}} archivos",
+    "serviceWarningTitle": "Está fallando un servicio usado por este repositorio",
+    "serviceWarningMessage": "{{warning}} Revisa la configuración del servicio (o consulta al administrador de la plataforma para los servicios del sistema) y vuelve a indexar los archivos afectados.",
+    "folderPath": "Ruta de carpetas",
+    "root": "Raíz del repositorio",
+    "files_one": "{{count}} elemento",
+    "files_other": "{{count}} elementos",
+    "doubleClickToOpen": "Haz doble clic para abrir",
+    "folderType": "Carpeta",
+    "columns": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "uploaded": "Subido",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "search": "Buscar",
+      "uploadMedia": "Subir contenido multimedia",
+      "uploadFiles": "Subir archivos",
+      "moveFile": "Mover {{name}}",
+      "downloadFile": "Descargar {{name}}",
+      "deleteFile": "Eliminar {{name}}",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "create": "Crear",
+      "rename": "Cambiar nombre",
+      "move": "Mover"
+    },
+    "empty": {
+      "rootTitle": "No hay archivos ni contenido multimedia en la raíz del repositorio",
+      "folderTitle": "No hay archivos ni contenido multimedia en esta carpeta",
+      "rootDescription": "Sube documentos o contenido multimedia para empezar",
+      "folderDescription": "Sube archivos o contenido multimedia a esta carpeta"
+    },
+    "services": {
+      "transcription": "Transcripción",
+      "videoAi": "IA de vídeo",
+      "serviceNumber": "Servicio n.º {{id}}"
+    },
+    "reindex": {
+      "success": "Se ha vuelto a indexar \"{{name}}\" correctamente.",
+      "title": "Volver a extraer e indexar este archivo",
+      "ariaLabel": "Volver a indexar {{name}}"
+    },
+    "media": {
+      "detecting": "detectando...",
+      "processing": "procesando...",
+      "multimodal": "Multimodal",
+      "multimodalTitle": "Indexado con análisis de vídeo multimodal",
+      "statuses": {
+        "ready": "Listo",
+        "error": "Error",
+        "pending": "Pendiente",
+        "downloading": "Descargando",
+        "processing": "Procesando",
+        "transcribing": "Transcribiendo",
+        "analyzing_video": "Analizando vídeo",
+        "indexing": "Indexando"
+      }
+    },
+    "modals": {
+      "deleteFile": {
+        "title": "Eliminar archivo",
+        "message": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer."
+      },
+      "createFolder": { "title": "Crear carpeta" },
+      "renameFolder": { "title": "Cambiar nombre de carpeta" },
+      "deleteFolder": {
+        "title": "Eliminar carpeta",
+        "message": "¿Seguro que quieres eliminar la carpeta \"{{name}}\"? También se eliminarán todos los archivos y subcarpetas que contiene."
+      },
+      "deleteMedia": {
+        "title": "Eliminar contenido multimedia",
+        "message": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer."
+      },
+      "moveFolder": { "title": "Mover carpeta" },
+      "moveMedia": { "title": "Mover contenido multimedia" },
+      "moveFile": { "title": "Mover archivo" },
+      "moveTo": "Mover \"{{name}}\" a:",
+      "folderName": "Nombre de la carpeta",
+      "folderNamePlaceholder": "Introduce el nombre de la carpeta",
+      "uploadMedia": { "title": "Subir contenido multimedia" }
+    },
+    "upload": {
+      "file": "Subir archivo",
+      "youtubeUrl": "URL de YouTube",
+      "selectMediaFiles": "Selecciona archivos de vídeo o audio",
+      "selectedFiles_one": "{{count}} archivo seleccionado",
+      "selectedFiles_other": "{{count}} archivos seleccionados",
+      "processingOptions": "Opciones de procesamiento",
+      "transcriptionMissingTitle": "Falta el servicio de transcripción",
+      "transcriptionMissingMessage": "No hay ningún servicio de transcripción configurado. Configura uno en los ajustes del repositorio antes de subir contenido multimedia.",
+      "videoAnalysis": "Análisis de vídeo",
+      "multimodalEnabled": "multimodal activado",
+      "languageOptional": "Idioma (opcional)",
+      "languages": {
+        "autoDetect": "Detectar automáticamente",
+        "spanish": "Español",
+        "english": "Inglés",
+        "basque": "Euskera",
+        "french": "Francés"
+      },
+      "minChunk": "Fragmento mín. (s)",
+      "maxChunk": "Fragmento máx. (s)",
+      "overlap": "Solapamiento (s)",
+      "uploading": "Subiendo...",
+      "upload": "Subir"
+    },
+    "errors": {
+      "loadRepository": "No se pudo cargar el repositorio",
+      "uploadFailed": "Error al subir:\n{{messages}}",
+      "someFilesFailed": "No se pudieron subir algunos archivos:\n{{messages}}",
+      "indexingFailed": "Se han subido, pero no se han podido indexar (no se podrán buscar hasta volver a indexarlos):\n{{messages}}",
+      "uploadFiles": "No se pudieron subir los archivos",
+      "someMediaFilesFailed": "No se pudieron subir algunos archivos:\n{{messages}}",
+      "uploadMedia": "No se pudo subir el contenido multimedia",
+      "createFolder": "No se pudo crear la carpeta",
+      "renameFolder": "No se pudo cambiar el nombre de la carpeta",
+      "deleteFolder": "No se pudo eliminar la carpeta",
+      "moveFolder": "No se pudo mover la carpeta",
+      "downloadFile": "No se pudo descargar el archivo",
+      "repositoryNotLinked": "Este repositorio no está vinculado a un silo.",
+      "reindex": "No se pudo volver a indexar",
+      "deleteFile": "No se pudo eliminar el archivo",
+      "moveFile": "No se pudo mover el archivo",
+      "deleteMedia": "No se pudo eliminar el contenido multimedia",
+      "moveMedia": "No se pudo mover el contenido multimedia"
+    }
+  },
+  "folderTree": {
+    "loading": "Cargando carpetas...",
+    "heading": "Carpetas",
+    "actions": "Acciones de la carpeta",
+    "createFolder": "Crear carpeta",
+    "expandFolder": "Expandir {{name}}",
+    "collapseFolder": "Contraer {{name}}",
+    "root": "Raíz del repositorio",
+    "rootActions": "Acciones de la carpeta raíz",
+    "createSubfolder": "Crear subcarpeta",
+    "renameFolder": "Cambiar nombre de carpeta",
+    "moveFolder": "Mover carpeta",
+    "deleteFolder": "Eliminar carpeta",
+    "noFolders": "Todavía no hay carpetas",
+    "createFirstFolder": "Crea tu primera carpeta para organizar los archivos"
+  },
+  "appDashboard": {
+    "loadingWorkspace": "Cargando espacio de trabajo...",
+    "appNotFound": "No se encontró la aplicación",
+    "requestedAppNotFound": "No se pudo encontrar la aplicación solicitada.",
+    "backToApps": "Volver a las aplicaciones",
+    "subtitle": "Administra tus componentes de IA y recursos de datos",
+    "workspace": "Espacio de trabajo",
+    "noLimit": "Sin límite",
+    "requestsPerMinute": "{{limit}} solicitudes/min",
+    "usageOfLimit": "{{percentage}} % del límite de {{limit}} solicitudes/min",
+    "noLimitConfigured": "No hay ningún límite configurado",
+    "unlimitedRequestCapacity": "Este espacio de trabajo tiene capacidad ilimitada de solicitudes.",
+    "limitRequestsPerMinute": "Límite: {{limit}} solicitudes/min",
+    "remaining_one": "{{count}} restante",
+    "remaining_other": "{{count}} restantes",
+    "usageDataUnavailable": "No hay datos de uso disponibles.",
+    "noAgentsYet": "Todavía no hay agentes.",
+    "createFirstAgent": "Crea tu primer agente",
+    "noActivityYet": "Todavía no hay actividad",
+    "goToAgent": "Ir a {{name}}",
+    "collaborators_one": "{{count}} colaborador",
+    "collaborators_other": "{{count}} colaboradores",
+    "langSmithActive": "LangSmith activo",
+    "langSmithNotConfigured": "LangSmith no está configurado",
+    "newAgent": "Nuevo agente",
+    "allApps": "Todas las aplicaciones",
+    "total": "total",
+    "rateLimitUsage": "Uso del límite de solicitudes",
+    "topAgentsByUsage": "Agentes con más uso",
+    "features": {
+      "agents": {
+        "title": "Agentes de IA",
+        "subtitle": "Automatización inteligente",
+        "action": "Administrar agentes"
+      },
+      "repositories": {
+        "title": "Repositorios",
+        "subtitle": "Almacenamiento de documentos",
+        "action": "Administrar repositorios"
+      },
+      "silos": {
+        "title": "Silos",
+        "subtitle": "Bases de conocimiento vectoriales",
+        "action": "Administrar silos"
+      },
+      "domains": {
+        "title": "Dominios",
+        "subtitle": "Fuentes de extracción web",
+        "action": "Administrar dominios"
+      },
+      "settings": {
+        "title": "Configuración de la aplicación",
+        "subtitle": "Servicios y configuración",
+        "action": "Abrir configuración"
+      }
+    },
+    "checklist": {
+      "title": "Primeros pasos",
+      "steps_one": "{{completed}} / {{count}} paso",
+      "steps_other": "{{completed}} / {{count}} pasos",
+      "dismiss": "Descartar lista de tareas",
+      "goToStep": "Ir a {{step}}",
+      "createAgent": "Crea un agente",
+      "uploadDocuments": "Sube documentos",
+      "createKnowledgeBase": "Crea una base de conocimiento",
+      "addWebDomain": "Añade un dominio web",
+      "inviteCollaborator": "Invita a un colaborador"
+    },
+    "speedometer": {
+      "stressLevels": {
+        "unlimited": "Ilimitado",
+        "low": "Bajo",
+        "moderate": "Moderado",
+        "high": "Alto",
+        "critical": "Crítico"
+      },
+      "seconds_one": "{{count}} segundo",
+      "seconds_other": "{{count}} segundos",
+      "minutesAndSeconds": "{{minutes}} min {{seconds}} s",
+      "calls_one": "{{usage}}/{{limit}} llamada",
+      "calls_other": "{{usage}}/{{limit}} llamadas",
+      "resetsIn": "Se restablece en {{time}}",
+      "overLimit": "¡Límite superado!"
+    }
+  },
+  "agentsPage": {
+    "title": "Agentes",
+    "subtitle": "Administra los agentes de IA de la aplicación {{app}}",
+    "loading": "Cargando agentes...",
+    "loadFailed": "No se pudieron cargar los datos",
+    "importAgent": "Importar agente",
+    "createAgent": "Crear agente",
+    "tool": "Herramienta",
+    "exposedViaA2A": "Expuesto mediante A2A",
+    "noDescription": "Sin descripción",
+    "agentTypes": {
+      "ocr": "Agente OCR",
+      "ai": "Agente de IA"
+    },
+    "columns": {
+      "agent": "Agente",
+      "description": "Descripción",
+      "type": "Tipo",
+      "aiService": "Servicio de IA",
+      "status": "Estado",
+      "scheduling": "Programación",
+      "usage": "Uso",
+      "created": "Creado",
+      "actions": "Acciones"
+    },
+    "noAIService": "Sin servicio de IA",
+    "active": "Activo",
+    "requests": "solicitudes",
+    "lastUsed": "Último uso: {{date}}",
+    "scheduling": {
+      "openTitle": "Abrir las tareas programadas que usan este agente",
+      "usedByTask_one": "Usado por {{count}} tarea programada",
+      "usedByTask_other": "Usado por {{count}} tareas programadas"
+    },
+    "actions": {
+      "playground": "Entorno de pruebas",
+      "export": "Exportar"
+    },
+    "empty": {
+      "title": "Aún no hay agentes",
+      "subtitle": "Crea tu primer agente de IA para empezar a automatizar tareas.",
+      "createFirstAgent": "Crear tu primer agente"
+    },
+    "delete": {
+      "confirmTitle": "¿Eliminar el agente?",
+      "confirmText": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+      "usedInMcpServers_one": "Este agente se usa en {{count}} servidor MCP:",
+      "usedInMcpServers_other": "Este agente se usa en {{count}} servidores MCP:",
+      "mcpWarning": "Si eliminas este agente, dejará de estar disponible en esos servidores MCP.",
+      "loading": "Eliminando agente…",
+      "success": "Agente eliminado",
+      "failed": "No se pudo eliminar el agente"
+    },
+    "import": {
+      "success": "Agente importado"
+    },
+    "export": {
+      "successWarning": "El agente se ha exportado correctamente. Nota: se ha excluido el historial de conversaciones.",
+      "failed": "No se pudo exportar el agente",
+      "title": "Exportar agente",
+      "description": "Exportando \"{{name}}\". Selecciona los componentes que quieres incluir:",
+      "includeAIService": "Incluir servicio de IA",
+      "includeSilo": "Incluir silo (base de conocimiento)",
+      "includeOutputParser": "Incluir analizador de salida",
+      "includeMCPConfigs": "Incluir configuraciones MCP",
+      "includeAgentTools": "Incluir herramientas del agente",
+      "historyNotIncluded": "El historial de conversaciones NO se exporta. Solo se incluye la configuración."
+    }
+  },
+  "scheduledTaskDetailPage": {
+    "title": "Detalles de la tarea programada",
+    "subtitle": "Detalles de la tarea programada",
+    "loadFailed": "No se pudo cargar el detalle de la tarea programada",
+    "runQueued": "Ejecución puesta en cola. Aparecerá en el historial al terminar.",
+    "runFailed": "No se pudo ejecutar la tarea",
+    "loading": "Cargando tarea…",
+    "notFound": "No se encontró la tarea programada.",
+    "runNow": "Ejecutar ahora",
+    "edit": "Editar",
+    "editSchedule": "Editar programación",
+    "generalConfiguration": "Configuración general",
+    "lastRunFailed": "La última ejecución falló",
+    "viewHistory": "Ver historial",
+    "agentFallback": "Agente n.º {{id}}",
+    "status": {
+      "active": "Activa",
+      "paused": "Pausada"
+    },
+    "visibility": {
+      "unpublished": "No publicada",
+      "private": "Marketplace · miembros de la aplicación",
+      "public": "Marketplace · público"
+    },
+    "fields": {
+      "agent": "Agente",
+      "status": "Estado",
+      "schedule": "Programación",
+      "conversationMode": "Modo de conversación",
+      "visibility": "Visibilidad",
+      "nextRun": "Próxima ejecución",
+      "taskInput": "Entrada de la tarea"
+    },
+    "conversationModes": {
+      "continuous": "Conversación continua",
+      "newPerRun": "Conversación nueva por ejecución"
+    },
+    "tabs": {
+      "info": "Información",
+      "runs": "Ejecuciones",
+      "ariaLabel": "Detalles de la tarea programada"
+    },
+    "runStatus": {
+      "succeeded": "Completada",
+      "failed": "Fallida",
+      "running": "En ejecución",
+      "queued": "En cola"
+    },
+    "results": {
+      "conversation": "Conversación",
+      "runs": "Ejecuciones",
+      "retention_one": "Se conserva la última de {{count}} ejecuciones",
+      "retention_other": "Se conservan las últimas {{count}} ejecuciones",
+      "loading": "Cargando ejecuciones…",
+      "empty": "Todavía no hay ejecuciones.",
+      "responses_one": "{{count}} respuesta",
+      "responses_other": "{{count}} respuestas",
+      "lastResponse": "· última {{date}}",
+      "failedCount_one": "{{count}} fallida",
+      "failedCount_other": "{{count}} fallidas",
+      "imageMarker": "[imagen]",
+      "fileCount_one": "{{count}} archivo",
+      "fileCount_other": "{{count}} archivos",
+      "duration": "Duración {{duration}}",
+      "runFailed": "La ejecución falló.",
+      "noOutput": "El agente no devolvió texto.",
+      "notFinished": "La ejecución todavía no ha terminado.",
+      "generatedFiles": "Archivos generados",
+      "noGeneratedFiles": "Esta ejecución no generó archivos."
+    }
+  },
+  "scheduledTaskFormPage": {
+    "title": {
+      "edit": "Editar tarea programada",
+      "create": "Nueva tarea programada"
+    },
+    "subtitle": "Configura qué agente ejecutar y con qué periodicidad.",
+    "agentsLoadFailed": "No se pudieron cargar los agentes",
+    "waitForLoad": "Espera a que se carguen la tarea y sus canales antes de guardar",
+    "requiredFields": "Completa el nombre, el agente y la programación",
+    "updated": "Tarea actualizada",
+    "created": "Tarea creada",
+    "saveFailed": "No se pudo guardar la tarea",
+    "loadFailedMessage": "No se pudieron cargar la tarea y sus canales. Reintenta la carga para poder guardar.",
+    "loading": "Cargando la configuración de la tarea y sus canales…",
+    "retry": "Reintentar carga",
+    "cancel": "Cancelar",
+    "saving": "Guardando…",
+    "saveAndActivate": "Guardar y activar",
+    "fields": {
+      "name": "Nombre de la tarea",
+      "namePlaceholder": "Informe diario",
+      "description": "Descripción (opcional, visible en el marketplace)",
+      "descriptionPlaceholder": "Qué produce esta tarea y para quién",
+      "agent": "Agente",
+      "selectAgent": "Selecciona un agente",
+      "taskInput": "Input de la tarea",
+      "taskInputPlaceholder": "Escribe el mensaje inicial o un objeto JSON…",
+      "timezone": "Zona horaria"
+    },
+    "conversation": {
+      "title": "Modo de conversación",
+      "newPerRun": "Cada ejecución empieza una conversación nueva",
+      "continuous": "Todas las ejecuciones continúan la misma conversación",
+      "continuousHelp": "El agente verá lo ocurrido en ejecuciones anteriores, como en una conversación normal. Requiere un agente con memoria.",
+      "immutable": "El modo no se puede cambiar una vez creada la tarea."
+    },
+    "schedule": {
+      "title": "Programación",
+      "description": "Define la frecuencia sin tener que escribir CRON.",
+      "frequency": "Frecuencia",
+      "interval": "Cada X minutos/horas",
+      "daily": "Diariamente",
+      "weekly": "Semanalmente",
+      "monthly": "Mensualmente",
+      "intervalMinutes": "Intervalo (minutos)",
+      "time": "Hora",
+      "weekday": "Día de la semana",
+      "monthDay": "Día del mes",
+      "savedAs": "Se guardará como",
+      "days": {
+        "monday": "Lunes",
+        "tuesday": "Martes",
+        "wednesday": "Miércoles",
+        "thursday": "Jueves",
+        "friday": "Viernes",
+        "saturday": "Sábado",
+        "sunday": "Domingo"
+      }
+    },
+    "destinations": {
+      "title": "Canales de salida",
+      "description": "Selecciona los canales registrados en App Settings para esta tarea.",
+      "empty": "Todavía no hay canales registrados para esta aplicación.",
+      "registerLink": "Ir a App Settings para registrar canales",
+      "manageLink": "Administrar canales en App Settings",
+      "webhook": "Webhook",
+      "teams": "Teams"
+    },
+    "retention": {
+      "label": "Ejecuciones a conservar",
+      "help": "Al superar el límite se borran las ejecuciones más antiguas, con sus archivos. Las que tengan notificaciones vigentes se conservan hasta que caduquen."
+    },
+    "visibility": {
+      "label": "Visibilidad en el marketplace",
+      "unpublished": "No publicada",
+      "private": "Privada · miembros de la aplicación",
+      "public": "Pública · todos los usuarios",
+      "help": "En el marketplace solo se muestran los resultados, nunca el input."
+    }
+  },
+  "siloFormPage": {
+    "title": {
+      "edit": "Editar silo",
+      "create": "Crear nuevo silo"
+    },
+    "subtitle": {
+      "edit": "Actualiza la configuración y los ajustes del silo.",
+      "create": "Crea un silo para almacenar vectores y realizar búsquedas semánticas."
+    },
+    "loadFailed": "No se pudo cargar el silo",
+    "loading": "Cargando silo…",
+    "loadErrorTitle": "Error al cargar el silo",
+    "backToSilos": "Volver a los silos",
+    "updating": "Actualizando silo…",
+    "creating": "Creando silo…",
+    "updated": "Silo actualizado",
+    "created": "Silo creado",
+    "saveFailed": "No se pudo guardar el silo",
+    "loadFormFailed": "No se pudieron cargar los datos del formulario",
+    "system": "Sistema",
+    "validation": {
+      "nameRequired": "El nombre del silo es obligatorio",
+      "vectorDbRequired": "Debes seleccionar una base de datos vectorial"
+    },
+    "actions": {
+      "update": "Actualizar silo",
+      "create": "Crear silo",
+      "saving": "Guardando…",
+      "cancel": "Cancelar"
+    },
+    "fields": {
+      "name": "Nombre del silo",
+      "namePlaceholder": "Escribe el nombre del silo",
+      "description": "Descripción del silo",
+      "descriptionPlaceholder": "Escribe la descripción del silo",
+      "metadataDefinition": "Definición de metadatos",
+      "noMetadataDefinition": "Sin definición de metadatos",
+      "embeddingService": "Servicio de embeddings",
+      "selectEmbeddingService": "Selecciona un servicio de embeddings",
+      "vectorDatabase": "Base de datos vectorial",
+      "noVectorDatabases": "No hay bases de datos vectoriales disponibles"
+    },
+    "help": {
+      "metadataDefinition": "Opcional: define metadatos estructurados para los documentos de este silo.",
+      "embeddingServiceImmutable": "El servicio de embeddings no se puede cambiar después de crear el silo.",
+      "embeddingServiceRequired": "Obligatorio: selecciona el servicio de embeddings para generar vectores.",
+      "vectorDatabaseImmutable": "La base de datos vectorial no se puede cambiar después de crear el silo.",
+      "configureVectorDatabase": "No hay bases de datos vectoriales disponibles. Configura un backend para silos antes de continuar.",
+      "vectorDatabaseRequired": "Obligatorio: selecciona el motor de almacenamiento que guardará los vectores de este silo."
+    },
+    "media": {
+      "title": "Vídeo y audio",
+      "transcriptionService": "Servicio de transcripción (Whisper)",
+      "noTranscription": "Ninguno (no se indexan vídeo ni audio)",
+      "transcriptionHelp": "Opcional. Necesario para indexar vídeo y audio en este silo (por ejemplo, mediante la API pública).",
+      "repositoryTranscriptionHelp": "Transcribe el vídeo y el audio cargados en este repositorio. Se almacenan en su silo.",
+      "videoAnalysisService": "Servicio de análisis de vídeo (Gemini)",
+      "noVideoAnalysis": "Ninguno (sin análisis visual)",
+      "videoAnalysisHelp": "Opcional. Añade una descripción del contenido visual a cada segmento transcrito."
+    },
+    "about": {
+      "title": "Acerca de los silos personalizados",
+      "description": "Los silos personalizados son contenedores de almacenamiento vectorial que permiten buscar y recuperar información semánticamente. Guardan embeddings de documentos para que los agentes de IA encuentren información relevante con rapidez.",
+      "embeddingService": "Obligatorio para convertir texto en vectores.",
+      "metadataDefinition": "Datos estructurados opcionales para filtrar y organizar."
+    }
+  },
+  "silosPage": {
+    "title": "Silos",
+    "subtitle": "Sistemas de almacenamiento y recuperación vectorial para búsqueda semántica",
+    "loadFailed": "No se pudieron cargar los silos",
+    "loading": "Cargando silos…",
+    "loadErrorTitle": "Error al cargar los silos",
+    "retry": "Reintentar",
+    "confirmDeleteTitle": "Eliminar silo",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar «{{name}}»? Esta acción no se puede deshacer y eliminará todos los vectores almacenados.",
+    "confirmDeleteFallback": "¿Seguro que quieres eliminar este silo? Esta acción no se puede deshacer.",
+    "deleting": "Eliminando silo…",
+    "deleted": "Silo eliminado",
+    "deleteFailed": "No se pudo eliminar el silo",
+    "exportFailed": "No se pudo exportar el silo",
+    "exported": "Silo exportado correctamente. Nota: los datos vectoriales están excluidos. Vuelve a cargar los documentos después de importarlo.",
+    "appIdRequired": "El ID de la aplicación es obligatorio",
+    "selectEmbeddingService": "Selecciona un servicio de embeddings para continuar",
+    "imported": "Silo importado",
+    "importFailed": "No se pudo importar el silo",
+    "importSilo": "Importar silo",
+    "createSilo": "Crear silo",
+    "createFirst": "Crear tu primer silo",
+    "silo": "Silo",
+    "custom": "Personalizado",
+    "unknown": "Desconocido",
+    "documentCount_one": "{{count}} documento",
+    "documentCount_other": "{{count}} documentos",
+    "notAvailable": "N/D",
+    "emptyTitle": "Todavía no hay silos",
+    "emptyDescription": "Crea tu primer silo para empezar a almacenar y buscar documentos con embeddings vectoriales.",
+    "columns": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "type": "Tipo",
+      "vectorDb": "Base de datos vectorial",
+      "documents": "Documentos",
+      "created": "Fecha de creación",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "playground": "Área de pruebas",
+      "export": "Exportar",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    }
+  },
+  "scheduledTasksPage": {
+    "title": "Tareas programadas",
+    "subtitle": "Gestiona las tareas programadas de tus agentes",
+    "loading": "Cargando tareas programadas…",
+    "loadFailed": "No se pudieron cargar las tareas programadas",
+    "updateFailed": "No se pudo actualizar la tarea",
+    "confirmDelete": "¿Eliminar la tarea programada «{{name}}»? Esta acción no se puede deshacer.",
+    "deleteFailed": "No se pudo eliminar la tarea",
+    "runQueued": "«{{name}}» se ha añadido a la cola para ejecutarse ahora",
+    "runFailed": "No se pudo ejecutar la tarea",
+    "createTask": "Nueva tarea programada",
+    "emptyMessage": "No hay tareas programadas en este espacio de trabajo.",
+    "createFirstTask": "Crear la primera tarea programada",
+    "detailView": "Vista de detalle",
+    "agentFallback": "Agente n.º {{id}}",
+    "noNextRun": "No hay próximas ejecuciones",
+    "columns": {
+      "task": "Tarea",
+      "agent": "Agente",
+      "nextRun": "Próxima ejecución",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "conversationModes": {
+      "continuous": "Conversación continua",
+      "newPerRun": "Conversación nueva por ejecución"
+    },
+    "status": {
+      "active": "Activa",
+      "paused": "Pausada"
+    },
+    "actions": {
+      "trigger": "Acciones",
+      "forTask": "Acciones para {{name}}",
+      "edit": "Editar tarea",
+      "runNow": "Ejecutar ahora",
+      "pause": "Pausar tarea",
+      "resume": "Reanudar tarea",
+      "delete": "Eliminar tarea"
+    }
+  },
+  "metricsDashboard": {
+    "appTitle": "Métricas",
+    "appDescription": "Uso, rendimiento y fiabilidad de los agentes de esta aplicación.",
+    "platformTitle": "Métricas de la plataforma",
+    "platformDescription": "Uso, rendimiento y fiabilidad de los agentes en todas las aplicaciones.",
+    "loadFailed": "No se pudieron cargar las métricas.",
+    "loading": "Cargando…",
+    "timeRange": "Intervalo de tiempo",
+    "kpi": {
+      "executions": "Ejecuciones",
+      "subAgentCalls_one": "+{{formattedCount}} llamada de subagente",
+      "subAgentCalls_other": "+{{formattedCount}} llamadas de subagente",
+      "errorRate": "Tasa de errores",
+      "timeouts_one": "{{formattedCount}} tiempo de espera agotado",
+      "timeouts_other": "{{formattedCount}} tiempos de espera agotados",
+      "failed_one": "{{formattedCount}} error",
+      "failed_other": "{{formattedCount}} errores",
+      "latencyP95": "Latencia p95",
+      "latencyMedianHint": "p50 {{value}}",
+      "timeToFirstToken": "Tiempo hasta el primer token",
+      "streamingOnly": "p50, solo streaming",
+      "totalTokens": "Tokens totales",
+      "inputOutputTokens": "{{input}} entrada · {{output}} salida",
+      "tokensPerExecution": "Tokens por ejecución",
+      "llmCalls_one": "{{formattedCount}} llamada LLM",
+      "llmCalls_other": "{{formattedCount}} llamadas LLM",
+      "toolCalls": "Llamadas a herramientas",
+      "activeApps": "Aplicaciones activas",
+      "activeAppsHint": "{{agents}} agentes · {{users}} usuarios",
+      "activeUsers": "Usuarios activos",
+      "activeAgents_one": "{{formattedCount}} agente",
+      "activeAgents_other": "{{formattedCount}} agentes"
+    },
+    "change": {
+      "title": "Cambio respecto al período anterior",
+      "unchanged": "sin cambios",
+      "improved": "mejoró",
+      "worsened": "empeoró",
+      "previousPeriod": "respecto al período anterior"
+    },
+    "charts": {
+      "activity": "Actividad",
+      "activityDescription": "Ejecuciones, llamadas de subagentes y ejecuciones fallidas",
+      "subAgentCalls": "Llamadas de subagentes",
+      "errors": "Errores",
+      "tokenUsage": "Uso de tokens",
+      "tokenUsageDescription": "Tokens de entrada y salida de todas las llamadas LLM",
+      "input": "Entrada",
+      "output": "Salida",
+      "latency": "Latencia",
+      "latencyDescription": "Duración de la ejecución: mediana y percentil 95"
+    },
+    "breakdown": {
+      "title": "Desglose",
+      "description": "Las ejecuciones incluyen llamadas de subagentes; los tokens corresponden a las llamadas LLM de cada ejecución",
+      "noRuns": "No hay ejecuciones en este período."
+    },
+    "dimensions": {
+      "apps": "Aplicaciones",
+      "app": "Aplicación",
+      "agents": "Agentes",
+      "agent": "Agente",
+      "models": "Modelos",
+      "model": "Modelo",
+      "providers": "Proveedores",
+      "provider": "Proveedor",
+      "channels": "Canales",
+      "channel": "Canal",
+      "users": "Usuarios",
+      "user": "Usuario"
+    },
+    "channels": {
+      "playground": "Entorno de pruebas",
+      "publicApi": "API pública",
+      "agentAsTool": "Agente como herramienta",
+      "scheduledTask": "Tarea programada"
+    },
+    "table": {
+      "runs": "Ejecuciones",
+      "errorRate": "Tasa de errores",
+      "tokens": "Tokens",
+      "averageLatency": "Latencia media",
+      "lastRun": "Última ejecución"
+    },
+    "errors": {
+      "title": "Errores",
+      "description": "Ejecuciones fallidas agrupadas por tipo de error y los fallos más recientes",
+      "noFailures": "No hay ejecuciones fallidas en este período.",
+      "lastSeen": "{{count}} · último {{date}}",
+      "latestFailures": "Fallos recientes",
+      "agentFallback": "Agente n.º {{id}}",
+      "appFallback": "Aplicación n.º {{id}}"
+    },
+    "tools": {
+      "title": "Herramientas",
+      "description": "Llamadas directas a herramientas realizadas por los agentes",
+      "tool": "Herramienta",
+      "type": "Tipo",
+      "calls": "Llamadas",
+      "average": "Media",
+      "noCalls": "No hay llamadas a herramientas en este período.",
+      "types": {
+        "subAgent": "Subagente",
+        "knowledgeBase": "Base de conocimiento",
+        "builtIn": "Integrada"
+      }
+    }
+  },
+  "agentA2ASettings": {
+    "copy": "Copiar",
+    "copySucceeded": "{{label}} copiada",
+    "copyFailed": "No se pudo copiar {{label}}",
+    "exposeAgent": "Exponer este agente mediante el protocolo A2A",
+    "exposeAgentHelp": "Al activarlo, los clientes A2A externos podrán descubrir la ficha de este agente y llamarlo mediante JSON-RPC.",
+    "visibility": "Visibilidad de la ficha del agente",
+    "publicVisibility": "Ficha pública: cualquier persona con la URL puede leerla",
+    "apiKeyVisibility": "Se requiere una clave API: la ficha solo se entrega a quienes presenten una X-API-KEY válida",
+    "nameOverride": "Nombre alternativo",
+    "namePlaceholder": "De forma predeterminada, se usa el nombre del agente",
+    "descriptionOverride": "Descripción alternativa",
+    "descriptionPlaceholder": "De forma predeterminada, se usa la descripción del agente",
+    "charactersCount": "{{count}}/{{max}} caracteres",
+    "skillTags": "Etiquetas de skills",
+    "skillTagsPlaceholder": "Escribe una etiqueta y pulsa Intro",
+    "skillTagLimit": "Cada etiqueta puede tener hasta {{max}} caracteres.",
+    "examples": "Prompts de ejemplo",
+    "examplesHelp": "Se muestran a los clientes A2A como tareas de ejemplo que el agente puede realizar. Hasta {{maxExamples}} ejemplos, con {{maxCharacters}} caracteres cada uno.",
+    "exampleLabel": "Prompt de ejemplo {{number}}",
+    "examplePlaceholder": "Escribe un prompt de ejemplo...",
+    "removeExample": "Eliminar prompt de ejemplo {{number}}",
+    "addExample": "Añadir ejemplo",
+    "cardUrl": "URL de la ficha",
+    "cardUrlMissingSlug": "Esta aplicación aún no tiene un slug. Configúralo en los ajustes de la aplicación para generar la URL de la ficha del agente.",
+    "setSlugLink": "Ir a los ajustes de la aplicación para configurar un slug",
+    "rpcUrl": "URL RPC",
+    "rpcUrlMissingSlug": "Esta aplicación aún no tiene un slug. Configúralo en los ajustes de la aplicación para generar la URL RPC.",
+    "apiKeyRequired": "Se requiere una clave API",
+    "apiKeyInstructions": "Los clientes deben enviar una clave API de la aplicación en la cabecera X-API-KEY. Crea claves en los",
+    "apiKeysSettings": "ajustes de claves API"
+  },
+  "agentFormPage": {
+    "title": {
+      "ocr": "Agente OCR",
+      "create": "Crear agente",
+      "edit": "Editar agente"
+    },
+    "description": {
+      "ocr": "Configura un agente OCR para procesar documentos",
+      "create": "Configura un nuevo agente de IA con capacidades avanzadas",
+      "edit": "Modificar agente: {{name}}"
+    },
+    "loading": "Cargando agente...",
+    "cancel": "Cancelar",
+    "errors": {
+      "title": "Error",
+      "loadFailed": "No se pudieron cargar los datos del agente",
+      "visibilityUpdateFailed": "No se pudo actualizar la visibilidad"
+    },
+    "saving": {
+      "inProgress": "Guardando...",
+      "create": "Crear agente",
+      "saveChanges": "Guardar cambios",
+      "creating": "Creando agente...",
+      "updating": "Actualizando agente...",
+      "created": "Agente creado",
+      "updated": "Agente actualizado",
+      "failed": "No se pudo guardar el agente"
+    },
+    "tabs": {
+      "basic": "General",
+      "prompts": "Prompts",
+      "configuration": "Configuración",
+      "advanced": "Avanzado",
+      "marketplace": "Marketplace",
+      "metrics": "Métricas",
+      "saveBeforeA2a": "Guarda primero el agente para configurar A2A"
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Nombre...",
+      "agentType": "Tipo de agente",
+      "aiAgent": "Agente de IA",
+      "ocrAgent": "Agente OCR",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción..."
+    },
+    "prompts": {
+      "title": "Prompts e instrucciones",
+      "systemPrompt": "System prompt",
+      "systemPromptPlaceholder": "Define el comportamiento y las capacidades del agente...",
+      "template": "Plantilla del prompt",
+      "templatePlaceholder": "Plantilla para las interacciones con el usuario (debe incluir {question})...",
+      "templateHint": "La plantilla debe incluir {{question}} para funcionar correctamente"
+    },
+    "configuration": {
+      "title": "Configuración",
+      "aiService": "Servicio de IA",
+      "selectAiService": "Selecciona un servicio de IA",
+      "knowledgeBase": "Base de conocimiento (silo)",
+      "selectKnowledgeBase": "Selecciona una base de conocimiento",
+      "temperature": "Temperatura",
+      "temperatureHelp": "Controla la aleatoriedad: 0 = determinista, 2 = muy creativo"
+    },
+    "validation": {
+      "promptTemplateQuestion": "La plantilla del prompt debe incluir {question} antes de guardar.",
+      "scoreThresholdRequired": "Se requiere un umbral de puntuación al usar la búsqueda por umbral de similitud.",
+      "mediaEmbeddingRequired": "Los agentes conversacionales requieren un servicio de embeddings de medios en Procesamiento multimedia."
+    },
+    "noAiServices": {
+      "title": "No hay servicios de IA configurados",
+      "ocrMessage": "Debes configurar al menos un servicio de IA antes de crear un agente OCR. Los servicios de IA definen qué modelos usará el agente para procesar imágenes y texto.",
+      "agentMessage": "Debes configurar al menos un servicio de IA antes de crear un agente. Los servicios de IA definen qué modelo de lenguaje usará.",
+      "configure": "Configurar servicios de IA"
+    },
+    "scheduledTasks": {
+      "title": "Tareas programadas que usan este agente",
+      "description": "La programación se gestiona independientemente del agente.",
+      "create": "Crear tarea programada",
+      "active": "Activa",
+      "paused": "Pausada"
+    },
+    "outputParser": {
+      "dataStructure": "Estructura de datos",
+      "select": "-- Selecciona una estructura de datos --"
+    },
+    "capabilities": {
+      "title": "Capacidades",
+      "mcpWarningTitle_one": "Este agente se usa en {{count}} servidor MCP",
+      "mcpWarningTitle_other": "Este agente se usa en {{count}} servidores MCP",
+      "mcpWarningMessage": "Si dejas de marcar este agente como herramienta, dejará de estar disponible en estos servidores MCP:",
+      "unmarkTool": "Dejar de marcar como herramienta",
+      "toggle": "Activar o desactivar {{item}}",
+      "toolAgent": "Agente herramienta",
+      "toolAgentHelp": "Otros agentes pueden usarlo",
+      "usedInMcpServers_one": "Se usa en {{count}} servidor MCP",
+      "usedInMcpServers_other": "Se usa en {{count}} servidores MCP",
+      "conversational": "Conversacional",
+      "conversationalHelp": "Mantiene la memoria de la conversación",
+      "codeInterpreter": "Intérprete de código",
+      "codeInterpreterHelp": "Permite al agente ejecutar código Python (pandas, openpyxl, numpy)",
+      "skillRouter": "Enrutador de skills",
+      "skillRouterHelp": "Permite que el modelo preseleccione hasta 2 skills por turno; desactivado de forma predeterminada.",
+      "sandboxService": "Servicio de sandbox",
+      "useDefaultSandbox": "Usar el valor predeterminado de la aplicación o del sistema",
+      "sandboxHelp": "Sobrescribe el entorno sandbox en el que se ejecuta el código Python del agente. Déjalo vacío para usar el servicio sandbox predeterminado de la aplicación."
+    },
+    "providerTools": {
+      "title": "Herramientas del proveedor",
+      "description": "Estas herramientas se ejecutan en la infraestructura del proveedor de IA y no requieren configuración adicional del backend. Solo estarán activas las herramientas compatibles con el proveedor seleccionado para el agente.",
+      "webSearch": "Búsqueda web",
+      "webSearchDescription": "Búsqueda en Internet en tiempo real",
+      "imageGeneration": "Generación de imágenes",
+      "imageGenerationDescription": "Generar imágenes con DALL-E",
+      "codeInterpreterDescription": "Ejecución de código en el sandbox del proveedor",
+      "fileSearch": "Búsqueda de archivos",
+      "fileSearchDescription": "Búsqueda vectorial en archivos cargados",
+      "on": "ACTIVO",
+      "compatibilityTitle": "Compatibilidad del modelo",
+      "compatibilityMessage": "Algunas herramientas requieren modelos específicos; por ejemplo, la generación de imágenes necesita gpt-image-1 (API de OpenAI Responses). Las herramientas no compatibles con el proveedor seleccionado se ignoran sin aviso."
+    },
+    "media": {
+      "title": "Procesamiento multimedia",
+      "description": "Configuración predeterminada para cargar audio, vídeo o URL de YouTube en el entorno de pruebas. Configúrala aquí para que al cargar solo tengas que elegir el archivo o la URL.",
+      "embeddingService": "Servicio de embeddings",
+      "noTemporaryKnowledgeBase": "Ninguno (sin base de conocimiento temporal)",
+      "embeddingServiceHelp": "Modelo que convierte los medios y documentos cargados en vectores para consultarlos en la base de conocimiento temporal de la conversación. Es obligatorio para agentes conversacionales; en los demás casos es opcional (los documentos se envían completos al agente y no se pueden cargar audios ni vídeos).",
+      "transcriptionService": "Servicio de transcripción",
+      "selectTranscriptionService": "Selecciona un servicio de transcripción",
+      "transcriptionHelp": "Modelo de voz a texto usado para transcribir medios.",
+      "videoAnalysisService": "Servicio de análisis de vídeo (opcional)",
+      "audioOnly": "Ninguno (solo audio)",
+      "videoAnalysisHelp": "Activa el análisis multimodal (descripciones visuales de los fotogramas del vídeo).",
+      "language": "Idioma",
+      "autoDetect": "Detectar automáticamente",
+      "languages": {
+        "spanish": "Español",
+        "english": "Inglés",
+        "basque": "Euskera",
+        "french": "Francés"
+      },
+      "minChunk": "Fragmento mínimo (s)",
+      "maxChunk": "Fragmento máximo (s)",
+      "overlap": "Solapamiento (s)"
+    },
+    "ocr": {
+      "title": "Configuración OCR",
+      "toolAgentHelp": "Otros agentes pueden usarlo (incluidas las herramientas OCR)",
+      "visionModel": "Modelo de visión",
+      "selectVisionModel": "-- Selecciona un modelo de visión --",
+      "visionPrompt": "System prompt (visión)",
+      "visionPromptPlaceholder": "Añade el system prompt para el modelo de visión...",
+      "textModel": "Modelo de texto",
+      "selectTextModel": "-- Selecciona un modelo de texto --",
+      "textPrompt": "System prompt (texto)",
+      "textPromptPlaceholder": "Añade el system prompt para el modelo de texto..."
+    },
+    "advanced": {
+      "availableTools": "Herramientas disponibles",
+      "toolsSelected_one": "{{count}} herramienta seleccionada",
+      "toolsSelected_other": "{{count}} herramientas seleccionadas",
+      "mcpServers": "Servidores MCP",
+      "mcpServersSelected_one": "{{count}} servidor MCP seleccionado",
+      "mcpServersSelected_other": "{{count}} servidores MCP seleccionados",
+      "mcpProtocol": "Protocolo de contexto del modelo",
+      "mcpInfoTitle": "¿Qué son los servidores MCP?",
+      "mcpInfoMessage": "Los servidores MCP (Model Context Protocol) permiten que los agentes se conecten a herramientas externas y fuentes de datos.\nSelecciona los servidores a los que debe tener acceso este agente.",
+      "noMcpServers": "No hay servidores MCP disponibles",
+      "noMcpServersDescription": "Aún no has configurado servidores MCP. Crea configuraciones MCP en los ajustes para habilitar el acceso a herramientas externas.",
+      "configureMcpServers": "Configurar servidores MCP",
+      "skills": "Skills",
+      "skillsDescription": "Asigna comportamientos especializados que el agente pueda activar cuando los necesite",
+      "systemSkill": "Skill del sistema.",
+      "disabledSkillHelp": "Desactivada; no se ejecutará hasta que vuelvas a activarla.",
+      "system": "Sistema",
+      "disabledSkillBadge": "Desactivada; no se ejecutará hasta que vuelvas a activarla",
+      "skillsSelected_one": "{{count}} skill seleccionada.",
+      "skillsSelected_other": "{{count}} skills seleccionadas.",
+      "skillActivationPrefix": "El agente tendrá una herramienta",
+      "skillActivationSuffix": "para activar estas skills.",
+      "noSkills": "No hay skills disponibles",
+      "noSkillsDescription": "Aún no has creado skills. Crea skills en los ajustes para habilitar comportamientos especializados del agente.",
+      "manageSkills": "Gestionar skills"
+    },
+    "marketplace": {
+      "title": "Publicación en marketplace",
+      "agentNotSaved": "Agente sin guardar",
+      "saveFirstMessage": "Guarda primero el agente para configurar su publicación en marketplace.",
+      "visibility": "Visibilidad en marketplace",
+      "unpublished": "Sin publicar (no aparece en el listado)",
+      "private": "Privado (visible solo para miembros de la aplicación)",
+      "public": "Público (visible para todos los usuarios)",
+      "toolCannotPublish": "Los agentes herramienta no se pueden publicar en marketplace",
+      "displayName": "Nombre para mostrar",
+      "displayNamePlaceholder": "Si se deja vacío, se usará el nombre del agente",
+      "shortDescription": "Descripción breve",
+      "charactersCount": "{{count}}/{{max}} caracteres",
+      "longDescription": "Descripción larga",
+      "markdownPlaceholder": "Admite Markdown",
+      "category": "Categoría",
+      "selectCategory": "-- Selecciona una categoría --",
+      "categories": {
+        "Productivity": "Productividad",
+        "Research": "Investigación",
+        "Writing": "Redacción",
+        "Code": "Código",
+        "DataAnalysis": "Análisis de datos",
+        "CustomerSupport": "Atención al cliente",
+        "Education": "Educación",
+        "Other": "Otra"
+      },
+      "tags": "Etiquetas",
+      "tagsPlaceholder": "Añade hasta 5 etiquetas",
+      "iconUrl": "URL del icono",
+      "iconPreview": "Vista previa del icono",
+      "coverImageUrl": "URL de la imagen de portada",
+      "coverPreview": "Vista previa de la portada",
+      "conversationStarters": "Mensajes para iniciar conversaciones",
+      "conversationStartersDescription": "Mensajes iniciales sugeridos para los usuarios. Solo aparecen al comienzo de una conversación nueva.",
+      "conversationStarterLabel": "Mensaje inicial {{number}}",
+      "starterPlaceholder": "Escribe un prompt inicial...",
+      "removeStarter": "Eliminar mensaje inicial",
+      "addStarter": "Añadir mensaje inicial",
+      "savingProfile": "Guardando el perfil de marketplace...",
+      "profileSaved": "Perfil de marketplace guardado",
+      "profileSaveFailed": "No se pudo guardar el perfil de marketplace"
+    }
+  },
+  "agentPlayground": {
+    "title": "Entorno del agente",
+    "agentSubtitle": "Agente: {{name}}",
+    "loading": "Cargando el entorno del agente...",
+    "loadFailed": "No se pudo cargar el agente",
+    "loadErrorTitle": "Error al cargar el agente",
+    "backToAgents": "Volver a los agentes",
+    "notFoundTitle": "Agente no encontrado",
+    "notFoundMessage": "No se ha encontrado el agente solicitado.",
+    "editPrompts": "Editar prompts",
+    "memory": "Memoria",
+    "chat": {
+      "reset": "Reiniciar conversación",
+      "loadingConversation": "Cargando conversación...",
+      "startChatting": "Empieza a conversar con {{agent}}",
+      "starterPromptDescription": "Escribe un mensaje abajo para empezar",
+      "youLabel": "TÚ",
+      "errorLabel": "Error",
+      "scrollToBottom": "Ir al final",
+      "filterByMetadata": "Filtrar por metadatos",
+      "attachFile": "Adjuntar archivo",
+      "attachMedia": "Adjuntar multimedia",
+      "attachMediaTitle": "Adjuntar multimedia (vídeo/audio)",
+      "answerApprovalToContinue": "Responde a la solicitud de aprobación para continuar",
+      "messagePlaceholder": "Mensaje para {{agent}}…",
+      "stopGenerating": "Detener generación",
+      "sendMessage": "Enviar mensaje",
+      "sendKeyboardHint": "Pulsa Intro para enviar; Mayús+Intro para insertar una línea",
+      "approvalCouldNotBeSent": "No se pudo enviar la aprobación",
+      "requestCouldNotBeCancelled": "No se pudo cancelar la solicitud",
+      "sendMessageFailed": "Se produjo un error",
+      "removePlaygroundMediaConfirm": "Al quitar este elemento multimedia, se eliminará todo el contenido multimedia subido para esta sesión del entorno de pruebas. ¿Quieres continuar?"
+    },
+    "tabs": {
+      "playground": "Entorno de pruebas",
+      "apiExamples": "Ejemplos de API"
+    }
+  },
+  "searchFilters": {
+    "title": "Filtrar por metadatos",
+    "match": "Combinar:",
+    "allFilters": "TODOS los filtros (AND)",
+    "anyFilter": "CUALQUIER filtro (OR)",
+    "operatorFor": "Operador para {{field}}",
+    "filterByField": "Filtrar por {{field}}",
+    "multipleValuesPlaceholder": "valor1, valor2, valor3",
+    "jsonPreview": "Vista previa del JSON del filtro",
+    "saveFilter": "Guardar filtro",
+    "filterName": "Nombre del filtro",
+    "filterNamePlaceholder": "Nombre del filtro...",
+    "loadSavedFilter": "Cargar filtro guardado",
+    "loadSavedFilterOption": "Cargar filtro guardado…",
+    "loaded": "Cargado",
+    "clear": "Limpiar",
+    "operators": {
+      "equals": "igual a",
+      "notEquals": "distinto de",
+      "greaterThan": "mayor que",
+      "greaterThanOrEqual": "mayor o igual que",
+      "lessThan": "menor que",
+      "lessThanOrEqual": "menor o igual que",
+      "inAnyOf": "incluido en cualquiera de"
+    }
+  },
+  "toolHistory": {
+    "title": "Actividad de herramientas",
+    "collapsePanel": "Contraer el panel del historial de herramientas",
+    "expandPanel": "Expandir el panel del historial de herramientas",
+    "clearHistory": "Borrar el historial de herramientas",
+    "edited": "editado",
+    "running": "en ejecución",
+    "awaitingApproval": "esperando aprobación",
+    "rejected": "rechazado",
+    "notRun": "{{status}} · no ejecutado",
+    "status": {
+      "expired": "caducado",
+      "cancelled": "cancelado"
+    },
+    "waitingForResult": "esperando el resultado…",
+    "waitingForApproval": "esperando tu aprobación…"
+  },
+  "playgroundMedia": {
+    "title": "Subir contenido multimedia",
+    "fileUpload": "Subir archivos",
+    "youtubeUrl": "URL de YouTube",
+    "selectFiles": "Selecciona archivos de vídeo o audio",
+    "selectedFiles_one": "{{count}} archivo seleccionado",
+    "selectedFiles_other": "{{count}} archivos seleccionados",
+    "configurationNote": "La transcripción, el idioma y la división en fragmentos se configuran en el agente.",
+    "uploadFailed": "No se pudo subir el contenido",
+    "uploading": "Subiendo...",
+    "upload": "Subir"
+  },
+  "marketplaceHome": {
+    "loadingDashboard": "Cargando tu panel...",
+    "loadConversationsFailed": "No se pudieron cargar las conversaciones",
+    "welcomeBack": "Te damos la bienvenida de nuevo",
+    "dashboardSubtitle": "Tu panel de agentes de IA",
+    "browseAgents": "Explorar agentes",
+    "discoverAgentsDescription": "Descubre y conversa con agentes de IA publicados por tu organización",
+    "recentConversations": "Mis conversaciones recientes",
+    "noConversations": "Aún no hay conversaciones",
+    "noConversationsDescription": "Todavía no has conversado con ningún agente. ¡Explora el marketplace para empezar!",
+    "noMessages": "Aún no hay mensajes",
+    "justNow": "ahora mismo",
+    "confirmDeleteTitle": "¿Eliminar la conversación?",
+    "confirmDeleteMessage": "¿Eliminar la conversación con \"{{agent}}\"? Esta acción no se puede deshacer.",
+    "deletingConversation": "Eliminando conversación...",
+    "conversationDeleted": "Conversación eliminada",
+    "deleteConversationFailed": "No se pudo eliminar la conversación",
+    "renameConversationFailed": "No se pudo cambiar el nombre de la conversación",
+    "conversationTitle": "Título de la conversación",
+    "saveConversationTitle": "Guardar título de la conversación",
+    "saveTitle": "Guardar título",
+    "cancelTitleEdit": "Cancelar edición del título",
+    "renameConversation": "Cambiar nombre de la conversación",
+    "deleteConversation": "Eliminar conversación"
+  },
+  "marketplacePage": {
+    "title": "Marketplace",
+    "subtitle": "Descubre e interactúa con agentes de IA y tareas programadas de la plataforma.",
+    "agentsTab": "Agentes",
+    "scheduledTasksTab": "Tareas programadas",
+    "sortTopRated": "Mejor valorados",
+    "sortNewest": "Más recientes",
+    "sortAlphabetical": "A–Z",
+    "loadingMarketplace": "Cargando marketplace...",
+    "loadMarketplaceFailed": "No se pudo cargar el marketplace",
+    "agentCount_one": "Mostrando {{shown}} de {{count}} agente",
+    "agentCount_other": "Mostrando {{shown}} de {{count}} agentes",
+    "searchAgents": "Buscar agentes...",
+    "category": "Categoría",
+    "allCategories": "Todas las categorías",
+    "sortBy": "Ordenar por",
+    "myApps": "Mis aplicaciones",
+    "noAgentsFound": "No se encontraron agentes",
+    "adjustFilters": "Prueba a cambiar la búsqueda o los filtros.",
+    "noAgentsPublished": "Todavía no se han publicado agentes en el marketplace.",
+    "categories": {
+      "productivity": "Productividad",
+      "research": "Investigación",
+      "writing": "Redacción",
+      "code": "Código",
+      "dataAnalysis": "Análisis de datos",
+      "customerSupport": "Atención al cliente",
+      "education": "Educación",
+      "other": "Otros"
+    },
+    "loadScheduledTasksFailed": "No se pudieron cargar las tareas programadas",
+    "loadingScheduledTasks": "Cargando tareas programadas...",
+    "noScheduledTasksFound": "No se encontraron tareas programadas",
+    "noScheduledTasksPublished": "Todavía no se han publicado tareas programadas.",
+    "taskCount_one": "Mostrando {{shown}} de {{count}} tarea",
+    "taskCount_other": "Mostrando {{shown}} de {{count}} tareas",
+    "searchScheduledTasks": "Buscar tareas programadas...",
+    "noDescriptionProvided": "No se ha proporcionado una descripción.",
+    "knowledge": "Conocimiento",
+    "noRatings": "Sin valoraciones",
+    "chatCount_one": "{{count}} conversación",
+    "chatCount_other": "{{count}} conversaciones",
+    "startChat": "Iniciar chat",
+    "startingConversation": "Iniciando conversación…",
+    "conversationStarted": "Conversación iniciada",
+    "startConversationFailed": "No se pudo iniciar la conversación",
+    "openAgent": "Abrir {{agent}}",
+    "openScheduledTask": "Abrir tarea programada {{task}}",
+    "lastRun": "Última ejecución",
+    "noRunsYet": "Todavía no se ha ejecutado",
+    "runStatus": {
+      "succeeded": "Completada",
+      "failed": "Fallida",
+      "running": "En ejecución",
+      "queued": "En cola"
+    },
+    "schedule": {
+      "everyMinutes_one": "Cada {{count}} minuto",
+      "everyMinutes_other": "Cada {{count}} minutos",
+      "everyHours_one": "Cada {{count}} hora",
+      "everyHours_other": "Cada {{count}} horas",
+      "weekly": "Semanalmente a las {{time}}",
+      "weeklyConfigured": "Semanalmente en el horario configurado",
+      "monthly": "Mensualmente, el día {{day}} a las {{time}}",
+      "monthlyConfigured": "Mensualmente, el día {{day}} en el horario configurado",
+      "daily": "Diariamente a las {{time}}",
+      "dailyConfigured": "Diariamente en el horario configurado"
+    }
+  },
+  "marketplaceChat": {
+    "agentFallback": "Agente",
+    "invalidConversationId": "El identificador de conversación no es válido",
+    "loadConversationFailed": "No se pudo cargar la conversación",
+    "approvalCouldNotBeSent": "No se pudo enviar la aprobación",
+    "requestCouldNotBeCancelled": "No se pudo cancelar la solicitud",
+    "quotaExceededError": "Se ha superado el límite de llamadas del marketplace. La cuota se restablece al comienzo del próximo mes.",
+    "sendMessageFailed": "No se pudo enviar el mensaje. Inténtalo de nuevo.",
+    "filesAttached_one": "{{count}} archivo adjunto",
+    "filesAttached_other": "{{count}} archivos adjuntos",
+    "failedToUploadFiles": "No se pudieron subir estos archivos: {{files}}",
+    "downloadFileFailed": "No se pudo descargar el archivo",
+    "removeFileFailed": "No se pudo eliminar el archivo",
+    "createConversationFailed": "No se pudo crear la conversación",
+    "loadHistoryFailed": "No se pudo cargar el historial de conversaciones",
+    "loadingConversation": "Cargando conversación...",
+    "backToMarketplace": "Volver al marketplace",
+    "history": "Historial",
+    "closeHistory": "Cerrar historial",
+    "new": "Nuevo",
+    "searchConversations": "Buscar conversaciones…",
+    "loading": "Cargando…",
+    "noSearchMatches": "Ninguna conversación coincide con la búsqueda.",
+    "noPreviousConversations": "No hay conversaciones anteriores.",
+    "historyGroups": {
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "previous7Days": "Últimos 7 días",
+      "older": "Anteriores"
+    },
+    "newConversation": "Nueva conversación",
+    "conversationHistory": "Historial de conversaciones",
+    "quotaUsage": "Uso del marketplace: {{used}}/{{quota}}",
+    "startChatting": "Empieza a conversar con {{agent}}",
+    "starterPromptDescription": "Haz una pregunta o elige una sugerencia para empezar",
+    "youLabel": "TÚ",
+    "errorLabel": "Error",
+    "scrollToBottom": "Ir al final",
+    "quotaLimitReached": "Has alcanzado el límite mensual de llamadas al marketplace ({{used}}/{{quota}}). La cuota se restablece al comienzo del próximo mes (UTC).",
+    "monthlyQuotaReached": "Límite mensual alcanzado",
+    "attachFile": "Adjuntar archivo",
+    "answerApprovalToContinue": "Responde a la solicitud de aprobación para continuar",
+    "messagePlaceholder": "Mensaje para {{agent}}…",
+    "stopGenerating": "Detener generación",
+    "sendMessage": "Enviar mensaje",
+    "sendKeyboardHint": "Pulsa Intro para enviar; Mayús+Intro para insertar una línea",
+    "agentDetails": "Detalles del agente",
+    "capabilities": "Capacidades",
+    "knowledgeEnhanced": "Conocimiento ampliado",
+    "memory": "Memoria",
+    "details": "Detalles",
+    "publishedBy": "Publicado por",
+    "knowledgeBase": "Base de conocimiento",
+    "yes": "Sí",
+    "no": "No",
+    "enabled": "Activada",
+    "disabled": "Desactivada",
+    "rating": "Valoración",
+    "conversations": "Conversaciones",
+    "published": "Publicado",
+    "marketplaceUsage": "Uso del marketplace",
+    "callsThisMonth": "{{used}} / {{quota}} llamadas este mes"
+  },
+  "attachedFiles": {
+    "title": "Archivos adjuntos",
+    "fileCount_one": "{{count}} archivo",
+    "fileCount_other": "{{count}} archivos",
+    "uploading": "Subiendo...",
+    "emptyTitle": "Aún no hay archivos adjuntos",
+    "emptyDescription": "Usa el botón de adjuntar para subir archivos",
+    "generated": "Generado",
+    "status": {
+      "ready": "Listo",
+      "error": "Error",
+      "pending": "Pendiente",
+      "processing": "Procesando",
+      "transcribing": "Transcribiendo",
+      "analyzingVideo": "Analizando vídeo",
+      "downloading": "Descargando",
+      "indexing": "Indexando"
+    },
+    "visionReady": "Visión disponible",
+    "textExtracted": "Texto extraído",
+    "noText": "Sin texto",
+    "downloadFile": "Descargar archivo",
+    "downloadFileNamed": "Descargar {{filename}}",
+    "removeFile": "Eliminar archivo",
+    "removeFileNamed": "Eliminar {{filename}}"
+  },
+  "hitlApproval": {
+    "required": "Se requiere aprobación",
+    "expired": "Caducada",
+    "expiresIn": "Caduca en {{time}}",
+    "statusExpired": "Esta solicitud ha caducado y la herramienta no se ejecutó. La respuesta del agente aparecerá en breve.",
+    "statusSingle": "El agente quiere ejecutar esta herramienta. No se ejecutará hasta que decidas.",
+    "statusMultiple": "El agente quiere ejecutar estas herramientas. Elige una opción para cada una y envía tus decisiones.",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "submitDecisions": "Enviar decisiones",
+    "approveAll": "Aprobar todo",
+    "rejectAll": "Rechazar todo",
+    "cancelRequest": "Cancelar solicitud",
+    "errors": {
+      "rejectNotAllowed": "Esta herramienta no permite el rechazo.",
+      "approveNotAllowed": "Esta herramienta no permite la aprobación.",
+      "invalidJson": "Los argumentos deben ser JSON válido.",
+      "jsonObjectRequired": "Los argumentos deben ser un objeto JSON.",
+      "editedArgumentsRequired": "Esta herramienta solo acepta argumentos editados."
+    }
+  }
+}

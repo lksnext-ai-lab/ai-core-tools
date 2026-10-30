@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   BreakdownDimension,
   BreakdownItem,
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export function MetricsDashboard({ api, dimensions, title, description, systemScope = false }: Props) {
+  const { t } = useTranslation('common');
   const [range, setRange] = useState<TimeRange>('7d');
   const [dimension, setDimension] = useState<BreakdownDimension>(dimensions[0]);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
@@ -52,7 +54,7 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
         setErrors(e);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to load metrics.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : t('metricsDashboard.loadFailed'));
       });
     return () => { cancelled = true; };
   }, [api, range]);
@@ -71,36 +73,36 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
     if (!summary) return null;
     const { current: c, previous: p } = summary;
     return [
-      { label: 'Executions', value: formatCount(c.executions), change: relativeChange(c.executions, p.executions),
-        hint: c.subagent_calls ? `+${formatCount(c.subagent_calls)} sub-agent calls` : undefined },
-      { label: 'Error rate', value: formatPercent(c.error_rate), change: relativeChange(c.error_rate, p.error_rate),
-        higherIsBetter: false, hint: c.timeouts ? `${formatCount(c.timeouts)} timeouts` : `${formatCount(c.errors)} failed` },
-      { label: 'Latency p95', value: formatMs(c.latency_p95_ms), change: relativeChange(c.latency_p95_ms, p.latency_p95_ms),
-        higherIsBetter: false, hint: `p50 ${formatMs(c.latency_p50_ms)}` },
-      { label: 'Time to first token', value: formatMs(c.ttft_p50_ms), change: relativeChange(c.ttft_p50_ms, p.ttft_p50_ms),
-        higherIsBetter: false, hint: 'p50, streaming only' },
-      { label: 'Total tokens', value: formatCount(c.total_tokens), change: relativeChange(c.total_tokens, p.total_tokens),
-        hint: `${formatCount(c.input_tokens)} in · ${formatCount(c.output_tokens)} out` },
-      { label: 'Tokens / execution', value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
+      { label: t('metricsDashboard.kpi.executions'), value: formatCount(c.executions), change: relativeChange(c.executions, p.executions),
+        hint: c.subagent_calls ? t('metricsDashboard.kpi.subAgentCalls', { count: c.subagent_calls, formattedCount: formatCount(c.subagent_calls) }) : undefined },
+      { label: t('metricsDashboard.kpi.errorRate'), value: formatPercent(c.error_rate), change: relativeChange(c.error_rate, p.error_rate),
+        higherIsBetter: false, hint: c.timeouts ? t('metricsDashboard.kpi.timeouts', { count: c.timeouts, formattedCount: formatCount(c.timeouts) }) : t('metricsDashboard.kpi.failed', { count: c.errors, formattedCount: formatCount(c.errors) }) },
+      { label: t('metricsDashboard.kpi.latencyP95'), value: formatMs(c.latency_p95_ms), change: relativeChange(c.latency_p95_ms, p.latency_p95_ms),
+        higherIsBetter: false, hint: t('metricsDashboard.kpi.latencyMedianHint', { value: formatMs(c.latency_p50_ms) }) },
+      { label: t('metricsDashboard.kpi.timeToFirstToken'), value: formatMs(c.ttft_p50_ms), change: relativeChange(c.ttft_p50_ms, p.ttft_p50_ms),
+        higherIsBetter: false, hint: t('metricsDashboard.kpi.streamingOnly') },
+      { label: t('metricsDashboard.kpi.totalTokens'), value: formatCount(c.total_tokens), change: relativeChange(c.total_tokens, p.total_tokens),
+        hint: t('metricsDashboard.kpi.inputOutputTokens', { input: formatCount(c.input_tokens), output: formatCount(c.output_tokens) }) },
+      { label: t('metricsDashboard.kpi.tokensPerExecution'), value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
         change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
-        hint: `${formatCount(c.llm_calls)} LLM calls` },
-      { label: 'Tool calls', value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
-        hint: c.tool_errors ? `${formatCount(c.tool_errors)} failed` : undefined },
+        hint: t('metricsDashboard.kpi.llmCalls', { count: c.llm_calls, formattedCount: formatCount(c.llm_calls) }) },
+      { label: t('metricsDashboard.kpi.toolCalls'), value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
+        hint: c.tool_errors ? t('metricsDashboard.kpi.failed', { count: c.tool_errors, formattedCount: formatCount(c.tool_errors) }) : undefined },
       systemScope
-        ? { label: 'Active apps', value: formatCount(c.active_apps), change: relativeChange(c.active_apps, p.active_apps),
-            hint: `${formatCount(c.active_agents)} agents · ${formatCount(c.active_users)} users` }
-        : { label: 'Active users', value: formatCount(c.active_users), change: relativeChange(c.active_users, p.active_users),
-            hint: `${formatCount(c.active_agents)} agents` },
+        ? { label: t('metricsDashboard.kpi.activeApps'), value: formatCount(c.active_apps), change: relativeChange(c.active_apps, p.active_apps),
+            hint: t('metricsDashboard.kpi.activeAppsHint', { agents: formatCount(c.active_agents), users: formatCount(c.active_users) }) }
+        : { label: t('metricsDashboard.kpi.activeUsers'), value: formatCount(c.active_users), change: relativeChange(c.active_users, p.active_users),
+            hint: t('metricsDashboard.kpi.activeAgents', { count: c.active_agents, formattedCount: formatCount(c.active_agents) }) },
     ];
-  }, [summary, systemScope]);
+  }, [summary, systemScope, t]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          {title === 'Platform metrics' || title === 'Metrics' ? (
+          {title ? (
             <Title
-              variant={title === 'Platform metrics' ? 'titPrincipal' : 'titSecundario'}
+              variant={systemScope ? 'titPrincipal' : 'titSecundario'}
               titulo={title}
               subtitulo={description}
             />

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Play } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { CrawlJob } from '../../types/crawl';
@@ -17,6 +18,7 @@ export default function RunCrawlNowButton({
   onJobTriggered,
   disabled = false,
 }: Readonly<RunCrawlNowButtonProps>) {
+  const { t } = useTranslation('common');
   const [loading, setLoading] = useState(false);
   const [conflictNotice, setConflictNotice] = useState(false);
 
@@ -43,7 +45,7 @@ export default function RunCrawlNowButton({
   return (
     <div className="inline-flex flex-col items-start gap-1">
       <ButtonApp
-        label={loading ? 'Starting...' : 'Run crawl now'}
+        label={loading ? t('domainDetailPage.runCrawl.starting') : t('domainDetailPage.runCrawl.runNow')}
         onClick={() => { void handleClick(); }}
         disabled={disabled}
         loading={loading}
@@ -51,7 +53,7 @@ export default function RunCrawlNowButton({
       />
       {conflictNotice && (
         <p className="text-xs text-bronze dark:text-bronze-dark bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark px-3 py-2 rounded-lg">
-          A crawl job is already queued or running.
+          {t('domainDetailPage.runCrawl.alreadyActive')}
         </p>
       )}
     </div>

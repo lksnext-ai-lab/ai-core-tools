@@ -8,29 +8,33 @@ import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 import AIRobot3D from '../components/ui/AIRobot3D';
 import { ButtonApp } from '../components/ui/ButtonApp';
 import { Spinner } from '../components/ui/Spinner';
+import LanguageSelector from '../components/ui/LanguageSelector';
+import { Trans, useTranslation } from 'react-i18next';
 
 const PHRASES = [
-  'Hey! Ready to build something amazing?',
-  'Your agents are waiting for you...',
-  'Did you know? You can chain agents as tools!',
-  'Tip: Connect any LLM provider in seconds',
-  'Fun fact: Your docs become AI-searchable instantly',
-  'Psst... MCP lets your agents use external tools',
-  'I can juggle 6 LLM providers. Can you?',
-  'Still here? I could be automating things for you...',
-  'Your knowledge base misses you. Just saying.',
-  'Plot twist: I work while you sleep.',
+  'login.robot.phrases.0',
+  'login.robot.phrases.1',
+  'login.robot.phrases.2',
+  'login.robot.phrases.3',
+  'login.robot.phrases.4',
+  'login.robot.phrases.5',
+  'login.robot.phrases.6',
+  'login.robot.phrases.7',
+  'login.robot.phrases.8',
+  'login.robot.phrases.9',
 ];
 
 const PHRASE_INTERVAL_MS = 8000;
 
 function RobotGreeting() {
+  const { i18n } = useTranslation('common');
   const [displayText, setDisplayText] = useState('');
   const [showCursor, setShowCursor] = useState(true);
   const isSpeaking = true;
   const [bubbleKey, setBubbleKey] = useState(0);
   const [bubbleVisible, setBubbleVisible] = useState(false);
   const phraseIndexRef = useRef(0);
+  const languageRef = useRef(i18n.resolvedLanguage ?? i18n.language);
   const charIndexRef = useRef(0);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const cursorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -63,20 +67,20 @@ function RobotGreeting() {
 
   useEffect(() => {
     const startDelay = setTimeout(() => {
-      typePhrase(PHRASES[0]);
+      typePhrase(i18n.t(PHRASES[0]));
     }, 800);
 
     const rotateInterval = setInterval(() => {
       setBubbleVisible(false);
       rotateTransitionRef.current = setTimeout(() => {
         phraseIndexRef.current = (phraseIndexRef.current + 1) % PHRASES.length;
-        typePhrase(PHRASES[phraseIndexRef.current]);
+        typePhrase(i18n.t(PHRASES[phraseIndexRef.current]));
       }, 400);
     }, PHRASE_INTERVAL_MS);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        typePhrase(PHRASES[phraseIndexRef.current]);
+        typePhrase(i18n.t(PHRASES[phraseIndexRef.current]));
       } else {
         clearAllTimers();
       }
@@ -90,7 +94,15 @@ function RobotGreeting() {
       clearAllTimers();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [typePhrase, clearAllTimers]);
+  }, [typePhrase, clearAllTimers, i18n]);
+
+  const currentLanguage = i18n.resolvedLanguage ?? i18n.language;
+
+  useEffect(() => {
+    if (languageRef.current === currentLanguage) return;
+    languageRef.current = currentLanguage;
+    typePhrase(i18n.t(PHRASES[phraseIndexRef.current]));
+  }, [currentLanguage, i18n, typePhrase]);
 
   return (
     <div className="flex items-center gap-4 animate-fade-in-up-d1">
@@ -122,6 +134,7 @@ function RobotGreeting() {
 type LoginErrorField = 'email' | 'password' | 'both' | null;
 
 function LoginPage() {
+  const { t } = useTranslation('common');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<LoginErrorField>(null);
@@ -158,7 +171,7 @@ function LoginPage() {
       setError(null);
       await auth.login(from);
     } catch (err) {
-      triggerError(err instanceof Error ? err.message : 'Login failed');
+      triggerError(err instanceof Error ? err.message : t('login.error.failed'));
       setLoading(false);
     }
   };
@@ -166,7 +179,7 @@ function LoginPage() {
   const handleLocalLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      triggerError('Please enter your email and password');
+      triggerError(t('login.validation.credentialsRequired'));
       return;
     }
     try {
@@ -177,7 +190,7 @@ function LoginPage() {
       await refreshUser();
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      triggerError(err instanceof Error ? err.message : 'Login failed', 'both');
+      triggerError(err instanceof Error ? err.message : t('login.error.failed'), 'both');
       setLoading(false);
     }
   };
@@ -191,6 +204,9 @@ function LoginPage() {
     // Design v3 login: sign-in column (left) + brand panel with the robot (right)
     <div className="min-h-screen flex bg-canvas text-fg dark:bg-canvas-dark dark:text-fg-dark">
       <main className="flex-1 min-w-0 flex flex-col items-center justify-center px-6 py-10 sm:px-10 overflow-y-auto bg-gradient-to-b from-canvas-alt to-surface dark:from-canvas-alt-dark dark:to-surface-dark">
+        <div className="absolute right-6 top-6 z-20 sm:right-10">
+          <LanguageSelector />
+        </div>
         <div className="w-full max-w-[400px]">
         <div className="flex items-center justify-center gap-2.5 mb-10 animate-fade-in-up">
           {theme.logo ? (
@@ -211,13 +227,16 @@ function LoginPage() {
           <div className="rounded-lg border px-[30px] py-8 space-y-5 bg-surface border-line dark:bg-surface-dark dark:border-line-dark">
             <div className="text-center">
               <h2 className="font-display text-2xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
-                Welcome back
+                {t('login.title')}
               </h2>
               <p className="mt-1.5 text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
-                Sign in to{' '}
-                <span className="font-medium text-fg underline decoration-accent underline-offset-[3px] dark:text-fg-dark dark:decoration-accent-dark">
-                  {theme.name || 'Mattin AI'}
-                </span>
+                <Trans
+                  i18nKey="login.subtitle"
+                  values={{ brand: theme.name || 'Mattin AI' }}
+                  components={{
+                    brand: <span className="font-medium text-fg underline decoration-accent underline-offset-[3px] dark:text-fg-dark dark:decoration-accent-dark" />,
+                  }}
+                />
               </p>
             </div>
 
@@ -234,7 +253,7 @@ function LoginPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
                   </svg>
                   <div>
-                    <p className="text-sm font-medium text-error-strong dark:text-error-strong-dark">Login Error</p>
+                    <p className="text-sm font-medium text-error-strong dark:text-error-strong-dark">{t('login.error.title')}</p>
                     <p className="text-sm mt-0.5 text-error dark:text-error-dark">{error}</p>
                   </div>
                 </>
@@ -242,7 +261,7 @@ function LoginPage() {
             </div>
 
             {configLoading && (
-              <div className="flex justify-center py-4" aria-label="Loading sign-in options" aria-busy="true">
+              <div className="flex justify-center py-4" aria-label={t('login.loadingOptions')} aria-busy="true">
                 <Spinner size="md" tone="muted" />
               </div>
             )}
@@ -251,7 +270,7 @@ function LoginPage() {
               <form onSubmit={handleLocalLogin} className="space-y-4" noValidate>
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium mb-2 text-fg dark:text-fg-dark">
-                    Email Address
+                    {t('login.emailLabel')}
                   </label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-fg-faint dark:text-fg-faint-dark" aria-hidden="true">
@@ -264,7 +283,7 @@ function LoginPage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com"
+                      placeholder={t('login.emailPlaceholder')}
                       disabled={loading}
                       required
                       autoComplete="email"
@@ -277,7 +296,7 @@ function LoginPage() {
                 </div>
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium mb-2 text-fg dark:text-fg-dark">
-                    Password
+                    {t('login.passwordLabel')}
                   </label>
                   <input
                     id="password"
@@ -296,7 +315,7 @@ function LoginPage() {
                 </div>
                 <ButtonApp
                   type="submit"
-                  label={loading ? 'Signing in...' : 'Sign in'}
+                  label={loading ? t('login.signingIn') : t('login.signIn')}
                   disabled={!email || !password}
                   loading={loading}
                   size="spacious"
@@ -307,7 +326,7 @@ function LoginPage() {
 
             {!configLoading && authMode === 'oidc' && (
               <ButtonApp
-                label={loading ? 'Signing in...' : 'Sign in with Microsoft'}
+                label={loading ? t('login.signingIn') : t('login.signInWithMicrosoft')}
                 onClick={handleOIDCLogin}
                 loading={loading}
                 variant="secondary"
@@ -327,12 +346,12 @@ function LoginPage() {
             {!configLoading && isSaasMode && (
               <div className="mt-4 text-center space-y-2">
                 <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
-                  Don&apos;t have an account?{' '}
+                  {t('login.registerPrompt')}{' '}
                   <Link
                     to="/register"
                     className="font-medium text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark"
                   >
-                    Create one
+                    {t('login.createAccount')}
                   </Link>
                 </p>
                 <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
@@ -340,7 +359,7 @@ function LoginPage() {
                     to="/password-reset/request"
                     className="text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark"
                   >
-                    Forgot your password?
+                    {t('login.forgotPassword')}
                   </Link>
                 </p>
               </div>
@@ -349,7 +368,7 @@ function LoginPage() {
             {/* Self-hosted LOCAL: no public reset link — admin-initiated only */}
             {!configLoading && !isSaasMode && authMode === 'local' && (
               <p className="text-xs text-center text-fg-faint dark:text-fg-faint-dark mt-2">
-                Forgot your password? Contact your administrator.
+                {t('login.selfHostedPasswordHelp')}
               </p>
             )}
           </div>
@@ -357,13 +376,13 @@ function LoginPage() {
 
         <div className="mt-[22px] text-center animate-fade-in-up-d3">
           <p className="text-xs text-fg-faint dark:text-fg-faint-dark">
-            By signing in, you agree to our{' '}
+            {t('login.termsAgreement')}{' '}
             <button type="button" onClick={() => undefined} className="text-fg underline decoration-accent underline-offset-[3px] hover:text-accent bg-transparent border-0 p-0 cursor-pointer dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark">
-              Terms of Service
+              {t('login.termsOfService')}
             </button>
-            {' '}and{' '}
+            {' '}{t('login.and')}{' '}
             <button type="button" onClick={() => undefined} className="text-fg underline decoration-accent underline-offset-[3px] hover:text-accent bg-transparent border-0 p-0 cursor-pointer dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark">
-              Privacy Policy
+              {t('login.privacyPolicy')}
             </button>
           </p>
         </div>

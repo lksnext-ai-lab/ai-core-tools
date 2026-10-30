@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Globe, Link2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -10,7 +11,7 @@ import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import { Title } from '../components/ui/Title';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { ButtonApp } from '../components/ui/ButtonApp';
@@ -28,6 +29,7 @@ interface Domain {
 
 function DomainsPage() {
   const { appId } = useParams<{ appId: string }>();
+  const { t, i18n } = useTranslation('common');
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
   const confirm = useConfirm();
@@ -53,7 +55,7 @@ function DomainsPage() {
       setDomains(response || []); // Response is the array directly, not response.data
     } catch (err) {
       console.error('Error loading domains:', err);
-      setError('Failed to load domains');
+      setError(t('domainsPage.loadFailed'));
       setDomains([]); // Ensure domains is always an array
     } finally {
       setLoading(false);
@@ -64,19 +66,19 @@ function DomainsPage() {
     if (!appId) return;
 
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('domain'),
-      message: `Are you sure you want to delete "${domain.name}"? This action cannot be undone and will remove all associated URLs and indexed content.`,
+      title: t('domainsPage.confirmDeleteTitle'),
+      message: t('domainsPage.confirmDeleteMessage', { name: domain.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('domainsPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteDomain(Number.parseInt(appId), domain.domain_id),
       {
-        loading: MESSAGES.DELETING('domain'),
-        success: MESSAGES.DELETED('domain'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('domain')),
+        loading: t('domainsPage.deleting'),
+        success: t('domainsPage.deleted'),
+        error: (err) => errorMessage(err, t('domainsPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -89,10 +91,10 @@ function DomainsPage() {
       <div className="space-y-6">
           {/* Page Header */}
           <div className="flex items-center justify-between">
-            <Title variant="titSecundario" titulo="Domains" subtitulo="Web scraping domains for content extraction" titleMarginBottom={0} subtitleMarginBottom={0} />
+            <Title variant="titSecundario" titulo={t('domainsPage.title')} subtitulo={t('domainsPage.subtitle')} titleMarginBottom={0} subtitleMarginBottom={0} />
           </div>
 
-          <LoadingState variant="page" message="Loading domains..." />
+          <LoadingState variant="page" message={t('domainsPage.loading')} />
         </div>
     );
   }
@@ -102,12 +104,12 @@ function DomainsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="Domains" subtitulo="Web scraping domains for content extraction" titleMarginBottom={0} subtitleMarginBottom={0} />
+          <Title variant="titSecundario" titulo={t('domainsPage.title')} subtitulo={t('domainsPage.subtitle')} titleMarginBottom={0} subtitleMarginBottom={0} />
         </div>
 
         <Alert 
           type="error" 
-          title="Error Loading Domains" 
+          title={t('domainsPage.loadErrorTitle')}
           message={error}
           onDismiss={() => loadDomains()}
         />
@@ -119,10 +121,10 @@ function DomainsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <Title variant="titSecundario" titulo="Domains" subtitulo="Web scraping domains for content extraction" titleMarginBottom={0} subtitleMarginBottom={0} />
+        <Title variant="titSecundario" titulo={t('domainsPage.title')} subtitulo={t('domainsPage.subtitle')} titleMarginBottom={0} subtitleMarginBottom={0} />
         {canEdit && (
           <ButtonApp
-            label="Create Domain"
+            label={t('domainsPage.actions.create')}
             variant="primary"
             size="medium"
             icon={<Plus className="w-4 h-4" />}
@@ -140,7 +142,7 @@ function DomainsPage() {
         keyExtractor={(domain) => domain.domain_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('domainsPage.columns.name'),
             render: (domain) => (
               <div className="flex items-center">
                 <BackgroundImage icon={Globe} size={40} iconSize={20} variant="marron" />
@@ -165,42 +167,42 @@ function DomainsPage() {
             )
           },
           {
-            header: 'Base URL',
+            header: t('domainsPage.columns.baseUrl'),
             accessor: 'base_url',
             className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'URLs',
-            render: (domain) => `${domain.url_count} URLs`,
+            header: t('domainsPage.columns.urls'),
+            render: (domain) => t('domainsPage.urlCount', { count: domain.url_count }),
             className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Created',
-            render: (domain) => new Date(domain.created_at).toLocaleDateString(),
+            header: t('domainsPage.columns.created'),
+            render: (domain) => new Date(domain.created_at).toLocaleDateString(i18n.resolvedLanguage),
             className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Actions',
+            header: t('domainsPage.columns.actions'),
             headerClassName: 'px-6 py-3 text-right  tracking-wider',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative',
             render: (domain) => (
               <ActionDropdown
                 actions={[
                   {
-                    label: 'URLs',
+                    label: t('domainsPage.actions.urls'),
                     onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/detail`),
                     icon: <Link2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
-                      label: 'Edit',
+                      label: t('domainsPage.actions.edit'),
                       onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
                       icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
-                      label: 'Delete',
+                      label: t('domainsPage.actions.delete'),
                       onClick: () => { void handleDeleteDomain(domain); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
@@ -213,15 +215,15 @@ function DomainsPage() {
           }
         ]}
         emptyIcon={<BackgroundImage icon={Globe} size={64} iconSize={32} />}
-        emptyMessage="No Domains Yet"
-        emptySubMessage="Create your first domain to start extracting content from websites."
+        emptyMessage={t('domainsPage.emptyTitle')}
+        emptySubMessage={t('domainsPage.emptyDescription')}
         loading={loading}
       />
 
       {!loading && (!domains || domains.length === 0) && canEdit && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Create Your First Domain"
+            label={t('domainsPage.actions.createFirst')}
             variant="primary"
             size="medium"
             onClick={() => navigate(`/apps/${appId}/domains/new`)}

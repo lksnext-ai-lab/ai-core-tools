@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, XCircle, Ban, Clock } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { CrawlJob, CrawlJobStatus } from '../../types/crawl';
@@ -22,15 +23,15 @@ const POLL_INTERVAL_MS = 2000;
 function statusBadge(status: CrawlJobStatus): { text: string; variant: BadgeVariant; icon: ReactNode } {
   switch (status) {
     case 'QUEUED':
-      return { text: 'Queued', variant: 'warning', icon: <Clock className="w-3 h-3" /> };
+      return { text: 'queued', variant: 'warning', icon: <Clock className="w-3 h-3" /> };
     case 'RUNNING':
-      return { text: 'Running', variant: 'info', icon: <Spinner size="xs" tone="current" /> };
+      return { text: 'running', variant: 'info', icon: <Spinner size="xs" tone="current" /> };
     case 'COMPLETED':
-      return { text: 'Completed', variant: 'success', icon: <CheckCircle2 className="w-3 h-3" /> };
+      return { text: 'completed', variant: 'success', icon: <CheckCircle2 className="w-3 h-3" /> };
     case 'FAILED':
-      return { text: 'Failed', variant: 'error', icon: <XCircle className="w-3 h-3" /> };
+      return { text: 'failed', variant: 'error', icon: <XCircle className="w-3 h-3" /> };
     case 'CANCELLED':
-      return { text: 'Cancelled', variant: 'default', icon: <Ban className="w-3 h-3" /> };
+      return { text: 'cancelled', variant: 'default', icon: <Ban className="w-3 h-3" /> };
     default:
       return { text: status, variant: 'default', icon: null };
   }
@@ -54,6 +55,7 @@ export default function CrawlJobProgressPanel({
   canEdit,
   onJobUpdate,
 }: Readonly<CrawlJobProgressPanelProps>) {
+  const { t, i18n } = useTranslation('common');
   const [currentJob, setCurrentJob] = useState<CrawlJob | null>(initialJob ?? null);
   const [cancelling, setCancelling] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -114,8 +116,8 @@ export default function CrawlJobProgressPanel({
 
   if (!currentJob) {
     return (
-      <div className="text-center py-8 text-gray-500 text-sm">
-        No crawl jobs yet. Use "Run crawl now" to start the first crawl.
+      <div className="text-center py-8 text-fg-secondary dark:text-fg-secondary-dark text-sm">
+        {t('domainDetailPage.crawlProgress.noJobs', { action: t('domainDetailPage.runCrawl.runNow') })}
       </div>
     );
   }
@@ -128,10 +130,10 @@ export default function CrawlJobProgressPanel({
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Badge label={badge.text} variant={badge.variant} icon={badge.icon} />
-          <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">Job #{currentJob.id}</span>
+          <Badge label={t(`domainDetailPage.jobStatuses.${badge.text}`, { defaultValue: badge.text })} variant={badge.variant} icon={badge.icon} />
+          <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('domainDetailPage.crawlProgress.job', { id: currentJob.id })}</span>
           <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
-            {currentJob.triggered_by === 'MANUAL' ? 'Manual trigger' : 'Scheduled'}
+            {currentJob.triggered_by === 'MANUAL' ? t('domainDetailPage.crawlProgress.manualTrigger') : t('domainDetailPage.crawlProgress.scheduled')}
           </span>
         </div>
 
@@ -139,7 +141,7 @@ export default function CrawlJobProgressPanel({
 
         {canEdit && isActive && (
           <ButtonApp
-            label={cancelling ? 'Cancelling...' : 'Cancel'}
+            label={cancelling ? t('domainDetailPage.crawlProgress.cancelling') : t('domainDetailPage.crawlProgress.cancel')}
             variant="danger"
             size="medium"
             onClick={() => { void handleCancel(); }}
@@ -152,11 +154,11 @@ export default function CrawlJobProgressPanel({
       <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-center">
         {(
           [
-            { label: 'Discovered', value: currentJob.discovered_count },
-            { label: 'Indexed', value: currentJob.indexed_count },
-            { label: 'Skipped', value: currentJob.skipped_count },
-            { label: 'Failed', value: currentJob.failed_count },
-            { label: 'Removed', value: currentJob.removed_count },
+            { label: t('domainDetailPage.crawlProgress.discovered'), value: currentJob.discovered_count },
+            { label: t('domainDetailPage.crawlProgress.indexed'), value: currentJob.indexed_count },
+            { label: t('domainDetailPage.crawlProgress.skipped'), value: currentJob.skipped_count },
+            { label: t('domainDetailPage.crawlProgress.failed'), value: currentJob.failed_count },
+            { label: t('domainDetailPage.crawlProgress.removed'), value: currentJob.removed_count },
           ] as const
         ).map(({ label, value }) => (
           <CardApp variant="white" key={label} className=" p-2">
@@ -168,9 +170,9 @@ export default function CrawlJobProgressPanel({
 
       {/* Timing */}
       <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark flex gap-4">
-        <span>Duration: {formatDuration(currentJob.started_at, currentJob.finished_at)}</span>
+        <span>{t('domainDetailPage.crawlProgress.duration')}: {formatDuration(currentJob.started_at, currentJob.finished_at)}</span>
         {currentJob.started_at && (
-          <span>Started: {new Date(currentJob.started_at).toLocaleString()}</span>
+          <span>{t('domainDetailPage.crawlProgress.started')}: {new Date(currentJob.started_at).toLocaleString(i18n.resolvedLanguage)}</span>
         )}
       </div>
         

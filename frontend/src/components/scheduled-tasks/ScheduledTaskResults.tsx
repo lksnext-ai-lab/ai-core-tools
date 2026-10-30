@@ -1,4 +1,5 @@
 import { ChevronDown, MessagesSquare, Paperclip } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ScheduledTaskRun } from '../../services/api';
 import { RunStatusBadge } from './RunStatusBadge';
 import { formatDateTime, outputPreview } from './format';
@@ -23,20 +24,21 @@ const accordionSummaryClass =
  * continuous conversation (its detail lists every answer).
  */
 export function ScheduledTaskResults({ conversationMode, runs, maxRunsRetained, resolveFileUrl }: Readonly<Props>) {
+  const { t } = useTranslation('common');
   const continuous = conversationMode === 'continuous';
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">
-          {continuous ? 'Conversación' : 'Ejecuciones'}
+          {continuous ? t('scheduledTaskDetailPage.results.conversation') : t('scheduledTaskDetailPage.results.runs')}
         </h3>
         {maxRunsRetained !== undefined && (
-          <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Se conservan las últimas {maxRunsRetained} ejecuciones</span>
+          <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.results.retention', { count: maxRunsRetained })}</span>
         )}
       </div>
-      {runs === null && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Cargando ejecuciones…</p>}
+      {runs === null && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.results.loading')}</p>}
       {runs !== null && runs.length === 0 && (
-        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">No hay ejecuciones todavía.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.results.empty')}</p>
       )}
       {runs !== null && runs.length > 0 && continuous && (
         <ContinuousEntry runs={runs} resolveFileUrl={resolveFileUrl} />
@@ -58,6 +60,7 @@ function RunAccordion({
   run,
   resolveFileUrl,
 }: Readonly<{ run: ScheduledTaskRun; resolveFileUrl: Props['resolveFileUrl'] }>) {
+  const { t } = useTranslation('common');
   return (
     <details className={accordionClass}>
       <summary className={accordionSummaryClass}>
@@ -68,7 +71,7 @@ function RunAccordion({
             {run.output_files?.length > 0 && <FileCount count={run.output_files.length} />}
           </div>
           <p className="mt-1 truncate text-fg-secondary dark:text-fg-secondary-dark">
-            {run.status === 'failed' ? run.error_summary : outputPreview(run.output_text)}
+            {run.status === 'failed' ? run.error_summary : outputPreview(run.output_text, 160, t('scheduledTaskDetailPage.results.imageMarker'))}
           </p>
         </div>
         <ChevronDown className="h-4 w-4 flex-shrink-0 text-fg-tertiary transition-transform group-open:rotate-180 dark:text-fg-tertiary-dark" aria-hidden="true" />
@@ -85,6 +88,7 @@ function ContinuousEntry({
   runs,
   resolveFileUrl,
 }: Readonly<{ runs: ScheduledTaskRun[]; resolveFileUrl: Props['resolveFileUrl'] }>) {
+  const { t } = useTranslation('common');
   const latest = runs[0];
   const files = runs.reduce((count, run) => count + (run.output_files?.length ?? 0), 0);
   const failed = runs.filter((run) => run.status === 'failed').length;
@@ -95,19 +99,19 @@ function ContinuousEntry({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-fg dark:text-fg-dark">
-              {runs.length} respuesta{runs.length === 1 ? '' : 's'}
+              {t('scheduledTaskDetailPage.results.responses', { count: runs.length })}
             </span>
-            <span className="text-fg-secondary dark:text-fg-secondary-dark">· última {formatDateTime(latest.scheduled_time)}</span>
+            <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.results.lastResponse', { date: formatDateTime(latest.scheduled_time) })}</span>
             {failed > 0 && (
               <Badge
-                label={`${failed} fallida${failed === 1 ? '' : 's'}`}
+                label={t('scheduledTaskDetailPage.results.failedCount', { count: failed })}
                 variant="error"
               />
             )}
             {files > 0 && <FileCount count={files} />}
           </div>
           <p className="mt-1 truncate text-fg-secondary dark:text-fg-secondary-dark">
-            {latest.status === 'failed' ? latest.error_summary : outputPreview(latest.output_text)}
+            {latest.status === 'failed' ? latest.error_summary : outputPreview(latest.output_text, 160, t('scheduledTaskDetailPage.results.imageMarker'))}
           </p>
         </div>
         <ChevronDown className="h-4 w-4 flex-shrink-0 text-fg-tertiary transition-transform group-open:rotate-180 dark:text-fg-tertiary-dark" aria-hidden="true" />
@@ -121,10 +125,11 @@ function ContinuousEntry({
 }
 
 function FileCount({ count }: Readonly<{ count: number }>) {
+  const { t } = useTranslation('common');
   return (
     <span className="inline-flex items-center gap-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
       <Paperclip className="h-3 w-3" aria-hidden="true" />
-      {count} archivo{count === 1 ? '' : 's'}
+      {t('scheduledTaskDetailPage.results.fileCount', { count })}
     </span>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
 import type { NavigationConfig, NavigationItem } from '../../core/types';
 
@@ -11,6 +12,7 @@ interface BreadcrumbsProps {
 interface Crumb {
   label: string;
   path?: string; // undefined = current page (not clickable)
+  translationKey?: string;
 }
 
 interface NavigationEntry {
@@ -36,29 +38,74 @@ function collectEntries(
   ]);
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  new: 'New',
-  edit: 'Edit',
-  playground: 'Playground',
-  detail: 'Detail',
-  runs: 'Runs',
-  files: 'Files',
-  conversation: 'Conversation',
-  general: 'General',
+const ACTION_LABELS: Record<string, { label: string; translationKey: string }> = {
+  new: { label: 'New', translationKey: 'breadcrumbs.action.new' },
+  edit: { label: 'Edit', translationKey: 'breadcrumbs.action.edit' },
+  playground: { label: 'Playground', translationKey: 'breadcrumbs.action.playground' },
+  detail: { label: 'Detail', translationKey: 'breadcrumbs.action.detail' },
+  runs: { label: 'Runs', translationKey: 'breadcrumbs.action.runs' },
+  files: { label: 'Files', translationKey: 'breadcrumbs.action.files' },
+  conversation: { label: 'Conversation', translationKey: 'breadcrumbs.action.conversation' },
+  general: { label: 'General', translationKey: 'breadcrumbs.action.general' },
 };
 
-function getSuffixLabels(basePath: string, pathname: string): string[] {
-  const remaining = pathname.slice(basePath.length).split('/').filter(Boolean);
-  const labels = remaining
-    .map((segment) => ACTION_LABELS[segment] ?? (/^\d+$/.test(segment) ? '' : segment))
-    .filter(Boolean);
+const NAVIGATION_LABELS: Record<string, { name: string; translationKey: string }> = {
+  '/home': { name: 'Home', translationKey: 'breadcrumbs.navigation.home' },
+  '/marketplace': { name: 'Marketplace', translationKey: 'breadcrumbs.navigation.marketplace' },
+  '/apps': { name: 'My Apps', translationKey: 'breadcrumbs.navigation.myApps' },
+  '/about': { name: 'About', translationKey: 'breadcrumbs.navigation.about' },
+  '/apps/:appId': { name: 'Dashboard', translationKey: 'breadcrumbs.navigation.dashboard' },
+  '/apps/:appId/agents': { name: 'Agents', translationKey: 'breadcrumbs.navigation.agents' },
+  '/apps/:appId/scheduled-tasks': { name: 'Scheduled Tasks', translationKey: 'breadcrumbs.navigation.scheduledTasks' },
+  '/apps/:appId/data': { name: 'Data sources', translationKey: 'breadcrumbs.navigation.dataSources' },
+  '/apps/:appId/silos': { name: 'Silos', translationKey: 'breadcrumbs.navigation.silos' },
+  '/apps/:appId/repositories': { name: 'Repositories', translationKey: 'breadcrumbs.navigation.repositories' },
+  '/apps/:appId/domains': { name: 'Domains', translationKey: 'breadcrumbs.navigation.domains' },
+  '/apps/:appId/sharepoint': { name: 'SharePoint', translationKey: 'breadcrumbs.navigation.sharePoint' },
+  '/apps/:appId/mcp-servers': { name: 'MCP Servers', translationKey: 'breadcrumbs.navigation.mcpServers' },
+  '/apps/:appId/metrics': { name: 'Metrics', translationKey: 'breadcrumbs.navigation.metrics' },
+  '/apps/:appId/skills': { name: 'Skills', translationKey: 'breadcrumbs.navigation.skills' },
+  '/apps/:appId/middlewares': { name: 'Middlewares', translationKey: 'breadcrumbs.navigation.middlewares' },
+  '/apps/:appId/settings': { name: 'App Settings', translationKey: 'breadcrumbs.navigation.appSettings' },
+  '/apps/:appId/settings/output-destinations': { name: 'Output Channels', translationKey: 'breadcrumbs.navigation.outputChannels' },
+  '/apps/:appId/settings/ai-services': { name: 'AI Services', translationKey: 'breadcrumbs.navigation.aiServices' },
+  '/apps/:appId/settings/embedding-services': { name: 'Embedding Services', translationKey: 'breadcrumbs.navigation.embeddingServices' },
+  '/apps/:appId/settings/sandbox-services': { name: 'Sandbox Services', translationKey: 'breadcrumbs.navigation.sandboxServices' },
+  '/apps/:appId/settings/mcp-configs': { name: 'MCP Configs', translationKey: 'breadcrumbs.navigation.mcpConfigs' },
+  '/apps/:appId/settings/api-keys': { name: 'API Keys', translationKey: 'breadcrumbs.navigation.apiKeys' },
+  '/apps/:appId/settings/data-structures': { name: 'Data Structures', translationKey: 'breadcrumbs.navigation.dataStructures' },
+  '/apps/:appId/settings/collaboration': { name: 'Collaboration', translationKey: 'breadcrumbs.navigation.collaboration' },
+  '/admin/users': { name: 'Users', translationKey: 'breadcrumbs.navigation.users' },
+  '/admin/stats': { name: 'Statistics', translationKey: 'breadcrumbs.navigation.statistics' },
+  '/admin/metrics': { name: 'Agent Metrics', translationKey: 'breadcrumbs.navigation.agentMetrics' },
+  '/admin/settings': { name: 'Settings', translationKey: 'breadcrumbs.navigation.settings' },
+  '/admin/saas-users': { name: 'SaaS Users', translationKey: 'breadcrumbs.navigation.saasUsers' },
+  '/admin/system-ai-services': { name: 'System AI Services', translationKey: 'breadcrumbs.navigation.systemAiServices' },
+  '/admin/system-embedding-services': { name: 'System Embedding Services', translationKey: 'breadcrumbs.navigation.systemEmbeddingServices' },
+  '/admin/system-sandbox-services': { name: 'System Sandbox Services', translationKey: 'breadcrumbs.navigation.systemSandboxServices' },
+  '/admin/system-skills': { name: 'System Skills', translationKey: 'breadcrumbs.navigation.systemSkills' },
+  '/admin/tier-config': { name: 'Tier Config', translationKey: 'breadcrumbs.navigation.tierConfig' },
+};
 
-  if (labels.length > 0) return labels;
+function getNavigationTranslationKey(item: NavigationItem): string | undefined {
+  const knownLabel = NAVIGATION_LABELS[item.path];
+  return knownLabel?.name === item.name ? knownLabel.translationKey : undefined;
+}
+
+function getSuffixCrumbs(basePath: string, pathname: string): Crumb[] {
+  const remaining = pathname.slice(basePath.length).split('/').filter(Boolean);
+  const crumbs = remaining.flatMap((segment) => {
+    const action = ACTION_LABELS[segment];
+    if (action) return [{ ...action }];
+    return /^\d+$/.test(segment) ? [] : [{ label: segment }];
+  });
+
+  if (crumbs.length > 0) return crumbs;
   if (remaining.length === 0) return [];
 
   return ['/scheduled-tasks', '/mcp-servers', '/sharepoint'].some((suffix) => basePath.endsWith(suffix))
-    ? ['Detail']
-    : ['Edit'];
+    ? [{ label: 'Detail', translationKey: 'breadcrumbs.action.detail' }]
+    : [{ label: 'Edit', translationKey: 'breadcrumbs.action.edit' }];
 }
 
 function findEntry(entries: NavigationEntry[], pathname: string): NavigationEntry | undefined {
@@ -69,9 +116,16 @@ function findEntry(entries: NavigationEntry[], pathname: string): NavigationEntr
 
 function getEntryCrumbs(match: NavigationEntry, pathname: string): Crumb[] {
   return [
-    ...match.ancestors.map((ancestor) => ({ label: ancestor.name })),
-    { label: match.item.name, path: match.path },
-    ...getSuffixLabels(match.path, pathname).map((label) => ({ label })),
+    ...match.ancestors.map((ancestor) => ({
+      label: ancestor.name,
+      translationKey: getNavigationTranslationKey(ancestor),
+    })),
+    {
+      label: match.item.name,
+      path: match.path,
+      translationKey: getNavigationTranslationKey(match.item),
+    },
+    ...getSuffixCrumbs(match.path, pathname),
   ];
 }
 
@@ -79,7 +133,7 @@ function getAdminCrumbs(pathname: string, navigationConfig?: NavigationConfig): 
   if (!pathname.startsWith('/admin/')) return null;
   const match = findEntry(collectEntries(navigationConfig?.admin, ''), pathname);
   return [
-    { label: 'Administration' },
+    { label: 'Administration', translationKey: 'breadcrumbs.administration' },
     ...(match ? getEntryCrumbs(match, pathname) : []),
   ];
 }
@@ -90,7 +144,11 @@ function getGlobalCrumbs(pathname: string, navigationConfig?: NavigationConfig):
   const entry = collectEntries(navigationConfig?.mainFeatures, '')
     .find((item) => item.path === pathname);
   const fallbackLabel = pathname === '/apps' ? 'My Apps' : 'Marketplace';
-  return [{ label: entry?.item.name ?? fallbackLabel }];
+  const label = entry?.item.name ?? fallbackLabel;
+  const translationKey = entry
+    ? getNavigationTranslationKey(entry.item)
+    : NAVIGATION_LABELS[pathname]?.translationKey;
+  return [{ label, translationKey }];
 }
 
 function getSettingsCrumbs(
@@ -101,7 +159,11 @@ function getSettingsCrumbs(
   const settingsBase = `/apps/${appId}/settings`;
   if (pathname !== settingsBase && !pathname.startsWith(`${settingsBase}/`)) return null;
 
-  const crumbs: Crumb[] = [{ label: 'App Settings', path: settingsBase }];
+  const crumbs: Crumb[] = [{
+    label: 'App Settings',
+    path: settingsBase,
+    translationKey: 'breadcrumbs.navigation.appSettings',
+  }];
   if (pathname === settingsBase) return crumbs;
 
   const entries = [
@@ -113,7 +175,7 @@ function getSettingsCrumbs(
     ...crumbs,
     ...(match
       ? getEntryCrumbs(match, pathname)
-      : getSuffixLabels(settingsBase, pathname).map((label) => ({ label }))),
+      : getSuffixCrumbs(settingsBase, pathname)),
   ];
 }
 
@@ -144,6 +206,7 @@ function useAppName(appId?: string): string | null {
 }
 
 export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({ navigationConfig }) => {
+  const { t } = useTranslation('common');
   const location = useLocation();
   const { appId } = useParams<{ appId?: string }>();
   const appName = useAppName(appId);
@@ -152,15 +215,20 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({ navigationConfig }) =>
   if (!appId) {
     const crumbs = getAdminCrumbs(pathname, navigationConfig)
       ?? getGlobalCrumbs(pathname, navigationConfig);
-    return crumbs ? renderBreadcrumbs(crumbs) : null;
+    return crumbs ? renderBreadcrumbs(crumbs, t) : null;
   }
 
   const dashboardPath = `/apps/${appId}`;
-  const rootCrumb = { label: appName ?? `App ${appId}`, path: dashboardPath };
-  if (pathname === dashboardPath) return renderBreadcrumbs([rootCrumb]);
+  const rootCrumb: Crumb = appName
+    ? { label: appName, path: dashboardPath }
+    : {
+        label: t('breadcrumbs.appFallback', { appId }),
+        path: dashboardPath,
+      };
+  if (pathname === dashboardPath) return renderBreadcrumbs([rootCrumb], t);
 
   const settingsCrumbs = getSettingsCrumbs(pathname, appId, navigationConfig);
-  if (settingsCrumbs) return renderBreadcrumbs([rootCrumb, ...settingsCrumbs]);
+  if (settingsCrumbs) return renderBreadcrumbs([rootCrumb, ...settingsCrumbs], t);
 
   const entries = [
     ...collectEntries(navigationConfig?.appNavigation, appId),
@@ -168,15 +236,15 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({ navigationConfig }) =>
   ];
   const match = findEntry(entries, pathname);
   return match
-    ? renderBreadcrumbs([rootCrumb, ...getEntryCrumbs(match, pathname)])
+    ? renderBreadcrumbs([rootCrumb, ...getEntryCrumbs(match, pathname)], t)
     : null;
 };
 
-function renderBreadcrumbs(crumbs: Crumb[]): React.ReactElement | null {
+function renderBreadcrumbs(crumbs: Crumb[], t: (key: string) => string): React.ReactElement | null {
   if (crumbs.length === 0) return null;
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1">
+    <nav aria-label={t('breadcrumbs.ariaLabel')} className="flex items-center gap-1">
       {crumbs.map((crumb, index) => {
         const isLast = index === crumbs.length - 1;
         return (
@@ -189,11 +257,11 @@ function renderBreadcrumbs(crumbs: Crumb[]): React.ReactElement | null {
                 to={crumb.path}
                 className="text-[13px] text-fg-tertiary hover:text-fg transition-colors whitespace-nowrap dark:text-fg-tertiary-dark dark:hover:text-fg-dark"
               >
-                {crumb.label}
+                {crumb.translationKey ? t(crumb.translationKey) : crumb.label}
               </Link>
             ) : (
               <span className="text-[13px] text-fg font-medium whitespace-nowrap dark:text-fg-dark">
-                {crumb.label}
+                {crumb.translationKey ? t(crumb.translationKey) : crumb.label}
               </span>
             )}
           </React.Fragment>

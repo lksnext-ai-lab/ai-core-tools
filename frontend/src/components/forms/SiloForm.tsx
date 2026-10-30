@@ -2,6 +2,7 @@ import Alert from '../ui/Alert';
 import { FormActions } from '../ui/FormActions';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Info } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus';
@@ -54,6 +55,7 @@ interface SiloFormProps {
 }
 
 function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
+  const { t } = useTranslation('common');
   const { appId } = useParams();
   const [formData, setFormData] = useState<SiloFormData>({
     name: '',
@@ -70,9 +72,9 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
   
   const isEditing = !!silo && silo.silo_id !== 0;
-  let submitButtonLabel = isEditing ? 'Update Silo' : 'Create Silo';
+  let submitButtonLabel = isEditing ? t('siloFormPage.actions.update') : t('siloFormPage.actions.create');
   if (isSubmitting) {
-    submitButtonLabel = 'Saving...';
+    submitButtonLabel = t('siloFormPage.actions.saving');
   }
 
   // Load form data (output parsers and embedding services)
@@ -140,7 +142,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
         }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load form data');
+      setError(err instanceof Error ? err.message : t('siloFormPage.loadFormFailed'));
       console.error('Error loading form data:', err);
     } 
   }
@@ -167,12 +169,12 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
     
     // Basic validation
     if (!formData.name.trim()) {
-      setError('Silo name is required');
+      setError(t('siloFormPage.validation.nameRequired'));
       return;
     }
 
     if (!isEditing && !formData.vector_db_type) {
-      setError('Vector database selection is required');
+      setError(t('siloFormPage.validation.vectorDbRequired'));
       return;
     }
 
@@ -184,7 +186,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
         : { ...formData, vector_db_type: formData.vector_db_type!.toUpperCase() };
       await onSubmit(payload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save silo');
+      setError(err instanceof Error ? err.message : t('siloFormPage.saveFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -199,56 +201,56 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
           <div className="grid grid-cols-1 gap-6">
             {/* Silo Name */}
             <FormField
-              label="Silo Name"
+              label={t('siloFormPage.fields.name')}
               id="name"
               value={formData.name}
               onChange={handleChange}
               required
-              placeholder="Enter silo name"
+              placeholder={t('siloFormPage.fields.namePlaceholder')}
               disabled={isSubmitting}
             />
             <FormField
-              label="Silo Description"
+              label={t('siloFormPage.fields.description')}
               id="description"
               value={formData.description || ''}
               onChange={handleChange}
               required
-              placeholder="Enter silo description"
+              placeholder={t('siloFormPage.fields.descriptionPlaceholder')}
               disabled={isSubmitting}
             />
             {/* Metadata Definition (Output Parser) */}
             <div>
               <FormSelect
-                label="Metadata Definition"
+                label={t('siloFormPage.fields.metadataDefinition')}
                 id="output_parser_id"
                 value={formData.output_parser_id?.toString() || ''}
                 onChange={handleChange}
                 options={[
-                  { value: '', label: 'No metadata definition' },
+                  { value: '', label: t('siloFormPage.fields.noMetadataDefinition') },
                   ...outputParsers.map((parser) => ({
                     value: parser.parser_id,
                     label: parser.name,
                   })),
                 ]}
                 disabled={isSubmitting}
-                helpText="Optional: Define structured metadata for documents in this silo."
+                helpText={t('siloFormPage.help.metadataDefinition')}
               />
             </div>
 
             {/* Embedding Service */}
             <div>
               <FormSelect
-                label="Embedding Service"
+                label={t('siloFormPage.fields.embeddingService')}
                 id="embedding_service_id"
                 value={formData.embedding_service_id?.toString() || ''}
                 onChange={handleChange}
                 required
                 options={[
-                  { value: '', label: 'Select an embedding service' },
+                  { value: '', label: t('siloFormPage.fields.selectEmbeddingService') },
                   ...selectableServiceOptions(embeddingServices, silo?.embedding_service_id).map((service) => ({
                     value: service.service_id,
                     label: serviceOptionLabel(service, [
-                      service.is_system ? '[System]' : '',
+                      service.is_system ? `[${t('siloFormPage.system')}]` : '',
                       service.name,
                       service.provider ? `(${service.provider})` : '',
                     ].filter(Boolean).join(' ')),
@@ -260,11 +262,11 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
               <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
               {isEditing ? (
                 <p className="mt-1 text-xs text-accent dark:text-accent-dark">
-                  The embedding service cannot be changed after a silo is created.
+                  {t('siloFormPage.help.embeddingServiceImmutable')}
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                  Required: Choose the embedding service for vector generation.
+                  {t('siloFormPage.help.embeddingServiceRequired')}
                 </p>
               )}
             </div>
@@ -272,14 +274,14 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
             {/* Vector Database */}
             <div>
               <FormSelect
-                label="Vector Database"
+                label={t('siloFormPage.fields.vectorDatabase')}
                 id="vector_db_type"
                 value={vectorDbOptions.length === 0 ? '' : formData.vector_db_type ?? ''}
                 onChange={handleChange}
                 required={!isEditing}
                 options={[
                   ...(vectorDbOptions.length === 0
-                    ? [{ value: '', label: 'No vector databases available' }]
+                    ? [{ value: '', label: t('siloFormPage.fields.noVectorDatabases') }]
                     : []),
                   ...vectorDbOptions.map((option) => ({
                     value: option.code,
@@ -290,14 +292,14 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 helpText={isEditing ? (
                   <span className="flex items-center gap-1 ">
                     <Info className="w-3.5 h-3.5 shrink-0" />
-                    The vector database cannot be changed after a silo is created.
+                    {t('siloFormPage.help.vectorDatabaseImmutable')}
                   </span>
                 ) : vectorDbOptions.length === 0 ? (
                   <span className="text-error dark:text-error-dark">
-                    No vector databases available. Configure a silo backend before proceeding.
+                    {t('siloFormPage.help.configureVectorDatabase')}
                   </span>
                 ) : (
-                  'Required: Select the storage engine that will persist vectors for this silo.'
+                  t('siloFormPage.help.vectorDatabaseRequired')
                 )}
               />
             </div>
@@ -306,7 +308,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
           {/* Media (video/audio) indexing */}
           {(silo?.ai_services?.length ?? 0) > 0 && (
             <fieldset className="space-y-4 border-t border-gray-200 pt-6 mt-5">
-              <legend className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">Video and audio</legend>
+              <legend className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">{t('siloFormPage.media.title')}</legend>
               <MediaServicesFields
                 scope="silo"
                 aiServices={silo?.ai_services ?? []}
@@ -330,6 +332,8 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
             onCancel={onCancel}
             isSubmitting={isSubmitting}
             submitLabel={submitButtonLabel}
+            submittingLabel={t('siloFormPage.actions.saving')}
+            cancelLabel={t('siloFormPage.actions.cancel')}
             containerClassName="mt-6"
           />
         </div>
@@ -338,18 +342,17 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       {/* Info Section */}
       <Alert
         type="info"
-        title="About Custom Silos"
+        title={t('siloFormPage.about.title')}
         className="mt-8"
         message={(
           <>
             <p>
-              Custom silos are vector storage containers that enable semantic search and retrieval. 
-              They store document embeddings and allow AI agents to find relevant information quickly.
+              {t('siloFormPage.about.description')}
             </p>
             <p className="mt-2">
-              <span className="font-medium">Embedding Service:</span> Required for converting text to vectors.
+              <span className="font-medium">{t('siloFormPage.fields.embeddingService')}:</span> {t('siloFormPage.about.embeddingService')}
               <br />
-              <span className="font-medium">Metadata Definition:</span> Optional structured data for filtering and organization.
+              <span className="font-medium">{t('siloFormPage.fields.metadataDefinition')}:</span> {t('siloFormPage.about.metadataDefinition')}
             </p>
           </>
         )}

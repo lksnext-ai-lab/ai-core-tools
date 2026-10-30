@@ -1,5 +1,6 @@
 import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Film } from 'lucide-react';
 import { Spinner } from '../ui/Spinner';
+import { useTranslation } from 'react-i18next';
 
 export interface PanelFile {
   id: string;
@@ -33,9 +34,9 @@ function getDisplayStatus(status?: string): string | undefined {
 }
 
 function getExtractableLabel(fileType?: string, hasExtractableContent?: boolean): string {
-  if (fileType === 'image') return 'Vision ready';
-  if (hasExtractableContent) return 'Text extracted';
-  return 'No text';
+  if (fileType === 'image') return 'visionReady';
+  if (hasExtractableContent) return 'textExtracted';
+  return 'noText';
 }
 
 function getFileIcon(fileType?: string) {
@@ -55,18 +56,19 @@ export default function AttachedFilesPanel({
   isLoading = false,
   onRemoveFile,
   onDownloadFile,
-  title = 'Attached Files',
+  title,
 }: Readonly<AttachedFilesPanelProps>) {
+  const { t } = useTranslation('common');
   return (
     <div className="w-64 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-full max-h-full min-h-0">
       {/* Header */}
       <div className="p-3 border-b border-line dark:border-line-dark shrink-0">
         <h3 className="text-sm font-medium text-fg dark:text-fg-dark flex items-center gap-2">
           <Paperclip className="w-4 h-4" />
-          <span>{title}</span>
+          <span>{title ?? t('attachedFiles.title')}</span>
           {files.length > 0 && (
             <span className="ml-auto text-xs text-fg dark:text-fg-dark">
-              {files.length} file{files.length === 1 ? '' : 's'}
+              {t('attachedFiles.fileCount', { count: files.length })}
             </span>
           )}
         </h3>
@@ -77,7 +79,7 @@ export default function AttachedFilesPanel({
         {isLoading && (
           <div className="flex items-center justify-center py-4 gap-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
             <Spinner size="sm" tone="muted" />
-            Uploading...
+            {t('attachedFiles.uploading')}
           </div>
         )}
 
@@ -86,8 +88,8 @@ export default function AttachedFilesPanel({
             <div className="flex justify-center mb-2">
               <Paperclip className="w-6 h-6" />
             </div>
-            <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">No files attached yet</p>
-            <p className="text-xs mt-1 text-fg-tertiary dark:text-fg-tertiary-dark">Use the attach button to upload</p>
+            <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('attachedFiles.emptyTitle')}</p>
+            <p className="text-xs mt-1 text-fg-tertiary dark:text-fg-tertiary-dark">{t('attachedFiles.emptyDescription')}</p>
           </div>
         )}
 
@@ -110,7 +112,7 @@ export default function AttachedFilesPanel({
                 </span>
                 {file.file_type === 'output' && (
                   <span className="text-xs px-1 py-0.5 rounded-full shrink-0 bg-blue-100 text-blue-700">
-                    Generated
+                    {t('attachedFiles.generated')}
                   </span>
                 )}
                 {file.processing_status && file.file_type !== 'output' && (
@@ -119,14 +121,14 @@ export default function AttachedFilesPanel({
                       getStatusClassName(file.processing_status)
                     }`}
                   >
-                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-bronze dark:text-bronze-dark" /> Ready</>}
-                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-bronze dark:text-bronze-dark" /> Error</>}
-                    {getDisplayStatus(file.processing_status) === 'pending' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Pending</>}
-                    {getDisplayStatus(file.processing_status) === 'processing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Processing</>}
-                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Transcribing</>}
-                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Analyzing video</>}
-                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Downloading</>}
-                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> Indexing</>}
+                    {getDisplayStatus(file.processing_status) === 'ready' && <><Check className="w-3 h-3 text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.ready')}</>}
+                    {getDisplayStatus(file.processing_status) === 'error' && <><X className="w-3 h-3 text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.error')}</>}
+                    {getDisplayStatus(file.processing_status) === 'pending' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.pending')}</>}
+                    {getDisplayStatus(file.processing_status) === 'processing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.processing')}</>}
+                    {getDisplayStatus(file.processing_status) === 'transcribing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.transcribing')}</>}
+                    {getDisplayStatus(file.processing_status) === 'analyzing_video' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.analyzingVideo')}</>}
+                    {getDisplayStatus(file.processing_status) === 'downloading' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.downloading')}</>}
+                    {getDisplayStatus(file.processing_status) === 'indexing' && <><Spinner size="xs" tone="current" className="text-bronze dark:text-bronze-dark" /> {t('attachedFiles.status.indexing')}</>}
                   </span>
                 )}
               </div>
@@ -136,7 +138,7 @@ export default function AttachedFilesPanel({
                   <>
                     {file.file_size_display && <span>·</span>}
                     <span className='text-fg-secondary dark:text-fg-secondary-dark'>
-                      {getExtractableLabel(file.file_type, file.has_extractable_content)}
+                      {t(`attachedFiles.${getExtractableLabel(file.file_type, file.has_extractable_content)}`)}
                     </span>
                   </>
                 )}
@@ -166,8 +168,8 @@ export default function AttachedFilesPanel({
                   type="button"
                   onClick={() => onDownloadFile(file.id)}
                   className="text-bronze dark:text-bronze-dark hover:text-fg dark:hover:text-fg-dark  rounded p-0.5 transition-colors"
-                  title="Download file"
-                  aria-label={`Download ${file.filename}`}
+                  title={t('attachedFiles.downloadFile')}
+                  aria-label={t('attachedFiles.downloadFileNamed', { filename: file.filename })}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -178,8 +180,8 @@ export default function AttachedFilesPanel({
                 type="button"
                 onClick={() => onRemoveFile(file.id)}
                 className="text-bronze dark:text-bronze-dark hover:text-error hover:bg-bg-error rounded p-0.5 transition-colors"
-                title="Remove file"
-                aria-label={`Remove ${file.filename}`}
+                title={t('attachedFiles.removeFile')}
+                aria-label={t('attachedFiles.removeFileNamed', { filename: file.filename })}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

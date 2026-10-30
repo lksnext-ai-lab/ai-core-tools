@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ErrorsResponse } from '../../types/metrics';
 import { ChartCard } from './TimeseriesCharts';
 import { formatCount, formatDateTime } from './format';
@@ -10,11 +11,12 @@ interface Props {
 }
 
 export function ErrorsPanel({ errors, showApp = false }: Props) {
+  const { t } = useTranslation('common');
   return (
-    <ChartCard title="Errors" subtitle="Failed executions grouped by error type, and the latest failures">
-      {!errors && <p className="py-6 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark">Loading…</p>}
+    <ChartCard title={t('metricsDashboard.errors.title')} subtitle={t('metricsDashboard.errors.description')}>
+      {!errors && <p className="py-6 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('metricsDashboard.loading')}</p>}
       {errors && errors.groups.length === 0 && (
-        <p className="py-6 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark ">No failed executions in this period.</p>
+        <p className="py-6 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark ">{t('metricsDashboard.errors.noFailures')}</p>
       )}
       {errors && errors.groups.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
@@ -27,7 +29,7 @@ export function ErrorsPanel({ errors, showApp = false }: Props) {
                     {g.error_code}
                   </span>
                   <span className="whitespace-nowrap text-xs tabular-nums  text-fg-secondary dark:text-fg-secondary-dark">
-                    {formatCount(g.count)} · last {formatDateTime(g.last_seen)}
+                    {t('metricsDashboard.errors.lastSeen', { count: formatCount(g.count), date: formatDateTime(g.last_seen) })}
                   </span>
                 </div>
                 {g.sample_message && (
@@ -37,14 +39,14 @@ export function ErrorsPanel({ errors, showApp = false }: Props) {
             ))}
           </ul>
           <div>
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-secondary dark:text-fg-secondary-dark">Latest failures</h4>
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-secondary dark:text-fg-secondary-dark">{t('metricsDashboard.errors.latestFailures')}</h4>
             <ul className="divide-y divide-gray-100 text-sm dark:divide-gray-700">
               {errors.recent.map((r, i) => (
                 <li key={`${r.started_at}-${i}`} className="py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium text-fg dark:text-fg-dark">
-                      {r.agent_name ?? `Agent #${r.agent_id}`}
-                      {showApp && <span className="font-normal text-fg-secondary dark:text-fg-secondary-dark"> · {r.app_name ?? `App #${r.app_id}`}</span>}
+                      {r.agent_name ?? t('metricsDashboard.errors.agentFallback', { id: r.agent_id })}
+                      {showApp && <span className="font-normal text-fg-secondary dark:text-fg-secondary-dark"> · {r.app_name ?? t('metricsDashboard.errors.appFallback', { id: r.app_id })}</span>}
                     </span>
                     <span className="whitespace-nowrap text-xs ext-fg-secondary dark:text-fg-secondary-dark">{formatDateTime(r.started_at)}</span>
                   </div>

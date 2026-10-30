@@ -18,23 +18,24 @@ import { FormSelect } from '../components/ui/FormField';
 import { SidePanel } from '../components/ui/SidePanel';
 import { Tabs } from '../components/ui/Tabs';
 import MarketplaceAgentDetailPage from './MarketplaceAgentDetailPage';
+import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 12;
 
 type SortOption = 'relevance' | 'newest' | 'alphabetical';
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'relevance', label: 'Top Rated' },
-  { value: 'newest', label: 'Newest' },
-  { value: 'alphabetical', label: 'A–Z' },
-];
-
 type MarketplaceTab = 'agents' | 'tasks';
 
-const TABS: { id: MarketplaceTab; label: string }[] = [
-  { id: 'agents', label: 'Agents' },
-  { id: 'tasks', label: 'Scheduled tasks' },
-];
+const CATEGORY_LABEL_KEYS: Record<(typeof MARKETPLACE_CATEGORIES)[number], string> = {
+  Productivity: 'productivity',
+  Research: 'research',
+  Writing: 'writing',
+  Code: 'code',
+  'Data Analysis': 'dataAnalysis',
+  'Customer Support': 'customerSupport',
+  Education: 'education',
+  Other: 'other',
+};
 
 /**
  * Marketplace page — published agents (to chat with) and published scheduled tasks
@@ -42,25 +43,22 @@ const TABS: { id: MarketplaceTab; label: string }[] = [
  */
 export default function MarketplacePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation('common');
   const tab: MarketplaceTab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'agents';
+  const tabs: { id: MarketplaceTab; label: string }[] = [
+    { id: 'agents', label: t('marketplacePage.agentsTab') },
+    { id: 'tasks', label: t('marketplacePage.scheduledTasksTab') },
+  ];
 
   return (
     <div className="space-y-6">
-      {/*<div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Marketplace</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {tab === 'agents'
-            ? 'Discover and chat with AI agents published across the platform.'
-            : 'Browse the results of scheduled tasks published across the platform.'}
-        </p>
-      </div>*/}
       <Title
-        titulo="Marketplace"
-        subtitulo="Discover and interact with AI agents and scheduled tasks across the platform."
+        titulo={t('marketplacePage.title')}
+        subtitulo={t('marketplacePage.subtitle')}
         variant="titPrincipal"
       />
       <Tabs
-        tabs={TABS}
+        tabs={tabs}
         activeTab={tab}
         onChange={(tabId) => setSearchParams(tabId === 'agents' ? {} : { tab: tabId })}
         className="border-gray-200 dark:border-gray-700"
@@ -74,6 +72,7 @@ export default function MarketplacePage() {
 
 /** Catalog of published agents — browse, search, and filter. */
 function MarketplaceAgentsTab() {
+  const { t } = useTranslation('common');
   // Agent shown in the right-hand detail panel (null = closed)
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
 
@@ -91,6 +90,11 @@ function MarketplaceAgentsTab() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const sortOptions: { value: SortOption; label: string }[] = [
+    { value: 'relevance', label: t('marketplacePage.sortTopRated') },
+    { value: 'newest', label: t('marketplacePage.sortNewest') },
+    { value: 'alphabetical', label: t('marketplacePage.sortAlphabetical') },
+  ];
 
   // Debounce search input (300ms)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,11 +134,11 @@ function MarketplaceAgentsTab() {
       setTotal(data.total);
       setTotalPages(data.total_pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load marketplace');
+      setError(err instanceof Error ? err.message : t('marketplacePage.loadMarketplaceFailed'));
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, category, sortBy, myAppsOnly, page]);
+  }, [debouncedSearch, category, sortBy, myAppsOnly, page, t]);
 
   useEffect(() => {
     void fetchCatalog();
@@ -145,7 +149,7 @@ function MarketplaceAgentsTab() {
 
   function renderContent() {
     if (loading) {
-      return <LoadingState message="Loading marketplace..." />;
+      return <LoadingState message={t('marketplacePage.loadingMarketplace')} />;
     }
     if (error) {
       return <ErrorState error={error} onRetry={fetchCatalog} />;
@@ -156,7 +160,7 @@ function MarketplaceAgentsTab() {
     return (
       <>
         <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-          Showing {agents.length} of {total} agent{total === 1 ? '' : 's'}
+          {t('marketplacePage.agentCount', { count: total, shown: agents.length })}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
@@ -188,7 +192,7 @@ function MarketplaceAgentsTab() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search agents..."
+            placeholder={t('marketplacePage.searchAgents')}
             className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:bg-surface-dark dark:border-btCard-border-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark"
           />
         </div>
@@ -196,29 +200,32 @@ function MarketplaceAgentsTab() {
         {/* Category */}
         <FormSelect
           id="marketplace-category"
-          label="Category"
+          label={t('marketplacePage.category')}
           labelClassName="sr-only"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           options={[
-            { value: '', label: 'All Categories' },
-            ...MARKETPLACE_CATEGORIES.map((cat) => ({ value: cat, label: cat })),
+            { value: '', label: t('marketplacePage.allCategories') },
+            ...MARKETPLACE_CATEGORIES.map((cat) => ({
+              value: cat,
+              label: t(`marketplacePage.categories.${CATEGORY_LABEL_KEYS[cat]}`),
+            })),
           ]}
         />
 
         {/* Sort */}
         <FormSelect
           id="marketplace-sort"
-          label="Sort by"
+          label={t('marketplacePage.sortBy')}
           labelClassName="sr-only"
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          options={SORT_OPTIONS}
+          options={sortOptions}
         />
 
         {/* My Apps toggle */}
         <ButtonApp
-          label="My Apps"
+          label={t('marketplacePage.myApps')}
           variant="primary"
           size="control"
           ariaPressed={myAppsOnly}
@@ -236,7 +243,7 @@ function MarketplaceAgentsTab() {
             open
             side="right"
             onClose={handleClosePanel}
-            title="Marketplace"
+            title={t('marketplacePage.title')}
             widthClassName="w-[640px] max-w-full"
           >
             <MarketplaceAgentDetailPage key={selectedAgentId} agentId={selectedAgentId} variant="panel" />
@@ -255,15 +262,16 @@ interface EmptyStateProps {
 }
 
 function EmptyState({ search, category }: EmptyStateProps) {
+  const { t } = useTranslation('common');
   const hasFilters = Boolean(search || category);
   return (
     <div className="text-center py-16">
       <Search className="w-12 h-12 text-gray-300 mx-auto" aria-hidden="true"  />
-      <h3 className="mt-4 text-lg font-medium text-fg-primary dark:text-fg-primary-dark">No agents found</h3>
+      <h3 className="mt-4 text-lg font-medium text-fg-primary dark:text-fg-primary-dark">{t('marketplacePage.noAgentsFound')}</h3>
       <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
         {hasFilters
-          ? 'Try adjusting your search or filters.'
-          : 'No agents have been published to the marketplace yet.'}
+          ? t('marketplacePage.adjustFilters')
+          : t('marketplacePage.noAgentsPublished')}
       </p>
     </div>
   );

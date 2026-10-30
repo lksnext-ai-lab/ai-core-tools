@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import Alert from '../components/ui/Alert';
 import { FormField, FormSelect } from '../components/ui/FormField';
@@ -37,6 +38,7 @@ interface AIService extends ServiceOptionLike {
 
 const RepositoryFormPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const mutate = useApiMutation();
   const [loading, setLoading] = useState(false);
@@ -111,49 +113,49 @@ const RepositoryFormPage: React.FC = () => {
         });
       } catch (err) {
         console.error('Error loading repository:', err);
-        setError('Failed to load repository');
+        setError(t('repositoryFormPage.errors.loadRepository'));
       } finally {
         setLoading(false);
       }
     };
 
     void fetchRepository();
-  }, [appId, repositoryId]);
+  }, [appId, repositoryId, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!appId) {
-      setError('Invalid application context');
+      setError(t('repositoryFormPage.errors.invalidAppContext'));
       return;
     }
 
     const appIdNumber = Number.parseInt(appId, 10);
     if (Number.isNaN(appIdNumber)) {
-      setError('Invalid application context');
+      setError(t('repositoryFormPage.errors.invalidAppContext'));
       return;
     }
 
     const trimmedName = formData.name.trim();
     if (!trimmedName) {
-      setError('Repository name is required');
+      setError(t('repositoryFormPage.errors.nameRequired'));
       return;
     }
 
     if (isNewRepository && !formData.vector_db_type) {
-      setError('Vector database selection is required');
+      setError(t('repositoryFormPage.errors.vectorDatabaseRequired'));
       return;
     }
 
     if (isNewRepository && !formData.embedding_service_id) {
-      setError('Embedding service is required for new repositories');
+      setError(t('repositoryFormPage.errors.embeddingServiceRequired'));
       return;
     }
 
     const normalizedVectorDbType = formData.vector_db_type.toUpperCase();
     const repositoryIdNumber = repositoryId ? Number.parseInt(repositoryId, 10) : 0;
     if (!isNewRepository && Number.isNaN(repositoryIdNumber)) {
-      setError('Invalid repository context');
+      setError(t('repositoryFormPage.errors.invalidRepositoryContext'));
       return;
     }
 
@@ -174,12 +176,12 @@ const RepositoryFormPage: React.FC = () => {
           : apiService.updateRepository(appIdNumber, repositoryIdNumber, payload),
       {
         loading: isNewRepository
-          ? MESSAGES.CREATING('repository')
-          : MESSAGES.UPDATING('repository'),
+          ? t('repositoryFormPage.creating')
+          : t('repositoryFormPage.updating'),
         success: isNewRepository
-          ? MESSAGES.CREATED('repository')
-          : MESSAGES.UPDATED('repository'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('repository')),
+          ? t('repositoryFormPage.created')
+          : t('repositoryFormPage.updated'),
+        error: (err) => errorMessage(err, t('repositoryFormPage.errors.saveFailed')),
       },
     );
     setSaving(false);
@@ -204,10 +206,10 @@ const RepositoryFormPage: React.FC = () => {
       {/* Header */}
 
       <Title variant="titPrincipal"
-        titulo={isNewRepository ? 'Create Repository' : 'Edit Repository'}
+        titulo={isNewRepository ? t('repositoryFormPage.title.create') : t('repositoryFormPage.title.edit')}
         subtitulo={isNewRepository 
-          ? 'Create a new repository to organize your documents. A silo will be automatically created for vector search.' 
-          : 'Update repository settings and configuration'
+          ? t('repositoryFormPage.subtitle.create')
+          : t('repositoryFormPage.subtitle.edit')
         } 
       />
 
@@ -221,18 +223,18 @@ const RepositoryFormPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Repository Name */}
           <FormField
-            label="Repository Name"
+            label={t('repositoryFormPage.fields.name')}
             id="name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Enter repository name"
+            placeholder={t('repositoryFormPage.fields.namePlaceholder')}
             required
-            helpText="Choose a descriptive name for your repository"
+            helpText={t('repositoryFormPage.help.name')}
           />
 
           {/* Vector Database */}
           <FormSelect
-            label="Vector Database"
+            label={t('repositoryFormPage.fields.vectorDatabase')}
             id="vector_db_type"
             value={formData.vector_db_type}
             onChange={(e) =>
@@ -248,15 +250,15 @@ const RepositoryFormPage: React.FC = () => {
             disabled={!isNewRepository}
             className={!isNewRepository ? '[&>p]:text-accent dark:text-accent-dark' : ''}
             helpText={isNewRepository
-              ? 'Select where embeddings for this repository will be stored.'
-              : 'The vector database cannot be changed after a repository is created.'}
+              ? t('repositoryFormPage.help.vectorDatabase')
+              : t('repositoryFormPage.help.vectorDatabaseImmutable')}
           />
 
           {/* Embedding Service (only for new repositories) */}
           {isNewRepository && (
             <div>
               <FormSelect
-                label="Embedding Service"
+                label={t('repositoryFormPage.fields.embeddingService')}
                 id="embedding_service_id"
                 value={formData.embedding_service_id || ''}
                 onChange={(e) => setFormData({ 
@@ -265,11 +267,11 @@ const RepositoryFormPage: React.FC = () => {
                 })}
                 required
                 options={[
-                  { value: '', label: 'Select an embedding service' },
+                  { value: '', label: t('repositoryFormPage.fields.selectEmbeddingService') },
                   ...selectableServiceOptions(embeddingServices, undefined).map((service) => ({
                     value: service.service_id,
                     label: serviceOptionLabel(service, [
-                      service.is_system ? '[System]' : '',
+                      service.is_system ? `[${t('siloFormPage.system')}]` : '',
                       service.provider && service.model_name
                         ? `${service.name} (${service.provider} - ${service.model_name})`
                         : service.name,
@@ -280,7 +282,7 @@ const RepositoryFormPage: React.FC = () => {
               />
               <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
               <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                This embedding service will be used for the silo that's automatically created with this repository
+                {t('repositoryFormPage.help.embeddingService')}
               </p>
             </div>
           )}
@@ -299,7 +301,7 @@ const RepositoryFormPage: React.FC = () => {
           <FormActions
             onCancel={handleCancel}
             isSubmitting={saving}
-            submitLabel={isNewRepository ? 'Create Repository' : 'Save Changes'}
+            submitLabel={isNewRepository ? t('repositoryFormPage.actions.create') : t('repositoryFormPage.actions.saveChanges')}
             containerClassName="pt-6"
           />
         </form>

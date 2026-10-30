@@ -9,6 +9,7 @@ import { apiService } from '../../services/api';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
 import type { MarketplaceAgentCard as MarketplaceAgentCardType } from '../../types/marketplace';
+import { useTranslation } from 'react-i18next';
 
 interface MarketplaceAgentCardProps {
   readonly agent: MarketplaceAgentCardType;
@@ -27,12 +28,24 @@ const CATEGORY_VARIANT: Record<string, 'info' | 'success' | 'warning' | 'error' 
   Other: 'default',
 };
 
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  Productivity: 'productivity',
+  Research: 'research',
+  Writing: 'writing',
+  Code: 'code',
+  'Data Analysis': 'dataAnalysis',
+  'Customer Support': 'customerSupport',
+  Education: 'education',
+  Other: 'other',
+};
+
 /**
  * Card component for displaying a published agent in the marketplace catalog grid.
  */
 export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardProps) {
   const navigate = useNavigate();
   const mutate = useApiMutation();
+  const { t, i18n } = useTranslation('common');
   const [starting, setStarting] = useState(false);
 
   const handleStartChat = async () => {
@@ -41,9 +54,9 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
     const conv = await mutate(
       () => apiService.createMarketplaceConversation(agent.agent_id),
       {
-        loading: 'Starting conversation…',
-        success: 'Conversation started',
-        error: (err) => errorMessage(err, 'Failed to start conversation'),
+        loading: t('marketplacePage.startingConversation'),
+        success: t('marketplacePage.conversationStarted'),
+        error: (err) => errorMessage(err, t('marketplacePage.startConversationFailed')),
       },
     );
     setStarting(false);
@@ -54,7 +67,7 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
   return (
     <ButtonCard
       onClick={() => onClick(agent.agent_id)}
-      ariaLabel={`Open ${agent.display_name}`}
+      ariaLabel={t('marketplacePage.openAgent', { agent: agent.display_name })}
     >
       <div className="mb-3 flex min-w-0 items-center gap-3">
         <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-md border-[0.8px] border-[#FF682C] text-sm font-medium">
@@ -64,20 +77,25 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
           <span className="block text-ink dark:text-ink-dark">{agent.display_name}</span>
           <span className="block text-[12.5px] text-fg-secondary dark:text-fg-secondary-dark">
             {agent.app_name} • {agent.published_at
-              ? new Date(agent.published_at).toLocaleDateString('en-CA')
+              ? new Date(agent.published_at).toLocaleDateString(i18n.resolvedLanguage ?? i18n.language)
               : '—'}
           </span>
         </div>
       </div>
       <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
-        {agent.short_description || 'No description provided.'}
+        {agent.short_description || t('marketplacePage.noDescriptionProvided')}
       </p>
       <div className="mb-4 flex flex-wrap gap-2">
         {agent.category && (
-          <Badge label={agent.category} variant={CATEGORY_VARIANT[agent.category] ?? 'default'} />
+          <Badge
+            label={CATEGORY_LABEL_KEYS[agent.category]
+              ? t(`marketplacePage.categories.${CATEGORY_LABEL_KEYS[agent.category]}`)
+              : agent.category}
+            variant={CATEGORY_VARIANT[agent.category] ?? 'default'}
+          />
         )}
         {agent.has_knowledge_base && (
-          <Badge label="Knowledge" variant="success" icon={<BookOpen className="w-3 h-3" />} />
+          <Badge label={t('marketplacePage.knowledge')} variant="success" icon={<BookOpen className="w-3 h-3" />} />
         )}
         {agent.tags?.slice(0, 3).map((tag) => (
           <Badge key={`tag-${tag}`} label={tag} variant="default" />
@@ -89,17 +107,17 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
             <div className="flex items-center gap-1">
               <StarRating value={agent.rating_avg ? Math.round(agent.rating_avg) : null} size="sm" />
               {agent.rating_avg === null ? (
-                <span className="text-fg-tertiary dark:text-fg-tertiary-dark">No ratings</span>
+                <span className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplacePage.noRatings')}</span>
               ) : (
                 <span>{agent.rating_avg.toFixed(1)} ({agent.rating_count})</span>
               )}
             </div>
             {agent.conversation_count > 0 && (
-              <span>{agent.conversation_count.toLocaleString()} chats</span>
+              <span>{t('marketplacePage.chatCount', { count: agent.conversation_count })}</span>
             )}
           </div>
           <ButtonApp
-            label={starting ? '…' : 'Start Chat'}
+            label={starting ? '…' : t('marketplacePage.startChat')}
             variant="primary"
             size="compact"
             type="button"

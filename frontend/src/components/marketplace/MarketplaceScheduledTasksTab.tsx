@@ -10,11 +10,13 @@ import { FormField } from '../ui/FormField';
 import { BackgroundImage, CardApp } from '../..';
 import { SidePanel } from '../ui/SidePanel';
 import MarketplaceScheduledTaskPage from '../../pages/MarketplaceScheduledTaskPage';
+import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 12;
 
 /** Catalog of published scheduled tasks (read-only results). */
 export function MarketplaceScheduledTasksTab() {
+  const { t } = useTranslation('common');
   // Task shown in the right-hand detail panel (null = closed)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -47,11 +49,11 @@ export function MarketplaceScheduledTasksTab() {
       setTotal(data.total);
       setTotalPages(data.total_pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load scheduled tasks');
+      setError(err instanceof Error ? err.message : t('marketplacePage.loadScheduledTasksFailed'));
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, myAppsOnly, page]);
+  }, [debouncedSearch, myAppsOnly, page, t]);
 
   useEffect(() => { void fetchCatalog(); }, [fetchCatalog]);
 
@@ -59,7 +61,7 @@ export function MarketplaceScheduledTasksTab() {
   const handleClosePanel = useCallback(() => setSelectedTaskId(null), []);
 
   let content;
-  if (loading) content = <LoadingState message="Loading scheduled tasks..." />;
+  if (loading) content = <LoadingState message={t('marketplacePage.loadingScheduledTasks')} />;
   else if (error) content = <ErrorState error={error} onRetry={fetchCatalog} />;
   else if (tasks.length === 0) {
     content = (
@@ -70,16 +72,18 @@ export function MarketplaceScheduledTasksTab() {
                         iconSize={32}
                         variant="marron"
                       />
-        <h3 className="mt-4 text-lg font-medium text-fg dark:text-fg-dark">No scheduled tasks found</h3>
+        <h3 className="mt-4 text-lg font-medium text-fg dark:text-fg-dark">{t('marketplacePage.noScheduledTasksFound')}</h3>
         <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
-          {debouncedSearch || myAppsOnly ? 'Try adjusting your search or filters.' : 'No scheduled tasks have been published yet.'}
+          {debouncedSearch || myAppsOnly ? t('marketplacePage.adjustFilters') : t('marketplacePage.noScheduledTasksPublished')}
         </p>
       </CardApp>
     );
   } else {
     content = (
       <>
-        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Showing {tasks.length} of {total} task{total === 1 ? '' : 's'}</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          {t('marketplacePage.taskCount', { count: total, shown: tasks.length })}
+        </p>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {tasks.map((task) => (
             <MarketplaceScheduledTaskCard key={task.id} task={task} onClick={handleTaskClick} />
@@ -103,13 +107,13 @@ export function MarketplaceScheduledTasksTab() {
             id="scheduled-tasks-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search scheduled tasks..."
-            ariaLabel="Search scheduled tasks"
+            placeholder={t('marketplacePage.searchScheduledTasks')}
+            ariaLabel={t('marketplacePage.searchScheduledTasks')}
             inputClassName="pl-10 pr-3"
           />
         </div>
         <ButtonApp
-          label="My Apps"
+          label={t('marketplacePage.myApps')}
           variant="primary"
           size="control"
           ariaPressed={myAppsOnly}
@@ -126,7 +130,7 @@ export function MarketplaceScheduledTasksTab() {
             open
             side="right"
             onClose={handleClosePanel}
-            title="Marketplace"
+            title={t('marketplacePage.title')}
             widthClassName="w-[640px] max-w-full"
           >
             <MarketplaceScheduledTaskPage key={selectedTaskId} taskId={selectedTaskId} variant="panel" />

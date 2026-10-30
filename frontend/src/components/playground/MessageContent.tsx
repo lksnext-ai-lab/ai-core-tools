@@ -75,13 +75,13 @@ function MarkdownCode({ className, children, ...props }: any) {
   };
 
   return isInline ? (
-    <code className="bg-gray-100 px-1 py-0.5 rounded text-sm" {...props}>{children}</code>
+    <code className="bg-canvas-alt dark:bg-canvas-alt-dark text-fg-secondary dark:text-fg-secondary-dark px-1 py-0.5 rounded text-sm" {...props}>{children}</code>
   ) : (
     <div className="relative group">
       <button
         onClick={handleCopy}
         aria-label="Copy code"
-        className="absolute top-2 right-2 p-1.5 rounded-md bg-gray-700/50 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="absolute top-2 right-2 inline-flex cursor-pointer items-center justify-center gap-2 p-1.5 font-display font-normal tracking-[-0.02em] transition-colors rounded-md border border-ink bg-surface text-fg hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         {copied ? (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -237,7 +237,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
 
   return (
     <ResolveFileUrlContext.Provider value={resolveFileUrl}>
-      <div className="text-gray-800 dark:text-gray-200" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
+      <div className="text-fg dark:text-fg-dark" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
         {renderedContent}
       </div>
     </ResolveFileUrlContext.Provider>

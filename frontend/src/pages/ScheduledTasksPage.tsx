@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiService, type ScheduledTask } from "../services/api";
 import Title from "../components/ui/Title";
@@ -24,6 +25,7 @@ import ScheduledTaskDetailPage from "./ScheduledTaskDetailPage";
 import BackgroundImage from "../components/ui/BackgroundImage";
 
 export default function ScheduledTasksPage() {
+  const { t, i18n } = useTranslation("common");
   const { appId } = useParams();
   const navigate = useNavigate();
   const numericAppId = Number.parseInt(appId ?? "0", 10);
@@ -52,12 +54,12 @@ export default function ScheduledTasksPage() {
       toast.error(
         error instanceof Error
           ? error.message
-          : "No se pudieron cargar las tareas programadas",
+          : t("scheduledTasksPage.loadFailed"),
       );
     } finally {
       setLoading(false);
     }
-  }, [numericAppId]);
+  }, [numericAppId, t]);
 
   useEffect(() => {
     void load();
@@ -73,19 +75,19 @@ export default function ScheduledTasksPage() {
       toast.error(
         error instanceof Error
           ? error.message
-          : "No se pudo actualizar la tarea",
+          : t("scheduledTasksPage.updateFailed"),
       );
     }
   };
 
   const remove = async (task: ScheduledTask) => {
-    if (!window.confirm(`¿Eliminar la tarea «${task.name}»?`)) return;
+    if (!window.confirm(t("scheduledTasksPage.confirmDelete", { name: task.name }))) return;
     try {
       await apiService.deleteScheduledTask(numericAppId, task.id);
       await load();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "No se pudo eliminar la tarea",
+        error instanceof Error ? error.message : t("scheduledTasksPage.deleteFailed"),
       );
     }
   };
@@ -94,10 +96,10 @@ export default function ScheduledTasksPage() {
     setRunningTaskId(task.id);
     try {
       await apiService.runScheduledTaskNow(numericAppId, task.id);
-      toast.success(`«${task.name}» puesta en cola para ejecución inmediata`);
+      toast.success(t("scheduledTasksPage.runQueued", { name: task.name }));
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "No se pudo ejecutar la tarea",
+        error instanceof Error ? error.message : t("scheduledTasksPage.runFailed"),
       );
     } finally {
       setRunningTaskId(null);
@@ -106,7 +108,7 @@ export default function ScheduledTasksPage() {
 
   const columns: TableColumn<ScheduledTask>[] = [
     {
-      header: "Tarea",
+      header: t("scheduledTasksPage.columns.task"),
       className: "px-5 py-4",
       render: (task) => (
         <div className="flex items-start gap-2">
@@ -131,8 +133,8 @@ export default function ScheduledTasksPage() {
               />
               <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                 {task.conversation_mode === "continuous"
-                  ? "Conversación continua"
-                  : "Conversación nueva por ejecución"}
+                  ? t("scheduledTasksPage.conversationModes.continuous")
+                  : t("scheduledTasksPage.conversationModes.newPerRun")}
               </div>
             </div>
           </div>
@@ -140,59 +142,59 @@ export default function ScheduledTasksPage() {
       ),
     },
     {
-      header: "Agente",
+      header: t("scheduledTasksPage.columns.agent"),
       className: "px-5 py-4",
       render: (task) => (
         <Link
           className="text-xs text-bronze  dark:text-bronze-dark inline-block"
           to={`/apps/${appId}/agents/${task.agent_id}`}
         >
-          {agentNames[task.agent_id] ?? `Agente #${task.agent_id}`}{''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+          {agentNames[task.agent_id] ?? t("scheduledTasksPage.agentFallback", { id: task.agent_id })}{''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
 
         </Link>
       ),
     },
     {
-      header: "Próxima ejecución",
+      header: t("scheduledTasksPage.columns.nextRun"),
       className: "px-5 py-4  text-fg-secondary dark:text-fg-secondary-dark text-xs",
       render: (task) => (
         <span className="inline-flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-fg-tertiary dark:text-fg-tertiary-dark" />
           {task.next_run_at
-            ? new Date(task.next_run_at).toLocaleString()
-            : "Sin próxima ejecución"}
+            ? new Date(task.next_run_at).toLocaleString(i18n.resolvedLanguage ?? i18n.language)
+            : t("scheduledTasksPage.noNextRun")}
         </span>
       ),
     },
     {
-      header: "Estado",
+      header: t("scheduledTasksPage.columns.status"),
       className: "px-5 py-4",
       render: (task) => (
         <Badge
-          label={task.status === "active" ? "Activa" : "Pausada"}
+          label={task.status === "active" ? t("scheduledTasksPage.status.active") : t("scheduledTasksPage.status.paused")}
           variant={task.status === "active" ? "success" : "default"}
         />
       ),
     },
     {
-      header: "Acciones",
+      header: t("scheduledTasksPage.columns.actions"),
       sticky: 'right',
       headerClassName: "text-right",
       className: "px-5 py-4 text-right ",
       render: (task) => (
         <ActionDropdown
-          triggerText="Acciones"
-          triggerAriaLabel={`Acciones para ${task.name}`}
+          triggerText={t("scheduledTasksPage.actions.trigger")}
+          triggerAriaLabel={t("scheduledTasksPage.actions.forTask", { name: task.name })}
           size="sm"
           actions={[
             {
-              label: "Editar tarea",
+              label: t("scheduledTasksPage.actions.edit"),
               onClick: () => navigate(`/apps/${appId}/scheduled-tasks/${task.id}/edit`),
               icon: <Pencil className="h-4 w-4" />,
             },
             ...(task.status === "active"
               ? [{
-                  label: "Ejecutar ahora",
+                  label: t("scheduledTasksPage.actions.runNow"),
                   onClick: () => { void runNow(task); },
                   icon: runningTaskId === task.id
                     ? <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -201,14 +203,14 @@ export default function ScheduledTasksPage() {
                 }]
               : []),
             {
-              label: task.status === "active" ? "Pausar tarea" : "Reanudar tarea",
+              label: task.status === "active" ? t("scheduledTasksPage.actions.pause") : t("scheduledTasksPage.actions.resume"),
               onClick: () => { void toggle(task); },
               icon: task.status === "active"
                 ? <Pause className="h-4 w-4" />
                 : <Play className="h-4 w-4" />,
             },
             {
-              label: "Eliminar tarea",
+              label: t("scheduledTasksPage.actions.delete"),
               onClick: () => { void remove(task); },
               icon: <Trash2 className="h-4 w-4" />,
               variant: "danger",
@@ -222,23 +224,23 @@ export default function ScheduledTasksPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Title variant="titSecundario" titulo="Tareas programadas" subtitulo="Gestiona las tareas programadas de tus agentes" />
+        <Title variant="titSecundario" titulo={t("scheduledTasksPage.title")} subtitulo={t("scheduledTasksPage.subtitle")} />
         <ButtonLink
-          label="Nueva tarea programada"
+          label={t("scheduledTasksPage.createTask")}
           to={`/apps/${appId}/scheduled-tasks/new`}
           variant="primary"
           size="medium"
         />
       </div>
       {loading ? (
-        <LoadingState message="Cargando tareas…" variant="section" />
+        <LoadingState message={t("scheduledTasksPage.loading")} variant="section" />
       ) : (
         <Table<ScheduledTask>
           stickyEdgeColumns
           columns={columns}
           data={tasks}
           keyExtractor={(task) => task.id}
-          emptyMessage="No hay tareas programadas en este workspace."
+          emptyMessage={t("scheduledTasksPage.emptyMessage")}
           emptyIcon={<BackgroundImage icon={CalendarClock} size={64} iconSize={32} />}
         />
       )}
@@ -246,7 +248,7 @@ export default function ScheduledTasksPage() {
       {!loading && tasks.length === 0 && (
         <div className="text-center py-6">
           <ButtonLink
-            label="Crear primera tarea programada"
+            label={t("scheduledTasksPage.createFirstTask")}
             to={`/apps/${appId}/scheduled-tasks/new`}
             variant="primary"
             size="medium"
@@ -256,15 +258,15 @@ export default function ScheduledTasksPage() {
 
       {/* Task detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {selectedTaskId !== null && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
           <SidePanel
             open
             side="right"
             onClose={handleClosePanel}
-            title="Scheduled Tasks"
+            title={t("scheduledTasksPage.title")}
             headerActions={(
               <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
-                Vista de detalle
+                {t("scheduledTasksPage.detailView")}
               </span>
             )}
             widthClassName="w-[640px] max-w-full"

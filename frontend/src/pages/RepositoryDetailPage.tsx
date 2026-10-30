@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Clapperboard, Mic, FolderOpen, Folder, Home, ChevronRight, Video, FileText, ArrowDownToLine, ArrowLeftRight, Trash2, Tv, Search, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 import Modal from '../components/ui/Modal';
@@ -140,6 +141,7 @@ function getAllFolderPaths(
 
 const RepositoryDetailPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
+  const { t, i18n } = useTranslation('common');
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
   
@@ -249,7 +251,7 @@ const RepositoryDetailPage: React.FC = () => {
       if (clearError) setError(null);
     } catch (err) {
       console.error('Error loading repository:', err);
-      setError('Failed to load repository');
+      setError(t('repositoryDetailPage.errors.loadRepository'));
     } finally {
       setLoading(false);
     }
@@ -278,12 +280,12 @@ const RepositoryDetailPage: React.FC = () => {
       if (result.failed_files && result.failed_files.length > 0) {
         const failedMessages = result.failed_files.map((failed) => `${failed.filename}: ${failed.error}`).join('\n');
         const allFailed = !result.created_resources || result.created_resources.length === 0;
-        problems.push(`${allFailed ? 'Upload failed' : 'Some files failed to upload'}:\n${failedMessages}`);
+        problems.push(t(allFailed ? 'repositoryDetailPage.errors.uploadFailed' : 'repositoryDetailPage.errors.someFilesFailed', { messages: failedMessages }));
       }
       // Uploaded but not indexed (e.g. the embedding service rejected its API key)
       if (result.indexing_failures && result.indexing_failures.length > 0) {
         const indexingMessages = result.indexing_failures.map((failed) => `${failed.filename}: ${failed.error}`).join('\n');
-        problems.push(`Uploaded, but indexing failed (not searchable until reindexed):\n${indexingMessages}`);
+        problems.push(t('repositoryDetailPage.errors.indexingFailed', { messages: indexingMessages }));
       }
       if (problems.length > 0) {
         setError(problems.join('\n\n'));
@@ -299,7 +301,7 @@ const RepositoryDetailPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error uploading files:', err);
-      setError(err.message || 'Failed to upload files');
+      setError(err.message || t('repositoryDetailPage.errors.uploadFiles'));
     } finally {
       setUploading(false);
     }
@@ -323,7 +325,7 @@ const RepositoryDetailPage: React.FC = () => {
           const failedMessages = result.failed_files.map((f: any) => 
             `${f.filename}: ${f.error}`
           ).join('\n');
-          setError(`Some files failed:\n${failedMessages}`);
+          setError(t('repositoryDetailPage.errors.someMediaFilesFailed', { messages: failedMessages }));
         }
       } else {
         await apiService.addYouTube(
@@ -340,7 +342,7 @@ const RepositoryDetailPage: React.FC = () => {
       setYoutubeUrl('');
       await loadRepository(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to upload media');
+      setError(err.message || t('repositoryDetailPage.errors.uploadMedia'));
     } finally {
       setUploading(false);
     }
@@ -390,7 +392,7 @@ const RepositoryDetailPage: React.FC = () => {
       await loadRepository();
     } catch (err: any) {
       console.error('Error creating folder:', err);
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to create folder';
+      const errorMessage = err?.response?.data?.detail || err?.message || t('repositoryDetailPage.errors.createFolder');
       setError(errorMessage);
     }
   };
@@ -410,7 +412,7 @@ const RepositoryDetailPage: React.FC = () => {
       await loadRepository();
     } catch (err: any) {
       console.error('Error renaming folder:', err);
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to rename folder';
+      const errorMessage = err?.response?.data?.detail || err?.message || t('repositoryDetailPage.errors.renameFolder');
       setError(errorMessage);
     }
   };
@@ -433,7 +435,7 @@ const RepositoryDetailPage: React.FC = () => {
       await loadRepository();
     } catch (err: any) {
       console.error('Error deleting folder:', err);
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to delete folder';
+      const errorMessage = err?.response?.data?.detail || err?.message || t('repositoryDetailPage.errors.deleteFolder');
       setError(errorMessage);
     }
   };
@@ -453,7 +455,7 @@ const RepositoryDetailPage: React.FC = () => {
       await loadRepository();
     } catch (err: any) {
       console.error('Error moving folder:', err);
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to move folder';
+      const errorMessage = err?.response?.data?.detail || err?.message || t('repositoryDetailPage.errors.moveFolder');
       setError(errorMessage);
     }
   };
@@ -500,7 +502,7 @@ const RepositoryDetailPage: React.FC = () => {
       a.remove();
     } catch (err) {
       console.error('Error downloading resource:', err);
-      setError('Failed to download file');
+      setError(t('repositoryDetailPage.errors.downloadFile'));
     }
   };
 
@@ -519,16 +521,16 @@ const RepositoryDetailPage: React.FC = () => {
     if (reindexingId !== null) return;
     const siloId = repository?.silo_id;
     if (!siloId) {
-      setReindexNotice({ type: 'error', text: 'This repository is not linked to a silo.' });
+      setReindexNotice({ type: 'error', text: t('repositoryDetailPage.errors.repositoryNotLinked') });
       return;
     }
     setReindexingId(resource.resource_id);
     setReindexNotice(null);
     try {
       await apiService.reindexSiloResource(Number.parseInt(appId!), siloId, resource.resource_id);
-      setReindexNotice({ type: 'success', text: `"${resource.name}" reindexed successfully.` });
+      setReindexNotice({ type: 'success', text: t('repositoryDetailPage.reindex.success', { name: resource.name }) });
     } catch (err) {
-      setReindexNotice({ type: 'error', text: err instanceof Error ? err.message : 'Reindex failed' });
+      setReindexNotice({ type: 'error', text: err instanceof Error ? err.message : t('repositoryDetailPage.errors.reindex') });
     } finally {
       await loadRepository(false);
       setReindexingId(null);
@@ -546,7 +548,7 @@ const RepositoryDetailPage: React.FC = () => {
       setResourceToDelete(null);
     } catch (err) {
       console.error('Error deleting resource:', err);
-      setError('Failed to delete file');
+      setError(t('repositoryDetailPage.errors.deleteFile'));
     }
   };
 
@@ -569,7 +571,7 @@ const RepositoryDetailPage: React.FC = () => {
       setMoveToFolderId(null);
     } catch (err) {
       console.error('Error moving resource:', err);
-      setError('Failed to move file');
+      setError(t('repositoryDetailPage.errors.moveFile'));
     }
   };
 
@@ -594,7 +596,7 @@ const RepositoryDetailPage: React.FC = () => {
       setMediaToDelete(null);
     } catch (err) {
       console.error(err);
-      setError('Failed to delete media');
+      setError(t('repositoryDetailPage.errors.deleteMedia'));
     }
   };
 
@@ -620,12 +622,12 @@ const RepositoryDetailPage: React.FC = () => {
       setMoveMediaToFolderId(null);
     } catch (err) {
       console.error(err);
-      setError('Failed to move media');
+      setError(t('repositoryDetailPage.errors.moveMedia'));
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString(i18n.resolvedLanguage);
   };
 
   if (loading) {
@@ -638,9 +640,9 @@ const RepositoryDetailPage: React.FC = () => {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-fg dark:text-fg-dark mb-4">Repository not found</h1>
+          <h1 className="text-2xl font-bold text-fg dark:text-fg-dark mb-4">{t('repositoryDetailPage.notFound')}</h1>
           <ButtonApp
-            label="Back to Repositories"
+            label={t('repositoryDetailPage.backToRepositories')}
             variant="secondary"
             size="medium"
             onClick={() => navigate(`/apps/${appId}/repositories`)}
@@ -656,19 +658,19 @@ const RepositoryDetailPage: React.FC = () => {
       <div className="mb-8">
         <Title
           titulo={repository.name}
-          subtitulo={`Created ${formatDate(repository.created_at)} • ${repository.resources.length} files`}
+          subtitulo={t('repositoryDetailPage.createdSummary', { date: formatDate(repository.created_at), count: repository.resources.length })}
           subtitleMarginBottom={0}
         />
         {(repository.transcription_service_id || repository.video_ai_service_id) && (
           <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
             {repository.transcription_service_id && (
               <span className="inline-flex items-center gap-1 mr-3">
-                <Mic className="w-4 h-4" aria-hidden="true" /> <span>Transcription: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</span>
+                <Mic className="w-4 h-4" aria-hidden="true" /> <span>{t('repositoryDetailPage.services.transcription')}: {repository.ai_services.find(s => s.service_id === repository.transcription_service_id)?.name ?? t('repositoryDetailPage.services.serviceNumber', { id: repository.transcription_service_id })}</span>
               </span>
             )}
             {repository.video_ai_service_id && (
               <span className="inline-flex items-center gap-1">
-                <Clapperboard className="w-4 h-4" aria-hidden="true" /> <span>Video AI: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</span>
+                <Clapperboard className="w-4 h-4" aria-hidden="true" /> <span>{t('repositoryDetailPage.services.videoAi')}: {repository.ai_services.find(s => s.service_id === repository.video_ai_service_id)?.name ?? t('repositoryDetailPage.services.serviceNumber', { id: repository.video_ai_service_id })}</span>
               </span>
             )}
           </p>
@@ -695,8 +697,8 @@ const RepositoryDetailPage: React.FC = () => {
         <Alert
           key={warning}
           type="warning"
-          title="A service used by this repository is failing"
-          message={`${warning} Check the service settings (or ask your platform administrator for system services), then reindex the affected files.`}
+          title={t('repositoryDetailPage.serviceWarningTitle')}
+          message={t('repositoryDetailPage.serviceWarningMessage', { warning })}
           className="mb-6"
         />
       ))}
@@ -722,7 +724,7 @@ const RepositoryDetailPage: React.FC = () => {
         <div className="min-w-0">
           {/* Toolbar: breadcrumb + actions */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-line dark:border-line-dark">
-            <nav aria-label="Folder path" className="flex flex-wrap items-center gap-1 min-w-0 text-sm">
+            <nav aria-label={t('repositoryDetailPage.folderPath')} className="flex flex-wrap items-center gap-1 min-w-0 text-sm">
               <button
                 onClick={() => handleFolderSelect(null, '')}
                 aria-current={selectedFolderId === null ? 'page' : undefined}
@@ -732,7 +734,7 @@ const RepositoryDetailPage: React.FC = () => {
                     : 'text-fg-tertiary hover:text-accent dark:text-fg-tertiary-dark dark:hover:text-accent-dark'
                 }`}
               >
-                <Home className="w-4 h-4" /> Repository Root
+                <Home className="w-4 h-4" /> {t('repositoryDetailPage.root')}
               </button>
               {folderTrail.map((crumb, index) => {
                 const isCurrent = index === folderTrail.length - 1;
@@ -754,13 +756,13 @@ const RepositoryDetailPage: React.FC = () => {
                 );
               })}
               <span className="ml-1 text-fg-faint dark:text-fg-faint-dark">
-                · {filteredResources.length + filteredMedia.length} files
+                · {t('repositoryDetailPage.files', { count: filteredResources.length + filteredMedia.length })}
               </span>
             </nav>
 
             <div className="flex flex-wrap items-center gap-2">
               <ButtonApp
-                label="Search"
+                label={t('repositoryDetailPage.actions.search')}
                 variant="muted"
                 size="control"
                 icon={<Search className="w-4 h-4" />}
@@ -769,7 +771,7 @@ const RepositoryDetailPage: React.FC = () => {
               {canEdit && (
                 <>
                   <ButtonApp
-                    label="Upload Media"
+                    label={t('repositoryDetailPage.actions.uploadMedia')}
                     variant="secondary"
                     size="control"
                     icon={<Video className="w-4 h-4" />}
@@ -779,7 +781,7 @@ const RepositoryDetailPage: React.FC = () => {
                     disabled={uploading}
                   />
                   <ButtonApp
-                    label="Upload Files"
+                    label={t('repositoryDetailPage.actions.uploadFiles')}
                     variant="primary"
                     size="control"
                     icon={<FolderOpen className="w-4 h-4" />}
@@ -800,14 +802,14 @@ const RepositoryDetailPage: React.FC = () => {
               </div>
               <h3 className="font-display text-lg font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-1">
                 {selectedFolderId === null
-                  ? 'No files or media in repository root'
-                  : 'No files or media in this folder'}
+                  ? t('repositoryDetailPage.empty.rootTitle')
+                  : t('repositoryDetailPage.empty.folderTitle')}
               </h3>
 
               <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
                 {selectedFolderId === null
-                  ? 'Upload documents or media to get started'
-                  : 'Upload files or media to this folder'}
+                  ? t('repositoryDetailPage.empty.rootDescription')
+                  : t('repositoryDetailPage.empty.folderDescription')}
               </p>
             </div>
           ) : (
@@ -815,11 +817,11 @@ const RepositoryDetailPage: React.FC = () => {
               <table className="min-w-full divide-y divide-line dark:divide-line-dark">
                 <thead className="bg-tableCab dark:bg-tableCab-dark">
                   <tr>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Name</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Type</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">Uploaded</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('repositoryDetailPage.columns.name')}</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('repositoryDetailPage.columns.type')}</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('repositoryDetailPage.columns.uploaded')}</th>
                     <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">{t('repositoryDetailPage.columns.actions')}</span>
                     </th>
                   </tr>
                 </thead>
@@ -840,7 +842,7 @@ const RepositoryDetailPage: React.FC = () => {
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleFolderSelect(folder.folder_id, folderPath);
                             }}
-                            title="Double-click to open"
+                            title={t('repositoryDetailPage.doubleClickToOpen')}
                             className="flex items-center gap-3 text-left"
                           >
                             <BackgroundImage icon={Folder} size={32} iconSize={16} variant="marron" />
@@ -850,7 +852,7 @@ const RepositoryDetailPage: React.FC = () => {
                             )}
                           </button>
                         </td>
-                        <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">Folder</td>
+                        <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">{t('repositoryDetailPage.folderType')}</td>
                         <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">—</td>
                         <td className="px-5 py-3" />
                       </tr>
@@ -867,7 +869,7 @@ const RepositoryDetailPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">
-                        {(resource.file_type || 'unknown').toUpperCase()}
+                        {(resource.file_type || t('repositoryDetailPage.unknownType')).toUpperCase()}
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap text-fg-tertiary dark:text-fg-tertiary-dark">
                         {formatDate(resource.created_at)}
@@ -879,21 +881,23 @@ const RepositoryDetailPage: React.FC = () => {
                               onClick={() => handleMoveResource(resource)}
                               className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
                             >
-                              <ArrowLeftRight className="w-4 h-4" />
+                              <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
+                              <span className="sr-only">{t('repositoryDetailPage.actions.moveFile', { name: resource.name })}</span>
                             </button>
                           )}
                           <button
                             onClick={() => handleDownloadResource(resource)}
                             className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
                           >
-                            <ArrowDownToLine className="w-4 h-4" />
+                            <ArrowDownToLine className="w-4 h-4" aria-hidden="true" />
+                            <span className="sr-only">{t('repositoryDetailPage.actions.downloadFile', { name: resource.name })}</span>
                           </button>
                           {canEdit && (
                             <button
                               onClick={() => handleReindexResource(resource)}
                               disabled={reindexingId !== null}
-                              title="Re-extract and reindex this file"
-                              aria-label={`Reindex ${resource.name}`}
+                              title={t('repositoryDetailPage.reindex.title')}
+                              aria-label={t('repositoryDetailPage.reindex.ariaLabel', { name: resource.name })}
                               className="p-2 rounded text-fg-tertiary hover:text-fg hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark"
                             >
                               {reindexingId === resource.resource_id
@@ -906,7 +910,8 @@ const RepositoryDetailPage: React.FC = () => {
                               onClick={() => handleDeleteResource(resource)}
                               className="p-2 rounded text-fg-tertiary hover:text-error hover:bg-error-bg dark:text-fg-tertiary-dark dark:hover:text-error-dark dark:hover:bg-error-bg-dark"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
+                              <span className="sr-only">{t('repositoryDetailPage.actions.deleteFile', { name: resource.name })}</span>
                             </button>
                           )}
                         </div>
@@ -923,13 +928,13 @@ const RepositoryDetailPage: React.FC = () => {
                           <div className="min-w-0">
                             <h4 className="font-medium">{media.name}</h4>
                             <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                              {media.language || 'detecting...'} •{' '}
+                              {media.language || t('repositoryDetailPage.media.detecting')} •{' '}
                               {media.duration
                                 ? `${media.duration.toFixed(1)}s`
-                                : 'processing...'}
+                                : t('repositoryDetailPage.media.processing')}
                               {media.processing_mode === 'multimodal' && (
-                                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark" title="Indexed with multimodal video analysis">
-                                  Multimodal
+                                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-bronze-bg text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark" title={t('repositoryDetailPage.media.multimodalTitle')}>
+                                  {t('repositoryDetailPage.media.multimodal')}
                                 </span>
                               )}
                             </p>
@@ -951,7 +956,7 @@ const RepositoryDetailPage: React.FC = () => {
                         <div className="flex items-center justify-end gap-1">
                           <StatusBadge
                             status={getMediaStatusBadgeType(media.status)}
-                            customLabel={media.status.replace('_', ' ')}
+                            customLabel={t(`repositoryDetailPage.media.statuses.${media.status}`, { defaultValue: media.status.replace('_', ' ') })}
                           />
 
                           {canEdit && (
@@ -988,11 +993,11 @@ const RepositoryDetailPage: React.FC = () => {
           setShowDeleteModal(false);
           setResourceToDelete(null);
         }}
-        title="Delete File"
+        title={t('repositoryDetailPage.modals.deleteFile.title')}
       >
         <div className="p-6">
           <p className="text-gray-700 mb-6">
-            Are you sure you want to delete "{resourceToDelete?.name}"? This action cannot be undone.
+            {t('repositoryDetailPage.modals.deleteFile.message', { name: resourceToDelete?.name })}
           </p>
           <div className="flex justify-end gap-3">
             <button
@@ -1002,13 +1007,13 @@ const RepositoryDetailPage: React.FC = () => {
               }}
               className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              Cancel
+              {t('repositoryDetailPage.actions.cancel')}
             </button>
             <button
               onClick={confirmDeleteResource}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
             >
-              Delete
+              {t('repositoryDetailPage.actions.delete')}
             </button>
           </div>
         </div>
@@ -1018,26 +1023,26 @@ const RepositoryDetailPage: React.FC = () => {
       <Modal
         isOpen={showCreateFolderModal}
         onClose={() => setShowCreateFolderModal(false)}
-        title="Create Folder"
+        title={t('repositoryDetailPage.modals.createFolder.title')}
       >
         <div className="space-y-4">
           <FormField
-            label="Folder Name"
+            label={t('repositoryDetailPage.modals.folderName')}
             id="create-folder-name"
             type="text"
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            placeholder="Enter folder name"
+            placeholder={t('repositoryDetailPage.modals.folderNamePlaceholder')}
           />
           <div className="flex justify-end space-x-3">
             <ButtonApp
-              label="Cancel"
+              label={t('repositoryDetailPage.actions.cancel')}
               variant="secondary"
               size="medium"
               onClick={() => setShowCreateFolderModal(false)}
             />
             <ButtonApp
-              label="Create"
+              label={t('repositoryDetailPage.actions.create')}
               variant="primary"
               size="medium"
               onClick={createFolder}
@@ -1051,26 +1056,26 @@ const RepositoryDetailPage: React.FC = () => {
       <Modal
         isOpen={showRenameFolderModal}
         onClose={() => setShowRenameFolderModal(false)}
-        title="Rename Folder"
+        title={t('repositoryDetailPage.modals.renameFolder.title')}
       >
         <div className="space-y-4">
           <FormField
-            label="Folder Name"
+            label={t('repositoryDetailPage.modals.folderName')}
             id="rename-folder-name"
             type="text"
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            placeholder="Enter folder name"
+            placeholder={t('repositoryDetailPage.modals.folderNamePlaceholder')}
           />
           <div className="flex justify-end space-x-3">
             <ButtonApp
-              label="Cancel"
+              label={t('repositoryDetailPage.actions.cancel')}
               variant="secondary"
               size="medium"
               onClick={() => setShowRenameFolderModal(false)}
             />
             <ButtonApp
-              label="Rename"
+              label={t('repositoryDetailPage.actions.rename')}
               variant="primary"
               size="medium"
               onClick={renameFolder}
@@ -1084,25 +1089,24 @@ const RepositoryDetailPage: React.FC = () => {
       <Modal
         isOpen={showDeleteFolderModal}
         onClose={() => setShowDeleteFolderModal(false)}
-        title="Delete Folder"
+        title={t('repositoryDetailPage.modals.deleteFolder.title')}
       >
         <div className="space-y-4">
           <p className="text-gray-700">
-            Are you sure you want to delete the folder "{folderActionData.folderName}"?
-            This will also delete all files and subfolders inside it.
+            {t('repositoryDetailPage.modals.deleteFolder.message', { name: folderActionData.folderName })}
           </p>
           <div className="flex justify-end space-x-3">
             <button
               onClick={() => setShowDeleteFolderModal(false)}
               className="px-4 py-2 text-gray-600 hover:text-gray-800"
             >
-              Cancel
+              {t('repositoryDetailPage.actions.cancel')}
             </button>
             <button
               onClick={deleteFolder}
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
             >
-              Delete
+              {t('repositoryDetailPage.actions.delete')}
             </button>
           </div>
         </div>
@@ -1115,25 +1119,24 @@ const RepositoryDetailPage: React.FC = () => {
           setShowDeleteMediaModal(false);
           setMediaToDelete(null);
         }}
-        title="Delete Media"
+        title={t('repositoryDetailPage.modals.deleteMedia.title')}
       >
         <div className="p-6">
           <p className="text-gray-700 mb-6">
-            Are you sure you want to delete "{mediaToDelete?.name}"?
-            This action cannot be undone.
+            {t('repositoryDetailPage.modals.deleteMedia.message', { name: mediaToDelete?.name })}
           </p>
           <div className="flex justify-end gap-3">
             <button
               onClick={() => setShowDeleteMediaModal(false)}
               className="px-4 py-2 bg-gray-100 rounded-lg"
             >
-              Cancel
+              {t('repositoryDetailPage.actions.cancel')}
             </button>
             <button
               onClick={confirmDeleteMedia}
               className="px-4 py-2 bg-red-600 text-white rounded-lg"
             >
-              Delete
+              {t('repositoryDetailPage.actions.delete')}
             </button>
           </div>
         </div>
@@ -1143,19 +1146,19 @@ const RepositoryDetailPage: React.FC = () => {
       <Modal
         isOpen={showMoveFolderModal}
         onClose={() => setShowMoveFolderModal(false)}
-        title="Move Folder"
+        title={t('repositoryDetailPage.modals.moveFolder.title')}
       >
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Move "{folderActionData.folderName}" to:
+              {t('repositoryDetailPage.modals.moveTo', { name: folderActionData.folderName })}
             </label>
             <select
               value={newParentFolderId || ''}
               onChange={(e) => setNewParentFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Repository Root</option>
+              <option value="">{t('repositoryDetailPage.root')}</option>
               {getValidDestinationFolders().map((folder) => (
                 <option key={folder.folder_id} value={folder.folder_id}>
                   {folder.full_path}
@@ -1168,13 +1171,13 @@ const RepositoryDetailPage: React.FC = () => {
               onClick={() => setShowMoveFolderModal(false)}
               className="px-4 py-2 text-gray-600 hover:text-gray-800"
             >
-              Cancel
+              {t('repositoryDetailPage.actions.cancel')}
             </button>
             <button
               onClick={moveFolder}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
-              Move
+              {t('repositoryDetailPage.actions.move')}
             </button>
           </div>
         </div>
@@ -1184,11 +1187,11 @@ const RepositoryDetailPage: React.FC = () => {
       <Modal
         isOpen={showMoveMediaModal}
         onClose={() => setShowMoveMediaModal(false)}
-        title="Move Media"
+        title={t('repositoryDetailPage.modals.moveMedia.title')}
       >
         <div className="space-y-4">
           <label className="block text-sm font-medium text-gray-700">
-            Move "{mediaToMove?.name}" to:
+            {t('repositoryDetailPage.modals.moveTo', { name: mediaToMove?.name })}
           </label>
 
           <select
@@ -1200,7 +1203,7 @@ const RepositoryDetailPage: React.FC = () => {
             }
             className="w-full px-3 py-2 border rounded-md"
           >
-            <option value="">Repository Root</option>
+            <option value="">{t('repositoryDetailPage.root')}</option>
             {repository?.folders &&
               getAllFolderPaths(repository.folders).map((folder) => (
                 <option key={folder.folder_id} value={folder.folder_id}>
@@ -1214,13 +1217,13 @@ const RepositoryDetailPage: React.FC = () => {
               onClick={() => setShowMoveMediaModal(false)}
               className="px-4 py-2 bg-gray-100 rounded-lg"
             >
-              Cancel
+              {t('repositoryDetailPage.actions.cancel')}
             </button>
             <button
               onClick={confirmMoveMedia}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg"
             >
-              Move
+              {t('repositoryDetailPage.actions.move')}
             </button>
           </div>
         </div>
@@ -1230,19 +1233,19 @@ const RepositoryDetailPage: React.FC = () => {
       <Modal
         isOpen={showMoveModal}
         onClose={() => setShowMoveModal(false)}
-        title="Move File"
+        title={t('repositoryDetailPage.modals.moveFile.title')}
       >
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Move "{resourceToMove?.name}" to:
+              {t('repositoryDetailPage.modals.moveTo', { name: resourceToMove?.name })}
             </label>
             <select
               value={moveToFolderId || ''}
               onChange={(e) => setMoveToFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Repository Root</option>
+              <option value="">{t('repositoryDetailPage.root')}</option>
               {repository?.folders ? getAllFolderPaths(repository.folders).map((folder) => (
                 <option key={folder.folder_id} value={folder.folder_id}>
                   {folder.full_path}
@@ -1255,13 +1258,13 @@ const RepositoryDetailPage: React.FC = () => {
               onClick={() => setShowMoveModal(false)}
               className="px-4 py-2 text-gray-600 hover:text-gray-800"
             >
-              Cancel
+              {t('repositoryDetailPage.actions.cancel')}
             </button>
             <button
               onClick={confirmMoveResource}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
-              Move
+              {t('repositoryDetailPage.actions.move')}
             </button>
           </div>
         </div>
@@ -1275,7 +1278,7 @@ const RepositoryDetailPage: React.FC = () => {
           setMediaFiles([]);
           setYoutubeUrl('');
         }}
-        title="Upload Media"
+        title={t('repositoryDetailPage.modals.uploadMedia.title')}
       >
         <div className="space-y-5">
           {/* Upload Type */}
@@ -1290,7 +1293,7 @@ const RepositoryDetailPage: React.FC = () => {
               }`}
             >
               <BackgroundImage icon={FolderOpen} variant={uploadType === 'file' ? 'marron' : 'gris'} />
-              <span className="font-display tracking-[-0.02em]">File Upload</span>
+              <span className="font-display tracking-[-0.02em]">{t('repositoryDetailPage.upload.file')}</span>
             </button>
             <button
               onClick={() => setUploadType('youtube')}
@@ -1302,7 +1305,7 @@ const RepositoryDetailPage: React.FC = () => {
               }`}
             >
               <BackgroundImage icon={Tv} variant={uploadType === 'youtube' ? 'marron' : 'gris'} />
-              <span className="font-display tracking-[-0.02em]">YouTube URL</span>
+              <span className="font-display tracking-[-0.02em]">{t('repositoryDetailPage.upload.youtubeUrl')}</span>
             </button>
           </div>
 
@@ -1310,7 +1313,7 @@ const RepositoryDetailPage: React.FC = () => {
           {uploadType === 'file' && (
             <div>
               <label htmlFor="media-files-input" className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
-                Select Video/Audio Files
+                {t('repositoryDetailPage.upload.selectMediaFiles')}
               </label>
               <input
                 id="media-files-input"
@@ -1321,7 +1324,7 @@ const RepositoryDetailPage: React.FC = () => {
                 className="w-full p-3 text-sm text-fg-secondary border border-dashed border-line-strong rounded-lg bg-surface-tint cursor-pointer dark:text-fg-secondary-dark dark:border-line-strong-dark dark:bg-surface-tint-dark file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-ink file:bg-surface file:text-fg file:font-display file:text-sm file:cursor-pointer hover:file:bg-surface-hover dark:file:border-ink-dark dark:file:bg-surface-dark dark:file:text-fg-dark"
               />
               {mediaFiles.length > 0 && (
-                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">{mediaFiles.length} file(s) selected</p>
+                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">{t('repositoryDetailPage.upload.selectedFiles', { count: mediaFiles.length })}</p>
               )}
             </div>
           )}
@@ -1329,7 +1332,7 @@ const RepositoryDetailPage: React.FC = () => {
           {/* YouTube URL */}
           {uploadType === 'youtube' && (
             <FormField
-              label="YouTube URL"
+              label={t('repositoryDetailPage.upload.youtubeUrl')}
               id="youtube-url-input"
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -1339,50 +1342,50 @@ const RepositoryDetailPage: React.FC = () => {
 
           {/* Configuration */}
           <div className="border-t border-line pt-5 dark:border-line-dark">
-            <h3 className="font-display text-base font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-3">Processing Options</h3>
+            <h3 className="font-display text-base font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-3">{t('repositoryDetailPage.upload.processingOptions')}</h3>
 
             {/* Repository AI Services (read-only info) */}
             <div className="mb-4 space-y-2">
               {repository?.transcription_service_id ? (
                 <Alert
                   type="success"
-                  title="Transcription"
+                  title={t('repositoryDetailPage.services.transcription')}
                   message={<strong>{repository.ai_services?.find(s => s.service_id === repository.transcription_service_id)?.name ?? `Service #${repository.transcription_service_id}`}</strong>}
                 />
               ) : (
                 <Alert
                   type="error"
-                  title="Transcription service missing"
-                  message="No transcription service configured. Please set one in the repository settings before uploading media."
+                  title={t('repositoryDetailPage.upload.transcriptionMissingTitle')}
+                  message={t('repositoryDetailPage.upload.transcriptionMissingMessage')}
                 />
               )}
               {repository?.video_ai_service_id && (
                 <Alert
                   type="info"
-                  title="Video Analysis"
-                  message={<><strong>{repository.ai_services?.find(s => s.service_id === repository.video_ai_service_id)?.name ?? `Service #${repository.video_ai_service_id}`}</strong> (multimodal enabled)</>}
+                  title={t('repositoryDetailPage.upload.videoAnalysis')}
+                  message={<><strong>{repository.ai_services?.find(s => s.service_id === repository.video_ai_service_id)?.name ?? t('repositoryDetailPage.services.serviceNumber', { id: repository.video_ai_service_id })}</strong> ({t('repositoryDetailPage.upload.multimodalEnabled')})</>}
                 />
               )}
             </div>
 
             <div className="space-y-3">
               <FormSelect
-                label="Language (optional)"
+                label={t('repositoryDetailPage.upload.languageOptional')}
                 id="media-language-select"
                 value={mediaConfig.forced_language}
                 onChange={(e) => setMediaConfig({...mediaConfig, forced_language: e.target.value})}
                 options={[
-                  { value: '', label: 'Auto-detect' },
-                  { value: 'es', label: 'Spanish' },
-                  { value: 'en', label: 'English' },
-                  { value: 'eu', label: 'Basque' },
-                  { value: 'fr', label: 'French' },
+                  { value: '', label: t('repositoryDetailPage.upload.languages.autoDetect') },
+                  { value: 'es', label: t('repositoryDetailPage.upload.languages.spanish') },
+                  { value: 'en', label: t('repositoryDetailPage.upload.languages.english') },
+                  { value: 'eu', label: t('repositoryDetailPage.upload.languages.basque') },
+                  { value: 'fr', label: t('repositoryDetailPage.upload.languages.french') },
                 ]}
               />
 
               <div className="grid grid-cols-3 gap-3">
                 <FormField
-                  label="Min Chunk (s)"
+                  label={t('repositoryDetailPage.upload.minChunk')}
                   id="chunk-min-duration"
                   type="number"
                   value={mediaConfig.chunk_min_duration}
@@ -1392,7 +1395,7 @@ const RepositoryDetailPage: React.FC = () => {
                   labelClassName="block text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1"
                 />
                 <FormField
-                  label="Max Chunk (s)"
+                  label={t('repositoryDetailPage.upload.maxChunk')}
                   id="chunk-max-duration"
                   type="number"
                   value={mediaConfig.chunk_max_duration}
@@ -1402,7 +1405,7 @@ const RepositoryDetailPage: React.FC = () => {
                   labelClassName="block text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1"
                 />
                 <FormField
-                  label="Overlap (s)"
+                  label={t('repositoryDetailPage.upload.overlap')}
                   id="chunk-overlap"
                   type="number"
                   value={mediaConfig.chunk_overlap}
@@ -1418,12 +1421,12 @@ const RepositoryDetailPage: React.FC = () => {
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-5 border-t border-line dark:border-line-dark">
             <ButtonApp
-              label="Cancel"
+              label={t('repositoryDetailPage.actions.cancel')}
               variant="secondary"
               onClick={() => setShowMediaUploadModal(false)}
             />
             <ButtonApp
-              label={uploading ? 'Uploading...' : 'Upload'}
+              label={uploading ? t('repositoryDetailPage.upload.uploading') : t('repositoryDetailPage.upload.upload')}
               variant="primary"
               onClick={handleMediaUpload}
               disabled={

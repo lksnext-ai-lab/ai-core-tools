@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import Title from '../components/ui/Title';
 import { FormField, FormSelect, FormTextArea } from '../components/ui/FormField';
 import { FormActions } from '../components/ui/FormActions';
@@ -35,6 +36,7 @@ interface DomainFormData {
 function DomainFormPage() {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
   const mutate = useApiMutation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,13 +57,13 @@ function DomainFormPage() {
   });
 
   const isNewDomain = domainId === 'new' || domainId === '0';
-  let submitButtonLabel = 'Update Domain';
-  if (isNewDomain) {
-    submitButtonLabel = 'Create Domain';
-  }
+  let submitButtonLabelKey = 'domainFormPage.actions.update';
   if (saving) {
-    submitButtonLabel = 'Saving...';
+    submitButtonLabelKey = 'domainFormPage.actions.saving';
+  } else if (isNewDomain) {
+    submitButtonLabelKey = 'domainFormPage.actions.create';
   }
+  const submitButtonLabel = t(submitButtonLabelKey);
   const vectorDbSelectValue = vectorDbOptions.length === 0 ? '' : formData.vector_db_type;
 
   useEffect(() => {
@@ -119,7 +121,7 @@ function DomainFormPage() {
       }
     } catch (err) {
       console.error('Error loading domain data:', err);
-      setLoadError(errorMessage(err, MESSAGES.LOAD_FAILED('domain')));
+      setLoadError(errorMessage(err, t('domainFormPage.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -143,9 +145,9 @@ function DomainFormPage() {
         return apiService.updateDomain(numericAppId, domainIdNum, updatePayload);
       },
       {
-        loading: isNewDomain ? MESSAGES.CREATING('domain') : MESSAGES.UPDATING('domain'),
-        success: isNewDomain ? MESSAGES.CREATED('domain') : MESSAGES.UPDATED('domain'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('domain')),
+        loading: t(isNewDomain ? 'domainFormPage.notifications.creating' : 'domainFormPage.notifications.updating'),
+        success: t(isNewDomain ? 'domainFormPage.notifications.created' : 'domainFormPage.notifications.updated'),
+        error: (err) => errorMessage(err, t('domainFormPage.notifications.saveFailed')),
       },
     );
     setSaving(false);
@@ -164,18 +166,18 @@ function DomainFormPage() {
 
 if (loading) {
     return (
-      <LoadingState variant="page" message="Loading domain..." />
+  <LoadingState variant="page" message={t('domainFormPage.loading')} />
     );
   }
 
   if (loadError) {
     return (
       <div className="p-6">
-        <Title variant="titPrincipal" titulo={isNewDomain ? 'Create Domain' : 'Edit Domain'} />
+        <Title variant="titPrincipal" titulo={t(isNewDomain ? 'domainFormPage.createTitle' : 'domainFormPage.editTitle')} />
         
         <Alert
           type="error"
-          title="Error"
+          title={t('domainFormPage.errorTitle')}
           message={(
             <>
               {loadError}
@@ -185,7 +187,7 @@ if (loading) {
                 onClick={loadDomainData}
                 className="mt-4 bg-red-100 px-2 py-1 rounded-md text-red-800 hover:bg-red-200"
               >
-                Try Again
+                {t('domainFormPage.tryAgain')}
               </button>
             </>
           )}
@@ -197,46 +199,46 @@ if (loading) {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <Title variant="titPrincipal" titulo={isNewDomain ? 'Create Domain' : 'Edit Domain'} />
+        <Title variant="titPrincipal" titulo={t(isNewDomain ? 'domainFormPage.createTitle' : 'domainFormPage.editTitle')} />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 ">
         {/* Basic Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
-            label="Domain Name"
+            label={t('domainFormPage.fields.name')}
             id="domain-name"
             type="text"
             value={formData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
-            placeholder="My Website"
+            placeholder={t('domainFormPage.fields.namePlaceholder')}
             required
           />
 
           <FormField
-            label="Base URL"
+            label={t('domainFormPage.fields.baseUrl')}
             id="base-url"
             type="url"
             value={formData.base_url}
             onChange={(e) => handleInputChange('base_url', e.target.value)}
-            placeholder="https://example.com"
+            placeholder={t('domainFormPage.fields.baseUrlPlaceholder')}
             required
           />
         </div>
 
         <FormTextArea
-          label="Description"
+          label={t('domainFormPage.fields.description')}
           id="description"
           value={formData.description}
           onChange={(e) => handleInputChange('description', e.target.value)}
           rows={3}
-          placeholder="Description of this domain..."
+          placeholder={t('domainFormPage.fields.descriptionPlaceholder')}
         />
 
         {/* Embedding Service Selection */}
         <div>
           <FormSelect
-            label="Embedding Service"
+            label={t('domainFormPage.fields.embeddingService')}
             id="embedding-service"
             value={formData.embedding_service_id || ''}
             onChange={(e) => {
@@ -246,11 +248,14 @@ if (loading) {
             required={isNewDomain}
             disabled={!isNewDomain}
             options={[
-              { value: '', label: 'Select an embedding service' },
-              ...selectableServiceOptions(embeddingServices, savedEmbeddingServiceId).map((service) => ({
-                value: service.service_id,
-                label: serviceOptionLabel(service, `${service.is_system ? '[System] ' : ''}${service.name}`),
-              })),
+              { value: '', label: t('domainFormPage.fields.selectEmbeddingService') },
+              ...selectableServiceOptions(embeddingServices, savedEmbeddingServiceId).map((service) => {
+                const systemPrefix = service.is_system ? `[${t('domainFormPage.system')}] ` : '';
+                return {
+                  value: service.service_id,
+                  label: serviceOptionLabel(service, `${systemPrefix}${service.name}`),
+                };
+              }),
             ]}
             ariaDescribedBy={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding-service')}
           />
@@ -261,12 +266,12 @@ if (loading) {
           />
           {embeddingServices.length === 0 && (
             <p className="text-xs text-error dark:text-error-dark mt-1">
-              No embedding services available. Please create one first.
+              {t('domainFormPage.messages.noEmbeddingServices')}
             </p>
           )}
           {!isNewDomain && (
             <p className="text-xs text-accent dark:text-accent-dark mt-1">
-              The embedding service cannot be changed after a domain is created.
+              {t('domainFormPage.messages.embeddingServiceLocked')}
             </p>
           )}
         </div>
@@ -276,7 +281,7 @@ if (loading) {
         {/* Vector Database Selection */}
         <div>
           <FormSelect
-            label="Vector Database"
+            label={t('domainFormPage.fields.vectorDatabase')}
             id="domain-vector-db"
             value={vectorDbSelectValue}
             onChange={(e) => handleInputChange('vector_db_type', e.target.value)}
@@ -286,47 +291,47 @@ if (loading) {
           />
           {vectorDbOptions.length === 0 && isNewDomain && (
             <p className="text-xs text-accent dark:text-accent-dark mt-1">
-              No vector databases available. Please configure a silo with vector support first.
+              {t('domainFormPage.messages.noVectorDatabases')}
             </p>
           )}
           {!isNewDomain && (
             <p className="text-xs text-accent dark:text-accent-dark mt-1">
-              The vector database cannot be changed after a domain is created.
+              {t('domainFormPage.messages.vectorDatabaseLocked')}
             </p>
           )}
         </div>
 
         {/* Content Extraction Configuration */}
-        <CardApp titulo="Content Extraction Configuration" className="pt-6">
+        <CardApp titulo={t('domainFormPage.contentExtraction')} className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <FormField
-              label="Content Tag"
+              label={t('domainFormPage.fields.contentTag')}
               id="content-tag"
               type="text"
               value={formData.content_tag}
               onChange={(e) => handleInputChange('content_tag', e.target.value)}
               placeholder="body"
-              helpText="HTML tag to extract content from (default: body)"
+              helpText={t('domainFormPage.fields.contentTagHelp')}
             />
 
             <FormField
-              label="Content Class"
+              label={t('domainFormPage.fields.contentClass')}
               id="content-class"
               type="text"
               value={formData.content_class}
               onChange={(e) => handleInputChange('content_class', e.target.value)}
               placeholder="main-content"
-              helpText="CSS class to filter content (optional)"
+              helpText={t('domainFormPage.fields.contentClassHelp')}
             />
 
             <FormField
-              label="Content ID"
+              label={t('domainFormPage.fields.contentId')}
               id="content-id"
               type="text"
               value={formData.content_id}
               onChange={(e) => handleInputChange('content_id', e.target.value)}
               placeholder="content"
-              helpText="HTML ID to filter content (optional)"
+              helpText={t('domainFormPage.fields.contentIdHelp')}
             />
           </div>
         </CardApp>
@@ -336,6 +341,8 @@ if (loading) {
           onCancel={() => navigate(`/apps/${appId}/domains`)}
           isSubmitting={saving}
           submitLabel={submitButtonLabel}
+          submittingLabel={t('domainFormPage.actions.saving')}
+          cancelLabel={t('domainFormPage.actions.cancel')}
           submitDisabled={embeddingServices.length === 0 || vectorDbOptions.length === 0}
           containerClassName="pt-6"
         />

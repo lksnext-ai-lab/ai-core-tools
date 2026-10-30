@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { I18nextProvider } from 'react-i18next';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '../themes/ThemeProvider';
 import { AuthProvider } from '../auth/AuthConfig';
@@ -85,6 +86,7 @@ import SharePointSourcesPage from '../pages/SharePointSourcesPage';
 import SharePointWizardPage from '../pages/SharePointWizardPage';
 import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
 import AppMetricsPage from '../pages/AppMetricsPage';
+import i18n from '../i18n';
 
 interface ExtensibleBaseAppProps {
   config: LibraryConfig;
@@ -154,6 +156,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   }), [mergedNavigationConfig, config, features]);
 
   return (
+    <I18nextProvider i18n={i18n}>
     <ThemeProvider theme={clientConfig.theme}>
       <Toaster richColors closeButton position="top-right" />
       <AuthProvider config={config.authProps}>
@@ -541,5 +544,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
         </UserProvider>
       </AuthProvider>
     </ThemeProvider>
+    </I18nextProvider>
   );
 };

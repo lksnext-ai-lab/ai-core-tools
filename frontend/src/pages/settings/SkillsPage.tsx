@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   Target,
@@ -27,7 +28,7 @@ import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
@@ -36,6 +37,7 @@ import BackgroundImage from '../../components/ui/BackgroundImage';
 
 function SkillsPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -87,7 +89,7 @@ function SkillsPage() {
       // Cache the response
       settingsCache.setSkills(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load skills');
+      setError(errorMessage(err, t('skillsPage.loadFailed')));
       console.error('Error loading skills:', err);
     } finally {
       setLoading(false);
@@ -105,7 +107,7 @@ function SkillsPage() {
       // Cache the response
       settingsCache.setSkills(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load skills');
+      setError(errorMessage(err, t('skillsPage.loadFailed')));
       console.error('Error loading skills:', err);
     } finally {
       setLoading(false);
@@ -117,21 +119,21 @@ function SkillsPage() {
 
     const target = skills.find((s) => s.skill_id === skillId);
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('skill'),
+      title: t('skillsPage.confirmDeleteTitle'),
       message: target
-        ? `Are you sure you want to delete "${target.name}"? Agents using it will lose this specialization.`
-        : MESSAGES.CONFIRM_DELETE_MESSAGE('skill'),
+        ? t('skillsPage.confirmDeleteMessage', { name: target.name })
+        : t('skillsPage.confirmDeleteFallback'),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('skillsPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteSkill(Number.parseInt(appId), skillId),
       {
-        loading: MESSAGES.DELETING('skill'),
-        success: MESSAGES.DELETED('skill'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('skill')),
+        loading: t('skillsPage.notifications.deleting'),
+        success: t('skillsPage.notifications.deleted'),
+        error: (err) => errorMessage(err, t('skillsPage.notifications.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -154,7 +156,7 @@ function SkillsPage() {
       setEditingSkill(skill);
       setIsModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load skill details');
+      setError(errorMessage(err, t('skillsPage.loadDetailsFailed')));
       console.error('Error loading skill:', err);
     }
   }
@@ -170,9 +172,9 @@ function SkillsPage() {
           ? apiService.updateSkill(Number.parseInt(appId), editingSkill.skill_id, data)
           : apiService.createSkill(Number.parseInt(appId), data),
       {
-        loading: isUpdate ? MESSAGES.UPDATING('skill') : MESSAGES.CREATING('skill'),
-        success: isUpdate ? MESSAGES.UPDATED('skill') : MESSAGES.CREATED('skill'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('skill')),
+        loading: t(isUpdate ? 'skillsPage.notifications.updating' : 'skillsPage.notifications.creating'),
+        success: t(isUpdate ? 'skillsPage.notifications.updated' : 'skillsPage.notifications.created'),
+        error: (err) => errorMessage(err, t('skillsPage.notifications.saveFailed')),
       },
     );
     if (result === undefined) return;
@@ -212,7 +214,7 @@ function SkillsPage() {
     if (!file || !appId) return;
 
     if (!file.name.toLowerCase().endsWith('.zip')) {
-      setImportError('Please select a valid skill package (.zip file).');
+      setImportError(t('skillsPage.import.invalidFile'));
       return;
     }
 
@@ -223,10 +225,10 @@ function SkillsPage() {
       const updatedSkills = [...skills, created];
       setSkills(updatedSkills);
       settingsCache.setSkills(appId, updatedSkills);
-      toast.success(MESSAGES.IMPORTED('skill'));
+      toast.success(t('skillsPage.notifications.imported'));
     } catch (err) {
       // Surface the backend's actual 400/409 reason (duplicate name, archive limits, etc.)
-      const message = errorMessage(err, MESSAGES.IMPORT_FAILED('skill'));
+      const message = errorMessage(err, t('skillsPage.import.failed'));
       setImportError(message);
       toast.error(message);
       console.error('Error importing skill package:', err);
@@ -266,9 +268,9 @@ function SkillsPage() {
       // Revoke immediately after the download has been kicked off — never leak object URLs.
       URL.revokeObjectURL(url);
 
-      toast.success(MESSAGES.EXPORTED('skill'));
+      toast.success(t('skillsPage.notifications.exported'));
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('skill')));
+      toast.error(errorMessage(err, t('skillsPage.notifications.exportFailed')));
       console.error('Error exporting skill:', err);
     } finally {
       setExportingSkillId(null);
@@ -289,9 +291,9 @@ function SkillsPage() {
       const newSkills = skills.map((s) => (s.skill_id === skill.skill_id ? updated : s));
       setSkills(newSkills);
       settingsCache.setSkills(appId, newSkills);
-      toast.success(nextEnabled ? 'Skill enabled' : 'Skill disabled');
+      toast.success(t(nextEnabled ? 'skillsPage.notifications.enabled' : 'skillsPage.notifications.disabled'));
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to update skill status'));
+      toast.error(errorMessage(err, t('skillsPage.notifications.statusUpdateFailed')));
       console.error('Error toggling skill enabled state:', err);
     } finally {
       setTogglingSkillId(null);
@@ -301,7 +303,7 @@ function SkillsPage() {
   const columns = useMemo(
     () => [
       {
-        header: 'Name',
+        header: t('skillsPage.columns.name'),
         render: (skill: Skill) => {
           const canManageSkill = canEdit && !skill.is_system;
           return (
@@ -311,7 +313,7 @@ function SkillsPage() {
                 type="button"
                 className="text-sm font-medium text-fg dark:text-fg-dark text-left"
                 onClick={() => void handleEditSkill(skill.skill_id)}
-                aria-label={canManageSkill ? `Edit skill ${skill.name}` : `View skill ${skill.name}`}
+                aria-label={t(canManageSkill ? 'skillsPage.actions.editSkill' : 'skillsPage.actions.viewSkill', { name: skill.name })}
               >
                 {skill.name}
               </button>
@@ -320,26 +322,26 @@ function SkillsPage() {
         }
       },
       {
-        header: 'Description',
+        header: t('skillsPage.columns.description'),
         render: (skill: Skill) => (
           <div className="text-xs text-secondary dark:text-secondary-dark max-w-xs truncate">
-            {skill.description || <span className="text-secondary dark:text-secondary-dark italic">No description</span>}
+            {skill.description || <span className="text-secondary dark:text-secondary-dark italic">{t('skillsPage.noDescription')}</span>}
           </div>
         ),
         className: 'px-6 py-4'
       },
       {
-        header: 'Status',
+        header: t('skillsPage.columns.status'),
         render: (skill: Skill) => {
           const isEnabled = skill.is_enabled !== false;
           return (
             <div className="flex flex-wrap items-center gap-1.5">
               {skill.is_system && (
-                <Badge label="System" variant="default" />
+                <Badge label={t('skillsPage.statuses.system')} variant="default" />
               )}
               <StatusBadge
                 status={isEnabled ? 'active' : 'inactive'}
-                customLabel={isEnabled ? 'Enabled' : 'Disabled'}
+                customLabel={t(isEnabled ? 'skillsPage.statuses.enabled' : 'skillsPage.statuses.disabled')}
               />
             </div>
           );
@@ -347,12 +349,12 @@ function SkillsPage() {
         className: 'px-6 py-4 whitespace-nowrap'
       },
       {
-        header: 'Created',
-        render: (skill: Skill) => skill.created_at ? new Date(skill.created_at).toLocaleDateString() : 'N/A',
+        header: t('skillsPage.columns.created'),
+        render: (skill: Skill) => skill.created_at ? new Date(skill.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('skillsPage.notAvailable'),
         className: 'px-6 py-4 whitespace-nowrap text-xs text-secondary dark:text-secondary-dark'
       },
       {
-        header: 'Actions',
+        header: t('skillsPage.columns.actions'),
         sticky: 'right' as const,
         className: 'relative',
         render: (skill: Skill) => {
@@ -365,7 +367,7 @@ function SkillsPage() {
 
           if (canManageSkill) {
             actions.push({
-              label: 'Edit',
+              label: t('skillsPage.actions.edit'),
               onClick: () => { void handleEditSkill(skill.skill_id); },
               icon: <Pencil className="w-4 h-4" />,
               variant: 'primary'
@@ -374,7 +376,7 @@ function SkillsPage() {
 
           // Export is available to anyone who can view the skill — no edit permission required.
           actions.push({
-            label: isExporting ? 'Exporting...' : 'Export',
+            label: t(isExporting ? 'skillsPage.actions.exporting' : 'skillsPage.actions.export'),
             onClick: () => { void handleExport(skill); },
             icon: isExporting
               ? <Spinner size="sm" tone="current" />
@@ -387,12 +389,20 @@ function SkillsPage() {
           // for system skills — those are enabled/disabled via the admin System Skills page
           // only; the app-scoped route rejects the request with a 403.
           if (hasMinRole(AppRole.ADMINISTRATOR) && !skill.is_system) {
+            let toggleLabelKey = 'skillsPage.actions.enable';
+            let toggleIcon = <ToggleRight className="w-4 h-4" aria-hidden="true" />;
+            if (isToggling) {
+              toggleLabelKey = 'skillsPage.actions.updating';
+              toggleIcon = <Spinner size="sm" tone="current" />;
+            } else if (isEnabled) {
+              toggleLabelKey = 'skillsPage.actions.disable';
+              toggleIcon = <ToggleLeft className="w-4 h-4" aria-hidden="true" />;
+            }
+
             actions.push({
-              label: isToggling ? 'Updating...' : (isEnabled ? 'Disable' : 'Enable'),
+              label: t(toggleLabelKey),
               onClick: () => { void handleToggleEnabled(skill); },
-              icon: isToggling
-                ? <Spinner size="sm" tone="current" />
-                : (isEnabled ? <ToggleLeft className="w-4 h-4" aria-hidden="true" /> : <ToggleRight className="w-4 h-4" aria-hidden="true" />),
+              icon: toggleIcon,
               disabled: isToggling,
               variant: isEnabled ? 'warning' : 'success'
             });
@@ -400,7 +410,7 @@ function SkillsPage() {
 
           if (canManageSkill) {
             actions.push({
-              label: 'Delete',
+              label: t('skillsPage.actions.delete'),
               onClick: () => { void handleDelete(skill.skill_id); },
               icon: <Trash2 className="w-4 h-4" />,
               variant: 'danger'
@@ -412,11 +422,11 @@ function SkillsPage() {
               <ActionDropdown
                 actions={actions}
                 size="sm"
-                triggerAriaLabel={`Actions for skill ${skill.name}`}
+                triggerAriaLabel={t('skillsPage.actions.forSkill', { name: skill.name })}
               />
               {(isExporting || isToggling) && (
                 <span role="status" aria-live="polite" className="sr-only">
-                  {isExporting ? `Exporting skill ${skill.name}…` : `Updating skill ${skill.name}…`}
+                  {t(isExporting ? 'skillsPage.actions.exportingSkill' : 'skillsPage.actions.updatingSkill', { name: skill.name })}
                 </span>
               )}
             </>
@@ -424,18 +434,25 @@ function SkillsPage() {
         }
       }
     ],
-    [canEdit, hasMinRole, exportingSkillId, togglingSkillId],
+    [canEdit, hasMinRole, exportingSkillId, togglingSkillId, t, i18n.resolvedLanguage],
   );
+
+  let modalTitle = t('skillsPage.modal.createSkill');
+  if (editingSkill) {
+    modalTitle = editingSkillReadOnly
+      ? t('skillsPage.modal.viewSkill')
+      : t('skillsPage.modal.editSkill');
+  }
 
   if (loading) {
     return (
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titPrincipal" titulo='Skills' subtitulo='Manage prompt-driven specializations for your agents' />
+          <Title variant="titPrincipal" titulo={t('skillsPage.title')} subtitulo={t('skillsPage.subtitle')} />
         </div>
 
-        <LoadingState variant="page" message="Loading skills..." />
+        <LoadingState variant="page" message={t('skillsPage.loading')} />
       </div>
 
     );
@@ -446,7 +463,7 @@ function SkillsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titPrincipal" titulo='Skills' subtitulo='Manage prompt-driven specializations for your agents' />
+          <Title variant="titPrincipal" titulo={t('skillsPage.title')} subtitulo={t('skillsPage.subtitle')} />
         </div>
 
         <Alert type="error" message={error} onDismiss={() => loadSkills()} />
@@ -458,11 +475,11 @@ function SkillsPage() {
     <div className="p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <Title variant="titPrincipal" titulo='Skills' subtitulo='Manage prompt-driven specializations for your agents' />
+        <Title variant="titPrincipal" titulo={t('skillsPage.title')} subtitulo={t('skillsPage.subtitle')} />
         {canEdit && (
           <div className="flex gap-2">
             <ButtonApp
-              label={importing ? 'Importing…' : 'Import package'}
+              label={t(importing ? 'skillsPage.actions.importing' : 'skillsPage.actions.importPackage')}
               onClick={handleImportClick}
               loading={importing}
               variant="secondary"
@@ -471,14 +488,14 @@ function SkillsPage() {
             <ButtonApp
               type="button"
               onClick={handleClaudePluginImportClick}
-              label="Import Claude plugin"
+              label={t('skillsPage.actions.importClaudePlugin')}
               icon={<PackagePlus className="w-4 h-4" aria-hidden="true" />}
               variant="secondary"
               size="medium"
             />
             <ButtonApp
               onClick={handleCreateSkill}
-              label="Add Skill"
+              label={t('skillsPage.actions.addSkill')}
               icon={<Plus className="w-4 h-4" aria-hidden="true" />}
               variant="primary"
               size="medium"
@@ -494,14 +511,14 @@ function SkillsPage() {
         accept=".zip,application/zip"
         onChange={(e) => { void handleImportFile(e); }}
         className="hidden"
-        aria-label="Import skill package file"
+        aria-label={t('skillsPage.import.fileInputLabel')}
       />
 
       {/* Import error */}
       {importError && (
         <Alert
           type="error"
-          title="Import failed"
+          title={t('skillsPage.import.failedTitle')}
           message={importError}
           onDismiss={() => setImportError(null)}
           className="mb-4"
@@ -518,8 +535,8 @@ function SkillsPage() {
         keyExtractor={(skill) => skill.skill_id.toString()}
         columns={columns}
         emptyIcon={<BackgroundImage icon={Target} size={64} iconSize={32} />}
-        emptyMessage="No Skills"
-        emptySubMessage="Add your first skill to create specialized behaviors for your agents."
+        emptyMessage={t('skillsPage.emptyTitle')}
+        emptySubMessage={t('skillsPage.emptyDescription')}
         loading={loading}
       />
 
@@ -527,7 +544,7 @@ function SkillsPage() {
         <div className="text-center py-6">
           <ButtonApp
             onClick={handleCreateSkill}
-            label="Add First Skill"
+            label={t('skillsPage.actions.addFirstSkill')}
             variant="primary"
             size="medium"
           />
@@ -536,23 +553,20 @@ function SkillsPage() {
 
       <Alert
         type="info"
-        title="About Skills"
+        title={t('skillsPage.about.title')}
         className="mt-6"
         message={(
           <>
             <p>
-              Skills are prompt-driven specializations that agents can dynamically load on-demand.
-              When an agent has skills assigned, it gains a <code className="px-1 rounded">load_skill</code> tool
-              that allows it to activate specialized behavior when needed. Skills marked <strong>System</strong> are
-              managed centrally and cannot be edited or deleted here.
+              {t('skillsPage.about.descriptionBeforeTool')} <code className="px-1 rounded">load_skill</code> {t('skillsPage.about.descriptionAfterTool')}
             </p>
             <div className="mt-2">
-              <span className="text-info dark:text-info-dark font-medium">Example Skills:</span>
+              <span className="text-info dark:text-info-dark font-medium">{t('skillsPage.about.examplesTitle')}</span>
               <ul className="list-disc list-inside mt-1 space-y-1">
-                <li>Code Review Guidelines - Best practices for reviewing code</li>
-                <li>Technical Writing - Formatting and style for documentation</li>
-                <li>Data Analysis - Steps for analyzing datasets</li>
-                <li>Customer Support - Tone and process for handling inquiries</li>
+                <li>{t('skillsPage.about.examples.codeReview')}</li>
+                <li>{t('skillsPage.about.examples.technicalWriting')}</li>
+                <li>{t('skillsPage.about.examples.dataAnalysis')}</li>
+                <li>{t('skillsPage.about.examples.customerSupport')}</li>
               </ul>
             </div>
           </>
@@ -563,7 +577,7 @@ function SkillsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingSkill ? (editingSkillReadOnly ? 'View Skill' : 'Edit Skill') : 'Create New Skill'}
+        title={modalTitle}
         size="large"
       >
         <SkillForm

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import SiloForm from '../components/forms/SiloForm';
 import Title from '../components/ui/Title';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -36,6 +37,7 @@ interface Silo {
 }
 
 function SiloFormPage() {
+  const { t } = useTranslation('common');
   const { appId, siloId } = useParams();
   const navigate = useNavigate();
   const mutate = useApiMutation();
@@ -68,7 +70,7 @@ function SiloFormPage() {
       const response = await apiService.getSilo(Number.parseInt(appId, 10), targetSiloId);
       setSilo(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load silo');
+      setError(err instanceof Error ? err.message : t('siloFormPage.loadFailed'));
       console.error('Error loading silo:', err);
     } finally {
       setLoading(false);
@@ -84,11 +86,11 @@ function SiloFormPage() {
           ? apiService.updateSilo(Number.parseInt(appId), Number.parseInt(siloId), formData)
           : apiService.createSilo(Number.parseInt(appId), formData),
       {
-        loading: isEditing ? MESSAGES.UPDATING('silo') : MESSAGES.CREATING('silo'),
-        success: isEditing ? MESSAGES.UPDATED('silo') : MESSAGES.CREATED('silo'),
+        loading: isEditing ? t('siloFormPage.updating') : t('siloFormPage.creating'),
+        success: isEditing ? t('siloFormPage.updated') : t('siloFormPage.created'),
 
         
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('silo')),
+        error: (err) => errorMessage(err, t('siloFormPage.saveFailed')),
       },
     );
 
@@ -106,15 +108,15 @@ function SiloFormPage() {
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  
+          <Title variant="titSecundario" titulo={isEditing ? t('siloFormPage.title.edit') : t('siloFormPage.title.create')}
             subtitulo={isEditing 
-                ? 'Update your silo configuration and settings.'
-                : 'Create a new silo for vector storage and semantic search.'
+                ? t('siloFormPage.subtitle.edit')
+                : t('siloFormPage.subtitle.create')
             }
           />
         </div>
 
-        <LoadingState variant="page" message="Loading silo..." />
+        <LoadingState variant="page" message={t('siloFormPage.loading')} />
       </div>
     );
   }
@@ -124,21 +126,21 @@ function SiloFormPage() {
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  subtitulo={isEditing 
-                ? 'Update your silo configuration and settings.'
-                : 'Create a new silo for vector storage and semantic search.'
+              <Title variant="titSecundario" titulo={isEditing ? t('siloFormPage.title.edit') : t('siloFormPage.title.create')}  subtitulo={isEditing
+                ? t('siloFormPage.subtitle.edit')
+                : t('siloFormPage.subtitle.create')
             }
           />
         </div>
 
         <Alert
           type="error"
-          title="Error Loading Silo"
+          title={t('siloFormPage.loadErrorTitle')}
           message={(
             <>
               {error}
               <button type="button" onClick={() => navigate(`/apps/${appId}/silos`)} className="mt-2 block underline">
-                Back to Silos
+                {t('siloFormPage.backToSilos')}
               </button>
             </>
           )}
@@ -150,9 +152,9 @@ function SiloFormPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {/* Page Header */}
-        <Title variant="titSecundario" titulo={isEditing ? 'Edit Silo' : 'Create New Silo'}  subtitulo={isEditing 
-                ? 'Update your silo configuration and settings.'
-                : 'Create a new silo for vector storage and semantic search.'
+        <Title variant="titSecundario" titulo={isEditing ? t('siloFormPage.title.edit') : t('siloFormPage.title.create')}  subtitulo={isEditing
+          ? t('siloFormPage.subtitle.edit')
+          : t('siloFormPage.subtitle.create')
             }
           />
 

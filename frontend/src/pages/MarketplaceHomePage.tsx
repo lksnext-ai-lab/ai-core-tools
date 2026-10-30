@@ -7,7 +7,7 @@ import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { errorMessage, MESSAGES } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import type { MarketplaceConversation } from '../types/marketplace';
 import Title from '../components/ui/Title';
 import BackgroundImage from '../components/ui/BackgroundImage';
@@ -15,17 +15,19 @@ import ButtonApp from '../components/ui/ButtonApp';
 import ButtonTab from '../components/ui/ButtonTab';
 import ButtonTabItem from '../components/ui/ButtonTabItem';
 import { CardApp } from '../components/ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 /** Simple relative-time formatter — no external dependency needed. */
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, locale: string, justNowLabel: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return justNowLabel;
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  if (minutes < 60) return formatter.format(-minutes, 'minute');
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return formatter.format(-hours, 'hour');
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return formatter.format(-days, 'day');
 }
 
 /**
@@ -36,6 +38,7 @@ export default function MarketplaceHomePage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const mutate = useApiMutation();
+  const { t, i18n } = useTranslation('common');
 
   const [conversations, setConversations] = useState<MarketplaceConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +59,7 @@ export default function MarketplaceHomePage() {
         }
       } catch (err) {
         if (isMounted) {
-          setError(errorMessage(err, 'Failed to load conversations'));
+          setError(errorMessage(err, t('marketplaceHome.loadConversationsFailed')));
         }
       } finally {
         if (isMounted) {
@@ -74,19 +77,19 @@ export default function MarketplaceHomePage() {
 
   async function handleDeleteConversation(conv: MarketplaceConversation) {
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('conversation'),
-      message: `Delete the conversation with ${conv.agent_display_name}? This action cannot be undone.`,
+      title: t('marketplaceHome.confirmDeleteTitle'),
+      message: t('marketplaceHome.confirmDeleteMessage', { agent: conv.agent_display_name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteConversation(conv.conversation_id),
       {
-        loading: MESSAGES.DELETING('conversation'),
-        success: MESSAGES.DELETED('conversation'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('conversation')),
+        loading: t('marketplaceHome.deletingConversation'),
+        success: t('marketplaceHome.conversationDeleted'),
+        error: (err) => errorMessage(err, t('marketplaceHome.deleteConversationFailed')),
       },
     );
     if (result === undefined) return;
@@ -112,12 +115,12 @@ export default function MarketplaceHomePage() {
         ),
       );
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to rename conversation'));
+      toast.error(errorMessage(err, t('marketplaceHome.renameConversationFailed')));
     }
   }
 
   if (loading) {
-    return <LoadingState message="Loading your dashboard..." />;
+    return <LoadingState message={t('marketplaceHome.loadingDashboard')} />;
   }
 
   if (error) {
@@ -126,14 +129,9 @@ export default function MarketplaceHomePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      {/* Page header */}
-      {/*<div>
-        <h1 className="text-3xl font-bold text-gray-900">Welcome back</h1>
-        <p className="text-gray-600 mt-1">Your AI agent dashboard</p>
-      </div>*/}
       <Title
-        titulo="Welcome back"
-        subtitulo="Your AI agent dashboard"
+        titulo={t('marketplaceHome.welcomeBack')}
+        subtitulo={t('marketplaceHome.dashboardSubtitle')}
         variant="titPrincipal"
         subtitleMarginBottom={0}
       />  
@@ -153,10 +151,10 @@ export default function MarketplaceHomePage() {
           />
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-semibold text-fg dark:text-fg-dark ">
-              Browse Agents
+              {t('marketplaceHome.browseAgents')}
             </h2>
             <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mt-0.5">
-              Discover and chat with AI agents published by your organisation
+              {t('marketplaceHome.discoverAgentsDescription')}
             </p>
           </div>
           <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-[var(--color-border-card-hover)] transition-colors duration-200" aria-hidden="true" />
@@ -165,17 +163,17 @@ export default function MarketplaceHomePage() {
 
       {/* Recent conversations */}
       <section>
-        <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">My Recent Conversations</h2>
+        <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">{t('marketplaceHome.recentConversations')}</h2>
 
         {conversations.length === 0 ? (
           <CardApp className="p-10 flex items-center justify-center ">
             <BackgroundImage icon={MessageCircle} size={64} iconSize={32} variant="marron" className="mx-auto mb-4"></BackgroundImage>
-            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-fg dark:text-fg-dark">No conversations yet</h3>
+            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-fg dark:text-fg-dark">{t('marketplaceHome.noConversations')}</h3>
             <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mt-0.5 mb-6">
-              You haven't chatted with any agents yet. Browse the marketplace to get started!
+              {t('marketplaceHome.noConversationsDescription')}
             </p>
             <ButtonApp
-              label="Browse Agents"
+              label={t('marketplaceHome.browseAgents')}
               variant="primary"
               size="spacious"
               icon={<Store className="h-4 w-4" aria-hidden="true" />}
@@ -183,14 +181,14 @@ export default function MarketplaceHomePage() {
             />
           </CardApp>
         ) : (
-          <ButtonTab ariaLabel="Recent conversations">
+          <ButtonTab ariaLabel={t('marketplaceHome.recentConversations')}>
             {conversations.map((conv) => (
               <ButtonTabItem
                 key={conv.conversation_id}
                 title={conv.title || conv.agent_display_name}
-                description={`${[conv.app_name, conv.agent_display_name].filter(Boolean).join(' · ')}\n${conv.last_message || 'No messages yet'}`}
+                description={`${[conv.app_name, conv.agent_display_name].filter(Boolean).join(' · ')}\n${conv.last_message || t('marketplaceHome.noMessages')}`}
                 dateTime={conv.updated_at}
-                dateLabel={formatRelativeTime(conv.updated_at)}
+                dateLabel={formatRelativeTime(conv.updated_at, i18n.resolvedLanguage ?? i18n.language, t('marketplaceHome.justNow'))}
                 onClick={() => navigate(`/marketplace/chat/${conv.conversation_id}`)}
                 icon={conv.agent_icon_url ? (
                   <img

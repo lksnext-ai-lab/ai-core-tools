@@ -1,0 +1,2176 @@
+{
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "name": "Name",
+  "description": "Description",
+  "required": "Required field",
+  "language": "Language",
+  "languageChangeError": "Could not change the language. Please try again.",
+  "sidebar": {
+    "app": "App",
+    "globalAdmin": "Global admin"
+  },
+  "header": {
+    "organizationTitle": "{{organization}} · Organization",
+    "organization": "Organization",
+    "search": "Search agents, apps or chats…",
+    "switchToLightMode": "Switch to light mode",
+    "switchToDarkMode": "Switch to dark mode",
+    "userFallback": "User",
+    "profile": "Profile",
+    "subscription": "Subscription",
+    "changePassword": "Change password",
+    "signOut": "Sign out"
+  },
+  "breadcrumbs": {
+    "ariaLabel": "Breadcrumb",
+    "administration": "Administration",
+    "appFallback": "App {{appId}}",
+    "action": {
+      "new": "New",
+      "edit": "Edit",
+      "playground": "Playground",
+      "detail": "Detail",
+      "runs": "Runs",
+      "files": "Files",
+      "conversation": "Conversation",
+      "general": "General"
+    },
+    "navigation": {
+      "home": "Home",
+      "marketplace": "Marketplace",
+      "myApps": "My Apps",
+      "about": "About",
+      "dashboard": "Dashboard",
+      "agents": "Agents",
+      "scheduledTasks": "Scheduled Tasks",
+      "dataSources": "Data sources",
+      "silos": "Silos",
+      "repositories": "Repositories",
+      "domains": "Domains",
+      "sharePoint": "SharePoint",
+      "mcpServers": "MCP Servers",
+      "metrics": "Metrics",
+      "skills": "Skills",
+      "middlewares": "Middlewares",
+      "appSettings": "App Settings",
+      "outputChannels": "Output Channels",
+      "aiServices": "AI Services",
+      "embeddingServices": "Embedding Services",
+      "sandboxServices": "Sandbox Services",
+      "mcpConfigs": "MCP Configs",
+      "apiKeys": "API Keys",
+      "dataStructures": "Data Structures",
+      "collaboration": "Collaboration",
+      "users": "Users",
+      "statistics": "Statistics",
+      "agentMetrics": "Agent Metrics",
+      "settings": "Settings",
+      "saasUsers": "SaaS Users",
+      "systemAiServices": "System AI Services",
+      "systemEmbeddingServices": "System Embedding Services",
+      "systemSandboxServices": "System Sandbox Services",
+      "systemSkills": "System Skills",
+      "tierConfig": "Tier Config"
+    }
+  },
+  "login": {
+    "title": "Welcome back",
+    "subtitle": "Sign in to <brand>{{brand}}</brand>",
+    "loadingOptions": "Loading sign-in options",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "user@example.com",
+    "passwordLabel": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "signInWithMicrosoft": "Sign in with Microsoft",
+    "registerPrompt": "Don't have an account?",
+    "createAccount": "Create one",
+    "forgotPassword": "Forgot your password?",
+    "selfHostedPasswordHelp": "Forgot your password? Contact your administrator.",
+    "termsAgreement": "By signing in, you agree to our",
+    "termsOfService": "Terms of Service",
+    "and": "and",
+    "privacyPolicy": "Privacy Policy",
+    "validation": {
+      "credentialsRequired": "Please enter your email and password"
+    },
+    "error": {
+      "title": "Login Error",
+      "failed": "Login failed"
+    },
+    "robot": {
+      "phrases": [
+        "Hey! Ready to build something amazing?",
+        "Your agents are waiting for you...",
+        "Did you know? You can chain agents as tools!",
+        "Tip: Connect any LLM provider in seconds",
+        "Fun fact: Your docs become AI-searchable instantly",
+        "Psst... MCP lets your agents use external tools",
+        "I can juggle 6 LLM providers. Can you?",
+        "Still here? I could be automating things for you...",
+        "Your knowledge base misses you. Just saying.",
+        "Plot twist: I work while you sleep."
+      ]
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong.",
+    "authenticationFailed": "Authentication failed",
+    "chatbotPrefix": "Sorry, something went wrong.",
+    "chatbotTryAgain": "Sorry, something went wrong. Please try again."
+  },
+  "pagination": {
+    "ariaLabel": "Pagination",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{totalPages}}",
+    "pageOfWithTotal": "Page {{page}} of {{totalPages}} ({{total}} total)"
+  },
+  "appsPage": {
+    "title": "My Apps",
+    "subtitle": "Manage your AI applications and workspaces",
+    "importApp": "Import App",
+    "newApp": "New App",
+    "createApp": "Create App",
+    "createNewApp": "Create New App",
+    "loading": "Loading apps...",
+    "loadFailed": "Failed to load apps",
+    "appCreatedSuccessfully": "App \"{{name}}\" created successfully!",
+    "appImportedSuccessfully": "App imported successfully!",
+    "openApp": "Open {{name}}",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "roles": {
+      "owner": "Owner",
+      "administrator": "Administrator",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "stats": {
+      "agents": "Agents",
+      "repositories": "Repos",
+      "domains": "Domains",
+      "silos": "Silos",
+      "collaborators": "Collabs"
+    }
+  },
+  "domainsPage": {
+    "title": "Domains",
+    "subtitle": "Web scraping domains for content extraction",
+    "loading": "Loading domains...",
+    "loadFailed": "Failed to load domains",
+    "loadErrorTitle": "Error loading domains",
+    "confirmDeleteTitle": "Delete domain?",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone and will remove all associated URLs and indexed content.",
+    "deleting": "Deleting domain…",
+    "deleted": "Domain deleted",
+    "deleteFailed": "Failed to delete domain",
+    "urlCount_one": "{{count}} URL",
+    "urlCount_other": "{{count}} URLs",
+    "emptyTitle": "No domains yet",
+    "emptyDescription": "Create your first domain to start extracting content from websites.",
+    "columns": {
+      "name": "Name",
+      "baseUrl": "Base URL",
+      "urls": "URLs",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "actions": {
+      "create": "Create domain",
+      "createFirst": "Create your first domain",
+      "urls": "URLs",
+      "edit": "Edit",
+      "delete": "Delete"
+    }
+  },
+  "skillsPage": {
+    "title": "Skills",
+    "subtitle": "Manage prompt-driven specializations for your agents",
+    "loading": "Loading skills...",
+    "loadFailed": "Failed to load skills",
+    "loadDetailsFailed": "Failed to load skill details",
+    "confirmDeleteTitle": "Delete skill?",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? Agents using it will lose this specialization.",
+    "confirmDeleteFallback": "Are you sure you want to delete this skill? This action cannot be undone.",
+    "noDescription": "No description",
+    "notAvailable": "N/A",
+    "emptyTitle": "No skills",
+    "emptyDescription": "Add your first skill to create specialized behaviors for your agents.",
+    "columns": {
+      "name": "Name",
+      "description": "Description",
+      "status": "Status",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "statuses": {
+      "system": "System",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "delete": "Delete",
+      "edit": "Edit",
+      "editSkill": "Edit skill {{name}}",
+      "viewSkill": "View skill {{name}}",
+      "export": "Export",
+      "exporting": "Exporting...",
+      "exportingSkill": "Exporting skill {{name}}...",
+      "updating": "Updating...",
+      "updatingSkill": "Updating skill {{name}}...",
+      "disable": "Disable",
+      "enable": "Enable",
+      "forSkill": "Actions for skill {{name}}",
+      "importPackage": "Import package",
+      "importing": "Importing...",
+      "importClaudePlugin": "Import Claude plugin",
+      "addSkill": "Add skill",
+      "addFirstSkill": "Add first skill"
+    },
+    "notifications": {
+      "deleting": "Deleting skill...",
+      "deleted": "Skill deleted",
+      "deleteFailed": "Failed to delete skill",
+      "creating": "Creating skill...",
+      "updating": "Updating skill...",
+      "created": "Skill created",
+      "updated": "Skill updated",
+      "saveFailed": "Failed to save skill",
+      "imported": "Skill imported",
+      "exported": "Skill exported",
+      "exportFailed": "Failed to export skill",
+      "enabled": "Skill enabled",
+      "disabled": "Skill disabled",
+      "statusUpdateFailed": "Failed to update skill status"
+    },
+    "import": {
+      "invalidFile": "Please select a valid skill package (.zip file).",
+      "failed": "Failed to import skill",
+      "failedTitle": "Import failed",
+      "fileInputLabel": "Import skill package file"
+    },
+    "about": {
+      "title": "About skills",
+      "descriptionBeforeTool": "Skills are prompt-driven specializations that agents can dynamically load on demand. When an agent has skills assigned, it gains a",
+      "descriptionAfterTool": "tool that lets it activate specialized behavior when needed. Skills marked System are managed centrally and cannot be edited or deleted here.",
+      "examplesTitle": "Example skills:",
+      "examples": {
+        "codeReview": "Code review guidelines - Best practices for reviewing code",
+        "technicalWriting": "Technical writing - Formatting and style for documentation",
+        "dataAnalysis": "Data analysis - Steps for analyzing datasets",
+        "customerSupport": "Customer support - Tone and process for handling inquiries"
+      }
+    },
+    "modal": {
+      "viewSkill": "View skill",
+      "editSkill": "Edit skill",
+      "createSkill": "Create new skill"
+    }
+  },
+  "skillForm": {
+    "platformAdministrators": "platform administrators",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "e.g., code_review_guidelines",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "e.g., Code Review Guidelines",
+      "description": "Description",
+      "descriptionPlaceholder": "e.g., Best practices for reviewing code quality",
+      "whenToUse": "When to use",
+      "whenToUsePlaceholder": "e.g., Use when the user asks to generate or edit a Word document.",
+      "instructions": "Skill instructions",
+      "allowedTools": "Allowed tools",
+      "runtime": "Runtime",
+      "runtimePlaceholder": "e.g., python3.11",
+      "bootstrapScriptPath": "Bootstrap script path",
+      "runtimeOptions": "Runtime options (JSON)",
+      "enabled": "Enabled"
+    },
+    "help": {
+      "name": "Short, unique identifier for the skill.",
+      "displayName": "Human-friendly label shown in the UI. Defaults to the name if left blank.",
+      "description": "The agent sees this description to decide when the skill is relevant.",
+      "whenToUse": "Extra routing guidance for the skill selector, kept separate from the description.",
+      "instructions": "Markdown-formatted instructions loaded when the agent activates this skill.",
+      "runtime": "Sandbox runtime this skill expects, if any.",
+      "bootstrapScriptPath": "Package-root-relative path to a script that runs after resources are copied into the sandbox.",
+      "runtimeOptions": "Optional JSON object passed to the sandbox runtime. Leave blank for none.",
+      "enabled": "Disabled skills are ignored at execution time until re-enabled."
+    },
+    "validation": {
+      "invalidJson": "Invalid JSON",
+      "invalidJsonWithMessage": "Invalid JSON: {{message}}",
+      "runtimeOptionsObject": "Runtime options must be a JSON object, e.g. {\"key\": \"value\"}",
+      "nameRequired": "Skill name is required",
+      "descriptionRequired": "Skill description is required",
+      "contentRequired": "Skill content is required",
+      "saveFailed": "Failed to save skill"
+    },
+    "allowedTools": {
+      "added": "Added tool {{tool}}",
+      "removed": "Removed tool {{tool}}",
+      "remove": "Remove allowed tool {{tool}}",
+      "placeholder": "e.g. Bash, WebSearch - press Enter or comma to add",
+      "noneDeclared": "No allowed tools declared",
+      "metadataBefore": "Informational metadata only - stored, imported/exported and displayed, but",
+      "notEnforced": "not enforced",
+      "metadataAfter": "against the agent's tool set."
+    },
+    "files": {
+      "bytes": "{{size}} bytes",
+      "binarySize": "Binary - {{size}} bytes",
+      "loadingPreview": "Loading preview...",
+      "previewUnavailable": "Preview is not available for this file.",
+      "previewFailed": "Failed to load file preview"
+    },
+    "resources": {
+      "title": "Package resources",
+      "skillFileOnly": "SKILL.md only",
+      "bundledFiles_one": "{{count}} bundled file",
+      "bundledFiles_other": "{{count}} bundled files",
+      "instructions": "Instructions",
+      "none": "This skill does not include bundled resources.",
+      "readOnlyDescription": "Read-only. Text file previews are fetched only when a file is expanded."
+    },
+    "actions": {
+      "close": "Close",
+      "update": "Update skill",
+      "create": "Create skill",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    }
+  },
+  "mcpServersPage": {
+    "title": "MCP servers",
+    "subtitle": "Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients",
+    "loading": "Loading MCP servers...",
+    "loadFailed": "Failed to load MCP servers",
+    "loadErrorTitle": "Error loading MCP servers",
+    "tryAgain": "Try again",
+    "confirmDeleteTitle": "Delete MCP server?",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirmDeleteFallback": "Are you sure you want to delete this MCP server? This action cannot be undone.",
+    "copyEndpoint": "Copy endpoint URL",
+    "detailView": "Detail view",
+    "notAvailable": "N/A",
+    "emptyTitle": "No MCP servers yet",
+    "emptyDescription": "Create an MCP server to expose your agents as tools.",
+    "agentCount_one": "{{count}} agent",
+    "agentCount_other": "{{count}} agents",
+    "columns": {
+      "name": "Name",
+      "status": "Status",
+      "agents": "Agents",
+      "endpoint": "Endpoint",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "statuses": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "create": "Create MCP server",
+      "createFirst": "Create your first MCP server",
+      "viewDetails": "View details",
+      "edit": "Edit",
+      "delete": "Delete",
+      "copy": "Copy",
+      "copied": "Done"
+    },
+    "notifications": {
+      "deleting": "Deleting MCP server...",
+      "deleted": "MCP server deleted",
+      "deleteFailed": "Failed to delete MCP server"
+    }
+  },
+  "mcpServerFormPage": {
+    "createTitle": "Create MCP server",
+    "editTitle": "Edit MCP server",
+    "subtitle": "Configure your MCP server settings",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load data",
+    "sections": {
+      "basicInformation": "Basic information",
+      "selectAgents": "Select agents to expose",
+      "selectAgentsDescription": "Choose which agents marked as tools to expose through this MCP server. These agents will be available as MCP tools for external clients."
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "My MCP server",
+      "slug": "URL slug",
+      "slugPlaceholder": "my-server (auto-generated if empty)",
+      "description": "Description",
+      "descriptionPlaceholder": "Describe what this MCP server does...",
+      "active": "Active (server accepts requests)",
+      "rateLimit": "Rate limit (requests per minute)"
+    },
+    "help": {
+      "slug": "URL-safe identifier. Use lowercase letters, numbers, and hyphens only.",
+      "rateLimit": "0 = unlimited"
+    },
+    "emptyAgentsTitle": "No agents marked as tools available.",
+    "emptyAgentsDescription": "Create an agent and enable \"Use as Tool\" to expose it via MCP.",
+    "selectedAgents_one": "{{count}} agent selected",
+    "selectedAgents_other": "{{count}} agents selected",
+    "selectAgent": "Select {{name}}",
+    "actions": {
+      "create": "Create MCP server",
+      "update": "Update MCP server",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    },
+    "notifications": {
+      "creating": "Creating MCP server...",
+      "updating": "Updating MCP server...",
+      "created": "MCP server created",
+      "updated": "MCP server updated",
+      "saveFailed": "Failed to save MCP server"
+    }
+  },
+  "mcpServerDetailPage": {
+    "title": "MCP server details",
+    "loading": "Loading...",
+    "loadingServer": "Loading MCP server...",
+    "notFound": "MCP server not found",
+    "noDescription": "No description",
+    "notAvailable": "N/A",
+    "unlimited": "Unlimited",
+    "requestsPerMinute": "{{count}} requests/min",
+    "confirmDelete": "Are you sure you want to delete this MCP server? This action cannot be undone.",
+    "tabs": {
+      "general": "General",
+      "endpoints": "Endpoints",
+      "connection": "Connection",
+      "testCurl": "Test with cURL"
+    },
+    "aria": {
+      "detailsTabs": "MCP server details"
+    },
+    "sections": {
+      "serverInformation": "Server information",
+      "exposedAgents": "Exposed agents",
+      "exposedAgentsCount_one": "Exposed agent ({{count}})",
+      "exposedAgentsCount_other": "Exposed agents ({{count}})",
+      "endpointUrls": "Endpoint URLs",
+      "connectionConfiguration": "Connection configuration",
+      "authenticationRequired": "Authentication required"
+    },
+    "fields": {
+      "slug": "Slug",
+      "rateLimit": "Rate limit",
+      "created": "Created",
+      "updated": "Last updated",
+      "reason": "Reason: {{reason}}",
+      "primaryEndpoint": "Primary endpoint (slug-based)",
+      "fallbackEndpoint": "Fallback endpoint (ID-based)"
+    },
+    "statuses": {
+      "unavailable": "Unavailable"
+    },
+    "messages": {
+      "unavailableAgents": "Some agents are unavailable and won't be exposed as tools. They may have been deleted or unmarked as tools.",
+      "noAgents": "No agents exposed yet.",
+      "selectClient": "Select a client to view connection instructions.",
+      "noConnectionInstructions": "No connection instructions are available.",
+      "claudeConfig": "Add this configuration to your Claude Desktop settings file",
+      "cursorConfig": "Add this to your Cursor MCP settings:",
+      "curlConfig": "Test the MCP endpoint using curl:",
+      "apiKeyRequired": "MCP endpoints require authentication. Use an API key from your app's API Keys settings and include it in the"
+    },
+    "errors": {
+      "loadFailed": "Failed to load MCP server",
+      "deleteFailed": "Failed to delete MCP server"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "copyEndpoint": "Copy endpoint",
+      "manageApiKeys": "Manage API keys",
+      "backToServers": "Back to MCP servers"
+    }
+  },
+  "domainFormPage": {
+    "createTitle": "Create domain",
+    "editTitle": "Edit domain",
+    "loading": "Loading domain...",
+    "loadFailed": "Failed to load domain",
+    "errorTitle": "Error",
+    "tryAgain": "Try again",
+    "system": "System",
+    "contentExtraction": "Content extraction configuration",
+    "fields": {
+      "name": "Domain name",
+      "namePlaceholder": "My website",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "https://example.com",
+      "description": "Description",
+      "descriptionPlaceholder": "Description of this domain...",
+      "embeddingService": "Embedding service",
+      "selectEmbeddingService": "Select an embedding service",
+      "vectorDatabase": "Vector database",
+      "contentTag": "Content tag",
+      "contentTagHelp": "HTML tag to extract content from (default: body)",
+      "contentClass": "Content class",
+      "contentClassHelp": "CSS class to filter content (optional)",
+      "contentId": "Content ID",
+      "contentIdHelp": "HTML ID to filter content (optional)"
+    },
+    "messages": {
+      "noEmbeddingServices": "No embedding services available. Please create one first.",
+      "embeddingServiceLocked": "The embedding service cannot be changed after a domain is created.",
+      "noVectorDatabases": "No vector databases available. Please configure a silo with vector support first.",
+      "vectorDatabaseLocked": "The vector database cannot be changed after a domain is created."
+    },
+    "actions": {
+      "create": "Create domain",
+      "update": "Update domain",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    },
+    "notifications": {
+      "creating": "Creating domain...",
+      "updating": "Updating domain...",
+      "created": "Domain created",
+      "updated": "Domain updated",
+      "saveFailed": "Failed to save domain"
+    }
+  },
+  "sharePointSourcesPage": {
+    "title": "SharePoint sources",
+    "subtitle": "Sync documents from Microsoft SharePoint",
+    "loading": "Loading sources...",
+    "loadFailed": "Failed to load SharePoint sources",
+    "loadErrorTitle": "Error loading sources",
+    "confirmDeleteTitle": "Delete SharePoint source?",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This will also delete all indexed content from the associated silo. This action cannot be undone.",
+    "emptyTitle": "No SharePoint sources yet",
+    "emptyDescription": "Add your first SharePoint source to start syncing documents.",
+    "columns": {
+      "name": "Name",
+      "siteDrive": "Site / Drive",
+      "status": "Status",
+      "lastSynced": "Last synced",
+      "files": "Files",
+      "actions": "Actions"
+    },
+    "statuses": {
+      "idle": "Idle",
+      "running": "Running",
+      "success": "Success",
+      "partial": "Partial",
+      "error": "Error"
+    },
+    "relativeTime": {
+      "never": "Never",
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    },
+    "actions": {
+      "addSource": "Add SharePoint source",
+      "addFirstSource": "Add your first SharePoint source",
+      "syncNow": "Sync now",
+      "syncing": "Syncing...",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "notifications": {
+      "deleting": "Deleting SharePoint source...",
+      "deleted": "SharePoint source deleted",
+      "deleteFailed": "Failed to delete SharePoint source"
+    }
+  },
+  "sharePointSourceDetailPage": {
+    "loading": "Loading...",
+    "loadFailed": "Failed to load source",
+    "loadErrorTitle": "Failed to load source",
+    "notFound": "Source not found",
+    "syncErrorTitle": "Sync error",
+    "confirmDeleteMessage": "This will delete all indexed content from the associated silo. This action cannot be undone.",
+    "sections": {
+      "syncStatus": "Sync status",
+      "general": "General",
+      "connection": "SharePoint connection",
+      "indexingConfig": "Indexing config",
+      "dangerZone": "Danger zone"
+    },
+    "fields": {
+      "status": "Status",
+      "lastSynced": "Last synced",
+      "filesIndexed": "Files indexed",
+      "name": "Name",
+      "description": "Description",
+      "site": "Site",
+      "drive": "Drive",
+      "tenantId": "Tenant ID",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "currentCredential": "Current: {{value}}",
+      "keepCurrent": "Leave blank to keep current",
+      "fileExtensionFilters": "File extension filters",
+      "fileExtensionsPlaceholder": "e.g. pdf, docx - press Enter"
+    },
+    "help": {
+      "credentials": "Leave credential fields blank to keep the current values. All three fields must be provided together if you want to update credentials.",
+      "validateCredentials": "Credentials will be validated against Microsoft Graph on save.",
+      "emptyExtensions": "Empty means all supported file types will be indexed.",
+      "deleteWarning": "Deleting this source will permanently remove all indexed documents from the associated silo. This action cannot be undone."
+    },
+    "errors": {
+      "saveFailedTitle": "Save failed",
+      "updateCredentialsTitle": "Credential update failed",
+      "saveGeneral": "Failed to save changes.",
+      "updateCredentials": "Failed to update credentials. Check the values and try again.",
+      "saveFilters": "Failed to save filters.",
+      "triggerSync": "Failed to trigger sync."
+    },
+    "actions": {
+      "save": "Save",
+      "saving": "Saving...",
+      "saveFilters": "Save filters",
+      "validating": "Validating...",
+      "updateCredentials": "Update credentials",
+      "deleteSource": "Delete source"
+    }
+  },
+  "domainDetailPage": {
+    "loading": "Loading domain...",
+    "loadFailed": "Failed to load domain",
+    "notFound": "Domain not found",
+    "backToApp": "Back to app",
+    "editDomain": "Edit domain",
+    "crawlJobQueued": "Crawl job queued",
+    "crawlPolicy": "Crawl policy",
+    "crawlPolicySaved": "Crawl policy saved",
+    "crawlJob": "Crawl job",
+    "crawlJobHistory": "Crawl job history",
+    "urlsCount_one": "{{count}} URL",
+    "urlsCount_other": "{{count}} URLs",
+    "tabs": {
+      "configuration": "Configuration",
+      "urls": "URLs",
+      "jobHistory": "Job history"
+    },
+    "configuration": {
+      "title": "Scraping configuration",
+      "contentTag": "Content tag",
+      "contentClass": "Content class",
+      "contentId": "Content ID"
+    },
+    "jobStatuses": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "crawlProgress": {
+      "noJobs": "No crawl jobs yet. Use \"{{action}}\" to start the first crawl.",
+      "job": "Job #{{id}}",
+      "manualTrigger": "Manual trigger",
+      "scheduled": "Scheduled",
+      "cancel": "Cancel",
+      "cancelling": "Cancelling...",
+      "discovered": "Discovered",
+      "indexed": "Indexed",
+      "skipped": "Skipped",
+      "failed": "Failed",
+      "removed": "Removed",
+      "duration": "Duration",
+      "started": "Started"
+    },
+    "runCrawl": {
+      "runNow": "Run crawl now",
+      "starting": "Starting...",
+      "alreadyActive": "A crawl job is already queued or running."
+    },
+    "jobHistory": {
+      "loading": "Loading job history...",
+      "loadFailed": "Failed to load job history",
+      "empty": "No crawl jobs yet.",
+      "manual": "Manual",
+      "scheduled": "Scheduled",
+      "previous": "Previous",
+      "pageOf": "Page {{page}} of {{total}}",
+      "next": "Next",
+      "columns": {
+        "id": "ID",
+        "status": "Status",
+        "triggeredBy": "Triggered by",
+        "started": "Started",
+        "finished": "Finished",
+        "discovered": "Discovered",
+        "indexed": "Indexed",
+        "skipped": "Skipped",
+        "failed": "Failed"
+      }
+    },
+    "urls": {
+      "loading": "Loading URLs...",
+      "allStatuses": "All statuses",
+      "allSources": "All sources",
+      "recrawlQueued": "URL marked for re-crawl",
+      "confirmDelete": "Delete this URL and its indexed content?",
+      "deleted": "URL deleted",
+      "emptyFiltered": "No URLs match the current filters.",
+      "empty": "No URLs yet. Add URLs manually or run a crawl.",
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {{page}} of {{totalPages}} ({{total}} total)",
+      "backoffTooltip": "{{count}} skips (backoff active)",
+      "columns": {
+        "url": "URL",
+        "status": "Status",
+        "via": "Via",
+        "depth": "Depth",
+        "lastCrawled": "Last crawled",
+        "nextCrawl": "Next crawl",
+        "failures": "Failures",
+        "actions": "Actions"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "crawling": "Crawling",
+        "indexed": "Indexed",
+        "skipped": "Skipped",
+        "failed": "Failed",
+        "removed": "Removed",
+        "excluded": "Excluded"
+      },
+      "sources": {
+        "sitemap": "Sitemap",
+        "crawl": "Crawl",
+        "manual": "Manual"
+      },
+      "actions": {
+        "viewDetail": "View detail",
+        "forceRecrawl": "Force re-crawl",
+        "delete": "Delete"
+      },
+      "filters": {
+        "status": "Status",
+        "source": "Source",
+        "search": "Search URLs",
+        "searchPlaceholder": "Search URLs...",
+        "searchButton": "Search",
+        "clear": "Clear",
+        "refresh": "Refresh"
+      },
+      "errors": {
+        "load": "Failed to load URLs",
+        "recrawl": "Failed to mark URL for re-crawl",
+        "delete": "Failed to delete URL"
+      }
+    },
+    "urlDrawer": {
+      "title": "URL detail",
+      "loading": "Loading URL details...",
+      "discoveredVia": "Discovered via",
+      "depth": "Depth",
+      "lastCrawled": "Last crawled",
+      "lastIndexed": "Last indexed",
+      "nextCrawl": "Next crawl",
+      "failureCount": "Failure count",
+      "backoffTooltip": "{{count}} consecutive skips; backoff active",
+      "backoffShort": "({{count}}× backoff)",
+      "lastError": "Last error",
+      "httpCacheHints": "HTTP cache hints",
+      "sitemapLastmod": "Sitemap last modified",
+      "marking": "Marking...",
+      "contentPreview": "Indexed content preview",
+      "loadingContent": "Loading content...",
+      "noContent": "No indexed content found for this URL.",
+      "errors": {
+        "loadDetail": "Failed to load URL detail"
+      }
+    },
+    "policyForm": {
+      "loading": "Loading crawl policy...",
+      "saved": "Crawl policy saved successfully",
+      "discovery": "Discovery",
+      "sitemapUrl": "Sitemap URL",
+      "sitemapHelp": "Leave empty to skip sitemap discovery.",
+      "seedUrl": "Seed URL",
+      "seedHelp": "Starting URL for link-following crawl.",
+      "maxDepth": "Max depth",
+      "maxDepthHelp": "0–5 link-following levels from the seed URL.",
+      "manualUrls": "Manual URLs",
+      "manualUrlsPlaceholder": "https://example.com/page — press Enter",
+      "manualUrlsHelp": "Individual URLs to always include. Duplicates are silently ignored.",
+      "filters": "Filters",
+      "filterPatternsBefore": "Patterns match against the URL path. Use",
+      "filterPatternsAfter": "to match any number of path segments (for example,",
+      "includeGlobs": "Include globs",
+      "includeGlobsPlaceholder": "/docs/** — press Enter",
+      "includeGlobsHelp": "Only crawl URLs that match at least one of these patterns. Leave empty to crawl everything.",
+      "excludeGlobs": "Exclude globs",
+      "excludeGlobsPlaceholder": "/admin/** — press Enter",
+      "excludeGlobsHelp": "Skip URLs that match any of these patterns.",
+      "crawlBehaviour": "Crawl behaviour",
+      "rateLimit": "Rate limit (requests/second)",
+      "rateLimitHelp": "0.1–10 requests per second.",
+      "refreshInterval": "Refresh interval (hours)",
+      "refreshIntervalHelp": "0 = disabled (never auto-crawl).",
+      "respectRobots": "Respect robots.txt",
+      "enableScheduled": "Enable scheduled crawls",
+      "saving": "Saving...",
+      "save": "Save policy",
+      "errors": {
+        "load": "Failed to load crawl policy",
+        "save": "Failed to save crawl policy"
+      }
+    }
+  },
+  "repositoriesPage": {
+    "title": "Repositories",
+    "subtitle": "Manage your document repositories",
+    "loading": "Loading repositories...",
+    "loadFailed": "Failed to load repositories",
+    "loadErrorTitle": "Error loading repositories",
+    "tryAgain": "Try again",
+    "confirmDeleteTitle": "Delete repository?",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone and will remove all associated documents.",
+    "deleting": "Deleting repository…",
+    "deleted": "Repository deleted",
+    "deleteFailed": "Failed to delete repository",
+    "documents_one": "{{count}} document",
+    "documents_other": "{{count}} documents",
+    "emptyTitle": "No repositories yet",
+    "emptyDescription": "Create your first repository to start organizing and searching documents.",
+    "columns": {
+      "name": "Name",
+      "documents": "Documents",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "actions": {
+      "create": "Create repository",
+      "createFirst": "Create your first repository",
+      "manageResources": "Manage resources",
+      "playground": "Playground",
+      "edit": "Edit",
+      "delete": "Delete"
+    }
+  },
+  "repositoryFormPage": {
+    "title": {
+      "create": "Create repository",
+      "edit": "Edit repository"
+    },
+    "subtitle": {
+      "create": "Create a new repository to organize your documents. A silo will be automatically created for vector search.",
+      "edit": "Update repository settings and configuration."
+    },
+    "creating": "Creating repository…",
+    "updating": "Updating repository…",
+    "created": "Repository created",
+    "updated": "Repository updated",
+    "errors": {
+      "loadRepository": "Failed to load repository",
+      "invalidAppContext": "Invalid application context",
+      "nameRequired": "Repository name is required",
+      "vectorDatabaseRequired": "Vector database selection is required",
+      "embeddingServiceRequired": "An embedding service is required for new repositories",
+      "invalidRepositoryContext": "Invalid repository context",
+      "saveFailed": "Failed to save repository"
+    },
+    "fields": {
+      "name": "Repository name",
+      "namePlaceholder": "Enter repository name",
+      "vectorDatabase": "Vector database",
+      "embeddingService": "Embedding service",
+      "selectEmbeddingService": "Select an embedding service"
+    },
+    "help": {
+      "name": "Choose a descriptive name for your repository.",
+      "vectorDatabase": "Select where embeddings for this repository will be stored.",
+      "vectorDatabaseImmutable": "The vector database cannot be changed after a repository is created.",
+      "embeddingService": "This embedding service will be used for the silo automatically created with this repository."
+    },
+    "actions": {
+      "create": "Create repository",
+      "saveChanges": "Save changes"
+    }
+  },
+  "repositoryDetailPage": {
+    "notFound": "Repository not found",
+    "backToRepositories": "Back to repositories",
+    "unknownType": "Unknown",
+    "createdSummary_one": "Created {{date}} · {{count}} file",
+    "createdSummary_other": "Created {{date}} · {{count}} files",
+    "serviceWarningTitle": "A service used by this repository is failing",
+    "serviceWarningMessage": "{{warning}} Check the service settings (or ask your platform administrator for system services), then reindex the affected files.",
+    "folderPath": "Folder path",
+    "root": "Repository root",
+    "files_one": "{{count}} item",
+    "files_other": "{{count}} items",
+    "doubleClickToOpen": "Double-click to open",
+    "folderType": "Folder",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "uploaded": "Uploaded",
+      "actions": "Actions"
+    },
+    "actions": {
+      "search": "Search",
+      "uploadMedia": "Upload media",
+      "uploadFiles": "Upload files",
+      "moveFile": "Move {{name}}",
+      "downloadFile": "Download {{name}}",
+      "deleteFile": "Delete {{name}}",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "create": "Create",
+      "rename": "Rename",
+      "move": "Move"
+    },
+    "empty": {
+      "rootTitle": "No files or media in the repository root",
+      "folderTitle": "No files or media in this folder",
+      "rootDescription": "Upload documents or media to get started",
+      "folderDescription": "Upload files or media to this folder"
+    },
+    "services": {
+      "transcription": "Transcription",
+      "videoAi": "Video AI",
+      "serviceNumber": "Service #{{id}}"
+    },
+    "reindex": {
+      "success": "\"{{name}}\" reindexed successfully.",
+      "title": "Re-extract and reindex this file",
+      "ariaLabel": "Reindex {{name}}"
+    },
+    "media": {
+      "detecting": "detecting...",
+      "processing": "processing...",
+      "multimodal": "Multimodal",
+      "multimodalTitle": "Indexed with multimodal video analysis",
+      "statuses": {
+        "ready": "Ready",
+        "error": "Error",
+        "pending": "Pending",
+        "downloading": "Downloading",
+        "processing": "Processing",
+        "transcribing": "Transcribing",
+        "analyzing_video": "Analyzing video",
+        "indexing": "Indexing"
+      }
+    },
+    "modals": {
+      "deleteFile": {
+        "title": "Delete file",
+        "message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone."
+      },
+      "createFolder": { "title": "Create folder" },
+      "renameFolder": { "title": "Rename folder" },
+      "deleteFolder": {
+        "title": "Delete folder",
+        "message": "Are you sure you want to delete the folder \"{{name}}\"? This will also delete all files and subfolders inside it."
+      },
+      "deleteMedia": {
+        "title": "Delete media",
+        "message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone."
+      },
+      "moveFolder": { "title": "Move folder" },
+      "moveMedia": { "title": "Move media" },
+      "moveFile": { "title": "Move file" },
+      "moveTo": "Move \"{{name}}\" to:",
+      "folderName": "Folder name",
+      "folderNamePlaceholder": "Enter folder name",
+      "uploadMedia": { "title": "Upload media" }
+    },
+    "upload": {
+      "file": "File upload",
+      "youtubeUrl": "YouTube URL",
+      "selectMediaFiles": "Select video/audio files",
+      "selectedFiles_one": "{{count}} file selected",
+      "selectedFiles_other": "{{count}} files selected",
+      "processingOptions": "Processing options",
+      "transcriptionMissingTitle": "Transcription service missing",
+      "transcriptionMissingMessage": "No transcription service configured. Please set one in the repository settings before uploading media.",
+      "videoAnalysis": "Video analysis",
+      "multimodalEnabled": "multimodal enabled",
+      "languageOptional": "Language (optional)",
+      "languages": {
+        "autoDetect": "Auto-detect",
+        "spanish": "Spanish",
+        "english": "English",
+        "basque": "Basque",
+        "french": "French"
+      },
+      "minChunk": "Min chunk (s)",
+      "maxChunk": "Max chunk (s)",
+      "overlap": "Overlap (s)",
+      "uploading": "Uploading...",
+      "upload": "Upload"
+    },
+    "errors": {
+      "loadRepository": "Failed to load repository",
+      "uploadFailed": "Upload failed:\n{{messages}}",
+      "someFilesFailed": "Some files failed to upload:\n{{messages}}",
+      "indexingFailed": "Uploaded, but indexing failed (not searchable until reindexed):\n{{messages}}",
+      "uploadFiles": "Failed to upload files",
+      "someMediaFilesFailed": "Some files failed:\n{{messages}}",
+      "uploadMedia": "Failed to upload media",
+      "createFolder": "Failed to create folder",
+      "renameFolder": "Failed to rename folder",
+      "deleteFolder": "Failed to delete folder",
+      "moveFolder": "Failed to move folder",
+      "downloadFile": "Failed to download file",
+      "repositoryNotLinked": "This repository is not linked to a silo.",
+      "reindex": "Reindex failed",
+      "deleteFile": "Failed to delete file",
+      "moveFile": "Failed to move file",
+      "deleteMedia": "Failed to delete media",
+      "moveMedia": "Failed to move media"
+    }
+  },
+  "folderTree": {
+    "loading": "Loading folders...",
+    "heading": "Folders",
+    "actions": "Folder actions",
+    "createFolder": "Create folder",
+    "expandFolder": "Expand {{name}}",
+    "collapseFolder": "Collapse {{name}}",
+    "root": "Repository root",
+    "rootActions": "Root folder actions",
+    "createSubfolder": "Create subfolder",
+    "renameFolder": "Rename folder",
+    "moveFolder": "Move folder",
+    "deleteFolder": "Delete folder",
+    "noFolders": "No folders yet",
+    "createFirstFolder": "Create your first folder to organize files"
+  },
+  "appDashboard": {
+    "loadingWorkspace": "Loading workspace...",
+    "appNotFound": "App Not Found",
+    "requestedAppNotFound": "The requested app could not be found.",
+    "backToApps": "Back to Apps",
+    "subtitle": "Manage your AI components and data resources",
+    "workspace": "Workspace",
+    "noLimit": "No limit",
+    "requestsPerMinute": "{{limit}} req/min",
+    "usageOfLimit": "{{percentage}}% of {{limit}} req/min",
+    "noLimitConfigured": "No limit configured",
+    "unlimitedRequestCapacity": "This workspace has unlimited request capacity.",
+    "limitRequestsPerMinute": "Limit: {{limit}} req/min",
+    "remaining_one": "{{count}} remaining",
+    "remaining_other": "{{count}} remaining",
+    "usageDataUnavailable": "Usage data unavailable.",
+    "noAgentsYet": "No agents yet.",
+    "createFirstAgent": "Create your first agent",
+    "noActivityYet": "No activity yet",
+    "goToAgent": "Go to {{name}}",
+    "collaborators_one": "{{count}} collaborator",
+    "collaborators_other": "{{count}} collaborators",
+    "langSmithActive": "LangSmith active",
+    "langSmithNotConfigured": "LangSmith not configured",
+    "newAgent": "New Agent",
+    "allApps": "All Apps",
+    "total": "total",
+    "rateLimitUsage": "Rate Limit Usage",
+    "topAgentsByUsage": "Top Agents by Usage",
+    "features": {
+      "agents": {
+        "title": "AI Agents",
+        "subtitle": "Intelligent automation",
+        "action": "Manage agents"
+      },
+      "repositories": {
+        "title": "Repositories",
+        "subtitle": "Document storage",
+        "action": "Manage repositories"
+      },
+      "silos": {
+        "title": "Silos",
+        "subtitle": "Vector knowledge bases",
+        "action": "Manage silos"
+      },
+      "domains": {
+        "title": "Domains",
+        "subtitle": "Web scraping sources",
+        "action": "Manage domains"
+      },
+      "settings": {
+        "title": "App Settings",
+        "subtitle": "Services & configuration",
+        "action": "Open settings"
+      }
+    },
+    "checklist": {
+      "title": "Getting Started",
+      "steps_one": "{{completed}} / {{count}} step",
+      "steps_other": "{{completed}} / {{count}} steps",
+      "dismiss": "Dismiss checklist",
+      "goToStep": "Go to {{step}}",
+      "createAgent": "Create an agent",
+      "uploadDocuments": "Upload documents",
+      "createKnowledgeBase": "Create a knowledge base",
+      "addWebDomain": "Add a web domain",
+      "inviteCollaborator": "Invite a collaborator"
+    },
+    "speedometer": {
+      "stressLevels": {
+        "unlimited": "Unlimited",
+        "low": "Low",
+        "moderate": "Moderate",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "seconds_one": "{{count}} second",
+      "seconds_other": "{{count}} seconds",
+      "minutesAndSeconds": "{{minutes}}m {{seconds}}s",
+      "calls_one": "{{usage}}/{{limit}} call",
+      "calls_other": "{{usage}}/{{limit}} calls",
+      "resetsIn": "Resets in {{time}}",
+      "overLimit": "Over limit!"
+    }
+  },
+  "agentsPage": {
+    "title": "Agents",
+    "subtitle": "Manage your AI agents for app {{app}}",
+    "loading": "Loading agents...",
+    "loadFailed": "Failed to load data",
+    "importAgent": "Import Agent",
+    "createAgent": "Create Agent",
+    "tool": "Tool",
+    "exposedViaA2A": "Exposed via A2A",
+    "noDescription": "No description",
+    "agentTypes": {
+      "ocr": "OCR Agent",
+      "ai": "AI Agent"
+    },
+    "columns": {
+      "agent": "Agent",
+      "description": "Description",
+      "type": "Type",
+      "aiService": "AI Service",
+      "status": "Status",
+      "scheduling": "Scheduling",
+      "usage": "Usage",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "noAIService": "No AI Service",
+    "active": "Active",
+    "requests": "requests",
+    "lastUsed": "Last used: {{date}}",
+    "scheduling": {
+      "openTitle": "Open scheduled tasks that use this agent",
+      "usedByTask_one": "Used by {{count}} scheduled task",
+      "usedByTask_other": "Used by {{count}} scheduled tasks"
+    },
+    "actions": {
+      "playground": "Playground",
+      "export": "Export"
+    },
+    "empty": {
+      "title": "No Agents Yet",
+      "subtitle": "Create your first AI agent to get started with intelligent automation.",
+      "createFirstAgent": "Create Your First Agent"
+    },
+    "delete": {
+      "confirmTitle": "Delete agent?",
+      "confirmText": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+      "usedInMcpServers_one": "This agent is used in {{count}} MCP server:",
+      "usedInMcpServers_other": "This agent is used in {{count}} MCP servers:",
+      "mcpWarning": "Deleting this agent will make it unavailable in those MCP servers.",
+      "loading": "Deleting agent…",
+      "success": "Agent deleted",
+      "failed": "Failed to delete agent"
+    },
+    "import": {
+      "success": "Agent imported"
+    },
+    "export": {
+      "successWarning": "Agent exported successfully. Note: Conversation history excluded.",
+      "failed": "Failed to export agent",
+      "title": "Export Agent",
+      "description": "Exporting \"{{name}}\". Select which components to bundle:",
+      "includeAIService": "Include AI Service",
+      "includeSilo": "Include Silo (Knowledge Base)",
+      "includeOutputParser": "Include Output Parser",
+      "includeMCPConfigs": "Include MCP Configs",
+      "includeAgentTools": "Include Agent Tools",
+      "historyNotIncluded": "Conversation history is NOT exported. Only configuration is included."
+    }
+  },
+  "scheduledTaskDetailPage": {
+    "title": "Scheduled task details",
+    "subtitle": "Scheduled task details",
+    "loadFailed": "Failed to load scheduled task details",
+    "runQueued": "Run queued. It will appear in the history when it finishes.",
+    "runFailed": "Failed to run the task",
+    "loading": "Loading task…",
+    "notFound": "Scheduled task not found.",
+    "runNow": "Run now",
+    "edit": "Edit",
+    "editSchedule": "Edit schedule",
+    "generalConfiguration": "General configuration",
+    "lastRunFailed": "Latest run failed",
+    "viewHistory": "View history",
+    "agentFallback": "Agent #{{id}}",
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "visibility": {
+      "unpublished": "Unpublished",
+      "private": "Marketplace · app members",
+      "public": "Marketplace · public"
+    },
+    "fields": {
+      "agent": "Agent",
+      "status": "Status",
+      "schedule": "Schedule",
+      "conversationMode": "Conversation mode",
+      "visibility": "Visibility",
+      "nextRun": "Next run",
+      "taskInput": "Task input"
+    },
+    "conversationModes": {
+      "continuous": "Continuous conversation",
+      "newPerRun": "New conversation per run"
+    },
+    "tabs": {
+      "info": "Information",
+      "runs": "Runs",
+      "ariaLabel": "Scheduled task details"
+    },
+    "runStatus": {
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "running": "Running",
+      "queued": "Queued"
+    },
+    "results": {
+      "conversation": "Conversation",
+      "runs": "Runs",
+      "retention_one": "The last {{count}} run is retained",
+      "retention_other": "The last {{count}} runs are retained",
+      "loading": "Loading runs…",
+      "empty": "No runs yet.",
+      "responses_one": "{{count}} response",
+      "responses_other": "{{count}} responses",
+      "lastResponse": "· latest {{date}}",
+      "failedCount_one": "{{count}} failed",
+      "failedCount_other": "{{count}} failed",
+      "imageMarker": "[image]",
+      "fileCount_one": "{{count}} file",
+      "fileCount_other": "{{count}} files",
+      "duration": "Duration {{duration}}",
+      "runFailed": "The run failed.",
+      "noOutput": "The agent returned no text.",
+      "notFinished": "The run has not finished yet.",
+      "generatedFiles": "Generated files",
+      "noGeneratedFiles": "This run did not generate any files."
+    }
+  },
+  "scheduledTaskFormPage": {
+    "title": {
+      "edit": "Edit scheduled task",
+      "create": "New scheduled task"
+    },
+    "subtitle": "Configure which agent to run and how often.",
+    "agentsLoadFailed": "Failed to load agents",
+    "waitForLoad": "Wait for the task and its channels to load before saving",
+    "requiredFields": "Complete the name, agent and schedule",
+    "updated": "Task updated",
+    "created": "Task created",
+    "saveFailed": "Failed to save the task",
+    "loadFailedMessage": "The task and its channels could not be loaded. Retry the load before saving.",
+    "loading": "Loading task settings and channels…",
+    "retry": "Retry loading",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveAndActivate": "Save and activate",
+    "fields": {
+      "name": "Task name",
+      "namePlaceholder": "Daily report",
+      "description": "Description (optional, visible in the marketplace)",
+      "descriptionPlaceholder": "What this task produces and for whom",
+      "agent": "Agent",
+      "selectAgent": "Select an agent",
+      "taskInput": "Task input",
+      "taskInputPlaceholder": "Enter the initial message or a JSON object…",
+      "timezone": "Time zone"
+    },
+    "conversation": {
+      "title": "Conversation mode",
+      "newPerRun": "Start a new conversation for each run",
+      "continuous": "Continue the same conversation across runs",
+      "continuousHelp": "The agent will see what happened in previous runs, like a regular conversation. Requires an agent with memory.",
+      "immutable": "The mode cannot be changed after the task is created."
+    },
+    "schedule": {
+      "title": "Schedule",
+      "description": "Set the frequency without writing CRON.",
+      "frequency": "Frequency",
+      "interval": "Every X minutes/hours",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "intervalMinutes": "Interval (minutes)",
+      "time": "Time",
+      "weekday": "Day of the week",
+      "monthDay": "Day of the month",
+      "savedAs": "Will be saved as",
+      "days": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
+      }
+    },
+    "destinations": {
+      "title": "Output channels",
+      "description": "Select the channels registered in App Settings for this task.",
+      "empty": "No channels are registered for this app yet.",
+      "registerLink": "Go to App Settings to register channels",
+      "manageLink": "Manage channels in App Settings",
+      "webhook": "Webhook",
+      "teams": "Teams"
+    },
+    "retention": {
+      "label": "Runs to retain",
+      "help": "When the limit is exceeded, the oldest runs and their files are deleted. Runs with active notifications are kept until they expire."
+    },
+    "visibility": {
+      "label": "Marketplace visibility",
+      "unpublished": "Unpublished",
+      "private": "Private · app members",
+      "public": "Public · all users",
+      "help": "Only results are shown in the marketplace, never the input."
+    }
+  },
+  "siloFormPage": {
+    "title": {
+      "edit": "Edit silo",
+      "create": "Create new silo"
+    },
+    "subtitle": {
+      "edit": "Update your silo configuration and settings.",
+      "create": "Create a new silo for vector storage and semantic search."
+    },
+    "loadFailed": "Failed to load silo",
+    "loading": "Loading silo…",
+    "loadErrorTitle": "Error loading silo",
+    "backToSilos": "Back to silos",
+    "updating": "Updating silo…",
+    "creating": "Creating silo…",
+    "updated": "Silo updated",
+    "created": "Silo created",
+    "saveFailed": "Failed to save silo",
+    "loadFormFailed": "Failed to load form data",
+    "system": "System",
+    "validation": {
+      "nameRequired": "Silo name is required",
+      "vectorDbRequired": "Vector database selection is required"
+    },
+    "actions": {
+      "update": "Update silo",
+      "create": "Create silo",
+      "saving": "Saving…",
+      "cancel": "Cancel"
+    },
+    "fields": {
+      "name": "Silo name",
+      "namePlaceholder": "Enter silo name",
+      "description": "Silo description",
+      "descriptionPlaceholder": "Enter silo description",
+      "metadataDefinition": "Metadata definition",
+      "noMetadataDefinition": "No metadata definition",
+      "embeddingService": "Embedding service",
+      "selectEmbeddingService": "Select an embedding service",
+      "vectorDatabase": "Vector database",
+      "noVectorDatabases": "No vector databases available"
+    },
+    "help": {
+      "metadataDefinition": "Optional: Define structured metadata for documents in this silo.",
+      "embeddingServiceImmutable": "The embedding service cannot be changed after a silo is created.",
+      "embeddingServiceRequired": "Required: Choose the embedding service for vector generation.",
+      "vectorDatabaseImmutable": "The vector database cannot be changed after a silo is created.",
+      "configureVectorDatabase": "No vector databases available. Configure a silo backend before proceeding.",
+      "vectorDatabaseRequired": "Required: Select the storage engine that will persist vectors for this silo."
+    },
+    "media": {
+      "title": "Video and audio",
+      "transcriptionService": "Transcription service (Whisper)",
+      "noTranscription": "None (video and audio are not indexed)",
+      "transcriptionHelp": "Optional. Needed to index video and audio into this silo (for example through the public API).",
+      "repositoryTranscriptionHelp": "Transcribes the video and audio uploaded to this repository. Stored on its silo.",
+      "videoAnalysisService": "Video analysis service (Gemini)",
+      "noVideoAnalysis": "None (no visual analysis)",
+      "videoAnalysisHelp": "Optional. Adds a description of what is seen in the video to each transcribed chunk."
+    },
+    "about": {
+      "title": "About custom silos",
+      "description": "Custom silos are vector storage containers that enable semantic search and retrieval. They store document embeddings and allow AI agents to find relevant information quickly.",
+      "embeddingService": "Required for converting text to vectors.",
+      "metadataDefinition": "Optional structured data for filtering and organization."
+    }
+  },
+  "silosPage": {
+    "title": "Silos",
+    "subtitle": "Vector storage and retrieval systems for semantic search",
+    "loadFailed": "Failed to load silos",
+    "loading": "Loading silos…",
+    "loadErrorTitle": "Error loading silos",
+    "retry": "Try again",
+    "confirmDeleteTitle": "Delete silo",
+    "confirmDeleteMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone and removes all stored vectors.",
+    "confirmDeleteFallback": "Are you sure you want to delete this silo? This action cannot be undone.",
+    "deleting": "Deleting silo…",
+    "deleted": "Silo deleted",
+    "deleteFailed": "Failed to delete silo",
+    "exportFailed": "Failed to export silo",
+    "exported": "Silo exported successfully. Note: Vector data excluded. Re-upload documents after import.",
+    "appIdRequired": "App ID is required",
+    "selectEmbeddingService": "Please select an embedding service to continue",
+    "imported": "Silo imported",
+    "importFailed": "Import failed",
+    "importSilo": "Import silo",
+    "createSilo": "Create silo",
+    "createFirst": "Create your first silo",
+    "silo": "Silo",
+    "custom": "Custom",
+    "unknown": "Unknown",
+    "documentCount_one": "{{count}} document",
+    "documentCount_other": "{{count}} documents",
+    "notAvailable": "N/A",
+    "emptyTitle": "No silos yet",
+    "emptyDescription": "Create your first silo to start storing and searching documents with vector embeddings.",
+    "columns": {
+      "name": "Name",
+      "description": "Description",
+      "type": "Type",
+      "vectorDb": "Vector DB",
+      "documents": "Documents",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "actions": {
+      "playground": "Playground",
+      "export": "Export",
+      "edit": "Edit",
+      "delete": "Delete"
+    }
+  },
+  "scheduledTasksPage": {
+    "title": "Scheduled Tasks",
+    "subtitle": "Manage your agents' scheduled tasks",
+    "loading": "Loading scheduled tasks…",
+    "loadFailed": "Failed to load scheduled tasks",
+    "updateFailed": "Failed to update the task",
+    "confirmDelete": "Delete scheduled task ‘{{name}}’? This action cannot be undone.",
+    "deleteFailed": "Failed to delete the task",
+    "runQueued": "‘{{name}}’ queued to run now",
+    "runFailed": "Failed to run the task",
+    "createTask": "New scheduled task",
+    "emptyMessage": "No scheduled tasks in this workspace.",
+    "createFirstTask": "Create your first scheduled task",
+    "detailView": "Detail view",
+    "agentFallback": "Agent #{{id}}",
+    "noNextRun": "No upcoming run",
+    "columns": {
+      "task": "Task",
+      "agent": "Agent",
+      "nextRun": "Next run",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "conversationModes": {
+      "continuous": "Continuous conversation",
+      "newPerRun": "New conversation per run"
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "actions": {
+      "trigger": "Actions",
+      "forTask": "Actions for {{name}}",
+      "edit": "Edit task",
+      "runNow": "Run now",
+      "pause": "Pause task",
+      "resume": "Resume task",
+      "delete": "Delete task"
+    }
+  },
+  "metricsDashboard": {
+    "appTitle": "Metrics",
+    "appDescription": "Usage, performance and reliability of this app's agents.",
+    "platformTitle": "Platform metrics",
+    "platformDescription": "Agent usage, performance and reliability across every app.",
+    "loadFailed": "Failed to load metrics.",
+    "loading": "Loading…",
+    "timeRange": "Time range",
+    "kpi": {
+      "executions": "Executions",
+      "subAgentCalls_one": "+{{formattedCount}} sub-agent call",
+      "subAgentCalls_other": "+{{formattedCount}} sub-agent calls",
+      "errorRate": "Error rate",
+      "timeouts_one": "{{formattedCount}} timeout",
+      "timeouts_other": "{{formattedCount}} timeouts",
+      "failed_one": "{{formattedCount}} failed",
+      "failed_other": "{{formattedCount}} failed",
+      "latencyP95": "Latency p95",
+      "latencyMedianHint": "p50 {{value}}",
+      "timeToFirstToken": "Time to first token",
+      "streamingOnly": "p50, streaming only",
+      "totalTokens": "Total tokens",
+      "inputOutputTokens": "{{input}} in · {{output}} out",
+      "tokensPerExecution": "Tokens / execution",
+      "llmCalls_one": "{{formattedCount}} LLM call",
+      "llmCalls_other": "{{formattedCount}} LLM calls",
+      "toolCalls": "Tool calls",
+      "activeApps": "Active apps",
+      "activeAppsHint": "{{agents}} agents · {{users}} users",
+      "activeUsers": "Active users",
+      "activeAgents_one": "{{formattedCount}} agent",
+      "activeAgents_other": "{{formattedCount}} agents"
+    },
+    "change": {
+      "title": "Change vs the previous period",
+      "unchanged": "unchanged",
+      "improved": "improved",
+      "worsened": "worsened",
+      "previousPeriod": "vs previous period"
+    },
+    "charts": {
+      "activity": "Activity",
+      "activityDescription": "Executions, sub-agent calls and failed executions",
+      "subAgentCalls": "Sub-agent calls",
+      "errors": "Errors",
+      "tokenUsage": "Token usage",
+      "tokenUsageDescription": "Input and output tokens across all LLM calls",
+      "input": "Input",
+      "output": "Output",
+      "latency": "Latency",
+      "latencyDescription": "Execution duration, median and 95th percentile"
+    },
+    "breakdown": {
+      "title": "Breakdown",
+      "description": "Runs include sub-agent calls; tokens are those of each run's own LLM calls",
+      "noRuns": "No runs in this period."
+    },
+    "dimensions": {
+      "apps": "Apps",
+      "app": "App",
+      "agents": "Agents",
+      "agent": "Agent",
+      "models": "Models",
+      "model": "Model",
+      "providers": "Providers",
+      "provider": "Provider",
+      "channels": "Channels",
+      "channel": "Channel",
+      "users": "Users",
+      "user": "User"
+    },
+    "channels": {
+      "playground": "Playground",
+      "publicApi": "Public API",
+      "agentAsTool": "Agent as tool",
+      "scheduledTask": "Scheduled task"
+    },
+    "table": {
+      "runs": "Runs",
+      "errorRate": "Error rate",
+      "tokens": "Tokens",
+      "averageLatency": "Avg latency",
+      "lastRun": "Last run"
+    },
+    "errors": {
+      "title": "Errors",
+      "description": "Failed executions grouped by error type, and the latest failures",
+      "noFailures": "No failed executions in this period.",
+      "lastSeen": "{{count}} · last {{date}}",
+      "latestFailures": "Latest failures",
+      "agentFallback": "Agent #{{id}}",
+      "appFallback": "App #{{id}}"
+    },
+    "tools": {
+      "title": "Tools",
+      "description": "Direct tool calls made by the agents",
+      "tool": "Tool",
+      "type": "Type",
+      "calls": "Calls",
+      "average": "Avg",
+      "noCalls": "No tool calls in this period.",
+      "types": {
+        "subAgent": "Sub-agent",
+        "knowledgeBase": "Knowledge base",
+        "builtIn": "Built-in"
+      }
+    }
+  },
+  "agentA2ASettings": {
+    "copy": "Copy",
+    "copySucceeded": "{{label}} copied",
+    "copyFailed": "Could not copy {{label}}",
+    "exposeAgent": "Expose this agent over the A2A protocol",
+    "exposeAgentHelp": "When enabled, external A2A clients can discover this agent's card and call it over JSON-RPC.",
+    "visibility": "Agent card visibility",
+    "publicVisibility": "Public card — anyone with the URL can read the agent card",
+    "apiKeyVisibility": "API key required — the card is only served to callers with a valid X-API-KEY",
+    "nameOverride": "Name override",
+    "namePlaceholder": "Defaults to the agent's name",
+    "descriptionOverride": "Description override",
+    "descriptionPlaceholder": "Defaults to the agent's description",
+    "charactersCount": "{{count}}/{{max}} characters",
+    "skillTags": "Skill tags",
+    "skillTagsPlaceholder": "Type a tag and press Enter",
+    "skillTagLimit": "Each tag is capped at {{max}} characters.",
+    "examples": "Example prompts",
+    "examplesHelp": "Shown to A2A callers as example tasks this agent can handle. Up to {{maxExamples}} examples, {{maxCharacters}} characters each.",
+    "exampleLabel": "Example prompt {{number}}",
+    "examplePlaceholder": "Enter an example prompt...",
+    "removeExample": "Remove example prompt {{number}}",
+    "addExample": "Add example",
+    "cardUrl": "Card URL",
+    "cardUrlMissingSlug": "This app has no slug yet — set one in App Settings to generate the agent card URL.",
+    "setSlugLink": "Go to App Settings to set a slug",
+    "rpcUrl": "RPC URL",
+    "rpcUrlMissingSlug": "This app has no slug yet — set one in App Settings to generate the RPC URL.",
+    "apiKeyRequired": "API key required",
+    "apiKeyInstructions": "Callers must send an app API key in the X-API-KEY header. Create keys in the app's",
+    "apiKeysSettings": "API Keys settings"
+  },
+  "agentFormPage": {
+    "title": {
+      "ocr": "OCR Agent",
+      "create": "Create Agent",
+      "edit": "Edit Agent"
+    },
+    "description": {
+      "ocr": "Configure OCR agent for document processing",
+      "create": "Configure a new AI agent with advanced capabilities",
+      "edit": "Modify agent: {{name}}"
+    },
+    "loading": "Loading agent...",
+    "cancel": "Cancel",
+    "errors": {
+      "title": "Error",
+      "loadFailed": "Failed to load agent data",
+      "visibilityUpdateFailed": "Failed to update visibility"
+    },
+    "saving": {
+      "inProgress": "Saving...",
+      "create": "Create Agent",
+      "saveChanges": "Save Changes",
+      "creating": "Creating agent...",
+      "updating": "Updating agent...",
+      "created": "Agent created",
+      "updated": "Agent updated",
+      "failed": "Failed to save agent"
+    },
+    "tabs": {
+      "basic": "Basic",
+      "prompts": "Prompts",
+      "configuration": "Configuration",
+      "advanced": "Advanced",
+      "marketplace": "Marketplace",
+      "metrics": "Metrics",
+      "saveBeforeA2a": "Save the agent first to configure A2A settings"
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "Name...",
+      "agentType": "Agent Type",
+      "aiAgent": "AI Agent",
+      "ocrAgent": "OCR Agent",
+      "description": "Description",
+      "descriptionPlaceholder": "Description..."
+    },
+    "prompts": {
+      "title": "Prompts & Instructions",
+      "systemPrompt": "System Prompt",
+      "systemPromptPlaceholder": "Define the agent's behavior and capabilities...",
+      "template": "Prompt Template",
+      "templatePlaceholder": "Template for user interactions (must include {question})...",
+      "templateHint": "The template must include {{question}} to work properly"
+    },
+    "configuration": {
+      "title": "Configuration",
+      "aiService": "AI Service",
+      "selectAiService": "Select AI Service",
+      "knowledgeBase": "Knowledge Base (Silo)",
+      "selectKnowledgeBase": "Select Knowledge Base",
+      "temperature": "Temperature",
+      "temperatureHelp": "Controls randomness: 0 = deterministic, 2 = very creative"
+    },
+    "validation": {
+      "promptTemplateQuestion": "The Prompt Template must include {question} before saving.",
+      "scoreThresholdRequired": "A score threshold is required when using similarity score threshold search.",
+      "mediaEmbeddingRequired": "Conversational agents require a media embedding service in Media Processing."
+    },
+    "noAiServices": {
+      "title": "No AI Services Configured",
+      "ocrMessage": "You need to configure at least one AI service before creating an OCR agent. AI services define which models your agent will use for vision and text processing.",
+      "agentMessage": "You need to configure at least one AI service before creating an agent. AI services define which language model your agent will use.",
+      "configure": "Configure AI Services"
+    },
+    "scheduledTasks": {
+      "title": "Scheduled tasks using this agent",
+      "description": "Scheduling is managed independently from the agent.",
+      "create": "Create scheduled task",
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "outputParser": {
+      "dataStructure": "Data Structure",
+      "select": "-- Select a Data Structure --"
+    },
+    "capabilities": {
+      "title": "Capabilities",
+      "mcpWarningTitle_one": "This agent is used in {{count}} MCP server",
+      "mcpWarningTitle_other": "This agent is used in {{count}} MCP servers",
+      "mcpWarningMessage": "Unmarking this agent as a tool will make it unavailable in the following MCP servers:",
+      "unmarkTool": "Unmark as Tool Anyway",
+      "toggle": "Toggle {{item}}",
+      "toolAgent": "Tool Agent",
+      "toolAgentHelp": "Can be used by other agents",
+      "usedInMcpServers_one": "Used in {{count}} MCP server",
+      "usedInMcpServers_other": "Used in {{count}} MCP servers",
+      "conversational": "Conversational",
+      "conversationalHelp": "Maintains conversation memory",
+      "codeInterpreter": "Code Interpreter",
+      "codeInterpreterHelp": "Allows the agent to execute Python code (pandas, openpyxl, numpy)",
+      "skillRouter": "Skill Router",
+      "skillRouterHelp": "Let the model pre-select at most 2 skills per turn; off by default.",
+      "sandboxService": "Sandbox Service",
+      "useDefaultSandbox": "Use app/system default",
+      "sandboxHelp": "Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service."
+    },
+    "providerTools": {
+      "title": "Provider-side Tools",
+      "description": "These tools run on the AI provider's infrastructure; no extra backend setup is needed. Only tools supported by the agent's selected provider will be active.",
+      "webSearch": "Web Search",
+      "webSearchDescription": "Real-time internet search",
+      "imageGeneration": "Image Generation",
+      "imageGenerationDescription": "Generate images with DALL-E",
+      "codeInterpreterDescription": "Provider-sandboxed code execution",
+      "fileSearch": "File Search",
+      "fileSearchDescription": "Vector search over uploaded files",
+      "on": "ON",
+      "compatibilityTitle": "Model compatibility",
+      "compatibilityMessage": "Some tools require specific models, for example Image Generation needs gpt-image-1 (OpenAI Responses API). Unsupported tools for the selected provider are silently ignored."
+    },
+    "media": {
+      "title": "Media Processing",
+      "description": "Default configuration used when uploading audio/video or YouTube URLs in the playground. Set it here once so uploads only require choosing the file or URL.",
+      "embeddingService": "Embedding Service",
+      "noTemporaryKnowledgeBase": "None (no temporary knowledge base)",
+      "embeddingServiceHelp": "Model used to vectorize uploaded media/documents into the conversation's temporary knowledge base for retrieval. Required for conversational agents; optional otherwise (documents are then sent in full to the agent, and audio/video uploads are unavailable).",
+      "transcriptionService": "Transcription Service",
+      "selectTranscriptionService": "Select Transcription Service",
+      "transcriptionHelp": "Speech-to-text model used to transcribe media.",
+      "videoAnalysisService": "Video Analysis Service (optional)",
+      "audioOnly": "None (audio only)",
+      "videoAnalysisHelp": "Enables multimodal analysis (visual descriptions from video frames).",
+      "language": "Language",
+      "autoDetect": "Auto-detect",
+      "languages": {
+        "spanish": "Spanish",
+        "english": "English",
+        "basque": "Basque",
+        "french": "French"
+      },
+      "minChunk": "Min Chunk (s)",
+      "maxChunk": "Max Chunk (s)",
+      "overlap": "Overlap (s)"
+    },
+    "ocr": {
+      "title": "OCR Configuration",
+      "toolAgentHelp": "Can be used by other agents (including OCR tools)",
+      "visionModel": "Vision Model",
+      "selectVisionModel": "-- Select vision model --",
+      "visionPrompt": "System Prompt (Vision)",
+      "visionPromptPlaceholder": "Add the system prompt for the vision model...",
+      "textModel": "Text Model",
+      "selectTextModel": "-- Select text model --",
+      "textPrompt": "System Prompt (Text)",
+      "textPromptPlaceholder": "Add the system prompt for the text model..."
+    },
+    "advanced": {
+      "availableTools": "Available Tools",
+      "toolsSelected_one": "{{count}} tool selected",
+      "toolsSelected_other": "{{count}} tools selected",
+      "mcpServers": "MCP Servers",
+      "mcpServersSelected_one": "{{count}} MCP server selected",
+      "mcpServersSelected_other": "{{count}} MCP servers selected",
+      "mcpProtocol": "Model Context Protocol",
+      "mcpInfoTitle": "What are MCP Servers?",
+      "mcpInfoMessage": "MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources.\nSelect the servers this agent should have access to.",
+      "noMcpServers": "No MCP Servers Available",
+      "noMcpServersDescription": "You haven't configured any MCP servers yet. Create MCP configurations in the settings to enable external tool access.",
+      "configureMcpServers": "Configure MCP Servers",
+      "skills": "Skills",
+      "skillsDescription": "Assign specialized behaviors that the agent can activate on-demand",
+      "systemSkill": "System skill.",
+      "disabledSkillHelp": "Disabled; ignored at execution until re-enabled.",
+      "system": "System",
+      "disabledSkillBadge": "Disabled; ignored at execution until re-enabled",
+      "skillsSelected_one": "{{count}} skill selected.",
+      "skillsSelected_other": "{{count}} skills selected.",
+      "skillActivationPrefix": "The agent will have a",
+      "skillActivationSuffix": "tool to activate these skills.",
+      "noSkills": "No Skills Available",
+      "noSkillsDescription": "You haven't created any skills yet. Create skills in the settings to enable specialized agent behaviors.",
+      "manageSkills": "Manage Skills"
+    },
+    "marketplace": {
+      "title": "Marketplace Publishing",
+      "agentNotSaved": "Agent not saved",
+      "saveFirstMessage": "Save the agent first to configure marketplace publishing.",
+      "visibility": "Marketplace Visibility",
+      "unpublished": "Unpublished (not listed)",
+      "private": "Private (visible to app members only)",
+      "public": "Public (visible to all users)",
+      "toolCannotPublish": "Tool agents cannot be published to the marketplace",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "Defaults to agent name if empty",
+      "shortDescription": "Short Description",
+      "charactersCount": "{{count}}/{{max}} characters",
+      "longDescription": "Long Description",
+      "markdownPlaceholder": "Supports Markdown",
+      "category": "Category",
+      "selectCategory": "-- Select a category --",
+      "categories": {
+        "Productivity": "Productivity",
+        "Research": "Research",
+        "Writing": "Writing",
+        "Code": "Code",
+        "DataAnalysis": "Data Analysis",
+        "CustomerSupport": "Customer Support",
+        "Education": "Education",
+        "Other": "Other"
+      },
+      "tags": "Tags",
+      "tagsPlaceholder": "Add up to 5 tags",
+      "iconUrl": "Icon URL",
+      "iconPreview": "Icon preview",
+      "coverImageUrl": "Cover Image URL",
+      "coverPreview": "Cover preview",
+      "conversationStarters": "Conversation Starters",
+      "conversationStartersDescription": "Suggested opening messages for users. These only appear at the start of a new conversation.",
+      "conversationStarterLabel": "Conversation starter {{number}}",
+      "starterPlaceholder": "Enter a starter prompt...",
+      "removeStarter": "Remove starter",
+      "addStarter": "Add Starter",
+      "savingProfile": "Saving marketplace profile...",
+      "profileSaved": "Marketplace profile saved",
+      "profileSaveFailed": "Failed to save marketplace profile"
+    }
+  },
+  "agentPlayground": {
+    "title": "Agent Playground",
+    "agentSubtitle": "Agent: {{name}}",
+    "loading": "Loading agent playground...",
+    "loadFailed": "Failed to load agent",
+    "loadErrorTitle": "Error Loading Agent",
+    "backToAgents": "Back to Agents",
+    "notFoundTitle": "Agent Not Found",
+    "notFoundMessage": "The requested agent could not be found.",
+    "editPrompts": "Edit Prompts",
+    "memory": "Memory",
+    "chat": {
+      "reset": "Reset",
+      "loadingConversation": "Loading conversation...",
+      "startChatting": "Start chatting with {{agent}}",
+      "starterPromptDescription": "Type a message below to begin",
+      "youLabel": "YOU",
+      "errorLabel": "Error",
+      "scrollToBottom": "Scroll to bottom",
+      "filterByMetadata": "Filter by Metadata",
+      "attachFile": "Attach file",
+      "attachMedia": "Attach media",
+      "attachMediaTitle": "Attach media (video/audio)",
+      "answerApprovalToContinue": "Answer the approval request to continue",
+      "messagePlaceholder": "Message {{agent}}…",
+      "stopGenerating": "Stop generating",
+      "sendMessage": "Send message",
+      "sendKeyboardHint": "Press Enter to send, Shift+Enter for new line",
+      "approvalCouldNotBeSent": "The approval could not be sent",
+      "requestCouldNotBeCancelled": "The request could not be cancelled",
+      "sendMessageFailed": "An error occurred",
+      "removePlaygroundMediaConfirm": "Removing this media item will delete all uploaded media for this playground session. Do you want to continue?"
+    },
+    "tabs": {
+      "playground": "Playground",
+      "apiExamples": "API Examples"
+    }
+  },
+  "searchFilters": {
+    "title": "Filter by Metadata",
+    "match": "Match:",
+    "allFilters": "ALL filters (AND)",
+    "anyFilter": "ANY filter (OR)",
+    "operatorFor": "Operator for {{field}}",
+    "filterByField": "Filter by {{field}}",
+    "multipleValuesPlaceholder": "value1, value2, value3",
+    "jsonPreview": "Filter JSON preview",
+    "saveFilter": "Save filter",
+    "filterName": "Filter name",
+    "filterNamePlaceholder": "Filter name...",
+    "loadSavedFilter": "Load saved filter",
+    "loadSavedFilterOption": "Load saved filter…",
+    "loaded": "Loaded",
+    "clear": "Clear",
+    "operators": {
+      "equals": "equals",
+      "notEquals": "not equals",
+      "greaterThan": "greater than",
+      "greaterThanOrEqual": "greater than or equal",
+      "lessThan": "less than",
+      "lessThanOrEqual": "less than or equal",
+      "inAnyOf": "in (any of)"
+    }
+  },
+  "toolHistory": {
+    "title": "Tool activity",
+    "collapsePanel": "Collapse tool history panel",
+    "expandPanel": "Expand tool history panel",
+    "clearHistory": "Clear tool history",
+    "edited": "edited",
+    "running": "running",
+    "awaitingApproval": "awaiting approval",
+    "rejected": "rejected",
+    "notRun": "{{status}} · not run",
+    "status": {
+      "expired": "expired",
+      "cancelled": "cancelled"
+    },
+    "waitingForResult": "waiting for result…",
+    "waitingForApproval": "waiting for your approval…"
+  },
+  "playgroundMedia": {
+    "title": "Upload Media",
+    "fileUpload": "File Upload",
+    "youtubeUrl": "YouTube URL",
+    "selectFiles": "Select Video/Audio Files",
+    "selectedFiles_one": "{{count}} file selected",
+    "selectedFiles_other": "{{count}} files selected",
+    "configurationNote": "Transcription, language and chunking settings are configured on the agent.",
+    "uploadFailed": "Upload failed",
+    "uploading": "Uploading...",
+    "upload": "Upload"
+  },
+  "marketplaceHome": {
+    "loadingDashboard": "Loading your dashboard...",
+    "loadConversationsFailed": "Failed to load conversations",
+    "welcomeBack": "Welcome back",
+    "dashboardSubtitle": "Your AI agent dashboard",
+    "browseAgents": "Browse Agents",
+    "discoverAgentsDescription": "Discover and chat with AI agents published by your organisation",
+    "recentConversations": "My Recent Conversations",
+    "noConversations": "No conversations yet",
+    "noConversationsDescription": "You haven't chatted with any agents yet. Browse the marketplace to get started!",
+    "noMessages": "No messages yet",
+    "justNow": "just now",
+    "confirmDeleteTitle": "Delete conversation?",
+    "confirmDeleteMessage": "Delete the conversation with \"{{agent}}\"? This action cannot be undone.",
+    "deletingConversation": "Deleting conversation...",
+    "conversationDeleted": "Conversation deleted",
+    "deleteConversationFailed": "Failed to delete conversation",
+    "renameConversationFailed": "Failed to rename conversation",
+    "conversationTitle": "Conversation title",
+    "saveConversationTitle": "Save conversation title",
+    "saveTitle": "Save title",
+    "cancelTitleEdit": "Cancel title edit",
+    "renameConversation": "Rename conversation",
+    "deleteConversation": "Delete conversation"
+  },
+  "marketplacePage": {
+    "title": "Marketplace",
+    "subtitle": "Discover and interact with AI agents and scheduled tasks across the platform.",
+    "agentsTab": "Agents",
+    "scheduledTasksTab": "Scheduled tasks",
+    "sortTopRated": "Top Rated",
+    "sortNewest": "Newest",
+    "sortAlphabetical": "A–Z",
+    "loadingMarketplace": "Loading marketplace...",
+    "loadMarketplaceFailed": "Failed to load marketplace",
+    "agentCount_one": "Showing {{shown}} of {{count}} agent",
+    "agentCount_other": "Showing {{shown}} of {{count}} agents",
+    "searchAgents": "Search agents...",
+    "category": "Category",
+    "allCategories": "All Categories",
+    "sortBy": "Sort by",
+    "myApps": "My Apps",
+    "noAgentsFound": "No agents found",
+    "adjustFilters": "Try adjusting your search or filters.",
+    "noAgentsPublished": "No agents have been published to the marketplace yet.",
+    "categories": {
+      "productivity": "Productivity",
+      "research": "Research",
+      "writing": "Writing",
+      "code": "Code",
+      "dataAnalysis": "Data Analysis",
+      "customerSupport": "Customer Support",
+      "education": "Education",
+      "other": "Other"
+    },
+    "loadScheduledTasksFailed": "Failed to load scheduled tasks",
+    "loadingScheduledTasks": "Loading scheduled tasks...",
+    "noScheduledTasksFound": "No scheduled tasks found",
+    "noScheduledTasksPublished": "No scheduled tasks have been published yet.",
+    "taskCount_one": "Showing {{shown}} of {{count}} task",
+    "taskCount_other": "Showing {{shown}} of {{count}} tasks",
+    "searchScheduledTasks": "Search scheduled tasks...",
+    "noDescriptionProvided": "No description provided.",
+    "knowledge": "Knowledge",
+    "noRatings": "No ratings",
+    "chatCount_one": "{{count}} chat",
+    "chatCount_other": "{{count}} chats",
+    "startChat": "Start Chat",
+    "startingConversation": "Starting conversation…",
+    "conversationStarted": "Conversation started",
+    "startConversationFailed": "Failed to start conversation",
+    "openAgent": "Open {{agent}}",
+    "openScheduledTask": "Open scheduled task {{task}}",
+    "lastRun": "Last run",
+    "noRunsYet": "No runs yet",
+    "runStatus": {
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "running": "Running",
+      "queued": "Queued"
+    },
+    "schedule": {
+      "everyMinutes_one": "Every {{count}} minute",
+      "everyMinutes_other": "Every {{count}} minutes",
+      "everyHours_one": "Every {{count}} hour",
+      "everyHours_other": "Every {{count}} hours",
+      "weekly": "Weekly at {{time}}",
+      "weeklyConfigured": "Weekly at the configured time",
+      "monthly": "Monthly, day {{day}} at {{time}}",
+      "monthlyConfigured": "Monthly, day {{day}}, at the configured time",
+      "daily": "Daily at {{time}}",
+      "dailyConfigured": "Daily at the configured time"
+    }
+  },
+  "marketplaceChat": {
+    "agentFallback": "Agent",
+    "invalidConversationId": "Invalid conversation ID",
+    "loadConversationFailed": "Failed to load conversation",
+    "approvalCouldNotBeSent": "The approval could not be sent",
+    "requestCouldNotBeCancelled": "The request could not be cancelled",
+    "quotaExceededError": "Marketplace call quota exceeded. Your quota resets at the start of next month.",
+    "sendMessageFailed": "Failed to send message. Please try again.",
+    "filesAttached_one": "{{count}} file attached",
+    "filesAttached_other": "{{count}} files attached",
+    "failedToUploadFiles": "Failed to upload: {{files}}",
+    "downloadFileFailed": "Failed to download file",
+    "removeFileFailed": "Failed to remove file",
+    "createConversationFailed": "Failed to create conversation",
+    "loadHistoryFailed": "Failed to load conversation history",
+    "loadingConversation": "Loading conversation...",
+    "backToMarketplace": "Back to Marketplace",
+    "history": "History",
+    "closeHistory": "Close history",
+    "new": "New",
+    "searchConversations": "Search conversations…",
+    "loading": "Loading…",
+    "noSearchMatches": "No conversations match your search.",
+    "noPreviousConversations": "No previous conversations.",
+    "historyGroups": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "previous7Days": "Previous 7 days",
+      "older": "Older"
+    },
+    "newConversation": "New conversation",
+    "conversationHistory": "Conversation history",
+    "quotaUsage": "Marketplace usage: {{used}}/{{quota}}",
+    "startChatting": "Start chatting with {{agent}}",
+    "starterPromptDescription": "Ask a question or choose a suggestion below to get started",
+    "youLabel": "YOU",
+    "errorLabel": "Error",
+    "scrollToBottom": "Scroll to bottom",
+    "quotaLimitReached": "You've reached your monthly marketplace call limit ({{used}}/{{quota}}). Your quota resets at the start of next month (UTC).",
+    "monthlyQuotaReached": "Monthly quota reached",
+    "attachFile": "Attach file",
+    "answerApprovalToContinue": "Answer the approval request to continue",
+    "messagePlaceholder": "Message {{agent}}…",
+    "stopGenerating": "Stop generating",
+    "sendMessage": "Send message",
+    "sendKeyboardHint": "Press Enter to send, Shift+Enter for new line",
+    "agentDetails": "Agent details",
+    "capabilities": "Capabilities",
+    "knowledgeEnhanced": "Knowledge-enhanced",
+    "memory": "Memory",
+    "details": "Details",
+    "publishedBy": "Published by",
+    "knowledgeBase": "Knowledge base",
+    "yes": "Yes",
+    "no": "No",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "rating": "Rating",
+    "conversations": "Conversations",
+    "published": "Published",
+    "marketplaceUsage": "Marketplace usage",
+    "callsThisMonth": "{{used}} / {{quota}} calls this month"
+  },
+  "attachedFiles": {
+    "title": "Attached Files",
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files",
+    "uploading": "Uploading...",
+    "emptyTitle": "No files attached yet",
+    "emptyDescription": "Use the attach button to upload",
+    "generated": "Generated",
+    "status": {
+      "ready": "Ready",
+      "error": "Error",
+      "pending": "Pending",
+      "processing": "Processing",
+      "transcribing": "Transcribing",
+      "analyzingVideo": "Analyzing video",
+      "downloading": "Downloading",
+      "indexing": "Indexing"
+    },
+    "visionReady": "Vision ready",
+    "textExtracted": "Text extracted",
+    "noText": "No text",
+    "downloadFile": "Download file",
+    "downloadFileNamed": "Download {{filename}}",
+    "removeFile": "Remove file",
+    "removeFileNamed": "Remove {{filename}}"
+  },
+  "hitlApproval": {
+    "required": "Approval required",
+    "expired": "Expired",
+    "expiresIn": "Expires in {{time}}",
+    "statusExpired": "This request expired and the tool was not executed. The agent's answer will appear shortly.",
+    "statusSingle": "The agent wants to run this tool. Nothing runs until you decide.",
+    "statusMultiple": "The agent wants to run these tools. Choose for each tool, then submit your decisions.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "submitDecisions": "Submit decisions",
+    "approveAll": "Approve all",
+    "rejectAll": "Reject all",
+    "cancelRequest": "Cancel request",
+    "errors": {
+      "rejectNotAllowed": "This tool does not allow rejection.",
+      "approveNotAllowed": "This tool does not allow approval.",
+      "invalidJson": "Arguments must be valid JSON.",
+      "jsonObjectRequired": "Arguments must be a JSON object.",
+      "editedArgumentsRequired": "This tool only accepts edited arguments."
+    }
+  }
+}

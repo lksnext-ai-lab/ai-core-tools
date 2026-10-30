@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
@@ -69,6 +70,7 @@ function ChatInterface({
   metadataFields,
   vectorDbType,
 }: Readonly<ChatInterfaceProps>) {
+  const { t } = useTranslation('common');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -418,7 +420,7 @@ function ChatInterface({
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : 'The approval could not be sent',
+        content: error instanceof Error ? error.message : t('agentPlayground.chat.approvalCouldNotBeSent'),
         timestamp: new Date(),
       }]);
     }
@@ -437,7 +439,7 @@ function ChatInterface({
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : 'The request could not be cancelled',
+        content: error instanceof Error ? error.message : t('agentPlayground.chat.requestCouldNotBeCancelled'),
         timestamp: new Date(),
       }]);
     } finally {
@@ -504,7 +506,7 @@ function ChatInterface({
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : 'An error occurred',
+        content: error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed'),
         timestamp: new Date(),
         elapsedMs: error instanceof StreamingChatError ? error.elapsedMs : responseElapsedMs,
       };
@@ -638,7 +640,7 @@ function ChatInterface({
     // Make that scope explicit to avoid a surprising destructive action.
     if (fileId.startsWith('media_')) {
       const confirmed = window.confirm(
-        'Removing this media item will delete all uploaded media for this playground session. Do you want to continue?'
+        t('agentPlayground.chat.removePlaygroundMediaConfirm')
       );
       if (!confirmed) {
         return;
@@ -914,7 +916,7 @@ function ChatInterface({
                   d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
                 />
               </svg>
-              Filter by Metadata
+              {t('agentPlayground.chat.filterByMetadata')}
             </span>
             <svg
               className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
@@ -958,7 +960,7 @@ function ChatInterface({
           {/* Reset button — subtle, top-right corner */}
           <div className="flex justify-end px-6 pt-3 pb-1">
             <ButtonApp
-              label="Reset"
+              label={t('agentPlayground.chat.reset')}
               variant="secondary"
               size="compact"
               onClick={handleResetConversation}
@@ -975,7 +977,7 @@ function ChatInterface({
           >
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-full">
-                <LoadingState variant="section" message="Loading conversation..." />
+                <LoadingState variant="section" message={t('agentPlayground.chat.loadingConversation')} />
               </div>
             ) : (
               <>
@@ -990,10 +992,10 @@ function ChatInterface({
                     />
                     <div className="space-y-2">
                       <p className="font-display text-[26px] font-normal tracking-tight text-fg dark:text-fg-dark">
-                        Start chatting with {agentName}
+                        {t('agentPlayground.chat.startChatting', { agent: agentName })}
                       </p>
                       <p className="text-[14.5px] text-fg-secondary dark:text-fg-secondary-dark max-w-[400px] mx-auto">
-                        Type a message below to begin
+                        {t('agentPlayground.chat.starterPromptDescription')}
                       </p>
                     </div>
                   </div>
@@ -1009,7 +1011,7 @@ function ChatInterface({
                         key={message.id}
                         className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4"
                       >
-                        <BackgroundImage text="YOU" size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                         <div className="max-w-[82%] min-w-0">
                           <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                             <MessageContent
@@ -1017,11 +1019,11 @@ function ChatInterface({
                               resolveFileUrl={resolveFileUrl}
                             />
                             {message.files && message.files.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-bronze-border dark:border-bronze-border-dark">
                                 {message.files.map((filename) => (
                                   <span
                                     key={filename}
-                                    className="inline-flex items-center gap-1 text-xs bg-gray-200/60 dark:bg-gray-600/60 text-gray-600 dark:text-gray-300 rounded-full px-2 py-0.5"
+                                    className="inline-flex items-center gap-1 text-xs bg-canvas dark:bg-canvas-dark text-fg-secondary  dark:text-fg-secondary-dark rounded-full px-2 py-0.5"
                                   >
                                     <svg
                                       className="w-3 h-3"
@@ -1080,7 +1082,7 @@ function ChatInterface({
                                 />
                               </svg>
                               <span className="text-xs font-semibold uppercase tracking-wide">
-                                Error
+                                {t('agentPlayground.chat.errorLabel')}
                               </span>
                             </div>
                             <p className="text-sm">{message.content}</p>
@@ -1196,10 +1198,10 @@ function ChatInterface({
                   scrollToBottom();
                 }}
                 className="pg-scroll-fab pointer-events-auto"
-                aria-label="Scroll to bottom"
+                aria-label={t('agentPlayground.chat.scrollToBottom')}
               >
                 <svg
-                  className="w-4 h-4 text-gray-600 dark:text-gray-300"
+                  className="w-4 h-4 text-fg-secondary dark:text-fg-secondary-dark"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1236,12 +1238,10 @@ function ChatInterface({
                   disabled={isStreaming}
                   className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg
                              text-fg-tertiary dark:text-fg-tertiary-dark
-                             hover:text-fg dark:hover:text-fg
-                             hover:bg-surface-hover dark:hover:bg-surface-hover-dark
                              disabled:opacity-40 disabled:cursor-not-allowed
                              transition-colors duration-150"
-                  title="Attach file"
-                  aria-label="Attach file"
+                  title={t('agentPlayground.chat.attachFile')}
+                  aria-label={t('agentPlayground.chat.attachFile')}
                 >
                   <svg
                     className="w-5 h-5"
@@ -1267,12 +1267,10 @@ function ChatInterface({
                 disabled={isStreaming}
                 className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
                            text-fg-tertiary dark:text-fg-tertiary-dark
-                           hover:text-fg dark:hover:text-fg
-                           hover:bg-surface-hover dark:hover:bg-surface-hover-dark
-                           disabled:opacity-40 disabled:cursor-not-allowed
+                          disabled:opacity-40 disabled:cursor-not-allowed
                            transition-colors duration-150"
-                title="Attach media (video/audio)"
-                aria-label="Attach media"
+                title={t('agentPlayground.chat.attachMediaTitle')}
+                aria-label={t('agentPlayground.chat.attachMedia')}
               >
                 <svg
                   className="w-5 h-5"
@@ -1297,7 +1295,9 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={approvalBlocksInput ? 'Answer the approval request to continue' : `Message ${agentName}...`}
+                placeholder={approvalBlocksInput
+                  ? t('agentPlayground.chat.answerApprovalToContinue')
+                  : t('agentPlayground.chat.messagePlaceholder', { agent: agentName })}
                 disabled={isStreaming || approvalBlocksInput}
                 className="flex-1 py-[9px] bg-transparent border-none outline-none resize-none
                            text-[14.5px] text-fg dark:text-fg-dark
@@ -1318,8 +1318,8 @@ function ChatInterface({
                              bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark
                              text-error dark:text-error-dark
                              hover:border-error dark:hover:border-error-dark transition-colors duration-150"
-                  aria-label="Stop generating"
-                  title="Stop generating"
+                  aria-label={t('agentPlayground.chat.stopGenerating')}
+                  title={t('agentPlayground.chat.stopGenerating')}
                 >
                   <Square className="w-4 h-4" />
                 </button>
@@ -1332,7 +1332,7 @@ function ChatInterface({
                              bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
                              hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
                              transition-opacity duration-150"
-                  aria-label="Send message"
+                  aria-label={t('agentPlayground.chat.sendMessage')}
                 >
                   <ArrowRight className="w-4 h-4" />
                 </button>
@@ -1341,24 +1341,27 @@ function ChatInterface({
 
             {/* Hint text */}
             <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
-              Press Enter to send, Shift+Enter for new line
+              {t('agentPlayground.chat.sendKeyboardHint')}
             </p>
           </div>
         </div>
 
-        {/* Attached Files Panel */}
-        <AttachedFilesPanel
-          files={panelFiles}
-          isLoading={isLoadingFiles}
-          onRemoveFile={handleRemovePersistentFile}
-          onDownloadFile={handleDownloadFile}
-        />
+        {/* Right column: attached files on top, tool activity below */}
+        <div className="w-72 shrink-0 flex flex-col gap-3 h-full min-h-0 [&>*:first-child]:w-full [&>*:first-child]:h-auto [&>*:first-child]:max-h-[50%]">
+          {/* Attached Files Panel */}
+          <AttachedFilesPanel
+            files={panelFiles}
+            isLoading={isLoadingFiles}
+            onRemoveFile={handleRemovePersistentFile}
+            onDownloadFile={handleDownloadFile}
+          />
 
-        {/* Tool Execution History Panel */}
-        <ToolHistoryPanel
-          history={toolExecutionHistory}
-          onClear={clearToolHistory}
-        />
+          {/* Tool Execution History Panel */}
+          <ToolHistoryPanel
+            history={toolExecutionHistory}
+            onClear={clearToolHistory}
+          />
+        </div>
       </div>
 
       {/* Media Upload Modal */}

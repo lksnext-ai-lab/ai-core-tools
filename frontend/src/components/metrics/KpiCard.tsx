@@ -1,4 +1,5 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { formatPercent } from './format';
 import CardApp from '../ui/CardApp';
 
@@ -26,6 +27,7 @@ export function KpiCard({ label, value, change = null, higherIsBetter = true, hi
 }
 
 function ChangeBadge({ change, higherIsBetter }: { change: number; higherIsBetter: boolean }) {
+  const { t } = useTranslation('common');
   const flat = Math.abs(change) < 0.005;
   const good = flat ? null : (change > 0) === higherIsBetter;
   const Icon = flat ? Minus : change > 0 ? ArrowUpRight : ArrowDownRight;
@@ -33,10 +35,10 @@ function ChangeBadge({ change, higherIsBetter }: { change: number; higherIsBette
     ? 'text-gray-500 dark:text-gray-400'
     : good ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400';
   return (
-    <span className={`inline-flex items-center gap-0.5 font-medium ${tone}`} title="Change vs the previous period">
+    <span className={`inline-flex items-center gap-0.5 font-medium ${tone}`} title={t('metricsDashboard.change.title')}>
       <Icon className="h-3 w-3" aria-hidden />
       {flat ? '0%' : `${change > 0 ? '+' : '−'}${formatPercent(Math.abs(change))}`}
-      <span className="sr-only">{good === null ? 'unchanged' : good ? 'improved' : 'worsened'} vs previous period</span>
+      <span className="sr-only">{t(good === null ? 'metricsDashboard.change.unchanged' : good ? 'metricsDashboard.change.improved' : 'metricsDashboard.change.worsened')} {t('metricsDashboard.change.previousPeriod')}</span>
     </span>
   );
 }

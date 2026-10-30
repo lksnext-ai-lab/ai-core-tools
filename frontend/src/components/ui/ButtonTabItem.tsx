@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, Pencil, Trash2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 export type ButtonTabItemVariant = 'edit' | 'link';
 
@@ -40,6 +41,7 @@ export function ButtonTabItem({
   onSaveTitle,
   onCancelEdit,
 }: ButtonTabItemProps) {
+  const { t } = useTranslation('common');
   const cancelBlurRef = React.useRef(false);
   const canEdit = variant === 'edit';
   const isTitleEditing = canEdit && isEditing;
@@ -87,7 +89,7 @@ export function ButtonTabItem({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <input
             autoFocus
-            aria-label="Conversation title"
+            aria-label={t('marketplaceHome.conversationTitle')}
             type="text"
             value={editingTitle}
             onChange={(event) => onTitleChange?.(event.target.value)}
@@ -102,8 +104,8 @@ export function ButtonTabItem({
               event.stopPropagation();
               onSaveTitle?.();
             }}
-            aria-label="Save conversation title"
-            title="Save title"
+            aria-label={t('marketplaceHome.saveConversationTitle')}
+            title={t('marketplaceHome.saveTitle')}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg-secondary hover:bg-bronze-border dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
           >
             <Check className="h-4 w-4" aria-hidden="true" />
@@ -116,8 +118,8 @@ export function ButtonTabItem({
               cancelBlurRef.current = true;
               onCancelEdit?.();
             }}
-            aria-label="Cancel title edit"
-            title="Cancel"
+            aria-label={t('marketplaceHome.cancelTitleEdit')}
+            title={t('marketplaceHome.cancelTitleEdit')}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg-secondary hover:bg-bronze-bg-soft dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -138,8 +140,8 @@ export function ButtonTabItem({
                       event.stopPropagation();
                       onEdit();
                     }}
-                    aria-label="Rename conversation"
-                    title="Rename conversation"
+                    aria-label={t('marketplaceHome.renameConversation')}
+                    title={t('marketplaceHome.renameConversation')}
                     className="flex h-8 w-8 shrink-0 items-center justify-center  text-fg-tertiary dark:text-fg-tertiary-dark opacity-0 transition group-hover:opacity-100 focus:opacity-100  hover:text-fg-secondary  dark:hover:text-fg-tertiary-dark"
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
@@ -156,7 +158,7 @@ export function ButtonTabItem({
               )}
             </span>
             {description && (
-              <span className="mt-0.5 block truncate text-xs text-fg-secondary dark:text-fg-secondary-dark">
+              <span className="mt-0.5 block min-w-0 whitespace-pre-line line-clamp-2 text-xs text-fg-secondary dark:text-fg-secondary-dark">
                 {description}
               </span>
             )}
@@ -182,8 +184,8 @@ export function ButtonTabItem({
                 event.stopPropagation();
                 onDelete();
               }}
-              aria-label="Delete conversation"
-              title="Delete conversation"
+              aria-label={t('marketplaceHome.deleteConversation')}
+              title={t('marketplaceHome.deleteConversation')}
               className="flex h-8 w-8 items-center justify-center  text-fg-tertiary dark:text-fg-tertiary-dark opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-fg-secondary  dark:hover:text-fg-tertiary-dark"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />

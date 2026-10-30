@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Briefcase, CheckCircle2, XCircle } from 'lucide-react';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
 import { Tabs } from '../components/ui/Tabs';
@@ -19,6 +20,8 @@ import { ButtonApp } from '../components/ui/ButtonApp';
 import Title from '../components/ui/Title';
 import CardApp from '../components/ui/CardApp';
 import Table, { type TableColumn } from '../components/ui/Table';
+import TablePagination from '../components/ui/TablePagination';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
 interface DomainDetail {
   domain_id: number;
@@ -37,71 +40,23 @@ interface DomainDetail {
 
 // ==================== Tab definitions ====================
 
-const TABS = [
-  { id: 'configuration', label: 'Configuration' },
-  { id: 'urls', label: 'URLs' },
-  { id: 'job-history', label: 'Job history' },
-];
-
 // ==================== Job history table ====================
 
 function jobStatusBadge(status: CrawlJobStatus): { text: string; variant: BadgeVariant; spinner?: boolean } {
   switch (status) {
-    case 'QUEUED': return { text: 'Queued', variant: 'warning' };
-    case 'RUNNING': return { text: 'Running', variant: 'info', spinner: true };
-    case 'COMPLETED': return { text: 'Completed', variant: 'success' };
-    case 'FAILED': return { text: 'Failed', variant: 'error' };
-    case 'CANCELLED': return { text: 'Cancelled', variant: 'default' };
+    case 'QUEUED': return { text: 'queued', variant: 'warning' };
+    case 'RUNNING': return { text: 'running', variant: 'info', spinner: true };
+    case 'COMPLETED': return { text: 'completed', variant: 'success' };
+    case 'FAILED': return { text: 'failed', variant: 'error' };
+    case 'CANCELLED': return { text: 'cancelled', variant: 'default' };
     default: return { text: status, variant: 'default' };
   }
 }
 
-function formatDate(iso: string | null | undefined): string {
+function formatDate(iso: string | null | undefined, language?: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString();
+  return new Date(iso).toLocaleString(language);
 }
-
-const JOB_HISTORY_COLUMNS: TableColumn<CrawlJob>[] = [
-  { header: 'ID', render: job => <span className="text-fg-secondary dark:text-fg-secondary-dark">#{job.id}</span> },
-  {
-    header: 'Status',
-    render: job => {
-      const badge = jobStatusBadge(job.status as CrawlJobStatus);
-      return (
-        <Badge
-          label={badge.text}
-          variant={badge.variant}
-          icon={badge.spinner ? <Spinner size="xs" tone="current" /> : undefined}
-        />
-      );
-    },
-  },
-  {
-    header: 'Triggered by',
-    render: job => (
-      <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
-        {job.triggered_by === 'MANUAL' ? 'Manual' : 'Scheduled'}
-      </span>
-    ),
-  },
-  {
-    header: 'Started',
-    render: job => <span className="whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDate(job.started_at)}</span>,
-  },
-  {
-    header: 'Finished',
-    render: job => <span className="whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDate(job.finished_at)}</span>,
-  },
-  { header: 'Discovered', accessor: 'discovered_count' },
-  { header: 'Indexed', accessor: 'indexed_count' },
-  { header: 'Skipped', accessor: 'skipped_count' },
-  {
-    header: 'Failed',
-    render: job => job.failed_count > 0
-      ? <span className="font-medium text-red-600">{job.failed_count}</span>
-      : job.failed_count,
-  },
-];
 
 interface JobHistoryTabProps {
   appId: number;
@@ -109,6 +64,7 @@ interface JobHistoryTabProps {
 }
 
 function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
+  const { t, i18n } = useTranslation('common');
   const [jobs, setJobs] = useState<CrawlJob[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -124,11 +80,11 @@ function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
       setJobs(resp.items);
       setTotal(resp.total);
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load job history');
+      setError(err?.message ?? t('domainDetailPage.jobHistory.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [appId, domainId]);
+  }, [appId, domainId, t]);
 
   useEffect(() => {
     void fetchJobs(page);
@@ -136,8 +92,50 @@ function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
+  const columns: TableColumn<CrawlJob>[] = [
+    { header: t('domainDetailPage.jobHistory.columns.id'), render: job => <span className="text-fg-secondary dark:text-fg-secondary-dark">#{job.id}</span> },
+    {
+      header: t('domainDetailPage.jobHistory.columns.status'),
+      render: job => {
+        const badge = jobStatusBadge(job.status as CrawlJobStatus);
+        return (
+          <Badge
+            label={t(`domainDetailPage.jobStatuses.${badge.text}`, { defaultValue: badge.text })}
+            variant={badge.variant}
+            icon={badge.spinner ? <Spinner size="xs" tone="current" /> : undefined}
+          />
+        );
+      },
+    },
+    {
+      header: t('domainDetailPage.jobHistory.columns.triggeredBy'),
+      render: job => (
+        <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+          {job.triggered_by === 'MANUAL' ? t('domainDetailPage.jobHistory.manual') : t('domainDetailPage.jobHistory.scheduled')}
+        </span>
+      ),
+    },
+    {
+      header: t('domainDetailPage.jobHistory.columns.started'),
+      render: job => <span className="whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDate(job.started_at, i18n.resolvedLanguage)}</span>,
+    },
+    {
+      header: t('domainDetailPage.jobHistory.columns.finished'),
+      render: job => <span className="whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark">{formatDate(job.finished_at, i18n.resolvedLanguage)}</span>,
+    },
+    { header: t('domainDetailPage.jobHistory.columns.discovered'), accessor: 'discovered_count' },
+    { header: t('domainDetailPage.jobHistory.columns.indexed'), accessor: 'indexed_count' },
+    { header: t('domainDetailPage.jobHistory.columns.skipped'), accessor: 'skipped_count' },
+    {
+      header: t('domainDetailPage.jobHistory.columns.failed'),
+      render: job => job.failed_count > 0
+        ? <span className="font-medium text-red-600">{job.failed_count}</span>
+        : job.failed_count,
+    },
+  ];
+
   if (loading) return (
-    <LoadingState variant="section" message="Loading job history..." />
+    <LoadingState variant="section" message={t('domainDetailPage.jobHistory.loading')} />
   );
 
   if (error) return <Alert type="error" message={error} onDismiss={() => setError(null)} />;
@@ -145,33 +143,14 @@ function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
   return (
     <div className="space-y-4">
       <Table
-        columns={JOB_HISTORY_COLUMNS}
+        columns={columns}
         data={jobs}
         keyExtractor={job => job.id}
-        emptyMessage="No crawl jobs yet."
+        emptyMessage={t('domainDetailPage.jobHistory.empty')}
+        emptyIcon={<BackgroundImage icon={Briefcase} size={40} iconSize={20} />}
       />
 
-      {total > PER_PAGE && (
-        <div className="flex items-center justify-center gap-3 text-sm text-gray-600">
-          <button
-            type="button"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-xs"
-          >
-            Previous
-          </button>
-          <span>Page {page} of {totalPages}</span>
-          <button
-            type="button"
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="px-2 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 text-xs"
-          >
-            Next
-          </button>
-        </div>
-      )}
+      <TablePagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }
@@ -180,6 +159,7 @@ function JobHistoryTab({ appId, domainId }: Readonly<JobHistoryTabProps>) {
 
 const DomainDetailPage: React.FC = () => {
   const { appId, domainId } = useParams<{ appId: string; domainId: string }>();
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const { hasMinRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
@@ -208,11 +188,11 @@ const DomainDetailPage: React.FC = () => {
       setDomain(data);
       setError(null);
     } catch {
-      setError('Failed to load domain');
+      setError(t('domainDetailPage.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [numericAppId, numericDomainId]);
+  }, [numericAppId, numericDomainId, t]);
 
   const loadLatestJob = useCallback(async () => {
     try {
@@ -235,22 +215,22 @@ const DomainDetailPage: React.FC = () => {
 
   const handleJobTriggered = (job: CrawlJob) => {
     setLatestJob(job);
-    setSuccessMessage('Crawl job queued');
+    setSuccessMessage(t('domainDetailPage.crawlJobQueued'));
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
   if (loading) {
     return (
-      <LoadingState variant="page" />
+      <LoadingState variant="page" message={t('domainDetailPage.loading')} />
     );
   }
 
   if (error || !domain) {
     return (
       <div className="p-6">
-        <Alert type="error" message={error ?? 'Domain not found'} className="mb-4" />
+        <Alert type="error" message={error ?? t('domainDetailPage.notFound')} className="mb-4" />
         <ButtonApp
-          label="Back to App"
+          label={t('domainDetailPage.backToApp')}
           variant="secondary"
           size="medium"
           onClick={() => navigate(`/apps/${appId}`)}
@@ -280,7 +260,7 @@ const DomainDetailPage: React.FC = () => {
         />
         <div className="flex gap-2">
           <ButtonApp
-            label="Edit domain"
+            label={t('domainDetailPage.editDomain')}
             variant="primary"
             size="medium"
             onClick={() => navigate(`/apps/${appId}/domains/${domainId}`)}
@@ -290,25 +270,34 @@ const DomainDetailPage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} className="mb-6" />
+      <Tabs
+        tabs={[
+          { id: 'configuration', label: t('domainDetailPage.tabs.configuration') },
+          { id: 'urls', label: t('domainDetailPage.tabs.urls') },
+          { id: 'job-history', label: t('domainDetailPage.tabs.jobHistory') },
+        ]}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        className="mb-6"
+      />
 
       {/* Tab: Configuration */}
       {activeTab === 'configuration' && (
         <div className="space-y-6">
           {/* Scraping config (read-only display) */}
           <CardApp className="p-6">
-            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Scraping configuration</h2>
+            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.configuration.title')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">Content tag</span>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">{t('domainDetailPage.configuration.contentTag')}</span>
                 <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_tag || 'body'}</p>
               </div>
               <div>
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">Content class</span>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">{t('domainDetailPage.configuration.contentClass')}</span>
                 <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_class || '—'}</p>
               </div>
               <div>
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">Content ID</span>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">{t('domainDetailPage.configuration.contentId')}</span>
                 <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_id || '—'}</p>
               </div>
             </div>
@@ -316,13 +305,13 @@ const DomainDetailPage: React.FC = () => {
 
           {/* Crawl policy */}
           <CardApp className="p-6">
-            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Crawl policy</h2>
+            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.crawlPolicy')}</h2>
             <CrawlPolicyForm
               appId={numericAppId}
               domainId={numericDomainId}
               canEdit={canEdit}
               onSaved={() => {
-                setSuccessMessage('Crawl policy saved');
+                setSuccessMessage(t('domainDetailPage.crawlPolicySaved'));
                 setTimeout(() => setSuccessMessage(null), 3000);
               }}
             />
@@ -336,7 +325,7 @@ const DomainDetailPage: React.FC = () => {
           {/* Crawl job controls */}
           <CardApp className=" p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-fg dark:text-fg-dark">Crawl job</h2>
+              <h2 className="text-lg font-semibold text-fg dark:text-fg-dark">{t('domainDetailPage.crawlJob')}</h2>
               {canEdit && (
                 <RunCrawlNowButton
                   appId={numericAppId}
@@ -359,7 +348,7 @@ const DomainDetailPage: React.FC = () => {
 
           {/* URL table */}
           <CardApp>
-            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">URLs ({domain.url_count})</h2>
+            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.urlsCount', { count: domain.url_count })}</h2>
             <DomainUrlsTable
               appId={numericAppId}
               domainId={numericDomainId}
@@ -382,7 +371,7 @@ const DomainDetailPage: React.FC = () => {
       {/* Tab: Job history */}
       {activeTab === 'job-history' && (
         <CardApp>
-          <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">Crawl job history</h2>
+          <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.crawlJobHistory')}</h2>
           <JobHistoryTab appId={numericAppId} domainId={numericDomainId} />
         </CardApp>
       )}

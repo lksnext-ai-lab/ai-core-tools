@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Eye, Pencil, Plus, Trash2, Plug } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -13,7 +14,7 @@ import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import type { MCPServerListItem } from '../core/types';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
@@ -23,6 +24,7 @@ import MCPServerDetailPage from './MCPServerDetailPage';
 
 function MCPServersPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
   const confirm = useConfirm();
@@ -49,7 +51,7 @@ function MCPServersPage() {
       const response = await apiService.getMCPServers(Number.parseInt(appId));
       setServers(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load MCP servers');
+      setError(errorMessage(err, t('mcpServersPage.loadFailed')));
       console.error('Error loading MCP servers:', err);
     } finally {
       setLoading(false);
@@ -61,21 +63,21 @@ function MCPServersPage() {
 
     const target = servers.find((s) => s.server_id === serverId);
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('MCP server'),
+      title: t('mcpServersPage.confirmDeleteTitle'),
       message: target
-        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone.`
-        : MESSAGES.CONFIRM_DELETE_MESSAGE('MCP server'),
+        ? t('mcpServersPage.confirmDeleteMessage', { name: target.name })
+        : t('mcpServersPage.confirmDeleteFallback'),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('mcpServersPage.actions.delete'),
     });
     if (!ok) return false;
 
     const result = await mutate(
       () => apiService.deleteMCPServer(Number.parseInt(appId), serverId),
       {
-        loading: MESSAGES.DELETING('MCP server'),
-        success: MESSAGES.DELETED('MCP server'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('MCP server')),
+        loading: t('mcpServersPage.notifications.deleting'),
+        success: t('mcpServersPage.notifications.deleted'),
+        error: (err) => errorMessage(err, t('mcpServersPage.notifications.deleteFailed')),
       },
     );
     if (result === undefined) return false;
@@ -99,10 +101,10 @@ function MCPServersPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">  
-          <Title variant="titSecundario" titulo="MCP Servers"  subtitulo="Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients" />
+          <Title variant="titSecundario" titulo={t('mcpServersPage.title')} subtitulo={t('mcpServersPage.subtitle')} />
         </div>
 
-        <LoadingState variant="page" message="Loading MCP servers..." />
+        <LoadingState variant="page" message={t('mcpServersPage.loading')} />
       </div>
     );
   }
@@ -111,17 +113,17 @@ function MCPServersPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="MCP Servers"  subtitulo="Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients" />
+          <Title variant="titSecundario" titulo={t('mcpServersPage.title')} subtitulo={t('mcpServersPage.subtitle')} />
         </div>
 
         <Alert
           type="error"
-          title="Error Loading MCP Servers"
+          title={t('mcpServersPage.loadErrorTitle')}
           message={(
             <>
               {error}
               <button type="button" onClick={() => loadServers()} className="mt-2 block underline">
-                Try again
+                {t('mcpServersPage.tryAgain')}
               </button>
             </>
           )}
@@ -134,10 +136,10 @@ function MCPServersPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <Title variant="titSecundario" titulo="MCP Servers"  subtitulo="Expose your agents as MCP tools for Claude Desktop, Cursor, and other clients" />
+        <Title variant="titSecundario" titulo={t('mcpServersPage.title')} subtitulo={t('mcpServersPage.subtitle')} />
         {canEdit && (
           <ButtonLink
-            label="Create MCP Server"
+            label={t('mcpServersPage.actions.create')}
             to={`/apps/${appId}/mcp-servers/new`}
             variant="primary"
             size="control"
@@ -155,7 +157,7 @@ function MCPServersPage() {
           keyExtractor={(server) => server.server_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('mcpServersPage.columns.name'),
               render: (server) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
@@ -184,32 +186,32 @@ function MCPServersPage() {
               )
             },
             {
-              header: 'Status',
+              header: t('mcpServersPage.columns.status'),
               render: (server) => (
                 <Badge
-                  label={server.is_active ? 'Active' : 'Inactive'}
+                  label={t(server.is_active ? 'mcpServersPage.statuses.active' : 'mcpServersPage.statuses.inactive')}
                   variant={server.is_active ? 'success' : 'default'}
                 />
               )
             },
             {
-              header: 'Agents',
+              header: t('mcpServersPage.columns.agents'),
               render: (server) => (
                 <span className="text-xs text-secondary dark:text-fg-secondary-dark">
-                  {server.agent_count} {server.agent_count === 1 ? 'agent' : 'agents'}
+                  {t('mcpServersPage.agentCount', { count: server.agent_count })}
                 </span>
               )
             },
             {
-              header: 'Endpoint',
+              header: t('mcpServersPage.columns.endpoint'),
               render: (server) => (
                 <div className="flex items-center space-x-2">
                   <code className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate max-w-xs">
                     {server.endpoint_url}
                   </code>
-                  <span title="Copy endpoint URL">
+                  <span title={t('mcpServersPage.copyEndpoint')}>
                     <ButtonApp
-                      label={copiedId === server.server_id ? 'Done' : 'Copy'}
+                      label={t(copiedId === server.server_id ? 'mcpServersPage.actions.copied' : 'mcpServersPage.actions.copy')}
                       onClick={() => copyToClipboard(server.endpoint_url, server.server_id)}
                       variant="table"
                       size="small"
@@ -219,12 +221,12 @@ function MCPServersPage() {
               )
             },
             {
-              header: 'Created',
-              render: (server) => server.create_date ? new Date(server.create_date).toLocaleDateString() : 'N/A',
+              header: t('mcpServersPage.columns.created'),
+              render: (server) => server.create_date ? new Date(server.create_date).toLocaleDateString(i18n.resolvedLanguage) : t('mcpServersPage.notAvailable'),
               className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Actions',
+              header: t('mcpServersPage.columns.actions'),
               sticky: 'right',
               headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
               className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
@@ -232,20 +234,20 @@ function MCPServersPage() {
                 <ActionDropdown
                   actions={[
                     {
-                      label: 'View Details',
+                      label: t('mcpServersPage.actions.viewDetails'),
                       onClick: () => navigate(`/apps/${appId}/mcp-servers/${server.server_id}`),
                       icon: <Eye className="w-4 h-4" />,
                       variant: 'primary'
                     },
                     ...(canEdit ? [
                       {
-                        label: 'Edit',
+                        label: t('mcpServersPage.actions.edit'),
                         onClick: () => navigate(`/apps/${appId}/mcp-servers/${server.server_id}/edit`),
                         icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary' as const
                       },
                       {
-                        label: 'Delete',
+                        label: t('mcpServersPage.actions.delete'),
                         onClick: () => { void handleDelete(server.server_id); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger' as const
@@ -258,15 +260,15 @@ function MCPServersPage() {
             }
           ]}
           emptyIcon={<BackgroundImage icon={Plug} size={64} iconSize={32} />}
-          emptyMessage="No MCP Servers Yet"
-          emptySubMessage="Create an MCP server to expose your agents as tools."
+          emptyMessage={t('mcpServersPage.emptyTitle')}
+          emptySubMessage={t('mcpServersPage.emptyDescription')}
           loading={loading}
       />
 
       {!loading && canEdit && servers.length === 0 && (
         <div className="text-center py-6">
           <ButtonLink
-            label="Create Your First MCP Server"
+            label={t('mcpServersPage.actions.createFirst')}
             to={`/apps/${appId}/mcp-servers/new`}
             variant="primary"
             size="medium"
@@ -277,15 +279,15 @@ function MCPServersPage() {
 
       {/* Server detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {selectedServerId !== null && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
           <SidePanel
             open
             side="right"
             onClose={handleClosePanel}
-            title="MCP Servers"
+            title={t('mcpServersPage.title')}
             headerActions={(
               <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
-                Vista de detalle
+                {t('mcpServersPage.detailView')}
               </span>
             )}
             widthClassName="w-[640px] max-w-full"

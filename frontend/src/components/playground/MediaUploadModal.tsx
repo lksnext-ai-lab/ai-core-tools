@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FolderOpen, Tv } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { apiService } from '../../services/api';
@@ -20,6 +21,7 @@ function MediaUploadModal({
   sessionId,
   onUploadComplete,
 }: Readonly<MediaUploadModalProps>) {
+  const { t } = useTranslation('common');
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -51,7 +53,7 @@ function MediaUploadModal({
       handleClose();
     } catch (error) {
       console.error('Error uploading media:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
+      setErrorMessage(error instanceof Error ? error.message : t('playgroundMedia.uploadFailed'));
     } finally {
       setUploading(false);
     }
@@ -61,7 +63,7 @@ function MediaUploadModal({
     uploadType === 'file' ? mediaFiles.length > 0 : !!youtubeUrl.trim();
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Upload Media" size="large">
+    <Modal isOpen={isOpen} onClose={handleClose} title={t('playgroundMedia.title')} size="large">
       <div className="space-y-4">
         {/* Upload Type Tabs */}
         <div className="flex gap-2">
@@ -73,7 +75,7 @@ function MediaUploadModal({
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             }`}
           >
-            <FolderOpen className="w-4 h-4 inline-block mr-1" /> File Upload
+            <FolderOpen className="w-4 h-4 inline-block mr-1" /> {t('playgroundMedia.fileUpload')}
           </button>
           <button
             onClick={() => setUploadType('youtube')}
@@ -83,7 +85,7 @@ function MediaUploadModal({
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             }`}
           >
-            <Tv className="w-4 h-4 inline-block mr-1" /> YouTube URL
+            <Tv className="w-4 h-4 inline-block mr-1" /> {t('playgroundMedia.youtubeUrl')}
           </button>
         </div>
 
@@ -94,7 +96,7 @@ function MediaUploadModal({
               htmlFor="pg-media-files-input"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
-              Select Video/Audio Files
+              {t('playgroundMedia.selectFiles')}
             </label>
             <input
               id="pg-media-files-input"
@@ -106,7 +108,7 @@ function MediaUploadModal({
             />
             {mediaFiles.length > 0 && (
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                {mediaFiles.length} file(s) selected
+                {t('playgroundMedia.selectedFiles', { count: mediaFiles.length })}
               </p>
             )}
           </div>
@@ -134,7 +136,7 @@ function MediaUploadModal({
         )}
 
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Transcription, language and chunking settings are configured on the agent.
+          {t('playgroundMedia.configurationNote')}
         </p>
 
         {/* Error */}
@@ -150,7 +152,7 @@ function MediaUploadModal({
             onClick={handleClose}
             className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             onClick={handleUpload}
@@ -158,7 +160,7 @@ function MediaUploadModal({
             className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700
                        disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {uploading ? 'Uploading...' : 'Upload'}
+            {uploading ? t('playgroundMedia.uploading') : t('playgroundMedia.upload')}
           </button>
         </div>
       </div>

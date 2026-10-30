@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   ChevronDown,
@@ -114,6 +115,7 @@ interface AllowedToolsInputProps {
 }
 
 function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps) {
+  const { t } = useTranslation('common');
   const [draft, setDraft] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -127,17 +129,17 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
         return;
       }
       onChange([...tools, trimmed]);
-      setAnnouncement(`Added tool ${trimmed}`);
+      setAnnouncement(t('skillForm.allowedTools.added', { tool: trimmed }));
       setDraft('');
     },
-    [tools, onChange],
+    [tools, onChange, t],
   );
 
   const removeTool = useCallback(
     (index: number) => {
       const removed = tools[index];
       onChange(tools.filter((_, i) => i !== index));
-      if (removed) setAnnouncement(`Removed tool ${removed}`);
+      if (removed) setAnnouncement(t('skillForm.allowedTools.removed', { tool: removed }));
       // Move focus to the previous chip's remove button, or back to the input if none remain —
       // otherwise focus falls to <body> when the removed button unmounts.
       requestAnimationFrame(() => {
@@ -146,7 +148,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
         else inputRef.current?.focus();
       });
     },
-    [tools, onChange],
+    [tools, onChange, t],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -182,7 +184,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
                 ref={(el) => { removeButtonRefs.current[idx] = el; }}
                 onClick={() => removeTool(idx)}
                 className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]"
-                aria-label={`Remove allowed tool ${tool}`}
+                aria-label={t('skillForm.allowedTools.remove', { tool })}
               >
                 <X className="w-3 h-3" aria-hidden="true" />
               </button>
@@ -198,20 +200,20 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={() => addTool(draft)}
-            placeholder={tools.length === 0 ? 'e.g. Bash, WebSearch — Enter or comma to add' : ''}
+            placeholder={tools.length === 0 ? t('skillForm.allowedTools.placeholder') : ''}
             aria-describedby="allowed_tools_help"
             className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
           />
         )}
         {disabled && tools.length === 0 && (
-          <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark italic">No allowed tools declared</span>
+          <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark italic">{t('skillForm.allowedTools.noneDeclared')}</span>
         )}
       </div>
       <p id="allowed_tools_help" className="mt-1 flex items-start gap-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
         <span>
-          Informational metadata only — stored, imported/exported and displayed, but <strong>not enforced</strong>{' '}
-          against the agent&apos;s tool set.
+          {t('skillForm.allowedTools.metadataBefore')} <strong>{t('skillForm.allowedTools.notEnforced')}</strong>{' '}
+          {t('skillForm.allowedTools.metadataAfter')}
         </span>
       </p>
     </div>
@@ -314,6 +316,8 @@ function FileTreeView({
   previews,
   onToggleFile,
 }: FileTreeViewProps) {
+  const { t, i18n } = useTranslation('common');
+
   return (
     <ul className="space-y-0.5">
       {nodes.map((node) => {
@@ -359,8 +363,9 @@ function FileTreeView({
         const isText = info?.is_text ?? false;
         const isOpen = expandedFiles.has(node.path);
         const preview = previews[node.path] ?? { status: 'idle' };
-        const sizeLabel =
-          info?.size_bytes !== undefined ? `${info.size_bytes.toLocaleString()} bytes` : undefined;
+        const sizeLabel = info?.size_bytes !== undefined
+          ? t('skillForm.files.bytes', { size: info.size_bytes.toLocaleString(i18n.resolvedLanguage) })
+          : undefined;
 
         const previewId = domIdForPath('skill-file-preview', node.path);
 
@@ -395,7 +400,9 @@ function FileTreeView({
                 <File className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
                 <span className="ml-auto shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark italic">
-                  binary — {info?.size_bytes?.toLocaleString() ?? 0} bytes
+                  {t('skillForm.files.binarySize', {
+                    size: (info?.size_bytes ?? 0).toLocaleString(i18n.resolvedLanguage),
+                  })}
                 </span>
               </div>
             )}
@@ -410,7 +417,7 @@ function FileTreeView({
                 {preview.status === 'loading' && (
                   <div className="flex items-center gap-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark py-2">
                     <Spinner size="xs" tone="muted" />
-                    Loading preview…
+                    {t('skillForm.files.loadingPreview')}
                   </div>
                 )}
                 {preview.status === 'error' && (
@@ -437,6 +444,7 @@ function FileTreeView({
 
 function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<SkillFormProps>) {
   const { appId } = useParams();
+  const { t } = useTranslation('common');
   const [formState, setFormState] = useState<SkillFormState>(() => stateFromSkill(skill));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -525,12 +533,12 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         .catch((err: unknown) => {
           const message =
             err instanceof ApiError && err.status === 404
-              ? 'Preview is not available for this file.'
-              : errorMessage(err, 'Failed to load file preview');
+              ? t('skillForm.files.previewUnavailable')
+              : errorMessage(err, t('skillForm.files.previewFailed'));
           applyIfStillCurrent((prev) => ({ ...prev, [path]: { status: 'error', message } }));
         });
     },
-    [appId, skill, expandedFiles, previews],
+    [appId, skill, expandedFiles, previews, t],
   );
 
   const runtimeOptionsValidation = useMemo((): { valid: true; value: Record<string, unknown> | null } | { valid: false; error: string } => {
@@ -540,13 +548,18 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
     try {
       parsed = JSON.parse(text);
     } catch (err) {
-      return { valid: false, error: err instanceof Error ? `Invalid JSON: ${err.message}` : 'Invalid JSON' };
+      return {
+        valid: false,
+        error: err instanceof Error
+          ? t('skillForm.validation.invalidJsonWithMessage', { message: err.message })
+          : t('skillForm.validation.invalidJson'),
+      };
     }
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return { valid: false, error: 'Runtime options must be a JSON object, e.g. {"key": "value"}' };
+      return { valid: false, error: t('skillForm.validation.runtimeOptionsObject') };
     }
     return { valid: true, value: parsed as Record<string, unknown> };
-  }, [formState.runtime_options_text]);
+  }, [formState.runtime_options_text, t]);
 
   const isValid =
     formState.name.trim() !== '' &&
@@ -559,15 +572,15 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
     if (isReadOnly) return;
 
     if (!formState.name.trim()) {
-      setError('Skill name is required');
+      setError(t('skillForm.validation.nameRequired'));
       return;
     }
     if (!formState.description.trim()) {
-      setError('Skill description is required');
+      setError(t('skillForm.validation.descriptionRequired'));
       return;
     }
     if (!formState.content.trim()) {
-      setError('Skill content is required');
+      setError(t('skillForm.validation.contentRequired'));
       return;
     }
     if ('error' in runtimeOptionsValidation) {
@@ -593,7 +606,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
       };
       await onSubmit(payload);
     } catch (err) {
-      setError(errorMessage(err, 'Failed to save skill'));
+      setError(errorMessage(err, t('skillForm.validation.saveFailed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -601,62 +614,62 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {isReadOnly && <ReadOnlyBanner userRole={userRole ?? 'viewer'} minRole="platform administrators" />}
+      {isReadOnly && <ReadOnlyBanner userRole={userRole ?? 'viewer'} minRole={t('skillForm.platformAdministrators')} />}
 
       {error && <Alert type="error" message={error} />}
 
       <FormField
-        label="Name"
+        label={t('skillForm.fields.name')}
         id="name"
         value={formState.name}
         onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
-        placeholder="e.g., code_review_guidelines"
+        placeholder={t('skillForm.fields.namePlaceholder')}
         disabled={disabled}
         required
-        helpText="Short, unique identifier for the skill."
+        helpText={t('skillForm.help.name')}
       />
 
       <FormField
-        label="Display Name"
+        label={t('skillForm.fields.displayName')}
         id="display_name"
         value={formState.display_name}
         onChange={(e) => setFormState((prev) => ({ ...prev, display_name: e.target.value }))}
-        placeholder="e.g., Code Review Guidelines"
+        placeholder={t('skillForm.fields.displayNamePlaceholder')}
         disabled={disabled}
-        helpText="Human-friendly label shown in the UI. Defaults to the name if left blank."
+        helpText={t('skillForm.help.displayName')}
       />
 
       <FormField
-        label="Description"
+        label={t('skillForm.fields.description')}
         id="description"
         value={formState.description}
         onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
-        placeholder="e.g., Best practices for reviewing code quality"
+        placeholder={t('skillForm.fields.descriptionPlaceholder')}
         disabled={disabled}
         required
-        helpText="The agent sees this description to decide when the skill is relevant."
+        helpText={t('skillForm.help.description')}
       />
 
       <FormTextArea
-        label="When to Use"
+        label={t('skillForm.fields.whenToUse')}
         id="when_to_use"
         value={formState.when_to_use}
         onChange={(e) => setFormState((prev) => ({ ...prev, when_to_use: e.target.value }))}
         rows={3}
         disabled={disabled}
-        placeholder="e.g., Use when the user asks to generate or edit a Word document."
-        helpText="Extra routing guidance for the skill selector — kept separate from the description."
+        placeholder={t('skillForm.fields.whenToUsePlaceholder')}
+        helpText={t('skillForm.help.whenToUse')}
       />
 
       <FormTextArea
-        label="Skill Instructions"
+        label={t('skillForm.fields.instructions')}
         id="content"
         value={formState.content}
         onChange={(e) => setFormState((prev) => ({ ...prev, content: e.target.value }))}
         rows={12}
         disabled={disabled}
         required
-        helpText="Markdown-formatted instructions loaded when the agent activates this skill."
+        helpText={t('skillForm.help.instructions')}
       />
 
       <div>
@@ -664,7 +677,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
           htmlFor={disabled ? undefined : 'allowed_tools'}
           className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
         >
-          Allowed Tools
+          {t('skillForm.fields.allowedTools')}
         </label>
         <AllowedToolsInput
           tools={formState.allowed_tools}
@@ -675,63 +688,65 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField
-          label="Runtime"
+          label={t('skillForm.fields.runtime')}
           id="runtime"
           value={formState.runtime}
           onChange={(e) => setFormState((prev) => ({ ...prev, runtime: e.target.value }))}
-          placeholder="e.g., python3.11"
+          placeholder={t('skillForm.fields.runtimePlaceholder')}
           disabled={disabled}
-          helpText="Sandbox runtime this skill expects, if any."
+          helpText={t('skillForm.help.runtime')}
         />
 
         <FormField
-          label="Bootstrap Script Path"
+          label={t('skillForm.fields.bootstrapScriptPath')}
           id="bootstrap_script_path"
           value={formState.bootstrap_script_path}
           onChange={(e) => setFormState((prev) => ({ ...prev, bootstrap_script_path: e.target.value }))}
           placeholder="scripts/bootstrap.sh"
           disabled={disabled}
           inputClassName="font-mono text-sm"
-          helpText="Package-root-relative path to a script that runs after resources are copied into the sandbox."
+          helpText={t('skillForm.help.bootstrapScriptPath')}
         />
       </div>
 
       <FormTextArea
-        label="Runtime Options (JSON)"
+        label={t('skillForm.fields.runtimeOptions')}
         id="runtime_options"
         value={formState.runtime_options_text}
         onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
         disabled={disabled}
         rows={6}
         error={'error' in runtimeOptionsValidation ? runtimeOptionsValidation.error : undefined}
-        helpText={runtimeOptionsValidation.valid ? 'Optional JSON object passed to the sandbox runtime. Leave blank for none.' : undefined}
+        helpText={runtimeOptionsValidation.valid ? t('skillForm.help.runtimeOptions') : undefined}
         placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
       />
 
       <FormCheckbox
-        label="Enabled"
+        label={t('skillForm.fields.enabled')}
         id="is_enabled"
         checked={formState.is_enabled}
         onChange={(e) => setFormState((prev) => ({ ...prev, is_enabled: e.target.checked }))}
         disabled={disabled}
-        helpText="Disabled skills are ignored at execution time until re-enabled."
+        helpText={t('skillForm.help.enabled')}
       />
 
       {isEditing && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="block text-sm font-medium text-fg dark:text-fg-dark">Package Resources</span>
+            <span className="block text-sm font-medium text-fg dark:text-fg-dark">{t('skillForm.resources.title')}</span>
             <span className="flex items-center gap-1.5 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-              {skill?.is_system && <Badge label="System" variant="secondary" />}
-              {skill?.is_enabled === false && <Badge label="Disabled" variant="warning" />}
-              {files.length === 0 ? 'SKILL.md only' : `${files.length} bundled ${files.length === 1 ? 'file' : 'files'}`}
+              {skill?.is_system && <Badge label={t('skillsPage.statuses.system')} variant="secondary" />}
+              {skill?.is_enabled === false && <Badge label={t('skillsPage.statuses.disabled')} variant="warning" />}
+              {files.length === 0
+                ? t('skillForm.resources.skillFileOnly')
+                : t('skillForm.resources.bundledFiles', { count: files.length })}
             </span>
           </div>
           <div className="border border-line dark:border-line-dark rounded-md bg-surface dark:bg-surface-dark overflow-hidden">
             <div className="flex items-center gap-2 border-b border-line dark:border-line-dark px-3 py-2 text-sm text-fg dark:text-fg-dark bg-surface-tint dark:bg-surface-tint-dark">
               <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
               <span className="font-mono text-xs">SKILL.md</span>
-              <span className="ml-auto text-xs text-gray-400">instructions</span>
+              <span className="ml-auto text-xs text-gray-400">{t('skillForm.resources.instructions')}</span>
             </div>
             {fileTree.length > 0 ? (
               <div className="max-h-72 overflow-y-auto py-1">
@@ -746,12 +761,12 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
               </div>
             ) : (
               <p className="px-3 py-4 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
-                This skill does not include bundled resources.
+                {t('skillForm.resources.none')}
               </p>
             )}
           </div>
           <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-            Read-only. Text file previews are fetched only when a file is expanded.
+            {t('skillForm.resources.readOnlyDescription')}
           </p>
         </div>
       )}
@@ -763,7 +778,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
             onClick={onCancel}
             className="px-4 py-2 text-fg dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
-            Close
+            {t('skillForm.actions.close')}
           </button>
         </div>
       ) : (
@@ -771,7 +786,9 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
           onCancel={onCancel}
           isSubmitting={isSubmitting}
           isEditing={isEditing}
-          submitLabel={isEditing ? 'Update Skill' : 'Create Skill'}
+          submitLabel={t(isEditing ? 'skillForm.actions.update' : 'skillForm.actions.create')}
+          submittingLabel={t('skillForm.actions.saving')}
+          cancelLabel={t('skillForm.actions.cancel')}
           submitDisabled={!isValid}
         />
       )}

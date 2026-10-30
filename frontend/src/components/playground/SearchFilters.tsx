@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 import { apiService } from '../../services/api';
 import ButtonApp from '../ui/ButtonApp';
@@ -60,14 +61,14 @@ const FILTER_OPERATOR_MAPPINGS: Record<SupportedDbType, Record<MetadataOperator,
   },
 };
 
-const OPERATOR_LABELS: Record<MetadataOperator, string> = {
+const OPERATOR_TRANSLATION_KEYS: Record<MetadataOperator, string> = {
   $eq: 'equals',
-  $ne: 'not equals',
-  $gt: 'greater than',
-  $gte: 'greater than or equal',
-  $lt: 'less than',
-  $lte: 'less than or equal',
-  $in: 'in (any of)',
+  $ne: 'notEquals',
+  $gt: 'greaterThan',
+  $gte: 'greaterThanOrEqual',
+  $lt: 'lessThan',
+  $lte: 'lessThanOrEqual',
+  $in: 'inAnyOf',
 };
 
 function normalizeDbType(dbType?: string): SupportedDbType {
@@ -227,6 +228,7 @@ export function SearchFilters({
   siloId,
   siloStorageKey,
 }: Readonly<SearchFiltersProps>) {
+  const { t } = useTranslation('common');
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [filterOperators, setFilterOperators] = useState<Record<string, MetadataOperator>>({});
   const [logicalOperator, setLogicalOperator] = useState<'$and' | '$or'>('$and');
@@ -377,19 +379,19 @@ export function SearchFilters({
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-700">
           <Search className="w-4 h-4 mr-2 inline-block" aria-hidden="true" />
-          Filter by Metadata
+          {t('searchFilters.title')}
         </h3>
         <div className="flex items-center gap-2">
           <FormSelect
-            label="Match:"
+            label={t('searchFilters.match')}
             labelClassName="text-sm text-gray-600 mb-0 whitespace-nowrap"
             id="logicalOperator"
             value={logicalOperator}
             onChange={(e) => setLogicalOperator(e.target.value as '$and' | '$or')}
             disabled={disabled}
             options={[
-              { value: '$and', label: 'ALL filters (AND)' },
-              { value: '$or', label: 'ANY filter (OR)' },
+              { value: '$and', label: t('searchFilters.allFilters') },
+              { value: '$or', label: t('searchFilters.anyFilter') },
             ]}
             className="flex items-center gap-2"
           />
@@ -413,7 +415,7 @@ export function SearchFilters({
               </label>
               <div className="flex items-center gap-2">
                 <FormSelect
-                  label={`Operator for ${field.name}`}
+                  label={t('searchFilters.operatorFor', { field: field.name })}
                   labelClassName="sr-only"
                   id={`filter_operator_${field.name}`}
                   value={currentOp}
@@ -422,7 +424,10 @@ export function SearchFilters({
                     handleMetadataFilterChange(field.name, metadataFilters[field.name] || '', newOp);
                   }}
                   disabled={disabled}
-                  options={allowedOps.map((op) => ({ value: op, label: OPERATOR_LABELS[op] }))}
+                  options={allowedOps.map((op) => ({
+                    value: op,
+                    label: t(`searchFilters.operators.${OPERATOR_TRANSLATION_KEYS[op]}`),
+                  }))}
                   className="w-44 shrink-0"
                 />
                 <div className="relative w-full">
@@ -443,7 +448,9 @@ export function SearchFilters({
                     onFocus={() => {
                       if (fieldSuggestions.length > 0) setOpenSuggestionField(field.name);
                     }}
-                    placeholder={currentOp === '$in' ? 'value1, value2, value3' : `Filter by ${field.name}`}
+                    placeholder={currentOp === '$in'
+                      ? t('searchFilters.multipleValuesPlaceholder')
+                      : t('searchFilters.filterByField', { field: field.name })}
                     className="w-full"
                     disabled={disabled}
                   />
@@ -475,7 +482,7 @@ export function SearchFilters({
       {filterMetadata && (
         <details className="mt-3">
           <summary className="text-xs text-gray-500 cursor-pointer select-none hover:text-gray-700">
-            Filter JSON preview
+            {t('searchFilters.jsonPreview')}
           </summary>
           <pre className="mt-1 text-xs bg-white border border-gray-200 rounded p-2 overflow-x-auto text-gray-700 leading-relaxed">
             {JSON.stringify(filterMetadata, null, 2)}
@@ -489,7 +496,7 @@ export function SearchFilters({
           <ButtonApp
             type="button"
             onClick={() => setShowSaveForm(true)}
-            label="Save filter"
+            label={t('searchFilters.saveFilter')}
             variant="primary"
             size="medium"
           />
@@ -497,7 +504,7 @@ export function SearchFilters({
         {showSaveForm && (
           <div className="flex items-center gap-1">
             <FormField
-              label="Filter name"
+              label={t('searchFilters.filterName')}
               labelClassName="sr-only"
               id="save-filter-name"
               value={saveFilterName}
@@ -506,21 +513,21 @@ export function SearchFilters({
                 if (e.key === 'Enter') handleSaveFilter();
                 if (e.key === 'Escape') { setShowSaveForm(false); setSaveFilterName(''); }
               }}
-              placeholder="Filter name..."
+              placeholder={t('searchFilters.filterNamePlaceholder')}
               className="w-full"
             />
             <ButtonApp
               type="button"
               onClick={handleSaveFilter}
               disabled={!saveFilterName.trim()}
-              label="Save"
+              label={t('save')}
               variant="primary"
               size="medium"
             />
             <ButtonApp
               type="button"
               onClick={() => { setShowSaveForm(false); setSaveFilterName(''); }}
-              label="Cancel"
+              label={t('cancel')}
               variant="secondary"
               size="medium"
             />
@@ -528,13 +535,13 @@ export function SearchFilters({
         )}
         {savedFilters.length > 0 && (
           <FormSelect
-            label="Load saved filter"
+            label={t('searchFilters.loadSavedFilter')}
             labelClassName="sr-only"
             id="load-saved-filter"
             value={loadSelectValue}
             onChange={handleLoadFilter}
             options={[
-              { value: '', label: 'Load saved filter…' },
+              { value: '', label: t('searchFilters.loadSavedFilterOption') },
               ...savedFilters.map((filter) => ({ value: filter.id, label: filter.name })),
             ]}
             className="w-48"
@@ -546,19 +553,19 @@ export function SearchFilters({
       {loadedFilterName && (
         <div className="mt-2 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
           <span>
-            Loaded: <strong>{loadedFilterName}</strong>
+            {t('searchFilters.loaded')}: <strong>{loadedFilterName}</strong>
           </span>
           <ButtonApp
             type="button"
             onClick={() => { onFilterMetadataChange(undefined); setLoadedFilterName(null); }}
-            label="Clear"
+            label={t('searchFilters.clear')}
             variant="secondary"
             size="medium"
           />
           <ButtonApp
             type="button"
             onClick={handleRemoveLoadedFilter}
-            label="Delete"
+            label={t('delete')}
             variant="danger"
             size="medium"
           />

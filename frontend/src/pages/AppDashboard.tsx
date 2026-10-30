@@ -31,6 +31,7 @@ import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
 import { LoadingState } from '../components/ui/LoadingState';
 import { Skeleton } from '../components/ui/Skeleton';
+import { useTranslation } from 'react-i18next';
 
 interface App {
   app_id: number;
@@ -80,6 +81,7 @@ const EDITOR_ROLES = new Set(['owner', 'administrator', 'editor']);
 function AppDashboard() {
   const { appId } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
 
   const [currentApp, setCurrentApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +154,7 @@ function AppDashboard() {
 
   if (loading) {
     return (
-      <LoadingState variant="page" message="Loading workspace..." />
+      <LoadingState variant="page" message={t('appDashboard.loadingWorkspace')} />
     );
   }
 
@@ -160,12 +162,12 @@ function AppDashboard() {
     return (
       <Alert
         type="error"
-        title="App Not Found"
+        title={t('appDashboard.appNotFound')}
         message={(
           <>
-            The requested app could not be found.
+            {t('appDashboard.requestedAppNotFound')}
             <Link to="/apps" className="mt-2 block underline">
-              Back to Apps
+              {t('appDashboard.backToApps')}
             </Link>
           </>
         )}
@@ -175,44 +177,44 @@ function AppDashboard() {
 
   const cards: FeatureCard[] = [
     {
-      title: 'AI Agents',
-      subtitle: 'Intelligent automation',
+      title: t('appDashboard.features.agents.title'),
+      subtitle: t('appDashboard.features.agents.subtitle'),
       count: currentApp.agent_count,
       icon: Bot,
       href: `/apps/${appId}/agents`,
-      label: 'Manage agents',
+      label: t('appDashboard.features.agents.action'),
     },
     {
-      title: 'Repositories',
-      subtitle: 'Document storage',
+      title: t('appDashboard.features.repositories.title'),
+      subtitle: t('appDashboard.features.repositories.subtitle'),
       count: currentApp.repository_count,
       icon: FolderOpen,
       href: `/apps/${appId}/repositories`,
-      label: 'Manage repositories',
+      label: t('appDashboard.features.repositories.action'),
     },
     {
-      title: 'Silos',
-      subtitle: 'Vector knowledge bases',
+      title: t('appDashboard.features.silos.title'),
+      subtitle: t('appDashboard.features.silos.subtitle'),
       count: currentApp.silo_count,
       icon: Database,
       href: `/apps/${appId}/silos`,
-      label: 'Manage silos',
+      label: t('appDashboard.features.silos.action'),
     },
     {
-      title: 'Domains',
-      subtitle: 'Web scraping sources',
+      title: t('appDashboard.features.domains.title'),
+      subtitle: t('appDashboard.features.domains.subtitle'),
       count: currentApp.domain_count,
       icon: Globe,
       href: `/apps/${appId}/domains`,
-      label: 'Manage domains',
+      label: t('appDashboard.features.domains.action'),
     },
     {
-      title: 'App Settings',
-      subtitle: 'Services & configuration',
+      title: t('appDashboard.features.settings.title'),
+      subtitle: t('appDashboard.features.settings.subtitle'),
       count: null,
       icon: Settings,
       href: `/apps/${appId}/settings`,
-      label: 'Open settings',
+      label: t('appDashboard.features.settings.action'),
     },
   ];
 
@@ -222,7 +224,7 @@ function AppDashboard() {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--bg-sticky-verde)] text-[var(--text-sticky-verde)]">
           <InfinityIcon className="w-3 h-3" />
-          No limit
+          {t('appDashboard.noLimit')}
         </span>
       );
     }
@@ -230,7 +232,7 @@ function AppDashboard() {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
           <Zap className="w-3 h-3" />
-          {currentApp.agent_rate_limit} req/min
+          {t('appDashboard.requestsPerMinute', { limit: currentApp.agent_rate_limit })}
         </span>
       );
     }
@@ -245,7 +247,10 @@ function AppDashboard() {
     return (
       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>
         <Zap className="w-3 h-3" />
-        {Math.round(usageStats.usage_percentage)}% of {currentApp.agent_rate_limit} req/min
+        {t('appDashboard.usageOfLimit', {
+          percentage: Math.round(usageStats.usage_percentage),
+          limit: currentApp.agent_rate_limit,
+        })}
       </span>
     );
   };
@@ -253,27 +258,27 @@ function AppDashboard() {
   // --- Checklist logic ---
   const checklistSteps = [
     {
-      label: 'Create an agent',
+      label: t('appDashboard.checklist.createAgent'),
       done: currentApp.agent_count > 0,
       href: `/apps/${appId}/agents`,
     },
     {
-      label: 'Upload documents',
+      label: t('appDashboard.checklist.uploadDocuments'),
       done: currentApp.repository_count > 0,
       href: `/apps/${appId}/repositories`,
     },
     {
-      label: 'Create a knowledge base',
+      label: t('appDashboard.checklist.createKnowledgeBase'),
       done: currentApp.silo_count > 0,
       href: `/apps/${appId}/silos`,
     },
     {
-      label: 'Add a web domain',
+      label: t('appDashboard.checklist.addWebDomain'),
       done: currentApp.domain_count > 0,
       href: `/apps/${appId}/domains`,
     },
     {
-      label: 'Invite a collaborator',
+      label: t('appDashboard.checklist.inviteCollaborator'),
       done: currentApp.collaborator_count > 1,
       href: `/apps/${appId}/settings`,
     },
@@ -300,9 +305,9 @@ function AppDashboard() {
         <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center">
           <InfinityIcon className="w-8 h-8 text-green-500" />
         </div>
-        <p className="text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark">No limit configured</p>
+        <p className="text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark">{t('appDashboard.noLimitConfigured')}</p>
         <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark text-center">
-          This workspace has unlimited request capacity.
+          {t('appDashboard.unlimitedRequestCapacity')}
         </p>
       </div>
     );
@@ -320,15 +325,15 @@ function AppDashboard() {
         <Speedometer usageStats={usageStats} size="lg" showDetails={true} />
         <div className="w-full pt-2 border-t border-gray-100">
           <div className="flex justify-between text-xs text-gray-500">
-            <span>Limit: {currentApp.agent_rate_limit} req/min</span>
-            <span>{usageStats.remaining} remaining</span>
+            <span>{t('appDashboard.limitRequestsPerMinute', { limit: currentApp.agent_rate_limit })}</span>
+            <span>{t('appDashboard.remaining', { count: usageStats.remaining })}</span>
           </div>
         </div>
       </div>
     );
   } else {
     speedometerContent = (
-      <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark text-center py-6">Usage data unavailable.</p>
+      <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark text-center py-6">{t('appDashboard.usageDataUnavailable')}</p>
     );
   }
 
@@ -349,12 +354,12 @@ function AppDashboard() {
     agentsContent = (
       <div className="flex flex-col items-center justify-center py-6 gap-3 text-center bg-btCard dark:bg-btCard-dark">
         <TrendingUp className="w-8 h-8 text-fg-secondary dark:text-fg-secondary-dark" />
-        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">No agents yet.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('appDashboard.noAgentsYet')}</p>
         <Link
           to={`/apps/${appId}/agents`}
           className="text-xs text-fg-secondary dark:text-fg-secondary-dark font-medium flex items-center gap-0.5"
         >
-          Create your first agent
+          {t('appDashboard.createFirstAgent')}
           <ChevronRight className="w-3 h-3" />
         </Link>
       </div>
@@ -363,7 +368,7 @@ function AppDashboard() {
     agentsContent = (
       <>
         {!hasActivity && (
-          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mb-3">No activity yet</p>
+          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mb-3">{t('appDashboard.noActivityYet')}</p>
         )}
         <div className="space-y-3">
           {topAgents.map((agent) => {
@@ -375,7 +380,7 @@ function AppDashboard() {
                 key={agent.agent_id}
                 to={`/apps/${appId}/agents`}
                 className="flex items-center gap-2 group rounded-lg px-1 -mx-1 hover:text-fg-tertiary dark:hover:text-fg-tertiary-dark transition-colors"
-                aria-label={`Go to ${agent.name}`}
+                aria-label={t('appDashboard.goToAgent', { name: agent.name })}
               >
                 <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark w-28 truncate shrink-0 group-hover:text-fg-tertiary dark:group-hover:text-fg-tertiary-dark transition-colors" title={agent.name}>
                   {agent.name}
@@ -409,10 +414,10 @@ function AppDashboard() {
       <CardApp variant="canvas" className="p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-bronze-dark uppercase tracking-wider mb-1">Workspace</p>
+            <p className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('appDashboard.workspace')}</p>
             <Title
               titulo={currentApp.name}
-              subtitulo='Manage your AI components and data resources'
+              subtitulo={t('appDashboard.subtitle')}
               variant="titTerciario"
               subtitleMarginBottom={0}
               titleMarginBottom={0}
@@ -422,12 +427,14 @@ function AppDashboard() {
               {/* Collaborators */}
               <span className="inline-flex items-center gap-1 rounded-full border border-color-border-card dark:border-btCard-border-dark bg-white dark:bg-canvas-alt-dark px-2.5 py-1 text-xs font-medium text-[var(--text-sticky-blanco)] dark:text-fg-secondary-dark">
                 <Users className="w-3 h-3" />
-                {currentApp.collaborator_count} collaborator{currentApp.collaborator_count === 1 ? '' : 's'}
+                {t('appDashboard.collaborators', { count: currentApp.collaborator_count })}
               </span>
 
               {/* LangSmith */}
               <Badge
-                label={currentApp.langsmith_configured ? 'LangSmith active' : 'LangSmith not configured'}
+                label={currentApp.langsmith_configured
+                  ? t('appDashboard.langSmithActive')
+                  : t('appDashboard.langSmithNotConfigured')}
                 variant={currentApp.langsmith_configured ? 'success' : 'default'}
                 icon={(
                   <span
@@ -446,7 +453,7 @@ function AppDashboard() {
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
             {canEdit && (
               <ButtonApp
-                label="New Agent"
+                label={t('appDashboard.newAgent')}
                 variant="primary"
                 size="medium"
                 icon={<Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
@@ -455,7 +462,7 @@ function AppDashboard() {
             )}
             <ButtonLink
               to="/apps"
-              label="All Apps"
+              label={t('appDashboard.allApps')}
               variant="secondary"
               size="medium"
               icon={<ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />}
@@ -488,7 +495,7 @@ function AppDashboard() {
                     <p className="text-2xl font-bold text-ink dark:dark:text-ink-dark">
                       {card.count}
                     </p>
-                    <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">total</p>
+                    <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">{t('appDashboard.total')}</p>
                   </div>
                 )}
               </div>
@@ -518,7 +525,7 @@ function AppDashboard() {
         <CardApp variant="white" >
           <div className="flex items-center gap-2 mb-4">
             <Zap className="w-4 h-4 text-bronze-dark" />
-            <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">Rate Limit Usage</h2>
+            <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">{t('appDashboard.rateLimitUsage')}</h2>
           </div>
 
           {speedometerContent}
@@ -528,7 +535,7 @@ function AppDashboard() {
         <CardApp variant="white">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="w-4 h-4 text-bronze-dark" />
-            <h2 className="text-sm font-semibold text-fg-secondary dark:text-fg-secondary-dark">Top Agents by Usage</h2>
+            <h2 className="text-sm font-semibold text-fg-secondary dark:text-fg-secondary-dark">{t('appDashboard.topAgentsByUsage')}</h2>
           </div>
 
           {agentsContent}
@@ -544,16 +551,16 @@ function AppDashboard() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">Getting Started</h2>
+              <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">{t('appDashboard.checklist.title')}</h2>
               <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark font-normal">
-                {completedCount} / {checklistSteps.length} steps
+                {t('appDashboard.checklist.steps', { count: checklistSteps.length, completed: completedCount })}
               </span>
             </div>
             {canEdit && (
               <button
                 onClick={() => void dismissChecklist()}
                 className="text-gray-300 hover:text-gray-500 transition-colors rounded p-0.5"
-                aria-label="Dismiss checklist"
+                aria-label={t('appDashboard.checklist.dismiss')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -596,7 +603,7 @@ function AppDashboard() {
                   key={step.href}
                   to={step.href}
                   className="flex items-center gap-3 group rounded-lg px-1 -mx-1 hover:bg-indigo-50 transition-colors"
-                  aria-label={`Go to ${step.label}`}
+                  aria-label={t('appDashboard.checklist.goToStep', { step: step.label })}
                 >
                   {row}
                 </Link>

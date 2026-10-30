@@ -3,6 +3,7 @@ import { Clock, ShieldAlert } from 'lucide-react';
 import { useCountdown } from '../../hooks/useCountdown';
 import { buildHitlDecisions, type HitlActionChoice } from './hitlApprovalDecisions';
 import type { HitlDecision, HitlPendingApproval } from '../../types/streaming';
+import { useTranslation } from 'react-i18next';
 
 export interface HitlApprovalCardProps {
   readonly approval: HitlPendingApproval;
@@ -31,6 +32,7 @@ function formatRemaining(ms: number): string {
  * requests expire and are rejected by the server.
  */
 function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onExpire }: HitlApprovalCardProps) {
+  const { t } = useTranslation('common');
   const { actions } = approval;
   const remainingMs = useCountdown(approval.expires_at);
   const expired = approval.status === 'expired' || remainingMs === 0;
@@ -78,27 +80,26 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
     setErrors(actions.map(() => null));
   };
 
-  const toolsLabel = actions.length === 1 ? 'this tool' : 'these tools';
   const statusText = expired
-    ? 'This request expired and the tool was not executed. The agent’s answer will appear shortly.'
+    ? t('hitlApproval.statusExpired')
     : actions.length > 1
-      ? `The agent wants to run ${toolsLabel}. Choose for each tool, then submit your decisions.`
-      : `The agent wants to run ${toolsLabel}. Nothing runs until you decide.`;
+      ? t('hitlApproval.statusMultiple')
+      : t('hitlApproval.statusSingle');
 
   return (
-    <section className="flex justify-start mb-4" aria-label="Approval required">
+    <section className="flex justify-start mb-4" aria-label={t('hitlApproval.required')}>
       <div className="w-full max-w-[85%] min-w-0">
         <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 text-sm font-medium">
             <ShieldAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1">Approval required</span>
+            <span className="flex-1">{t('hitlApproval.required')}</span>
             <span
               className={`flex items-center gap-1 text-xs font-normal tabular-nums ${
                 expired ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'
               }`}
             >
               <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-              {expired ? 'Expired' : `Expires in ${formatRemaining(remainingMs)}`}
+              {expired ? t('hitlApproval.expired') : t('hitlApproval.expiresIn', { time: formatRemaining(remainingMs) })}
             </span>
           </div>
           <p className="text-xs text-amber-900/80 dark:text-amber-100/80" aria-live="polite">
@@ -136,7 +137,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                   </pre>
                 )}
                 {errors[idx] && (
-                  <p id={`${fieldId}-error`} className="mt-1 text-xs text-red-600 dark:text-red-400">{errors[idx]}</p>
+                  <p id={`${fieldId}-error`} className="mt-1 text-xs text-red-600 dark:text-red-400">{t(`hitlApproval.errors.${errors[idx]}`)}</p>
                 )}
                 <div className="flex flex-wrap items-center gap-2 mt-3">
                   {canApprove(action) && (
@@ -151,7 +152,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                           : 'bg-green-100 hover:bg-green-200 dark:bg-green-900/40 dark:hover:bg-green-900/70 text-green-800 dark:text-green-200'
                       }`}
                     >
-                      Approve
+                      {t('hitlApproval.approve')}
                     </button>
                   )}
                   {canReject(action) && (
@@ -166,7 +167,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                           : 'bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/70 text-red-800 dark:text-red-200'
                       }`}
                     >
-                      Reject
+                      {t('hitlApproval.reject')}
                     </button>
                   )}
                 </div>
@@ -183,7 +184,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                   disabled={locked || choices.some((choice) => choice === null)}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  Submit decisions
+                  {t('hitlApproval.submitDecisions')}
                 </button>
                 {actions.every(canApprove) && (
                   <button
@@ -192,7 +193,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                     disabled={locked}
                     className="px-3 py-2 text-sm font-medium text-green-800 dark:text-green-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                   >
-                    Approve all
+                    {t('hitlApproval.approveAll')}
                   </button>
                 )}
                 {actions.every(canReject) && (
@@ -202,7 +203,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                     disabled={locked}
                     className="px-3 py-2 text-sm font-medium text-red-800 dark:text-red-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                   >
-                    Reject all
+                    {t('hitlApproval.rejectAll')}
                   </button>
                 )}
               </>
@@ -215,7 +216,7 @@ function HitlApprovalCard({ approval, disabled = false, onDecide, onCancel, onEx
                 disabled={locked}
                 className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
               >
-                Cancel request
+                {t('hitlApproval.cancelRequest')}
               </button>
             )}
           </div>

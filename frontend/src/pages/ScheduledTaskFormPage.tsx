@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   apiService,
@@ -66,6 +67,7 @@ function applyCronToSimpleSchedule(
 }
 
 export default function ScheduledTaskFormPage() {
+  const { t } = useTranslation("common");
   const { appId, taskId } = useParams();
   const navigate = useNavigate();
   const numericAppId = Number.parseInt(appId ?? "0", 10);
@@ -112,7 +114,7 @@ export default function ScheduledTaskFormPage() {
           );
       })
       .catch(() => {
-        if (active) toast.error("No se pudieron cargar los agentes");
+        if (active) toast.error(t("scheduledTaskFormPage.agentsLoadFailed"));
       });
     const destinationsRequest = apiService.getOutputDestinations(numericAppId);
     if (editing) {
@@ -172,7 +174,7 @@ export default function ScheduledTaskFormPage() {
     return () => {
       active = false;
     };
-  }, [editing, numericAppId, taskId, loadAttempt]);
+  }, [editing, numericAppId, taskId, loadAttempt, t]);
 
   const simpleCron = () => {
     const [hour, minute] = time.split(":").map(Number);
@@ -189,13 +191,13 @@ export default function ScheduledTaskFormPage() {
   const save = async () => {
     if (loadState !== "ready" || (editing && task?.id !== Number(taskId))) {
       toast.error(
-        "Espera a que se carguen la tarea y sus canales antes de guardar",
+        t("scheduledTaskFormPage.waitForLoad"),
       );
       return;
     }
     const effectiveCron = simpleCron();
     if (!name.trim() || !agentId || !effectiveCron) {
-      toast.error("Completa el nombre, el agente y la programación");
+      toast.error(t("scheduledTaskFormPage.requiredFields"));
       return;
     }
     let parsedInput: Record<string, unknown> = {};
@@ -236,11 +238,11 @@ export default function ScheduledTaskFormPage() {
           saved.id,
           outputBindings,
         );
-      toast.success(task ? "Tarea actualizada" : "Tarea creada");
+      toast.success(task ? t("scheduledTaskFormPage.updated") : t("scheduledTaskFormPage.created"));
       navigate(`/apps/${appId}/scheduled-tasks/${saved.id}`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "No se pudo guardar la tarea",
+        error instanceof Error ? error.message : t("scheduledTaskFormPage.saveFailed"),
       );
     } finally {
       setSaving(false);
@@ -248,10 +250,10 @@ export default function ScheduledTaskFormPage() {
   };
 
   if (loadState !== "ready" || (editing && task?.id !== Number(taskId))) {
-    return;
+    return (
     <div className="mx-auto max-w-4xl space-y-4">
       <h1 className="text-2xl font-bold text-gray-900">
-        {editing ? "Editar tarea programada" : "Nueva tarea programada"}
+        {editing ? t("scheduledTaskFormPage.title.edit") : t("scheduledTaskFormPage.title.create")}
       </h1>
       {loadState === "error" ? (
         <div
@@ -259,8 +261,7 @@ export default function ScheduledTaskFormPage() {
           className="rounded-lg border border-red-200 bg-red-50 p-4"
         >
           <p>
-            No se pudieron cargar la tarea y sus canales. Reintenta la carga
-            para poder guardar.
+            {t("scheduledTaskFormPage.loadFailedMessage")}
           </p>
           <button
             type="button"
@@ -270,50 +271,51 @@ export default function ScheduledTaskFormPage() {
             }}
             className="mt-3 rounded-lg border px-3 py-2"
           >
-            Reintentar carga
+            {t("scheduledTaskFormPage.retry")}
           </button>
         </div>
       ) : (
-        <p role="status">Cargando configuración de la tarea y sus canales…</p>
+        <p role="status">{t("scheduledTaskFormPage.loading")}</p>
       )}
       <button
         type="button"
         onClick={() => navigate(`/apps/${appId}/scheduled-tasks`)}
         className="rounded-lg border px-4 py-2"
       >
-        Cancelar
+        {t("scheduledTaskFormPage.cancel")}
       </button>
-    </div>;
+    </div>
+    );
   }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Title variant="titPrincipal" titulo={task ? "Editar tarea programada" : "Nueva tarea programada"} subtitulo="Configura qué agente ejecutar y con qué periodicidad." />
+      <Title variant="titPrincipal" titulo={task ? t("scheduledTaskFormPage.title.edit") : t("scheduledTaskFormPage.title.create")} subtitulo={t("scheduledTaskFormPage.subtitle")} />
       <div className="space-y-5">
         <FormField
-          label="Nombre de la tarea"
+          label={t("scheduledTaskFormPage.fields.name")}
           id="task-name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Informe diario"
+          placeholder={t("scheduledTaskFormPage.fields.namePlaceholder")}
         />
         <FormTextArea
-          label="Descripción (opcional, visible en el marketplace)"
+          label={t("scheduledTaskFormPage.fields.description")}
           id="task-description"
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           rows={2}
           maxLength={4000}
-          placeholder="Qué produce esta tarea y para quién"
+          placeholder={t("scheduledTaskFormPage.fields.descriptionPlaceholder")}
         />
         <FormSelect
-          label="Agente"
+          label={t("scheduledTaskFormPage.fields.agent")}
           id="task-agent"
           value={agentId}
           disabled={Boolean(task)}
           onChange={(event) => setAgentId(event.target.value)}
           options={[
-            { value: "", label: "Selecciona un agente" },
+            { value: "", label: t("scheduledTaskFormPage.fields.selectAgent") },
             ...agents.map((agent) => ({
               value: agent.agent_id,
               label: agent.name,
@@ -321,68 +323,67 @@ export default function ScheduledTaskFormPage() {
           ]}
         />
         <FormTextArea
-          label="Input de la tarea"
+          label={t("scheduledTaskFormPage.fields.taskInput")}
           id="task-input"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           rows={5}
-          placeholder="Escribe el mensaje inicial o un objeto JSON…"
+          placeholder={t("scheduledTaskFormPage.fields.taskInputPlaceholder")}
         />
         <fieldset disabled={Boolean(task)}>
           <legend className="mb-2 text-sm font-medium text-fg dark:text-fg-dark">
-            Modo de conversación
+            {t("scheduledTaskFormPage.conversation.title")}
           </legend>
           <FormRadio
-            label="Cada ejecución empieza una conversación nueva"
+            label={t("scheduledTaskFormPage.conversation.newPerRun")}
             checked={mode === "new_per_run"}
             onChange={() => setMode("new_per_run")}
             className="mb-2 flex gap-2 text-sm"
           />
           <FormRadio
-            label="Todas las ejecuciones continúan la misma conversación"
+            label={t("scheduledTaskFormPage.conversation.continuous")}
             checked={mode === "continuous"}
             onChange={() => setMode("continuous")}
             className="flex gap-2 text-sm"
           />
           {mode === "continuous" && (
             <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
-              El agente verá lo ocurrido en ejecuciones anteriores, como en una
-              conversación normal. Requiere un agente con memoria.
+              {t("scheduledTaskFormPage.conversation.continuousHelp")}
             </p>
           )}
           {task && (
             <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
-              El modo no se puede cambiar una vez creada la tarea.
+              {t("scheduledTaskFormPage.conversation.immutable")}
             </p>
           )}
         </fieldset>
         <CardApp className="p-4">
           <div className="mb-3">
             <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">
-              Programación
+              {t("scheduledTaskFormPage.schedule.title")}
             </h3>
             <p className="text-sm text-secondary dark:text-secondary-dark mt-1">
-              Define la frecuencia sin tener que escribir CRON.
+              {t("scheduledTaskFormPage.schedule.description")}
             </p>
           </div>
           <div className="space-y-3">
             <FormSelect
-              label="Frecuencia"
+              label={t("scheduledTaskFormPage.schedule.frequency")}
               id="task-frequency"
               value={frequency}
               onChange={(event) =>
                 setFrequency(event.target.value as Frequency)
               }
               options={[
-                { value: "interval", label: "Cada X minutos/horas" },
-                { value: "daily", label: "Diariamente" },
-                { value: "weekly", label: "Semanalmente" },
-                { value: "monthly", label: "Mensualmente" },
+                { value: "interval", label: t("scheduledTaskFormPage.schedule.interval") },
+                { value: "daily", label: t("scheduledTaskFormPage.schedule.daily") },
+                { value: "weekly", label: t("scheduledTaskFormPage.schedule.weekly") },
+                { value: "monthly", label: t("scheduledTaskFormPage.schedule.monthly") },
               ]}
             />
             {frequency === "interval" && (
               <FormField
-                label="Intervalo (minutos)"
+                label={t("scheduledTaskFormPage.schedule.intervalMinutes")}
                 id="task-interval"
                 type="number"
                 min={1}
@@ -393,7 +394,7 @@ export default function ScheduledTaskFormPage() {
             )}
             {frequency !== "interval" && (
               <FormField
-                label="Hora"
+                label={t("scheduledTaskFormPage.schedule.time")}
                 id="task-time"
                 type="time"
                 value={time}
@@ -403,24 +404,24 @@ export default function ScheduledTaskFormPage() {
             )}
             {frequency === "weekly" && (
               <FormSelect
-                label="Día de la semana"
+                label={t("scheduledTaskFormPage.schedule.weekday")}
                 id="task-weekday"
                 value={weekday}
                 onChange={(event) => setWeekday(event.target.value)}
                 options={[
-                  { value: "1", label: "Lunes" },
-                  { value: "2", label: "Martes" },
-                  { value: "3", label: "Miércoles" },
-                  { value: "4", label: "Jueves" },
-                  { value: "5", label: "Viernes" },
-                  { value: "6", label: "Sábado" },
-                  { value: "0", label: "Domingo" },
+                  { value: "1", label: t("scheduledTaskFormPage.schedule.days.monday") },
+                  { value: "2", label: t("scheduledTaskFormPage.schedule.days.tuesday") },
+                  { value: "3", label: t("scheduledTaskFormPage.schedule.days.wednesday") },
+                  { value: "4", label: t("scheduledTaskFormPage.schedule.days.thursday") },
+                  { value: "5", label: t("scheduledTaskFormPage.schedule.days.friday") },
+                  { value: "6", label: t("scheduledTaskFormPage.schedule.days.saturday") },
+                  { value: "0", label: t("scheduledTaskFormPage.schedule.days.sunday") },
                 ]}
               />
             )}
             {frequency === "monthly" && (
               <FormField
-                label="Día del mes"
+                label={t("scheduledTaskFormPage.schedule.monthDay")}
                 id="task-month-day"
                 type="number"
                 min={1}
@@ -430,7 +431,7 @@ export default function ScheduledTaskFormPage() {
               />
             )}
             <p className="text-sm text-tertiary dark:text-tertiary-dark">
-              Se guardará como{" "}
+              {t("scheduledTaskFormPage.schedule.savedAs")}{" "}
               <code className="px-1 font-mono">
                 {simpleCron()}
               </code>.
@@ -440,23 +441,22 @@ export default function ScheduledTaskFormPage() {
         <CardApp className="p-4">
           <div className="mb-3">
             <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">
-              Canales de salida
+              {t("scheduledTaskFormPage.destinations.title")}
             </h3>
             <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-              Selecciona los canales registrados en App Settings para esta
-              tarea.
+              {t("scheduledTaskFormPage.destinations.description")}
             </p>
           </div>
           {destinations.length === 0 ? (
             <div className="space-y-2">
               <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-                Todavía no hay canales registrados para esta aplicación.
+                {t("scheduledTaskFormPage.destinations.empty")}
               </p>
               <Link
                 to={`/apps/${appId}/settings/output-destinations`}
                 className="inline-block text-xs font-medium text-bronze dark:text-bronze-dark transition-colors"
               >
-                Ir a App Settings para registrar canales
+                {t("scheduledTaskFormPage.destinations.registerLink")}
               </Link>
             </div>
           ) : (
@@ -482,8 +482,8 @@ export default function ScheduledTaskFormPage() {
                     />
                     <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                       {destination.provider_key === "webhook"
-                        ? "Webhook"
-                        : "Teams"}
+                        ? t("scheduledTaskFormPage.destinations.webhook")
+                        : t("scheduledTaskFormPage.destinations.teams")}
                     </span>
                   </div>
                 ))}
@@ -492,20 +492,20 @@ export default function ScheduledTaskFormPage() {
                 to={`/apps/${appId}/settings/output-destinations`}
                 className="mt-3 inline-block text-xs  text-bronze dark:text-bronze-dark transition-colors"
               >
-                Administrar canales en App Settings
+                {t("scheduledTaskFormPage.destinations.manageLink")}
               </Link>
             </>
           )}
         </CardApp>
         <FormField
-          label="Zona horaria"
+          label={t("scheduledTaskFormPage.fields.timezone")}
           id="task-timezone"
           value={timezone}
           onChange={(event) => setTimezone(event.target.value)}
         />
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField
-            label="Ejecuciones a conservar"
+            label={t("scheduledTaskFormPage.retention.label")}
             id="task-retention"
             type="number"
             min={1}
@@ -516,28 +516,28 @@ export default function ScheduledTaskFormPage() {
                 Math.min(100, Math.max(1, Number(event.target.value) || 1)),
               )
             }
-            helpText="Al superar el límite se borran las más antiguas, con sus archivos. Las que tengan notificaciones vigentes se conservan hasta que caduquen."
+            helpText={t("scheduledTaskFormPage.retention.help")}
           />
           <div>
             <FormSelect
-              label="Visibilidad en el marketplace"
+              label={t("scheduledTaskFormPage.visibility.label")}
               id="task-visibility"
               value={visibility}
               onChange={(event) =>
                 setVisibility(event.target.value as ScheduledTaskVisibility)
               }
               options={[
-                { value: "unpublished", label: "No publicada" },
-                { value: "private", label: "Privada · miembros de la app" },
-                { value: "public", label: "Pública · todos los usuarios" },
+                { value: "unpublished", label: t("scheduledTaskFormPage.visibility.unpublished") },
+                { value: "private", label: t("scheduledTaskFormPage.visibility.private") },
+                { value: "public", label: t("scheduledTaskFormPage.visibility.public") },
               ]}
-              helpText="En el marketplace solo se muestran los resultados, nunca el input."
+              helpText={t("scheduledTaskFormPage.visibility.help")}
             />
           </div>
         </div>
         <div className="flex justify-end gap-3">
           <ButtonApp
-            label="Cancelar"
+            label={t("scheduledTaskFormPage.cancel")}
             type="button"
             variant="secondary"
             size="medium"
@@ -550,7 +550,7 @@ export default function ScheduledTaskFormPage() {
             }
           />
           <ButtonApp
-            label={saving ? "Guardando…" : "Guardar y activar"}
+            label={saving ? t("scheduledTaskFormPage.saving") : t("scheduledTaskFormPage.saveAndActivate")}
             type="button"
             variant="primary"
             size="medium"

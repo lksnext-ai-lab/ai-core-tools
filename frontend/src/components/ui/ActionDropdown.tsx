@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreVertical } from 'lucide-react';
 
 export interface ActionItem {
@@ -53,7 +54,8 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!dropdownRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
@@ -227,8 +229,8 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
         </button>
       )}
 
-      {isOpen && (
-        <div 
+      {isOpen && createPortal(
+        <div
           ref={menuRef}
           className="w-48 origin-top-right rounded-lg bg-surface border border-line shadow-[0_14px_40px_rgba(32,28,20,0.14)] dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)] focus:outline-none overflow-hidden"
           style={getDropdownStyle()}
@@ -252,7 +254,8 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -19,6 +19,7 @@ import { formatDuration } from '../utils/duration';
 import { errorMessage } from '../constants/messages';
 import type { MarketplaceAgentDetail, MarketplaceConversation } from '../types/marketplace';
 import CardApp from '../components/ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 interface ChatMessage {
   readonly id: string;
@@ -45,7 +46,7 @@ interface QuotaInfo {
 }
 
 interface HistoryGroup {
-  readonly label: string;
+  readonly label: 'today' | 'yesterday' | 'previous7Days' | 'older';
   readonly items: MarketplaceConversation[];
 }
 
@@ -56,10 +57,10 @@ function groupConversationsByDate(conversations: MarketplaceConversation[]): His
   const today = startOfToday.getTime();
   const dayMs = 24 * 60 * 60 * 1000;
   const groups: HistoryGroup[] = [
-    { label: 'Today', items: [] },
-    { label: 'Yesterday', items: [] },
-    { label: 'Previous 7 days', items: [] },
-    { label: 'Older', items: [] },
+    { label: 'today', items: [] },
+    { label: 'yesterday', items: [] },
+    { label: 'previous7Days', items: [] },
+    { label: 'older', items: [] },
   ];
   const sorted = [...conversations].sort(
     (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
@@ -74,11 +75,11 @@ function groupConversationsByDate(conversations: MarketplaceConversation[]): His
   return groups.filter((g) => g.items.length > 0);
 }
 
-function formatHistoryTime(iso: string, isToday: boolean): string {
+function formatHistoryTime(iso: string, isToday: boolean, locale: string): string {
   const date = new Date(iso);
   return isToday
-    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : date.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    ? date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -90,10 +91,12 @@ function formatHistoryTime(iso: string, isToday: boolean): string {
 export default function MarketplaceChatPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation('common');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const numericId = Number(conversationId);
 
   const [agentId, setAgentId] = useState<number | null>(null);
-  const [agentName, setAgentName] = useState('Agent');
+  const [agentName, setAgentName] = useState('');
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
   const [starters, setStarters] = useState<{ id: number; prompt: string }[]>([]);
   const [agentDetail, setAgentDetail] = useState<MarketplaceAgentDetail | null>(null);
@@ -110,6 +113,7 @@ export default function MarketplaceChatPage() {
   const [historySearch, setHistorySearch] = useState('');
   const [historyConversations, setHistoryConversations] = useState<MarketplaceConversation[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const displayAgentName = agentName || t('marketplaceChat.agentFallback');
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -267,7 +271,7 @@ export default function MarketplaceChatPage() {
 
   useEffect(() => {
     if (!numericId || Number.isNaN(numericId)) {
-      setHistoryError('Invalid conversation ID');
+      setHistoryError(t('marketplaceChat.invalidConversationId'));
       setLoadingHistory(false);
       return;
     }
@@ -309,7 +313,7 @@ export default function MarketplaceChatPage() {
         }
       } catch (err) {
         if (!isMounted) return;
-        setHistoryError(errorMessage(err, 'Failed to load conversation'));
+        setHistoryError(errorMessage(err, t('marketplaceChat.loadConversationFailed')));
       } finally {
         if (isMounted) setLoadingHistory(false);
       }
@@ -319,7 +323,7 @@ export default function MarketplaceChatPage() {
     return () => {
       isMounted = false;
     };
-  }, [numericId, historyReloadKey, setPendingApproval]);
+  }, [numericId, historyReloadKey, setPendingApproval, t]);
 
   useEffect(() => {
     if (!numericId || Number.isNaN(numericId)) return;
@@ -401,9 +405,9 @@ export default function MarketplaceChatPage() {
       setHoldStreamingContent(false);
       // The decision was not applied: keep the request on screen so it can be answered again.
       setPendingApproval(approval);
-      pushError(errorMessage(err, 'The approval could not be sent'));
+      pushError(errorMessage(err, t('marketplaceChat.approvalCouldNotBeSent')));
     }
-  }, [pendingApproval, resetScrollLock, sendMessage, numericId, commitAgentResponse, setPendingApproval, pushError]);
+  }, [pendingApproval, resetScrollLock, sendMessage, numericId, commitAgentResponse, setPendingApproval, pushError, t]);
 
   const handleApprovalCancel = useCallback(async () => {
     const approval = pendingApproval;
@@ -415,11 +419,11 @@ export default function MarketplaceChatPage() {
       setPendingApproval(result.pending_approval);
       commitAgentResponse(result.response, 0, result.pending_approval !== null);
     } catch (err) {
-      pushError(errorMessage(err, 'The request could not be cancelled'));
+      pushError(errorMessage(err, t('marketplaceChat.requestCouldNotBeCancelled')));
     } finally {
       setApprovalBusy(false);
     }
-  }, [pendingApproval, settleAwaitingTools, setPendingApproval, commitAgentResponse, pushError]);
+  }, [pendingApproval, settleAwaitingTools, setPendingApproval, commitAgentResponse, pushError, t]);
 
   const handleApprovalExpire = useCallback(() => {
     if (!pendingApproval) return;
@@ -440,7 +444,7 @@ export default function MarketplaceChatPage() {
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
-      content: trimmed || `[${persistentFiles.length} file(s) attached]`,
+      content: trimmed || t('marketplaceChat.filesAttached', { count: persistentFiles.length }),
       timestamp: new Date(),
     };
 
@@ -466,8 +470,8 @@ export default function MarketplaceChatPage() {
       setHoldStreamingContent(false);
       const isQuotaError = err instanceof ApiError && err.status === 429;
       const content = isQuotaError
-        ? 'Marketplace call quota exceeded. Your quota resets at the start of next month.'
-        : errorMessage(err, 'Failed to send message. Please try again.');
+        ? t('marketplaceChat.quotaExceededError')
+        : errorMessage(err, t('marketplaceChat.sendMessageFailed'));
       setMessages((prev) => [
         ...prev,
         {
@@ -493,6 +497,7 @@ export default function MarketplaceChatPage() {
     refreshFileList,
     fetchQuotaInfo,
     commitAgentResponse,
+    t,
   ]);
 
   const handleKeyDown = useCallback(
@@ -525,10 +530,10 @@ export default function MarketplaceChatPage() {
       setIsLoadingFiles(false);
 
       if (failed.length > 0) {
-        toast.error(`Failed to upload: ${failed.join(', ')}`);
+        toast.error(t('marketplaceChat.failedToUploadFiles', { files: failed.join(', ') }));
       }
     },
-    [numericId, refreshFileList],
+    [numericId, refreshFileList, t],
   );
 
   const resolveFileUrl = useCallback(
@@ -543,10 +548,10 @@ export default function MarketplaceChatPage() {
         const url = await resolveFileUrl(fileId);
         window.open(url, '_blank');
       } catch (err) {
-        toast.error(errorMessage(err, 'Failed to download file'));
+        toast.error(errorMessage(err, t('marketplaceChat.downloadFileFailed')));
       }
     },
-    [resolveFileUrl],
+    [resolveFileUrl, t],
   );
 
   const handleRemoveFile = useCallback(
@@ -555,10 +560,10 @@ export default function MarketplaceChatPage() {
         await apiService.removeMarketplaceFile(numericId, fileId);
         await refreshFileList();
       } catch (err) {
-        toast.error(errorMessage(err, 'Failed to remove file'));
+        toast.error(errorMessage(err, t('marketplaceChat.removeFileFailed')));
       }
     },
-    [numericId, refreshFileList],
+    [numericId, refreshFileList, t],
   );
 
   const handleNewChat = useCallback(async () => {
@@ -567,9 +572,9 @@ export default function MarketplaceChatPage() {
       const conv = await apiService.createMarketplaceConversation(agentId);
       navigate(`/marketplace/chat/${conv.conversation_id ?? conv.id}`);
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to create conversation'));
+      toast.error(errorMessage(err, t('marketplaceChat.createConversationFailed')));
     }
-  }, [agentId, navigate]);
+  }, [agentId, navigate, t]);
 
   // Load this agent's conversations each time the history panel opens.
   useEffect(() => {
@@ -584,7 +589,7 @@ export default function MarketplaceChatPage() {
         }
       })
       .catch((err) => {
-        if (isMounted) toast.error(errorMessage(err, 'Failed to load conversation history'));
+        if (isMounted) toast.error(errorMessage(err, t('marketplaceChat.loadHistoryFailed')));
       })
       .finally(() => {
         if (isMounted) setHistoryLoading(false);
@@ -592,7 +597,7 @@ export default function MarketplaceChatPage() {
     return () => {
       isMounted = false;
     };
-  }, [historyOpen, agentId]);
+  }, [historyOpen, agentId, t]);
 
   const closeHistory = useCallback(() => {
     setHistoryOpen(false);
@@ -608,7 +613,7 @@ export default function MarketplaceChatPage() {
   );
 
   if (loadingHistory) {
-    return <LoadingState message="Loading conversation..." />;
+    return <LoadingState message={t('marketplaceChat.loadingConversation')} />;
   }
 
   if (historyError && messages.length === 0) {
@@ -620,7 +625,7 @@ export default function MarketplaceChatPage() {
             to="/marketplace"
             className="text-sm text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Marketplace
+            <ArrowLeft className="w-4 h-4" /> {t('marketplaceChat.backToMarketplace')}
           </Link>
         </div>
       </div>
@@ -653,8 +658,8 @@ export default function MarketplaceChatPage() {
       <SidePanel
         open={historyOpen}
         onClose={closeHistory}
-        title="History"
-        closeLabel="Close history"
+        title={t('marketplaceChat.history')}
+        closeLabel={t('marketplaceChat.closeHistory')}
         headerActions={
           <button
             type="button"
@@ -666,7 +671,7 @@ export default function MarketplaceChatPage() {
                        border border-ink dark:border-ink-dark text-fg dark:text-fg-dark
                        hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150"
           >
-            New
+            {t('marketplaceChat.new')}
           </button>
         }
         toolbar={
@@ -674,8 +679,8 @@ export default function MarketplaceChatPage() {
             type="search"
             value={historySearch}
             onChange={(e) => setHistorySearch(e.target.value)}
-            placeholder="Search conversations…"
-            aria-label="Search conversations"
+            placeholder={t('marketplaceChat.searchConversations')}
+            aria-label={t('marketplaceChat.searchConversations')}
             className="w-full rounded-md px-[11px] py-2 text-[13px]
                        bg-surface dark:bg-surface-dark border border-line dark:border-line-dark
                        text-fg dark:text-fg-dark placeholder:text-fg-tertiary dark:placeholder:text-fg-tertiary-dark
@@ -684,17 +689,17 @@ export default function MarketplaceChatPage() {
         }
       >
         {historyLoading && historyConversations.length === 0 && (
-          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 py-3.5">Loading…</p>
+          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 py-3.5">{t('marketplaceChat.loading')}</p>
         )}
         {!historyLoading && historyGroups.length === 0 && (
           <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 py-3.5">
-            {historyQuery ? 'No conversations match your search.' : 'No previous conversations.'}
+            {historyQuery ? t('marketplaceChat.noSearchMatches') : t('marketplaceChat.noPreviousConversations')}
           </p>
         )}
         {historyGroups.map((group) => (
           <div key={group.label} className="mb-3.5">
             <div className="text-[11px] uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark px-2.5 pt-1.5 pb-1">
-              {group.label}
+              {t(`marketplaceChat.historyGroups.${group.label}`)}
             </div>
             {group.items.map((conv) => {
               const isCurrent = conv.conversation_id === numericId;
@@ -710,10 +715,10 @@ export default function MarketplaceChatPage() {
                 >
                   <span className="flex items-baseline gap-2 w-full">
                     <span className="flex-1 min-w-0 truncate text-[13.5px] font-medium text-fg dark:text-fg-dark">
-                      {conv.title || 'New conversation'}
+                      {conv.title || t('marketplaceChat.newConversation')}
                     </span>
                     <span className="flex-none text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
-                      {formatHistoryTime(conv.updated_at, group.label === 'Today')}
+                      {formatHistoryTime(conv.updated_at, group.label === 'today', locale)}
                     </span>
                   </span>
                   {conv.last_message && (
@@ -735,7 +740,7 @@ export default function MarketplaceChatPage() {
             <BackgroundImage icon={Bot} size={32} iconSize={17} variant="marron" />
             <div className="min-w-0">
               <h2 className="font-display text-lg font-normal tracking-tight text-fg dark:text-fg-dark truncate">
-                {conversationTitle || 'New conversation'}
+                {conversationTitle || t('marketplaceChat.newConversation')}
               </h2>
               <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate">
                 {agentName}
@@ -747,8 +752,8 @@ export default function MarketplaceChatPage() {
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
-                title="Conversation history"
-                aria-label="Conversation history"
+                title={t('marketplaceChat.conversationHistory')}
+                aria-label={t('marketplaceChat.conversationHistory')}
                 aria-expanded={historyOpen}
                 className="w-[34px] h-[34px] flex-none flex items-center justify-center rounded-lg
                            border border-line dark:border-line-dark
@@ -767,7 +772,7 @@ export default function MarketplaceChatPage() {
                     : 'bg-surface-hover dark:bg-surface-hover-dark border-line dark:border-line-dark text-fg-secondary dark:text-fg-secondary-dark'
                 }`}
               >
-                {quotaInfo.call_count}/{quotaInfo.quota} Marketplace usage
+                {t('marketplaceChat.quotaUsage', { used: quotaInfo.call_count, quota: quotaInfo.quota })}
               </span>
             )}
             {/*{agentId && (
@@ -816,10 +821,10 @@ export default function MarketplaceChatPage() {
 
                <div className="space-y-2">
                  <p className="font-display text-[26px] font-normal tracking-tight text-fg dark:text-fg-dark">
-                   Start chatting with {agentName}
+                   {t('marketplaceChat.startChatting', { agent: displayAgentName })}
                  </p>
                  <p className="text-[14.5px] text-fg-secondary dark:text-fg-secondary-dark max-w-[400px] mx-auto">
-                   Ask a question or choose a suggestion below to get started
+                   {t('marketplaceChat.starterPromptDescription')}
                  </p>
                </div>
 
@@ -854,7 +859,7 @@ export default function MarketplaceChatPage() {
             if (message.type === 'user') {
               return (
                 <div key={message.id} className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4">
-                  <BackgroundImage text='YOU' size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                  <BackgroundImage text={t('marketplaceChat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                   
                   <div className="max-w-[82%]">
                     <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
@@ -879,9 +884,14 @@ export default function MarketplaceChatPage() {
                   <div className="max-w-[82%]">
                     <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold uppercase tracking-wide">Error</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide">{t('marketplaceChat.errorLabel')}</span>
                       </div>
-                      <p className="text-sm">{message.content}</p>
+                      <p className="text-sm">
+                        {message.content.replace(
+                          /authentication failed/gi,
+                          t('errors.authenticationFailed'),
+                        )}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -952,10 +962,10 @@ export default function MarketplaceChatPage() {
                 scrollToBottom();
               }}
               className="pg-scroll-fab pointer-events-auto"
-              aria-label="Scroll to bottom"
+              aria-label={t('marketplaceChat.scrollToBottom')}
             >
               <svg
-                className="w-4 h-4 text-gray-600 dark:text-gray-300"
+                className="w-4 h-4 text-fg-secondary dark:text-fg-secondary-dark"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -978,9 +988,7 @@ export default function MarketplaceChatPage() {
             <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark rounded-lg p-3 mb-3 flex items-start gap-2">
               <span className="text-error dark:text-error-dark flex-shrink-0" aria-hidden="true">⚠️</span>
               <span className="text-error dark:text-error-dark text-sm font-medium">
-                You've reached your monthly marketplace call limit
-                ({quotaInfo.call_count}/{quotaInfo.quota}).
-                Your quota resets at the start of next month (UTC).
+                {t('marketplaceChat.quotaLimitReached', { used: quotaInfo.call_count, quota: quotaInfo.quota })}
               </span>
             </div>
           )}
@@ -1004,8 +1012,8 @@ export default function MarketplaceChatPage() {
                           hover:bg-surface-hover dark:hover:bg-surface-hover-dark
                           disabled:opacity-40 disabled:cursor-not-allowed
                           transition-colors duration-150"
-               title={isQuotaExceeded ? 'Monthly quota reached' : 'Attach file'}
-               aria-label="Attach file"
+               title={isQuotaExceeded ? t('marketplaceChat.monthlyQuotaReached') : t('marketplaceChat.attachFile')}
+               aria-label={t('marketplaceChat.attachFile')}
              >
                <Paperclip className="w-5 h-5" />
              </button>
@@ -1015,7 +1023,7 @@ export default function MarketplaceChatPage() {
                value={inputMessage}
                onChange={(e) => setInputMessage(e.target.value)}
                onKeyDown={handleKeyDown}
-               placeholder={approvalBlocksInput ? 'Answer the approval request to continue' : `Message ${agentName}…`}
+               placeholder={approvalBlocksInput ? t('marketplaceChat.answerApprovalToContinue') : t('marketplaceChat.messagePlaceholder', { agent: displayAgentName })}
                disabled={isStreaming || isQuotaExceeded || approvalBlocksInput}
                rows={1}
                className="flex-1 py-[9px] bg-transparent border-none outline-none resize-none
@@ -1035,8 +1043,8 @@ export default function MarketplaceChatPage() {
                             bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark
                             text-error dark:text-error-dark
                             hover:border-error dark:hover:border-error-dark transition-colors duration-150"
-                 aria-label="Stop generating"
-                 title="Stop generating"
+                 aria-label={t('marketplaceChat.stopGenerating')}
+                 title={t('marketplaceChat.stopGenerating')}
                >
                  <Square className="w-4 h-4" />
                </button>
@@ -1049,7 +1057,7 @@ export default function MarketplaceChatPage() {
                             bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
                             hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
                             transition-opacity duration-150"
-                 aria-label="Send message"
+                 aria-label={t('marketplaceChat.sendMessage')}
                >
                  <ArrowRight className="w-4 h-4" />
                </button>
@@ -1057,7 +1065,7 @@ export default function MarketplaceChatPage() {
            </div>
 
           <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
-            Press Enter to send, Shift+Enter for new line
+            {t('marketplaceChat.sendKeyboardHint')}
           </p>
         </div>
       </div>
@@ -1071,12 +1079,12 @@ export default function MarketplaceChatPage() {
 
       {agentDetail && (
         <aside
-          aria-label="Agent details"
+          aria-label={t('marketplaceChat.agentDetails')}
           className="w-80 flex-none h-full min-h-0 overflow-y-auto overscroll-contain p-5
                      bg-canvas-alt dark:bg-canvas-alt-dark border-l border-line dark:border-line-dark"
         >
           <h2 className="font-display text-[17px] font-normal tracking-tight text-fg dark:text-fg-dark mb-4">
-            Agent details
+            {t('marketplaceChat.agentDetails')}
           </h2>
 
           <div className="flex flex-col gap-3.5">
@@ -1084,7 +1092,7 @@ export default function MarketplaceChatPage() {
             {(agentDetail.category || agentDetail.has_knowledge_base || agentDetail.has_memory || (agentDetail.tags && agentDetail.tags.length > 0)) && (
               <section className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg px-[18px] py-4">
                 <h3 className="text-[11px] font-[700] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark mb-3">
-                  Capabilities
+                  {t('marketplaceChat.capabilities')}
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
                   {agentDetail.category && (
@@ -1094,12 +1102,12 @@ export default function MarketplaceChatPage() {
                   )}
                   {agentDetail.has_knowledge_base && (
                     <span className="text-xs rounded-full px-[11px] py-1 bg-bronze-bg dark:bg-bronze-bg-dark text-bronze dark:text-bronze-dark">
-                      Knowledge-enhanced
+                      {t('marketplaceChat.knowledgeEnhanced')}
                     </span>
                   )}
                   {agentDetail.has_memory && (
                     <span className="text-xs rounded-full px-[11px] py-1 bg-bronze-bg dark:bg-bronze-bg-dark text-bronze dark:text-bronze-dark">
-                      Memory
+                      {t('marketplaceChat.memory')}
                     </span>
                   )}
                   {agentDetail.tags?.map((tag) => (
@@ -1117,36 +1125,36 @@ export default function MarketplaceChatPage() {
             {/* Details */}
             <section className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg px-[18px] py-4">
               <h3 className="text-[11px] font-[700] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark mb-3">
-                Details
+                {t('marketplaceChat.details')}
               </h3>
               <dl className="flex flex-col gap-2.5 text-[13px]">
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">Published by</dt>
+                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceChat.publishedBy')}</dt>
                   <dd className="font-medium text-fg dark:text-fg-dark truncate">{agentDetail.app_name}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">Knowledge base</dt>
-                  <dd className="font-medium text-fg dark:text-fg-dark">{agentDetail.has_knowledge_base ? 'Yes' : 'No'}</dd>
+                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceChat.knowledgeBase')}</dt>
+                  <dd className="font-medium text-fg dark:text-fg-dark">{agentDetail.has_knowledge_base ? t('marketplaceChat.yes') : t('marketplaceChat.no')}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">Memory</dt>
-                  <dd className="font-medium text-fg dark:text-fg-dark">{agentDetail.has_memory ? 'Enabled' : 'Disabled'}</dd>
+                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceChat.memory')}</dt>
+                  <dd className="font-medium text-fg dark:text-fg-dark">{agentDetail.has_memory ? t('marketplaceChat.enabled') : t('marketplaceChat.disabled')}</dd>
                 </div>
                 {agentDetail.rating_avg !== null && (
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">Rating</dt>
+                    <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceChat.rating')}</dt>
                     <dd className="font-medium text-fg dark:text-fg-dark tabular-nums">
                       {agentDetail.rating_avg.toFixed(1)} ({agentDetail.rating_count})
                     </dd>
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">Conversations</dt>
+                  <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceChat.conversations')}</dt>
                   <dd className="font-medium text-fg dark:text-fg-dark tabular-nums">{agentDetail.conversation_count}</dd>
                 </div>
                 {agentDetail.published_at && (
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">Published</dt>
+                    <dt className="text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceChat.published')}</dt>
                     <dd className="font-medium text-fg dark:text-fg-dark">
                       {new Date(agentDetail.published_at).toLocaleDateString()}
                     </dd>
@@ -1160,7 +1168,7 @@ export default function MarketplaceChatPage() {
               <section className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg px-[18px] py-4">
                 <div className="flex items-center justify-between mb-[9px]">
                   <h3 className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">
-                    Marketplace usage
+                    {t('marketplaceChat.marketplaceUsage')}
                   </h3>
                   <span className="text-xs font-medium tabular-nums text-fg dark:text-fg-dark">
                     {Math.min(100, Math.round((quotaInfo.call_count / quotaInfo.quota) * 100))}%
@@ -1169,7 +1177,7 @@ export default function MarketplaceChatPage() {
                 <progress
                   value={Math.min(quotaInfo.call_count, quotaInfo.quota)}
                   max={quotaInfo.quota}
-                  aria-label="Marketplace usage"
+                  aria-label={t('marketplaceChat.marketplaceUsage')}
                   className="block w-full h-[5px] mb-[7px] appearance-none overflow-hidden rounded-full
                              bg-surface-tint dark:bg-surface-tint-dark
                              [&::-webkit-progress-bar]:bg-surface-tint dark:[&::-webkit-progress-bar]:bg-surface-tint-dark
@@ -1177,7 +1185,7 @@ export default function MarketplaceChatPage() {
                              [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-accent dark:[&::-moz-progress-bar]:bg-accent-dark"
                 />
                 <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark tabular-nums">
-                  {quotaInfo.call_count} / {quotaInfo.quota} calls this month
+                  {t('marketplaceChat.callsThisMonth', { used: quotaInfo.call_count, quota: quotaInfo.quota })}
                 </p>
               </section>
             )}

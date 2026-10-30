@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { TimeRange } from '../../types/metrics';
 
 const RANGES: { label: string; value: TimeRange }[] = [
@@ -13,8 +14,9 @@ interface Props {
 }
 
 export function MetricRangeSelector({ value, onChange }: Props) {
+  const { t } = useTranslation('common');
   return (
-    <div role="group" aria-label="Time range" className="flex items-center gap-1 rounded-lg bg-white dark:bg-surface-dark border border-line dark:border-btCard-border-dark">
+    <div role="group" aria-label={t('metricsDashboard.timeRange')} className="flex items-center gap-1 rounded-lg bg-white dark:bg-surface-dark border border-line dark:border-btCard-border-dark">
       {RANGES.map((r) => (
         <button
           key={r.value}

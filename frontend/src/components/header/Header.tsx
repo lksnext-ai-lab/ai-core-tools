@@ -5,8 +5,10 @@ import { useAuth } from '../../auth/AuthContext';
 import { useUser } from '../../contexts/UserContext';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
 import { useTheme } from '../../themes/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
 import type { NavigationConfig, OrganizationConfig } from '../../core/types';
+import LanguageSelector from '../ui/LanguageSelector';
 
 interface HeaderProps {
   navigationConfig?: NavigationConfig;
@@ -24,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   logoUrl,
   organization = { name: 'LKS NEXT', logo: '/LKS-NEXT-02.png' }
 }) => {
+  const { t } = useTranslation('common');
   const { appId } = useParams();
   const { user } = useUser();
   const { logout } = useAuth();
@@ -60,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className={`relative z-20 bg-surface border-b border-line h-14 flex items-center shadow-[0_4px_10px_rgba(32,32,32,0.08)] dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_4px_10px_rgba(0,0,0,0.4)] ${className}`}>
+    <header className={`relative z-40 bg-surface border-b border-line h-14 flex items-center shadow-[0_4px_10px_rgba(32,32,32,0.08)] dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_4px_10px_rgba(0,0,0,0.4)] ${className}`}>
 
       {/* Design v3: brand block (isotipo + name) — independent of the sidebar width */}
       <div className="flex-shrink-0 flex items-center gap-2 pl-3 pr-4 min-w-0">
@@ -84,13 +87,13 @@ export const Header: React.FC<HeaderProps> = ({
           {organization && (
             <Link
               to="/home"
-              title={`${organization.name} · Organization`}
+              title={t('header.organizationTitle', { organization: organization.name })}
               className="flex-shrink-0 flex items-center gap-1 py-1 pl-1 pr-2 rounded-lg hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark"
             >
               <img src={organization.logo || '/LKS-NEXT-02.png'} alt="" className="w-[26px] h-[26px] object-contain flex-shrink-0" />
               <span className="hidden md:flex flex-col items-start leading-[1.12]">
                 <span className="text-[13px] font-medium text-fg whitespace-nowrap dark:text-fg-dark">{organization.name}</span>
-                <span className="text-[9px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">Organization</span>
+                <span className="text-[9px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('header.organization')}</span>
               </span>
             </Link>
           )}
@@ -102,14 +105,14 @@ export const Header: React.FC<HeaderProps> = ({
 
         {isHome && (
           <div role="search" className="hidden md:block flex-1 max-w-[460px] mx-6">
-            <label htmlFor="header-search" className="sr-only">Search agents, apps or chats</label>
+            <label htmlFor="header-search" className="sr-only">{t('header.search')}</label>
             <div className="flex items-center gap-[9px] px-[13px] py-2 bg-surface-hover border border-line rounded-lg focus-within:border-ink dark:bg-surface-hover-dark dark:border-line-dark dark:focus-within:border-ink-dark">
               <Search className="w-[15px] h-[15px] flex-shrink-0 text-fg-faint dark:text-fg-faint-dark" aria-hidden="true" />
               <input
                 id="header-search"
                 name="search"
                 type="search"
-                placeholder="Search agents, apps or chats…"
+                placeholder={t('header.search')}
                 className="w-full p-0 border-none bg-transparent text-[13.5px] text-fg placeholder:text-fg-tertiary outline-none focus:ring-0 dark:text-fg-dark dark:placeholder:text-fg-tertiary-dark"
               />
             </div>
@@ -121,8 +124,8 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={toggleColorMode}
             aria-pressed={isDark}
-            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={isDark ? t('header.switchToLightMode') : t('header.switchToDarkMode')}
+            title={isDark ? t('header.switchToLightMode') : t('header.switchToDarkMode')}
             className="w-[34px] h-[34px] flex items-center justify-center rounded-lg text-fg-secondary hover:bg-surface-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark"
           >
             {isDark
@@ -148,14 +151,13 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="hidden lg:block text-left">
                 <p className="text-[13px] font-medium text-fg leading-tight whitespace-nowrap dark:text-fg-dark">
-                  {user?.name || 'User'}
+                  {user?.name || t('header.userFallback')}
                 </p>
                 <p className="text-[11px] text-fg-tertiary leading-tight whitespace-nowrap dark:text-fg-tertiary-dark">
                   {user?.email}
                 </p>
               </div>
-              <svg
-                className={`w-3 h-3 text-fg-faint flex-shrink-0 transition-transform dark:text-fg-faint-dark ${isUserMenuOpen ? 'rotate-180' : ''}`}
+              <svg className={`w-3 h-3 text-fg-faint flex-shrink-0 transition-transform dark:text-fg-faint-dark ${isUserMenuOpen ? 'rotate-180' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -165,11 +167,11 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-2 w-[280px] bg-surface border border-line rounded-lg shadow-[0_14px_40px_rgba(32,28,20,0.14)] overflow-hidden z-50 dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)]">
+              <div className="absolute right-0 mt-2 w-[280px] bg-surface border border-line rounded-lg shadow-[0_14px_40px_rgba(32,28,20,0.14)] overflow-visible z-50 dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)]">
                 <div className="p-1.5" role="menu" aria-orientation="vertical">
                   <div className="-m-1.5 mb-1.5 p-4 border-b border-line dark:border-line-dark">
                     <p className="text-sm font-medium text-fg dark:text-fg-dark">
-                      {user?.name || 'User'}
+                      {user?.name || t('header.userFallback')}
                     </p>
                     <p className="text-xs text-fg-tertiary truncate dark:text-fg-tertiary-dark">
                       {user?.email}
@@ -185,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <svg className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                    Profile
+                    {t('header.profile')}
                   </Link>
 
                   {appId && (
@@ -199,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
-                      Settings
+                      {t('breadcrumbs.navigation.settings')}
                     </Link>
                   )}
 
@@ -213,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <svg className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
-                      Subscription
+                      {t('header.subscription')}
                     </Link>
                   )}
 
@@ -227,9 +229,13 @@ export const Header: React.FC<HeaderProps> = ({
                       <svg className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                       </svg>
-                      Change password
+                      {t('header.changePassword')}
                     </Link>
                   )}
+
+                  <div className="mt-1 border-t border-line px-2.5 py-3 dark:border-line-dark">
+                    <LanguageSelector className="w-full" />
+                  </div>
 
                   <div className="mt-1 pt-1 border-t border-line dark:border-line-dark">
                     <button
@@ -243,7 +249,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <svg className="w-4 h-4 mr-3 text-fg-tertiary dark:text-fg-tertiary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                       </svg>
-                      Sign out
+                      {t('header.signOut')}
                     </button>
                   </div>
                 </div>
