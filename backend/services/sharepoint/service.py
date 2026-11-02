@@ -356,7 +356,9 @@ class SharePointSyncService:
                         }
 
                         from services.silo_service import SiloService
-                        docs = SiloService.extract_documents_from_file(tmp_path, ext_with_dot, base_metadata)
+                        docs = SiloService.extract_documents_from_file(
+                            tmp_path, ext_with_dot, base_metadata
+                        )
 
                         # Convert Document objects to dict format expected by index_multiple_content
                         doc_dicts = []

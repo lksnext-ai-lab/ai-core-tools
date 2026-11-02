@@ -7,6 +7,7 @@ import os
 from services.silo_service import SiloService
 from services.media_service import MediaService
 from models.media import Media
+from tools.pdf_loader import PdfOcrError
 
 from .schemas import (
     MessageResponseSchema,
@@ -655,8 +656,15 @@ async def index_file_document(
         temp_file_path = await write_temp_file(content, suffix=file_extension)
 
         docs = SiloService.extract_documents_from_file(
-            temp_file_path, file_extension, metadata_dict
+            temp_file_path,
+            file_extension,
+            metadata_dict,
         )
+        if not docs:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No readable text could be extracted from this file.",
+            )
 
         documents_for_indexing = [
             {"content": doc.page_content, "metadata": doc.metadata} for doc in docs
@@ -673,6 +681,12 @@ async def index_file_document(
         )
     except (HTTPException, ServiceRetiredError):
         raise
+    except PdfOcrError as e:
+        logger.error("PDF OCR failed while indexing file in silo %s: %s", silo_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        ) from e
     except Exception as e:
         logger.error(f"Error indexing file in silo {silo_id} for app {app_id}: {str(e)}")
         raise HTTPException(

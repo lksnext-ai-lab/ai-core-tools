@@ -12,6 +12,7 @@ from models.ai_service import AIService
 from models.embedding_service import EmbeddingService
 from models.resource import RESOURCE_STATUS_ERROR, RESOURCE_STATUS_INDEXED
 from services.silo_service import ResourceIndexingError, ResourceNotIndexableError
+from tools.pdf_loader import PdfOcrError
 
 
 def _revoked_key_error():
@@ -104,6 +105,21 @@ class TestResourceIndexingStatus:
         store.index_documents.assert_not_called()
         assert resource.status == RESOURCE_STATUS_ERROR
         assert "No text could be extracted" in resource.error_message
+
+    def test_pdf_ocr_failure_is_reported_on_resource(self, index_env):
+        from services import silo_service
+        resource, _, _ = index_env
+        message = "PDF OCR failed. Check that Tesseract is installed."
+
+        with patch.object(
+            silo_service.SiloService,
+            "extract_documents_from_file",
+            side_effect=PdfOcrError(message),
+        ), pytest.raises(ResourceIndexingError, match="Tesseract"):
+            silo_service.SiloService.index_resource(resource)
+
+        assert resource.status == RESOURCE_STATUS_ERROR
+        assert resource.error_message == message
 
     def test_missing_embedding_service_is_an_error(self, index_env):
         from services.silo_service import SiloService

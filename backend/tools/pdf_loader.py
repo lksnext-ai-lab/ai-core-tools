@@ -5,6 +5,13 @@ import re
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
+_OCR_LANGUAGES = "eng+spa+eus"
+_MIN_NATIVE_TEXT_LENGTH = 50
+
+
+class PdfOcrError(RuntimeError):
+    """Raised when the local OCR engine cannot process a PDF page."""
+
 
 def _pdf_line_text(line: dict) -> str:
     return "".join(span.get("text", "") for span in line.get("spans", [])).strip()
@@ -97,6 +104,39 @@ class PdfLoader(BaseLoader):
                     for block_number, block in enumerate(blocks)
                     if block.get("type") == 0 and block.get("lines")
                 ]
+                native_text = " ".join(
+                    _pdf_line_text(line)
+                    for _, block in text_blocks
+                    for line in block.get("lines", [])
+                ).strip()
+                ocr_used = False
+                if len(native_text) < _MIN_NATIVE_TEXT_LENGTH:
+                    try:
+                        text_page = page.get_textpage_ocr(
+                            language=_OCR_LANGUAGES,
+                            dpi=300,
+                            full=False,
+                        )
+                    except RuntimeError as exc:
+                        raise PdfOcrError(
+                            "PDF OCR failed. Ensure Tesseract and the eng, spa, and eus "
+                            "language data are available to the backend."
+                        ) from exc
+                    page_data = page.get_text(
+                        "dict",
+                        textpage=text_page,
+                        sort=True,
+                    )
+                    blocks = page_data.get("blocks")
+                    if not isinstance(blocks, list):
+                        return None
+                    text_blocks = [
+                        (block_number, block)
+                        for block_number, block in enumerate(blocks)
+                        if block.get("type") == 0 and block.get("lines")
+                    ]
+                    ocr_used = True
+
                 if not text_blocks:
                     continue
                 found_text_blocks = True
@@ -122,6 +162,8 @@ class PdfLoader(BaseLoader):
                         "page": page_number,
                         "pdf_blocks": sorted(set(current_blocks)),
                     }
+                    if ocr_used:
+                        metadata["pdf_extraction_method"] = "ocr"
                     if current_section:
                         metadata["section"] = current_section
                     documents.append(Document(

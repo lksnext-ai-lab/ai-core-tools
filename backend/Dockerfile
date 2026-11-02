@@ -68,6 +68,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     ffmpeg \
     poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-spa \
+    tesseract-ocr-eus \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

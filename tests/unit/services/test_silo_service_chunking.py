@@ -379,6 +379,76 @@ class TestExtractDocumentsFromFileSplitter:
         assert not pdf_loader.structured
         loader.return_value.load.assert_called_once()
 
+    def test_scanned_pages_use_ocr_automatically(self):
+        digital_page = MagicMock()
+        digital_page.get_text.return_value = {
+            "blocks": [
+                self._make_block(
+                    "This digital PDF page already contains enough searchable text."
+                )
+            ]
+        }
+
+        scanned_page = MagicMock()
+        scanned_page.get_text.side_effect = [
+            {"blocks": []},
+            {
+                "blocks": [
+                    self._make_block(
+                        "OCR recovered readable text from this scanned PDF page."
+                    )
+                ]
+            },
+        ]
+        scanned_page.get_textpage_ocr.return_value = object()
+
+        fake_pdf = MagicMock()
+        fake_pdf.__enter__.return_value = fake_pdf
+        fake_pdf.__exit__.return_value = False
+        fake_pdf.__iter__.return_value = iter([digital_page, scanned_page])
+
+        with patch("fitz.open", return_value=fake_pdf):
+            docs = SiloService.extract_documents_from_file(
+                "mixed.pdf",
+                ".pdf",
+            )
+
+        assert [doc.page_content for doc in docs] == [
+            "This digital PDF page already contains enough searchable text.",
+            "OCR recovered readable text from this scanned PDF page.",
+        ]
+        assert docs[0].metadata["page"] == 1
+        assert "pdf_extraction_method" not in docs[0].metadata
+        assert docs[1].metadata["page"] == 2
+        assert docs[1].metadata["pdf_extraction_method"] == "ocr"
+        scanned_page.get_textpage_ocr.assert_called_once_with(
+            language="eng+spa+eus",
+            dpi=300,
+            full=False,
+        )
+        digital_page.get_textpage_ocr.assert_not_called()
+
+    def test_ocr_engine_errors_are_reported(self):
+        scanned_page = MagicMock()
+        scanned_page.get_text.return_value = {"blocks": []}
+        scanned_page.get_textpage_ocr.side_effect = RuntimeError(
+            "No tessdata specified and Tesseract is not installed"
+        )
+
+        fake_pdf = MagicMock()
+        fake_pdf.__enter__.return_value = fake_pdf
+        fake_pdf.__exit__.return_value = False
+        fake_pdf.__iter__.return_value = iter([scanned_page])
+
+        with (
+            patch("fitz.open", return_value=fake_pdf),
+            pytest.raises(RuntimeError, match="eng, spa, and eus"),
+        ):
+            SiloService.extract_documents_from_file(
+                "scanned.pdf",
+                ".pdf",
+            )
+
     def test_silo_service_splits_pdf_fallback_documents(self):
         fake_pdf = MagicMock()
         fake_pdf.__enter__.return_value = fake_pdf

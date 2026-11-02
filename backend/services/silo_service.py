@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from utils.logger import get_logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from tools.pdf_loader import PdfLoader
+from tools.pdf_loader import PdfLoader, PdfOcrError
 from tools.vector_store_factory import VectorStoreFactory
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from models.silo import SiloType
@@ -856,7 +856,11 @@ class SiloService:
             logger.warning("metadata_values_cache: invalidation failed after index_multiple_content for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
-    def extract_documents_from_file(file_path: str, file_extension: str, base_metadata: dict = None):
+    def extract_documents_from_file(
+        file_path: str,
+        file_extension: str,
+        base_metadata: dict = None,
+    ):
         """
         Extracts and splits documents from a file, attaching base metadata to each chunk.
         Args:
@@ -1119,7 +1123,9 @@ class SiloService:
                 base_metadata["folder_path"] = ""
                 base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
 
-            docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
+            docs = SiloService.extract_documents_from_file(
+                path, file_extension, base_metadata
+            )
 
             if not docs:
                 logger.warning(f"No content extracted from resource {resource_with_relations.resource_id} ({resource_with_relations.uri}). The file may be empty or contain only images/scans without text.")
@@ -1165,6 +1171,11 @@ class SiloService:
                 raise  # already logged once (WARNING) by ensure_service_active
             logger.exception(f"Error indexing resource {resource.resource_id}: {e}")
             raise
+        except PdfOcrError as e:
+            logger.exception(f"PDF OCR failed for resource {resource.resource_id}: {e}")
+            if resource_with_relations is not None:
+                SiloService._set_index_status(resource_with_relations, session, str(e))
+            raise ResourceIndexingError(str(e)) from e
         except Exception as e:
             logger.exception(f"Error indexing resource {resource.resource_id}: {e}")
             message = classify_provider_error(e, "Indexing", step="Indexing").message
@@ -1915,7 +1926,10 @@ class SiloService:
             'vector_db_type': getattr(silo_data, 'vector_db_type', None)
         }
         fields_set = getattr(silo_data, 'model_fields_set', set())
-        for field in ('transcription_service_id', 'video_ai_service_id'):
+        for field in (
+            'transcription_service_id',
+            'video_ai_service_id',
+        ):
             if field in fields_set:
                 form_data[field] = getattr(silo_data, field)
         

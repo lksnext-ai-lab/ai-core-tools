@@ -33,7 +33,6 @@ class Silo(Base):
     transcription_service = relationship('AIService', foreign_keys=[transcription_service_id])
     video_ai_service = relationship('AIService', foreign_keys=[video_ai_service_id])
     vector_db_type = Column(String(45), default='PGVECTOR')
-
     is_frozen = Column(Boolean, default=False, nullable=False)
     agents = relationship('Agent', lazy=True)
     repository = relationship('Repository', back_populates='silo')

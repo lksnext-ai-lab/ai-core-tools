@@ -105,7 +105,10 @@ def _doc(text):
 
 def test_indexes_documents_extracted_from_the_file(tmp_path):
     (tmp_path / "doc.pdf").write_bytes(b"%PDF")
-    result, silo_service = _run_indexing(tmp_path, extract=lambda *_: [_doc("page one")])
+    result, silo_service = _run_indexing(
+        tmp_path,
+        extract=lambda *_, **__: [_doc("page one")],
+    )
 
     assert result is True
     silo_service.index_multiple_content.assert_called_once()
@@ -117,7 +120,7 @@ def test_indexes_documents_extracted_from_the_file(tmp_path):
 def test_falls_back_to_content_when_extraction_fails(tmp_path):
     (tmp_path / "doc.pdf").write_bytes(b"%PDF")
 
-    def _boom(*_):
+    def _boom(*_, **__):
         raise RuntimeError("broken pdf")
 
     result, silo_service = _run_indexing(tmp_path, extract=_boom)
@@ -130,7 +133,7 @@ def test_falls_back_to_content_when_extraction_fails(tmp_path):
 
 def test_falls_back_to_content_when_extraction_returns_no_documents(tmp_path):
     (tmp_path / "doc.pdf").write_bytes(b"%PDF")
-    result, silo_service = _run_indexing(tmp_path, extract=lambda *_: [])
+    result, silo_service = _run_indexing(tmp_path, extract=lambda *_, **__: [])
 
     assert result is True
     _, items, _ = silo_service.index_multiple_content.call_args.args
