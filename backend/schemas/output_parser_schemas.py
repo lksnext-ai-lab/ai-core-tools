@@ -10,6 +10,7 @@ class OutputParserListItemSchema(BaseModel):
     description: Optional[str] = None
     field_count: int  # Number of fields in the parser
     created_at: Optional[datetime] = None
+    is_enum: bool = False
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -17,12 +18,14 @@ class OutputParserListItemSchema(BaseModel):
 class OutputParserFieldSchema(BaseModel):
     """Schema for individual parser fields"""
     name: str
-    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'dict', 'parser'
+    type: str  # 'str', 'int', 'float', 'bool', 'date', 'list', 'dict', 'parser', 'enum'
     description: str
     optional: bool = False  # If True, the field is optional (may be absent in LLM output)
     parser_id: Optional[int] = None  # For type='parser'
     list_item_type: Optional[str] = None  # For type='list'
     list_item_parser_id: Optional[int] = None  # For list of parsers
+    enum_id: Optional[int] = None  # For type='enum'
+    list_item_enum_id: Optional[int] = None  # For list of enums
 
 
 class OutputParserDetailSchema(BaseModel):
@@ -33,6 +36,8 @@ class OutputParserDetailSchema(BaseModel):
     fields: List[OutputParserFieldSchema]
     created_at: Optional[datetime] = None
     available_parsers: List[Dict[str, Any]]  # Other parsers for references
+    available_enums: List[Dict[str, Any]] = []
+    is_enum: bool = False
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,3 +47,4 @@ class CreateUpdateOutputParserSchema(BaseModel):
     name: str
     description: Optional[str] = ""
     fields: List[OutputParserFieldSchema]
+    is_enum: bool = False
