@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session, joinedload, selectinload
 from models.middleware import AgentMiddleware
@@ -71,6 +72,7 @@ class AgentExecutionRepository:
             db_agent = AgentRepository.get_by_id(db, agent_id)
             if db_agent:
                 db_agent.request_count = (db_agent.request_count or 0) + 1
+                db_agent.last_used_date = datetime.now()
                 db.commit()
                 return True
             return False

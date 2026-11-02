@@ -294,5 +294,7 @@ def test_discovery_rate_limit_returns_429_with_retry_after_and_never_touches_the
     assert "Retry-After" in second.headers
 
     # The app's own execution budget counter was never consumed by discovery traffic.
-    state = rate_limit_service.check_and_consume(world.app_id, 1000)
+    state = rate_limit_service.check_and_consume_for_agent(
+        world.app_id, world.agent_public_id, 1000
+    )
     assert state.remaining == 999

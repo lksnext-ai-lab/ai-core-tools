@@ -69,6 +69,7 @@ class Agent(Base):
     type = Column(String(45), nullable=False, default='agent')
     status = Column(String(45))
     request_count = Column(Integer, default=0)
+    last_used_date = Column(DateTime, nullable=True)
     is_tool = Column(Boolean, default=False)
     service_id = Column(Integer,
                         ForeignKey('AIService.service_id', ondelete='SET NULL'),

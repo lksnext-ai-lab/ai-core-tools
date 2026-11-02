@@ -96,6 +96,7 @@ class AgentService:
                 type=agent.type or "agent",
                 is_tool=agent.is_tool or False,
                 created_at=agent.create_date,
+                last_used_date=getattr(agent, 'last_used_date', None),
                 request_count=agent.request_count or 0,
                 service_id=getattr(agent, 'service_id', None),
                 ai_service=ai_service_info,
@@ -209,6 +210,7 @@ class AgentService:
             skill_ids=associations['skill_ids'],
             middleware_ids=associations['middleware_ids'],
             created_at=agent.create_date,
+            last_used_date=getattr(agent, 'last_used_date', None),
             request_count=getattr(agent, 'request_count', 0) or 0,
             # OCR-specific fields
             vision_service_id=getattr(agent, 'vision_service_id', None),

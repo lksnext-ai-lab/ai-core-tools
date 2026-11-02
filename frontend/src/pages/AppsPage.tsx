@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
-import { Download } from 'lucide-react';
+import { Download, Bot, Settings, Upload, LogOut, Trash2 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
+import ActionDropdown, { type ActionItem } from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
 import AppImportStepper from '../components/import/AppImportStepper';
 import Title from '../components/ui/Title';
@@ -11,6 +12,7 @@ import ButtonCard from '../components/ui/ButtonCard';
 import { Badge } from '../components/ui/Badge';
 import ButtonApp from '../components/ui/ButtonApp';
 import { LoadingState } from '../components/ui/LoadingState';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { useTranslation } from 'react-i18next';
 
 interface App {
@@ -48,6 +50,7 @@ function AppsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const { t, i18n } = useTranslation('common');
+  const confirm = useConfirm();
 
   useEffect(() => {
     void loadApps();
@@ -76,6 +79,65 @@ function AppsPage() {
     }
   }
 
+  async function handleExportApp(app: App) {
+    try {
+      setError(null);
+      const blob = await apiService.exportFullApp(app.app_id);
+      const url = globalThis.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().split('T')[0];
+      const sanitizedName = app.name.replaceAll(/[^a-z0-9]/gi, '_').toLowerCase();
+      link.href = url;
+      link.download = `app-${sanitizedName}-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      globalThis.URL.revokeObjectURL(url);
+      setSuccess(t('appsPage.appExportedSuccessfully', { name: app.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('appsPage.appExportFailed', { name: app.name }));
+    }
+  }
+
+  async function handleLeaveApp(app: App) {
+    const confirmed = await confirm({
+      title: t('appsPage.confirmLeaveTitle'),
+      message: t('appsPage.confirmLeaveMessage', { name: app.name }),
+      confirmLabel: t('appsPage.actions.leaveApp'),
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiService.leaveApp(app.app_id);
+      setApps((currentApps) => currentApps.filter((currentApp) => currentApp.app_id !== app.app_id));
+      setError(null);
+      setSuccess(t('appsPage.appLeftSuccessfully', { name: app.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('appsPage.appLeaveFailed', { name: app.name }));
+    }
+  }
+
+  async function handleDeleteApp(app: App) {
+    const confirmed = await confirm({
+      title: t('appsPage.confirmDeleteTitle'),
+      message: t('appsPage.confirmDeleteMessage', { name: app.name }),
+      confirmLabel: t('appsPage.actions.deleteApp'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiService.deleteApp(app.app_id);
+      setApps((currentApps) => currentApps.filter((currentApp) => currentApp.app_id !== app.app_id));
+      setError(null);
+      setSuccess(t('appsPage.appDeletedSuccessfully', { name: app.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('appsPage.appDeleteFailed', { name: app.name }));
+    }
+  }
+
+  // Function to create a new app
   async function handleCreateApp(data: { name: string }) {
     await apiService.createApp(data);
     setShowCreateModal(false);
@@ -142,12 +204,46 @@ function AppsPage() {
         {apps.map((app) => {
           const ownerBonus = app.role === 'owner' ? 1 : 0;
           const totalCollaborators = app.collaborator_count + ownerBonus;
+          const actions: ActionItem[] = [
+            {
+              label: t('appsPage.actions.manageAgents'),
+              onClick: () => { globalThis.location.href = `/apps/${app.app_id}/agents`; },
+              icon: <Bot className="w-4 h-4" />,
+              variant: 'secondary',
+            },
+            {
+              label: t('appsPage.actions.appSettings'),
+              onClick: () => { globalThis.location.href = `/apps/${app.app_id}/settings`; },
+              icon: <Settings className="w-4 h-4" />,
+              variant: 'secondary',
+            },
+            {
+              label: t('appsPage.actions.exportApp'),
+              onClick: () => { void handleExportApp(app); },
+              icon: <Upload className="w-4 h-4" />,
+              variant: 'secondary',
+            },
+            ...(app.role === 'owner'
+              ? [{
+                  label: t('appsPage.actions.deleteApp'),
+                  onClick: () => { void handleDeleteApp(app); },
+                  icon: <Trash2 className="w-4 h-4" />,
+                  variant: 'danger' as const,
+                }]
+              : [{
+                  label: t('appsPage.actions.leaveApp'),
+                  onClick: () => { void handleLeaveApp(app); },
+                  icon: <LogOut className="w-4 h-4" />,
+                  variant: 'danger' as const,
+                }]),
+          ];
 
           return (
             <ButtonCard
               key={app.app_id}
               ariaLabel={t('appsPage.openApp', { name: app.name })}
               onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
+              interactiveChildren
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
@@ -156,11 +252,20 @@ function AppsPage() {
                   </div>
                   <span className="min-w-0 text-[18px] leading-tight text-ink dark:text-ink-dark">{app.name}</span>
                 </div>
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
                   {getAppRoleTranslationKey(app.role)
                     ? t(getAppRoleTranslationKey(app.role)!)
                     : app.role}
-                </span>
+                  </span>
+                  <ActionDropdown
+                    actions={actions}
+                    size="sm"
+                    triggerText={t('appsPage.actions.menu')}
+                    triggerAriaLabel={t('appsPage.actions.menuForApp', { name: app.name })}
+                    className="pointer-events-auto relative z-10"
+                  />
+                </div>
               </div>
               <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
                 {app.created_at ? new Date(app.created_at).toLocaleDateString(i18n.resolvedLanguage) : '-'}

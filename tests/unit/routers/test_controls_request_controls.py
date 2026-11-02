@@ -2,10 +2,10 @@
 Unit tests for the step_006 request-control helpers:
 
 - services.rate_limit_service.RateLimitService.check_and_consume_key (separate
-  namespace from the per-app check_and_consume counter).
+  namespace from per-agent execution counters).
 - routers.controls.ip_rate_limit.enforce_ip_rate_limit.
 - routers.controls.body_limit.read_body_capped / make_replay_request.
-- routers.controls.rate_limit.apply_app_rate_limit and
+
   routers.controls.origins.check_allowed_origin (the extracted, reusable bodies
   of the existing enforce_* dependencies).
 
@@ -21,7 +21,6 @@ from fastapi import HTTPException
 from services.rate_limit_service import RateLimitService, _OVERFLOW_KEY
 from routers.controls.ip_rate_limit import enforce_ip_rate_limit, client_ip_from_request
 from routers.controls.body_limit import read_body_capped, make_replay_request, BodyReadAborted
-from routers.controls.rate_limit import apply_app_rate_limit
 from routers.controls.origins import check_allowed_origin
 
 
@@ -52,7 +51,7 @@ class TestCheckAndConsumeKeyNamespaceIsolation:
         assert not other.exceeded
         assert other.remaining == 4
 
-    def test_key_namespace_does_not_touch_app_counter(self):
+    def test_key_namespace_does_not_touch_agent_counter(self):
         svc = fresh_service()
         # Exhaust a key-namespace budget that happens to look like an app id.
         for _ in range(3):
@@ -60,10 +59,12 @@ class TestCheckAndConsumeKeyNamespaceIsolation:
         blocked = svc.check_and_consume_key("1", 3)
         assert blocked.exceeded
 
-        # The app-id counter (separate dict) for app_id=1 must be untouched.
-        app_state = svc.check_and_consume(app_id=1, max_per_minute=3)
-        assert not app_state.exceeded
-        assert app_state.remaining == 2
+        # The agent execution counter must remain isolated from the key namespace.
+        agent_state = svc.check_and_consume_for_agent(
+            app_id=1, agent_id=11, max_per_minute=3
+        )
+        assert not agent_state.exceeded
+        assert agent_state.remaining == 2
 
     def test_unlimited_when_limit_non_positive(self):
         svc = fresh_service()
@@ -556,39 +557,14 @@ class TestMakeReplayRequest:
 
 
 # ---------------------------------------------------------------------------
-# apply_app_rate_limit / check_allowed_origin — extracted reusable bodies
+# check_allowed_origin — extracted reusable body
 # ---------------------------------------------------------------------------
 
 
 class _FakeApp:
-    def __init__(self, app_id=1, agent_rate_limit=0, agent_cors_origins=""):
+    def __init__(self, app_id=1, agent_cors_origins=""):
         self.app_id = app_id
-        self.agent_rate_limit = agent_rate_limit
         self.agent_cors_origins = agent_cors_origins
-
-
-class TestApplyAppRateLimit:
-    def test_unlimited_sets_headers_without_raising(self, monkeypatch):
-        import routers.controls.rate_limit as mod
-        fresh = fresh_service()
-        monkeypatch.setattr(mod, "rate_limit_service", fresh)
-
-        headers: dict = {}
-        app = _FakeApp(app_id=1, agent_rate_limit=0)
-        apply_app_rate_limit(app, headers)
-        assert headers["X-RateLimit-Limit"] == "0"
-        assert headers["X-RateLimit-Remaining"] == "-1"
-
-    def test_exceeded_raises_429(self, monkeypatch):
-        import routers.controls.rate_limit as mod
-        fresh = fresh_service()
-        monkeypatch.setattr(mod, "rate_limit_service", fresh)
-
-        app = _FakeApp(app_id=7, agent_rate_limit=1)
-        apply_app_rate_limit(app, {})
-        with pytest.raises(HTTPException) as exc_info:
-            apply_app_rate_limit(app, {})
-        assert exc_info.value.status_code == 429
 
 
 class TestCheckAllowedOrigin:
