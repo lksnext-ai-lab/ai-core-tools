@@ -255,13 +255,10 @@ class TestRuntime:
         assert SystemOneEvaluator.snapshot(_agent(_svc(eos=SOON))).endpoint.service_id == 1
         assert SystemOneEvaluator.snapshot(_agent(_svc(eos=FAR))).endpoint.model == "nimble-latest"
 
-    async def test_the_tool_of_a_retired_service_says_so_to_the_calling_llm(self, blocked_logs):
-        with patch.object(SystemOneEvaluator, "evaluate", AsyncMock()) as evaluate:
-            tool = await IACTSystemOneTool.create(_agent(_svc(eos=PAST)), user_context={"user_id": 1})
-            content, artifact = await tool._arun(text="hello")
-        evaluate.assert_not_awaited()
-        assert tool.snapshot is None and "currently unavailable" in tool.description
-        assert "retired" in content and artifact is None
+    async def test_the_tool_of_a_retired_service_fails_the_turn_like_other_agent_tools(self, blocked_logs):
+        with pytest.raises(ServiceRetiredError) as exc:
+            await IACTSystemOneTool.create(_agent(_svc(eos=PAST)), user_context={"user_id": 1})
+        assert "retired" in exc.value.message
         assert len(blocked_logs()) == 1       # the guard logs once; the tool does not log it again
 
     async def test_the_tool_of_an_active_service_evaluates(self):
