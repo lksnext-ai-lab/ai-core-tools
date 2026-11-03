@@ -44,7 +44,7 @@ A service can be deleted even if agents use it, like an AI service. The agents a
 
 ### End of service
 
-Like AI, embedding and sandbox services, a System One service can have a planned **end of service** date and a deprecation notice (set them in the service wizard). Before the date the service is shown as deprecated and agents using it show a warning; from that date it is **retired**: its agents cannot evaluate (`409 SERVICE_RETIRED`; as a tool they tell the calling LLM why), and it can no longer be chosen for an agent that did not already have it. Test connection, copy and delete keep working. The same rule applies to the agent's summarization LLM: a retired AI service cannot be newly chosen, and an agent that already has one truncates long texts instead of summarizing them (with a warning in the log). Export/import carries the date and notice.
+Like AI, embedding and sandbox services, a System One service can have a planned **end of service** date and a deprecation notice (set them in the service wizard). Before the date the service is shown as deprecated and agents using it show a warning; from that date it is **retired**: its agents cannot evaluate (`409 SERVICE_RETIRED`; used as a tool, the calling agent's turn fails with the same `409`, like any agent tool whose service is retired), and it can no longer be chosen for an agent that did not already have it. Test connection, copy and delete keep working. The same rule applies to the agent's summarization LLM: a retired AI service cannot be newly chosen, and an agent that already has one truncates long texts instead of summarizing them (with a warning in the log). Export/import carries the date and notice.
 
 ## Defining questions
 

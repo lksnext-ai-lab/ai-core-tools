@@ -99,11 +99,12 @@ class IACTSystemOneTool(BaseTool):
                      attached_files: Optional[List[Dict]] = None) -> "IACTSystemOneTool":
         try:
             snapshot = SystemOneEvaluator.snapshot(agent)
-        except (HTTPException, ServiceRetiredError) as exc:
-            # Its service was deleted or retired. The calling agent still gets the tool so that its LLM can tell
+        except ServiceRetiredError:
+            raise    # like any agent used as a tool: a retired service fails the turn (409 SERVICE_RETIRED)
+        except HTTPException as exc:
+            # Its service was deleted. The calling agent still gets the tool so that its LLM can tell
             # the user why it cannot be used, instead of the whole turn failing while the tools are built.
-            # (A retired service was already logged by the guard.)
-            reason = exc.message if isinstance(exc, ServiceRetiredError) else str(exc.detail)
+            reason = str(exc.detail)
             return cls(
                 name=sanitize_identifier(agent.name),
                 description=f"{agent.description or agent.name} (currently unavailable: {reason})",
