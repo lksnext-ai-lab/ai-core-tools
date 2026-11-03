@@ -48,7 +48,7 @@ ENTRA_CLIENT_SECRET=your-client-secret
 7. Session cookie set → user redirected to frontend
 ```
 
-**Libraries used**: `lks-idprovider-fastapi`, `lks-idprovider-entraid`.
+**Libraries used**: `lks-idprovider-fastapi`, `lks-idprovider-entraid` (and `lks-idprovider-api`, which both depend on). They are installed from the wheels attached to the [lks-idprovider GitHub Releases](https://github.com/lksnext-ai-lab/lks-idprovider/releases), not from PyPI; to upgrade, update the three URLs in `pyproject.toml` and run `poetry lock`.
 
 ### Azure setup
 

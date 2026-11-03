@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **lks-idprovider moved to GitHub Releases and updated** (`lks-idprovider-api` 0.1.7, `-entraid` 0.1.4, `-fastapi` 0.1.1): installed from the release wheels instead of PyPI. Security floors raised: `cryptography` >=50 (with `cffi` >=2 and `msal` >=1.39, which cryptography 50 requires) and `pyjwt` >=2.15. `pyright` is no longer pulled in at runtime.
 - **AI services used by middlewares cannot be deleted**: `DELETE /internal/apps/{app}/ai-services/{id}` returns `409` naming the summarization/PII middlewares that reference it.
 - **Middleware export/import**: middlewares can be exported and imported on their own and travel with agent and full-app exports (AI services by name). `Middleware.is_frozen`, never applied, is dropped.
 - **Agents used as tools run their middlewares**; the tools their approval rules gate are withheld because a sub-agent cannot pause. Renaming an agent moves the approval rules that name it.
