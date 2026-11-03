@@ -148,6 +148,14 @@ class TestPublicEvaluate:
         ctx = server[1].call_args.kwargs["user_context"]
         assert ctx["api_key_id"] == fake_api_key.key_id and ctx["app_id"] == fake_app.app_id
 
+    def test_the_apps_per_agent_rate_limit_applies(self, client, db, fake_app, agent, fake_api_key, server):
+        fake_app.agent_rate_limit = 2
+        db.flush()
+        codes = [client.post(public(fake_app, agent.agent_id), data={"text": "x"},
+                             headers={"X-API-KEY": fake_api_key.key}).status_code for _ in range(3)]
+        assert codes == [200, 200, 429]
+        assert server[1].call_count == 2
+
     def test_without_or_with_a_wrong_key_is_401(self, client, fake_app, agent, server):
         assert client.post(public(fake_app, agent.agent_id), data={"text": "x"}).status_code == 401
         assert client.post(public(fake_app, agent.agent_id), data={"text": "x"},

@@ -1,15 +1,16 @@
 """Evaluate a text with a System One agent through the public API (API key)."""
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from db.database import get_db
 from schemas.system_one_schemas import SystemOneResult
+from routers.controls.rate_limit import apply_agent_rate_limit
 from services.agent_execution_service import AgentExecutionService
 from utils.logger import get_logger
 
-from .auth import create_api_key_user_context, get_api_key_auth, validate_api_key_for_app
+from .auth import create_api_key_user_context, get_api_key_auth, validate_agent_ownership, validate_api_key_for_app
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,7 @@ system_one_router = APIRouter()
         400: {"description": "Nothing to evaluate, an image, or an attachment whose text cannot be read"},
         401: {"description": "Missing or invalid API key"},
         404: {"description": "System One agent not found in this app"},
+        429: {"description": "The app's per-agent rate limit was exceeded"},
         422: {"description": "The System One server rejected the request"},
         503: {"description": "The System One server is unavailable or overloaded"},
     },
@@ -34,11 +36,14 @@ async def evaluate_system_one_agent(
     agent_id: int,
     api_key: Annotated[str, Depends(get_api_key_auth)],
     db: Annotated[Session, Depends(get_db)],
+    response: Response,
     text: Annotated[str, Form()] = "",
     files: Annotated[List[UploadFile], File()] = [],
 ):
     """Send ``text`` (and optional text attachments) and get one typed answer per question of the agent."""
     auth = validate_api_key_for_app(app_id, api_key, db)
+    agent = validate_agent_ownership(db, agent_id, app_id)
+    apply_agent_rate_limit(agent.app, agent_id, response.headers)
     user_context = create_api_key_user_context(app_id, api_key)
     user_context["api_key_id"] = auth.key_id
     return await AgentExecutionService().execute_agent_system_one(
