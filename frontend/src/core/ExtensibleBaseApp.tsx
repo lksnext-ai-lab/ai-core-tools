@@ -45,6 +45,7 @@ import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
 import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
+import SystemOneServicesPage from '../pages/settings/SystemOneServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import OutputDestinationsPage from '../pages/settings/OutputDestinationsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
@@ -404,6 +405,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/settings/sandbox-services" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><SandboxServicesPage /></SettingsLayout>
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/system-one-services" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SettingsLayout><SystemOneServicesPage /></SettingsLayout>
                   </EditorLayoutRoute>
                 } />
 

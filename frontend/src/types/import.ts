@@ -2,6 +2,7 @@ export type ConflictMode = 'fail' | 'rename' | 'override';
 
 export type ComponentType =
   | 'ai_service'
+  | 'system_one_service'
   | 'embedding_service'
   | 'output_parser'
   | 'mcp_config'
@@ -52,6 +53,7 @@ export interface AppImportPreview {
   export_version: string;
   app_name: string;
   ai_services: ComponentPreviewItem[];
+  system_one_services: ComponentPreviewItem[];
   embedding_services: ComponentPreviewItem[];
   output_parsers: ComponentPreviewItem[];
   mcp_configs: ComponentPreviewItem[];
@@ -113,6 +115,7 @@ export interface FullAppImportResponse {
 
 export const COMPONENT_TYPE_LABELS: Record<string, string> = {
   ai_service: 'AI Service',
+  system_one_service: 'System One Service',
   embedding_service: 'Embedding Service',
   output_parser: 'Output Parser',
   mcp_config: 'MCP Config',
@@ -125,6 +128,7 @@ export const COMPONENT_TYPE_LABELS: Record<string, string> = {
 
 export const COMPONENT_TYPE_ICONS: Record<string, string> = {
   ai_service: 'AI',
+  system_one_service: 'S1',
   embedding_service: 'Embed',
   output_parser: 'Parser',
   mcp_config: 'MCP',

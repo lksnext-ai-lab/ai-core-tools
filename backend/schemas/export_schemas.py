@@ -7,7 +7,7 @@ These schemas define the structure of exported data with:
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 from schemas.agent_schemas import A2AAgentFieldsMixin
@@ -39,6 +39,20 @@ class ExportAIServiceSchema(ServiceLifecycleFieldsMixin):
     endpoint: Optional[str] = None
     description: Optional[str] = None
     api_version: Optional[str] = None
+
+
+# ==================== SYSTEM ONE SERVICE ====================
+
+
+class ExportSystemOneServiceSchema(ServiceLifecycleFieldsMixin):
+    """System One service export schema (full-app export only)"""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    api_key: Optional[str] = None  # Always None (security)
+    endpoint: Optional[str] = None
+    model_name: str = ""
+    max_concurrency: int = 1
+    provider: Literal["system_one", "openai_decisions"] = "system_one"
 
 
 # ==================== EMBEDDING SERVICE ====================
@@ -206,6 +220,14 @@ class ExportAgentSchema(A2AAgentFieldsMixin):
     vision_service_name: Optional[str] = None  # Reference by name (OCR agents only)
     vision_system_prompt: Optional[str] = None  # OCR agents only
     text_system_prompt: Optional[str] = None  # OCR agents only
+    # System One-specific fields (None in files exported before System One existed)
+    type: Optional[str] = None  # "system_one_agent"
+    questions: Optional[List[Dict[str, Any]]] = None
+    max_state_chars: Optional[int] = None
+    system_one_service_name: Optional[str] = None  # Reference by name
+    summarization_service_name: Optional[str] = None  # Reference by name
+    # None in files exported before the field existed: the import then keeps the default of each agent type
+    is_tool: Optional[bool] = None
     # Exclude: conversation history, request_count, usage stats
 
 
@@ -300,6 +322,8 @@ class AgentExportFileSchema(BaseModel):
     mcp_configs: List[ExportMCPConfigSchema] = []
     middlewares: List[ExportMiddlewareSchema] = []  # The agent's middlewares
     agent_tools: List[ExportAgentSchema] = []  # Referenced agents
+    # Services of the System One agent and of its System One tools, so that the file imports into another app
+    system_one_services: List[ExportSystemOneServiceSchema] = []
 
 
 # ==================== FULL APP EXPORT ====================
@@ -311,6 +335,7 @@ class AppExportFileSchema(BaseModel):
     metadata: ExportMetadataSchema
     app: ExportAppSchema
     ai_services: List[ExportAIServiceSchema] = []
+    system_one_services: List[ExportSystemOneServiceSchema] = []
     embedding_services: List[ExportEmbeddingServiceSchema] = []
     output_parsers: List[ExportOutputParserSchema] = []
     mcp_configs: List[ExportMCPConfigSchema] = []

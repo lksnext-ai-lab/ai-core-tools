@@ -277,7 +277,8 @@ class MCPServerService:
                 agent = db.query(Agent).filter(
                     Agent.agent_id == agent_id,
                     Agent.app_id == app_id,
-                    Agent.is_tool == True
+                    Agent.is_tool == True,
+                    Agent.type != 'system_one_agent'  # evaluators, not chat agents: not exposed as MCP tools
                 ).first()
                 if agent:
                     MCPServerRepository.add_agent(db, server.server_id, agent_id)
@@ -332,7 +333,8 @@ class MCPServerService:
                 agent = db.query(Agent).filter(
                     Agent.agent_id == agent_id,
                     Agent.app_id == app_id,
-                    Agent.is_tool == True
+                    Agent.is_tool == True,
+                    Agent.type != 'system_one_agent'  # evaluators, not chat agents: not exposed as MCP tools
                 ).first()
                 if agent:
                     MCPServerRepository.add_agent(db, server.server_id, agent_id)
@@ -349,7 +351,8 @@ class MCPServerService:
         """Get all agents marked as tools for this app"""
         agents = db.query(Agent).filter(
             Agent.app_id == app_id,
-            Agent.is_tool == True
+            Agent.is_tool == True,
+            Agent.type != 'system_one_agent'  # evaluators, not chat agents: not exposed as MCP tools
         ).all()
 
         return [

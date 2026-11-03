@@ -38,6 +38,7 @@ from utils.service_lifecycle import (
     SERVICE_KIND_AI,
     SERVICE_KIND_EMBEDDING,
     SERVICE_KIND_SANDBOX,
+    SERVICE_KIND_SYSTEM_ONE,
     LifecycleStatus,
     compute_lifecycle_status,
     is_retired,
@@ -54,8 +55,9 @@ DEFAULT_WARNING_DAYS = 30
 class LifecycleContext:
     """Everything the warning builders need, loaded once per request.
 
-    ``services`` is keyed by service kind (``ai`` / ``embedding`` / ``sandbox``) and then by service id. The builders only read these dicts, never ORM
-    relationships, so building warnings for N resources costs no extra queries.
+    ``services`` is keyed by service kind (``ai`` / ``embedding`` / ``sandbox`` / ``system_one``) and then by service
+    id. The builders only read these dicts, never ORM relationships, so building warnings for N resources costs no
+    extra queries.
     """
 
     warning_days: int
@@ -135,7 +137,8 @@ class ServiceLifecycleService:
     ) -> LifecycleContext:
         """Load the lookup context for warnings in one fixed set of queries.
 
-        Always: the warning-days setting, AI, embedding and sandbox services, the app's default sandbox, the app's silos. Agent data
+        Always: the warning-days setting, AI, embedding, sandbox and System One services, the app's default sandbox, the
+        app's silos. Agent data
         (service references, middleware links, middlewares) is loaded only when ``all_agents`` is
         true (every agent of the app, for list endpoints) or ``agent_ids`` is non-empty. The count
         does not depend on how many agents/silos are involved.
@@ -159,6 +162,7 @@ class ServiceLifecycleService:
                 SERVICE_KIND_AI: ServiceUsageRepository.ai_service_snapshots(db, app_id),
                 SERVICE_KIND_EMBEDDING: ServiceUsageRepository.embedding_service_snapshots(db, app_id),
                 SERVICE_KIND_SANDBOX: ServiceUsageRepository.sandbox_service_snapshots(db, app_id),
+                SERVICE_KIND_SYSTEM_ONE: ServiceUsageRepository.system_one_service_snapshots(db, app_id),
             },
             app_default_sandbox_service_id=ServiceUsageRepository.app_default_sandbox_service_id(db, app_id),
             silos=ServiceUsageRepository.silo_refs(db, app_id),
@@ -245,6 +249,10 @@ class ServiceLifecycleService:
             else:
                 entries.append(entry(
                     ctx, SERVICE_KIND_SANDBOX, ctx.app_default_sandbox_service_id, "sandbox", "app default"))
+        # System One agents: the evaluating service and the optional summarization LLM (app-level only).
+        entries.append(entry(
+            ctx, SERVICE_KIND_SYSTEM_ONE, getattr(agent_row, "system_one_service_id", None), "system_one"))
+        entries.append(entry(ctx, ai, getattr(agent_row, "summarization_service_id", None), "summarization"))
         return ServiceLifecycleService._finish(entries)
 
     @staticmethod

@@ -22,11 +22,15 @@ def _agent(**kwargs):
     return AgentRefs(**base)
 
 
-def _ctx(ai=(), embedding=(), silos=(), middlewares=None, agent_middlewares=None, warning_days=30):
+def _ctx(ai=(), embedding=(), silos=(), middlewares=None, agent_middlewares=None, warning_days=30, system_one=()):
     return LifecycleContext(
         warning_days=warning_days,
         now=NOW,
-        services={"ai": {s.service_id: s for s in ai}, "embedding": {s.service_id: s for s in embedding}},
+        services={
+            "ai": {s.service_id: s for s in ai},
+            "embedding": {s.service_id: s for s in embedding},
+            "system_one": {s.service_id: s for s in system_one},
+        },
         silos={s.silo_id: s for s in silos},
         middlewares=middlewares or {},
         agent_middlewares=agent_middlewares or {},
@@ -102,6 +106,38 @@ class TestWarningsForAgent:
             _agent(service_id=1, transcription_service_id=2), ctx
         )
         assert [w.service_name for w in warnings] == ["soon", "late"]
+
+
+class TestWarningsForSystemOneAgent:
+    def test_system_one_service_and_summarization_llm_reported(self):
+        ctx = _ctx(
+            ai=[_snap(1, "summariser", days=-2)],
+            system_one=[_snap(7, "Nimble", days=10, notice="use Nimble 2")],
+        )
+        warnings = ServiceLifecycleService.warnings_for_agent(
+            _agent(system_one_service_id=7, summarization_service_id=1), ctx
+        )
+        assert [(w.kind, w.role, w.lifecycle_status, w.service_id) for w in warnings] == [
+            ("ai", "summarization", "retired", 1),
+            ("system_one", "system_one", "deprecated", 7),
+        ]
+        assert warnings[1].deprecation_notice == "use Nimble 2"
+
+    def test_active_system_one_service_and_llm_produce_nothing(self):
+        ctx = _ctx(ai=[_snap(1, "summariser", days=365)], system_one=[_snap(7, "Nimble", days=365)])
+        assert ServiceLifecycleService.warnings_for_agent(
+            _agent(system_one_service_id=7, summarization_service_id=1), ctx
+        ) == []
+
+    def test_no_summarization_llm_only_the_system_one_service(self):
+        ctx = _ctx(ai=[_snap(1, "summariser", days=-2)], system_one=[_snap(7, "Nimble", days=-1)])
+        warnings = ServiceLifecycleService.warnings_for_agent(_agent(system_one_service_id=7), ctx)
+        assert [(w.kind, w.role, w.lifecycle_status) for w in warnings] == [("system_one", "system_one", "retired")]
+
+    def test_system_one_id_is_not_looked_up_among_ai_services(self):
+        # Same numeric id as a retired AI service, but no System One service with it: nothing to report.
+        ctx = _ctx(ai=[_snap(1, "gpt", days=-2)])
+        assert ServiceLifecycleService.warnings_for_agent(_agent(system_one_service_id=1), ctx) == []
 
 
 class TestWarningsForSiloAndTask:

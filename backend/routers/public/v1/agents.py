@@ -218,6 +218,12 @@ async def update_agent(
     validate_api_key_for_app(app_id, api_key, db)
 
     existing_agent = validate_agent_ownership(db, agent_id, app_id)
+    if existing_agent.type == "system_one_agent":
+        # The generic update would reset fields it does not know (is_tool, questions, service…).
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="System One agents cannot be updated through the public API; edit them in the app",
+        )
 
     try:
         update_dict = agent_data.model_dump(exclude_unset=True)

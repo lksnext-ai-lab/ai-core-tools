@@ -165,6 +165,11 @@ class AppRepository:
         from models.sandbox_service import SandboxService
         return self.db.query(SandboxService).filter(SandboxService.app_id == app_id).all()
 
+    def get_system_one_services_by_app_id(self, app_id: int):
+        """Get all System One services for an app"""
+        from models.system_one_service import SystemOneService
+        return self.db.query(SystemOneService).filter(SystemOneService.app_id == app_id).all()
+
     def get_urls_by_domain_id(self, domain_id: int):
         """Get all URLs for a domain"""
         from models.domain_url import DomainUrl

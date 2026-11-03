@@ -45,6 +45,7 @@ function buildReviewRows(
 ): { selectedItems: ReviewSelectedItem[]; skippedItems: ReviewSkippedItem[] } {
   const categories = [
     { type: 'ai_service', items: preview.ai_services },
+    { type: 'system_one_service', items: preview.system_one_services },
     { type: 'embedding_service', items: preview.embedding_services },
     { type: 'output_parser', items: preview.output_parsers },
     { type: 'mcp_config', items: preview.mcp_configs },

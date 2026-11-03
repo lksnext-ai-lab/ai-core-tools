@@ -22,6 +22,8 @@ type CacheFns<T> = {
 interface ServicesManagerOptions {
   /** Singular entity label used in toasts and confirmation dialogs (e.g. "AI service"). */
   readonly entity?: string;
+  /** Extra sentence for the delete confirmation (e.g. what stops working); null/undefined = none. */
+  readonly deleteWarning?: (service: any) => string | null | undefined;
 }
 
 export function useServicesManager<T = any>(
@@ -86,9 +88,12 @@ export function useServicesManager<T = any>(
   async function handleDelete(id: number): Promise<boolean> {
     if (!appId) return false;
 
+    const warning = options.deleteWarning?.(services.find((s: any) => s.service_id === id));
     const ok = await confirm({
       title: MESSAGES.CONFIRM_DELETE_TITLE(entity),
-      message: MESSAGES.CONFIRM_DELETE_MESSAGE(entity),
+      message: warning
+        ? `${warning} ${MESSAGES.CONFIRM_DELETE_MESSAGE(entity)}`
+        : MESSAGES.CONFIRM_DELETE_MESSAGE(entity),
       variant: 'danger',
       confirmLabel: 'Delete',
     });

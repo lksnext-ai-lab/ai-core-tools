@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { canBeScheduled } from '../utils/systemOneStatus';
 import { apiService, type OutputDestination, type ScheduledTask, type ScheduledTaskVisibility } from '../services/api';
 
 interface AgentOption { agent_id: number; name: string; }
@@ -58,7 +59,7 @@ export default function ScheduledTaskFormPage() {
     setOutputDestinationIds([]);
     setLoadState('loading');
     void apiService.getAgents(numericAppId).then((items) => {
-      if (active) setAgents(items.map((item) => ({ agent_id: item.agent_id, name: item.name })));
+      if (active) setAgents(items.filter(canBeScheduled).map((item) => ({ agent_id: item.agent_id, name: item.name })));
     }).catch(() => { if (active) toast.error('No se pudieron cargar los agentes'); });
     const destinationsRequest = apiService.getOutputDestinations(numericAppId);
     if (editing) {
