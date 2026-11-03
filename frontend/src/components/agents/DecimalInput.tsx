@@ -8,7 +8,6 @@ interface DecimalInputProps {
   readonly onChange: (value: number | undefined) => void;
   readonly className?: string;
   readonly placeholder?: string;
-  readonly describedBy?: string;
 }
 
 /**
@@ -16,7 +15,7 @@ interface DecimalInputProps {
  * "0,5" in Spanish; this is a text field with a decimal keyboard, and it still accepts a comma when typed.
  * The text being typed is kept apart from the number so "0." can be typed without the point disappearing.
  */
-export function DecimalInput({ id, value, onChange, className, placeholder, describedBy }: DecimalInputProps) {
+export function DecimalInput({ id, value, onChange, className, placeholder }: DecimalInputProps) {
   const [draft, setDraft] = useState(formatDecimal(value));
 
   // Follow the value when it changes from outside, never while the user is typing something that means the same.
@@ -34,7 +33,6 @@ export function DecimalInput({ id, value, onChange, className, placeholder, desc
       autoComplete="off"
       className={className}
       placeholder={placeholder}
-      aria-describedby={describedBy}
       value={draft}
       onChange={(e) => {
         setDraft(e.target.value);

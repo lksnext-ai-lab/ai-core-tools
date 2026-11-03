@@ -63,13 +63,8 @@ function decisionText(answer: SystemOneAnswer): { text: string; determined: bool
   return answer.decision === null ? { text: 'Undetermined', determined: false } : { text: answer.decision, determined: true };
 }
 
-/** The playground's own color preference of a score question (undefined for the other types). */
-function colorStartOf(question: SystemOneQuestion | undefined): 'green' | 'red' | undefined {
-  return question?.type === 'score' ? question.color_start : undefined;
-}
-
 function AnswerCard({ questionKey, instructions, answer, question }: { readonly questionKey: string; readonly instructions?: string; readonly answer: SystemOneAnswer; readonly question?: SystemOneQuestion }) {
-  const colorStart = colorStartOf(question);
+  const colorStart = question?.type === 'score' ? question.color_start : undefined;
   const colorOfOption = (name: string) => optionColor(question?.type === 'choice' ? question.criteria.find((o) => o.key === name) : undefined, name);
   const { text, determined } = decisionText(answer);
   // Colors: Yes green / No red; each choice option its own stable color; a score runs green to red (see colorStart).

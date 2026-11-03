@@ -77,14 +77,7 @@ def format_tool_content(result: SystemOneResult) -> str:
 
 
 def _error_text(exc: HTTPException) -> str:
-    if exc.status_code == 503:
-        return "System One is unavailable or overloaded; try again later."
-    if exc.status_code == 504:
-        return "System One timed out; try again later."
-    if exc.status_code == 502:
-        return "System One returned an unexpected response."
-    if exc.status_code == 422:
-        return f"System One rejected the request: {exc.detail}"
+    # The evaluator already maps each failure to its curated message (SystemOneEvaluator._ERRORS in exc.detail).
     return f"System One could not evaluate the text: {exc.detail}"
 
 
@@ -102,8 +95,8 @@ class IACTSystemOneTool(BaseTool):
     attached_files: Optional[List[Dict]] = None
 
     @classmethod
-    async def create(cls, agent, user_context: Optional[Dict] = None, attached_files: Optional[List[Dict]] = None,
-                     user_message: Optional[str] = None) -> "IACTSystemOneTool":
+    async def create(cls, agent, user_context: Optional[Dict] = None,
+                     attached_files: Optional[List[Dict]] = None) -> "IACTSystemOneTool":
         try:
             snapshot = SystemOneEvaluator.snapshot(agent)
         except (HTTPException, ServiceRetiredError) as exc:

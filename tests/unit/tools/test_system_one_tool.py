@@ -127,14 +127,13 @@ def test_the_artifact_survives_the_checkpointer_serializer():
     assert restored == result() or restored.model_dump() == result().model_dump()
 
 
-@pytest.mark.parametrize("status,fragment", [
-    (503, "unavailable"), (504, "timed out"), (502, "unexpected"), (422, "rejected"), (400, "empty"),
-])
-async def test_server_problems_come_back_as_text_and_do_not_raise(status, fragment):
+@pytest.mark.parametrize("status", [503, 504, 502, 422, 400])
+async def test_server_problems_come_back_as_text_and_do_not_raise(status):
     tool = await make_tool()
     with patch.object(SystemOneEvaluator, "evaluate", AsyncMock(side_effect=HTTPException(status, "the detail: empty"))):
         content, artifact = await tool._arun(text="hi")
-    assert artifact is None and fragment in content.lower()
+    # The evaluator's curated message travels in exc.detail; the tool only adds its prefix.
+    assert artifact is None and content == "System One could not evaluate the text: the detail: empty"
 
 
 async def test_unexpected_errors_are_contained_too():

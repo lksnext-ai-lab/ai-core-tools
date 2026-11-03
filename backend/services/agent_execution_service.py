@@ -1781,9 +1781,11 @@ class AgentExecutionService:
         files = files or []
         image_files = [f for f in files if _is_image_upload(f)]
         files = [f for f in files if f not in image_files]
+        # One snapshot for both the image check and the evaluation (it raises 409 for a missing/retired service).
+        snapshot = SystemOneEvaluator.snapshot(agent)
         images: List[str] = []
         if image_files:
-            endpoint = SystemOneEvaluator.snapshot(agent).endpoint
+            endpoint = snapshot.endpoint
             if not system_one_client.supports_images(endpoint.provider, endpoint.model):
                 raise HTTPException(
                     status_code=400,
@@ -1816,7 +1818,6 @@ class AgentExecutionService:
                 detail=f"No extractable text in: {', '.join(empty)}",
             )
 
-        snapshot = SystemOneEvaluator.snapshot(agent)
         # The evaluation can wait for a slot (up to 20 s) and for the server: do it without holding a pooled database
         # connection, or a burst of requests pins the whole pool and their own authentication cannot get one.
         db.commit()      # nothing is pending (only reads so far); this hands the connection back to the pool

@@ -1951,10 +1951,7 @@ async def discover_tool(
             user_message=user_message, caller_filter=caller_filter,
         )
     if agent.type == "system_one_agent":
-        return await IACTSystemOneTool.create(
-            agent, user_context=user_context, attached_files=attached_files,
-            user_message=user_message,
-        )
+        return await IACTSystemOneTool.create(agent, user_context=user_context, attached_files=attached_files)
     return await IACTTool.create(
         agent,
         user_context=user_context,

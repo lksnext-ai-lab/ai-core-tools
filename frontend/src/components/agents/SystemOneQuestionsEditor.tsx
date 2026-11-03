@@ -30,7 +30,6 @@ const TYPE_LABEL: Record<SystemOneQuestionType, string> = { noul: 'Yes / No', ch
 interface SystemOneQuestionsEditorProps {
   readonly questions: EditorQuestion[];
   readonly onChange: (questions: EditorQuestion[]) => void;
-  /** About the list as a whole. */
   /** What the chosen server accepts (undefined fields = unknown, no upper limit is enforced). */
   readonly limits: QuestionLimits;
   readonly generalProblems: string[];
@@ -61,9 +60,7 @@ function SystemOneQuestionsEditor({ questions, onChange, limits, generalProblems
   const move = (index: number, delta: -1 | 1, focusId?: string) => {
     const target = index + delta;
     if (target < 0 || target >= questions.length) return;
-    const next = [...questions];
-    [next[index], next[target]] = [next[target], next[index]];
-    onChange(next);
+    onChange(reorder(questions, index, target));
     setAnnouncement(`Question moved to position ${target + 1} of ${questions.length}`);
     const questionId = questions[index]._id ?? String(index);
     window.setTimeout(() => {

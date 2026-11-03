@@ -144,7 +144,8 @@ class SystemOneServiceService:
             raise ValueError("The URL changed: type the token again (or clear it) so it is not sent to a new server")
         if not is_masked_key(token):
             service.api_key = token or None
-        concurrency = data.max_concurrency or system_one_client.default_max_concurrency(None)
+        # default_max_concurrency(None) is 1: the shared server cap is suggested by the probe, never assumed here.
+        concurrency = data.max_concurrency or 1
         service.extra_config = json.dumps({"max_concurrency": concurrency, "provider": data.provider})
         ServiceLifecycleService.apply_lifecycle_fields(service, SERVICE_KIND_SYSTEM_ONE, data, actor_id)
 
@@ -239,7 +240,8 @@ class SystemOneServiceService:
 
     @staticmethod
     async def test_connection_with_config(
-        db: Session, app_id: int, config: Dict[str, Any], service_id: Optional[int] = None
+        db: Session, app_id: int, config: Dict[str, Any], service_id: Optional[int] = None,
+        live_call: bool = True,
     ) -> Dict[str, Any]:
         """Probe the server with the form's values (nothing is saved).
 
@@ -255,6 +257,7 @@ class SystemOneServiceService:
             api_key = (stored.api_key if same else None) or ""
         try:
             return await SystemOneServiceService._verify(endpoint, api_key, (config.get("model") or "").strip(),
+                                                         live_call=live_call,
                                                          provider=config.get("provider") or system_one_client.PROVIDER_SYSTEM_ONE)
         except ValueError as exc:
             return _failure(str(exc))
@@ -264,8 +267,8 @@ class SystemOneServiceService:
         service = SystemOneServiceRepository.get_by_id_and_app_id(db, service_id, app_id)
         if not service:
             return None
-        try:
-            return await SystemOneServiceService._verify(service.endpoint or "", service.api_key or "", service.description or "",
-                                                         live_call=live_call, provider=provider_of(service))
-        except ValueError as exc:
-            return _failure(str(exc))
+        return await SystemOneServiceService.test_connection_with_config(
+            db, app_id,
+            {"endpoint": service.endpoint or "", "api_key": service.api_key or "",
+             "model": service.description or "", "provider": provider_of(service)},
+            service_id=service_id, live_call=live_call)

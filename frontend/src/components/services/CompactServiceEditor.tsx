@@ -7,7 +7,7 @@ import Alert from '../ui/Alert';
 import { getProviderBadgeColor } from '../ui/providerBadges';
 import { getProviderDescriptor } from './wizard/providers';
 import ServiceWizard from './wizard/ServiceWizard';
-import { dateInputValueFromIso, isoFromDateInput } from '../../utils/serviceLifecycle';
+import { dateInputValueFromIso, endOfServiceForSave } from '../../utils/serviceLifecycle';
 import ServiceLifecycleInputs from './ServiceLifecycleInputs';
 import type {
   ExistingSandboxService,
@@ -136,11 +136,7 @@ function CompactServiceEditor({
       apiKeyChanged || !apiKey.startsWith(MASKED_KEY_PREFIX) ? apiKey : service.api_key;
 
     // Always sent: an omitted field keeps its value, an explicit null clears it.
-    // Keep a stored non-midnight timestamp untouched unless the day was changed.
-    const resolvedEndOfService =
-      storedEndOfService && dateInputValueFromIso(storedEndOfService) === endOfServiceDate
-        ? storedEndOfService
-        : isoFromDateInput(endOfServiceDate);
+    const resolvedEndOfService = endOfServiceForSave(storedEndOfService, endOfServiceDate);
     const resolvedNotice = deprecationNotice.trim() || null;
 
     const payload: ServiceFormData | SandboxServiceFormData = isSandbox

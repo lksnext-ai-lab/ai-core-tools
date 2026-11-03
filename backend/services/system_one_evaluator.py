@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from pydantic import TypeAdapter
 
 from models.system_one_agent import SystemOneAgent
-from schemas.system_one_schemas import Question, QuestionList, SystemOneResult, Timings, Usage
+from schemas.system_one_schemas import DEFAULT_MAX_STATE_CHARS, Question, QuestionList, SystemOneResult, Timings, Usage
 from services.agent_metrics_recorder import record_agent_execution
 from services.system_one_service_service import max_concurrency_of, provider_of
 from services.system_one_state import (
@@ -194,7 +194,7 @@ class SystemOneEvaluator:
             agent_description=agent.description or "",
             questions=TypeAdapter(QuestionList).validate_python(agent.questions),
             endpoint=endpoint,
-            max_state_chars=agent.max_state_chars or 6000,
+            max_state_chars=agent.max_state_chars or DEFAULT_MAX_STATE_CHARS,
             summarize=summarize,
             metrics_subject=SimpleNamespace(app_id=agent.app_id, agent_id=agent.agent_id, service_id=None,
                                             ai_service=None, output_parser_id=None),

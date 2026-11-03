@@ -13,28 +13,20 @@ const positive = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 
 export function questionLimits(raw: Record<string, number> | null | undefined): QuestionLimits {
-  const limits: QuestionLimits = {};
-  const maxQuestions = positive(raw?.max_questions);
-  const maxOptions = positive(raw?.max_answers_per_question);
-  if (maxQuestions !== undefined) limits.maxQuestions = maxQuestions;
-  if (maxOptions !== undefined) limits.maxOptions = maxOptions;
-  const maxPromptTokens = positive(raw?.max_prompt_tokens);
-  if (maxPromptTokens !== undefined) limits.maxPromptTokens = maxPromptTokens;
-  return limits;
-}
-
-export interface ConcurrencyCheck {
-  /** Blocks saving. */
-  error?: string;
+  return {
+    maxQuestions: positive(raw?.max_questions),
+    maxOptions: positive(raw?.max_answers_per_question),
+    maxPromptTokens: positive(raw?.max_prompt_tokens),
+  };
 }
 
 /**
  * The cap is the whole server's limit: every backend process shares it through the global limiter, so a cap above
- * what the server accepts at once can never be used.
+ * what the server accepts at once can never be used. Returns the message when it is not, null otherwise.
  */
-export function checkConcurrency(value: number | null, serverLimit: number | null | undefined): ConcurrencyCheck {
-  if (value === null || !serverLimit || value <= serverLimit) return {};
-  return { error: `The server accepts ${serverLimit} requests at once: a cap of ${value} can never be used` };
+export function checkConcurrency(value: number | null, serverLimit: number | null | undefined): string | null {
+  if (value === null || !serverLimit || value <= serverLimit) return null;
+  return `The server accepts ${serverLimit} requests at once: a cap of ${value} can never be used`;
 }
 
 /** Ordinary text is about 4 characters per token; dense text (codes, numbers) far fewer. A rough guide, never a limit. */

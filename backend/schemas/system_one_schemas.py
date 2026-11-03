@@ -6,10 +6,12 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstra
 QuestionKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,40}$")]
 # No per-field length caps: how long a question may be depends on the prompt budget (see AgentService), not on a number here.
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-ShortText = Text
-OptionKey = Text
 Prob = Annotated[float, Field(ge=0.0, le=1.0)]
 MIN_OPTIONS = 2  # the upper limits (questions, options) are each server's own: see /v1/limits
+# max_state_chars (the per-prompt budget): the default the form and the import start from, and its floor.
+DEFAULT_MAX_STATE_CHARS = 6000
+MIN_MAX_STATE_CHARS = 500
+MAX_STATE_CHARS_ERROR = f"max_state_chars must be at least {MIN_MAX_STATE_CHARS}"
 
 
 class _QuestionBase(BaseModel):
@@ -21,8 +23,8 @@ class _QuestionBase(BaseModel):
 class NoulCriteria(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # Independent and optional, like the server's: the one left out keeps its default ("Yes" / "No").
-    true: Optional[ShortText] = None
-    false: Optional[ShortText] = None
+    true: Optional[Text] = None
+    false: Optional[Text] = None
 
 
 class NoulQuestion(_QuestionBase):
@@ -33,7 +35,7 @@ class NoulQuestion(_QuestionBase):
 
 class ChoiceOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    key: OptionKey
+    key: Text
     description: Optional[str] = None
     # Only for the playground's colors (never sent to the server); empty = the automatic color of the name.
     color: Optional[Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]] = None
@@ -58,7 +60,7 @@ class ChoiceQuestion(_QuestionBase):
 
 class ScoreQuestion(_QuestionBase):
     type: Literal["score"]
-    criteria: Annotated[List[ShortText], Field(min_length=MIN_OPTIONS)]
+    criteria: Annotated[List[Text], Field(min_length=MIN_OPTIONS)]
     min_probability: Optional[Prob] = None
     # Only for the playground's colors (never sent to the server): which end of the scale is green.
     color_start: Literal["green", "red"] = "green"
