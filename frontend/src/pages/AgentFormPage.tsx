@@ -344,7 +344,8 @@ function AgentFormPage() {
       return;
     }
     let cancelled = false;
-    apiService.testSystemOneService(Number.parseInt(appId), serviceId)
+    // The status check, not the test: editors may read it, and it never spends a real (token) call.
+    apiService.getSystemOneServiceStatus(Number.parseInt(appId), serviceId)
       .then((result) => { if (!cancelled) setServerQuestionLimits(questionLimits(result.limits)); })
       .catch(() => { if (!cancelled) setServerQuestionLimits({}); });
     return () => { cancelled = true; };

@@ -99,6 +99,22 @@ class TestInternalEvaluate:
         state = server[0].await_args.args[1]
         assert "see file" in state and "FILE BODY" in state
 
+    def test_an_unreadable_file_is_rejected_even_if_another_upload_has_its_name(
+            self, client, fake_app, agent, owner_headers, server):
+        r = client.post(internal(fake_app, agent.agent_id), data={"text": "x"}, headers=owner_headers,
+                        files=[("files", ("dup.txt", b"FILE BODY", "text/plain")),
+                               ("files", ("dup.txt", b"\x80\x81\xfe\xff" * 64, "text/plain"))])
+        assert r.status_code == 400 and "dup.txt" in r.json()["detail"]
+        server[0].assert_not_awaited()
+
+    def test_the_apps_file_size_limit_applies(self, client, db, fake_app, agent, owner_headers, server):
+        fake_app.max_file_size_mb = 1
+        db.flush()
+        r = client.post(internal(fake_app, agent.agent_id), data={"text": "x"}, headers=owner_headers,
+                        files=[("files", ("big.txt", b"a" * (2 * 1024 * 1024), "text/plain"))])
+        assert r.status_code == 413, r.text
+        server[0].assert_not_awaited()
+
     def test_caller_context_is_the_playground_user(self, client, fake_app, agent, owner_headers, server, fake_user):
         client.post(internal(fake_app, agent.agent_id), data={"text": "x"}, headers=owner_headers)
         ctx = server[1].call_args.kwargs["user_context"]

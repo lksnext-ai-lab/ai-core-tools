@@ -148,15 +148,16 @@ async def system_one_service_status(
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Reachability and token check for the services table. Never makes the real (token-spending) call and
-    returns neither models nor limits."""
+    """Reachability and token check (services table, agent form). Never makes the real (token-spending) call;
+    returns the server's question limits when it publishes them, but not its models."""
     try:
         result = await SystemOneServiceService.test_connection(db, app_id, service_id, live_call=False)
     except Exception as exc:
         raise _server_error("checking the System One service status", exc, app_id=app_id, service_id=service_id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND)
-    return {"status": result["status"], "message": result["message"], "verifiable": result["verifiable"]}
+    return {"status": result["status"], "message": result["message"], "verifiable": result["verifiable"],
+            "limits": result["limits"]}
 
 
 @system_one_services_router.post("/{service_id}/test", summary="Test a saved System One service", tags=TAG)

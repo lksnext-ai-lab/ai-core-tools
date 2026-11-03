@@ -8,6 +8,7 @@ from models.ai_service import AIService
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
+from models.system_one_service import SystemOneService
 from schemas.export_schemas import (
     AgentExportFileSchema,
     ExportAgentSchema,
@@ -226,6 +227,10 @@ class AgentImportService:
                     f"Agent will be created without output parser."
                 )
 
+        missing_system_one = self._missing_system_one_service(export_data, app_id)
+        if missing_system_one:
+            missing_dependencies.append(missing_system_one)
+
         return ValidateImportResponseSchema(
             component_type=ComponentType.AGENT,
             component_name=export_data.agent.name,
@@ -396,6 +401,20 @@ class AgentImportService:
                 bundled=True,
             ))
 
+        if export_data.agent.type == "system_one_agent" and export_data.agent.system_one_service_name:
+            missing_system_one = self._missing_system_one_service(export_data, app_id)
+            if missing_system_one:
+                global_warnings.append(missing_system_one)
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="system_one_service",
+                depends_on_name=export_data.agent.system_one_service_name,
+                mandatory=True,
+                bundled=any(b.name == export_data.agent.system_one_service_name
+                            for b in export_data.system_one_services),
+            ))
+
         return AgentImportPreviewSchema(
             valid=True,
             export_version=(
@@ -415,6 +434,19 @@ class AgentImportService:
                 requires_ai_service_selection
             ),
         )
+
+    def _missing_system_one_service(self, export_data: AgentExportFileSchema, app_id: int) -> Optional[str]:
+        """Message when a System One agent's service is neither bundled nor in this app (the import would fail)."""
+        name = export_data.agent.system_one_service_name
+        if export_data.agent.type != "system_one_agent" or not name:
+            return None
+        if any(b.name == name for b in export_data.system_one_services):
+            return None
+        exists = (self.session.query(SystemOneService)
+                  .filter(SystemOneService.name == name, SystemOneService.app_id == app_id).first())
+        if exists:
+            return None
+        return f"System One service: {name} not found in this app and not bundled; create it before importing"
 
     def _check_ai_service_conflict(
         self, name: str, app_id: int

@@ -6,6 +6,7 @@ from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
 
 from db.database import get_db
+from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import AppRole, require_min_role
 from schemas.system_one_schemas import SystemOneResult
 from services.agent_execution_service import AgentExecutionService
@@ -26,8 +27,12 @@ system_one_router = APIRouter()
     responses={
         400: {"description": "Nothing to evaluate, an image, or an attachment whose text cannot be read"},
         404: {"description": "System One agent not found in this app"},
+        409: {"description": "The agent has no usable System One service (deleted, no model, or retired)"},
+        413: {"description": "The attachments exceed the app's file size limit"},
         422: {"description": "The System One server rejected the request"},
+        502: {"description": "The System One server answered with an error or an unreadable response"},
         503: {"description": "The System One server is unavailable or overloaded"},
+        504: {"description": "The System One server did not answer in time"},
     },
 )
 async def evaluate_system_one_agent(
@@ -36,6 +41,7 @@ async def evaluate_system_one_agent(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
     db: Annotated[Session, Depends(get_db)],
+    _: Annotated[None, Depends(enforce_file_size_limit)],
     text: Annotated[str, Form()] = "",
     files: Annotated[List[UploadFile], File()] = [],
 ):

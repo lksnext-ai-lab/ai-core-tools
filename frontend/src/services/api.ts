@@ -1494,8 +1494,10 @@ class ApiService {
     });
   }
 
-  /** Reachability and token check for the services table (read-only, never spends tokens). */
-  async getSystemOneServiceStatus(appId: number, serviceId: number): Promise<{ status: 'success' | 'error'; message: string; verifiable: boolean }> {
+  /** Reachability, token check and published limits (read-only, viewers too, never spends tokens). */
+  async getSystemOneServiceStatus(
+    appId: number, serviceId: number,
+  ): Promise<Pick<SystemOneConnectionResult, 'status' | 'message' | 'limits'> & { verifiable: boolean }> {
     return this.request(`/internal/apps/${appId}/system-one-services/${serviceId}/status`);
   }
 

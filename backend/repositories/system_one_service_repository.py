@@ -35,5 +35,5 @@ class SystemOneServiceRepository:
 
     @staticmethod
     def get_agents_using(db: Session, service_id: int) -> List[SystemOneAgent]:
-        """Agents that depend on the service (the FK is RESTRICT: it cannot be deleted while any exists)."""
+        """Agents that depend on the service (the FK is SET NULL: deleting the service leaves them without one)."""
         return db.query(SystemOneAgent).filter(SystemOneAgent.system_one_service_id == service_id).all()

@@ -123,7 +123,7 @@ docker compose down -v           # Parar y borrar volúmenes
 | **SystemOneAgent** | Agent subclass (`type='system_one_agent'`). Uses one SystemOneService (FK `SET NULL`: deleting the service leaves the agent inoperative, like AIService) and a fixed list of questions (`noul`/`choice`/`score`; limits come from the server's `/v1/limits`); no LLM, memory or prompt, only an optional summarization LLM for long texts. Evaluates text (images only with a provider that accepts them, e.g. OpenAI Decisions); usable as a tool (`IACTSystemOneTool`). See `docs/guides/system-one.md`. |
 | **AIService** | LLM provider config (OpenAI, Anthropic, MistralAI, Azure, Google, Custom). |
 | **EmbeddingService** | Embedding model config for vector stores. Providers: OpenAI, MistralAI, Ollama, Custom/HuggingFace, Azure OpenAI, Google AI Studio, Google Cloud Vertex AI. |
-| **SystemOneService** | Per-app connection to a System One decision-model server: URL, optional Bearer token, model, per-process concurrency cap. Not an LLM. |
+| **SystemOneService** | Per-app connection to a System One decision-model server: URL, optional Bearer token, model, concurrency cap (global: shared by all backend processes). Not an LLM. |
 | **Skill** | Reusable markdown prompt block attached to agents (M:N). Injected into system prompt at execution time. App-scoped or system-wide (`app_id IS NULL`). |
 | **SkillFile** | One bundled package file (script, reference, template) for a Skill, text/bytes split with checksum. |
 | **OutputParser** | JSON-schema definition for structured LLM output. Dynamically generates a Pydantic model at runtime. |

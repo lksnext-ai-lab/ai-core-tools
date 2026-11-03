@@ -42,7 +42,7 @@ def _read_extra(raw: Optional[str]) -> Dict[str, Any]:
 
 
 def max_concurrency_of(service: SystemOneService) -> int:
-    """Per-process cap stored in ``extra_config`` (1 when missing or broken)."""
+    """Concurrency cap stored in ``extra_config`` (global, for the whole backend; 1 when missing or broken)."""
     value = _read_extra(service.extra_config).get("max_concurrency")
     return value if isinstance(value, int) and value >= 1 else 1
 

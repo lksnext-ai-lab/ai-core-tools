@@ -1797,9 +1797,13 @@ class AgentExecutionService:
                 if mime not in system_one_client.IMAGE_MIME_TYPES:
                     raise HTTPException(status_code=400, detail=f"Only PNG and JPEG images are supported ({f.filename})")
                 images.append(f"data:{mime};base64,{base64.b64encode(await f.read()).decode()}")
-        processed = await self._process_files_for_agent(files, agent) if files else []
-        readable = {p["filename"] for p in processed}
-        unreadable = [f.filename for f in files if f.filename not in readable]
+        # One file at a time: a failure is told apart by file, not by name (two uploads can share one).
+        processed, unreadable = [], []
+        for f in files:
+            result = await self._process_files_for_agent([f], agent)
+            processed.extend(result)
+            if not result:
+                unreadable.append(f.filename)
         if unreadable:
             raise HTTPException(status_code=400, detail=f"Could not read text from: {', '.join(unreadable)}")
         # Read fine but nothing in it (a scanned PDF has no text layer): say so, or the rest of the input would be

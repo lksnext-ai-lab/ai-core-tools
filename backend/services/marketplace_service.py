@@ -267,6 +267,9 @@ class MarketplaceService:
 
         if agent.is_tool and visibility != MarketplaceVisibility.UNPUBLISHED:
             raise ValueError("Tool agents cannot be published to the marketplace")
+        # The marketplace offers a chat; a System One agent only evaluates a text, so every chat would fail.
+        if agent.type == 'system_one_agent' and visibility != MarketplaceVisibility.UNPUBLISHED:
+            raise ValueError("System One agents cannot be published to the marketplace")
 
         agent.marketplace_visibility = visibility
 
