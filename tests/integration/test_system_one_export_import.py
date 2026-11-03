@@ -107,6 +107,23 @@ def test_import_into_another_app_needs_the_service_there_by_name(db, fake_user, 
     assert any("summarization" in w.lower() for w in result.warnings)
 
 
+def test_validate_and_preview_report_a_service_that_is_neither_bundled_nor_in_the_app(db, fake_user, fake_app, world):
+    export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    other = new_app(db, fake_user, "Target App")
+    service = AgentImportService(db)
+    # Bundled: nothing missing, and the preview lists it as a bundled mandatory dependency.
+    assert service.validate_import(export, other.app_id).missing_dependencies == []
+    dep = next(d for d in service.preview_import(export, other.app_id).dependencies
+               if d.depends_on_type == "system_one_service")
+    assert dep.mandatory and dep.bundled and dep.depends_on_name == "Nimble"
+    # Not bundled and not in the target app: both say so before the import fails.
+    export.system_one_services = []
+    assert any("Nimble" in m for m in service.validate_import(export, other.app_id).missing_dependencies)
+    assert any("Nimble" in w for w in service.preview_import(export, other.app_id).global_warnings)
+    # Present in the target app by name: nothing missing.
+    assert service.validate_import(export, fake_app.app_id).missing_dependencies == []
+
+
 def test_agent_export_bundles_its_service_without_the_token(db, fake_app, world):
     export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
     [svc] = export.system_one_services
@@ -209,6 +226,13 @@ def test_import_with_invalid_questions_is_rejected(db, fake_app, world):
     export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
     export.agent.questions = [{"key": "Bad Key", "type": "noul", "instructions": "q"}]
     with pytest.raises(ValueError, match="questions"):
+        AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.RENAME)
+
+
+def test_import_rejects_a_max_text_length_below_the_form_floor(db, fake_app, world):
+    export = AgentExportService(db).export_agent(world.agent.agent_id, fake_app.app_id)
+    export.agent.max_state_chars = 100
+    with pytest.raises(ValueError, match="at least 500"):
         AgentImportService(db).import_agent(export, fake_app.app_id, ConflictMode.RENAME)
 
 

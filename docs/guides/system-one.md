@@ -16,7 +16,7 @@ System One is a **decision model**: it reads a text and answers a fixed list of 
 | **System One agent** | An agent type (like OCR agents) that requires exactly one System One service and a fixed list of questions. Created from **Agents → Create Agent → System One Agent**. |
 | **Question** | One thing to decide about the text. Three types: yes/no (`noul`), pick one option (`choice`), rate on an ordered scale (`score`). |
 
-A System One agent has no LLM, memory, prompt, RAG, MCP or skills. Each evaluation is independent: there is no conversation.
+A System One agent has no LLM, memory, prompt, RAG, MCP or skills. Each evaluation is independent: there is no conversation. Because it does not chat, it is not offered where a chat is: the chat endpoints, MCP servers, A2A, scheduled tasks, the OpenAI-compatible API and the marketplace (publishing one is refused).
 
 ---
 
@@ -36,7 +36,7 @@ A System One server accepts a limited number of simultaneous requests (Nimble: 4
 
 The test (steps 2 and 3) reads the server's `max_concurrent_requests` and prefills the cap with it. A cap **above that limit cannot be saved**, because it could never be used.
 
-If the database cannot be reached, the call goes ahead without the global limit (the process-local cap still applies): System One does not depend on it. The client also retries `429`, `502`, `503`, `529` up to three times, honoring `Retry-After`, and a changed value applies to new calls without a restart. A service saved before this behaviour had its cap read as *per process*; it now means the total, which is more conservative.
+If the database cannot be reached, the call goes ahead without the global limit (the process-local cap still applies): System One does not depend on it. The client also retries `429`, `502`, `503`, `529` (up to three attempts in total), honoring `Retry-After`, and a changed value applies to new calls without a restart. A service saved before this behaviour had its cap read as *per process*; it now means the total, which is more conservative.
 
 ### Deleting a service
 

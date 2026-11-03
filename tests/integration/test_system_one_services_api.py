@@ -169,7 +169,7 @@ class TestConnection:
              patch("services.system_one_service_service.system_one_client.check_model", check):
             r = client.get(url(fake_app, f"{sid}/status"), headers=viewer_headers)
         assert r.status_code == 200
-        assert r.json() == {"status": "success", "message": bare["message"], "verifiable": False}
+        assert r.json() == {"status": "success", "message": bare["message"], "verifiable": False, "limits": None}
         check.assert_not_awaited()
 
     def test_the_status_of_an_unknown_service_is_404(self, client, fake_app, owner_headers):

@@ -82,3 +82,16 @@ def test_the_generic_public_update_refuses_a_system_one_agent(client, fake_app, 
     assert "system one" in r.json()["detail"].lower()
     db.refresh(so_agent)
     assert so_agent.name == "Triage" and so_agent.is_tool is True
+
+
+# ----------------------------------------------------------------- marketplace
+
+def test_a_system_one_agent_cannot_be_published_to_the_marketplace(db, fake_app, so_agent):
+    from services.marketplace_service import MarketplaceService
+
+    so_agent.is_tool = False    # tool agents are refused anyway; this is the System One rule
+    db.flush()
+    for visibility in ("private", "public"):
+        with pytest.raises(ValueError, match="System One"):
+            MarketplaceService.update_marketplace_visibility(db, so_agent.agent_id, fake_app.app_id, visibility)
+    MarketplaceService.update_marketplace_visibility(db, so_agent.agent_id, fake_app.app_id, "unpublished")

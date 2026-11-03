@@ -156,6 +156,8 @@ def import_system_one_agent(
 
     stored_questions = [q.model_dump(mode="json", exclude_none=True) for q in questions]
     max_chars = data.max_state_chars or _DEFAULT_MAX_STATE_CHARS
+    if max_chars < 500:      # same floor as the agent form
+        raise ValueError("max_state_chars must be at least 500")
 
     if existing is not None and conflict_mode == ConflictMode.OVERRIDE:
         existing.description = data.description
