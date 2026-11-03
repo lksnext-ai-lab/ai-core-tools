@@ -49,8 +49,6 @@ export interface SystemOneConnectionResult {
   limits: Record<string, number> | null;
   /** The server's own limit (the cap is the total, shared by all backend processes); null when it did not report its limits. */
   suggested_max_concurrency?: number | null;
-  /** True when the server cannot list models and the check was one real, tiny call with the chosen model. */
-  checked_with_call?: boolean;
 }
 
 // ----------------------------------------------------------------- questions

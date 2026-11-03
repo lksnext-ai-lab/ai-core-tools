@@ -196,7 +196,7 @@ async def test_a_system_one_failure_reaches_the_llm_as_text_and_the_turn_goes_on
     tool = [t for t in (await build_parent(world))[-1]["tools"] if isinstance(t, IACTSystemOneTool)][0]
     with evaluate_patch(side_effect=SystemOneError("overloaded", "busy", 529)):
         message = await tool.ainvoke(call_message(tool))          # must not raise
-    assert "overloaded" in message.content.lower() and message.artifact is None
+    assert "busy" in message.content.lower() and message.artifact is None
     await drain()
     events, answers = events_of(world.so_id)
     assert len(events) == 1 and answers == []

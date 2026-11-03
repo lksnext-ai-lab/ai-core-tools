@@ -162,7 +162,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     if (stepId === 'provider') return !provider;
     if (stepId === 'connection') return !isUrl(endpoint) || (tokenRequired && !apiKey.trim());
     if (stepId === 'model') return listing || !model.trim();
-    return !finalName || concurrencyError !== null || concurrencyCheck.error !== undefined;
+    return !finalName || concurrencyError !== null || concurrencyCheck !== null;
   }
 
   function payload(): SystemOneServicePayload {
@@ -339,7 +339,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   value={concurrency}
                   onChange={(e) => setConcurrency(e.target.value)}
                   placeholder="1"
-                  error={concurrencyError ?? concurrencyCheck.error}
+                  error={concurrencyError ?? concurrencyCheck ?? undefined}
                   helpText={
                     (listResult?.suggested_max_concurrency != null
                       ? `Suggested for this server: ${listResult.suggested_max_concurrency}. `

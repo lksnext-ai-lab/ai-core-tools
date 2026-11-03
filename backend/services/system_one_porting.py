@@ -18,14 +18,12 @@ from models.system_one_agent import SystemOneAgent
 from models.system_one_service import SystemOneService
 from schemas.export_schemas import AgentExportFileSchema, ExportSystemOneServiceSchema
 from schemas.import_schemas import ComponentType, ConflictMode, ImportSummarySchema
-from schemas.system_one_schemas import QuestionList, questions_error_message
+from schemas.system_one_schemas import DEFAULT_MAX_STATE_CHARS, MAX_STATE_CHARS_ERROR, MIN_MAX_STATE_CHARS, QuestionList, questions_error_message
 from services.system_one_service_service import max_concurrency_of, provider_of
 from tools import system_one_client
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-_DEFAULT_MAX_STATE_CHARS = 6000
 
 
 def system_one_export_fields(agent: Any) -> Dict[str, Any]:
@@ -155,9 +153,9 @@ def import_system_one_agent(
         name = new_name
 
     stored_questions = [q.model_dump(mode="json", exclude_none=True) for q in questions]
-    max_chars = data.max_state_chars or _DEFAULT_MAX_STATE_CHARS
-    if max_chars < 500:      # same floor as the agent form
-        raise ValueError("max_state_chars must be at least 500")
+    max_chars = data.max_state_chars or DEFAULT_MAX_STATE_CHARS
+    if max_chars < MIN_MAX_STATE_CHARS:      # same floor as the agent form
+        raise ValueError(MAX_STATE_CHARS_ERROR)
 
     if existing is not None and conflict_mode == ConflictMode.OVERRIDE:
         existing.description = data.description

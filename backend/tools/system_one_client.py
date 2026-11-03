@@ -130,7 +130,7 @@ def _build_openai_body(model: str, state: str, questions: List[Question], images
     return {"model": model, "input": input_, "questions": items}
 
 
-def _normalize_openai(data: Any, questions: List[Question]) -> Dict[str, Any]:
+def _normalize_openai(data: Any) -> Dict[str, Any]:
     """OpenAI's ``{"answers": [..]}`` -> the System One shape (``answers`` keyed by question, probability maps)."""
     answers = data.get("answers") if isinstance(data, dict) else None
     if not isinstance(answers, list):
@@ -250,7 +250,7 @@ def _validate(response: httpx.Response, questions: List[Question], provider: str
     except ValueError:
         raise invalid("not JSON")
     if provider == PROVIDER_OPENAI:
-        data = _normalize_openai(data, questions)
+        data = _normalize_openai(data)
     answers = data.get("answers") if isinstance(data, dict) else None
     if not isinstance(answers, dict):
         raise invalid("no 'answers'")

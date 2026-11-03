@@ -35,18 +35,18 @@ describe('questions are checked against the limits of the chosen service', () =>
 
 describe('checkConcurrency', () => {
   it('blocks a cap above what the server accepts at once: the cap is the whole server, shared by every process', () => {
-    expect(checkConcurrency(5, 4).error).toMatch(/4/);
+    expect(checkConcurrency(5, 4)).toMatch(/4/);
   });
 
   it('allows any cap up to the limit, with no warning', () => {
-    expect(checkConcurrency(4, 4)).toEqual({});
-    expect(checkConcurrency(1, 4)).toEqual({});
+    expect(checkConcurrency(4, 4)).toBeNull();
+    expect(checkConcurrency(1, 4)).toBeNull();
   });
 
   it('is silent when nothing is known', () => {
-    expect(checkConcurrency(null, 4)).toEqual({});
-    expect(checkConcurrency(500, null)).toEqual({});
-    expect(checkConcurrency(500, undefined)).toEqual({});
+    expect(checkConcurrency(null, 4)).toBeNull();
+    expect(checkConcurrency(500, null)).toBeNull();
+    expect(checkConcurrency(500, undefined)).toBeNull();
   });
 });
 

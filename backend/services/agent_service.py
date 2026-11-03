@@ -14,7 +14,7 @@ from services.a2a_server.lifecycle_service import schedule_owner_purge
 from services.service_lifecycle_service import ServiceLifecycleService
 from utils import a2a_config
 from repositories.system_one_service_repository import SystemOneServiceRepository
-from schemas.system_one_schemas import QuestionList, questions_error_message
+from schemas.system_one_schemas import DEFAULT_MAX_STATE_CHARS, MAX_STATE_CHARS_ERROR, MIN_MAX_STATE_CHARS, QuestionList, questions_error_message
 from services.system_one_state import MIN_TEXT_ROOM_CHARS, question_overhead_chars
 from utils.logger import get_logger
 from types import SimpleNamespace
@@ -612,11 +612,11 @@ class AgentService:
         max_chars = data.get('max_state_chars')
         if max_chars is not None:
             # No upper limit of ours: the server enforces its own prompt budget (and a text over it is shrunk and retried).
-            if max_chars < 500:
-                raise ValueError("max_state_chars must be at least 500")
+            if max_chars < MIN_MAX_STATE_CHARS:
+                raise ValueError(MAX_STATE_CHARS_ERROR)
             agent.max_state_chars = max_chars
         elif creating:
-            agent.max_state_chars = 6000
+            agent.max_state_chars = DEFAULT_MAX_STATE_CHARS
 
         # The server counts the text PLUS one question in every prompt, and max_state_chars is that per-prompt budget:
         # a question that eats it leaves nothing to evaluate (the length of a question is judged here, not per field).
