@@ -46,6 +46,25 @@ interface RawAttachedFile {
   content_preview?: string;
 }
 
+/**
+ * Legacy "Filter by Metadata" panel sends its filter as the entire search_params
+ * root (a pre-existing bug, out of scope here — see SearchFilters.tsx). The new
+ * orchestrator dropdowns must be nested under a "filter" key per resolve_search_params.
+ * Merge defensively so neither panel clobbers the other if both happen to render.
+ */
+function buildSearchParams(
+  legacyFilter: Record<string, unknown> | undefined,
+  exposedSelection: ChatFilterSelection,
+): Record<string, unknown> | undefined {
+  const hasLegacyFilter = legacyFilter !== undefined && Object.keys(legacyFilter).length > 0;
+  const exposedFilter = toSearchFilter(exposedSelection);
+  if (!hasLegacyFilter && !exposedFilter) return undefined;
+  return {
+    ...(hasLegacyFilter ? legacyFilter : {}),
+    ...(exposedFilter ? { filter: exposedFilter } : {}),
+  };
+}
+
 interface ChatInterfaceProps {
   appId: number;
   agentId: number;
@@ -512,20 +531,7 @@ function ChatInterface({
     setTimeout(() => scrollToBottom('instant'), 50);
 
     try {
-      // Legacy "Filter by Metadata" panel sends its filter as the entire search_params
-      // root (a pre-existing bug, out of scope here — see SearchFilters.tsx). The new
-      // orchestrator dropdowns must be nested under a "filter" key per resolve_search_params.
-      // Merge defensively so neither panel clobbers the other if both happen to render.
-      const hasLegacyFilters =
-        filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
-      const exposedFilter = toSearchFilter(exposedFilterValues);
-      const searchParams =
-        hasLegacyFilters || exposedFilter
-          ? {
-              ...(hasLegacyFilters ? filterMetadata : {}),
-              ...(exposedFilter ? { filter: exposedFilter } : {}),
-            }
-          : undefined;
+      const searchParams = buildSearchParams(filterMetadata, exposedFilterValues);
 
       // Hold streaming content visible while we commit the final message
       setHoldStreamingContent(true);

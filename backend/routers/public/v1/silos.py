@@ -5,7 +5,6 @@ import json
 import os
 
 from services.silo_service import DEFAULT_METADATA_VALUES_LIMIT, SiloService
-from services.silo_service import SiloService
 from services.media_service import MediaService
 from models.media import Media
 
@@ -46,6 +45,7 @@ from utils.async_files import write_temp_file
 logger = get_logger(__name__)
 
 SILO_NOT_FOUND_MSG = "Silo not found"
+FILTER_METADATA_EMPTY_MSG = "filter_metadata cannot be empty"
 
 silos_router = APIRouter()
 
@@ -464,7 +464,7 @@ async def delete_docs_by_metadata(
         if not request.filter_metadata:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="filter_metadata cannot be empty",
+                detail=FILTER_METADATA_EMPTY_MSG,
             )
 
         deleted_count = SiloService.delete_docs_by_metadata(
@@ -507,7 +507,7 @@ async def count_docs_by_metadata(
         if not request.filter_metadata:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="filter_metadata cannot be empty",
+                detail=FILTER_METADATA_EMPTY_MSG,
             )
 
         count = SiloService.count_docs_with_filter(
@@ -518,8 +518,8 @@ async def count_docs_by_metadata(
         return CountResponseSchema(count=count)
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error counting documents by metadata in silo {silo_id} for app {app_id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error counting documents by metadata in silo {silo_id} for app {app_id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to count documents",
@@ -578,8 +578,8 @@ async def list_metadata_values(
         # Only ever raised for an invalid field name, which quotes the caller's
         # own input — safe to surface.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error listing metadata values in silo {silo_id} for app {app_id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error listing metadata values in silo {silo_id} for app {app_id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to list metadata values",
@@ -612,7 +612,7 @@ async def update_docs_metadata(
         if not request.filter_metadata:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="filter_metadata cannot be empty",
+                detail=FILTER_METADATA_EMPTY_MSG,
             )
         if not request.metadata_updates:
             raise HTTPException(
@@ -630,8 +630,8 @@ async def update_docs_metadata(
         return UpdatedCountResponseSchema(updated=updated)
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error updating documents metadata in silo {silo_id} for app {app_id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error updating documents metadata in silo {silo_id} for app {app_id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to update documents metadata",

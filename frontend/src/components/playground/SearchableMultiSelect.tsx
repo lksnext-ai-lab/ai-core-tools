@@ -335,6 +335,12 @@ function SearchableMultiSelect({
                   aria-selected={isSelected}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => activate(item)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      activate(item);
+                    }
+                  }}
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
                     isActive ? 'bg-indigo-50 dark:bg-indigo-500/20' : ''

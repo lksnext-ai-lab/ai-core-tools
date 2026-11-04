@@ -82,7 +82,8 @@ def test_render_sanitizes_and_truncates_injected_value():
     block = render_chat_filter_block({"source_type": nasty}, has_subagents=True)
 
     value_line = next(l for l in block.splitlines() if l.startswith("- source_type ="))
-    assert "<" not in value_line and ">" not in value_line
+    assert "<" not in value_line
+    assert ">" not in value_line
     assert "\n" not in value_line
     assert len(value_line) < 160
 

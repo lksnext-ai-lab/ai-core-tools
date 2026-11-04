@@ -354,25 +354,31 @@ class AgentService:
 
         fields_by_name: Dict[str, Dict[str, Any]] = {}
         for silo_id in silo_ids:
-            try:
-                silo_info = AgentRepository.get_silo_with_metadata_definition(db, silo_id)
-                metadata_def = silo_info.get('metadata_definition') if silo_info else None
-                fields = (metadata_def or {}).get('fields') or []
-                for field in fields:
-                    if not isinstance(field, dict) or not field.get('name'):
-                        continue
-                    name = field['name']
-                    if name not in fields_by_name:
-                        fields_by_name[name] = {
-                            'name': name,
-                            'type': field.get('type', 'str'),
-                            'description': field.get('description'),
-                        }
-            except Exception as exc:
-                logger.warning(f"Failed to load metadata definition for silo {silo_id}: {exc}")
-                continue
+            for field in self._load_declared_metadata_fields(db, silo_id):
+                fields_by_name.setdefault(field['name'], {
+                    'name': field['name'],
+                    'type': field.get('type', 'str'),
+                    'description': field.get('description'),
+                })
 
         return sorted(fields_by_name.values(), key=lambda f: f['name'])
+
+    def _load_declared_metadata_fields(self, db: Session, silo_id: int) -> List[Dict[str, Any]]:
+        """Named field entries of a silo's metadata definition.
+
+        Never raises: a broken or missing metadata_definition is logged and
+        contributes no fields.
+        """
+        try:
+            silo_info = AgentRepository.get_silo_with_metadata_definition(db, silo_id)
+        except Exception as exc:
+            logger.warning(f"Failed to load metadata definition for silo {silo_id}: {exc}")
+            return []
+        metadata_def = silo_info.get('metadata_definition') if silo_info else None
+        fields = metadata_def.get('fields') if isinstance(metadata_def, dict) else None
+        if not isinstance(fields, list):
+            return []
+        return [field for field in fields if isinstance(field, dict) and field.get('name')]
 
     def _get_silo_ids_by_metadata_field(self, db: Session, silo_ids: Set[int]) -> Dict[str, Set[int]]:
         """Map each declared metadata field name to the silo_ids that declare it.
@@ -395,17 +401,8 @@ class AgentService:
         """
         field_to_silos: Dict[str, Set[int]] = {}
         for silo_id in silo_ids:
-            try:
-                silo_info = AgentRepository.get_silo_with_metadata_definition(db, silo_id)
-                metadata_def = silo_info.get('metadata_definition') if silo_info else None
-                fields = (metadata_def or {}).get('fields') or []
-                for field in fields:
-                    if not isinstance(field, dict) or not field.get('name'):
-                        continue
-                    field_to_silos.setdefault(field['name'], set()).add(silo_id)
-            except Exception as exc:
-                logger.warning(f"Failed to load metadata definition for silo {silo_id}: {exc}")
-                continue
+            for field in self._load_declared_metadata_fields(db, silo_id):
+                field_to_silos.setdefault(field['name'], set()).add(silo_id)
         return field_to_silos
 
     def _collect_candidate_silo_ids(self, agent: Agent) -> Set[int]:
