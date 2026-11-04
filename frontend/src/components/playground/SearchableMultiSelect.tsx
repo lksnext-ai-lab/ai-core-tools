@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface SearchableMultiSelectProps {
   readonly id: string;
@@ -14,8 +15,36 @@ interface SearchableMultiSelectProps {
 export const SEARCH_RESULT_LIMIT = 50;
 const MAX_VISIBLE_OPTIONS = 100;
 const POPOVER_HEIGHT_PX = 300;
+const POPOVER_GAP_PX = 4;
+const VIEWPORT_MARGIN_PX = 8;
+// Search input + hint footer, i.e. everything in the popover except the list.
+const POPOVER_CHROME_PX = 72;
+const LIST_MAX_HEIGHT_PX = 224;
+const LIST_MIN_HEIGHT_PX = 96;
 const SEARCH_DEBOUNCE_MS = 250;
 const CLEAR_ROW = '';
+
+interface PopoverPosition {
+  readonly left: number;
+  readonly width: number;
+  readonly top?: number;
+  readonly bottom?: number;
+  readonly listMaxHeight: number;
+}
+
+function computePopoverPosition(trigger: DOMRect): PopoverPosition {
+  const spaceBelow = window.innerHeight - trigger.bottom - POPOVER_GAP_PX - VIEWPORT_MARGIN_PX;
+  const spaceAbove = trigger.top - POPOVER_GAP_PX - VIEWPORT_MARGIN_PX;
+  const openUp = spaceBelow < POPOVER_HEIGHT_PX && spaceAbove > spaceBelow;
+  const listMaxHeight = Math.max(
+    LIST_MIN_HEIGHT_PX,
+    Math.min(LIST_MAX_HEIGHT_PX, (openUp ? spaceAbove : spaceBelow) - POPOVER_CHROME_PX),
+  );
+  const base = { left: trigger.left, width: trigger.width, listMaxHeight };
+  return openUp
+    ? { ...base, bottom: window.innerHeight - trigger.top + POPOVER_GAP_PX }
+    : { ...base, top: trigger.bottom + POPOVER_GAP_PX };
+}
 
 function summarize(value: readonly string[], anyLabel: string): string {
   if (value.length === 0) return anyLabel;
@@ -25,8 +54,9 @@ function summarize(value: readonly string[], anyLabel: string): string {
 
 /**
  * Multi-select with a search box, for fields that can have hundreds of values.
- * The list floats over the surrounding layout (it never pushes content) and flips
- * upward when there is no room below. Ancestors must not clip overflow.
+ * The list is portaled to <body> with fixed positioning, so it floats above any
+ * sibling panel, stacking context or scroll container; it flips upward when there is
+ * more room above, shrinks to fit the viewport and follows the trigger on scroll/resize.
  * Toggling a value keeps the list open; Escape or an outside click closes it.
  *
  * With `onSearch`, the preloaded `options` are filtered locally right away and
@@ -45,7 +75,7 @@ function SearchableMultiSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [openUp, setOpenUp] = useState(false);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
   const [remoteItems, setRemoteItems] = useState<string[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
@@ -55,6 +85,7 @@ function SearchableMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
 
   const trimmedQuery = query.trim().toLowerCase();
@@ -99,12 +130,28 @@ function SearchableMultiSelect({
     searchRef.current?.focus();
 
     const handleOutsideMouseDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!containerRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleOutsideMouseDown);
     return () => document.removeEventListener('mousedown', handleOutsideMouseDown);
+  }, [isOpen]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect) setPosition(computePopoverPosition(rect));
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -156,12 +203,8 @@ function SearchableMultiSelect({
   const open = () => {
     setQuery('');
     setActiveIndex(0);
-    const rect = containerRef.current?.getBoundingClientRect();
-    setOpenUp(
-      rect !== undefined &&
-        rect.bottom + POPOVER_HEIGHT_PX > window.innerHeight &&
-        rect.top > POPOVER_HEIGHT_PX,
-    );
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setPosition(computePopoverPosition(rect));
     setIsOpen(true);
   };
 
@@ -198,7 +241,8 @@ function SearchableMultiSelect({
         close(true);
         break;
       case 'Tab':
-        close(false);
+        // The popover lives at the end of <body>: hand focus back so Tab continues from the trigger.
+        close(true);
         break;
     }
   };
@@ -235,12 +279,17 @@ function SearchableMultiSelect({
         </svg>
       </button>
 
-      {isOpen && (
+      {isOpen && position && createPortal(
         <div
-          className={`absolute left-0 right-0 z-30 border border-gray-300 dark:border-gray-600 rounded-lg
-                      bg-white dark:bg-gray-800 shadow-lg overflow-hidden ${
-                        openUp ? 'bottom-full mb-1' : 'top-full mt-1'
-                      }`}
+          ref={popoverRef}
+          style={{
+            left: position.left,
+            width: position.width,
+            top: position.top,
+            bottom: position.bottom,
+          }}
+          className="fixed z-50 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-800 shadow-lg overflow-hidden"
         >
           <input
             ref={searchRef}
@@ -266,7 +315,8 @@ function SearchableMultiSelect({
             id={listboxId}
             role="listbox"
             aria-multiselectable="true"
-            className="max-h-56 overflow-y-auto py-1"
+            style={{ maxHeight: position.listMaxHeight }}
+            className="overflow-y-auto py-1"
           >
             {items.length === 0 && !isSearching && (
               <li className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
@@ -323,7 +373,8 @@ function SearchableMultiSelect({
               {hint}
             </p>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
