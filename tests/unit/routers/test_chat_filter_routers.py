@@ -80,10 +80,11 @@ class TestInternalAgentChatFilters:
     async def test_field_not_exposed_returns_404(self):
         service = MagicMock()
         service.get_chat_filter_field_values.return_value = None
+        db = MagicMock()
 
         with pytest.raises(HTTPException) as exc_info:
             await internal_agents.search_chat_filter_field_values(
-                app_id=1, agent_id=3, field_name="secret", auth_context=None, role=None, db=MagicMock(),
+                app_id=1, agent_id=3, field_name="secret", auth_context=None, role=None, db=db,
                 agent_service=service, q="", limit=50,
             )
 
@@ -116,10 +117,11 @@ class TestPublicAgentChatFilterField:
     @pytest.mark.asyncio
     async def test_field_not_exposed_returns_404(self, service):
         service.get_chat_filter_field_values.return_value = None
+        db = MagicMock()
 
         with pytest.raises(HTTPException) as exc_info:
             await public_agents.get_chat_filter_field_values(
-                app_id=1, agent_id=3, field_name="secret", api_key="key", db=MagicMock(),
+                app_id=1, agent_id=3, field_name="secret", api_key="key", db=db,
             )
 
         assert exc_info.value.status_code == 404
@@ -173,10 +175,11 @@ class TestMarketplaceChatFilters:
     @pytest.mark.asyncio
     async def test_field_not_exposed_returns_404(self, service):
         service.get_chat_filter_field_values.return_value = None
+        db = MagicMock()
 
         with pytest.raises(HTTPException) as exc_info:
             await marketplace.search_marketplace_chat_filter_values(
-                conversation_id=9, field_name="secret", db=MagicMock(), current_user=CURRENT_USER, q="", limit=50,
+                conversation_id=9, field_name="secret", db=db, current_user=CURRENT_USER, q="", limit=50,
             )
 
         assert exc_info.value.status_code == 404

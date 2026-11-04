@@ -76,8 +76,9 @@ class TestUpdateDocsMetadata:
 class TestGetMetadataFieldValuesValidation:
     @pytest.mark.parametrize("field", ["", "empresa; DROP TABLE", "a b", "x'y"])
     def test_rejects_unsafe_field_names_before_touching_the_store(self, field):
+        db = MagicMock()
         with patch("services.silo_service.SiloRepository.get_by_id") as get_by_id:
             with pytest.raises(ValueError, match="Invalid metadata field name"):
-                SiloService.get_metadata_field_values(silo_id=7, field=field, db=MagicMock())
+                SiloService.get_metadata_field_values(silo_id=7, field=field, db=db)
 
         get_by_id.assert_not_called()
