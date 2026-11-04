@@ -21,6 +21,8 @@ const VIEWPORT_MARGIN_PX = 8;
 const POPOVER_CHROME_PX = 72;
 const LIST_MAX_HEIGHT_PX = 224;
 const LIST_MIN_HEIGHT_PX = 96;
+// Narrow triggers (e.g. a three-column filter grid in a squeezed chat column) still get a readable list.
+const POPOVER_MIN_WIDTH_PX = 240;
 const SEARCH_DEBOUNCE_MS = 250;
 const CLEAR_ROW = '';
 
@@ -40,7 +42,15 @@ function computePopoverPosition(trigger: DOMRect): PopoverPosition {
     LIST_MIN_HEIGHT_PX,
     Math.min(LIST_MAX_HEIGHT_PX, (openUp ? spaceAbove : spaceBelow) - POPOVER_CHROME_PX),
   );
-  const base = { left: trigger.left, width: trigger.width, listMaxHeight };
+  const width = Math.min(
+    Math.max(trigger.width, POPOVER_MIN_WIDTH_PX),
+    window.innerWidth - 2 * VIEWPORT_MARGIN_PX,
+  );
+  const left = Math.max(
+    VIEWPORT_MARGIN_PX,
+    Math.min(trigger.left, window.innerWidth - width - VIEWPORT_MARGIN_PX),
+  );
+  const base = { left, width, listMaxHeight };
   return openUp
     ? { ...base, bottom: window.innerHeight - trigger.top + POPOVER_GAP_PX }
     : { ...base, top: trigger.bottom + POPOVER_GAP_PX };
@@ -366,7 +376,9 @@ function SearchableMultiSelect({
                       )}
                     </span>
                   )}
-                  <span className="truncate">{isClearRow ? 'Clear selection' : item}</span>
+                  <span className="truncate" title={isClearRow ? undefined : item}>
+                    {isClearRow ? 'Clear selection' : item}
+                  </span>
                 </li>
               );
             })}
