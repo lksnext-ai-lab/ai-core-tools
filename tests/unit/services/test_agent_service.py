@@ -420,6 +420,22 @@ class TestGetAvailableChatFilterFields:
 
         assert [f['name'] for f in result] == ['machine_model']
 
+    @pytest.mark.parametrize("silo_info", [
+        None,
+        {"metadata_definition": None},
+        {"metadata_definition": "not-a-dict"},
+        {"metadata_definition": {"fields": {"name": "not-a-list"}}},
+        {"metadata_definition": {"fields": ["not-a-dict", {"type": "str"}, {"name": ""}]}},
+    ])
+    def test_malformed_metadata_definition_contributes_no_fields(self, mocker, silo_info):
+        db = MagicMock()
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value=silo_info,
+        )
+
+        assert AgentService().get_available_chat_filter_fields(db, tool_ids=[], own_silo_id=100) == []
+
     def test_returns_empty_list_with_no_candidates(self, mocker):
         db = MagicMock()
         service = AgentService()
