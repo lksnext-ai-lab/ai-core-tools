@@ -19,6 +19,9 @@ from schemas.repository_schemas import RepositoryListItemSchema, RepositoryDetai
 from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from datetime import datetime
 from utils.logger import get_logger
+from utils.error_handlers import ValidationError
+from utils.service_lifecycle import SERVICE_KIND_EMBEDDING, RetiredServiceAssignmentError, ensure_assignable
+from services.service_lifecycle_service import ServiceLifecycleService
 from tools.vector_store_factory import VectorStoreFactory
 
 load_dotenv()
@@ -64,7 +67,9 @@ class RepositoryService:
         repository: Repository,
         embedding_service_id: Optional[int] = None,
         vector_db_type: Optional[str] = None,
-        db: Session = None
+        db: Session = None,
+        transcription_service_id: Optional[int] = None,
+        video_ai_service_id: Optional[int] = None,
     ) -> Repository:
         """
         Create a new repository with its associated silo
@@ -96,7 +101,10 @@ class RepositoryService:
             'fixed_metadata': False,
             'metadata_definition_id': parser_id,
             'embedding_service_id': embedding_service_id,
-            'vector_db_type': resolved_vector_db_type
+            'vector_db_type': resolved_vector_db_type,
+            # Media services are stored on the silo, which does the indexing.
+            'transcription_service_id': transcription_service_id,
+            'video_ai_service_id': video_ai_service_id,
         }
         silo = silo_service.create_or_update_silo(silo_data, SiloType.REPO, db)
         
@@ -132,6 +140,16 @@ class RepositoryService:
             assert_embedding_service_immutable(
                 repository.silo.embedding_service_id, embedding_service_id, "repository"
             )
+            if repository.silo.embedding_service_id != embedding_service_id:
+                new_embedding = EmbeddingServiceRepository.get_by_id(db, embedding_service_id)
+                SiloService.ensure_embedding_service_owned(new_embedding, repository.app_id)
+                try:
+                    ensure_assignable(
+                        new_embedding, repository.silo.embedding_service_id,
+                        'embedding_service_id', SERVICE_KIND_EMBEDDING,
+                    )
+                except RetiredServiceAssignmentError as exc:
+                    raise ValidationError(str(exc)) from exc
             repository.silo.embedding_service_id = embedding_service_id
 
         if repository.silo:
@@ -161,6 +179,7 @@ class RepositoryService:
         # Get silo and parser info before deletion
         silo = repository.silo
         parser_id = silo.metadata_definition_id if silo else None
+        repository_app_id = repository.app_id
         
         # Delete all resources first
         resources = RepositoryRepository.get_resources_by_repository_id(db, repository.repository_id)
@@ -194,8 +213,12 @@ class RepositoryService:
             db.commit()
         
         # Delete output parser LAST (after silo is deleted)
+        # (only when it belongs to the repository's app: never delete another tenant's parser)
         if parser_id:
-            RepositoryRepository.delete_output_parser_by_id(db, parser_id)
+            from models.output_parser import OutputParser
+            parser = db.get(OutputParser, parser_id)
+            if parser is not None and parser.app_id == repository_app_id:
+                RepositoryRepository.delete_output_parser_by_id(db, parser_id)
 
     # ==================== ROUTER SERVICE METHODS ====================
 
@@ -215,7 +238,10 @@ class RepositoryService:
         
         # Use repository to get repositories
         repositories = RepositoryRepository.get_by_app_id(db, app_id)
-        
+
+        # Dependency warnings (via each repository's silo): one lookup context for the whole list.
+        lifecycle_ctx = ServiceLifecycleService.build_context(db, app_id)
+
         result = []
         for repo in repositories:
             resource_count = ResourceRepository.count_by_repository_id(db, repo.repository_id)
@@ -232,10 +258,44 @@ class RepositoryService:
                 status=repo.status,
                 created_at=repo.create_date,
                 resource_count=resource_count,
-                vector_db_type=repo_vector_db_type
+                vector_db_type=repo_vector_db_type,
+                lifecycle_warnings=ServiceLifecycleService.warnings_for_silo(
+                    repo.silo.silo_id if repo.silo else None, lifecycle_ctx
+                ),
             ))
         
         return result
+
+    @staticmethod
+    def _embedding_service_options(db: Session, app_id: int, warning_days: int) -> List[Dict[str, Any]]:
+        """Embedding services (app + system) offered in the repository form, with lifecycle data."""
+        app_es = EmbeddingServiceRepository.get_by_app_id(db, app_id)
+        system_es = EmbeddingServiceRepository.get_system_services(db)
+        return [
+            {
+                "service_id": s.service_id,
+                "name": s.name,
+                "is_system": is_system,
+                **ServiceLifecycleService.option_fields(s, warning_days),
+            }
+            for is_system, services in ((False, app_es), (True, system_es))
+            for s in services
+        ]
+
+    @staticmethod
+    def _ai_service_options(db: Session, app_id: int, warning_days: int) -> List[Dict[str, Any]]:
+        """AI services (app + system) offered as transcription / video services, with lifecycle data."""
+        from repositories.ai_service_repository import AIServiceRepository
+        services = AIServiceRepository.get_by_app_id(db, app_id) + AIServiceRepository.get_system_services(db)
+        return [
+            {
+                "service_id": s.service_id,
+                "name": s.name,
+                "supports_video": s.supports_video,
+                **ServiceLifecycleService.option_fields(s, warning_days),
+            }
+            for s in services
+        ]
 
     @staticmethod
     def get_repository_detail(app_id: int, repository_id: int, db: Session) -> RepositoryDetailSchema:
@@ -258,17 +318,9 @@ class RepositoryService:
         if repository_id == 0:
             # New repository
             vector_db_options = VectorStoreFactory.get_available_type_options()
-            app_es = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-            system_es = EmbeddingServiceRepository.get_system_services(db)
-            embedding_services = (
-                [{"service_id": s.service_id, "name": s.name, "is_system": False} for s in app_es]
-                + [{"service_id": s.service_id, "name": s.name, "is_system": True} for s in system_es]
-            )
-            
-            # Get AI services for media transcription
-            from repositories.ai_service_repository import AIServiceRepository
-            ai_services_query = AIServiceRepository.get_by_app_id(db, app_id) + AIServiceRepository.get_system_services(db)
-            ai_services = [{"service_id": s.service_id, "name": s.name, "supports_video": s.supports_video} for s in ai_services_query]
+            warning_days = ServiceLifecycleService.warning_days(db)
+            embedding_services = RepositoryService._embedding_service_options(db, app_id, warning_days)
+            ai_services = RepositoryService._ai_service_options(db, app_id, warning_days)
             
             return RepositoryDetailSchema(
                 repository_id=0,
@@ -306,21 +358,18 @@ class RepositoryService:
                 "uri": resource.uri,
                 "file_type": resource.type or "unknown",
                 "created_at": resource.create_date,
-                "folder_id": resource.folder_id
+                "folder_id": resource.folder_id,
+                "status": resource.status,
+                "error_message": resource.error_message,
             })
         
-        # Get embedding services for form data
-        app_es = EmbeddingServiceRepository.get_by_app_id(db, app_id)
-        system_es = EmbeddingServiceRepository.get_system_services(db)
-        embedding_services = (
-            [{"service_id": s.service_id, "name": s.name, "is_system": False} for s in app_es]
-            + [{"service_id": s.service_id, "name": s.name, "is_system": True} for s in system_es]
-        )
-        
-        # Get AI services for media transcription
-        from repositories.ai_service_repository import AIServiceRepository
-        ai_services_query = AIServiceRepository.get_by_app_id(db, app_id) + AIServiceRepository.get_system_services(db)
-        ai_services = [{"service_id": s.service_id, "name": s.name, "supports_video": s.supports_video} for s in ai_services_query]
+        # One warning-days read and one lookup context for the whole detail
+        lifecycle_ctx = ServiceLifecycleService.build_context(db, app_id)
+        warning_days = lifecycle_ctx.warning_days
+
+        # Service options for the form (with their end-of-service data)
+        embedding_services = RepositoryService._embedding_service_options(db, app_id, warning_days)
+        ai_services = RepositoryService._ai_service_options(db, app_id, warning_days)
         
         # Get folders for the repository
         from services.folder_service import FolderService
@@ -357,7 +406,8 @@ class RepositoryService:
                 embedding_service_id = repo.silo.embedding_service.service_id
             
             # Get metadata fields from silo's metadata definition (OutputParser)
-            if repo.silo.metadata_definition and repo.silo.metadata_definition.fields:
+            if (repo.silo.metadata_definition and repo.silo.metadata_definition.app_id == repo.app_id
+                    and repo.silo.metadata_definition.fields):
                 try:
                     parser_fields = repo.silo.metadata_definition.fields
                     if isinstance(parser_fields, dict) and 'fields' in parser_fields:
@@ -393,7 +443,9 @@ class RepositoryService:
             media=media_list,
             ai_services=ai_services,
             transcription_service_id=repo.transcription_service_id,
-            video_ai_service_id=repo.video_ai_service_id
+            video_ai_service_id=repo.video_ai_service_id,
+            service_warnings=SiloService.service_warnings(repo.silo),
+            lifecycle_warnings=ServiceLifecycleService.warnings_for_silo(silo_id, lifecycle_ctx),
         )
 
     @staticmethod
@@ -428,14 +480,14 @@ class RepositoryService:
         repo.type = repo_data.type
         repo.status = repo_data.status or 'active'
         repo.create_date = datetime.now()
-        repo.transcription_service_id = repo_data.transcription_service_id
-        repo.video_ai_service_id = repo_data.video_ai_service_id
 
         return RepositoryService.create_repository(
             repo,
             repo_data.embedding_service_id,
             normalized_vector_db_type,
             db,
+            transcription_service_id=repo_data.transcription_service_id,
+            video_ai_service_id=repo_data.video_ai_service_id,
         )
 
     @staticmethod
@@ -463,8 +515,10 @@ class RepositoryService:
             repo.type = repo_data.type
         if repo_data.status is not None:
             repo.status = repo_data.status
-        repo.transcription_service_id = repo_data.transcription_service_id
-        repo.video_ai_service_id = repo_data.video_ai_service_id
+        if repo.silo:
+            SiloService.apply_media_services(
+                repo.silo, repo_data.transcription_service_id, repo_data.video_ai_service_id, app_id, db,
+            )
 
         return RepositoryService.update_repository(
             repo,

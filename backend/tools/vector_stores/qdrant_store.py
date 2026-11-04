@@ -253,8 +253,12 @@ class QdrantStore(VectorStoreInterface):
             all matching points are removed regardless of collection size.
         """
         if isinstance(ids, list):
-            vector_store = self._get_vector_store(collection_name, embedding_service)
-            vector_store.delete(ids=ids)
+            # Raw client: building a QdrantVectorStore embeds a dummy text to validate the
+            # collection, which would call a retired/dead embedding provider just to delete.
+            from qdrant_client.models import PointIdsList
+
+            if ids:
+                self.client.delete(collection_name=collection_name, points_selector=PointIdsList(points=ids))
         else:
             # Native filter-based delete removes all matching points atomically
             # regardless of collection size (no scroll/page-size limit).

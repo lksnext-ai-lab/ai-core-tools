@@ -94,6 +94,7 @@ async def create_multiple_resources(
             message=result.get("message", "Resources created successfully"),
             created_resources=result.get("created_resources", []),
             failed_files=result.get("failed_files", []),
+            indexing_failures=result.get("indexing_failures", []),
         )
     except HTTPException:
         raise

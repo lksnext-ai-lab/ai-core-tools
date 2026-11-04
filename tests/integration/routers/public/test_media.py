@@ -85,6 +85,7 @@ def fake_media(db, fake_repository, fake_ai_transcription_service):
 
     media = Media(
         name="test_video",
+        silo_id=fake_repository.silo_id,
         repository_id=fake_repository.repository_id,
         transcription_service_id=fake_ai_transcription_service.service_id,
         source_type="upload",
@@ -102,6 +103,7 @@ def fake_youtube_media(db, fake_repository, fake_ai_transcription_service):
 
     media = Media(
         name="YouTube: test_video",
+        silo_id=fake_repository.silo_id,
         repository_id=fake_repository.repository_id,
         transcription_service_id=fake_ai_transcription_service.service_id,
         source_type="youtube",
@@ -380,9 +382,10 @@ class TestYouTubeMedia:
     def test_missing_required_fields_returns_422(
         self, client, fake_app, fake_repository, fake_api_key, db
     ):
+        # url is the only required field; omitting it should return 422
         resp = client.post(
             media_url(fake_app.app_id, fake_repository.repository_id, "/youtube"),
-            json={"url": "https://www.youtube.com/watch?v=abc123"},
+            json={},
             headers=api_headers(fake_api_key.key),
         )
         assert resp.status_code == 422

@@ -32,6 +32,7 @@ from services.media_service import MediaService
 from db.database import get_db
 
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -201,6 +202,7 @@ async def delete_repo(
     summary="Find docs in repository",
     tags=["Repositories"],
     response_model=DocsResponseSchema,
+    responses={409: {"description": "A service used by this resource was retired"}},
 )
 async def find_docs_in_repository(
     app_id: int,
@@ -254,7 +256,7 @@ async def find_docs_in_repository(
             )
 
         return DocsResponseSchema(docs=doc_schemas)
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error finding documents in repository: {str(e)}")

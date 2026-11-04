@@ -1,20 +1,23 @@
 import json
 import math
 import os
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from utils.security import generate_signature
 
 from lks_idprovider import AuthContext
 from sqlalchemy.orm import Session
-from typing import Any, AsyncGenerator, List, Optional, Dict, Annotated
+from typing import Any, AsyncGenerator, List, Optional, Dict, MutableMapping, Annotated
 
 from db.database import get_db
+from routers.controls.rate_limit import apply_agent_rate_limit
 from routers.internal.auth_utils import get_current_user_oauth
 from services.marketplace_service import MarketplaceService
 from services.conversation_service import ConversationService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from models.hitl_approval import ApprovalChannel
+from tools.stream_guard import guard_agent_stream
 from services.agent_service import AgentService
 from services.user_service import UserService
 from services.file_management_service import FileManagementService, FileReference
@@ -36,6 +39,7 @@ from schemas.marketplace_schemas import (
 from schemas.conversation_schemas import ConversationWithHistoryResponse, MarketplaceConversationResponse
 from schemas.chat_schemas import ChatResponseSchema
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -293,9 +297,11 @@ async def get_marketplace_conversation(
             conversation_id=conversation_id,
             user_context=user_context,
         )
+        pending_approval = await ConversationService.get_pending_approval(db, conversation_id, user_context)
         return ConversationWithHistoryResponse(
             **conversation.to_dict(),
             messages=history or [],
+            pending_approval=pending_approval,
         )
     except Exception as e:
         logger.error(f"Error retrieving marketplace conversation history: {e}")
@@ -342,6 +348,7 @@ def _build_file_user_context(auth_context: AuthContext, app_id: int) -> Dict:
 @marketplace_router.post(
     "/conversations/{conversation_id}/upload-file",
     summary="Upload file for marketplace conversation",
+    responses={409: {"description": "A service used by this resource was retired"}},
 )
 async def upload_marketplace_file(
     conversation_id: int,
@@ -386,6 +393,11 @@ async def upload_marketplace_file(
                     content=file_ref.content,
                     db=db,
                 )
+            except ServiceRetiredError:
+                await file_service.discard_uploaded_file(
+                    file_ref.file_id, agent.agent_id, user_context, conversation_id
+                )
+                raise
             except Exception as vec_err:
                 logger.warning(f"Marketplace file vectorization at upload failed: {vec_err}")
 
@@ -402,7 +414,7 @@ async def upload_marketplace_file(
             "has_extractable_content": file_ref.has_extractable_content,
             "mime_type": file_ref.mime_type,
         }
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error uploading marketplace file: {e}")
@@ -573,19 +585,24 @@ def _extract_jwt_token(request: Request) -> Optional[str]:
 
 
 
-def _validate_marketplace_agent(agent: Optional[Agent]) -> None:
+def _validate_marketplace_agent(
+    agent: Optional[Agent],
+) -> None:
     """Raise if agent is missing or unpublished."""
     if not agent or agent.marketplace_visibility == MarketplaceVisibility.UNPUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This agent is no longer available in the marketplace",
         )
-    if agent.app and agent.app.agent_rate_limit and agent.app.agent_rate_limit > 0:
-        if agent.request_count and agent.request_count >= agent.app.agent_rate_limit:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="This agent is temporarily unavailable due to high demand. Please try again later.",
-            )
+
+
+def _apply_marketplace_agent_rate_limit(
+    agent: Agent,
+    response_headers: MutableMapping[str, str],
+) -> None:
+    """Consume the per-agent rate-limit budget for a marketplace chat."""
+    if agent.app:
+        apply_agent_rate_limit(agent.app, agent.agent_id, response_headers)
 
 
 def _enforce_marketplace_quota(user_id: int, db: Session) -> None:
@@ -646,10 +663,12 @@ def _prepare_marketplace_chat(
     conversation_id: int,
     user_id: int,
     db: Session,
+    response_headers: MutableMapping[str, str],
 ) -> tuple[Conversation, Agent]:
     """Validate the conversation/agent/quota for a marketplace chat call."""
     conversation, agent = _validate_marketplace_conversation(conversation_id, user_id, db)
     _enforce_marketplace_quota(user_id, db)
+    _apply_marketplace_agent_rate_limit(agent, response_headers)
     return conversation, agent
 
 
@@ -664,13 +683,13 @@ async def get_marketplace_chat_filter_values(
 ):
     """Get distinct values for the agent's exposed chat-time dropdown filters.
 
-    Reuses ``_prepare_marketplace_chat`` for the established
-    ownership/visibility/quota validation on this router, even though this is
-    a pure read — it's a one-shot call on chat page load, not per-message, so
-    the quota check it performs is a negligible cost.
+    Applies the same ownership/visibility/quota validation as a chat call, but
+    it is a pure read on chat page load, so it does not consume the agent's
+    rate-limit budget.
     """
     user_id = int(current_user.identity.id)
-    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+    _, agent = _validate_marketplace_conversation(conversation_id, user_id, db)
+    _enforce_marketplace_quota(user_id, db)
 
     filters = AgentService().get_chat_filter_values(db, agent)
     return {"filters": filters}
@@ -711,6 +730,7 @@ async def search_marketplace_chat_filter_values(
     "/conversations/{conversation_id}/chat",
     summary="Chat in marketplace conversation",
     response_model=ChatResponseSchema,
+    responses={409: {"description": "A service used by this resource was retired"}},
 )
 async def marketplace_chat(
     conversation_id: int,
@@ -718,13 +738,16 @@ async def marketplace_chat(
     message: Annotated[str, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    response: Response,
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
 ):
     """Send a message in a marketplace conversation."""
     user_id = int(current_user.identity.id)
-    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+    _, agent = _prepare_marketplace_chat(
+        conversation_id, user_id, db, response.headers
+    )
 
     fms = FileManagementService()
     all_file_references: list = []
@@ -769,7 +792,7 @@ async def marketplace_chat(
         )
         return ChatResponseSchema(**result)
 
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error in marketplace chat: {e}")
@@ -784,7 +807,10 @@ async def marketplace_chat(
 @marketplace_router.post(
     "/conversations/{conversation_id}/chat/stream",
     summary="Chat in marketplace conversation (streaming)",
-    responses={500: {"description": "Internal server error"}},
+    responses={
+        409: {"description": "A service used by this resource was retired"},
+        500: {"description": "Internal server error"},
+    },
 )
 async def marketplace_chat_stream(
     conversation_id: int,
@@ -792,6 +818,7 @@ async def marketplace_chat_stream(
     message: Annotated[str, Form(...)],
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    response: Response,
     files: Annotated[List[UploadFile], File()] = None,
     file_references: Annotated[Optional[str], Form()] = None,
     search_params: Annotated[Optional[str], Form()] = None,
@@ -802,7 +829,9 @@ async def marketplace_chat_stream(
     metadata → thinking/tool_start/tool_end → token… → done|error.
     """
     user_id = int(current_user.identity.id)
-    _, agent = _prepare_marketplace_chat(conversation_id, user_id, db)
+    _, agent = _prepare_marketplace_chat(
+        conversation_id, user_id, db, response.headers
+    )
 
     try:
         parsed_refs = _parse_file_references_json(file_references)
@@ -836,12 +865,13 @@ async def marketplace_chat_stream(
             user_context=user_context,
             conversation_id=conversation_id,
             db=db,
+            channel=ApprovalChannel.MARKETPLACE,
         )
 
         async def generator() -> AsyncGenerator[str, None]:
             stream_completed = False
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     if '"type": "done"' in chunk or '"type":"done"' in chunk:
                         stream_completed = True
                     yield chunk
@@ -864,13 +894,14 @@ async def marketplace_chat_stream(
             generator(),
             media_type="text/event-stream",
             headers={
+                **response.headers,
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
         )
 
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error in marketplace streaming chat: {e}")

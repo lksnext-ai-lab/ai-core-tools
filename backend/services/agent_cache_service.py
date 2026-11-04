@@ -24,6 +24,11 @@ _MISSING_TOOL_OUTPUT_MARKERS = (
     "did not have response messages",
 )
 
+# Part of the per-process connection budget documented in db/database.py.
+CHECKPOINTER_POOL_MIN = int(os.getenv("CHECKPOINTER_POOL_MIN", "2"))
+CHECKPOINTER_POOL_MAX = int(os.getenv("CHECKPOINTER_POOL_MAX", "10"))
+CHECKPOINTER_APPLICATION_NAME = "mattin-checkpointer"
+
 
 def is_missing_tool_output_error(exc: BaseException) -> bool:
     """Return True when a provider rejects a stale incomplete tool-call checkpoint."""
@@ -98,8 +103,8 @@ class CheckpointerCacheService:
 
         cls._pool = AsyncConnectionPool(
             conninfo=db_uri,
-            min_size=2,
-            max_size=10,
+            min_size=CHECKPOINTER_POOL_MIN,
+            max_size=CHECKPOINTER_POOL_MAX,
             max_lifetime=1800,   # recycle connections after 30 min
             max_idle=300,        # close connections idle longer than 5 min
             reconnect_timeout=30,  # retry broken connections for up to 30 s
@@ -108,6 +113,7 @@ class CheckpointerCacheService:
                 "autocommit": True,
                 "prepare_threshold": 0,
                 "row_factory": dict_row,
+                "application_name": CHECKPOINTER_APPLICATION_NAME,
             },
         )
         await cls._pool.open(wait=True)
@@ -304,6 +310,28 @@ class CheckpointerCacheService:
             logger.info(f"Deleted checkpoints for session {session_id} (agent {agent_id})")
         except Exception as e:
             logger.error(f"Error invalidating session checkpointers: {str(e)}")
+
+    @classmethod
+    async def get_pending_tool_calls_async(cls, agent_id: int, session_id: str) -> list:
+        """Tool calls of the last AI message when they are still unanswered, else [].
+
+        That is the state a human-in-the-loop interrupt leaves in the checkpoint.
+        """
+        try:
+            checkpointer = await cls.get_async_checkpointer()
+            state_tuple = await checkpointer.aget_tuple(
+                {"configurable": {"thread_id": f"thread_{agent_id}_{session_id}"}}
+            )
+        except Exception as exc:
+            logger.warning("Could not read checkpoint for pending tool calls: %s", exc)
+            return []
+        if not state_tuple or not state_tuple.checkpoint:
+            return []
+        messages = state_tuple.checkpoint.get("channel_values", {}).get("messages", [])
+        last = messages[-1] if messages else None
+        if getattr(last, "type", None) == "ai" and getattr(last, "tool_calls", None):
+            return list(last.tool_calls)
+        return []
 
     @classmethod
     async def get_conversation_history_async(cls, agent_id: int, session_id: str = "default"):

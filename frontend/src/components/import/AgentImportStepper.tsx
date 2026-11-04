@@ -7,6 +7,7 @@ import type {
   ImportResponse,
 } from '../../types/import';
 import { apiService } from '../../services/api';
+import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
 import AgentStepUpload from './steps/AgentStepUpload';
 import AgentStepDeps from './steps/AgentStepDeps';
 import AgentStepConflicts from './steps/AgentStepConflicts';
@@ -55,7 +56,7 @@ function AgentImportStepper({
   const [selectedAIServiceId, setSelectedAIServiceId] =
     useState<number | null>(null);
   const [availableAIServices, setAvailableAIServices] = useState<
-    Array<{ id: number; name: string }>
+    ServiceOptionLike[]
   >([]);
   const [importBundledSilo, setImportBundledSilo] = useState(true);
   const [importBundledOutputParser, setImportBundledOutputParser] =
@@ -87,9 +88,7 @@ function AgentImportStepper({
         const services = await apiService.getAIServices(appId);
         if (Array.isArray(services)) {
           setAvailableAIServices(
-            (services as Array<{ service_id: number; name: string }>).map(
-              (svc) => ({ id: svc.service_id, name: svc.name })
-            )
+            services as ServiceOptionLike[]
           );
         }
       } catch {

@@ -2,6 +2,7 @@
 
 from typing import Optional
 from datetime import datetime
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models.silo import Silo
 from models.embedding_service import EmbeddingService
@@ -18,6 +19,7 @@ from services.embedding_service_import_service import EmbeddingServiceImportServ
 from services.output_parser_import_service import OutputParserImportService
 from repositories.silo_repository import SiloRepository
 import logging
+from utils.service_lifecycle import SERVICE_KIND_EMBEDDING, RetiredServiceAssignmentError, ensure_assignable
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,43 @@ class SiloImportService:
         self.silo_repo = SiloRepository()
         self.embedding_service_import = EmbeddingServiceImportService(session)
         self.output_parser_import = OutputParserImportService(session)
+
+    def _ensure_embedding_assignable(
+        self,
+        embedding_service: EmbeddingService,
+        export_data: SiloExportFileSchema,
+        app_id: int,
+        conflict_mode: ConflictMode,
+    ) -> None:
+        """Reject newly assigning a retired embedding service (OVERRIDE may keep the silo's current one)."""
+        current_id = None
+        if conflict_mode == ConflictMode.OVERRIDE:
+            existing_silo = self.get_by_name_and_app(export_data.silo.name, app_id)
+            current_id = existing_silo.embedding_service_id if existing_silo is not None else None
+        try:
+            ensure_assignable(embedding_service, current_id, "embedding_service_id", SERVICE_KIND_EMBEDDING)
+        except RetiredServiceAssignmentError as exc:
+            raise ValueError(str(exc)) from exc
+
+    def _find_embedding_service_by_name(self, name: str, app_id: int) -> Optional[EmbeddingService]:
+        """Resolve an embedding service by name: the app's own first, then a system one (app_id NULL).
+
+        Another app's services are never matched; ties resolve to the lowest service_id.
+        """
+        for scope in (EmbeddingService.app_id == app_id, EmbeddingService.app_id.is_(None)):
+            service = (
+                self.session.query(EmbeddingService)
+                .filter(EmbeddingService.name == name, scope)
+                .order_by(EmbeddingService.service_id)
+                .first()
+            )
+            if service is not None:
+                logger.info(
+                    f"Resolved embedding service by name '{name}' -> ID {service.service_id} "
+                    f"({'system' if service.app_id is None else 'app'} service)"
+                )
+                return service
+        return None
 
     def get_by_name_and_app(self, name: str, app_id: int) -> Optional[Silo]:
         """Get Silo by name and app ID.
@@ -169,7 +208,12 @@ class SiloImportService:
                 and export_data.silo.embedding_service_name 
                 and export_data.silo.embedding_service_name in embedding_service_id_map
             )
-            if selected_embedding_service_id is None and not has_id_map:
+            resolvable_by_name = (
+                export_data.embedding_service is None
+                and self._find_embedding_service_by_name(export_data.silo.embedding_service_name, app_id)
+                is not None
+            )
+            if selected_embedding_service_id is None and not has_id_map and not resolvable_by_name:
                 raise ValueError(
                     "Embedding service selection required but not provided. "
                     "Please select an existing embedding service to use with this silo."
@@ -192,7 +236,7 @@ class SiloImportService:
                     self.session.query(EmbeddingService)
                     .filter(
                         EmbeddingService.service_id == selected_embedding_service_id,
-                        EmbeddingService.app_id == app_id,
+                        or_(EmbeddingService.app_id == app_id, EmbeddingService.app_id.is_(None)),
                     )
                     .first()
                 )
@@ -201,21 +245,18 @@ class SiloImportService:
                         f"Selected embedding service {selected_embedding_service_id} "
                         f"not found in app {app_id}"
                     )
+                self._ensure_embedding_assignable(embedding_service, export_data, app_id, conflict_mode)
                 embedding_service_id = selected_embedding_service_id
                 logger.info(
                     f"Using selected embedding service '{embedding_service.name}'"
                 )
             # Priority 3: Try to resolve by name (for existing services)
             elif not export_data.embedding_service:
-                existing_service = (
-                    self.session.query(EmbeddingService)
-                    .filter(
-                        EmbeddingService.name == export_data.silo.embedding_service_name,
-                        EmbeddingService.app_id == app_id,
-                    )
-                    .first()
+                existing_service = self._find_embedding_service_by_name(
+                    export_data.silo.embedding_service_name, app_id
                 )
                 if existing_service:
+                    self._ensure_embedding_assignable(existing_service, export_data, app_id, conflict_mode)
                     embedding_service_id = existing_service.service_id
                     logger.info(
                         f"Resolved embedding service by name: '{existing_service.name}'"

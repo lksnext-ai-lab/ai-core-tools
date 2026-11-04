@@ -5,7 +5,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from croniter import croniter
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from db.database import Base
@@ -47,6 +47,7 @@ class ScheduledTask(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default="now()")
 
     runs = relationship("ScheduledTaskRun", back_populates="task", cascade="all, delete-orphan")
+    output_bindings = relationship("ScheduledTaskOutputBinding", back_populates="task", cascade="all, delete-orphan")
 
     @property
     def next_run_at(self) -> Optional[datetime]:
@@ -78,5 +79,9 @@ class ScheduledTaskRun(Base):
     # [{"file_id", "filename", "file_type"}]. Independent of the agent's memory settings.
     output_text = Column(Text, nullable=True)
     output_files = Column(JSON, nullable=False, default=list, server_default="[]")
+    # False only if agent output committed after an outbox persistence error;
+    # the DBOS reconciler repairs these rows without replaying historic runs.
+    outputs_reconciled = Column(Boolean, nullable=False, default=True, server_default="true")
 
     task = relationship("ScheduledTask", back_populates="runs")
+    output_deliveries = relationship("OutputDelivery", back_populates="run", cascade="all, delete-orphan")

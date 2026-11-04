@@ -15,6 +15,7 @@ from schemas.common_schemas import MessageResponseSchema
 # Import auth and database
 from .auth_utils import get_current_user_oauth
 from db.database import get_db
+from routers.controls.repository_scope import require_repository_in_app
 from routers.controls.role_authorization import require_min_role, AppRole
 
 # Import logger
@@ -25,7 +26,8 @@ FOLDER_NOT_IN_REPO_ERROR = "Folder does not belong to this repository"
 
 logger = get_logger(__name__)
 
-folders_router = APIRouter()
+# Every route is nested under /{repository_id}: enforce repository.app_id == app_id on all of them.
+folders_router = APIRouter(dependencies=[Depends(require_repository_in_app)])
 
 
 @folders_router.get("/",

@@ -9,13 +9,18 @@ from schemas.embedding_service_schemas import (
 from core.export_constants import PLACEHOLDER_API_KEY
 from utils.secret_utils import mask_api_key, is_masked_key
 from tools.aws_bedrock_utils import build_extra_config, parse_extra_config
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
+from utils.service_lifecycle import SERVICE_KIND_EMBEDDING, compute_lifecycle_status, to_utc
+from services.service_lifecycle_service import ServiceLifecycleService
+from schemas.service_lifecycle_schemas import ServiceLifecycleFieldsMixin
 
 class EmbeddingServiceService:
 
     @staticmethod
-    def _to_list_item(service: "EmbeddingService", is_system: bool = False) -> EmbeddingServiceListItemSchema:
+    def _to_list_item(
+        service: "EmbeddingService", is_system: bool = False, *, warning_days: int
+    ) -> EmbeddingServiceListItemSchema:
         """Convert an EmbeddingService ORM instance to a list item schema."""
         needs_api_key = (
             not service.api_key
@@ -29,7 +34,49 @@ class EmbeddingServiceService:
             created_at=service.create_date,
             needs_api_key=needs_api_key,
             is_system=is_system,
+            last_error=service.last_error,
+            last_error_at=service.last_error_at,
+            end_of_service_at=to_utc(service.end_of_service_at),
+            deprecation_notice=service.deprecation_notice,
+            lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
         )
+
+    @staticmethod
+    def to_detail(
+        service: "EmbeddingService", warning_days: int, providers: Optional[List[Dict[str, Any]]] = None
+    ) -> EmbeddingServiceDetailSchema:
+        """Convert an EmbeddingService ORM instance to the detail schema (masked key, lifecycle status)."""
+        needs_api_key = (
+            not service.api_key
+            or service.api_key == PLACEHOLDER_API_KEY
+        )
+        extra_cfg = parse_extra_config(service.extra_config)
+        return EmbeddingServiceDetailSchema(
+            service_id=service.service_id,
+            name=service.name,
+            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
+            model_name=service.description or "",
+            api_key=mask_api_key(service.api_key),
+            base_url=service.endpoint or "",
+            api_version=service.api_version,
+            created_at=service.create_date,
+            available_providers=providers or [],
+            needs_api_key=needs_api_key,
+            aws_access_key_id=extra_cfg.get("aws_access_key_id"),
+            aws_region=extra_cfg.get("aws_region"),
+            last_error=service.last_error,
+            last_error_at=service.last_error_at,
+            end_of_service_at=to_utc(service.end_of_service_at),
+            deprecation_notice=service.deprecation_notice,
+            lifecycle_status=compute_lifecycle_status(service.end_of_service_at, warning_days).value,
+        )
+
+    @staticmethod
+    def apply_lifecycle_fields(
+        service: "EmbeddingService", data: ServiceLifecycleFieldsMixin, actor_id: Optional[int] = None
+    ) -> None:
+        """Apply the end-of-service fields present in ``data`` (absent ones keep their value)."""
+        ServiceLifecycleService.apply_lifecycle_fields(service, SERVICE_KIND_EMBEDDING, data, actor_id)
 
     @staticmethod
     def get_embedding_services_list(db: Session, app_id: int) -> List[EmbeddingServiceListItemSchema]:
@@ -37,8 +84,16 @@ class EmbeddingServiceService:
         app_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
         system_services = EmbeddingServiceRepository.get_system_services(db)
 
-        result = [EmbeddingServiceService._to_list_item(svc, is_system=False) for svc in app_services]
-        result += [EmbeddingServiceService._to_list_item(svc, is_system=True) for svc in system_services]
+        warning_days = ServiceLifecycleService.warning_days(db)
+
+        result = [
+            EmbeddingServiceService._to_list_item(svc, is_system=False, warning_days=warning_days)
+            for svc in app_services
+        ]
+        result += [
+            EmbeddingServiceService._to_list_item(svc, is_system=True, warning_days=warning_days)
+            for svc in system_services
+        ]
         return result
 
     @staticmethod
@@ -68,32 +123,15 @@ class EmbeddingServiceService:
         # Get available providers for the form
         providers = [{"value": p.value, "name": p.value} for p in EmbeddingProvider]
         
-        needs_api_key = (
-            not service.api_key
-            or service.api_key == PLACEHOLDER_API_KEY
-        )
-        extra_cfg = parse_extra_config(service.extra_config)
-        return EmbeddingServiceDetailSchema(
-            service_id=service.service_id,
-            name=service.name,
-            provider=service.provider.value if hasattr(service.provider, 'value') else service.provider,
-            model_name=service.description or "",
-            api_key=mask_api_key(service.api_key),
-            base_url=service.endpoint or "",
-            api_version=service.api_version,
-            created_at=service.create_date,
-            available_providers=providers,
-            needs_api_key=needs_api_key,
-            aws_access_key_id=extra_cfg.get("aws_access_key_id"),
-            aws_region=extra_cfg.get("aws_region"),
-        )
+        return EmbeddingServiceService.to_detail(service, ServiceLifecycleService.warning_days(db), providers)
 
     @staticmethod
     def create_or_update_embedding_service(
         db: Session, 
         app_id: int, 
         service_id: int, 
-        service_data: CreateUpdateEmbeddingServiceSchema
+        service_data: CreateUpdateEmbeddingServiceSchema,
+        actor_id: Optional[int] = None,
     ) -> Optional[EmbeddingService]:
         """Create or update an embedding service"""
         if service_id == 0:
@@ -122,9 +160,17 @@ class EmbeddingServiceService:
             service_data.aws_access_key_id,
             service_data.aws_region,
         )
+        EmbeddingServiceService.apply_lifecycle_fields(
+            service, service_data, actor_id
+        )
         
         if service_id == 0:
-            return EmbeddingServiceRepository.create(db, service)
+            service = EmbeddingServiceRepository.create(db, service)
+            if service.end_of_service_at is not None:
+                ServiceLifecycleService.log_change(
+                    service, SERVICE_KIND_EMBEDDING, None, service.end_of_service_at, actor_id
+                )
+            return service
         else:
             return EmbeddingServiceRepository.update(db, service)
 

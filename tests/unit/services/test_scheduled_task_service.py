@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -226,3 +227,60 @@ def test_create_rejects_continuous_mode_for_agents_without_memory():
         service.create(app_id=3, created_by=42, data={
             "name": "x", "agent_id": 11, "cron_expression": "*/5 * * * *", "conversation_mode": "continuous",
         })
+
+
+@pytest.mark.asyncio
+async def test_prune_preserves_runs_with_nonterminal_output_deliveries():
+    task = _task(max_runs_retained=1)
+    protected = SimpleNamespace(
+        id=1, conversation_id=101, output_files=[],
+        output_deliveries=[SimpleNamespace(status="pending")],
+    )
+    newest = SimpleNamespace(id=2, conversation_id=102, output_files=[], output_deliveries=[])
+    db = _prune_db([newest, protected], {})
+
+    assert await ScheduledTaskService(db).prune_runs(task) == 0
+    db.delete.assert_not_called()
+
+
+@pytest.mark.parametrize("status", ["accepted", "failed"])
+@pytest.mark.asyncio
+async def test_prune_preserves_notification_links_until_delivery_expiry(status):
+    protected = SimpleNamespace(
+        id=1, conversation_id=None, output_files=[],
+        output_deliveries=[SimpleNamespace(status=status, expires_at=datetime.utcnow() + timedelta(hours=1))],
+    )
+    newest = SimpleNamespace(id=2, conversation_id=None, output_files=[], output_deliveries=[])
+    db = _prune_db([newest, protected], {})
+
+    assert await ScheduledTaskService(db).prune_runs(_task(max_runs_retained=1)) == 0
+    db.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_prune_releases_notification_run_after_expiry():
+    expired = SimpleNamespace(
+        id=1, conversation_id=None, output_files=[],
+        output_deliveries=[SimpleNamespace(status="accepted", expires_at=datetime.utcnow() - timedelta(seconds=1))],
+    )
+    newest = SimpleNamespace(id=2, conversation_id=None, output_files=[], output_deliveries=[])
+    db = _prune_db([newest, expired], {})
+
+    assert await ScheduledTaskService(db).prune_runs(_task(max_runs_retained=1)) == 1
+    db.delete.assert_called_once_with(expired)
+
+
+@pytest.mark.asyncio
+async def test_prune_caps_how_many_runs_notification_links_keep():
+    from services import scheduled_task_service
+
+    live = [SimpleNamespace(status="accepted", expires_at=datetime.utcnow() + timedelta(hours=1))]
+    newest = SimpleNamespace(id=10_000, conversation_id=None, output_files=[], output_deliveries=[])
+    linked = [
+        SimpleNamespace(id=index, conversation_id=None, output_files=[], output_deliveries=live)
+        for index in range(scheduled_task_service._MAX_NOTIFICATION_PROTECTED_RUNS + 2, 0, -1)
+    ]
+    db = _prune_db([newest, *linked], {})
+
+    assert await ScheduledTaskService(db).prune_runs(_task(max_runs_retained=1)) == 2
+    assert [call.args[0].id for call in db.delete.call_args_list] == [2, 1]

@@ -7,3 +7,4 @@ class AgentExecutionCallerType(str, enum.Enum):
     MCP = "MCP"
     AGENT_AS_TOOL = "AGENT_AS_TOOL"
     SCHEDULED_TASK = "SCHEDULED_TASK"
+    A2A = "A2A"

@@ -1,7 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
-import { Bot, Plug, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Loader2, Upload, CheckCircle2, XCircle, X, Lightbulb, AlertTriangle } from 'lucide-react';
-import Modal from '../../components/ui/Modal';
+import { Bot, Users, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Loader2, Upload, CheckCircle2, XCircle, X, Lightbulb } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -14,14 +13,24 @@ import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
 import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
+import type { ServiceLifecycleFields } from '../../types/services';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
+import UsedByButton from '../../components/services/UsedByButton';
+import SystemServiceBadge from '../../components/services/SystemServiceBadge';
+import ServiceUsageModal from '../../components/services/ServiceUsageModal';
+import { useServiceConnectionTest } from '../../components/services/useServiceConnectionTest';
+import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 
-interface AIService {
+interface AIService extends Partial<ServiceLifecycleFields> {
   service_id: number;
   name: string;
   provider: string;
   model_name: string;
   created_at: string;
   needs_api_key?: boolean;
+  is_system?: boolean;
+  last_error?: string | null;
+  last_error_at?: string | null;
 }
 
 function AIServicesPage() {
@@ -62,28 +71,20 @@ function AIServicesPage() {
     forceReload,
   } = useServicesManager<AIService>(appId, api as any, cache as any, { entity: 'AI service' });
 
-  const [testResult, setTestResult] = useState<any>(null);
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [testingServiceId, setTestingServiceId] = useState<number | null>(null);
+  const { testAction, modal: connectionTestModal } = useServiceConnectionTest('AI');
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportingServiceId, setExportingServiceId] = useState<number | null>(null);
+  const [usageService, setUsageService] = useState<{
+    id: number;
+    name: string;
+    deleteRequested?: boolean;
+  } | null>(null);
   const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
 
-  async function handleTestConnection(serviceId: number) {
-    if (!appId) return;
-    setTestingServiceId(serviceId);
-    setTestResult(null);
-    setIsTestModalOpen(true);
-    
-    try {
-      const apiService = (await import('../../services/api')).apiService;
-      const result = await apiService.testAIServiceConnection(Number.parseInt(appId), serviceId);
-      setTestResult(result);
-    } catch (err) {
-      setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
-    } finally {
-      setTestingServiceId(null);
-    }
+  async function testConnection(serviceId: number) {
+    if (!appId) throw new Error('App ID not found');
+    const apiService = (await import('../../services/api')).apiService;
+    return apiService.testAIServiceConnection(Number.parseInt(appId, 10), serviceId);
   }
 
   async function handleExport(serviceId: number) {
@@ -208,13 +209,16 @@ function AIServicesPage() {
           {
             header: 'Name',
             render: (service: AIService) => (
-              canEdit ? (
-                <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
-                  {service.name}
-                </button>
-              ) : (
-                <span className="text-sm font-medium text-gray-900">{service.name}</span>
-              )
+              <span className="flex items-center gap-1.5">
+                {canEdit && !service.is_system ? (
+                  <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
+                    {service.name}
+                  </button>
+                ) : (
+                  <span className="text-sm font-medium text-gray-900">{service.name}</span>
+                )}
+                {service.is_system && <SystemServiceBadge />}
+              </span>
             )
           },
           { header: 'Model', accessor: 'model_name' },
@@ -224,26 +228,20 @@ function AIServicesPage() {
             </span>
           )},
           { header: 'Status', render: (service: AIService) => (
-            service.needs_api_key ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                <AlertTriangle className="w-3 h-3" /> API Key Required
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Ready
-              </span>
-            )
+            <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           )},
           { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
           { header: 'Actions', className: 'relative', render: (service: AIService) => (
-            canEdit ? (
-              <ActionDropdown actions={[
-                {
-                  label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
-                  onClick: () => void handleTestConnection(service.service_id),
-                  icon: testingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />,
-                  disabled: testingServiceId === service.service_id
-                },
+            service.is_system ? (
+              // System services are managed by platform admins; the app can only see where they are used.
+              <span className="inline-flex items-center gap-3">
+                <span className="text-gray-400 text-sm">System</span>
+                <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
+              </span>
+            ) : canEdit ? (
+              <ActionDropdown triggerAriaLabel={`Actions for ${service.name}`} actions={[
+                { label: SERVICE_USAGE_STRINGS.action, onClick: () => setUsageService({ id: service.service_id, name: service.name }), icon: <Users className="w-4 h-4" /> },
+                testAction(service.service_id, service.name, () => testConnection(service.service_id)),
                 {
                   label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
                   onClick: () => void handleExport(service.service_id),
@@ -253,10 +251,10 @@ function AIServicesPage() {
                 },
                 { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
                 { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
-                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
+                { label: 'Delete', onClick: () => setUsageService({ id: service.service_id, name: service.name, deleteRequested: true }), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
               ]} size="sm" />
             ) : (
-               <span className="text-gray-400 text-sm">View only</span>
+              <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
             )
           ) }
         ]}
@@ -333,48 +331,22 @@ function AIServicesPage() {
         />
       )}
 
-      {/* Test Result Modal */}
-      <Modal
-        isOpen={isTestModalOpen}
-        onClose={() => !testingServiceId && setIsTestModalOpen(false)}
-        title="Connection Test Result"
-      >
-        <div className="p-4">
-          {testingServiceId ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Testing connection to AI service...</p>
-            </div>
-          ) : testResult && (
-            <div>
-              <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                <strong>Status:</strong> {testResult.status === 'success' ? 'Success' : 'Error'}
-                <br />
-                <strong>Message:</strong> {testResult.message}
-              </div>
-              
-              {testResult.response && (
-                <div>
-                  <h4 className="font-semibold mb-2">Response:</h4>
-                  <div className="bg-gray-50 p-3 rounded border text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {testResult.response}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {!testingServiceId && (
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setIsTestModalOpen(false)}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded"
-              >
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </Modal>
+      {connectionTestModal}
+
+      {usageService && appId && (
+        <ServiceUsageModal
+          kind="ai"
+          scope="app"
+          canNavigate={hasMinRole(AppRole.EDITOR)}
+          appId={Number.parseInt(appId, 10)}
+          serviceId={usageService.id}
+          serviceName={usageService.name}
+          canMove={canEdit}
+          onMoved={() => void forceReload()}
+          onDelete={usageService.deleteRequested ? () => handleDelete(usageService.id) : undefined}
+          onClose={() => setUsageService(null)}
+        />
+      )}
 
       {/* Import Modal */}
       <ImportModal

@@ -4,10 +4,10 @@ import { ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 
-interface EmbeddingService {
-  service_id: number;
-  name: string;
+interface EmbeddingService extends ServiceOptionLike {
   is_system?: boolean;
 }
 
@@ -35,6 +35,7 @@ function DomainFormPage() {
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [embeddingServices, setEmbeddingServices] = useState<EmbeddingService[]>([]);
+  const [savedEmbeddingServiceId, setSavedEmbeddingServiceId] = useState<number | undefined>(undefined);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
 
   const [formData, setFormData] = useState<DomainFormData>({
@@ -86,6 +87,7 @@ function DomainFormPage() {
         || 'PGVECTOR';
 
       setEmbeddingServices(domain.embedding_services || []);
+      setSavedEmbeddingServiceId(domain.embedding_service_id || undefined);
       setVectorDbOptions(availableVectorDbOptions);
 
       if (!isNewDomain) {
@@ -274,14 +276,20 @@ function DomainFormPage() {
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             required={isNewDomain}
             disabled={!isNewDomain}
+            aria-describedby={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding-service')}
           >
             <option value="">Select an embedding service</option>
-            {embeddingServices.map((service) => (
-              <option key={service.service_id} value={service.service_id}>
-                {service.is_system ? `[System] ${service.name}` : service.name}
-              </option>
-            ))}
+            <ServiceSelectOptions
+              options={embeddingServices}
+              savedValue={savedEmbeddingServiceId}
+              getLabel={(service) => (service.is_system ? `[System] ${service.name}` : service.name)}
+            />
           </select>
+          <ServiceOptionStatus
+            options={embeddingServices}
+            selectedId={formData.embedding_service_id}
+            selectId="embedding-service"
+          />
           {embeddingServices.length === 0 && (
             <p className="text-sm text-red-600 mt-1">
               No embedding services available. Please create one first.

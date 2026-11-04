@@ -1,35 +1,45 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Users } from 'lucide-react';
 import { apiService } from '../../services/api';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
-import type { SandboxServiceFormData } from '../../types/services';
+import type { SandboxServiceFormData, ServiceLifecycleFields } from '../../types/services';
+import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
+import ServiceUsageModal from '../../components/services/ServiceUsageModal';
+import { getServiceApiClient } from '../../components/services/serviceApi';
+import { useServiceConnectionTest } from '../../components/services/useServiceConnectionTest';
+import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage, MESSAGES } from '../../constants/messages';
 
-interface SystemSandboxService {
+interface SystemSandboxService extends Partial<ServiceLifecycleFields> {
   readonly service_id: number;
   readonly name: string;
   readonly provider: string;
   readonly api_key: string;
   readonly base_url: string;
   readonly is_system: boolean;
+  readonly needs_api_key?: boolean;
   readonly created_at: string;
 }
 
 const SystemSandboxServicesPage: React.FC = () => {
   const confirm = useConfirm();
+  const settingsCache = useSettingsCache();
   const mutate = useApiMutation();
 
   const [services, setServices] = useState<SystemSandboxService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usageService, setUsageService] = useState<{ id: number; name: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState<SystemSandboxService | null>(null);
+  const { testAction, modal: connectionTestModal } = useServiceConnectionTest('sandbox');
 
   const fetchServices = useCallback(async () => {
     try {
@@ -92,8 +102,26 @@ const SystemSandboxServicesPage: React.FC = () => {
     );
     if (result === undefined) return;
 
+    settingsCache.invalidateSystemServiceCaches();
     handleCancel();
     await fetchServices();
+  };
+
+  const testConnection = async (serviceId: number) => {
+    const detail = await apiService.getSystemSandboxService(serviceId);
+    return getServiceApiClient('sandbox', 'system', undefined).testConnection({
+      name: detail.name,
+      provider: detail.provider,
+      api_key: detail.api_key,
+      base_url: detail.base_url,
+      opensandbox_image: detail.opensandbox_image,
+      daytona_target: detail.daytona_target,
+      daytona_workspace: detail.daytona_workspace,
+      daytona_cpu: detail.daytona_cpu,
+      daytona_memory_gb: detail.daytona_memory_gb,
+      e2b_template: detail.e2b_template,
+      e2b_workspace: detail.e2b_workspace,
+    }, serviceId);
   };
 
   const handleDelete = async (service: SystemSandboxService) => {
@@ -114,6 +142,7 @@ const SystemSandboxServicesPage: React.FC = () => {
       },
     );
     if (result === undefined) return;
+    settingsCache.invalidateSystemServiceCaches();
     await fetchServices();
   };
 
@@ -148,6 +177,9 @@ const SystemSandboxServicesPage: React.FC = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Provider
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -156,7 +188,7 @@ const SystemSandboxServicesPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {services.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-6 py-8 text-center text-sm text-gray-500">
+                <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
                   No system sandbox services configured.
                 </td>
               </tr>
@@ -167,11 +199,21 @@ const SystemSandboxServicesPage: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {svc.provider}
                   </td>
+                  <td className="px-6 py-4 text-sm">
+                    <ServiceStatusBadge needsApiKey={svc.needs_api_key} lifecycleStatus={svc.lifecycle_status} endOfServiceAt={svc.end_of_service_at} deprecationNotice={svc.deprecation_notice} />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="inline-flex justify-end">
                       <ActionDropdown
                         size="sm"
+                        triggerAriaLabel={`Actions for ${svc.name}`}
                         actions={[
+                          {
+                            label: SERVICE_USAGE_STRINGS.action,
+                            icon: <Users className="w-4 h-4" />,
+                            onClick: () => setUsageService({ id: svc.service_id, name: svc.name }),
+                          },
+                          testAction(svc.service_id, svc.name, () => testConnection(svc.service_id)),
                           {
                             label: 'Edit',
                             icon: <Pencil className="w-4 h-4" />,
@@ -220,6 +262,17 @@ const SystemSandboxServicesPage: React.FC = () => {
           onSave={handleSave}
         />
       )}
+
+      {usageService && (
+        <ServiceUsageModal
+          kind="sandbox"
+          scope="system"
+          serviceId={usageService.id}
+          serviceName={usageService.name}
+          onClose={() => setUsageService(null)}
+        />
+      )}
+      {connectionTestModal}
     </div>
   );
 };

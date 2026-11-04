@@ -2,16 +2,14 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Literal, Optional, Dict, Any
 from datetime import datetime
 
-class AppUsageStatsSchema(BaseModel):
+class AgentRateLimitUsageSchema(BaseModel):
+    agent_id: int
     usage_percentage: float
-    stress_level: str  # "low", "moderate", "high", "critical", "unlimited"
     current_usage: int
     limit: int
     remaining: int
     reset_in_seconds: int
     is_over_limit: bool
-    
-    model_config = ConfigDict(from_attributes=True)
 
 
 class AppListItemSchema(BaseModel):
@@ -32,7 +30,6 @@ class AppListItemSchema(BaseModel):
     domain_count: int = 0
     silo_count: int = 0
     collaborator_count: int = 0
-    usage_stats: Optional[AppUsageStatsSchema] = None
     is_frozen: bool = False
 
     model_config = ConfigDict(from_attributes=True)
@@ -195,6 +192,4 @@ class OwnershipAcceptResponse(BaseModel):
     previous_owner_id: int
 
     model_config = ConfigDict(from_attributes=True)
-
-
 

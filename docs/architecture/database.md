@@ -210,6 +210,8 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 | `temperature` | Float | LLM temperature (0.0-1.0) |
 | `max_tokens` | Integer | Max output tokens |
 | `create_date` | DateTime | Service creation timestamp |
+| `end_of_service_at` | DateTime (tz, nullable) | Planned end of service; retired once reached. See [End-of-service columns](#end-of-service-columns) |
+| `deprecation_notice` | String(1000) (nullable) | Notice shown to users |
 
 **Relationships**:
 - `app` → Owning app
@@ -279,10 +281,27 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 | `api_key` | String(500) | Encrypted API key |
 | `dimensions` | Integer | Embedding dimensions |
 | `create_date` | DateTime | Service creation timestamp |
+| `end_of_service_at` | DateTime (tz, nullable) | Planned end of service (see below) |
+| `deprecation_notice` | String(1000) (nullable) | Notice shown to users |
 
 **Relationships**:
 - `app` → Owning app
 - `silos` → List of silos using this service
+
+### End-of-service columns
+
+`AIService`, `EmbeddingService` (table `embedding_service`) and `SandboxService` share two nullable columns, added by migration `svceos001` (down revision `indexerr001`):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `end_of_service_at` | DateTime(timezone=True) | Stored in UTC (00:00 of the chosen day). NULL = no end of service planned |
+| `deprecation_notice` | String(1000) | Free text, control characters replaced with spaces |
+
+No status column exists: `active` / `deprecated` / `retired` is computed at read time from `end_of_service_at` and the system setting `service_end_of_service_warning_days` (default 30, `0` = no deprecated phase; env override `AICT_SYSTEM_SERVICE_END_OF_SERVICE_WARNING_DAYS`). Existing rows stay NULL. Logic lives in `backend/utils/service_lifecycle.py` (pure helpers) and `backend/services/service_lifecycle_service.py` (usage, bulk move, warnings).
+
+### Silo output parser ownership
+
+A silo's `metadata_definition_id` (output parser) must belong to the silo's app; it is checked on create/update, and deleting a silo or repository only deletes a parser of the same app. Migration `siloparser001` (down revision `svceos001`) sets `metadata_definition_id` to NULL on silos whose parser is missing or belongs to another app. It is a data fix: the downgrade is a no-op and cleared links are not restored.
 
 ### BaseService
 
@@ -396,7 +415,7 @@ Provides common fields and methods for AIService and EmbeddingService.
 | `updated_at` | DateTime | When the value was last changed |
 
 **Notes**:
-- Environment variable names follow the pattern `AICT_SETTING_<KEY_UPPERCASE>` (e.g., `AICT_SETTING_MARKETPLACE_CALL_QUOTA`).
+- Environment variable names follow the pattern `AICT_SYSTEM_<KEY_UPPERCASE>` (e.g., `AICT_SYSTEM_MARKETPLACE_CALL_QUOTA`).
 - The defaults file `backend/system_defaults.yaml` defines all valid keys, their types, categories, and fallback values.
 - Settings are managed via the Admin API (`GET/PUT/DELETE /internal/admin/settings/{key}`).
 
@@ -405,6 +424,7 @@ Provides common fields and methods for AIService and EmbeddingService.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `marketplace_call_quota` | integer | `0` | Max marketplace API calls per user per month. `0` = unlimited. |
+| `service_end_of_service_warning_days` | integer | `30` | Days before a service's end of service during which it shows as deprecated. `0` = no deprecated phase. |
 
 ## Content Models
 

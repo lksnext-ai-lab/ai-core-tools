@@ -142,6 +142,10 @@ The primary endpoint for agent execution.
 
 Execute agent chat with message and optional file attachments.
 
+If the agent has a human-approval middleware, the response can be `status: "requires_approval"`
+with a `pending_approval` to answer via `/approvals/{approval_id}/decisions` — see
+[Human approval in the public API](../guides/human-approval.md).
+
 **Request**:
 
 ```http
@@ -476,6 +480,14 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
   -H "X-API-Key: mattin_..."
 ```
 
+## A2A (Agent2Agent protocol)
+
+External agent executions are limited independently per agent within each App by `App.agent_rate_limit` (requests per minute; `0` means unlimited). The limit applies to chat, OCR, OpenAI-compatible, approval resumptions, marketplace, and A2A executions; non-execution API operations and Playground use do not consume this budget.
+
+Agents can also be opted into the **A2A** (Agent2Agent) protocol, a separate JSON-RPC surface at `/a2a/v1/apps/{app_slug}/agents/{agent_id}` that lets external A2A-compliant clients and agent frameworks call Mattin agents as peers. It reuses the same app API keys and per-agent `agent_rate_limit`/origin controls described above, but is opt-in per agent (disabled by default) and uses its own task lifecycle (send/stream/get/list/cancel/subscribe) instead of the `/chat` endpoint.
+
+See [A2A Integration](../ai/a2a-integration.md) for the full reference: URLs, visibility modes, auth semantics, supported methods, input/output handling, rate limits, env vars, and the deployment runbook.
+
 ## Error Responses
 
 **Standard error format**:
@@ -495,8 +507,11 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
 | 401 | Unauthorized (invalid API key) |
 | 403 | Forbidden (revoked API key) |
 | 404 | Not Found |
+| 409 | Conflict: a service the request needs is past its end of service (`error_code: "SERVICE_RETIRED"`) |
 | 429 | Too Many Requests (rate limit exceeded) |
 | 500 | Internal Server Error |
+
+**Retired services**: chat and silo endpoints (including indexing and search) return `409` with `{"detail": "<service name, retirement date and deprecation notice>", "error_code": "SERVICE_RETIRED"}` when the agent's LLM, or the silo's embedding, transcription or video service, is retired. Streaming responses send an SSE `error` event with `code: "service_retired"`. The OpenAI-compatible endpoint returns `409`, or an error chunk when streaming. Retired services are not retried, so fix it by selecting another service. Public silo responses do not include `lifecycle_warnings` (internal API only). See [Service End of Service](../guides/chat-bot/kb-ai-services.md#service-end-of-service).
 
 **Example error responses**:
 
@@ -539,6 +554,8 @@ curl -X GET "http://localhost:8000/public/v1/agents?app_id=1" \
 ## See Also
 
 - [Internal API](internal-api.md) — Frontend-backend API
+- [A2A Integration](../ai/a2a-integration.md) — Agent2Agent protocol JSON-RPC surface
 - [Backend Architecture](../architecture/backend.md) — Router implementation
 - [Agent System](../ai/agent-system.md) — Agent execution details
 - [Authentication Guide](../guides/authentication.md) — API key management
+- [Human approval in the public API](../guides/human-approval.md) — Answering tool-approval requests

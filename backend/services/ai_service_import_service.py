@@ -17,6 +17,8 @@ from core.export_constants import (
 )
 from repositories.ai_service_repository import AIServiceRepository
 import logging
+from services.service_lifecycle_service import ServiceLifecycleService
+from utils.service_lifecycle import SERVICE_KIND_AI
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +140,9 @@ class AIServiceImportService:
                 existing_service.description = export_data.ai_service.model_name  # model_name mapped to description
                 existing_service.endpoint = export_data.ai_service.endpoint
                 existing_service.api_version = export_data.ai_service.api_version
+                ServiceLifecycleService.apply_lifecycle_fields(
+                    existing_service, SERVICE_KIND_AI, export_data.ai_service, user_id
+                )
                 # Note: Keep existing api_key (user configured)
 
                 self.session.add(existing_service)
@@ -163,6 +168,8 @@ class AIServiceImportService:
             description=export_data.ai_service.model_name,  # model_name mapped to description
             endpoint=export_data.ai_service.endpoint,
             api_version=export_data.ai_service.api_version,
+            end_of_service_at=export_data.ai_service.end_of_service_at,
+            deprecation_notice=export_data.ai_service.deprecation_notice,
         )
 
         self.session.add(new_service)

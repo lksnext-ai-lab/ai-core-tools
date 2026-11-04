@@ -22,6 +22,7 @@ from schemas.sharepoint_schemas import (
     TestConnectionResponse,
     SyncTriggerResponse,
 )
+from utils.error_handlers import ValidationError
 from services.sharepoint.graph_client import GraphAuthError, GraphAccessError
 from services.sharepoint.service import SharePointSourceService
 from repositories.sharepoint_source_repository import SharePointSourceRepository
@@ -61,7 +62,10 @@ async def create_sharepoint_source(
     role: Annotated[AppRole, Depends(require_min_role("editor"))],
 ):
     """Create a new SharePoint source. Tests credentials before creation."""
-    return await SharePointSourceService.create_source(app_id, data, db)
+    try:
+        return await SharePointSourceService.create_source(app_id, data, db)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.get(

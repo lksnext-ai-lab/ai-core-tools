@@ -23,6 +23,7 @@ class ComponentType(str, Enum):
     EMBEDDING_SERVICE = "embedding_service"
     OUTPUT_PARSER = "output_parser"
     MCP_CONFIG = "mcp_config"
+    MIDDLEWARE = "middleware"
     SILO = "silo"
     REPOSITORY = "repository"
     DOMAIN = "domain"

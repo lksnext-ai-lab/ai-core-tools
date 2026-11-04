@@ -18,7 +18,7 @@ def _make_silo(silo_id: int = 7) -> MagicMock:
     silo = MagicMock()
     silo.silo_id = silo_id
     silo.embedding_service_id = 1
-    silo.embedding_service = MagicMock(name="mock-embedding-service")
+    silo.embedding_service = MagicMock(name="mock-embedding-service", end_of_service_at=None)
     return silo
 
 

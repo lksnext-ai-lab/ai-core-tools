@@ -6,7 +6,14 @@ from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
 from repositories.skill_repository import SkillRepository
 from services.metadata_values_cache_service import MetadataValuesCacheService
+from repositories.middleware_repository import MiddlewareRepository
+from models.middleware import AgentMiddleware, MiddlewareType
+from repositories.app_repository import AppRepository
+from services.a2a_server.lifecycle_service import schedule_owner_purge
+from services.service_lifecycle_service import ServiceLifecycleService
+from utils import a2a_config
 from utils.logger import get_logger
+from types import SimpleNamespace
 
 logger = get_logger(__name__)
 
@@ -17,6 +24,31 @@ def _typed_attr(obj, name: str, expected_type, default=None):
     if value is None:
         return default
     return value if isinstance(value, expected_type) else default
+
+
+def _build_a2a_urls(app_slug: Optional[str], agent_id: int) -> tuple[Optional[str], Optional[str]]:
+    """Return (card_url, rpc_url) for the agent, or (None, None) if the app has no slug.
+
+    Uses the no-request public base URL fallback (FR-11): the ``A2A_PUBLIC_BASE_URL``
+    env var, else ``FRONTEND_URL``. The internal agent API has no inbound A2A request
+    to fall back to, unlike the A2A router itself.
+
+    ``app_slug``/``agent_id`` are validated with ``isinstance`` (not just truthiness)
+    so a non-string/non-int value — e.g. a ``MagicMock`` attribute in a unit test
+    that doesn't stub the App lookup — is treated as "no slug" instead of being
+    passed into ``urllib.parse.quote``, which only accepts str/bytes.
+    """
+    if not isinstance(app_slug, str) or not app_slug:
+        return None, None
+    if not isinstance(agent_id, int) or not agent_id:
+        return None, None
+    base = a2a_config.public_base_url()
+    if not base:
+        return None, None
+    return (
+        a2a_config.agent_card_url(base, app_slug, agent_id),
+        a2a_config.agent_rpc_url(base, app_slug, agent_id),
+    )
 
 
 def _serialize_marketplace_profile(profile) -> Optional[Dict[str, Any]]:
@@ -47,7 +79,10 @@ class AgentService:
         
         # Get AI services for this app
         ai_services_dict = AgentRepository.get_ai_services_dict_by_app_id(db, app_id)
-        
+
+        # Dependency warnings: one lookup context for the whole list, never per agent.
+        lifecycle_ctx = ServiceLifecycleService.build_context(db, app_id, all_agents=True)
+
         result = []
         for agent in agents:
             # Get AI service details if agent has one
@@ -62,6 +97,7 @@ class AgentService:
                 type=agent.type or "agent",
                 is_tool=agent.is_tool or False,
                 created_at=agent.create_date,
+                last_used_date=getattr(agent, 'last_used_date', None),
                 request_count=agent.request_count or 0,
                 service_id=getattr(agent, 'service_id', None),
                 ai_service=ai_service_info,
@@ -70,8 +106,12 @@ class AgentService:
                     if hasattr(agent, 'marketplace_visibility') and agent.marketplace_visibility
                     else None
                 ),
+                a2a_enabled=bool(_typed_attr(agent, 'a2a_enabled', bool, False)),
+                lifecycle_warnings=ServiceLifecycleService.warnings_for_agent(
+                    lifecycle_ctx.agent_refs.get(agent.agent_id), lifecycle_ctx
+                ),
             ))
-        
+
         return result
 
     def get_agents(self, db: Session, app_id: int) -> List[Agent]:
@@ -84,14 +124,33 @@ class AgentService:
 
     def get_agent_detail(self, db: Session, app_id: int, agent_id: int) -> Optional[AgentDetailSchema]:
         """Get detailed agent information with form data for editing"""
-        
-        # Get agent details
-        agent = self._get_agent_for_detail(db, agent_id)
+
+        # Get agent details, scoped to this app (defense in depth: the router already
+        # checks app ownership, but the service must never leak another tenant's agent).
+        agent = self._get_agent_for_detail(db, agent_id, app_id)
         if agent_id != 0 and not agent:
             return None
         
         # Get form data for dropdowns
         form_data = self._get_form_data(db, app_id, agent_id)
+
+        # Lifecycle: status of every offered AI service and the agent's dependency warnings, computed
+        # from one warning-days read and one lookup context.
+        lifecycle_ctx = ServiceLifecycleService.build_context(db, app_id, [agent_id] if agent_id != 0 else [])
+        ai_service_options = [
+            {**option, **ServiceLifecycleService.option_fields(
+                SimpleNamespace(**option), lifecycle_ctx.warning_days)}
+            for option in form_data['ai_services']
+        ]
+        sandbox_service_options = [
+            {**option, **ServiceLifecycleService.option_fields(
+                SimpleNamespace(**option), lifecycle_ctx.warning_days)}
+            for option in form_data['sandbox_services']
+        ]
+        lifecycle_warnings = (
+            ServiceLifecycleService.warnings_for_agent(lifecycle_ctx.agent_refs.get(agent_id), lifecycle_ctx)
+            if agent_id != 0 else []
+        )
         
         # Get agent associations
         associations = self._get_agent_associations(db, agent_id)
@@ -115,7 +174,18 @@ class AgentService:
             agent, "media_chunk_max_duration", int, 120
         )
         media_chunk_overlap = _typed_attr(agent, "media_chunk_overlap", int, 5)
-        
+
+        a2a_card_url: Optional[str] = None
+        a2a_rpc_url: Optional[str] = None
+        if agent_id != 0:
+            # Slug-only projection (AppRepository.get_slug_by_id): building the A2A
+            # URLs needs nothing else from App, so avoid fetching the full row.
+            app_slug = AppRepository(db).get_slug_by_id(app_id)
+            a2a_card_url, a2a_rpc_url = _build_a2a_urls(
+                app_slug if isinstance(app_slug, str) else None,
+                _typed_attr(agent, 'agent_id', int),
+            )
+
         return AgentDetailSchema(
             agent_id=agent.agent_id,
             name=agent.name or "",
@@ -139,7 +209,9 @@ class AgentService:
             tool_ids=associations['tool_ids'],
             mcp_config_ids=associations['mcp_ids'],
             skill_ids=associations['skill_ids'],
+            middleware_ids=associations['middleware_ids'],
             created_at=agent.create_date,
+            last_used_date=getattr(agent, 'last_used_date', None),
             request_count=getattr(agent, 'request_count', 0) or 0,
             # OCR-specific fields
             vision_service_id=getattr(agent, 'vision_service_id', None),
@@ -157,13 +229,14 @@ class AgentService:
             silo=silo_info,
             output_parser=output_parser_info,
             # Form data
-            ai_services=form_data['ai_services'],
-            sandbox_services=form_data['sandbox_services'],
+            ai_services=ai_service_options,
+            sandbox_services=sandbox_service_options,
             silos=form_data['silos'],
             output_parsers=form_data['output_parsers'],
             tools=form_data['tools'],
             mcp_configs=form_data['mcp_configs'],
             skills=form_data['skills'],
+            middlewares=form_data.get('middlewares', []),
             # Marketplace
             marketplace_visibility=(
                 agent.marketplace_visibility.value
@@ -180,10 +253,24 @@ class AgentService:
             rag_max_retrieval_calls=getattr(agent, 'rag_max_retrieval_calls', None) if isinstance(getattr(agent, 'rag_max_retrieval_calls', None), (int, type(None))) else None,
             rag_fixed_filters=getattr(agent, 'rag_fixed_filters', None) if isinstance(getattr(agent, 'rag_fixed_filters', None), (list, type(None))) else None,
             exposed_chat_filters=getattr(agent, 'exposed_chat_filters', None) or [],
+            # A2A (Agent2Agent protocol) configuration (step_009, FR-3)
+            a2a_enabled=bool(_typed_attr(agent, 'a2a_enabled', bool, False)),
+            a2a_card_visibility=_typed_attr(agent, 'a2a_card_visibility', str, 'public') or 'public',
+            a2a_name_override=_typed_attr(agent, 'a2a_name_override', str),
+            a2a_description_override=_typed_attr(agent, 'a2a_description_override', str),
+            a2a_skill_tags=_typed_attr(agent, 'a2a_skill_tags', list, []) or [],
+            a2a_examples=_typed_attr(agent, 'a2a_examples', list, []) or [],
+            a2a_card_url=a2a_card_url,
+            a2a_rpc_url=a2a_rpc_url,
+            lifecycle_warnings=lifecycle_warnings,
         )
 
-    def _get_agent_for_detail(self, db: Session, agent_id: int):
-        """Get agent for detail view"""
+    def _get_agent_for_detail(self, db: Session, agent_id: int, app_id: Optional[int] = None):
+        """Get agent for detail view, optionally scoped to ``app_id``.
+
+        When ``app_id`` is provided, an agent that exists but belongs to a different
+        app is treated as not found (returns ``None``) rather than leaking it.
+        """
         if agent_id == 0:
             # New agent
             return type('Agent', (), {
@@ -196,7 +283,9 @@ class AgentService:
             agent = self.get_agent(db, agent_id)
             if not agent:
                 return None
-            
+            if app_id is not None and agent.app_id != app_id:
+                return None
+
             # If it's an OCR agent, get the OCR-specific data
             if agent.type == 'ocr_agent':
                 agent = self.get_agent(db, agent_id, 'ocr')
@@ -484,6 +573,19 @@ class AgentService:
             agent_id = None
 
         agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        previous_name = agent.name if agent else None
+
+        # Defense in depth: never let an update move an existing agent into a different
+        # app (the router already verifies ownership, but the service must not silently
+        # allow a cross-tenant takeover if ever called without that check upstream).
+        # A NULL agent.app_id is also treated as a mismatch (no such thing as a
+        # "system" Agent row to legitimately fall through here).
+        if agent and agent.app_id != agent_data.get('app_id'):
+            raise ValueError(
+                f"Agent {agent_id} does not belong to app {agent_data.get('app_id')}"
+            )
+
+        is_new_agent = agent is None
 
         if not agent:
             # Enforce per-app agent limit before creation (SaaS mode only)
@@ -497,6 +599,12 @@ class AgentService:
                 agent = OCRAgent()
             else:
                 agent = Agent()
+
+        # Reject any referenced resource id (AI service, silo, output parser, media
+        # services) that doesn't belong to this app (or isn't a system-wide resource
+        # where that's allowed) before persisting anything — otherwise a caller could
+        # point an agent at another tenant's resource (IDOR).
+        self._validate_referenced_resource_ids(db, agent_data, None if is_new_agent else agent)
 
         # Validate rag_fixed_filters fields against the silo's metadata_definition.
         # Fixed filters are only meaningful with a silo; reject them otherwise so a
@@ -545,7 +653,7 @@ class AgentService:
                 )
 
         update_method = self._update_normal_agent
-        update_method(db, agent, agent_data)
+        update_method(db, agent, agent_data, is_new_agent=is_new_agent)
 
         # Threshold search needs a threshold value, else it degrades to plain similarity at
         # retrieval. Checked on the merged state (the schema can't see the stored value on a
@@ -565,12 +673,108 @@ class AgentService:
             agent = AgentRepository.update(db, agent)
         else:
             agent = AgentRepository.create(db, agent)
-        
-        # Return the agent ID
+
+        if previous_name and previous_name != agent.name:
+            # Approval rules name an agent used as a tool by its tool name.
+            from services.middleware_service import MiddlewareService
+            from utils.schema_utils import sanitize_identifier
+            MiddlewareService.rename_tool_in_approval_rules(
+                db, agent.app_id, sanitize_identifier(previous_name), sanitize_identifier(agent.name)
+            )
+
         return agent.agent_id
 
+    @staticmethod
+    def _validate_owned_resource(resource, app_id: int, field_name: str, allow_system: bool) -> None:
+        """Raise ``ValueError`` unless ``resource`` exists and belongs to ``app_id``.
 
-    
+        When ``allow_system`` is true, a resource with ``app_id is None`` (a
+        platform/system-wide resource, e.g. AIService or EmbeddingService) is also
+        accepted for any app. The error message is intentionally generic — it never
+        reveals whether the id exists under a different app.
+        """
+        if resource is None:
+            raise ValueError(f"{field_name} does not exist or does not belong to this app")
+        if resource.app_id == app_id:
+            return
+        if allow_system and resource.app_id is None:
+            return
+        raise ValueError(f"{field_name} does not exist or does not belong to this app")
+
+    def _validate_referenced_resource_ids(
+        self, db: Session, data: dict, existing_agent: Optional[Agent] = None
+    ) -> None:
+        """Ensure every foreign-key id referenced by an agent create/update payload
+        belongs to ``data['app_id']`` (or is a system-wide resource, where allowed).
+
+        Without this check, an editor of one app could point their agent at another
+        tenant's AI service, silo, output parser, or media-processing service (IDOR).
+        ``tool_ids`` / ``mcp_config_ids`` are validated in ``update_agent_tools`` /
+        ``update_agent_mcps`` respectively (they're only known after this call).
+
+        A retired AI/embedding service cannot be newly assigned: the value must equal the
+        one ``existing_agent`` already has (``None`` for a new agent).
+        Raises ``RetiredServiceAssignmentError`` (a ``ValueError``).
+        """
+        from utils.service_lifecycle import (
+            ensure_assignable, SERVICE_KIND_AI, SERVICE_KIND_EMBEDDING, SERVICE_KIND_SANDBOX,
+        )
+
+        app_id = data['app_id']
+
+        def _current(field_name: str) -> Optional[int]:
+            return getattr(existing_agent, field_name, None) if existing_agent is not None else None
+
+        service_id = data.get('service_id') or None
+        if service_id:
+            from repositories.ai_service_repository import AIServiceRepository
+            service = AIServiceRepository.get_by_id(db, service_id)
+            self._validate_owned_resource(service, app_id, 'service_id', allow_system=True)
+            ensure_assignable(service, _current('service_id'), 'service_id', SERVICE_KIND_AI)
+
+        # A sandbox service of another app would run code against that app's provider credentials/quota.
+        sandbox_service_id = data.get('sandbox_service_id') or None
+        if sandbox_service_id:
+            from repositories.sandbox_service_repository import SandboxServiceRepository
+            sandbox_service = SandboxServiceRepository.get_by_id(db, sandbox_service_id)
+            self._validate_owned_resource(sandbox_service, app_id, 'sandbox_service_id', allow_system=True)
+            ensure_assignable(
+                sandbox_service, _current('sandbox_service_id'), 'sandbox_service_id', SERVICE_KIND_SANDBOX
+            )
+
+        silo_id = data.get('silo_id') or None
+        if silo_id:
+            from repositories.silo_repository import SiloRepository
+            silo = SiloRepository.get_by_id(silo_id, db)
+            self._validate_owned_resource(silo, app_id, 'silo_id', allow_system=False)
+
+        output_parser_id = data.get('output_parser_id') or None
+        if output_parser_id:
+            from repositories.output_parser_repository import OutputParserRepository
+            parser = OutputParserRepository().get_by_id(db, output_parser_id)
+            self._validate_owned_resource(parser, app_id, 'output_parser_id', allow_system=False)
+
+        # AI-service-backed fields (vision/transcription/video): system-wide services allowed.
+        for field_name in ('vision_service_id', 'transcription_service_id', 'video_ai_service_id'):
+            value = data.get(field_name) or None
+            if value:
+                from repositories.ai_service_repository import AIServiceRepository
+                service = AIServiceRepository.get_by_id(db, value)
+                self._validate_owned_resource(service, app_id, field_name, allow_system=True)
+                ensure_assignable(service, _current(field_name), field_name, SERVICE_KIND_AI)
+
+        media_embedding_service_id = data.get('media_embedding_service_id') or None
+        if media_embedding_service_id:
+            from repositories.embedding_service_repository import EmbeddingServiceRepository
+            embedding_service = EmbeddingServiceRepository.get_by_id(db, media_embedding_service_id)
+            self._validate_owned_resource(
+                embedding_service, app_id, 'media_embedding_service_id', allow_system=True
+            )
+            ensure_assignable(
+                embedding_service, _current('media_embedding_service_id'),
+                'media_embedding_service_id', SERVICE_KIND_EMBEDDING,
+            )
+
     @staticmethod
     def _resolve_prompt_template(new_value: Optional[str], current_value: Optional[str]) -> str:
         """Never persist an empty prompt template: it would drop the user's message.
@@ -584,8 +788,14 @@ class AgentService:
             return DEFAULT_PROMPT_TEMPLATE
         return new_value
 
-    def _update_normal_agent(self, db: Session, agent: Agent, data: dict):
-        """Update agent fields"""
+    def _update_normal_agent(self, db: Session, agent: Agent, data: dict, is_new_agent: bool = False):
+        """Update agent fields.
+
+        ``is_new_agent`` gates ``app_id`` assignment: it is only ever set at creation
+        time. An update must never move an existing agent to a different app's
+        ``app_id`` (that would allow a cross-tenant takeover of the agent and the
+        AI service/silo it references).
+        """
         agent.name = data['name']
         agent.description = data.get('description', '')  # Ensure it's not None
         agent.system_prompt = data.get('system_prompt')
@@ -595,23 +805,11 @@ class AgentService:
         agent.status = data.get('status')
         agent.service_id = data.get('service_id') or None
 
-        # Validate sandbox_service_id belongs to the target app (or is system-scoped)
-        # before assigning it. Without this check, any caller could point an agent at
-        # a SandboxService owned by a different App, silently running code execution
-        # against that other App's provider credentials/endpoint/quota.
+        # Ownership and lifecycle of sandbox_service_id are validated in _validate_referenced_resource_ids.
         sandbox_service_id = data.get('sandbox_service_id') or None
-        if sandbox_service_id:
-            from repositories.sandbox_service_repository import SandboxServiceRepository
-            sandbox_service = SandboxServiceRepository.get_by_id(db, sandbox_service_id)
-            if sandbox_service is None or (
-                sandbox_service.app_id is not None and sandbox_service.app_id != data['app_id']
-            ):
-                raise ValueError(
-                    f"sandbox_service_id {sandbox_service_id} does not exist or does not "
-                    "belong to this app"
-                )
         agent.sandbox_service_id = sandbox_service_id
-        agent.app_id = data['app_id']
+        if is_new_agent:
+            agent.app_id = data['app_id']
         agent.silo_id = data.get('silo_id') or None
         # Handle has_memory field - can be boolean from API or 'on' from form
         has_memory_value = data.get('has_memory')
@@ -704,6 +902,26 @@ class AgentService:
         # column is NOT NULL, so always coerce to a list, clearing via explicit [].
         if 'exposed_chat_filters' in data:
             agent.exposed_chat_filters = data.get('exposed_chat_filters') or []
+        # A2A (Agent2Agent protocol) configuration (step_009, FR-3). Values are already
+        # trimmed/capped/deduped by the schema validators; only persist here.
+        # Presence-gated (not "truthy"-gated): the schema already validated/normalized
+        # each value (including rejecting an explicit null a2a_card_visibility with a
+        # 422), so a key present in ``data`` is always safe to assign verbatim. A key
+        # the caller never sent is absent from ``data`` entirely (see the router), so
+        # it is never touched here — no `or <default>` fallback that could mask an
+        # explicit, intentional value.
+        if 'a2a_enabled' in data:
+            agent.a2a_enabled = bool(data['a2a_enabled'])
+        if 'a2a_card_visibility' in data:
+            agent.a2a_card_visibility = data['a2a_card_visibility']
+        if 'a2a_name_override' in data:
+            agent.a2a_name_override = data['a2a_name_override']
+        if 'a2a_description_override' in data:
+            agent.a2a_description_override = data['a2a_description_override']
+        if 'a2a_skill_tags' in data:
+            agent.a2a_skill_tags = data['a2a_skill_tags'] or []
+        if 'a2a_examples' in data:
+            agent.a2a_examples = data['a2a_examples'] or []
 
     def update_agent_tools(self, db: Session, agent_id: int, tool_ids: list, form_data: dict = None):
         """Update agent tools associations"""
@@ -714,9 +932,12 @@ class AgentService:
         
         # Get existing tool associations
         existing_tools = {assoc.tool_id: assoc for assoc in AgentRepository.get_agent_tool_associations(db, agent_id)}
-        
-        # Convert tool_ids to set of integers and filter out non-tool agents
-        valid_tool_ids = set(AgentRepository.get_valid_tool_ids(db, [int(id) for id in tool_ids if id]))
+
+        # Convert tool_ids to set of integers and filter out non-tool agents and agents
+        # belonging to a different app (cross-tenant tool attachment / IDOR).
+        valid_tool_ids = set(
+            AgentRepository.get_valid_tool_ids(db, [int(id) for id in tool_ids if id], agent.app_id)
+        )
         
         # Remove associations that are no longer needed
         for tool_id in existing_tools.keys():
@@ -752,9 +973,14 @@ class AgentService:
 
         # Get existing MCP associations
         existing_mcps = {assoc.config_id: assoc for assoc in AgentRepository.get_agent_mcp_associations(db, agent_id)}
-        
-        # Convert mcp_ids to set of integers
-        valid_mcp_ids = {int(id) for id in mcp_ids if id}
+
+        # Convert mcp_ids to set of integers, filtered to configs that exist and belong to
+        # this agent's app (cross-tenant MCP config attachment / IDOR otherwise).
+        from repositories.mcp_config_repository import MCPConfigRepository
+        requested_mcp_ids = [int(id) for id in mcp_ids if id]
+        valid_mcp_ids = set(
+            MCPConfigRepository.get_valid_config_ids_for_app(db, requested_mcp_ids, agent.app_id)
+        )
         
         # Remove associations that are no longer needed
         for mcp_id in existing_mcps.keys():
@@ -835,8 +1061,63 @@ class AgentService:
 
         db.commit()
 
+    @staticmethod
+    def validate_middleware_selection(db: Session, app_id: int, middleware_ids: list, has_memory: bool) -> list:
+        """Validate an agent's middleware selection and return the ids in chain order.
+
+        Raises ValueError when the selection references middlewares outside the app,
+        repeats a middleware type (LangChain rejects duplicate middleware instances),
+        or uses human-in-the-loop without conversation memory (HITL needs the checkpointer
+        to pause and resume).
+        """
+        ordered_ids = list(dict.fromkeys(int(mid) for mid in middleware_ids))
+        middlewares = {m.middleware_id: m for m in MiddlewareRepository.get_by_ids_and_app_id(db, ordered_ids, app_id)}
+        if len(middlewares) != len(ordered_ids):
+            raise ValueError("One or more selected middlewares do not exist in this app")
+        seen_types = set()
+        for mid in ordered_ids:
+            mw_type = middlewares[mid].middleware_type
+            if mw_type in seen_types:
+                raise ValueError(f"Only one {mw_type.value} middleware can be attached to an agent")
+            seen_types.add(mw_type)
+        if MiddlewareType.HUMAN_IN_THE_LOOP in seen_types and not has_memory:
+            raise ValueError("Human-in-the-loop middlewares require conversation memory to be enabled")
+        return ordered_ids
+
+    @staticmethod
+    def validate_current_middlewares(db: Session, app_id: int, agent_id: int, has_memory: bool) -> None:
+        """Validate the agent's attached middlewares against new settings (e.g. memory turned off)."""
+        current_ids = AgentRepository.get_agent_associations_dict(db, agent_id)['middleware_ids']
+        AgentService.validate_middleware_selection(db, app_id, current_ids, has_memory)
+
+    def update_agent_middlewares(self, db: Session, agent_id: int, ordered_ids: list):
+        """Replace the agent's middleware chain; list position is the execution order."""
+        existing = {
+            assoc.middleware_id: assoc
+            for assoc in db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()
+        }
+        hitl_before = {
+            mid for mid, assoc in existing.items()
+            if assoc.middleware and assoc.middleware.middleware_type == MiddlewareType.HUMAN_IN_THE_LOOP
+        }
+        if hitl_before and not hitl_before.issubset(ordered_ids):
+            from services import hitl_approval_service as approvals
+            approvals.cancel_pending_for_agents(db, [agent_id], reason="approval_rules_changed")
+        for mid, assoc in existing.items():
+            if mid not in ordered_ids:
+                db.delete(assoc)
+        for position, mid in enumerate(ordered_ids):
+            if mid in existing:
+                existing[mid].order = position
+            else:
+                db.add(AgentMiddleware(agent_id=agent_id, middleware_id=mid, order=position))
+        db.commit()
+
     def delete_agent(self, db: Session, agent_id: int) -> bool:
         """Delete agent"""
+        # AD-10: capture app_id before deletion (OCRAgent is STI, so get_by_id covers it).
+        agent = AgentRepository.get_by_id(db, agent_id)
+        a2a_app_id = agent.app_id if agent else None
         # Scheduled tasks own conversations, files, temp silos and DBOS schedules
         # that a plain FK cascade would leave behind.
         try:
@@ -876,7 +1157,23 @@ class AgentService:
                 "Could not clear sandbox DB state for agent %s conversations: %s",
                 agent_id, exc
             )
-        return AgentRepository.delete_by_id(db, agent_id)
+        from models.conversation import Conversation
+        from services.conversation_service import ConversationService
+        from services.file_management_service import FileManagementService
+
+        conversation_ids = [
+            row.conversation_id
+            for row in db.query(Conversation.conversation_id).filter(Conversation.agent_id == agent_id)
+        ]
+        threads = ConversationService.release_agent_conversations(db, agent_id)
+        if not AgentRepository.delete_by_id(db, agent_id):
+            return False
+        if a2a_app_id is not None:
+            schedule_owner_purge(a2a_app_id, agent_id=agent_id)  # FR-22: sync, never raises
+        # Only once the rows are gone: checkpoints and files are not transactional.
+        ConversationService.delete_thread_histories_in_background(threads)
+        FileManagementService().delete_agent_storage(agent_id, conversation_ids)
+        return True
 
     def _remove_tool_references(self, db: Session, tool_id: int):
         """Remove all tool associations where this agent is used as a tool"""

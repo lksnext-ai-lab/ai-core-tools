@@ -10,12 +10,15 @@ from services.system_settings_service import SystemSettingsService
 from services.agent_service import AgentService
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
+from models.hitl_approval import ApprovalChannel
+from tools.stream_guard import guard_agent_stream
 from schemas.platform_chatbot_schemas import (
     PlatformChatbotConfigResponse,
     PlatformChatbotChatRequest,
 )
 from schemas.chat_schemas import ChatResponseSchema
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -59,6 +62,7 @@ async def get_platform_chatbot_config(
     "/chat",
     response_model=ChatResponseSchema,
     summary="Send a message to the platform chatbot",
+    responses={409: {"description": "A service used by this resource was retired"}},
 )
 async def platform_chatbot_chat(
     body: PlatformChatbotChatRequest,
@@ -96,9 +100,10 @@ async def platform_chatbot_chat(
             user_context=user_context,
             conversation_id=None,
             db=db,
+            channel=ApprovalChannel.PLATFORM_CHATBOT,
         )
         return ChatResponseSchema(**result)
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as exc:
         logger.error(f"Platform chatbot execution error: {exc}")
@@ -111,6 +116,7 @@ async def platform_chatbot_chat(
 @platform_chatbot_router.post(
     "/chat/stream",
     summary="Stream a message to the platform chatbot via SSE",
+    responses={409: {"description": "A service used by this resource was retired"}},
 )
 async def platform_chatbot_chat_stream(
     body: PlatformChatbotChatRequest,
@@ -149,11 +155,12 @@ async def platform_chatbot_chat_stream(
             user_context=user_context,
             conversation_id=None,
             db=db,
+            channel=ApprovalChannel.PLATFORM_CHATBOT,
         )
 
         async def generator():
             try:
-                async for chunk in base_generator:
+                async for chunk in guard_agent_stream(base_generator):
                     yield chunk
             finally:
                 # Release request session; get_db teardown is too late for streaming.
@@ -168,7 +175,7 @@ async def platform_chatbot_chat_stream(
                 "X-Accel-Buffering": "no",
             },
         )
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as exc:
         logger.error(f"Platform chatbot streaming error: {exc}")

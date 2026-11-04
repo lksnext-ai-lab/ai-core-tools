@@ -4,6 +4,7 @@ import type {
   ConflictMode,
 } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
+import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
 
 interface Props {
   preview: AgentImportPreview;
@@ -11,7 +12,7 @@ interface Props {
   newName: string;
   useExistingAIService: boolean;
   selectedAIServiceId: number | null;
-  availableAIServices: Array<{ id: number; name: string }>;
+  availableAIServices: readonly ServiceOptionLike[];
   importBundledSilo: boolean;
   importBundledOutputParser: boolean;
   importBundledMCPConfigs: boolean;
@@ -45,7 +46,7 @@ function AgentStepReview({
   const aiServiceAction = () => {
     if (useExistingAIService || !preview.ai_service) {
       const svc = availableAIServices.find(
-        (s) => s.id === selectedAIServiceId
+        (s) => s.service_id === selectedAIServiceId
       );
       return `Use existing: ${svc?.name || 'None'}`;
     }

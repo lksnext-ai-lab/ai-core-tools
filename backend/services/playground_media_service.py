@@ -23,6 +23,8 @@ from models.agent import Agent
 from services.repository_service import RepositoryService
 from services.media_service import MediaService
 from services.silo_service import SiloService
+from utils.error_handlers import ValidationError
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,39 @@ class PlaygroundMediaService:
         )
 
     @staticmethod
+    def _ensure_media_services_active(
+        db: Session,
+        app_id: int,
+        transcription_service_id: Optional[int],
+        video_ai_service_id: Optional[int],
+        embedding_service_id: Optional[int],
+    ) -> None:
+        """Raise ``ServiceRetiredError`` if a media service about to be used is retired.
+
+        The ids can come from the request form, so ownership (the app's own or a system
+        service) is validated first with the generic ownership error; only services the app
+        may use are then checked for retirement, so a foreign id never reveals its lifecycle.
+        A retired own service is a runtime block (409), not a "cannot be newly selected" error.
+        """
+        from repositories.ai_service_repository import AIServiceRepository
+        from repositories.embedding_service_repository import EmbeddingServiceRepository
+        from utils.service_lifecycle import SERVICE_KIND_AI, SERVICE_KIND_EMBEDDING, ensure_service_active
+
+        for label, service_id in (
+            ("Transcription service", transcription_service_id),
+            ("Video AI service", video_ai_service_id),
+        ):
+            if service_id:
+                service = AIServiceRepository.get_by_id(db, service_id)
+                if service is None or (service.app_id is not None and service.app_id != app_id):
+                    raise ValidationError(f"{label} {service_id} not found")
+                ensure_service_active(service, SERVICE_KIND_AI)
+        if embedding_service_id:
+            embedding = EmbeddingServiceRepository.get_by_id(db, embedding_service_id)
+            SiloService.ensure_embedding_service_owned(embedding, app_id)
+            ensure_service_active(embedding, SERVICE_KIND_EMBEDDING)
+
+    @staticmethod
     def get_or_create_temp_repository(
         app_id: int,
         agent_id: int,
@@ -142,18 +177,25 @@ class PlaygroundMediaService:
             # resolve media services (e.g. file vectorization) pass None and
             # must not wipe an in-flight transcription's service configuration.
             updated = False
-            if (
-                transcription_service_id is not None
-                and existing.transcription_service_id != transcription_service_id
-            ):
-                existing.transcription_service_id = transcription_service_id
-                updated = True
-            if (
-                video_ai_service_id is not None
-                and existing.video_ai_service_id != video_ai_service_id
-            ):
-                existing.video_ai_service_id = video_ai_service_id
-                updated = True
+            silo = existing.silo
+            if silo is not None:
+                PlaygroundMediaService._ensure_media_services_active(
+                    db,
+                    app_id,
+                    transcription_service_id
+                    if transcription_service_id not in (None, silo.transcription_service_id) else None,
+                    video_ai_service_id
+                    if video_ai_service_id not in (None, silo.video_ai_service_id) else None,
+                    None,
+                )
+            if silo is not None and (transcription_service_id is not None or video_ai_service_id is not None):
+                new_t = transcription_service_id or silo.transcription_service_id
+                new_v = video_ai_service_id or silo.video_ai_service_id
+                if (new_t, new_v) != (silo.transcription_service_id, silo.video_ai_service_id):
+                    # Ownership (app or system) and supports_video are validated here; the ids
+                    # come from the request form, so they must not be assigned unchecked.
+                    SiloService.apply_media_services(silo, new_t, new_v, app_id, db)
+                    updated = True
             if updated:
                 db.commit()
                 logger.info(
@@ -178,19 +220,23 @@ class PlaygroundMediaService:
                 "the agent's Media Processing configuration before uploading media."
             )
 
+        PlaygroundMediaService._ensure_media_services_active(
+            db, app_id, transcription_service_id, video_ai_service_id, embedding_service_id
+        )
+
         repo = Repository(
             name=_temp_repo_name(agent_id, session_id),
             type="playground_media",
             status="active",
             app_id=app_id,
-            transcription_service_id=transcription_service_id,
-            video_ai_service_id=video_ai_service_id,
         )
 
         created = RepositoryService.create_repository(
             repository=repo,
             embedding_service_id=embedding_service_id,
             db=db,
+            transcription_service_id=transcription_service_id,
+            video_ai_service_id=video_ai_service_id,
         )
         logger.info(
             "Created temp playground repo %s (silo %s) for agent %s session %s",
@@ -403,6 +449,58 @@ class PlaygroundMediaService:
         return []
 
     @staticmethod
+    def _can_use_temp_silo(
+        app_id: int,
+        agent_id: int,
+        session_id: str,
+        db: Session,
+        embedding_service_id: Optional[int],
+    ) -> bool:
+        """Whether the session has (or can create) a temp silo.
+
+        The media embedding service is optional for non-conversational agents:
+        without one (and no temp silo already created) documents are sent in
+        full in the prompt instead of being retrieved via RAG.
+        """
+        if embedding_service_id:
+            return True
+        if PlaygroundMediaService.get_temp_repository(app_id, agent_id, session_id, db):
+            return True
+        agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
+        return bool(getattr(agent, "media_embedding_service_id", None))
+
+    @staticmethod
+    def _index_file_documents(
+        silo_id: int,
+        abs_path: str,
+        filename: str,
+        base_metadata: dict,
+        db: Session,
+    ) -> bool:
+        """Index a file with the proper loaders/chunking; False if it could not be indexed."""
+        if not os.path.exists(abs_path):
+            return False
+        ext = os.path.splitext(filename)[1].lower()
+        try:
+            docs = SiloService.extract_documents_from_file(abs_path, ext, base_metadata)
+            if not docs:
+                return False
+            SiloService.index_multiple_content(
+                silo_id,
+                [{"content": d.page_content, "metadata": d.metadata} for d in docs],
+                db,
+            )
+            return True
+        except ServiceRetiredError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "File-based extraction failed for %s, falling back to content: %s",
+                filename, exc,
+            )
+            return False
+
+    @staticmethod
     def vectorize_uploaded_file(
         app_id: int,
         agent_id: int,
@@ -433,6 +531,16 @@ class PlaygroundMediaService:
         Returns:
             True if file was successfully vectorized.
         """
+        if not PlaygroundMediaService._can_use_temp_silo(
+            app_id, agent_id, session_id, db, embedding_service_id
+        ):
+            logger.info(
+                "Agent %s has no media embedding service; skipping vectorization of %s",
+                agent_id,
+                filename,
+            )
+            return False
+
         repo = PlaygroundMediaService.get_or_create_temp_repository(
             app_id, agent_id, session_id, db,
             embedding_service_id=embedding_service_id,
@@ -452,29 +560,9 @@ class PlaygroundMediaService:
             "source": "playground_upload",
         }
 
-        docs_indexed = False
-
-        # Try file-based extraction with proper loaders/chunking
-        if file_path:
-            abs_path = os.path.join(tmp_base, file_path)
-            if os.path.exists(abs_path):
-                ext = os.path.splitext(filename)[1].lower()
-                try:
-                    docs = SiloService.extract_documents_from_file(
-                        abs_path, ext, base_metadata
-                    )
-                    if docs:
-                        SiloService.index_multiple_content(
-                            repo.silo_id,
-                            [{"content": d.page_content, "metadata": d.metadata} for d in docs],
-                            db,
-                        )
-                        docs_indexed = True
-                except Exception as exc:
-                    logger.warning(
-                        "File-based extraction failed for %s, falling back to content: %s",
-                        filename, exc,
-                    )
+        docs_indexed = bool(file_path) and PlaygroundMediaService._index_file_documents(
+            repo.silo_id, os.path.join(tmp_base, file_path), filename, base_metadata, db
+        )
 
         # Fallback: use pre-extracted text content
         if not docs_indexed and content:

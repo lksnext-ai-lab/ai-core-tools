@@ -3,7 +3,7 @@ import React from 'react';
 interface FormFieldProps {
   label: string;
   id: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel';
+  type?: 'text' | 'date' | 'email' | 'password' | 'number' | 'url' | 'tel';
   value: string | number;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
@@ -40,7 +40,7 @@ export function FormField({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-gray-700 mb-2"
+        className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
@@ -57,21 +57,21 @@ export function FormField({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors dark:bg-gray-800 dark:text-gray-100 ${
           error
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            ? 'border-red-300 dark:border-red-500 focus:ring-red-500 focus:border-red-500'
+            : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'
         } ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : ''
+          disabled ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed' : ''
         } ${inputClassName}`}
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
     </div>
   );
@@ -117,7 +117,7 @@ export function FormTextArea({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-gray-700 mb-2"
+        className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
@@ -134,21 +134,21 @@ export function FormTextArea({
         rows={rows}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors dark:bg-gray-800 dark:text-gray-100 ${
           error
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            ? 'border-red-300 dark:border-red-500 focus:ring-red-500 focus:border-red-500'
+            : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'
         } ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : ''
+          disabled ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed' : ''
         } ${textareaClassName}`}
       />
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
     </div>
   );
@@ -192,7 +192,7 @@ export function FormSelect({
     <div className={className}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-gray-700 mb-2"
+        className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2"
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
@@ -207,12 +207,12 @@ export function FormSelect({
         required={required}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors dark:bg-gray-800 dark:text-gray-100 ${
           error
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            ? 'border-red-300 dark:border-red-500 focus:ring-red-500 focus:border-red-500'
+            : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'
         } ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : ''
+          disabled ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed' : ''
         } ${selectClassName}`}
       >
         {options.map(option => (
@@ -223,11 +223,11 @@ export function FormSelect({
       </select>
 
       {helpText && !error && (
-        <p id={helpTextId} className="mt-1 text-sm text-gray-500">{helpText}</p>
+        <p id={helpTextId} className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helpText}</p>
       )}
 
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600">{error}</p>
+        <p id={errorId} className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
     </div>
   );
@@ -265,18 +265,18 @@ export function FormCheckbox({
           checked={checked}
           onChange={onChange}
           disabled={disabled}
-          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-4 h-4 text-blue-600 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       <div className="ml-3">
         <label 
           htmlFor={id} 
-          className="text-sm font-medium text-gray-700"
+          className="text-sm font-medium text-gray-700 dark:text-gray-200"
         >
           {label}
         </label>
         {helpText && (
-          <p className="text-sm text-gray-500">{helpText}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{helpText}</p>
         )}
       </div>
     </div>

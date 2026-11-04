@@ -2,6 +2,7 @@ import enum
 from sqlalchemy import Column, String, Integer, ForeignKey
 from sqlalchemy.orm import relationship
 from models.base_service import BaseService
+from models.service_lifecycle import ServiceLifecycleMixin
 
 
 class SandboxProviderEnum(enum.Enum):
@@ -10,7 +11,7 @@ class SandboxProviderEnum(enum.Enum):
     E2B = "e2b"
 
 
-class SandboxService(BaseService):
+class SandboxService(ServiceLifecycleMixin, BaseService):
     """Per-app (or system-wide) sandbox provider credential configuration.
 
     Mirrors ``AIService``/``EmbeddingService``: reuses ``BaseService``'s

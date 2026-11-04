@@ -10,12 +10,15 @@ import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
 interface Repository {
   repository_id: number;
   name: string;
   created_at: string;
   resource_count: number;
+  lifecycle_warnings?: ServiceLifecycleWarning[];
 }
 
 const RepositoriesPage: React.FC = () => {
@@ -181,6 +184,7 @@ const RepositoriesPage: React.FC = () => {
                   <div className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
                     {repository.name}
                   </div>
+                  <ServiceLifecycleAlert warnings={repository.lifecycle_warnings} variant="compact" className="mt-0.5" />
                 </div>
               </button>
             )

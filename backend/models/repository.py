@@ -18,13 +18,6 @@ class Repository(Base):
                            back_populates='repositories',
                            foreign_keys=[app_id])
     
-    # AI service configuration (centralized for all media in this repository)
-    transcription_service_id = Column(Integer, ForeignKey('AIService.service_id'), nullable=True)
-    video_ai_service_id = Column(Integer, ForeignKey('AIService.service_id'), nullable=True)
-
-    transcription_service = relationship('AIService', foreign_keys=[transcription_service_id])
-    video_ai_service = relationship('AIService', foreign_keys=[video_ai_service_id])
-
     resources = relationship('Resource', lazy=True)
     folders = relationship('Folder', back_populates='repository', cascade='all, delete-orphan')
     media = relationship('Media', back_populates='repository', cascade='all, delete-orphan')
@@ -32,6 +25,15 @@ class Repository(Base):
 
     silo = relationship('Silo', lazy=False, uselist=False)
     silo_id = Column(Integer, ForeignKey('Silo.silo_id'), nullable=False)
+
+    # Media services are stored on the repository's silo (the silo is what indexes media).
+    @property
+    def transcription_service_id(self):
+        return self.silo.transcription_service_id if self.silo else None
+
+    @property
+    def video_ai_service_id(self):
+        return self.silo.video_ai_service_id if self.silo else None
 
     def get_embedding_service(self):
         """

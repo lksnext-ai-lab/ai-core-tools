@@ -68,7 +68,7 @@ ax.set_title("Revenue by region")
 ax.set_xlabel("Region")
 ax.set_ylabel("Revenue ($)")
 fig.tight_layout()
-fig.savefig("chart.png", dpi=150)
+fig.savefig("output/chart.png", dpi=150)
 plt.close(fig)
 ```
 
@@ -84,7 +84,7 @@ ax.set_title("Revenue trend")
 ax.set_ylabel("Revenue ($)")
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-fig.savefig("trend.png", dpi=150)
+fig.savefig("output/trend.png", dpi=150)
 plt.close(fig)
 ```
 
@@ -94,7 +94,7 @@ plt.close(fig)
 fig, ax = plt.subplots(figsize=(6, 6))
 ax.pie(revenue, labels=regions, autopct="%1.1f%%")
 ax.set_title("Revenue share by region")
-fig.savefig("share.png", dpi=150)
+fig.savefig("output/share.png", dpi=150)
 plt.close(fig)
 ```
 
@@ -107,7 +107,7 @@ df = pd.DataFrame({"region": regions, "revenue": revenue})
 ax = df.plot.bar(x="region", y="revenue", legend=False, figsize=(8, 5), color="#4C72B0")
 ax.set_title("Revenue by region")
 ax.figure.tight_layout()
-ax.figure.savefig("chart.png", dpi=150)
+ax.figure.savefig("output/chart.png", dpi=150)
 ```
 
 ### Histogram / distribution
@@ -119,7 +119,7 @@ values = np.random.default_rng(0).normal(loc=100, scale=15, size=500)
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.hist(values, bins=30, color="#4C72B0", edgecolor="white")
 ax.set_title("Distribution")
-fig.savefig("hist.png", dpi=150)
+fig.savefig("output/hist.png", dpi=150)
 plt.close(fig)
 ```
 

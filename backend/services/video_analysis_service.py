@@ -12,6 +12,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from repositories.ai_service_repository import AIServiceRepository
+from utils.service_lifecycle import SERVICE_KIND_AI, ensure_service_active
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,9 @@ class VideoAnalysisService:
         ai_service = AIServiceRepository.get_by_id(db, ai_service_id)
         if not ai_service:
             raise ValueError(f"AI Service with ID {ai_service_id} not found")
-        
+
+        ensure_service_active(ai_service, SERVICE_KIND_AI)
+
         if not ai_service.supports_video:
             raise ValueError(f"AI Service '{ai_service.name}' does not have video capabilities enabled")
         

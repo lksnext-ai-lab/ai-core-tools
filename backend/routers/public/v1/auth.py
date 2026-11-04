@@ -1,5 +1,3 @@
-import hashlib
-
 from fastapi import HTTPException, Depends, status, Request
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -8,7 +6,7 @@ from typing import Optional, Callable
 from pydantic import BaseModel
 
 from db.database import SessionLocal
-from services.public_auth_service import PublicAuthService
+from services.public_auth_service import PublicAuthService, create_api_key_user_context
 from services.agent_service import AgentService
 from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
@@ -133,36 +131,10 @@ def validate_api_key_for_app(app_id: int, api_key: str, db: Session = None) -> A
         session.close()
 
 
-def create_api_key_user_context(
-    app_id: int,
-    api_key: str,
-    conversation_id: str = None,
-    user_token: str = None,
-) -> dict:
-    """
-    Create user context for API key authentication.
-    Uses a hash of the API key as user identifier to maintain session isolation.
-
-    Args:
-        app_id: Application ID
-        api_key: API key for authentication
-        conversation_id: Optional conversation ID
-        user_token: Optional end-user JWT to forward to MCP servers. When set,
-                    MCPClientManager will inject it as ``Authorization: Bearer``
-                    on every MCP tool call made during this agent execution.
-    """
-    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
-    context = {
-        "user_id": f"apikey_{api_key_hash}",
-        "app_id": app_id,
-        "oauth": False,
-        "api_key": api_key
-    }
-    if conversation_id is not None:
-        context["conversation_id"] = conversation_id
-    if user_token:
-        context["token"] = user_token
-    return context
+# create_api_key_user_context moved to services.public_auth_service (step_016,
+# layering: a service -- the A2A executor bridge -- must not import a
+# router module). Re-exported above so every existing `.auth import
+# create_api_key_user_context` caller keeps working unchanged.
 
 
 def validate_agent_ownership(db: Session, agent_id: int, app_id: int):

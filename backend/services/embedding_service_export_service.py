@@ -60,6 +60,8 @@ class EmbeddingServiceExportService(BaseExportService):
             endpoint=service.endpoint,  # BD: endpoint field stores base_url
             description=None,  # No separate description field in current model
             api_version=service.api_version,
+            end_of_service_at=service.end_of_service_at,
+            deprecation_notice=service.deprecation_notice,
         )
 
         # Create export file

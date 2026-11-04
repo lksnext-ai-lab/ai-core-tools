@@ -20,11 +20,15 @@ from schemas.export_schemas import RepositoryExportFileSchema
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
-from repositories.media_repository import MediaRepository
 from utils.error_handlers import ValidationError
+from utils.service_lifecycle import ServiceRetiredError
 
 # Import database dependency
 from db.database import get_db
+from routers.controls.repository_scope import (
+    require_repository_in_app,
+    require_repository_in_app_or_new,
+)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -35,23 +39,7 @@ repositories_router = APIRouter()
 logger.info("Repositories router loaded successfully")
 
 
-def _validate_repository_app_ownership(repository_id: int, app_id: int, db) -> None:
-    """Raise HTTP 404 if the repository does not exist or does not belong to app_id."""
-    from models.repository import Repository as RepositoryModel
-    repo = RepositoryService.get_repository(repository_id, db)
-    if not repo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Repository not found",
-        )
-    if repo.app_id != app_id:
-        logger.warning(
-            f"Access violation: repository {repository_id} (app {repo.app_id}) accessed from app {app_id}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Repository does not belong to this app",
-        )
+REPOSITORY_IN_APP = Depends(require_repository_in_app)
 
 
 # ==================== REPOSITORY MANAGEMENT ====================
@@ -145,7 +133,7 @@ async def list_repositories(
     return RepositoryService.get_repositories_list(app_id, db)
 
 
-@repositories_router.get("/{repository_id}",
+@repositories_router.get("/{repository_id}", dependencies=[Depends(require_repository_in_app_or_new)],
                         summary="Get repository details",
                         tags=["Repositories"],
                         response_model=RepositoryDetailSchema)
@@ -191,7 +179,7 @@ async def create_repository(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@repositories_router.put("/{repository_id}",
+@repositories_router.put("/{repository_id}", dependencies=[REPOSITORY_IN_APP],
                          summary="Update repository",
                          tags=["Repositories"],
                          response_model=RepositoryDetailSchema)
@@ -206,7 +194,6 @@ async def update_repository(
     """
     Update an existing repository. Note: vector_db_type cannot be changed after creation.
     """
-    _validate_repository_app_ownership(repository_id, app_id, db)
     try:
         repo = RepositoryService.update_repository_router(app_id, repository_id, repo_data, db)
         return RepositoryService.get_repository_detail(app_id, repo.repository_id, db)
@@ -219,7 +206,7 @@ async def update_repository(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@repositories_router.delete("/{repository_id}",
+@repositories_router.delete("/{repository_id}", dependencies=[REPOSITORY_IN_APP],
                            summary="Delete repository",
                            tags=["Repositories"])
 async def delete_repository(
@@ -232,15 +219,14 @@ async def delete_repository(
     """
     Delete a repository and all its resources.
     """
-    
-    # Use RepositoryService for business logic
+
     RepositoryService.delete_repository_router(repository_id, db)
     
     return {"message": "Repository deleted successfully"}
 
 
 @repositories_router.post(
-    "/{repository_id}/export",
+    "/{repository_id}/export", dependencies=[REPOSITORY_IN_APP],
     summary="Export Repository",
     tags=["Repositories", "Export/Import"],
     status_code=status.HTTP_200_OK,
@@ -302,7 +288,7 @@ async def export_repository(
 
 # ==================== RESOURCE MANAGEMENT ====================
 
-@repositories_router.post("/{repository_id}/resources",
+@repositories_router.post("/{repository_id}/resources", dependencies=[REPOSITORY_IN_APP],
                          summary="Upload resources",
                          tags=["Resources"])
 async def upload_resources(
@@ -334,7 +320,7 @@ async def upload_resources(
     return result
 
 
-@repositories_router.post("/{repository_id}/resources/{resource_id}/move",
+@repositories_router.post("/{repository_id}/resources/{resource_id}/move", dependencies=[REPOSITORY_IN_APP],
                          summary="Move resource to different folder",
                          tags=["Resources"])
 async def move_resource(
@@ -364,7 +350,7 @@ async def move_resource(
     return result
 
 
-@repositories_router.delete("/{repository_id}/resources/{resource_id}",
+@repositories_router.delete("/{repository_id}/resources/{resource_id}", dependencies=[REPOSITORY_IN_APP],
                            summary="Delete resource",
                            tags=["Resources"])
 async def delete_resource(
@@ -393,7 +379,7 @@ async def delete_resource(
     return result
 
 
-@repositories_router.get("/{repository_id}/resources/{resource_id}/download",
+@repositories_router.get("/{repository_id}/resources/{resource_id}/download", dependencies=[REPOSITORY_IN_APP],
                         summary="Download resource",
                         tags=["Resources"])
 async def download_resource(
@@ -430,7 +416,7 @@ async def download_resource(
 
 
 # ==================== MEDIA MANAGEMENT ====================
-@repositories_router.post("/{repository_id}/media", response_model=MediaUploadResponse, responses={500: {"description": "Internal server error"}})
+@repositories_router.post("/{repository_id}/media", dependencies=[REPOSITORY_IN_APP], response_model=MediaUploadResponse, responses={500: {"description": "Internal server error"}})
 async def upload_media(
     app_id: int,
     repository_id: int,
@@ -481,11 +467,13 @@ async def upload_media(
             created_media=[MediaResponse(**m.__dict__) for m in created_media],
             failed_files=failed_files
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error uploading media: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@repositories_router.post("/{repository_id}/media/youtube", response_model=MediaResponse, responses={400: {"description": "Validation error"}, 500: {"description": "Internal server error"}})
+@repositories_router.post("/{repository_id}/media/youtube", dependencies=[REPOSITORY_IN_APP], response_model=MediaResponse, responses={400: {"description": "Validation error"}, 500: {"description": "Internal server error"}})
 async def add_youtube_video(
     app_id: int,
     background_tasks: BackgroundTasks,
@@ -535,6 +523,8 @@ async def add_youtube_video(
         )
 
         return MediaResponse(**media.__dict__)
+    except HTTPException:
+        raise
     except ValueError as e:
         # Handle validation errors (invalid URL, duplicate)
         raise HTTPException(status_code=400, detail=str(e))
@@ -542,7 +532,7 @@ async def add_youtube_video(
         logger.error(f"Error adding YouTube video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@repositories_router.get("/{repository_id}/media", response_model=List[MediaResponse])
+@repositories_router.get("/{repository_id}/media", dependencies=[REPOSITORY_IN_APP], response_model=List[MediaResponse])
 async def list_media(
     app_id: int,
     repository_id: int,
@@ -559,7 +549,7 @@ async def list_media(
     )
     return [MediaResponse(**{k: v for k, v in m.__dict__.items() if not k.startswith('_')}) for m in media_list]
 
-@repositories_router.post("/{repository_id}/media/{media_id}/move",
+@repositories_router.post("/{repository_id}/media/{media_id}/move", dependencies=[REPOSITORY_IN_APP],
                          summary="Move media to different folder",
                          tags=["Media"])
 async def move_media(
@@ -589,7 +579,7 @@ async def move_media(
     
     return result
 
-@repositories_router.get("/{repository_id}/media/{media_id}", response_model=MediaResponse, responses={404: {"description": "Media not found"}})
+@repositories_router.get("/{repository_id}/media/{media_id}", dependencies=[REPOSITORY_IN_APP], response_model=MediaResponse, responses={404: {"description": "Media not found"}})
 async def get_media_status(
     app_id: int,
     repository_id: int,
@@ -598,12 +588,9 @@ async def get_media_status(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    media = MediaRepository.get_by_id(media_id, db)
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    return media
+    return MediaService.get_repository_media(repository_id, media_id, db)
 
-@repositories_router.delete("/{repository_id}/media/{media_id}")
+@repositories_router.delete("/{repository_id}/media/{media_id}", dependencies=[REPOSITORY_IN_APP])
 async def delete_media(
     app_id: int,
     repository_id: int,
@@ -630,9 +617,10 @@ async def delete_media(
 
 # ==================== REPOSITORY SEARCH ====================
 
-@repositories_router.post("/{repository_id}/search",
+@repositories_router.post("/{repository_id}/search", dependencies=[REPOSITORY_IN_APP],
                          summary="Search documents in repository",
-                         tags=["Repositories", "Search"])
+                         tags=["Repositories", "Search"],
+                         responses={409: {"description": "A service used by this resource was retired"}})
 async def search_repository_documents(
     app_id: int,
     repository_id: int,
@@ -663,7 +651,7 @@ async def search_repository_documents(
         logger.info(f"Repository search completed - found {len(result.get('results', []))} results")
         return result
         
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error searching repository {repository_id}: {str(e)}", exc_info=True)

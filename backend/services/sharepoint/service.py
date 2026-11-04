@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import tempfile
+from contextlib import ExitStack
 import os
 from datetime import datetime
 from typing import Optional
@@ -10,6 +11,13 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from utils.logger import get_logger
+from utils.provider_errors import classify_provider_error
+from utils.service_lifecycle import (
+    SERVICE_KIND_EMBEDDING,
+    ServiceRetiredError,
+    ensure_service_active,
+    service_call_context,
+)
 from services.sharepoint.graph_client import GraphClient, GraphAuthError, GraphAccessError, GraphDeltaExpiredError
 from repositories.sharepoint_source_repository import SharePointSourceRepository
 from repositories.sharepoint_file_repository import SharePointFileRepository
@@ -230,10 +238,33 @@ class SharePointSyncService:
         from models.enums.sharepoint_file_status import SharePointFileStatus
 
         db: Session = SessionLocal()
+        call_context = ExitStack()
         try:
             source = SharePointSourceRepository.get_by_id(source_id, db)
             if not source:
                 return
+
+            call_context.enter_context(service_call_context(
+                channel="sharepoint_sync",
+                app_id=source.app_id,
+                resource_type="sharepoint_source",
+                resource_id=source_id,
+            ))
+
+            # Retirement is checked once per sync, before any download; the delta token stays put
+            # so the same changes are picked up once another embedding service is set.
+            try:
+                ensure_service_active(
+                    source.silo.embedding_service if getattr(source, "silo", None) else None,
+                    SERVICE_KIND_EMBEDDING,
+                )
+            except ServiceRetiredError as exc:
+                source.last_sync_status = SharePointSyncStatus.ERROR
+                source.last_sync_error = exc.message
+                SharePointSourceRepository.update(source, db)
+                return
+
+            retired_mid_sync = False
 
             # Mark as running
             source.last_sync_status = SharePointSyncStatus.RUNNING
@@ -356,13 +387,23 @@ class SharePointSyncService:
                         )
                     except Exception as exc:
                         per_file_errors = True
+                        if isinstance(exc, ServiceRetiredError):
+                            # Already logged once by the lifecycle guard; its message is safe to store.
+                            retired_mid_sync = True
+                            error_message = exc.message
+                        else:
+                            # The stored message is classified (no raw details), so keep the cause in the logs.
+                            logger.warning(
+                                "SharePoint file %s failed for source %s", item_id, source_id, exc_info=True
+                            )
+                            error_message = classify_provider_error(exc, "SharePoint sync", step="Indexing").message
                         SharePointFileRepository.upsert_by_drive_item(
                             source_id=source_id,
                             drive_item_id=item_id,
                             data={
                                 "name": name,
                                 "status": SharePointFileStatus.ERROR,
-                                "error_message": str(exc),
+                                "error_message": error_message,
                                 "last_synced_at": datetime.utcnow(),
                             },
                             db=db,
@@ -381,7 +422,8 @@ class SharePointSyncService:
                     SharePointFileRepository.delete_file(stale.id, db)
 
             # Persist state
-            source.last_delta_token = new_delta_token
+            if not retired_mid_sync:
+                source.last_delta_token = new_delta_token
             source.last_synced_at = datetime.utcnow()
             source.last_sync_status = (
                 SharePointSyncStatus.PARTIAL if per_file_errors else SharePointSyncStatus.SUCCESS
@@ -401,6 +443,7 @@ class SharePointSyncService:
                 pass
             raise
         finally:
+            call_context.close()
             db.close()
 
     @staticmethod

@@ -4,6 +4,7 @@ from models.app import App
 from repositories.app_repository import AppRepository
 from repositories.app_collaboration_repository import AppCollaborationRepository
 from datetime import datetime
+from services.a2a_server.lifecycle_service import schedule_owner_purge
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,6 +36,34 @@ class AppService:
         """Get a specific app by ID"""
         return self.app_repo.get_by_id(app_id)
     
+    def validate_default_sandbox_service(
+        self, app_id: int, sandbox_service_id: Optional[int], current_id: Optional[int]
+    ) -> None:
+        """Validate an app's ``default_sandbox_service_id`` (``None`` = env default, always valid).
+
+        The service must exist and be system-scoped or owned by this app (checked first, so a
+        foreign service id and a missing one are indistinguishable); then a retired service can
+        only be kept (``current_id``), not newly selected.
+
+        Raises:
+            ValueError: the service is not valid for this app, or is retired and not the current one
+                (``RetiredServiceAssignmentError``).
+        """
+        if sandbox_service_id is None:
+            return
+        from repositories.sandbox_service_repository import SandboxServiceRepository
+        from utils.service_lifecycle import SERVICE_KIND_SANDBOX, ensure_assignable
+
+        sandbox_service = SandboxServiceRepository.get_by_id(self.db, sandbox_service_id)
+        if sandbox_service is None or (
+            sandbox_service.app_id is not None and sandbox_service.app_id != app_id
+        ):
+            raise ValueError(
+                f"default_sandbox_service_id '{sandbox_service_id}' does not "
+                "reference a valid sandbox service for this app."
+            )
+        ensure_assignable(sandbox_service, current_id, "default_sandbox_service_id", SERVICE_KIND_SANDBOX)
+
     def create_or_update_app(self, app_data: dict, user_id: int = None) -> App:
         """Create a new app or update an existing one.
 
@@ -70,6 +99,8 @@ class AppService:
         from .sandbox_service_service import SandboxServiceService
         from .api_key_service import APIKeyService
         from .mcp_config_service import MCPConfigService
+        from .middleware_service import MiddlewareService
+        from repositories.middleware_repository import MiddlewareRepository
         from .resource_service import ResourceService
         from .skill_service import SkillService
         from .mcp_server_service import MCPServerService
@@ -102,7 +133,13 @@ class AppService:
             agents = self.app_repo.get_agents_by_app_id(app_id)
             for agent in agents:
                 logger.info(f"Deleting agent {agent.agent_id}: {agent.name}")
-                agent_service.delete_agent(self.db, agent.agent_id)
+                if not agent_service.delete_agent(self.db, agent.agent_id):
+                    raise RuntimeError(f"agent {agent.agent_id} could not be deleted")
+
+            # 1b. Delete middlewares (after agents; before AI services, which they may reference)
+            for middleware in MiddlewareRepository.get_all_by_app_id(self.db, app_id):
+                logger.info(f"Deleting middleware {middleware.middleware_id}: {middleware.name}")
+                MiddlewareService.delete_middleware(self.db, app_id, middleware.middleware_id)
 
             # 2. Delete skills (after agents, since agents may reference skills)
             skills = self.app_repo.get_skills_by_app_id(app_id)
@@ -219,10 +256,11 @@ class AppService:
                 return False
 
             success = self.app_repo.delete(app)
-            
+
             if success:
                 logger.info(f"Successfully deleted app {app_id} and all related data")
-            
+                schedule_owner_purge(app_id)  # FR-22/AD-10: app-wide A2A purge; sync, never raises
+
             return success
                 
         except Exception as e:

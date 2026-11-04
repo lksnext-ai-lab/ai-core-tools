@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Brain, Info, BarChart2, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
-import { apiService, type ScheduledTask } from '../services/api';
+import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
+import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
-import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
+import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
+import AgentMiddlewaresCard, { type AgentMiddlewareOption } from '../components/forms/AgentMiddlewaresCard';
 import { Badge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
+import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 import type { TabItem } from '../components/ui/Tabs';
 import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
 import type { RagConfigValue, RagFixedFilter, RagSearchType } from '../components/forms/RagConfigSection';
@@ -18,7 +21,13 @@ import type { AgentMCPUsage } from '../core/types';
 import type { MarketplaceVisibility, MarketplaceProfileUpdate } from '../types/marketplace';
 import { MARKETPLACE_CATEGORIES } from '../types/marketplace';
 import { AgentMetricsTab } from '../components/metrics/AgentMetricsTab';
+import { AgentA2ASettings } from '../components/forms/AgentA2ASettings';
+import type { A2ACardVisibility, AgentA2AFieldErrors, AgentA2AValue } from '../components/forms/AgentA2ASettings';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
 import { randomId } from '../utils/randomId';
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
 // Define the Agent types
 interface Agent {
@@ -31,10 +40,8 @@ interface Agent {
   is_tool: boolean;
   has_memory: boolean;
   enable_code_interpreter: boolean;
+  lifecycle_warnings?: ServiceLifecycleWarning[];
   skill_router_enabled?: boolean;
-  memory_max_messages: number;
-  memory_max_tokens: number;
-  memory_summarize_threshold: number;
   service_id?: number;
   sandbox_service_id?: number;
   silo_id?: number;
@@ -47,6 +54,15 @@ interface Agent {
   created_at: string;
   request_count: number;
   marketplace_visibility?: MarketplaceVisibility;
+  // A2A (Agent2Agent protocol) exposure
+  a2a_enabled?: boolean;
+  a2a_card_visibility?: A2ACardVisibility;
+  a2a_name_override?: string | null;
+  a2a_description_override?: string | null;
+  a2a_skill_tags?: string[];
+  a2a_examples?: string[];
+  a2a_card_url?: string | null;
+  a2a_rpc_url?: string | null;
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -65,13 +81,14 @@ interface Agent {
   media_chunk_min_duration?: number | null;
   media_chunk_max_duration?: number | null;
   media_chunk_overlap?: number | null;
-  ai_services: Array<{ service_id: number; name: string; supports_video?: boolean }>;
-  sandbox_services: Array<{ service_id: number; name: string }>;
+  ai_services: Array<ServiceOptionLike & { supports_video?: boolean }>;
+  sandbox_services: ServiceOptionLike[];
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
   mcp_configs: Array<{ config_id: number; name: string }>;
   skills: Array<{ skill_id: number; name: string; description?: string; is_enabled?: boolean; is_system?: boolean }>;
+  middlewares?: AgentMiddlewareOption[];
 }
 
 interface AgentFormData {
@@ -85,9 +102,6 @@ interface AgentFormData {
   enable_code_interpreter: boolean;
   skill_router_enabled: boolean;
   server_tools: string[];
-  memory_max_messages: number;
-  memory_max_tokens: number;
-  memory_summarize_threshold: number;
   service_id?: number;
   sandbox_service_id?: number;
   silo_id?: number;
@@ -97,6 +111,7 @@ interface AgentFormData {
   mcp_config_ids: number[];
   skill_ids: number[];
   exposed_chat_filters: string[];
+  middleware_ids: number[];
   // OCR-specific fields
   vision_service_id?: number;
   vision_system_prompt?: string;
@@ -115,6 +130,13 @@ interface AgentFormData {
   media_chunk_min_duration: number;
   media_chunk_max_duration: number;
   media_chunk_overlap: number;
+  // A2A (Agent2Agent protocol) exposure
+  a2a_enabled: boolean;
+  a2a_card_visibility: A2ACardVisibility;
+  a2a_name_override: string | null;
+  a2a_description_override: string | null;
+  a2a_skill_tags: string[];
+  a2a_examples: string[];
 }
 
 // Output Parser Field Component
@@ -171,6 +193,30 @@ const OutputParserField = ({
   </div>
 );
 
+/**
+ * Pull per-field messages for a2a_* keys out of a FastAPI 422 `detail` array
+ * (each item's `loc` looks like `["body", "a2a_name_override"]`). Returns null
+ * when the error isn't a 422 with any a2a_* location, so callers can fall back
+ * to the generic top-level banner.
+ */
+function extractA2AFieldErrors(err: unknown): AgentA2AFieldErrors | null {
+  if (!(err instanceof ApiError) || err.status !== 422 || !Array.isArray(err.detail)) {
+    return null;
+  }
+  const errors: AgentA2AFieldErrors = {};
+  for (const item of err.detail) {
+    if (!item || typeof item !== 'object') continue;
+    const loc = (item as { loc?: unknown }).loc;
+    const msg = (item as { msg?: unknown }).msg;
+    if (!Array.isArray(loc) || typeof msg !== 'string') continue;
+    const field = loc.find((segment) => typeof segment === 'string' && segment.startsWith('a2a_'));
+    if (typeof field !== 'string') continue;
+    const key = field as keyof AgentA2AFieldErrors;
+    if (!errors[key]) errors[key] = msg;
+  }
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
 function getPageTitle(type: string, isNewAgent: boolean): string {
   if (type === 'ocr_agent') return 'Agente OCR';
   if (isNewAgent) return 'Create Agent';
@@ -193,7 +239,12 @@ function AgentFormPage() {
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
   const mutate = useApiMutation();
+  const { hasMinRole } = useAppRole(appId);
+  const canEditA2A = hasMinRole(AppRole.EDITOR);
   const [agent, setAgent] = useState<Agent | null>(null);
+  const [a2aCardUrl, setA2aCardUrl] = useState<string | null>(null);
+  const [a2aRpcUrl, setA2aRpcUrl] = useState<string | null>(null);
+  const [a2aFieldErrors, setA2aFieldErrors] = useState<AgentA2AFieldErrors>({});
   const [loading, setLoading] = useState(true);
   const [mcpUsage, setMcpUsage] = useState<AgentMCPUsage | null>(null);
   const [showMcpWarning, setShowMcpWarning] = useState(false);
@@ -243,14 +294,12 @@ function AgentFormPage() {
     enable_code_interpreter: false,
     skill_router_enabled: false,
     server_tools: [],
-    memory_max_messages: 20,
-    memory_max_tokens: 4000,
-    memory_summarize_threshold: DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
     temperature: DEFAULT_AGENT_TEMPERATURE,
     tool_ids: [],
     mcp_config_ids: [],
     skill_ids: [],
     exposed_chat_filters: [],
+    middleware_ids: [],
     rag_k: 10,
     rag_search_type: 'similarity',
     rag_score_threshold: null,
@@ -259,12 +308,18 @@ function AgentFormPage() {
     media_embedding_service_id: undefined,
     media_chunk_min_duration: 30,
     media_chunk_max_duration: 120,
-    media_chunk_overlap: 5
+    media_chunk_overlap: 5,
+    a2a_enabled: false,
+    a2a_card_visibility: 'public',
+    a2a_name_override: null,
+    a2a_description_override: null,
+    a2a_skill_tags: [],
+    a2a_examples: [],
   });
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
   const [loadingSiloMetadata, setLoadingSiloMetadata] = useState(false);
-  const [embeddingServices, setEmbeddingServices] = useState<Array<{ service_id: number; name: string }>>([]);
+  const [embeddingServices, setEmbeddingServices] = useState<ServiceOptionLike[]>([]);
 
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -299,9 +354,12 @@ function AgentFormPage() {
         if (cancelled) return;
         const list = Array.isArray(services) ? services : [];
         setEmbeddingServices(
-          list.map((s: { service_id: number; name: string }) => ({
+          list.map((s: ServiceOptionLike) => ({
             service_id: s.service_id,
             name: s.name,
+            lifecycle_status: s.lifecycle_status,
+            end_of_service_at: s.end_of_service_at,
+            deprecation_notice: s.deprecation_notice,
           }))
         );
       })
@@ -360,9 +418,6 @@ function AgentFormPage() {
         enable_code_interpreter: response.enable_code_interpreter || false,
         skill_router_enabled: response.skill_router_enabled || false,
         server_tools: response.server_tools || [],
-        memory_max_messages: response.memory_max_messages || 20,
-        memory_max_tokens: response.memory_max_tokens || 4000,
-        memory_summarize_threshold: response.memory_summarize_threshold || DEFAULT_MEMORY_SUMMARIZE_THRESHOLD,
         service_id: response.service_id || undefined,
         sandbox_service_id: response.sandbox_service_id || undefined,
         silo_id: response.silo_id || undefined,
@@ -372,6 +427,7 @@ function AgentFormPage() {
         mcp_config_ids: response.mcp_config_ids || [],
         skill_ids: response.skill_ids || [],
         exposed_chat_filters: response.exposed_chat_filters || [],
+        middleware_ids: response.middleware_ids || [],
         // OCR-specific fields
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
@@ -392,8 +448,17 @@ function AgentFormPage() {
         media_forced_language: response.media_forced_language || '',
         media_chunk_min_duration: response.media_chunk_min_duration ?? 30,
         media_chunk_max_duration: response.media_chunk_max_duration ?? 120,
-        media_chunk_overlap: response.media_chunk_overlap ?? 5
+        media_chunk_overlap: response.media_chunk_overlap ?? 5,
+        // A2A (Agent2Agent protocol) exposure
+        a2a_enabled: response.a2a_enabled ?? false,
+        a2a_card_visibility: response.a2a_card_visibility ?? 'public',
+        a2a_name_override: response.a2a_name_override ?? null,
+        a2a_description_override: response.a2a_description_override ?? null,
+        a2a_skill_tags: response.a2a_skill_tags ?? [],
+        a2a_examples: response.a2a_examples ?? [],
       });
+      setA2aCardUrl(response.a2a_card_url ?? null);
+      setA2aRpcUrl(response.a2a_rpc_url ?? null);
 
       // Set output parser toggle based on whether agent has an output parser
       setShowOutputParser(!!response.output_parser_id);
@@ -471,6 +536,10 @@ function AgentFormPage() {
         : [...prev.skill_ids, skillId]
     }));
   };
+
+  const handleA2AChange = useCallback((patch: Partial<AgentA2AValue>) => {
+    setFormData(prev => ({ ...prev, ...patch }));
+  }, []);
 
   // Marketplace handlers
   const handleVisibilityChange = useCallback(async (visibility: MarketplaceVisibility) => {
@@ -568,11 +637,11 @@ function AgentFormPage() {
       return;
     }
 
-    // Mirror the backend invariant: a media embedding service is required so
-    // uploaded media/documents are always vectorized with a valid model.
-    if (!formData.media_embedding_service_id) {
+    // Mirror the backend invariant: conversational agents keep uploaded documents in a
+    // per-conversation temp silo, which needs an embedding service.
+    if (formData.has_memory && !formData.media_embedding_service_id) {
       setActiveTab('configuration');
-      setError('Select a media embedding service in Media Processing before saving.');
+      setError('Conversational agents require a media embedding service in Media Processing.');
       return;
     }
 
@@ -581,6 +650,20 @@ function AgentFormPage() {
     const cleanedFilters: RagFixedFilter[] = formData.rag_fixed_filters
       .filter((f) => f.field && (Array.isArray(f.value) ? f.value.length > 0 : String(f.value ?? '').trim() !== ''))
       .map(({ _key, ...rest }) => rest);
+
+    // The A2A tab is disabled for new agents, so only existing agents send these
+    // fields; a2a_card_visibility must never be sent as null (422 on the backend).
+    const isExistingAgent = Number.parseInt(agentId) !== 0;
+    const a2aFields = isExistingAgent
+      ? {
+          a2a_enabled: formData.a2a_enabled,
+          a2a_card_visibility: formData.a2a_card_visibility,
+          a2a_name_override: formData.a2a_name_override,
+          a2a_description_override: formData.a2a_description_override,
+          a2a_skill_tags: formData.a2a_skill_tags,
+          a2a_examples: formData.a2a_examples.map((example) => example.trim()).filter((example) => example.length > 0),
+        }
+      : {};
 
     const submitData = {
       name: formData.name,
@@ -593,9 +676,6 @@ function AgentFormPage() {
       enable_code_interpreter: formData.enable_code_interpreter,
       skill_router_enabled: formData.skill_router_enabled,
       server_tools: formData.server_tools,
-      memory_max_messages: formData.memory_max_messages,
-      memory_max_tokens: formData.memory_max_tokens,
-      memory_summarize_threshold: formData.memory_summarize_threshold,
       service_id: formData.service_id,
       sandbox_service_id: formData.enable_code_interpreter ? formData.sandbox_service_id : undefined,
       silo_id: formData.silo_id,
@@ -605,6 +685,7 @@ function AgentFormPage() {
       mcp_config_ids: formData.mcp_config_ids,
       skill_ids: formData.skill_ids,
       exposed_chat_filters: formData.exposed_chat_filters,
+      middleware_ids: formData.middleware_ids,
       // OCR-specific fields
       vision_service_id: formData.vision_service_id,
       vision_system_prompt: formData.vision_system_prompt,
@@ -624,6 +705,7 @@ function AgentFormPage() {
       media_chunk_max_duration: formData.media_chunk_max_duration,
       media_chunk_overlap: formData.media_chunk_overlap,
       app_id: Number.parseInt(appId),
+      ...a2aFields,
     };
 
     const isNew = Number.parseInt(agentId) === 0;
@@ -633,22 +715,37 @@ function AgentFormPage() {
     await handleSaveMarketplaceProfile();
 
     setError(null);
+    setA2aFieldErrors({});
     setSaving(true);
-    const result = await mutate(
-      () =>
-        isNew
-          ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
-          : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData),
-      {
-        loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
-        success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
-      },
-    );
+
+    // Created once so both the toast (via `mutate`) and our own error inspection
+    // below observe the same settled promise instead of issuing the request twice.
+    const submitPromise = isNew
+      ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
+      : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData);
+
+    const result = await mutate(() => submitPromise, {
+      loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
+      success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
+      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
+    });
     setSaving(false);
 
     if (result !== undefined) {
       navigate(`/apps/${appId}/agents`);
+      return;
+    }
+
+    try {
+      await submitPromise;
+    } catch (err) {
+      const a2aErrors = extractA2AFieldErrors(err);
+      if (a2aErrors) {
+        setActiveTab('a2a');
+        setA2aFieldErrors(a2aErrors);
+      }
+      // Keep the existing top-level banner in addition to the per-field messages.
+      setError(errorMessage(err, MESSAGES.SAVE_FAILED('agent')));
     }
   };
 
@@ -674,8 +771,16 @@ function AgentFormPage() {
     { id: 'configuration', label: 'Configuration' },
     { id: 'advanced', label: 'Advanced' },
     { id: 'marketplace', label: 'Marketplace' },
+    {
+      id: 'a2a',
+      label: 'A2A',
+      disabled: isNewAgent,
+      disabledReason: isNewAgent ? 'Save the agent first to configure A2A settings' : undefined,
+    },
     ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
   ];
+
+  const videoServiceOptions = agent?.ai_services?.filter((service) => service.supports_video);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -699,6 +804,10 @@ function AgentFormPage() {
             Back to Agents
           </button>
         </div>
+
+        {agent && (
+          <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="mb-6" />
+        )}
 
         {/* Error Message */}
         {error && (
@@ -818,109 +927,6 @@ function AgentFormPage() {
                   />
                   <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
                 </div>
-
-                {/* Memory Management - Conditional */}
-                {formData.has_memory && (
-                  <div className="border-t border-gray-200 pt-6">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-                        <Brain className="w-5 h-5 text-indigo-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">Memory Management</h3>
-                        <p className="text-sm text-gray-600 mt-1">Configure the agent's memory management strategy</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-6 p-4 bg-indigo-50 rounded-xl">
-                      <div className="flex items-start">
-                        <Info className="w-5 h-5 text-indigo-500 mr-3 shrink-0" />
-                        <div>
-                          <p className="text-sm text-indigo-800 font-medium">Automatic Hybrid Strategy</p>
-                          <p className="text-xs text-indigo-700 mt-1">
-                            The agent automatically applies a hybrid strategy that removes tool messages, trims the history,
-                            and manages token limits to optimize performance and costs.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-6">
-                      <div>
-                        <label htmlFor="memory_max_messages" className="block text-sm font-medium text-gray-700 mb-2">
-                          Maximum Messages
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_messages"
-                          min="1"
-                          max="100"
-                          value={formData.memory_max_messages}
-                          onChange={(e) => handleInputChange('memory_max_messages', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Maximum number of messages to keep in the conversation history (recommended: 20)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_max_tokens" className="block text-sm font-medium text-gray-700 mb-2">
-                          Token Limit
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_max_tokens"
-                          min="100"
-                          max="32000"
-                          step="100"
-                          value={formData.memory_max_tokens}
-                          onChange={(e) => handleInputChange('memory_max_tokens', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Maximum number of tokens for the conversation history (recommended: 4000)
-                        </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory_summarize_threshold" className="block text-sm font-medium text-gray-700 mb-2">
-                          Summarization Threshold
-                        </label>
-                        <input
-                          type="number"
-                          id="memory_summarize_threshold"
-                          min="1"
-                          max="50"
-                          value={formData.memory_summarize_threshold}
-                          onChange={(e) => handleInputChange('memory_summarize_threshold', Number.parseInt(e.target.value))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Number of old messages at which summarization is considered (future implementation, recommended: 10)
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-1"><BarChart2 className="w-4 h-4" /> Current Configuration:</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Messages:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_messages}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Tokens:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_max_tokens.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Threshold:</span>
-                          <span className="ml-2 font-medium text-gray-900">{formData.memory_summarize_threshold}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -949,18 +955,16 @@ function AgentFormPage() {
                         </label>
                         <select
                           id="ai_service"
+                          aria-describedby={serviceStatusId(agent?.ai_services, formData.service_id, "ai_service")}
                           value={formData.service_id || ''}
                           onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                           required
                         >
                           <option value="">Select AI Service</option>
-                          {agent?.ai_services.map((service) => (
-                            <option key={service.service_id} value={service.service_id}>
-                              {service.name}
-                            </option>
-                          ))}
+                          <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.service_id} />
                         </select>
+                        <ServiceOptionStatus selectId="ai_service" options={agent?.ai_services} selectedId={formData.service_id} />
                       </div>
 
                       <div>
@@ -1164,17 +1168,15 @@ function AgentFormPage() {
                           </label>
                           <select
                             id="sandbox_service"
+                            aria-describedby={serviceStatusId(agent?.sandbox_services, formData.sandbox_service_id, 'sandbox_service')}
                             value={formData.sandbox_service_id || ''}
                             onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                           >
                             <option value="">Use app/system default</option>
-                            {agent?.sandbox_services.map((service) => (
-                              <option key={service.service_id} value={service.service_id}>
-                                {service.name}
-                              </option>
-                            ))}
+                            <ServiceSelectOptions options={agent?.sandbox_services} savedValue={agent?.sandbox_service_id} />
                           </select>
+                          <ServiceOptionStatus selectId="sandbox_service" options={agent?.sandbox_services} selectedId={formData.sandbox_service_id} />
                           <p className="text-xs text-gray-500 mt-1">
                             Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
                           </p>
@@ -1283,25 +1285,24 @@ function AgentFormPage() {
 
                     <div className="mb-6">
                       <label htmlFor="media_embedding_service" className="block text-sm font-medium text-gray-700 mb-2">
-                        Embedding Service <span className="text-red-500">*</span>
+                        Embedding Service {formData.has_memory && <span className="text-red-500">*</span>}
                       </label>
                       <select
                         id="media_embedding_service"
-                        required
+                        aria-describedby={serviceStatusId(embeddingServices, formData.media_embedding_service_id, "media_embedding_service")}
+                        required={formData.has_memory}
                         value={formData.media_embedding_service_id || ''}
                         onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       >
-                        <option value="">Select Embedding Service</option>
-                        {embeddingServices.map((service) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
+                        <option value="">None (no temporary knowledge base)</option>
+                        <ServiceSelectOptions options={embeddingServices} savedValue={agent?.media_embedding_service_id} />
                       </select>
+                      <ServiceOptionStatus selectId="media_embedding_service" options={embeddingServices} selectedId={formData.media_embedding_service_id} />
                       <p className="text-xs text-gray-500 mt-1">
-                        Required. Model used to vectorize uploaded media/documents into the conversation's
-                        temporary knowledge base for retrieval.
+                        Model used to vectorize uploaded media/documents into the conversation's temporary
+                        knowledge base for retrieval. Required for conversational agents; optional otherwise
+                        (documents are then sent in full to the agent, and audio/video uploads are unavailable).
                       </p>
                     </div>
 
@@ -1312,17 +1313,15 @@ function AgentFormPage() {
                         </label>
                         <select
                           id="transcription_service"
+                          aria-describedby={serviceStatusId(agent?.ai_services, formData.transcription_service_id, "transcription_service")}
                           value={formData.transcription_service_id || ''}
                           onChange={(e) => handleInputChange('transcription_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                           <option value="">Select Transcription Service</option>
-                          {agent?.ai_services.map((service) => (
-                            <option key={service.service_id} value={service.service_id}>
-                              {service.name}
-                            </option>
-                          ))}
+                          <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.transcription_service_id} />
                         </select>
+                        <ServiceOptionStatus selectId="transcription_service" options={agent?.ai_services} selectedId={formData.transcription_service_id} />
                         <p className="text-xs text-gray-500 mt-1">Speech-to-text model used to transcribe media.</p>
                       </div>
 
@@ -1332,17 +1331,15 @@ function AgentFormPage() {
                         </label>
                         <select
                           id="video_ai_service"
+                          aria-describedby={serviceStatusId(videoServiceOptions, formData.video_ai_service_id, "video_ai_service")}
                           value={formData.video_ai_service_id || ''}
                           onChange={(e) => handleInputChange('video_ai_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                           <option value="">None (audio only)</option>
-                          {agent?.ai_services.filter((service) => service.supports_video).map((service) => (
-                            <option key={service.service_id} value={service.service_id}>
-                              {service.name}
-                            </option>
-                          ))}
+                          <ServiceSelectOptions options={videoServiceOptions} savedValue={agent?.video_ai_service_id} />
                         </select>
+                        <ServiceOptionStatus selectId="video_ai_service" options={videoServiceOptions} selectedId={formData.video_ai_service_id} />
                         <p className="text-xs text-gray-500 mt-1">Enables multimodal analysis (visual descriptions from video frames).</p>
                       </div>
 
@@ -1468,17 +1465,15 @@ function AgentFormPage() {
                       </label>
                       <select
                         id="vision_service"
+                        aria-describedby={serviceStatusId(agent?.ai_services, formData.vision_service_id, "vision_service")}
                         value={formData.vision_service_id || ''}
                         onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       >
                         <option value="">-- Seleccionar modelo de visión --</option>
-                        {agent?.ai_services.map((service) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
+                        <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.vision_service_id} />
                       </select>
+                      <ServiceOptionStatus selectId="vision_service" options={agent?.ai_services} selectedId={formData.vision_service_id} />
                     </div>
 
                     <div>
@@ -1501,17 +1496,15 @@ function AgentFormPage() {
                       </label>
                       <select
                         id="text_service"
+                        aria-describedby={serviceStatusId(agent?.ai_services, formData.service_id, "text_service")}
                         value={formData.service_id || ''}
                         onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       >
                         <option value="">-- Seleccionar modelo de texto --</option>
-                        {agent?.ai_services.map((service) => (
-                          <option key={service.service_id} value={service.service_id}>
-                            {service.name}
-                          </option>
-                        ))}
+                        <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.service_id} />
                       </select>
+                      <ServiceOptionStatus selectId="text_service" options={agent?.ai_services} selectedId={formData.service_id} />
                     </div>
 
                     <div>
@@ -1694,6 +1687,18 @@ function AgentFormPage() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Middlewares Card - Only for regular agents */}
+              {agent?.middlewares && formData.type !== 'ocr_agent' && (
+                <AgentMiddlewaresCard
+                  middlewares={agent.middlewares}
+                  selectedIds={formData.middleware_ids}
+                  hasMemory={formData.has_memory}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, middleware_ids: ids }))}
+                  onRequireMemory={() => setFormData((prev) => ({ ...prev, has_memory: true }))}
+                  onManage={() => navigate(`/apps/${appId}/middlewares`)}
+                />
               )}
 
               {/* Skills Card - Only for regular agents */}
@@ -1989,6 +1994,25 @@ function AgentFormPage() {
               </>
               )}
             </div>
+          )}
+
+          {activeTab === 'a2a' && !isNewAgent && (
+            <AgentA2ASettings
+              appId={Number.parseInt(appId ?? '0')}
+              value={{
+                a2a_enabled: formData.a2a_enabled,
+                a2a_card_visibility: formData.a2a_card_visibility,
+                a2a_name_override: formData.a2a_name_override,
+                a2a_description_override: formData.a2a_description_override,
+                a2a_skill_tags: formData.a2a_skill_tags,
+                a2a_examples: formData.a2a_examples,
+              }}
+              onChange={handleA2AChange}
+              cardUrl={a2aCardUrl}
+              rpcUrl={a2aRpcUrl}
+              disabled={!canEditA2A}
+              fieldErrors={a2aFieldErrors}
+            />
           )}
 
           {activeTab === 'metrics' && !isNewAgent && (

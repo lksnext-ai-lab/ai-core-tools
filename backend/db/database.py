@@ -11,14 +11,24 @@ DATABASE_URL = os.getenv('SQLALCHEMY_DATABASE_URI')
 if not DATABASE_URL:
     raise EnvironmentError("SQLALCHEMY_DATABASE_URI environment variable is required")
 
-# Total connections per process = (sync pool + async pool + checkpointer pool)
-# x workers x replicas. Keep below Postgres max_connections (default 100).
+# Connection budget: (sync + async + checkpointer + DBOS pools, at their max)
+# x uvicorn workers x (replicas + rollout surge) must stay below Postgres
+# max_connections minus its reserved slots. Each pool is sized on its own env vars.
 # pool_timeout is short on purpose: a saturated pool fails fast as 503 (main.py)
-# rather than blocking 30s. All tunable via env without a code change.
+# rather than blocking 30s.
 DB_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '20'))
 DB_MAX_OVERFLOW = int(os.getenv('DB_MAX_OVERFLOW', '10'))
+# The async engine only serves the A2A store and async pgvector calls.
+DB_ASYNC_POOL_SIZE = int(os.getenv('DB_ASYNC_POOL_SIZE', '5'))
+DB_ASYNC_MAX_OVERFLOW = int(os.getenv('DB_ASYNC_MAX_OVERFLOW', '5'))
 DB_POOL_TIMEOUT = int(os.getenv('DB_POOL_TIMEOUT', '10'))
 DB_POOL_RECYCLE = int(os.getenv('DB_POOL_RECYCLE', '3600'))
+
+# application_name tags each pool's connections in pg_stat_activity.
+SYNC_APPLICATION_NAME = "mattin-api"
+ASYNC_APPLICATION_NAME = "mattin-api-async"
+
+_IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 # Configure synchronous engine with connection pooling for better concurrency
 engine = create_engine(
@@ -29,21 +39,40 @@ engine = create_engine(
     pool_pre_ping=True,               # Verify connections before using them
     pool_recycle=DB_POOL_RECYCLE,     # Recycle connections (prevent stale connections)
     echo=False,                       # Set to True for SQL debugging
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    connect_args={"check_same_thread": False} if _IS_SQLITE else {"application_name": SYNC_APPLICATION_NAME},
 )
 
 # Configure async engine for async operations (needed for async retrievers in LangGraph)
 # Use psycopg (async) instead of asyncpg to avoid "cannot insert multiple commands" limitation
 # psycopg supports async natively and handles multiple SQL statements properly
+# RB-4/RB-13 (A2A step_017): the a2a-sdk store/stream/event-stream objects
+# (services/a2a_server/storage.py) run their polling/writes through this same
+# engine. Without connection-level timeouts, a stalled network path to
+# Postgres (as opposed to a saturated pool, which pool_timeout already
+# bounds) could hang a connect or leave a half-dead TCP connection open
+# indefinitely. These are libpq connection parameters, forwarded verbatim by
+# psycopg's async connect(**kwargs) -- connect_timeout bounds the TCP
+# handshake, the keepalives_* trio makes the OS probe an idle connection, and
+# tcp_user_timeout (ms) bounds how long the OS waits for an ACK before
+# declaring the connection dead, independent of the keepalive probes.
 ASYNC_DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://') if DATABASE_URL.startswith('postgresql://') else DATABASE_URL
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
-    pool_size=DB_POOL_SIZE,
-    max_overflow=DB_MAX_OVERFLOW,
+    pool_size=DB_ASYNC_POOL_SIZE,
+    max_overflow=DB_ASYNC_MAX_OVERFLOW,
     pool_timeout=DB_POOL_TIMEOUT,
     pool_pre_ping=True,
     pool_recycle=DB_POOL_RECYCLE,
     echo=False,
+    connect_args={
+        "application_name": ASYNC_APPLICATION_NAME,
+        "connect_timeout": 5,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+        "tcp_user_timeout": 30000,
+    } if ASYNC_DATABASE_URL.startswith("postgresql+psycopg://") else {},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

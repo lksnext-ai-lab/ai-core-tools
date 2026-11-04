@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from schemas.service_lifecycle_schemas import ServiceLifecycleWarningSchema
 
 VISIBILITY_PATTERN = "^(unpublished|private|public)$"
 
@@ -21,6 +23,7 @@ class ScheduledTaskCreateSchema(BaseModel):
     max_concurrent_runs: int = Field(default=1, ge=1, le=32)
     max_runs_retained: int = Field(default=10, ge=1, le=100)
     marketplace_visibility: str = Field(default="unpublished", pattern=VISIBILITY_PATTERN)
+    output_bindings: list[Dict[str, Any]] = Field(default_factory=list, max_length=20)
 
 
 class ScheduledTaskUpdateSchema(BaseModel):
@@ -55,6 +58,7 @@ class ScheduledTaskResponseSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     next_run_at: Optional[datetime] = None
+    lifecycle_warnings: List[ServiceLifecycleWarningSchema] = []
     model_config = ConfigDict(from_attributes=True)
 
     _visibility = field_validator("marketplace_visibility", mode="before")(_visibility_value)

@@ -272,6 +272,16 @@ MCP router endpoints use **custom protocol-based authentication** (not session o
 Authorization: Bearer <mcp-server-token>
 ```
 
+### Retired Services
+
+When an agent exposed as an MCP tool depends on a service past its end of service (see [Service End of Service](../guides/chat-bot/kb-ai-services.md#service-end-of-service)), `tools/call` returns a normal tool result with `isError: true` (not a JSON-RPC protocol error). The text content carries the retirement message: service name, retirement date and the admin's deprecation notice.
+
+```json
+{ "content": [{ "type": "text", "text": "Service GPT-4 was retired on 2026-09-30. ..." }], "isError": true }
+```
+
+MCP is a non-interactive channel; nothing is retried.
+
 ## Agent-Server Association
 
 Agents connect to MCP servers via the **AgentMCP** junction table:

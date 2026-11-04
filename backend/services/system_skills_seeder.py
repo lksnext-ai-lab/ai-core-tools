@@ -1,9 +1,9 @@
 """Seed system (platform) skill packages from ``backend/system_skills/`` on startup (FR-32/33, AC-29..32).
 
-Modelled on ``backend/services/tier_config_seeder.py``. **Create-if-missing only** (AC-30): a system skill
-already present (matched by name) is never updated, restored or re-enabled by this seeder, even if its YAML
-entry or on-disk package contents have since changed — an admin may freely disable or edit a seeded skill and
-that change survives every subsequent restart untouched.
+Modelled on ``backend/services/tier_config_seeder.py``. Missing skills are created (AC-30); an existing
+``source='yaml'`` skill that is not frozen has its content/files refreshed when the on-disk package changed
+(its content is not admin-editable, so disk is the source of truth). ``is_enabled`` is never touched, so an
+admin's disable survives every restart; skills created or edited by admins (``source='admin'``) are left alone.
 
 Concurrency (AC-32, NFR-4a): the whole run is wrapped in ``try_advisory_lock`` (transaction-scoped, see
 ``backend/db/advisory_lock.py``'s module docstring — read it before touching this file). Per-package failures
@@ -17,6 +17,7 @@ failure, the package path and exception message — never file contents (NFR-7).
 """
 from __future__ import annotations
 
+import mimetypes
 import os
 import stat
 from pathlib import Path
@@ -27,10 +28,12 @@ from sqlalchemy.orm import Session
 
 import config as settings
 from db.advisory_lock import try_advisory_lock
+from repositories.skill_package_repository import SkillPackageRepository
 from repositories.skill_repository import SkillRepository
 from services.skill_errors import SkillServiceError
 from services.skill_package_service import SkillPackageService
 from utils.logger import get_logger
+from utils.skill_json import dump_json
 from utils.skill_frontmatter import SkillFrontmatterError, parse_skill_md
 from utils.skill_paths import normalize_path
 
@@ -116,6 +119,7 @@ def _seed_locked(db: Session, entries: List[Dict[str, Any]]) -> None:
         return
 
     created_names: List[str] = []
+    refreshed_names: List[str] = []
     skipped = 0
     failed = 0
 
@@ -128,7 +132,13 @@ def _seed_locked(db: Session, entries: List[Dict[str, Any]]) -> None:
         try:
             # Existence check moved inside the per-package try (M4): a DB error here must be
             # isolated like any other per-package failure, not abandon the whole run.
-            if SkillRepository.get_system_skill_by_name(db, name) is not None:
+            existing = SkillRepository.get_system_skill_by_name(db, name)
+            if existing is not None:
+                if existing.source == "yaml" and not existing.is_frozen:
+                    with db.begin_nested():
+                        if _refresh_skill_from_package(db, existing, _resolve_package_dir(rel_path)):
+                            refreshed_names.append(name)
+                            continue
                 skipped += 1
                 logger.debug("system_skills_seeder: system skill %r already exists, skipping", name)
                 continue
@@ -167,8 +177,10 @@ def _seed_locked(db: Session, entries: List[Dict[str, Any]]) -> None:
         return
 
     logger.info(
-        "system_skills_seeder: done - created=%d skipped=%d failed=%d (total entries=%d) - names=%s",
-        len(created_names), skipped, failed, len(entries), created_names,
+        "system_skills_seeder: done - created=%d refreshed=%d skipped=%d failed=%d (total entries=%d) "
+        "- created=%s refreshed=%s",
+        len(created_names), len(refreshed_names), skipped, failed, len(entries),
+        created_names, refreshed_names,
     )
 
 
@@ -389,6 +401,61 @@ def _walk_package_files(pkg_dir: Path) -> Tuple[str, Dict[str, bytes]]:
             files[norm] = data
 
     return skill_md_text, files
+
+
+def _refresh_skill_from_package(db: Session, skill: Any, pkg_dir: Path) -> bool:
+    """Bring an unmodified ``source='yaml'`` system skill in line with its on-disk package.
+
+    Admins cannot edit the content of a yaml-sourced skill (see ``YAML_SKILL_DELETE_MSG``), so the
+    package on disk is the only source of truth and a changed package must reach existing installs.
+    ``is_enabled`` is never touched, so an admin's disable survives. Frozen skills are skipped by the
+    caller. Flushes only; must run inside ``db.begin_nested()``.
+
+    Returns:
+        True if anything changed.
+    """
+    skill_md_text, files = _walk_package_files(pkg_dir)
+    try:
+        parsed = parse_skill_md(skill_md_text)
+    except SkillFrontmatterError as exc:
+        raise _PackageError(f"invalid {_SKILL_MD}: {exc}") from exc
+    if parsed.name != skill.name:
+        raise _PackageError(f"{_SKILL_MD} name {parsed.name!r} does not match skill {skill.name!r}")
+
+    current = {
+        path: checksum
+        for path, _media, _size, checksum, _is_text in SkillPackageRepository.list_paths(db, skill.skill_id)
+    }
+    wanted = {path: SkillPackageRepository.compute_checksum(data) for path, data in files.items()}
+    if skill.content == parsed.body and current == wanted:
+        return False
+
+    bootstrap = SkillPackageService.validate_parsed_package(parsed, files)
+    frontmatter: Dict[str, Any] = dict(parsed.extra)
+    if parsed.when_to_use:
+        frontmatter["when_to_use"] = parsed.when_to_use
+    if parsed.disable_model_invocation:
+        frontmatter["disable_model_invocation"] = True
+
+    skill.display_name = parsed.display_name
+    skill.description = parsed.description
+    skill.content = parsed.body
+    skill.frontmatter = dump_json(frontmatter) if frontmatter else None
+    skill.allowed_tools = dump_json(parsed.allowed_tools) if parsed.allowed_tools else None
+    skill.runtime = parsed.runtime
+    skill.bootstrap_script_path = bootstrap
+    skill.runtime_options = dump_json(parsed.runtime_options) if parsed.runtime_options else None
+    db.add(skill)
+    try:
+        SkillPackageRepository.replace_files(
+            db,
+            skill.skill_id,
+            [(path, data, mimetypes.guess_type(path)[0]) for path, data in files.items()],
+        )
+    except ValueError as exc:
+        raise _PackageError(f"invalid package file: {exc}") from exc
+    db.flush()
+    return True
 
 
 def _create_skill_from_package(db: Session, name: str, pkg_dir: Path) -> None:

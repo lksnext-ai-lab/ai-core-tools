@@ -1,6 +1,36 @@
 {
 	admin off
 	auto_https off
+	# Trust model (RB-9/RB-16). `trusted_proxies` is left at its default here
+	# (the `static` source below with no ranges configured is equivalent to
+	# omitting the directive entirely — verified with `caddy adapt`): Caddy is
+	# the single ingress for this stack (one published host port, see
+	# docker-compose.yaml) and is not itself behind another proxy in the
+	# common single-host deployment. With no trusted proxies configured,
+	# Caddy REPLACES whatever X-Forwarded-For a client sends with just the
+	# real TCP peer address before forwarding to backend/frontend — it does
+	# NOT append to a client-supplied value. This matters beyond uvicorn's own
+	# `--forwarded-allow-ips` (backend/Dockerfile): backend/services/auth/
+	# login_throttle.py reads the FIRST entry of X-Forwarded-For directly as
+	# the client IP, which is only safe because Caddy guarantees that header
+	# has a single, trustworthy entry by the time it reaches backend.
+	#
+	# If a TLS-terminating load balancer/CDN sits in FRONT of Caddy (not the
+	# single-host case this stack ships for by default), set
+	# CADDY_TRUSTED_PROXIES to that LB's CIDR(s) (space-separated) so Caddy
+	# trusts and preserves ITS X-Forwarded-For instead of overwriting it with
+	# the LB's own address. Otherwise every client behind that LB would share
+	# one X-Forwarded-For value (the LB's IP) and therefore one rate-limit
+	# bucket (A2A discovery limiter, login throttle, etc.) — see
+	# docker/.env.example for the full write-up, including the IPv6 caveat and
+	# why A2A_PUBLIC_BASE_URL/FRONTEND_URL must be the https:// public URL in
+	# that case. Leave unset for the default single-host deployment.
+	servers {
+		trusted_proxies static {$CADDY_TRUSTED_PROXIES}
+		timeouts {
+			read_header 10s
+		}
+	}
 	log {
 		output stdout
 		format console
@@ -9,15 +39,47 @@
 }
 
 :80 {
-	encode zstd gzip
+	# A2A (Agent2Agent protocol) routes — step_021. Handled in their own
+	# `handle` block, deliberately separate from @backend below, so that:
+	#   - SSE responses (SendStreamingMessage / SubscribeToTask) are never
+	#     gzip/zstd-encoded or buffered: `encode` is NOT applied in this
+	#     block, and `flush_interval -1` on the reverse_proxy flushes each
+	#     chunk to the client immediately instead of waiting for Caddy's
+	#     write buffer to fill (RB-16);
+	#   - the route gets its own request-body ceiling, a blunt perimeter
+	#     guard mirroring A2A_MAX_REQUEST_MB (backend/utils/a2a_config.py is
+	#     the authoritative, per-request-type cap enforced via
+	#     read_body_capped — this one only needs enough headroom above it to
+	#     never reject a legitimate request before the backend's own, more
+	#     precise 413 does). There is deliberately NO request-body *read
+	#     timeout* here (fix round 1, C1): Go's http.Server read timeout is
+	#     connection-wide, not per-route, and would cut off slow uploads
+	#     (App.max_file_size_mb defaults to unlimited) and, on HTTP/1.1, any
+	#     request/response lasting longer than it end to end — including A2A
+	#     SSE streams. The backend's own read_body_capped already bounds body
+	#     *size*, which is what actually matters here; time-bounding is the
+	#     backend's job (A2A_TURN_MAX_SECONDS, A2A_STREAM_MAX_SECONDS, etc.,
+	#     see backend/utils/a2a_config.py), not Caddy's.
+	@a2a path /a2a/* /.well-known/agent-card.json
+
+	handle @a2a {
+		request_body {
+			max_size {$A2A_CADDY_MAX_REQUEST_BODY:40MB}
+		}
+		reverse_proxy backend:8000 {
+			flush_interval -1
+		}
+	}
 
 	@backend path /internal/* /public/* /mcp/* /docs/* /scalar /openapi-internal.json /openapi-public.json /static/* /health
 
 	handle @backend {
+		encode zstd gzip
 		reverse_proxy backend:8000
 	}
 
 	handle {
+		encode zstd gzip
 		reverse_proxy frontend:80
 	}
 }

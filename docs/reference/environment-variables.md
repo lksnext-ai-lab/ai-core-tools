@@ -276,6 +276,14 @@ See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 | `SANDBOX_IDLE_TIMEOUT_S` | No | `120` | Max idle time before cached sandboxes are stopped/destroyed |
 | `SANDBOX_REAPER_INTERVAL_S` | No | `30` | How often the backend checks for idle sandboxes |
 
+### Service End of Service
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_SYSTEM_SERVICE_END_OF_SERVICE_WARNING_DAYS` | No | `30` | Days before a service's end-of-service date during which it is shown as `deprecated`. `0` = no deprecated phase. Overrides the system setting `service_end_of_service_warning_days` (default in `backend/system_defaults.yaml`) |
+
+The warning window only affects display. A service is blocked at runtime as soon as its date is reached, whatever this value is. `SANDBOX_DEFAULT_PROVIDER` (the env/system default provider) has no lifecycle. See [Knowledge Base AI Services](../guides/chat-bot/kb-ai-services.md#service-end-of-service).
+
 ### Skill Package Import
 
 Hardened limits applied by the in-memory zip reader (`backend/utils/safe_zip.py`) when a skill package (`.zip`) is imported — via the app-scoped `/skills/import` route, the admin `/system-skills/import` route, or a Claude Code plugin import. All are optional; an invalid value (non-numeric, NaN/infinite, below the documented minimum) makes the backend fail fast at startup rather than silently falling back to the default.

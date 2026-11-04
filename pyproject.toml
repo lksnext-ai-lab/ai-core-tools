@@ -177,6 +177,8 @@ e2b-code-interpreter = "2.5.0"
 e2b = "2.7.0"
 dbos = ">=2.0.0,<3.0.0"
 croniter = ">=6.0.0,<7.0.0"  # used directly by scheduled_task_service (was only pulled in transitively)
+# Exact pin: services/a2a_server/storage.py overrides private SDK attributes; bump only after tests/integration/a2a_server/test_sdk_contract.py passes
+a2a-sdk = {version = "==1.2.2", extras = ["http-server"]}  # SDK DB stores run on our psycopg async_engine; no asyncpg extra
 
 [tool.poetry.scripts]
 dev = "uvicorn backend.main:app --reload --port 8000"

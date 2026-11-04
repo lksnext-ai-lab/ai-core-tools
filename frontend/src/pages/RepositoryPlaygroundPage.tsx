@@ -4,14 +4,15 @@ import { ArrowLeft, Search, Info } from 'lucide-react';
 import { apiService } from '../services/api';
 import SearchFilters from '../components/playground/SearchFilters';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
+import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 
 // Define the repository type
 interface Repository {
   repository_id: number;
   name: string;
   created_at?: string;
-  resources: any[];
-  embedding_services: any[];
+  resources: unknown[];
+  embedding_services: ServiceOptionLike[];
   embedding_service_id?: number;
   metadata_fields?: SearchFilterMetadataField[];
   vector_db_type?: string;

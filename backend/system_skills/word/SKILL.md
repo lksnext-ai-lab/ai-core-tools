@@ -84,7 +84,7 @@ for region, revenue, growth in [("North", "$1.2M", "+8%"), ("South", "$0.9M", "+
     row = table.add_row().cells
     row[0].text, row[1].text, row[2].text = region, revenue, growth
 
-doc.save("output.docx")
+doc.save("output/document.docx")  # only files under output/ reach the user
 ```
 
 ## Reading an existing document

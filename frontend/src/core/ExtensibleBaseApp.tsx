@@ -25,6 +25,7 @@ import ScheduledTasksPage from '../pages/ScheduledTasksPage';
 import ScheduledTaskFormPage from '../pages/ScheduledTaskFormPage';
 import ScheduledTaskDetailPage from '../pages/ScheduledTaskDetailPage';
 import ScheduledTaskRunPage from '../pages/ScheduledTaskRunPage';
+import ScheduledTaskRunFileRedirectPage from '../pages/ScheduledTaskRunFileRedirectPage';
 import MarketplaceScheduledTaskPage from '../pages/MarketplaceScheduledTaskPage';
 import MarketplaceScheduledTaskRunPage from '../pages/MarketplaceScheduledTaskRunPage';
 import SilosPage from '../pages/SilosPage';
@@ -45,8 +46,10 @@ import CollaborationPage from '../pages/settings/CollaborationPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
 import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
+import OutputDestinationsPage from '../pages/settings/OutputDestinationsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
+import MiddlewaresPage from '../pages/settings/MiddlewaresPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
@@ -239,6 +242,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/scheduled-tasks/:taskId/edit" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/:taskId" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskDetailPage /></ProtectedLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/:taskId/runs/:runId" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskRunPage /></ProtectedLayoutRoute>} />
+                <Route path="/apps/:appId/scheduled-tasks/:taskId/runs/:runId/files/:fileId" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskRunFileRedirectPage /></ProtectedLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/:taskId/conversation" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTaskRunPage /></ProtectedLayoutRoute>} />
 
                 <Route path="/apps/:appId/agents/:agentId/playground" element={
@@ -361,6 +365,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
 
+                <Route path="/apps/:appId/middlewares" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                    <MiddlewaresPage />
+                  </EditorLayoutRoute>
+                } />
+
                 <Route path="/apps/:appId/settings" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><AppSettingsPage /></SettingsLayout>
@@ -370,6 +380,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/apps/:appId/settings/general" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><AppSettingsPage /></SettingsLayout>
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/output-destinations" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SettingsLayout><OutputDestinationsPage /></SettingsLayout>
                   </EditorLayoutRoute>
                 } />
 

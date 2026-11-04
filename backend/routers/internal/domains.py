@@ -36,12 +36,14 @@ from schemas.import_schemas import ConflictMode, ImportResponseSchema
 from schemas.export_schemas import DomainExportFileSchema
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.role_authorization import require_min_role, AppRole
+from routers.controls.domain_scope import require_domain_in_app, require_domain_in_app_or_new
 
 # Import database dependencies
 from db.database import get_db
 
 # Import logger
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 from utils.error_handlers import ValidationError
 from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from tools.vector_store_factory import VectorStoreFactory
@@ -147,6 +149,7 @@ async def list_domains(
 
 
 @domains_router.get("/{domain_id}",
+                    dependencies=[require_domain_in_app_or_new],
                     summary="Get domain details",
                     tags=["Domains"],
                     response_model=DomainDetailSchema)
@@ -214,6 +217,7 @@ async def create_domain(
 
 
 @domains_router.put("/{domain_id}",
+                    dependencies=[require_domain_in_app],
                     summary="Update domain",
                     tags=["Domains"],
                     response_model=DomainDetailSchema)
@@ -257,6 +261,7 @@ async def update_domain(
 
 
 @domains_router.delete("/{domain_id}",
+                       dependencies=[require_domain_in_app],
                        summary="Delete domain",
                        tags=["Domains"])
 async def delete_domain(
@@ -285,6 +290,7 @@ async def delete_domain(
 
 @domains_router.post(
     "/{domain_id}/export",
+    dependencies=[require_domain_in_app],
     summary="Export Domain",
     tags=["Domains", "Export/Import"],
     status_code=status.HTTP_200_OK,
@@ -321,6 +327,7 @@ async def export_domain(
 # ==================== URL MANAGEMENT ====================
 
 @domains_router.get("/{domain_id}/urls",
+                    dependencies=[require_domain_in_app],
                     summary="List URLs for domain",
                     tags=["Domains", "URLs"],
                     response_model=DomainUrlListResponseSchema)
@@ -355,6 +362,7 @@ async def list_domain_urls(
 
 
 @domains_router.post("/{domain_id}/urls",
+                     dependencies=[require_domain_in_app],
                      summary="Add URL to domain",
                      tags=["Domains", "URLs"],
                      response_model=DomainUrlActionResponseSchema,
@@ -387,6 +395,7 @@ async def add_domain_url(
 
 
 @domains_router.get("/{domain_id}/urls/{url_id}",
+                    dependencies=[require_domain_in_app],
                     summary="Get URL detail",
                     tags=["Domains", "URLs"],
                     response_model=DomainUrlDetailSchema)
@@ -413,6 +422,7 @@ async def get_domain_url(
 
 
 @domains_router.delete("/{domain_id}/urls/{url_id}",
+                       dependencies=[require_domain_in_app],
                        summary="Delete URL from domain",
                        tags=["Domains", "URLs"],
                        response_model=DomainUrlActionResponseSchema)
@@ -439,6 +449,7 @@ async def delete_domain_url(
 
 
 @domains_router.post("/{domain_id}/urls/{url_id}/recrawl",
+                     dependencies=[require_domain_in_app],
                      summary="Force re-crawl a URL",
                      tags=["Domains", "URLs"],
                      response_model=DomainUrlActionResponseSchema)
@@ -465,8 +476,10 @@ async def recrawl_url(
 
 
 @domains_router.get("/{domain_id}/urls/{url_id}/content",
+                    dependencies=[require_domain_in_app],
                     summary="Get URL content preview",
-                    tags=["Domains", "URLs"])
+                    tags=["Domains", "URLs"],
+                    responses={409: {"description": "A service used by this resource was retired"}})
 async def get_url_content(
     app_id: int,
     domain_id: int,
@@ -510,7 +523,7 @@ async def get_url_content(
             "content": content,
             "message": "Content retrieved successfully" if content else "No content found for this URL",
         }
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error retrieving URL content: {str(e)}")
@@ -520,6 +533,7 @@ async def get_url_content(
 # ==================== CRAWL POLICY ====================
 
 @domains_router.get("/{domain_id}/crawl-policy",
+                    dependencies=[require_domain_in_app],
                     summary="Get crawl policy",
                     tags=["Domains", "Crawl"],
                     response_model=CrawlPolicyResponseSchema)
@@ -539,6 +553,7 @@ async def get_crawl_policy(
 
 
 @domains_router.put("/{domain_id}/crawl-policy",
+                    dependencies=[require_domain_in_app],
                     summary="Create or update crawl policy",
                     tags=["Domains", "Crawl"],
                     response_model=CrawlPolicyResponseSchema)
@@ -565,6 +580,7 @@ async def upsert_crawl_policy(
 # ==================== CRAWL JOBS ====================
 
 @domains_router.post("/{domain_id}/crawl-jobs",
+                     dependencies=[require_domain_in_app],
                      summary="Trigger a crawl job",
                      tags=["Domains", "Crawl"],
                      response_model=TriggerCrawlResponseSchema,
@@ -597,6 +613,7 @@ async def trigger_crawl(
 
 
 @domains_router.get("/{domain_id}/crawl-jobs",
+                    dependencies=[require_domain_in_app],
                     summary="List crawl jobs",
                     tags=["Domains", "Crawl"],
                     response_model=CrawlJobListResponseSchema)
@@ -621,6 +638,7 @@ async def list_crawl_jobs(
 
 
 @domains_router.get("/{domain_id}/crawl-jobs/{job_id}",
+                    dependencies=[require_domain_in_app],
                     summary="Get crawl job",
                     tags=["Domains", "Crawl"],
                     response_model=CrawlJobResponseSchema)
@@ -641,6 +659,7 @@ async def get_crawl_job(
 
 
 @domains_router.post("/{domain_id}/crawl-jobs/{job_id}/cancel",
+                     dependencies=[require_domain_in_app],
                      summary="Cancel a crawl job",
                      tags=["Domains", "Crawl"],
                      response_model=CrawlJobResponseSchema)

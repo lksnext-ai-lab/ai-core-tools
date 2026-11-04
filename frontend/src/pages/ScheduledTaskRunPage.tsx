@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiService, type ScheduledTask } from '../services/api';
 import { ScheduledTaskOutputView, type ScheduledTaskOutputSource } from '../components/scheduled-tasks/ScheduledTaskOutputView';
+import { OutputDeliveriesPanel } from '../components/scheduled-tasks/OutputDeliveriesPanel';
 
 /** Read-only result of a run (/runs/:runId) or of a continuous conversation (/conversation). */
 export default function ScheduledTaskRunPage() {
@@ -23,6 +24,7 @@ export default function ScheduledTaskRunPage() {
   }), [numericAppId, numericTaskId, numericRunId]);
 
   return (
+    <>
     <ScheduledTaskOutputView
       title={task?.name ?? 'Tarea programada'}
       subtitle={numericRunId === null ? 'Respuestas de la conversación continua' : 'Resultado de la ejecución'}
@@ -31,5 +33,7 @@ export default function ScheduledTaskRunPage() {
       source={source}
       timeline={numericRunId === null}
     />
+    {numericRunId !== null && <OutputDeliveriesPanel appId={numericAppId} taskId={numericTaskId} runId={numericRunId} />}
+    </>
   );
 }

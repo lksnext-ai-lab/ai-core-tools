@@ -23,6 +23,7 @@ import {
   Cpu,
   Box,
   CalendarClock,
+  Webhook,
   Target,
   Activity,
 } from 'lucide-react';
@@ -128,6 +129,12 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      path: '/apps/:appId/middlewares',
+      name: 'Middlewares',
+      icon: <Layers size={16} />,
+      section: 'appNavigation'
+    },
+    {
       path: '/apps/:appId/settings',
       name: 'App Settings',
       icon: <Settings size={16} />,
@@ -136,6 +143,12 @@ export const defaultNavigation: NavigationConfig = {
   ],
   // Settings sub-navigation (rendered inside collapsible in sidebar)
   settingsNavigation: [
+    {
+      path: '/apps/:appId/settings/output-destinations',
+      name: 'Output Channels',
+      icon: <Webhook size={16} />,
+      section: 'settings'
+    },
     {
       path: '/apps/:appId/settings/ai-services',
       name: 'AI Services',
