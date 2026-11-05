@@ -242,6 +242,10 @@ class VectorStoreInterface(ABC):
         field: str,
         prefix: Optional[str] = None,
         limit: int = 100,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
+        after: Optional[str] = None,
+        raise_errors: bool = False,
     ) -> List[str]:
         """
         Return distinct string values for a metadata field in a collection.
@@ -251,6 +255,18 @@ class VectorStoreInterface(ABC):
             field: Metadata field name
             prefix: Optional case-insensitive prefix filter
             limit: Maximum number of values to return
+            contains: Optional case-insensitive substring filter
+            filter_metadata: Optional PGVector-style metadata filter narrowing
+                which documents contribute values (e.g.
+                ``{"modelo_maquina": {"$eq": "LS5000"}}``). Lets a caller
+                enumerate one subset of a collection without a similarity
+                search and without the result cap that search carries.
+            after: Optional keyset cursor: only values sorting strictly after
+                it are returned, so a caller pages by passing the last value
+                of the previous page. ``None`` keeps the original behaviour.
+            raise_errors: Propagate a backend failure instead of returning the
+                (empty or partial) values gathered so far. Off by default, which
+                is what the UI autocomplete callers rely on.
 
         Returns:
             Alphabetically sorted list of distinct values.
