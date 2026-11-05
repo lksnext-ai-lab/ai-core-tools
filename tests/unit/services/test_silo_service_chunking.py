@@ -5,8 +5,10 @@ All external dependencies are mocked — no DB, filesystem, or vector store acce
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
+from tools.pdf_loader import PdfLoader
 from services.silo_service import (
     CHUNK_OVERLAP,
     CHUNK_SIZE,
@@ -213,132 +215,201 @@ class TestDomainContentChunking:
 
 
 class TestExtractDocumentsFromFileSplitter:
-    """AC-16: extract_documents_from_file must use RecursiveCharacterTextSplitter."""
+    """PDF blocks are reconstructed into page- and section-aware chunks."""
 
-    def _make_page_doc(self, text: str, page: int = 0) -> Document:
-        return Document(page_content=text, metadata={"page": page, "source": "/tmp/test.pdf"})
+    def test_pdf_loader_implements_langchain_base_loader(self):
+        assert issubclass(PdfLoader, BaseLoader)
 
-    def test_uses_recursive_splitter_not_character_splitter(self):
-        """RecursiveCharacterTextSplitter splits at paragraph boundaries before the hard limit.
+    @staticmethod
+    def _make_block(text: str, y: float = 72, size: float = 11, bold: bool = False) -> dict:
+        lines = []
+        for line_number, line_text in enumerate(text.splitlines() or [text]):
+            top = y + line_number * 12
+            lines.append({
+                "bbox": (72, top, 400, top + 10),
+                "spans": [{
+                    "text": line_text,
+                    "size": size,
+                    "flags": 16 if bold else 0,
+                }],
+            })
+        return {"type": 0, "lines": lines}
 
-        A text with a clear \\n\\n boundary before CHUNK_SIZE must be split there,
-        not at the character limit — which is what CharacterTextSplitter would do.
-        """
-        para_a = "Alpha " * 67  # ~402 chars
-        para_b = "Beta  " * 117  # ~702 chars
-        text = para_a.strip() + "\n\n" + para_b.strip()
-        assert len(text) > CHUNK_SIZE
+    class _FakePdf:
+        def __init__(self, pages: list[list[dict]]):
+            self.pages = pages
 
-        page_doc = self._make_page_doc(text, page=0)
+        def __enter__(self):
+            return self
 
-        with patch("langchain_community.document_loaders.PyMuPDFLoader") as MockLoader:
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.load.return_value = [page_doc]
-            MockLoader.return_value = mock_loader_instance
+        def __exit__(self, *_):
+            return False
 
-            docs = SiloService.extract_documents_from_file(
-                file_path="/tmp/fake.pdf",
+        def __iter__(self):
+            for blocks in self.pages:
+                page = MagicMock()
+                page.get_text.return_value = {"blocks": blocks}
+                yield page
+
+    def _extract(self, pages: list[list[dict]], base_metadata: dict | None = None):
+        fake_pdf = self._FakePdf(pages)
+        with patch("fitz.open", return_value=fake_pdf):
+            return SiloService.extract_documents_from_file(
+                file_path="fake.pdf",
                 file_extension=".pdf",
-                base_metadata={"resource_id": 1, "silo_id": 3},
+                base_metadata=base_metadata,
             )
 
-        assert len(docs) >= 2, (
-            f"Expected >=2 chunks for a {len(text)}-char text, got {len(docs)}"
-        )
-        assert len(docs[0].page_content) < CHUNK_SIZE, (
-            "First chunk must split at the paragraph boundary, not at the character limit"
-        )
-        assert "Beta" not in docs[0].page_content
-
-    def test_paragraph_boundary_is_preferred_split_point(self):
-        """RecursiveCharacterTextSplitter splits at \\n\\n before splitting mid-sentence."""
-        para_a = ("Sentence one about the topic. " * 14).rstrip()  # ~420 chars
-        para_b = ("Sentence two about the topic. " * 24).rstrip()  # ~720 chars
-        text = para_a + "\n\n" + para_b
-        assert len(text) > CHUNK_SIZE
-
-        page_doc = self._make_page_doc(text)
-
-        with patch("langchain_community.document_loaders.PyMuPDFLoader") as MockLoader:
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.load.return_value = [page_doc]
-            MockLoader.return_value = mock_loader_instance
-
-            docs = SiloService.extract_documents_from_file(
-                file_path="/tmp/fake.pdf",
-                file_extension=".pdf",
-            )
-
-        assert len(docs) >= 2
-        assert len(docs[0].page_content) <= CHUNK_SIZE + CHUNK_OVERLAP, (
-            f"First chunk too large: {len(docs[0].page_content)} chars"
-        )
-
-    def test_base_metadata_attached_to_every_chunk(self):
-        """base_metadata keys must appear on every chunk produced by extract_documents_from_file."""
-        text = ("Word " * 300).strip()
-        assert len(text) > CHUNK_SIZE
-
-        page_doc = self._make_page_doc(text)
-
-        with patch("langchain_community.document_loaders.PyMuPDFLoader") as MockLoader:
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.load.return_value = [page_doc]
-            MockLoader.return_value = mock_loader_instance
-
-            base_meta = {"resource_id": 42, "silo_id": 9, "name": "test.pdf"}
-            docs = SiloService.extract_documents_from_file(
-                file_path="/tmp/fake.pdf",
-                file_extension=".pdf",
-                base_metadata=base_meta,
-            )
-
-        assert len(docs) >= 2
-        for i, doc in enumerate(docs):
-            for key, value in base_meta.items():
-                assert key in doc.metadata, f"Chunk {i} missing '{key}' from base_metadata"
-                assert doc.metadata[key] == value, (
-                    f"Chunk {i}: '{key}' expected {value!r}, got {doc.metadata[key]!r}"
-                )
-
-    def test_short_file_produces_single_chunk(self):
-        """A file whose text fits within CHUNK_SIZE must produce exactly one chunk."""
-        text = "Short document content."
-        assert len(text) < CHUNK_SIZE
-
-        page_doc = self._make_page_doc(text)
-
-        with patch("langchain_community.document_loaders.PyMuPDFLoader") as MockLoader:
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.load.return_value = [page_doc]
-            MockLoader.return_value = mock_loader_instance
-
-            docs = SiloService.extract_documents_from_file(
-                file_path="/tmp/fake.pdf",
-                file_extension=".pdf",
-                base_metadata={"resource_id": 1, "silo_id": 1},
-            )
+    def test_visual_line_breaks_are_joined_within_a_pdf_block(self):
+        docs = self._extract([[
+            self._make_block("A visual line ends here\nand continues on the next line."),
+        ]])
 
         assert len(docs) == 1
-        assert docs[0].page_content == text
+        assert docs[0].page_content == (
+            "A visual line ends here and continues on the next line."
+        )
 
-    def test_page_number_offset_applied(self):
-        """The 'page' metadata value from PDFs must be incremented by 1 (1-based)."""
-        text = "Content on page zero."
-        page_doc = self._make_page_doc(text, page=0)
+    def test_paragraphs_are_grouped_without_crossing_section_boundaries(self):
+        first_paragraph = "First paragraph. " * 12
+        section_heading = "Second section"
+        second_paragraph = "Second section content. " * 8
+        docs = self._extract([[
+            self._make_block(first_paragraph),
+            self._make_block(section_heading, y=100, size=16, bold=True),
+            self._make_block(second_paragraph, y=130),
+        ]])
 
-        with patch("langchain_community.document_loaders.PyMuPDFLoader") as MockLoader:
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.load.return_value = [page_doc]
-            MockLoader.return_value = mock_loader_instance
+        assert len(docs) == 2
+        assert first_paragraph.strip() in docs[0].page_content
+        assert section_heading in docs[1].page_content
+        assert second_paragraph.strip() in docs[1].page_content
+        assert "section" not in docs[0].metadata
+        assert docs[1].metadata["section"] == section_heading
 
-            docs = SiloService.extract_documents_from_file(
-                file_path="/tmp/fake.pdf",
-                file_extension=".pdf",
-            )
+    def test_oversized_paragraph_is_kept_intact_above_target(self):
+        sentence_a = "Alpha " * 100 + "ends here."
+        sentence_b = "Beta " * 100 + "ends there."
+        paragraph = f"{sentence_a} {sentence_b}"
+        docs = self._extract([[self._make_block(paragraph)]])
 
         assert len(docs) == 1
-        assert docs[0].metadata["page"] == 1
+        assert len(docs[0].page_content) > CHUNK_SIZE
+        assert docs[0].page_content == paragraph
+
+    def test_single_long_sentence_is_not_split_without_embedding_limit(self):
+        paragraph = "meaningful " * (CHUNK_SIZE * 2)
+        docs = self._extract([[self._make_block(paragraph)]])
+
+        assert len(docs) == 1
+        assert docs[0].page_content == paragraph.strip()
+
+    def test_complete_paragraphs_are_grouped_up_to_target_size(self):
+        first = "First paragraph has a complete idea and ends clearly."
+        second = "Second paragraph carries another complete idea."
+        docs = self._extract([[
+            self._make_block(first),
+            self._make_block(second, y=100),
+        ]])
+
+        assert len(docs) == 1
+        assert docs[0].page_content == f"{first}\n{second}"
+        assert docs[0].metadata["pdf_blocks"] == [0, 1]
+
+    def test_second_pass_preserves_a_pdf_unit_above_target_size(self):
+        text = "A complete PDF text block. " * 60
+        docs = self._extract([[self._make_block(text)]])
+
+        indexed = SiloService._create_documents_for_indexing(
+            4,
+            [{"content": doc.page_content, "metadata": doc.metadata} for doc in docs],
+        )
+
+        assert len(indexed) == 1
+        assert indexed[0].page_content == docs[0].page_content
+        assert len(indexed[0].page_content) > CHUNK_SIZE
+
+    def test_page_section_and_base_metadata_survive_second_chunking_pass(self):
+        docs = self._extract(
+            [
+                [
+                    self._make_block("First page body. " * 4),
+                ],
+                [
+                    self._make_block("Overview", y=100, size=16, bold=True),
+                    self._make_block("Second page section body. " * 4, y=130),
+                ],
+            ],
+            base_metadata={"resource_id": 42, "silo_id": 9},
+        )
+        indexed = SiloService._create_documents_for_indexing(
+            9,
+            [{"content": doc.page_content, "metadata": doc.metadata} for doc in docs],
+        )
+
+        assert len(indexed) == len(docs)
+        assert [doc.page_content for doc in indexed] == [doc.page_content for doc in docs]
+        assert [doc.metadata["page"] for doc in indexed] == [1, 2]
+        assert all(doc.metadata["resource_id"] == 42 for doc in indexed)
+        assert all(doc.metadata["silo_id"] == 9 for doc in indexed)
+        assert indexed[-1].metadata["section"] == "Overview"
+        assert indexed[-1].metadata["pdf_blocks"] == [0, 1]
+        assert all("_aict_structured_pdf_chunk" not in doc.metadata for doc in indexed)
+
+    def test_pdf_loader_fallback_returns_unsplit_pages(self):
+        fake_pdf = MagicMock()
+        fake_pdf.__enter__.return_value = fake_pdf
+        fake_pdf.__exit__.return_value = False
+        fake_pdf.__iter__.return_value = iter([
+            MagicMock(get_text=MagicMock(return_value={"not_blocks": []})),
+        ])
+        loaded_page = Document(
+            page_content="Fallback text " * 100,
+            metadata={"page": 0, "source": "fallback.pdf"},
+        )
+        with (
+            patch("fitz.open", return_value=fake_pdf),
+            patch("langchain_community.document_loaders.PyMuPDFLoader") as loader,
+        ):
+            loader.return_value.load.return_value = [loaded_page]
+            pdf_loader = PdfLoader("fake.pdf", chunk_size=CHUNK_SIZE)
+            docs = pdf_loader.load()
+
+        assert docs == [loaded_page]
+        assert not pdf_loader.structured
+        loader.return_value.load.assert_called_once()
+
+    def test_silo_service_splits_pdf_fallback_documents(self):
+        fake_pdf = MagicMock()
+        fake_pdf.__enter__.return_value = fake_pdf
+        fake_pdf.__exit__.return_value = False
+        fake_pdf.__iter__.return_value = iter([
+            MagicMock(get_text=MagicMock(return_value={"not_blocks": []})),
+        ])
+        loaded_page = Document(
+            page_content="Fallback text " * 100,
+            metadata={"page": 0, "source": "fallback.pdf"},
+        )
+        with (
+            patch("fitz.open", return_value=fake_pdf),
+            patch("langchain_community.document_loaders.PyMuPDFLoader") as loader,
+        ):
+            loader.return_value.load.return_value = [loaded_page]
+            docs = SiloService.extract_documents_from_file("fake.pdf", ".pdf")
+
+        assert len(docs) > 1
+        assert all(doc.metadata["page"] == 1 for doc in docs)
+        assert all("_aict_structured_pdf_chunk" not in doc.metadata for doc in docs)
+
+    def test_text_file_keeps_existing_loader_and_split_behavior(self):
+        source = Document(page_content="A short text file with readable content.", metadata={})
+        with patch("langchain_community.document_loaders.TextLoader") as loader:
+            loader.return_value.load.return_value = [source]
+            docs = SiloService.extract_documents_from_file("fake.txt", ".txt")
+
+        assert len(docs) == 1
+        assert docs[0].page_content == source.page_content
+        loader.assert_called_once_with("fake.txt", encoding="utf-8")
 
 
 def test_chunk_size_constant_is_positive():
