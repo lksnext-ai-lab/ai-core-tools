@@ -19,6 +19,7 @@ from typing import List
 from langchain_core.documents import Document
 from tools.embeddingTools import get_embeddings_model
 from utils.logger import get_logger
+from utils.azure_endpoint import normalize_azure_openai_endpoint
 from utils.service_lifecycle import SERVICE_KIND_AI, SERVICE_KIND_EMBEDDING, ensure_service_active
 
 load_dotenv()
@@ -264,7 +265,7 @@ def _build_azure_llm(ai_service, temperature):
         model=ai_service.description,
         temperature=temperature,
         credential=ai_service.api_key,
-        endpoint=ai_service.endpoint,
+        endpoint=normalize_azure_openai_endpoint(ai_service.endpoint, ai_service.description),
         api_version=ai_service.api_version,
     )
 
