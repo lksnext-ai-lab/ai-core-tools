@@ -1,0 +1,23 @@
+{
+  "receipt": {
+    "event_id": "00000000-0000-0000-0000-000000000001",
+    "http_status": 202
+  },
+  "requests": [
+    {
+      "body": "--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"payload\"\r\nContent-Type: application/json\r\n\r\n{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"destination-test-file\",\"filename\":\"prueba.txt\",\"part_name\":\"file_1\",\"sha256\":\"dd89575fd15015a58d4faa2fdf573f0936a0ac995065ea854ebe8e65161ba369\",\"size_bytes\":35}],\"content\":{\"files\":[],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"This is a test notification from Mattin AI.\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"destination.test\",\"links\":{\"result\":\"https://mattin.example\"},\"occurred_at\":\"<now:Z>\",\"run\":null,\"schema_version\":\"1\",\"task\":null}\r\n--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"file_1\"; filename=\"file_1.txt\"\r\nContent-Type: text/plain\r\n\r\nMattin AI webhook attachment test.\n\r\n--mattin-00000000000000000000000000000002--\r\n",
+      "headers": {
+        "content-length": "<len>",
+        "content-type": "multipart/form-data; boundary=mattin-00000000000000000000000000000002",
+        "idempotency-key": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-attempt": "1",
+        "x-mattin-event-id": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-event-type": "destination.test",
+        "x-mattin-signature": "<verified-hmac>",
+        "x-mattin-timestamp": "1790000000"
+      },
+      "method": "POST",
+      "url": "https://hooks.example.com/mattin/synthetic"
+    }
+  ]
+}

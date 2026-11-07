@@ -1,0 +1,109 @@
+{
+  "teams_credentials_empty": {
+    "credentials": {},
+    "credentials_is_none": false,
+    "dto": {
+      "app_id": 1,
+      "content_mode": "result",
+      "enabled": true,
+      "has_credentials": false,
+      "has_secret": true,
+      "name": "t-empty",
+      "provider_key": "teams_workflow",
+      "public_config": {}
+    },
+    "public_config": {}
+  },
+  "teams_credentials_none": {
+    "credentials": null,
+    "credentials_is_none": true,
+    "dto": {
+      "app_id": 1,
+      "content_mode": "result",
+      "enabled": true,
+      "has_credentials": false,
+      "has_secret": true,
+      "name": "t-none",
+      "provider_key": "teams_workflow",
+      "public_config": {}
+    },
+    "public_config": {}
+  },
+  "webhook_hmac": {
+    "credentials": {
+      "signing_secret": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s="
+    },
+    "credentials_is_none": false,
+    "dto": {
+      "app_id": 1,
+      "content_mode": "result",
+      "enabled": true,
+      "has_credentials": true,
+      "has_secret": true,
+      "name": "w-hmac",
+      "provider_key": "webhook",
+      "public_config": {
+        "auth_mode": "hmac_sha256",
+        "include_attachments": false,
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      }
+    },
+    "public_config": {
+      "auth_mode": "hmac_sha256",
+      "include_attachments": false,
+      "receiver_deduplicates": false,
+      "schema_version": "1"
+    }
+  },
+  "webhook_none_credentials_empty": {
+    "credentials": {},
+    "credentials_is_none": false,
+    "dto": {
+      "app_id": 1,
+      "content_mode": "result",
+      "enabled": true,
+      "has_credentials": false,
+      "has_secret": true,
+      "name": "w-none-empty",
+      "provider_key": "webhook",
+      "public_config": {
+        "auth_mode": "none",
+        "include_attachments": false,
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      }
+    },
+    "public_config": {
+      "auth_mode": "none",
+      "include_attachments": false,
+      "receiver_deduplicates": false,
+      "schema_version": "1"
+    }
+  },
+  "webhook_none_credentials_omitted": {
+    "credentials": null,
+    "credentials_is_none": true,
+    "dto": {
+      "app_id": 1,
+      "content_mode": "result",
+      "enabled": true,
+      "has_credentials": false,
+      "has_secret": true,
+      "name": "w-none-omitted",
+      "provider_key": "webhook",
+      "public_config": {
+        "auth_mode": "none",
+        "include_attachments": false,
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      }
+    },
+    "public_config": {
+      "auth_mode": "none",
+      "include_attachments": false,
+      "receiver_deduplicates": false,
+      "schema_version": "1"
+    }
+  }
+}

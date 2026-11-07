@@ -1,0 +1,159 @@
+{
+  "final": [
+    {
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "error_summary": null,
+          "http_status": 202,
+          "status": "accepted"
+        }
+      ],
+      "error_summary": null,
+      "receipt": {
+        "http_status": 202
+      },
+      "request_body_cleared": true,
+      "status": "accepted"
+    }
+  ],
+  "persisted": [
+    {
+      "destination_snapshot": {
+        "content_mode": "excerpt",
+        "name": "Teams",
+        "provider_key": "teams_workflow"
+      },
+      "error_summary": null,
+      "payload": {
+        "attachments": [
+          {
+            "content": {
+              "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
+              "actions": [
+                {
+                  "title": "View result",
+                  "type": "Action.OpenUrl",
+                  "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1"
+                },
+                {
+                  "title": "informe.pdf",
+                  "type": "Action.OpenUrl",
+                  "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1"
+                },
+                {
+                  "title": "datos.csv",
+                  "type": "Action.OpenUrl",
+                  "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-2"
+                }
+              ],
+              "body": [
+                {
+                  "items": [
+                    {
+                      "columns": [
+                        {
+                          "items": [
+                            {
+                              "altText": "Mattin AI",
+                              "size": "Small",
+                              "type": "Image",
+                              "url": "<mattin-logo sha256=c9b6183e390b146f>"
+                            }
+                          ],
+                          "type": "Column",
+                          "verticalContentAlignment": "Center",
+                          "width": "auto"
+                        },
+                        {
+                          "items": [
+                            {
+                              "color": "Accent",
+                              "size": "Small",
+                              "spacing": "None",
+                              "text": "MATTIN AI",
+                              "type": "TextBlock",
+                              "weight": "Bolder"
+                            },
+                            {
+                              "isSubtle": true,
+                              "size": "Small",
+                              "spacing": "None",
+                              "text": "Scheduled task",
+                              "type": "TextBlock"
+                            }
+                          ],
+                          "type": "Column",
+                          "verticalContentAlignment": "Center",
+                          "width": "stretch"
+                        }
+                      ],
+                      "type": "ColumnSet",
+                      "verticalContentAlignment": "Center"
+                    },
+                    {
+                      "size": "Large",
+                      "spacing": "Medium",
+                      "text": "Daily report",
+                      "type": "TextBlock",
+                      "weight": "Bolder",
+                      "wrap": true
+                    }
+                  ],
+                  "style": "emphasis",
+                  "type": "Container"
+                },
+                {
+                  "facts": [
+                    {
+                      "title": "Status",
+                      "value": "succeeded"
+                    },
+                    {
+                      "title": "Scheduled",
+                      "value": "2026-05-04T08:00:00+00:00"
+                    }
+                  ],
+                  "type": "FactSet"
+                },
+                {
+                  "text": "Resumen: ver informe.pdf y [output file]\nResultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario…",
+                  "type": "TextBlock",
+                  "wrap": true
+                },
+                {
+                  "text": "Files: informe.pdf, datos.csv",
+                  "type": "TextBlock",
+                  "wrap": true
+                }
+              ],
+              "type": "AdaptiveCard",
+              "version": "1.4"
+            },
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "contentUrl": null
+          }
+        ],
+        "type": "message"
+      },
+      "request_body": null,
+      "request_body_file": null,
+      "request_body_path": null,
+      "request_body_sha256": null,
+      "request_body_size": null,
+      "status": "pending"
+    }
+  ],
+  "requests": [
+    {
+      "body": "{\"type\":\"message\",\"attachments\":[{\"contentType\":\"application/vnd.microsoft.card.adaptive\",\"contentUrl\":null,\"content\":{\"$schema\":\"https://adaptivecards.io/schemas/adaptive-card.json\",\"type\":\"AdaptiveCard\",\"version\":\"1.4\",\"body\":[{\"type\":\"Container\",\"style\":\"emphasis\",\"items\":[{\"type\":\"ColumnSet\",\"verticalContentAlignment\":\"Center\",\"columns\":[{\"type\":\"Column\",\"width\":\"auto\",\"verticalContentAlignment\":\"Center\",\"items\":[{\"type\":\"Image\",\"url\":\"<mattin-logo sha256=c9b6183e390b146f>\",\"size\":\"Small\",\"altText\":\"Mattin AI\"}]},{\"type\":\"Column\",\"width\":\"stretch\",\"verticalContentAlignment\":\"Center\",\"items\":[{\"type\":\"TextBlock\",\"text\":\"MATTIN AI\",\"weight\":\"Bolder\",\"size\":\"Small\",\"color\":\"Accent\",\"spacing\":\"None\"},{\"type\":\"TextBlock\",\"text\":\"Scheduled task\",\"size\":\"Small\",\"isSubtle\":true,\"spacing\":\"None\"}]}]},{\"type\":\"TextBlock\",\"text\":\"Daily report\",\"weight\":\"Bolder\",\"size\":\"Large\",\"wrap\":true,\"spacing\":\"Medium\"}]},{\"type\":\"FactSet\",\"facts\":[{\"title\":\"Status\",\"value\":\"succeeded\"},{\"title\":\"Scheduled\",\"value\":\"2026-05-04T08:00:00+00:00\"}]},{\"type\":\"TextBlock\",\"text\":\"Resumen: ver informe.pdf y [output file]\\nResultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario. Resultado detallado del informe diario…\",\"wrap\":true},{\"type\":\"TextBlock\",\"text\":\"Files: informe.pdf, datos.csv\",\"wrap\":true}],\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"View result\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},{\"type\":\"Action.OpenUrl\",\"title\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"},{\"type\":\"Action.OpenUrl\",\"title\":\"datos.csv\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-2\"}]}}]}",
+      "headers": {
+        "content-length": "14028",
+        "content-type": "application/json"
+      },
+      "method": "POST",
+      "url": "https://prod-00.westeurope.logic.azure.com/workflows/synthetic-flow/triggers/manual/paths/invoke?sig=SYNTHETIC-SIG"
+    }
+  ]
+}

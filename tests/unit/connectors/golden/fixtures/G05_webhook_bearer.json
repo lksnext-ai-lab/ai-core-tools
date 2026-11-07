@@ -1,0 +1,89 @@
+{
+  "final": [
+    {
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "error_summary": null,
+          "http_status": 202,
+          "status": "accepted"
+        }
+      ],
+      "error_summary": null,
+      "receipt": {
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "http_status": 202
+      },
+      "request_body_cleared": true,
+      "status": "accepted"
+    }
+  ],
+  "persisted": [
+    {
+      "destination_snapshot": {
+        "auth_mode": "bearer",
+        "content_mode": "result",
+        "content_type": "application/json",
+        "include_attachments": false,
+        "name": "Hook",
+        "provider_key": "webhook",
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      },
+      "error_summary": null,
+      "payload": {
+        "app": {
+          "id": 1
+        },
+        "attachments": [],
+        "content": {
+          "files": [],
+          "files_truncated": false,
+          "mode": "result",
+          "text": "Hecho.",
+          "text_truncated": false
+        },
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "event_type": "task.run.succeeded",
+        "links": {
+          "result": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1"
+        },
+        "occurred_at": "2026-05-04T08:30:15Z",
+        "run": {
+          "completed_at": "2026-05-04T08:30:15Z",
+          "id": 1,
+          "scheduled_at": "2026-05-04T08:00:00Z",
+          "status": "succeeded"
+        },
+        "schema_version": "1",
+        "task": {
+          "id": 1,
+          "name": "Daily report"
+        }
+      },
+      "request_body": "{\"app\":{\"id\":1},\"attachments\":[],\"content\":{\"files\":[],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Hecho.\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}",
+      "request_body_file": null,
+      "request_body_path": null,
+      "request_body_sha256": null,
+      "request_body_size": null,
+      "status": "pending"
+    }
+  ],
+  "requests": [
+    {
+      "body": "{\"app\":{\"id\":1},\"attachments\":[],\"content\":{\"files\":[],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Hecho.\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}",
+      "headers": {
+        "authorization": "Bearer tok-123",
+        "content-length": "503",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-attempt": "1",
+        "x-mattin-event-id": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-event-type": "task.run.succeeded"
+      },
+      "method": "POST",
+      "url": "https://hooks.example.com/mattin/synthetic"
+    }
+  ]
+}

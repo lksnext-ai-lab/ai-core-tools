@@ -1,0 +1,21 @@
+{
+  "receipt": {
+    "event_id": "00000000-0000-0000-0000-000000000001",
+    "http_status": 202
+  },
+  "requests": [
+    {
+      "body": "{\"app\":{\"id\":1},\"attachments\":[],\"content\":{\"files\":[],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"This is a test notification from Mattin AI.\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"destination.test\",\"links\":{\"result\":\"https://mattin.example\"},\"occurred_at\":\"<now:Z>\",\"run\":null,\"schema_version\":\"1\",\"task\":null}",
+      "headers": {
+        "content-length": "<len>",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-attempt": "1",
+        "x-mattin-event-id": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-event-type": "destination.test"
+      },
+      "method": "POST",
+      "url": "https://hooks.example.com/mattin/synthetic"
+    }
+  ]
+}

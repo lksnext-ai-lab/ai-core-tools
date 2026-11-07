@@ -1,0 +1,118 @@
+{
+  "final": [
+    {
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "error_summary": null,
+          "http_status": 202,
+          "status": "accepted"
+        }
+      ],
+      "error_summary": null,
+      "receipt": {
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "http_status": 202
+      },
+      "request_body_cleared": true,
+      "status": "accepted"
+    }
+  ],
+  "persisted": [
+    {
+      "destination_snapshot": {
+        "auth_mode": "hmac_sha256",
+        "content_mode": "result",
+        "content_type": "multipart/form-data; boundary=mattin-00000000000000000000000000000002",
+        "include_attachments": true,
+        "name": "Hook",
+        "provider_key": "webhook",
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      },
+      "error_summary": null,
+      "payload": {
+        "app": {
+          "id": 1
+        },
+        "attachments": [
+          {
+            "content_type": "text/plain",
+            "file_id": "f-1",
+            "filename": "informe.txt",
+            "part_name": "file_1",
+            "sha256": "bece823f92c2db2ef10e9a3f1a7fa10c367e0d9b7b4f493cbfa1e232d690a9a4",
+            "size_bytes": 28
+          },
+          {
+            "content_type": "text/csv",
+            "file_id": "f-2",
+            "filename": "datos.csv",
+            "part_name": "file_2",
+            "sha256": "b9485148546419a0f6a85e8d708c923557c15d7f3c7d078ef1fa7f7c0f57d5a5",
+            "size_bytes": 12
+          }
+        ],
+        "content": {
+          "files": [
+            {
+              "file_id": "f-1",
+              "filename": "informe.pdf",
+              "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1"
+            },
+            {
+              "file_id": "f-2",
+              "filename": "datos.csv",
+              "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-2"
+            }
+          ],
+          "files_truncated": false,
+          "mode": "result",
+          "text": "Ver informe.pdf y datos.csv",
+          "text_truncated": false
+        },
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "event_type": "task.run.succeeded",
+        "links": {
+          "result": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1"
+        },
+        "occurred_at": "2026-05-04T08:30:15Z",
+        "run": {
+          "completed_at": "2026-05-04T08:30:15Z",
+          "id": 1,
+          "scheduled_at": "2026-05-04T08:00:00Z",
+          "status": "succeeded"
+        },
+        "schema_version": "1",
+        "task": {
+          "id": 1,
+          "name": "Daily report"
+        }
+      },
+      "request_body": "{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"f-1\",\"filename\":\"informe.txt\",\"part_name\":\"file_1\",\"sha256\":\"bece823f92c2db2ef10e9a3f1a7fa10c367e0d9b7b4f493cbfa1e232d690a9a4\",\"size_bytes\":28},{\"content_type\":\"text/csv\",\"file_id\":\"f-2\",\"filename\":\"datos.csv\",\"part_name\":\"file_2\",\"sha256\":\"b9485148546419a0f6a85e8d708c923557c15d7f3c7d078ef1fa7f7c0f57d5a5\",\"size_bytes\":12}],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"},{\"file_id\":\"f-2\",\"filename\":\"datos.csv\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-2\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf y datos.csv\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}",
+      "request_body_file": "--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"payload\"\r\nContent-Type: application/json\r\n\r\n{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"f-1\",\"filename\":\"informe.txt\",\"part_name\":\"file_1\",\"sha256\":\"bece823f92c2db2ef10e9a3f1a7fa10c367e0d9b7b4f493cbfa1e232d690a9a4\",\"size_bytes\":28},{\"content_type\":\"text/csv\",\"file_id\":\"f-2\",\"filename\":\"datos.csv\",\"part_name\":\"file_2\",\"sha256\":\"b9485148546419a0f6a85e8d708c923557c15d7f3c7d078ef1fa7f7c0f57d5a5\",\"size_bytes\":12}],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"},{\"file_id\":\"f-2\",\"filename\":\"datos.csv\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-2\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf y datos.csv\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}\r\n--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"file_1\"; filename=\"file_1.txt\"\r\nContent-Type: text/plain\r\n\r\nLinea 1 del informe\nLinea 2\n\r\n--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"file_2\"; filename=\"file_2.csv\"\r\nContent-Type: text/csv\r\n\r\na,b\n1,2\n3,4\n\r\n--mattin-00000000000000000000000000000002--\r\n",
+      "request_body_path": "deliveries/00000000000000000000000000000001.multipart",
+      "request_body_sha256": "d28476eb480e9d86c9daa03761f7530776a105d65bd1fb2002969814f14ff8f9",
+      "request_body_size": 1612,
+      "status": "pending"
+    }
+  ],
+  "requests": [
+    {
+      "body": "--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"payload\"\r\nContent-Type: application/json\r\n\r\n{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"f-1\",\"filename\":\"informe.txt\",\"part_name\":\"file_1\",\"sha256\":\"bece823f92c2db2ef10e9a3f1a7fa10c367e0d9b7b4f493cbfa1e232d690a9a4\",\"size_bytes\":28},{\"content_type\":\"text/csv\",\"file_id\":\"f-2\",\"filename\":\"datos.csv\",\"part_name\":\"file_2\",\"sha256\":\"b9485148546419a0f6a85e8d708c923557c15d7f3c7d078ef1fa7f7c0f57d5a5\",\"size_bytes\":12}],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"},{\"file_id\":\"f-2\",\"filename\":\"datos.csv\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-2\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf y datos.csv\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}\r\n--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"file_1\"; filename=\"file_1.txt\"\r\nContent-Type: text/plain\r\n\r\nLinea 1 del informe\nLinea 2\n\r\n--mattin-00000000000000000000000000000002\r\nContent-Disposition: form-data; name=\"file_2\"; filename=\"file_2.csv\"\r\nContent-Type: text/csv\r\n\r\na,b\n1,2\n3,4\n\r\n--mattin-00000000000000000000000000000002--\r\n",
+      "headers": {
+        "content-length": "1612",
+        "content-type": "multipart/form-data; boundary=mattin-00000000000000000000000000000002",
+        "idempotency-key": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-attempt": "1",
+        "x-mattin-event-id": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-event-type": "task.run.succeeded",
+        "x-mattin-signature": "<verified-hmac>",
+        "x-mattin-timestamp": "1790000000"
+      },
+      "method": "POST",
+      "url": "https://hooks.example.com/mattin/synthetic"
+    }
+  ]
+}

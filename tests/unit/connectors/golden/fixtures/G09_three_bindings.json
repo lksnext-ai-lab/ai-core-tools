@@ -1,0 +1,339 @@
+{
+  "final": [
+    {
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "error_summary": null,
+          "http_status": 202,
+          "status": "accepted"
+        }
+      ],
+      "error_summary": null,
+      "receipt": {
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "http_status": 202
+      },
+      "request_body_cleared": true,
+      "status": "accepted"
+    },
+    {
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "error_summary": null,
+          "http_status": 202,
+          "status": "accepted"
+        }
+      ],
+      "error_summary": null,
+      "receipt": {
+        "http_status": 202
+      },
+      "request_body_cleared": true,
+      "status": "accepted"
+    },
+    {
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "error_summary": null,
+          "http_status": 202,
+          "status": "accepted"
+        }
+      ],
+      "error_summary": null,
+      "receipt": {
+        "event_id": "00000000-0000-0000-0000-000000000002",
+        "http_status": 202
+      },
+      "request_body_cleared": true,
+      "status": "accepted"
+    }
+  ],
+  "persisted": [
+    {
+      "destination_snapshot": {
+        "auth_mode": "hmac_sha256",
+        "content_mode": "result",
+        "content_type": "application/json",
+        "include_attachments": false,
+        "name": "B-hmac",
+        "provider_key": "webhook",
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      },
+      "error_summary": null,
+      "payload": {
+        "app": {
+          "id": 1
+        },
+        "attachments": [],
+        "content": {
+          "files": [
+            {
+              "file_id": "f-1",
+              "filename": "informe.pdf",
+              "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1"
+            }
+          ],
+          "files_truncated": false,
+          "mode": "result",
+          "text": "Ver informe.pdf",
+          "text_truncated": false
+        },
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "event_type": "task.run.succeeded",
+        "links": {
+          "result": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1"
+        },
+        "occurred_at": "2026-05-04T08:30:15Z",
+        "run": {
+          "completed_at": "2026-05-04T08:30:15Z",
+          "id": 1,
+          "scheduled_at": "2026-05-04T08:00:00Z",
+          "status": "succeeded"
+        },
+        "schema_version": "1",
+        "task": {
+          "id": 1,
+          "name": "Daily report"
+        }
+      },
+      "request_body": "{\"app\":{\"id\":1},\"attachments\":[],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}",
+      "request_body_file": null,
+      "request_body_path": null,
+      "request_body_sha256": null,
+      "request_body_size": null,
+      "status": "pending"
+    },
+    {
+      "destination_snapshot": {
+        "content_mode": "result",
+        "name": "A-teams",
+        "provider_key": "teams_workflow"
+      },
+      "error_summary": null,
+      "payload": {
+        "attachments": [
+          {
+            "content": {
+              "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
+              "actions": [
+                {
+                  "title": "View result",
+                  "type": "Action.OpenUrl",
+                  "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1"
+                },
+                {
+                  "title": "informe.pdf",
+                  "type": "Action.OpenUrl",
+                  "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1"
+                }
+              ],
+              "body": [
+                {
+                  "items": [
+                    {
+                      "columns": [
+                        {
+                          "items": [
+                            {
+                              "altText": "Mattin AI",
+                              "size": "Small",
+                              "type": "Image",
+                              "url": "<mattin-logo sha256=c9b6183e390b146f>"
+                            }
+                          ],
+                          "type": "Column",
+                          "verticalContentAlignment": "Center",
+                          "width": "auto"
+                        },
+                        {
+                          "items": [
+                            {
+                              "color": "Accent",
+                              "size": "Small",
+                              "spacing": "None",
+                              "text": "MATTIN AI",
+                              "type": "TextBlock",
+                              "weight": "Bolder"
+                            },
+                            {
+                              "isSubtle": true,
+                              "size": "Small",
+                              "spacing": "None",
+                              "text": "Scheduled task",
+                              "type": "TextBlock"
+                            }
+                          ],
+                          "type": "Column",
+                          "verticalContentAlignment": "Center",
+                          "width": "stretch"
+                        }
+                      ],
+                      "type": "ColumnSet",
+                      "verticalContentAlignment": "Center"
+                    },
+                    {
+                      "size": "Large",
+                      "spacing": "Medium",
+                      "text": "Daily report",
+                      "type": "TextBlock",
+                      "weight": "Bolder",
+                      "wrap": true
+                    }
+                  ],
+                  "style": "emphasis",
+                  "type": "Container"
+                },
+                {
+                  "facts": [
+                    {
+                      "title": "Status",
+                      "value": "succeeded"
+                    },
+                    {
+                      "title": "Scheduled",
+                      "value": "2026-05-04T08:00:00+00:00"
+                    }
+                  ],
+                  "type": "FactSet"
+                },
+                {
+                  "text": "Ver informe.pdf",
+                  "type": "TextBlock",
+                  "wrap": true
+                },
+                {
+                  "text": "Files: informe.pdf",
+                  "type": "TextBlock",
+                  "wrap": true
+                }
+              ],
+              "type": "AdaptiveCard",
+              "version": "1.4"
+            },
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "contentUrl": null
+          }
+        ],
+        "type": "message"
+      },
+      "request_body": null,
+      "request_body_file": null,
+      "request_body_path": null,
+      "request_body_sha256": null,
+      "request_body_size": null,
+      "status": "pending"
+    },
+    {
+      "destination_snapshot": {
+        "auth_mode": "hmac_sha256",
+        "content_mode": "result",
+        "content_type": "multipart/form-data; boundary=mattin-00000000000000000000000000000003",
+        "include_attachments": true,
+        "name": "C-multipart",
+        "provider_key": "webhook",
+        "receiver_deduplicates": false,
+        "schema_version": "1"
+      },
+      "error_summary": null,
+      "payload": {
+        "app": {
+          "id": 1
+        },
+        "attachments": [
+          {
+            "content_type": "text/plain",
+            "file_id": "f-1",
+            "filename": "informe.txt",
+            "part_name": "file_1",
+            "sha256": "271b3207d020b069d1db393afc4d98b60a183f747134a43d6aa0190e14e43471",
+            "size_bytes": 10
+          }
+        ],
+        "content": {
+          "files": [
+            {
+              "file_id": "f-1",
+              "filename": "informe.pdf",
+              "url": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1"
+            }
+          ],
+          "files_truncated": false,
+          "mode": "result",
+          "text": "Ver informe.pdf",
+          "text_truncated": false
+        },
+        "event_id": "00000000-0000-0000-0000-000000000002",
+        "event_type": "task.run.succeeded",
+        "links": {
+          "result": "https://mattin.example/apps/1/scheduled-tasks/1/runs/1"
+        },
+        "occurred_at": "2026-05-04T08:30:15Z",
+        "run": {
+          "completed_at": "2026-05-04T08:30:15Z",
+          "id": 1,
+          "scheduled_at": "2026-05-04T08:00:00Z",
+          "status": "succeeded"
+        },
+        "schema_version": "1",
+        "task": {
+          "id": 1,
+          "name": "Daily report"
+        }
+      },
+      "request_body": "{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"f-1\",\"filename\":\"informe.txt\",\"part_name\":\"file_1\",\"sha256\":\"271b3207d020b069d1db393afc4d98b60a183f747134a43d6aa0190e14e43471\",\"size_bytes\":10}],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000002\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}",
+      "request_body_file": "--mattin-00000000000000000000000000000003\r\nContent-Disposition: form-data; name=\"payload\"\r\nContent-Type: application/json\r\n\r\n{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"f-1\",\"filename\":\"informe.txt\",\"part_name\":\"file_1\",\"sha256\":\"271b3207d020b069d1db393afc4d98b60a183f747134a43d6aa0190e14e43471\",\"size_bytes\":10}],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000002\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}\r\n--mattin-00000000000000000000000000000003\r\nContent-Disposition: form-data; name=\"file_1\"; filename=\"file_1.txt\"\r\nContent-Type: text/plain\r\n\r\nContenido\n\r\n--mattin-00000000000000000000000000000003--\r\n",
+      "request_body_path": "deliveries/00000000000000000000000000000002.multipart",
+      "request_body_sha256": "62c3d148274e553837343620ad65cde92e1c7a706ebf1ffd1500f33fdf0e36c4",
+      "request_body_size": 1135,
+      "status": "pending"
+    }
+  ],
+  "requests": [
+    {
+      "body": "{\"app\":{\"id\":1},\"attachments\":[],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000001\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}",
+      "headers": {
+        "content-length": "627",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-attempt": "1",
+        "x-mattin-event-id": "00000000-0000-0000-0000-000000000001",
+        "x-mattin-event-type": "task.run.succeeded",
+        "x-mattin-signature": "<verified-hmac>",
+        "x-mattin-timestamp": "1790000000"
+      },
+      "method": "POST",
+      "url": "https://hooks.example.com/mattin/synthetic"
+    },
+    {
+      "body": "{\"type\":\"message\",\"attachments\":[{\"contentType\":\"application/vnd.microsoft.card.adaptive\",\"contentUrl\":null,\"content\":{\"$schema\":\"https://adaptivecards.io/schemas/adaptive-card.json\",\"type\":\"AdaptiveCard\",\"version\":\"1.4\",\"body\":[{\"type\":\"Container\",\"style\":\"emphasis\",\"items\":[{\"type\":\"ColumnSet\",\"verticalContentAlignment\":\"Center\",\"columns\":[{\"type\":\"Column\",\"width\":\"auto\",\"verticalContentAlignment\":\"Center\",\"items\":[{\"type\":\"Image\",\"url\":\"<mattin-logo sha256=c9b6183e390b146f>\",\"size\":\"Small\",\"altText\":\"Mattin AI\"}]},{\"type\":\"Column\",\"width\":\"stretch\",\"verticalContentAlignment\":\"Center\",\"items\":[{\"type\":\"TextBlock\",\"text\":\"MATTIN AI\",\"weight\":\"Bolder\",\"size\":\"Small\",\"color\":\"Accent\",\"spacing\":\"None\"},{\"type\":\"TextBlock\",\"text\":\"Scheduled task\",\"size\":\"Small\",\"isSubtle\":true,\"spacing\":\"None\"}]}]},{\"type\":\"TextBlock\",\"text\":\"Daily report\",\"weight\":\"Bolder\",\"size\":\"Large\",\"wrap\":true,\"spacing\":\"Medium\"}]},{\"type\":\"FactSet\",\"facts\":[{\"title\":\"Status\",\"value\":\"succeeded\"},{\"title\":\"Scheduled\",\"value\":\"2026-05-04T08:00:00+00:00\"}]},{\"type\":\"TextBlock\",\"text\":\"Ver informe.pdf\",\"wrap\":true},{\"type\":\"TextBlock\",\"text\":\"Files: informe.pdf\",\"wrap\":true}],\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"View result\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},{\"type\":\"Action.OpenUrl\",\"title\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"}]}}]}",
+      "headers": {
+        "content-length": "12710",
+        "content-type": "application/json"
+      },
+      "method": "POST",
+      "url": "https://prod-00.westeurope.logic.azure.com/workflows/synthetic-flow/triggers/manual/paths/invoke?sig=SYNTHETIC-SIG"
+    },
+    {
+      "body": "--mattin-00000000000000000000000000000003\r\nContent-Disposition: form-data; name=\"payload\"\r\nContent-Type: application/json\r\n\r\n{\"app\":{\"id\":1},\"attachments\":[{\"content_type\":\"text/plain\",\"file_id\":\"f-1\",\"filename\":\"informe.txt\",\"part_name\":\"file_1\",\"sha256\":\"271b3207d020b069d1db393afc4d98b60a183f747134a43d6aa0190e14e43471\",\"size_bytes\":10}],\"content\":{\"files\":[{\"file_id\":\"f-1\",\"filename\":\"informe.pdf\",\"url\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1/files/f-1\"}],\"files_truncated\":false,\"mode\":\"result\",\"text\":\"Ver informe.pdf\",\"text_truncated\":false},\"event_id\":\"00000000-0000-0000-0000-000000000002\",\"event_type\":\"task.run.succeeded\",\"links\":{\"result\":\"https://mattin.example/apps/1/scheduled-tasks/1/runs/1\"},\"occurred_at\":\"2026-05-04T08:30:15Z\",\"run\":{\"completed_at\":\"2026-05-04T08:30:15Z\",\"id\":1,\"scheduled_at\":\"2026-05-04T08:00:00Z\",\"status\":\"succeeded\"},\"schema_version\":\"1\",\"task\":{\"id\":1,\"name\":\"Daily report\"}}\r\n--mattin-00000000000000000000000000000003\r\nContent-Disposition: form-data; name=\"file_1\"; filename=\"file_1.txt\"\r\nContent-Type: text/plain\r\n\r\nContenido\n\r\n--mattin-00000000000000000000000000000003--\r\n",
+      "headers": {
+        "content-length": "1135",
+        "content-type": "multipart/form-data; boundary=mattin-00000000000000000000000000000003",
+        "idempotency-key": "00000000-0000-0000-0000-000000000002",
+        "x-mattin-attempt": "1",
+        "x-mattin-event-id": "00000000-0000-0000-0000-000000000002",
+        "x-mattin-event-type": "task.run.succeeded",
+        "x-mattin-signature": "<verified-hmac>",
+        "x-mattin-timestamp": "1790000000"
+      },
+      "method": "POST",
+      "url": "https://hooks.example.com/mattin/synthetic"
+    }
+  ]
+}
