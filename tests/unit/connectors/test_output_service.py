@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 from connectors.core.errors import DeliveryError
+from connectors.providers.teams_workflow.card import build_run_card
+from connectors.providers.webhook.events import build_run_event
 from models.output_delivery import (
     OutputArtifact,
     OutputDelivery,
@@ -15,6 +17,7 @@ from models.output_delivery import (
     ScheduledTaskOutputBinding,
 )
 from services.output_channels import service
+from services.output_channels.messages import run_message_from
 from utils.clock import utcnow_naive
 
 from .factories import (
@@ -230,11 +233,11 @@ class TestTaskBindings:
 
 def test_teams_payload_handles_aware_times_and_skips_files_without_id():
     task = SimpleNamespace(id=4, app_id=3, name="Daily")
-    run = SimpleNamespace(id=12, status="succeeded", output_text="See file://report.csv",
+    run = SimpleNamespace(id=12, status="succeeded", finished_at=None, output_text="See file://report.csv",
                           scheduled_time=datetime(2026, 10, 1, 10, 0, tzinfo=timezone(timedelta(hours=2))),
                           output_files=[{"filename": "no-id.txt"}, {"file_id": "f 1", "filename": "report.csv"}])
     binding = SimpleNamespace(destination=SimpleNamespace(content_mode="result"))
-    serialized = str(service._run_payload(task, run, binding))
+    serialized = str(build_run_card(run_message_from(task, run), content_mode=binding.destination.content_mode))
     assert "08:00:00+00:00" in serialized
     assert "/files/f%201" in serialized
     assert "file://" not in serialized
@@ -248,7 +251,9 @@ def test_webhook_event_respects_content_mode(mode):
                           finished_at=datetime(2026, 10, 1, 0, 5), output_files=files,
                           output_text="x" * 5000 + " file://f1 file://elsewhere")
     binding = SimpleNamespace(destination=SimpleNamespace(content_mode=mode))
-    event = service._run_webhook_event(task, run, binding, "evt-1", [])
+    event = build_run_event(
+        run_message_from(task, run), content_mode=binding.destination.content_mode, event_id="evt-1", artifacts=[],
+    )
     content = event["content"]
     assert event["run"]["completed_at"] == "2026-10-01T00:05:00Z"
     if mode == "link_only":

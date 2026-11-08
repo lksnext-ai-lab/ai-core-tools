@@ -1,8 +1,5 @@
 """Teams Workflows webhook provider using Adaptive Cards and authenticated links."""
 
-import base64
-import json
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -18,14 +15,9 @@ from connectors.core.contracts import ProviderDescriptor
 from connectors.core.errors import DeliveryError
 from connectors.core.http import ensure_public_host, parse_retry_after
 
-MAX_CARD_BYTES = 24 * 1024
-MAX_RESULT_CHARS = 5000
-MAX_EXCERPT_CHARS = 1200
 ALLOWED_WEBHOOK_HOST_SUFFIXES = (
     ".logic.azure.com", ".logic.azure.us", ".logic.azure.cn", ".api.powerplatform.com",
 )
-MATTIN_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mattin-small.png"
-MATTIN_LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(MATTIN_LOGO_PATH.read_bytes()).decode("ascii")
 
 
 def check_teams_workflow_url(value: str) -> str:
@@ -50,89 +42,6 @@ def validate_teams_workflow_url(value: str) -> str:
     raw = check_teams_workflow_url(value)
     ensure_public_host(urlparse(raw).hostname, "Teams Workflow")
     return raw
-
-
-def build_adaptive_card(
-    *, title: str, status: str, scheduled_time: str, result: str, view_url: str,
-    files: list[dict[str, str]] | None = None, content_mode: str = "result",
-) -> dict[str, Any]:
-    files = files or []
-    limit = MAX_EXCERPT_CHARS if content_mode == "excerpt" else MAX_RESULT_CHARS
-    result_text = result[:limit - 1].rstrip() + "…" if content_mode == "excerpt" and len(result) > limit else result
-    if content_mode == "link_only":
-        result_text = "The scheduled task has completed. Open the result to view its full output."
-    elif len(result_text) > limit:
-        result_text = result_text[:limit].rstrip() + "…"
-
-    body: list[dict[str, Any]] = [
-        {
-            "type": "Container",
-            "style": "emphasis",
-            "items": [
-                {
-                    "type": "ColumnSet",
-                    "verticalContentAlignment": "Center",
-                    "columns": [
-                        {
-                            "type": "Column",
-                            "width": "auto",
-                            "verticalContentAlignment": "Center",
-                            "items": [{
-                                "type": "Image",
-                                "url": MATTIN_LOGO_DATA_URI,
-                                "size": "Small",
-                                "altText": "Mattin AI",
-                            }],
-                        },
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "verticalContentAlignment": "Center",
-                            "items": [
-                                {"type": "TextBlock", "text": "MATTIN AI", "weight": "Bolder", "size": "Small", "color": "Accent", "spacing": "None"},
-                                {"type": "TextBlock", "text": "Scheduled task", "size": "Small", "isSubtle": True, "spacing": "None"},
-                            ],
-                        },
-                    ],
-                },
-                {"type": "TextBlock", "text": title[:255], "weight": "Bolder", "size": "Large", "wrap": True, "spacing": "Medium"},
-            ],
-        },
-        {"type": "FactSet", "facts": [
-            {"title": "Status", "value": status[:40]},
-            {"title": "Scheduled", "value": scheduled_time[:80]},
-        ]},
-    ]
-    if result_text:
-        body.append({"type": "TextBlock", "text": result_text, "wrap": True})
-    actions = [{"type": "Action.OpenUrl", "title": "View result", "url": view_url}]
-    if files:
-        body.append({"type": "TextBlock", "text": "Files: " + ", ".join(item["filename"] for item in files[:20]), "wrap": True})
-        actions.extend({"type": "Action.OpenUrl", "title": item["filename"][:80], "url": item["url"]} for item in files[:4])
-    card = {
-        "type": "message",
-        "attachments": [{
-            "contentType": "application/vnd.microsoft.card.adaptive",
-            "contentUrl": None,
-            "content": {
-                "$schema": "https://adaptivecards.io/schemas/adaptive-card.json",
-                "type": "AdaptiveCard",
-                "version": "1.4",
-                "body": body,
-                "actions": actions,
-            },
-        }],
-    }
-    if len(json.dumps(card, ensure_ascii=False).encode("utf-8")) > MAX_CARD_BYTES:
-        # File and excerpt overflow should not make a delivery silently fail.
-        content = card["attachments"][0]["content"]
-        content["body"] = body[:2] + [{
-            "type": "TextBlock", "text": "The output is too large to include here. Open the result to view it.", "wrap": True,
-        }]
-        content["actions"] = actions[:1]
-        if len(json.dumps(card, ensure_ascii=False).encode("utf-8")) > MAX_CARD_BYTES:
-            content["actions"] = []
-    return card
 
 
 async def post_card(webhook_url: str, payload: dict[str, Any]) -> dict[str, Any]:

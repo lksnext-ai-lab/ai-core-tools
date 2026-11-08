@@ -1,5 +1,6 @@
 import pytest
 from connectors.core import http as core_http
+from connectors.providers.teams_workflow import card as card_module
 from connectors.providers.teams_workflow import provider as module
 
 
@@ -16,7 +17,7 @@ def test_webhook_url_requires_https_and_public_host(monkeypatch):
 
 
 def test_card_has_result_and_authenticated_file_actions():
-    card = module.build_adaptive_card(
+    card = card_module.build_adaptive_card(
         title="Daily report", status="succeeded", scheduled_time="2026-09-28T10:00:00Z",
         result="Report is ready", view_url="https://mattin.test/run/1",
         files=[{"filename": "report.csv", "url": "https://mattin.test/run/1/files/f1"}],
@@ -32,7 +33,7 @@ def test_card_uses_mattin_brand_and_embeds_logo():
     import base64
     from pathlib import Path
 
-    card = module.build_adaptive_card(
+    card = card_module.build_adaptive_card(
         title="Daily report", status="succeeded", scheduled_time="today",
         result="Report is ready", view_url="https://mattin.test/run/1",
     )
@@ -49,7 +50,7 @@ def test_card_uses_mattin_brand_and_embeds_logo():
 
 
 def test_card_bounds_result_excerpt():
-    card = module.build_adaptive_card(
+    card = card_module.build_adaptive_card(
         title="Daily report", status="succeeded", scheduled_time="today",
         result="x" * 10000, view_url="https://mattin.test/run/1", content_mode="excerpt",
     )
@@ -123,16 +124,17 @@ def test_provider_registry_exposes_teams_capabilities():
 def test_run_payload_never_publishes_file_scheme(monkeypatch):
     from types import SimpleNamespace
 
-    from services.output_channels.service import _run_payload
+    from connectors.providers.teams_workflow.card import build_run_card
+    from services.output_channels.messages import run_message_from
 
     monkeypatch.setenv("FRONTEND_URL", "https://mattin.example")
     task = SimpleNamespace(id=4, app_id=3, name="Daily")
     run = SimpleNamespace(
         id=12, scheduled_time=__import__("datetime").datetime(2026, 9, 28), status="succeeded",
-        output_text="Open file://f-123 for details", output_files=[{"file_id": "f-123", "filename": "report.csv"}],
+        finished_at=None, output_text="Open file://f-123 for details", output_files=[{"file_id": "f-123", "filename": "report.csv"}],
     )
     binding = SimpleNamespace(destination=SimpleNamespace(content_mode="result"))
-    payload = _run_payload(task, run, binding)
+    payload = build_run_card(run_message_from(task, run), content_mode=binding.destination.content_mode)
     serialized = str(payload)
     assert "file://" not in serialized
     assert "report.csv" in serialized

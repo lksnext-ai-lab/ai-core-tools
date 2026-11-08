@@ -12,10 +12,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 from connectors.core.errors import DeliveryError
-from connectors.providers.teams_workflow.provider import build_adaptive_card
+from connectors.providers.teams_workflow.card import build_run_card, build_test_card
+from connectors.providers.webhook.events import build_run_event, build_test_event
 from connectors.registry import get_output_provider, get_webhook_provider
 from models.output_delivery import (
     OutputArtifact,
@@ -25,6 +26,7 @@ from models.output_delivery import (
     ScheduledTaskOutputBinding,
 )
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from services.output_channels import messages
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -47,10 +49,6 @@ def _delivery_expiry() -> datetime:
     persistent_ttl_days = max(1, int(os.getenv("TMP_PERSISTENT_TTL_DAYS", "7")))
     persistent_ttl_seconds = persistent_ttl_days * 86400
     return utcnow_naive() + timedelta(seconds=min(30 * 86400, persistent_ttl_seconds - 3600))
-
-
-def _base_url() -> str:
-    return (os.getenv("FRONTEND_URL") or os.getenv("AICT_BASE_URL") or "http://localhost:5173").rstrip("/")
 
 
 def destination_dto(destination: OutputDestination) -> dict[str, Any]:
@@ -202,111 +200,6 @@ def task_bindings(db: Session, *, task: ScheduledTask, app_id: int) -> list[dict
                 OutputDestination.app_id == app_id, ScheduledTaskOutputBinding.enabled.is_(True))
         .order_by(OutputDestination.name).all()
     ]
-
-
-def _run_payload(task: ScheduledTask, run: ScheduledTaskRun, binding: ScheduledTaskOutputBinding) -> dict[str, Any]:
-    base = _base_url()
-    result_url = f"{base}/apps/{task.app_id}/scheduled-tasks/{task.id}/runs/{run.id}"
-    file_items = []
-    for item in run.output_files or []:
-        file_id = item.get("file_id")
-        if not file_id:
-            continue
-        file_url = f"{base}/apps/{task.app_id}/scheduled-tasks/{task.id}/runs/{run.id}/files/{quote(str(file_id), safe='')}"
-        file_items.append({"filename": str(item.get("filename") or "Output file"), "url": file_url})
-    scheduled_time = run.scheduled_time
-    if scheduled_time.tzinfo is None:
-        scheduled_time = scheduled_time.replace(tzinfo=timezone.utc)
-    else:
-        scheduled_time = scheduled_time.astimezone(timezone.utc)
-    result_text = run.output_text or ""
-    for item in run.output_files or []:
-        file_id = str(item.get("file_id") or "")
-        filename = str(item.get("filename") or "output file")
-        for identifier in (file_id, filename):
-            if identifier:
-                result_text = result_text.replace(f"file://{identifier}", filename)
-    # Never place local sandbox/file references in a message. The card links below
-    # point to the authenticated Mattin AI file route instead.
-    result_text = re.sub(r"file://[^\s\])}]+", "[output file]", result_text)
-    return build_adaptive_card(
-        title=task.name,
-        status=run.status,
-        scheduled_time=scheduled_time.isoformat(),
-        result=result_text,
-        view_url=result_url,
-        files=file_items,
-        content_mode=binding.destination.content_mode,
-    )
-
-
-def _run_webhook_event(
-    task: ScheduledTask, run: ScheduledTaskRun, binding: ScheduledTaskOutputBinding,
-    event_id: str, artifacts: list[dict[str, Any]],
-) -> dict[str, Any]:
-    base = _base_url()
-    result_url = f"{base}/apps/{task.app_id}/scheduled-tasks/{run.scheduled_task_id}/runs/{run.id}"
-    files = []
-    for item in (run.output_files or []):
-        file_id = str(item.get("file_id") or "")
-        if not file_id:
-            continue
-        filename = str(item.get("filename") or "Output file")
-        files.append({
-            "file_id": file_id,
-            "filename": filename,
-            "url": f"{result_url}/files/{quote(file_id, safe='')}",
-        })
-    text = run.output_text or ""
-    for item in (run.output_files or []):
-        file_id = str(item.get("file_id") or "")
-        filename = str(item.get("filename") or "output file")
-        for marker in (file_id, filename):
-            if marker:
-                text = text.replace(f"file://{marker}", filename)
-    text = re.sub(r"file://[^\s\])}]+", "[output file]", text)
-    mode = binding.destination.content_mode
-    text_limit = 4000 if mode == "excerpt" else 100_000
-    text_truncated = len(text) > text_limit
-    visible_files = files[:50]
-    files_truncated = len(visible_files) < len(files)
-    if mode == "link_only":
-        text = None
-        visible_files = []
-        files_truncated = False
-        text_truncated = False
-    else:
-        text = text[:text_limit]
-    occurred_at = run.finished_at or datetime.now(timezone.utc)
-    scheduled_at = run.scheduled_time
-    if occurred_at.tzinfo is None:
-        occurred_at = occurred_at.replace(tzinfo=timezone.utc)
-    if scheduled_at.tzinfo is None:
-        scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
-    manifest = [{key: item[key] for key in ("file_id", "filename", "content_type", "size_bytes", "sha256", "part_name")} for item in artifacts]
-    return {
-        "schema_version": "1",
-        "event_id": event_id,
-        "event_type": "task.run.succeeded",
-        "occurred_at": occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "app": {"id": task.app_id},
-        "task": {"id": task.id, "name": task.name},
-        "run": {
-            "id": run.id,
-            "status": run.status,
-            "scheduled_at": scheduled_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "completed_at": occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-        },
-        "content": {
-            "mode": mode,
-            "text": text,
-            "text_truncated": text_truncated,
-            "files_truncated": files_truncated,
-            "files": visible_files,
-        },
-        "attachments": manifest,
-        "links": {"result": result_url},
-    }
 
 
 def _spool_root() -> Path:
@@ -608,7 +501,10 @@ def create_deliveries_for_run(
             snapshot.update(config)
             event_id = str(uuid.uuid4())
             destination_artifacts = artifacts or [] if config.get("include_attachments") else []
-            payload = _run_webhook_event(task, run, binding, event_id, destination_artifacts)
+            payload = build_run_event(
+                messages.run_message_from(task, run), content_mode=destination.content_mode,
+                event_id=event_id, artifacts=destination_artifacts,
+            )
             body = None
             request_body_path = None
             request_body_size = None
@@ -633,7 +529,7 @@ def create_deliveries_for_run(
                     body = None
             snapshot["content_type"] = content_type
         else:
-            payload = _run_payload(task, run, binding)
+            payload = build_run_card(messages.run_message_from(task, run), content_mode=destination.content_mode)
             body = None
             request_body_path = None
             request_body_size = None
@@ -699,15 +595,10 @@ def delivery_dto(delivery: OutputDelivery) -> dict[str, Any]:
 async def test_destination(destination: OutputDestination) -> dict[str, Any]:
     if destination.provider_key == "webhook":
         event_id = str(uuid.uuid4())
-        payload = {
-            "schema_version": "1", "event_id": event_id, "event_type": "destination.test",
-            "occurred_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "app": {"id": destination.app_id}, "task": None, "run": None,
-            "content": {"mode": destination.content_mode,
-                        "text": None if destination.content_mode == "link_only" else "This is a test notification from Mattin AI.",
-                        "text_truncated": False, "files_truncated": False, "files": []},
-            "attachments": [], "links": {"result": _base_url()},
-        }
+        payload = build_test_event(
+            app_id=destination.app_id, content_mode=destination.content_mode, event_id=event_id,
+            base_url=messages.base_url(), now=datetime.now(timezone.utc),
+        )
         config = dict(destination.public_config or {})
         body = _json_body(payload)
         path = None
@@ -742,9 +633,9 @@ async def test_destination(destination: OutputDestination) -> dict[str, Any]:
             if test_file:
                 test_file.unlink(missing_ok=True)
 
-    payload = build_adaptive_card(
-        title=f"{destination.name}: connection test", status="test", scheduled_time=datetime.now(timezone.utc).isoformat(),
-        result="This is a test notification from Mattin AI.", view_url=_base_url(), content_mode=destination.content_mode,
+    payload = build_test_card(
+        destination_name=destination.name, content_mode=destination.content_mode,
+        base_url=messages.base_url(), now=datetime.now(timezone.utc),
     )
     return await get_output_provider(destination.provider_key).send(destination.webhook_url, payload)
 
