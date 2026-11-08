@@ -3,15 +3,22 @@
 from datetime import datetime
 
 import pytest
+from connectors.core import http as core_http
+from db.database import Base
+from models.output_delivery import (
+    OutputDelivery,
+    OutputDeliveryAttempt,
+    OutputDestination,
+    ScheduledTaskOutputBinding,
+)
+from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from schemas.output_provider_schemas import (
+    OutputDestinationCreateSchema,
+    OutputDestinationUpdateSchema,
+)
+from services.output_channels import service
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-
-from db.database import Base
-from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
-from models.scheduled_task import ScheduledTask, ScheduledTaskRun
-from output import service
-from output import teams_workflow
-from schemas.output_provider_schemas import OutputDestinationCreateSchema, OutputDestinationUpdateSchema
 
 
 @pytest.fixture
@@ -21,7 +28,7 @@ def db(monkeypatch):
         ScheduledTask, ScheduledTaskRun, OutputDestination, ScheduledTaskOutputBinding,
         OutputDelivery, OutputDeliveryAttempt,
     )])
-    monkeypatch.setattr(teams_workflow, "resolve_host", lambda host: ["20.1.2.3"])
+    monkeypatch.setattr(core_http, "resolve_host", lambda host: ["20.1.2.3"])
     with Session(engine) as session:
         yield session
     engine.dispose()

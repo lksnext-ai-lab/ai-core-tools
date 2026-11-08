@@ -5,15 +5,20 @@ import os
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from db import database
-from models.output_delivery import OutputArtifact, OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
+from models.output_delivery import (
+    OutputArtifact,
+    OutputDelivery,
+    OutputDeliveryAttempt,
+    OutputDestination,
+    ScheduledTaskOutputBinding,
+)
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from scheduling import output_delivery
 from services import file_cleanup_worker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture
@@ -32,7 +37,7 @@ def sessions(monkeypatch, tmp_path):
     monkeypatch.setattr(output_delivery, "SessionLocal", factory)
     spool = tmp_path / "output-deliveries"
     spool.mkdir()
-    monkeypatch.setattr("output.service._spool_root", lambda: spool)
+    monkeypatch.setattr("services.output_channels.service._spool_root", lambda: spool)
     with factory() as db:
         db.add(ScheduledTask(id=1, name="Daily", app_id=1, agent_id=1, created_by=1,
                              cron_expression="0 8 * * *", orchestrator_schedule_name="task-1"))

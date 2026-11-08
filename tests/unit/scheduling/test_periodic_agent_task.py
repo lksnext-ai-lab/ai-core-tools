@@ -40,7 +40,7 @@ async def test_run_creates_task_owned_conversation_and_stores_output():
         patch.object(module, "SessionLocal", return_value=db),
         patch.object(module.ConversationService, "create_conversation", return_value=conversation) as create,
         patch.object(module, "invoke_agent_step", new=AsyncMock(return_value=output)) as invoke,
-        patch("output.service.create_deliveries_for_run", return_value=[]),
+        patch("services.output_channels.service.create_deliveries_for_run", return_value=[]),
         patch.object(module.ScheduledTaskService, "prune_runs", new=AsyncMock()) as prune,
     ):
         result = await module._run_scheduled_task(datetime.now(timezone.utc), 7)
@@ -217,7 +217,7 @@ async def test_run_marks_failed_without_retry_or_delivery_for_retired_service():
         patch.object(module, "SessionLocal", return_value=db),
         patch.object(module.ConversationService, "create_conversation", return_value=SimpleNamespace(conversation_id=99)),
         patch.object(module, "invoke_agent_step", new=AsyncMock(return_value=failure)) as invoke,
-        patch("output.service.create_deliveries_for_run") as deliveries,
+        patch("services.output_channels.service.create_deliveries_for_run") as deliveries,
         patch.object(module.ScheduledTaskService, "prune_runs", new=AsyncMock()) as prune,
     ):
         result = await module._run_scheduled_task(datetime.now(timezone.utc), 7)

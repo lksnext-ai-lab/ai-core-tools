@@ -2,18 +2,21 @@
 
 import base64
 import json
-import logging
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from utils.ssrf_guard import (
+    FetchUnresolvableError,
+    SsrfBlockedError,
+    pinned_async_transport,
+)
 
-from output.contracts import ProviderDescriptor
-from utils.ssrf_guard import FetchUnresolvableError, SsrfBlockedError, is_blocked_ip, pinned_async_transport, resolve_host
-
+import connectors.core.http  # noqa: F401  (installs the httpx URL-redaction filter)
+from connectors.core.contracts import ProviderDescriptor
+from connectors.core.errors import DeliveryError
+from connectors.core.http import ensure_public_host, parse_retry_after
 
 MAX_CARD_BYTES = 24 * 1024
 MAX_RESULT_CHARS = 5000
@@ -25,40 +28,7 @@ MATTIN_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mattin-small.pn
 MATTIN_LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(MATTIN_LOGO_PATH.read_bytes()).decode("ascii")
 
 
-class _RedactHttpxRequestUrls(logging.Filter):
-    """Prevent HTTPX's INFO request log from exposing webhook credentials."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.name == "httpx" and "HTTP Request:" in str(record.msg):
-            record.msg = "HTTP request completed (URL redacted)"
-            record.args = ()
-        return True
-
-
-logging.getLogger("httpx").addFilter(_RedactHttpxRequestUrls())
-
-
-class DeliveryError(Exception):
-    def __init__(self, message: str, *, kind: str = "permanent", http_status: int | None = None, retry_after: float | None = None):
-        super().__init__(message)
-        self.kind = kind
-        self.http_status = http_status
-        self.retry_after = retry_after
-
-
-def ensure_public_host(hostname: str, label: str) -> None:
-    """Reject hosts that do not resolve or resolve to a non-public address (SSRF guard)."""
-    try:
-        addresses = resolve_host(hostname)
-    except OSError as exc:
-        raise ValueError(f"{label} host could not be resolved") from exc
-    if not addresses:
-        raise ValueError(f"{label} host could not be resolved")
-    if any(is_blocked_ip(address) for address in addresses):
-        raise ValueError(f"{label} URL cannot target a private or reserved network")
-
-
-def check_webhook_url(value: str) -> str:
+def check_teams_workflow_url(value: str) -> str:
     """Structural checks only (no DNS): HTTPS, a Microsoft Power Automate host, port 443."""
     raw = (value or "").strip()
     parsed = urlparse(raw)
@@ -71,13 +41,13 @@ def check_webhook_url(value: str) -> str:
     return raw
 
 
-def validate_webhook_url(value: str) -> str:
+def validate_teams_workflow_url(value: str) -> str:
     """Require HTTPS and a public DNS target; webhook URLs are bearer credentials.
 
     Resolves DNS synchronously: call it from sync code only. Sends re-check the
     resolved address through the pinned transport instead.
     """
-    raw = check_webhook_url(value)
+    raw = check_teams_workflow_url(value)
     ensure_public_host(urlparse(raw).hostname, "Teams Workflow")
     return raw
 
@@ -165,25 +135,10 @@ def build_adaptive_card(
     return card
 
 
-def parse_retry_after(value: str | None) -> float | None:
-    if not value:
-        return None
-    try:
-        return max(0.0, float(value))
-    except ValueError:
-        try:
-            target = parsedate_to_datetime(value)
-            if target.tzinfo is None:
-                target = target.replace(tzinfo=timezone.utc)
-            return max(0.0, (target - datetime.now(timezone.utc)).total_seconds())
-        except (TypeError, ValueError, OverflowError):
-            return None
-
-
 async def post_card(webhook_url: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Send one card; do not follow redirects because the URL contains a credential."""
     try:
-        check_webhook_url(webhook_url)
+        check_teams_workflow_url(webhook_url)
         async with httpx.AsyncClient(
             transport=pinned_async_transport(), timeout=httpx.Timeout(20.0, connect=5.0),
             follow_redirects=False, trust_env=False,
@@ -228,7 +183,7 @@ class TeamsWorkflowProvider:
     )
 
     def validate_secret(self, value: str) -> str:
-        return validate_webhook_url(value)
+        return validate_teams_workflow_url(value)
 
     async def send(self, secret: str, payload: dict[str, Any]) -> dict[str, Any]:
         return await post_card(secret, payload)

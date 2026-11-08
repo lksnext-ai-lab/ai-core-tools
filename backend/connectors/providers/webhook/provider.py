@@ -10,10 +10,15 @@ from typing import Any, AsyncIterator
 from urllib.parse import urlparse
 
 import httpx
+from utils.ssrf_guard import (
+    FetchUnresolvableError,
+    SsrfBlockedError,
+    pinned_async_transport,
+)
 
-from output.contracts import ProviderDescriptor
-from output.teams_workflow import DeliveryError, ensure_public_host
-from utils.ssrf_guard import FetchUnresolvableError, SsrfBlockedError, pinned_async_transport
+from connectors.core.contracts import ProviderDescriptor
+from connectors.core.errors import DeliveryError
+from connectors.core.http import ensure_public_host, parse_retry_after
 
 
 def check_webhook_url(value: str) -> str:
@@ -182,7 +187,6 @@ class WebhookProvider:
         if 200 <= status_code < 300:
             return {"http_status": status_code, "event_id": event_id}
         if status_code == 429:
-            from output.teams_workflow import parse_retry_after
             raise DeliveryError(
                 "Webhook rejected the request due to throttling", kind="retryable", http_status=429,
                 retry_after=parse_retry_after(retry_after_value),

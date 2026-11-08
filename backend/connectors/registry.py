@@ -1,8 +1,8 @@
 """Explicit allowlisted output provider registry."""
 
-from output.contracts import OutputProvider
-from output.teams_workflow import TeamsWorkflowProvider
-from output.webhook import WebhookProvider
+from connectors.core.contracts import OutputProvider
+from connectors.providers.teams_workflow import TeamsWorkflowProvider
+from connectors.providers.webhook import WebhookProvider
 
 _WEBHOOK_PROVIDER = WebhookProvider()
 

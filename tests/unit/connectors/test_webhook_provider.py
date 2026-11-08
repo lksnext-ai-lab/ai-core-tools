@@ -6,17 +6,17 @@ import hmac
 
 import httpx
 import pytest
-
-from output import teams_workflow
-from output import webhook as module
-from output.teams_workflow import DeliveryError
+from connectors.core import http as core_http
+from connectors.core.errors import DeliveryError
+from connectors.providers.teams_workflow import provider as teams_workflow
+from connectors.providers.webhook import provider as module
 
 from .factories import HMAC_SECRET, WEBHOOK_URL
 
 
 @pytest.fixture(autouse=True)
 def public_dns(monkeypatch):
-    monkeypatch.setattr(teams_workflow, "resolve_host", lambda host: ["20.1.2.3"])
+    monkeypatch.setattr(core_http, "resolve_host", lambda host: ["20.1.2.3"])
 
 
 class TestValidateWebhookUrl:
@@ -39,7 +39,7 @@ class TestValidateWebhookUrl:
         ([], "could not be resolved"),
     ])
     def test_rejects_non_public_targets(self, monkeypatch, resolved, message):
-        monkeypatch.setattr(teams_workflow, "resolve_host", lambda host: resolved)
+        monkeypatch.setattr(core_http, "resolve_host", lambda host: resolved)
         with pytest.raises(ValueError, match=message):
             module.validate_webhook_url(WEBHOOK_URL)
 
@@ -47,7 +47,7 @@ class TestValidateWebhookUrl:
         def fail(host):
             raise OSError("nxdomain")
 
-        monkeypatch.setattr(teams_workflow, "resolve_host", fail)
+        monkeypatch.setattr(core_http, "resolve_host", fail)
         with pytest.raises(ValueError, match="could not be resolved"):
             module.validate_webhook_url(WEBHOOK_URL)
 
@@ -230,7 +230,7 @@ class TestSendResolvesThroughThePinnedTransport:
         def blocking_lookup(host):
             raise AssertionError("send() must not resolve DNS synchronously")
 
-        monkeypatch.setattr(teams_workflow, "resolve_host", blocking_lookup)
+        monkeypatch.setattr(core_http, "resolve_host", blocking_lookup)
         monkeypatch.setattr(module.httpx, "AsyncClient", FakeHttp())
         assert (await _send())["http_status"] == 202
 
@@ -271,7 +271,7 @@ async def test_teams_post_card_is_pinned_too(monkeypatch, resolved, kind):
         raise AssertionError("post_card() must not resolve DNS synchronously")
 
     monkeypatch.setattr(ssrf_guard, "resolve_host_async", resolve)
-    monkeypatch.setattr(teams_workflow, "resolve_host", blocking_lookup)
+    monkeypatch.setattr(core_http, "resolve_host", blocking_lookup)
     with pytest.raises(DeliveryError) as caught:
         await teams_workflow.post_card("https://prod.logic.azure.com/workflows/x", {"type": "message"})
     assert caught.value.kind == kind

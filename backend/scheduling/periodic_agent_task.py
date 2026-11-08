@@ -183,7 +183,7 @@ async def _run_scheduled_task(scheduled_time: datetime, task_id: int):
             run.output_text = completed_output["response"]
             run.output_files = completed_output["files"]
             run.outputs_reconciled = True
-            from output.service import create_deliveries_for_run, prepare_run_attachments
+            from services.output_channels.service import create_deliveries_for_run, prepare_run_attachments
             artifacts, attachment_error = await prepare_run_attachments(db, task=task, run=run)
             # Webhook multipart bodies are written and fsynced here: keep that off
             # the event loop. The session is only used by the thread while we await.

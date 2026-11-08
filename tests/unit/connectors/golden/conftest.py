@@ -1,4 +1,4 @@
-"""Fixtures for the golden tests (independent from tests/unit/output/conftest.py)."""
+"""Fixtures for the golden tests (independent from tests/unit/connectors/conftest.py)."""
 
 import socket
 import uuid

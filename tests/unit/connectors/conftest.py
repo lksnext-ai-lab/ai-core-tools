@@ -7,14 +7,19 @@ public address so destination validation never touches the network.
 """
 
 import pytest
+from connectors.core import http as core_http
+from db import database
+from models.output_delivery import (
+    OutputArtifact,
+    OutputDelivery,
+    OutputDeliveryAttempt,
+    OutputDestination,
+    ScheduledTaskOutputBinding,
+)
+from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from db import database
-from models.output_delivery import OutputArtifact, OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
-from models.scheduled_task import ScheduledTask, ScheduledTaskRun
-from output import teams_workflow
 
 
 @pytest.fixture
@@ -30,8 +35,8 @@ def outbox(monkeypatch, tmp_path):
     monkeypatch.setattr(database, "SessionLocal", factory)
     spool = tmp_path / "output-deliveries"
     spool.mkdir()
-    monkeypatch.setattr("output.service._spool_root", lambda: spool)
-    monkeypatch.setattr(teams_workflow, "resolve_host", lambda host: ["20.1.2.3"])
+    monkeypatch.setattr("services.output_channels.service._spool_root", lambda: spool)
+    monkeypatch.setattr(core_http, "resolve_host", lambda host: ["20.1.2.3"])
     monkeypatch.setenv("FRONTEND_URL", "https://mattin.example")
     factory.spool = spool
     yield factory

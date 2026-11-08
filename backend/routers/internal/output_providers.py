@@ -22,8 +22,8 @@ from schemas.output_provider_schemas import (
     OutputProviderDescriptorSchema,
     ScheduledTaskOutputBindingsRequestSchema,
 )
-from output.service import create_destination, destination_dto, get_destination, request_retry, task_bindings, test_destination, update_destination, replace_task_bindings, delivery_dto
-from output.registry import list_output_providers as registered_output_providers
+from services.output_channels.service import create_destination, destination_dto, get_destination, request_retry, task_bindings, test_destination, update_destination, replace_task_bindings, delivery_dto
+from connectors.registry import list_output_providers as registered_output_providers
 from scheduling.output_delivery import enqueue_delivery
 
 router = APIRouter(prefix="/apps/{app_id}", tags=["Scheduled task output providers"])

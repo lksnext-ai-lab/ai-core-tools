@@ -1,18 +1,18 @@
 import pytest
-
-from output import teams_workflow as module
+from connectors.core import http as core_http
+from connectors.providers.teams_workflow import provider as module
 
 
 def test_webhook_url_requires_https_and_public_host(monkeypatch):
-    monkeypatch.setattr(module, "resolve_host", lambda host: ["20.1.2.3"])
-    assert module.validate_webhook_url("https://prod.logic.azure.com/trigger?sig=secret") == "https://prod.logic.azure.com/trigger?sig=secret"
+    monkeypatch.setattr(core_http, "resolve_host", lambda host: ["20.1.2.3"])
+    assert module.validate_teams_workflow_url("https://prod.logic.azure.com/trigger?sig=secret") == "https://prod.logic.azure.com/trigger?sig=secret"
 
     with pytest.raises(ValueError, match="HTTPS"):
-        module.validate_webhook_url("http://prod.logic.azure.com/trigger")
+        module.validate_teams_workflow_url("http://prod.logic.azure.com/trigger")
 
-    monkeypatch.setattr(module, "resolve_host", lambda host: ["10.0.0.8"])
+    monkeypatch.setattr(core_http, "resolve_host", lambda host: ["10.0.0.8"])
     with pytest.raises(ValueError, match="private or reserved"):
-        module.validate_webhook_url("https://prod.logic.azure.com/trigger")
+        module.validate_teams_workflow_url("https://prod.logic.azure.com/trigger")
 
 
 def test_card_has_result_and_authenticated_file_actions():
@@ -64,7 +64,7 @@ def test_card_bounds_result_excerpt():
     [(429, "retryable"), (503, "unknown"), (400, "permanent")],
 )
 async def test_post_card_classifies_http_outcomes(monkeypatch, status, expected_kind):
-    monkeypatch.setattr(module, "validate_webhook_url", lambda url: url)
+    monkeypatch.setattr(module, "validate_teams_workflow_url", lambda url: url)
 
     class FakeResponse:
         status_code = status
@@ -90,7 +90,7 @@ async def test_post_card_classifies_http_outcomes(monkeypatch, status, expected_
 
 @pytest.mark.asyncio
 async def test_post_card_accepts_2xx_without_persisting_response_body(monkeypatch):
-    monkeypatch.setattr(module, "validate_webhook_url", lambda url: url)
+    monkeypatch.setattr(module, "validate_teams_workflow_url", lambda url: url)
 
     class FakeResponse:
         status_code = 202
@@ -112,7 +112,7 @@ async def test_post_card_accepts_2xx_without_persisting_response_body(monkeypatc
 
 
 def test_provider_registry_exposes_teams_capabilities():
-    from output.registry import get_output_provider, list_output_providers
+    from connectors.registry import get_output_provider, list_output_providers
 
     provider = get_output_provider("teams_workflow")
     assert provider.descriptor.supports_links is True
@@ -122,7 +122,8 @@ def test_provider_registry_exposes_teams_capabilities():
 
 def test_run_payload_never_publishes_file_scheme(monkeypatch):
     from types import SimpleNamespace
-    from output.service import _run_payload
+
+    from services.output_channels.service import _run_payload
 
     monkeypatch.setenv("FRONTEND_URL", "https://mattin.example")
     task = SimpleNamespace(id=4, app_id=3, name="Daily")

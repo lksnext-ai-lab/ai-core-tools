@@ -1,4 +1,4 @@
-"""Destination management, outbox creation and dispatch in ``output.service``."""
+"""Destination management, outbox creation and dispatch in ``services.output_channels.service``."""
 
 import asyncio
 import hashlib
@@ -7,13 +7,24 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-
-from models.output_delivery import OutputArtifact, OutputDelivery, OutputDeliveryAttempt, ScheduledTaskOutputBinding
-from output import service
-from output.teams_workflow import DeliveryError
+from connectors.core.errors import DeliveryError
+from models.output_delivery import (
+    OutputArtifact,
+    OutputDelivery,
+    OutputDeliveryAttempt,
+    ScheduledTaskOutputBinding,
+)
+from services.output_channels import service
 from utils.clock import utcnow_naive
 
-from .factories import HMAC_SECRET, TEAMS_URL, WEBHOOK_URL, make_destination, make_run, make_task
+from .factories import (
+    HMAC_SECRET,
+    TEAMS_URL,
+    WEBHOOK_URL,
+    make_destination,
+    make_run,
+    make_task,
+)
 
 HMAC_CONFIG = {"auth_mode": "hmac_sha256"}
 FUTURE_EXPIRY = datetime(2999, 1, 1)

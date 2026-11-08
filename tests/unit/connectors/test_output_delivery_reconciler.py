@@ -4,8 +4,11 @@ import contextlib
 from datetime import datetime
 
 import pytest
-
-from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, ScheduledTaskOutputBinding
+from models.output_delivery import (
+    OutputDelivery,
+    OutputDeliveryAttempt,
+    ScheduledTaskOutputBinding,
+)
 from scheduling import output_delivery
 
 from .factories import make_destination, make_run, make_task

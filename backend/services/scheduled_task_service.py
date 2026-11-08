@@ -107,7 +107,7 @@ class ScheduledTaskService:
         self.db.add(task)
         self.db.flush()
         if output_bindings:
-            from output.service import replace_task_bindings
+            from services.output_channels.service import replace_task_bindings
             replace_task_bindings(
                 self.db, task=task, app_id=app_id, bindings=output_bindings, commit=False,
             )

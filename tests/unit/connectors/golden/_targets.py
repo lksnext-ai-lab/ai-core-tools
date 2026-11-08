@@ -23,7 +23,7 @@ Not refactor-stable by nature (documented, not patched): ``test_destination``
 reads ``datetime.now(timezone.utc)``; the tests normalise that value instead.
 """
 
-from output.service import (  # noqa: F401
+from services.output_channels.service import (  # noqa: F401
     create_deliveries_for_run,
     create_destination,
     destination_dto,

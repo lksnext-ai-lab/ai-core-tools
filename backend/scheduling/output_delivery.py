@@ -10,7 +10,7 @@ from sqlalchemy import and_, or_
 from db.database import SessionLocal
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
-from output.service import cleanup_spool_files, create_deliveries_for_run, process_delivery
+from services.output_channels.service import cleanup_spool_files, create_deliveries_for_run, process_delivery
 from utils.clock import utcnow_naive
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ async def _reconcile_pending_deliveries() -> int:
             run_id = run.id
             try:
                 with db.begin_nested():
-                    from output.service import prepare_run_attachments
+                    from services.output_channels.service import prepare_run_attachments
                     artifacts, attachment_error = await prepare_run_attachments(db, task=run.task, run=run)
                     # Multipart bodies are written off the event loop; the session
                     # is only used by the thread while this coroutine awaits it.

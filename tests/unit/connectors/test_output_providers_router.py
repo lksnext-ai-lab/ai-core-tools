@@ -4,8 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-
-from models.output_delivery import OutputDelivery, OutputDestination, ScheduledTaskOutputBinding
+from models.output_delivery import (
+    OutputDelivery,
+    OutputDestination,
+    ScheduledTaskOutputBinding,
+)
 from routers.internal import output_providers as router
 from schemas.output_provider_schemas import (
     OutputDestinationCreateSchema,
