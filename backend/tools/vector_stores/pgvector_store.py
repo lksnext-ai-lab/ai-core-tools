@@ -450,16 +450,41 @@ class PGVectorStore(VectorStoreInterface):
         field: str,
         prefix: Optional[str] = None,
         limit: int = 100,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
+        after: Optional[str] = None,
+        raise_errors: bool = False,
     ) -> List[str]:
+        # The embedding table is aliased ``e`` because _build_filter_sql always
+        # emits fragments prefixed with it.
+        params: Dict[str, Any] = {
+            "field": field,
+            "collection_name": collection_name,
+            "prefix_pattern": (prefix + "%") if prefix else None,
+            "prefix": prefix if prefix else None,
+            "contains": contains if contains else None,
+            "contains_pattern": f"%{self._escape_like(contains)}%" if contains else None,
+            "limit": limit,
+        }
+        # Keyset cursor: ``>`` uses the same collation as the ORDER BY below.
+        after_sql = ""
+        if after is not None:
+            after_sql = "AND e.cmetadata->>:field > :after"
+            params["after"] = after
+        where_extra = self._build_filter_sql(filter_metadata, params) if filter_metadata else ""
+
         sql = text(
-            """
-            SELECT DISTINCT lpe.cmetadata->>:field AS val
-            FROM langchain_pg_embedding lpe
-            JOIN langchain_pg_collection lpc ON lpe.collection_id = lpc.uuid
-            WHERE lpc.name = :collection_name
-              AND lpe.cmetadata->>:field IS NOT NULL
-              AND lpe.cmetadata->>:field != ''
-              AND (:prefix IS NULL OR LOWER(lpe.cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+            f"""
+            SELECT DISTINCT e.cmetadata->>:field AS val
+            FROM langchain_pg_embedding e
+            JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+            WHERE c.name = :collection_name
+              AND e.cmetadata->>:field IS NOT NULL
+              AND e.cmetadata->>:field != ''
+              AND (:prefix IS NULL OR LOWER(e.cmetadata->>:field) LIKE LOWER(:prefix_pattern))
+              AND (:contains IS NULL OR e.cmetadata->>:field ILIKE :contains_pattern ESCAPE '\\')
+              {after_sql}
+              {where_extra}
             ORDER BY val
             LIMIT :limit
             """
@@ -467,20 +492,17 @@ class PGVectorStore(VectorStoreInterface):
 
         try:
             with self.engine.connect() as connection:
-                result = connection.execute(
-                    sql,
-                    {
-                        "field": field,
-                        "collection_name": collection_name,
-                        "prefix_pattern": (prefix + "%") if prefix else None,
-                        "prefix": prefix if prefix else None,
-                        "limit": limit,
-                    },
-                )
+                result = connection.execute(sql, params)
                 return [str(row[0]) for row in result if row[0] is not None]
         except Exception as exc:
             logger.error("PGVector get_distinct_metadata_values error: %s", exc)
+            if raise_errors:
+                raise
             return []
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     @staticmethod
     def _build_filter_sql(filter_metadata: Dict[str, Any], params: Dict[str, Any]) -> str:

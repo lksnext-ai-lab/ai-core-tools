@@ -7,6 +7,14 @@ import MessageContent from '../components/playground/MessageContent';
 import StreamingMessage from '../components/playground/StreamingMessage';
 import AttachedFilesPanel from '../components/playground/AttachedFilesPanel';
 import type { PanelFile } from '../components/playground/AttachedFilesPanel';
+import OrchestratorFilterDropdowns, {
+  toSearchFilter,
+} from '../components/playground/OrchestratorFilterDropdowns';
+import type {
+  ChatFilterField,
+  ChatFilterSelection,
+} from '../components/playground/OrchestratorFilterDropdowns';
+import { SEARCH_RESULT_LIMIT } from '../components/playground/SearchableMultiSelect';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import BackgroundImage from '../components/ui/BackgroundImage';
@@ -109,11 +117,13 @@ export default function MarketplaceChatPage() {
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState('');
   const [historyConversations, setHistoryConversations] = useState<MarketplaceConversation[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const displayAgentName = agentName || t('marketplaceChat.agentFallback');
+  const [chatFilters, setChatFilters] = useState<ChatFilterField[]>([]);
+  const [exposedFilterValues, setExposedFilterValues] = useState<ChatFilterSelection>({});
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -140,6 +150,7 @@ export default function MarketplaceChatPage() {
       return apiService.chatMarketplaceStream(numericId, message, {
         files: opts.files,
         fileReferences: persistentFiles.length > 0 ? persistentFiles.map((f) => f.file_id) : undefined,
+        searchParams: opts.searchParams,
         onEvent: opts.onEvent,
         signal: opts.signal,
       });
@@ -342,6 +353,27 @@ export default function MarketplaceChatPage() {
     };
   }, [numericId]);
 
+  // Orchestrator-level exposed chat filters — resolved via the conversation's
+  // agent, aggregated across its own silo + all its subagents' silos.
+  useEffect(() => {
+    if (!numericId || Number.isNaN(numericId)) return;
+    let isMounted = true;
+    setExposedFilterValues({});
+    const loadChatFilters = async () => {
+      try {
+        const response = await apiService.getMarketplaceChatFilters(numericId);
+        if (isMounted) setChatFilters(response.filters || []);
+      } catch (err) {
+        console.error('Error loading chat filters:', err);
+        if (isMounted) setChatFilters([]);
+      }
+    };
+    void loadChatFilters();
+    return () => {
+      isMounted = false;
+    };
+  }, [numericId]);
+
   useEffect(() => {
     if (!isStreaming && textareaRef.current && !isQuotaExceeded) {
       textareaRef.current.focus();
@@ -356,6 +388,19 @@ export default function MarketplaceChatPage() {
       // Non-critical
     }
   }, [numericId]);
+
+  const searchChatFilterValues = useCallback(
+    async (fieldName: string, query: string) => {
+      const response = await apiService.searchMarketplaceChatFilterValues(
+        numericId,
+        fieldName,
+        query,
+        SEARCH_RESULT_LIMIT,
+      );
+      return response.values;
+    },
+    [numericId],
+  );
 
   const handleStarterClick = useCallback((prompt: string) => {
     setInputMessage(prompt);
@@ -458,8 +503,10 @@ export default function MarketplaceChatPage() {
 
     try {
       setHoldStreamingContent(true);
+      const exposedFilter = toSearchFilter(exposedFilterValues);
       const result = await sendMessage(trimmed, {
         conversationId: numericId,
+        searchParams: exposedFilter ? { filter: exposedFilter } : undefined,
       });
 
       commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
@@ -496,6 +543,7 @@ export default function MarketplaceChatPage() {
     scrollToBottom,
     refreshFileList,
     fetchQuotaInfo,
+    exposedFilterValues,
     commitAgentResponse,
     t,
   ]);
@@ -993,7 +1041,19 @@ export default function MarketplaceChatPage() {
             </div>
           )}
 
-           <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark transition-colors duration-150">
+          {chatFilters.length > 0 && (
+            <div className="mb-3">
+              <OrchestratorFilterDropdowns
+                filters={chatFilters}
+                selected={exposedFilterValues}
+                onChange={setExposedFilterValues}
+                onSearchValues={searchChatFilterValues}
+                disabled={isStreaming || isQuotaExceeded}
+              />
+            </div>
+          )}
+
+           <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
              <input
                ref={fileInputRef}
                type="file"
