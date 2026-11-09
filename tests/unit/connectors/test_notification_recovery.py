@@ -37,7 +37,7 @@ def sessions(monkeypatch, tmp_path):
     monkeypatch.setattr(output_delivery, "SessionLocal", factory)
     spool = tmp_path / "output-deliveries"
     spool.mkdir()
-    monkeypatch.setattr("services.output_channels.service._spool_root", lambda: spool)
+    monkeypatch.setattr("services.output_channels.spool.spool_root", lambda: spool)
     with factory() as db:
         db.add(ScheduledTask(id=1, name="Daily", app_id=1, agent_id=1, created_by=1,
                              cron_expression="0 8 * * *", orchestrator_schedule_name="task-1"))

@@ -1,9 +1,13 @@
 """Delivery policy shared by the processor and the DBOS reconciler (capability driven)."""
 
+import os
+import random
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 
 from connectors import registry as connector_registry
 from connectors.core.messages import JsonValue
+from utils.clock import utcnow_naive
 
 MAX_ATTEMPTS = 5
 # A prepared request body is still needed while a send can happen: automatically
@@ -35,3 +39,15 @@ def lease_seconds_for(snapshot: Mapping[str, JsonValue]) -> int:
             and provider.includes_attachments(provider.snapshot_public_config(snapshot))):
         return capabilities.attachment_lease_seconds
     return LEASE_SECONDS
+
+
+def delivery_expiry() -> datetime:
+    # Keep pending deliveries inside the file cleanup worker's persistent-file
+    # retention window so a card cannot be retried after its links have expired.
+    persistent_ttl_days = max(1, int(os.getenv("TMP_PERSISTENT_TTL_DAYS", "7")))
+    persistent_ttl_seconds = persistent_ttl_days * 86400
+    return utcnow_naive() + timedelta(seconds=min(30 * 86400, persistent_ttl_seconds - 3600))
+
+
+def retry_delay(attempt: int) -> float:
+    return min(3600.0, 30.0 * (2 ** max(0, attempt - 1))) * random.uniform(0.75, 1.25)

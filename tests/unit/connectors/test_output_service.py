@@ -1,4 +1,4 @@
-"""Destination management, outbox creation and dispatch in ``services.output_channels.service``."""
+"""Destination management, outbox creation and dispatch in ``services.output_channels``."""
 
 import asyncio
 import hashlib
@@ -17,7 +17,17 @@ from models.output_delivery import (
     OutputDeliveryAttempt,
     ScheduledTaskOutputBinding,
 )
-from services.output_channels import delivery_policy, service
+from services.output_channels import (
+    attachments,
+    bindings,
+    delivery_factory,
+    delivery_policy,
+    delivery_processor,
+    destination_test,
+    destinations,
+    spool,
+)
+from services.output_channels.dto import delivery_dto, destination_dto
 from services.output_channels.messages import run_message_from
 from utils.clock import utcnow_naive
 
@@ -96,8 +106,8 @@ def _patch_provider(monkeypatch, provider):
 class TestCreateDestination:
     def test_creates_teams_destination(self, outbox):
         with outbox() as db:
-            destination = service.create_destination(db, app_id=1, created_by=7, name="  Alerts ", webhook_url=TEAMS_URL)
-            dto = service.destination_dto(destination)
+            destination = destinations.create_destination(db, app_id=1, created_by=7, name="  Alerts ", webhook_url=TEAMS_URL)
+            dto = destination_dto(destination)
         assert dto["name"] == "Alerts"
         assert dto["has_secret"] is True
         assert dto["has_credentials"] is False
@@ -105,13 +115,13 @@ class TestCreateDestination:
 
     def test_creates_webhook_destination_with_validated_config(self, outbox):
         with outbox() as db:
-            destination = service.create_destination(
+            destination = destinations.create_destination(
                 db, app_id=1, created_by=7, name="Hook", webhook_url=WEBHOOK_URL, provider_key="webhook",
                 public_config=HMAC_CONFIG, credentials=HMAC_CREDENTIALS,
             )
         assert destination.public_config == {"schema_version": "1", "auth_mode": "hmac_sha256",
                                              "receiver_deduplicates": False, "include_attachments": False}
-        assert service.destination_dto(destination)["has_credentials"] is True
+        assert destination_dto(destination)["has_credentials"] is True
 
     @pytest.mark.parametrize("kwargs, message", [
         ({"name": "   "}, "required"),
@@ -124,13 +134,13 @@ class TestCreateDestination:
     def test_rejects_invalid_input(self, outbox, kwargs, message):
         arguments = {"app_id": 1, "created_by": 1, "name": "Alerts", "webhook_url": TEAMS_URL, **kwargs}
         with outbox() as db, pytest.raises(ValueError, match=message):
-            service.create_destination(db, **arguments)
+            destinations.create_destination(db, **arguments)
 
     def test_duplicate_name_in_app_is_rejected(self, outbox):
         with outbox() as db:
-            service.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url=TEAMS_URL)
+            destinations.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url=TEAMS_URL)
             with pytest.raises(ValueError, match="already exists"):
-                service.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url=TEAMS_URL)
+                destinations.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url=TEAMS_URL)
 
 
 class TestUpdateDestination:
@@ -139,7 +149,7 @@ class TestUpdateDestination:
             destination = make_destination()
             db.add(destination)
             db.commit()
-            service.update_destination(db, destination, {"name": " Renamed ", "enabled": False, "content_mode": "excerpt"})
+            destinations.update_destination(db, destination, {"name": " Renamed ", "enabled": False, "content_mode": "excerpt"})
         assert (destination.name, destination.enabled, destination.content_mode) == ("Renamed", False, "excerpt")
 
     @pytest.mark.parametrize("changes, message", [
@@ -152,7 +162,7 @@ class TestUpdateDestination:
             db.add(destination)
             db.commit()
             with pytest.raises(ValueError, match=message):
-                service.update_destination(db, destination, changes)
+                destinations.update_destination(db, destination, changes)
 
     def test_teams_secret_can_rotate_on_same_workflow(self, outbox):
         rotated = TEAMS_URL.replace("sig=secret", "sig=rotated")
@@ -160,7 +170,7 @@ class TestUpdateDestination:
             destination = make_destination()
             db.add(destination)
             db.commit()
-            service.update_destination(db, destination, {"webhook_url": rotated})
+            destinations.update_destination(db, destination, {"webhook_url": rotated})
         assert destination.webhook_url == rotated
 
     def test_teams_workflow_cannot_change(self, outbox):
@@ -169,21 +179,21 @@ class TestUpdateDestination:
             db.add(destination)
             db.commit()
             with pytest.raises(ValueError, match="Workflow or channel"):
-                service.update_destination(db, destination, {"webhook_url": "https://prod.logic.azure.com/workflows/other"})
+                destinations.update_destination(db, destination, {"webhook_url": "https://prod.logic.azure.com/workflows/other"})
 
     def test_webhook_config_and_credentials_can_change(self, outbox):
         with outbox() as db:
             destination = make_destination(provider_key="webhook", config=HMAC_CONFIG, credentials=HMAC_CREDENTIALS)
             db.add(destination)
             db.commit()
-            service.update_destination(db, destination, {
+            destinations.update_destination(db, destination, {
                 "public_config": {"auth_mode": "bearer"}, "credentials": {"bearer_token": "token-1"},
                 "webhook_url": WEBHOOK_URL + "?",
             })
             assert destination.public_config["auth_mode"] == "bearer"
             assert destination.credentials == {"bearer_token": "token-1"}
 
-            service.update_destination(db, destination, {"public_config": {"auth_mode": "none"}, "clear_credentials": True})
+            destinations.update_destination(db, destination, {"public_config": {"auth_mode": "none"}, "clear_credentials": True})
             assert destination.credentials is None
 
     def test_webhook_endpoint_cannot_change(self, outbox):
@@ -192,24 +202,24 @@ class TestUpdateDestination:
             db.add(destination)
             db.commit()
             with pytest.raises(ValueError, match="new destination"):
-                service.update_destination(db, destination, {"webhook_url": "https://hooks.example.com/other"})
+                destinations.update_destination(db, destination, {"webhook_url": "https://hooks.example.com/other"})
 
     def test_duplicate_name_is_rejected(self, outbox):
         with outbox() as db:
             db.add_all([make_destination(1, name="A"), make_destination(2, name="B")])
             db.commit()
-            second = service.get_destination(db, app_id=1, destination_id=2)
+            second = destinations.get_destination(db, app_id=1, destination_id=2)
             with pytest.raises(ValueError, match="already exists"):
-                service.update_destination(db, second, {"name": "A"})
+                destinations.update_destination(db, second, {"name": "A"})
 
 
 def test_get_destination_is_scoped_to_app(outbox):
     with outbox() as db:
         db.add(make_destination())
         db.commit()
-        assert service.get_destination(db, app_id=1, destination_id=1).id == 1
+        assert destinations.get_destination(db, app_id=1, destination_id=1).id == 1
         with pytest.raises(ValueError, match="not found"):
-            service.get_destination(db, app_id=2, destination_id=1)
+            destinations.get_destination(db, app_id=2, destination_id=1)
 
 
 # --------------------------------------------------------------------------- bindings
@@ -223,13 +233,13 @@ class TestTaskBindings:
                                                                           config={"include_attachments": True})])
             db.commit()
 
-            listed = service.replace_task_bindings(db, task=task, app_id=1, bindings=[
+            listed = bindings.replace_task_bindings(db, task=task, app_id=1, bindings=[
                 {"destination_id": 1}, {"destination_id": 2},
             ])
             assert [item["destination_name"] for item in listed] == ["A", "B"]
             assert listed[0]["include_attachments"] is True
 
-            listed = service.replace_task_bindings(db, task=task, app_id=1, bindings=[{"destination_id": 2}], commit=False)
+            listed = bindings.replace_task_bindings(db, task=task, app_id=1, bindings=[{"destination_id": 2}], commit=False)
             assert [item["destination_id"] for item in listed] == [2]
             assert db.query(ScheduledTaskOutputBinding).filter_by(destination_id=1).one().enabled is False
 
@@ -239,7 +249,7 @@ class TestTaskBindings:
             db.add_all([task, make_destination()])
             db.commit()
             with pytest.raises(ValueError, match="only be selected once"):
-                service.replace_task_bindings(db, task=task, app_id=1, bindings=[{"destination_id": 1}, {"destination_id": 1}])
+                bindings.replace_task_bindings(db, task=task, app_id=1, bindings=[{"destination_id": 1}, {"destination_id": 1}])
 
     def test_disabled_destination_is_not_ready(self, outbox):
         with outbox() as db:
@@ -247,7 +257,7 @@ class TestTaskBindings:
             db.add_all([task, make_destination(enabled=False)])
             db.commit()
             with pytest.raises(ValueError, match="not ready"):
-                service.replace_task_bindings(db, task=task, app_id=1, bindings=[{"destination_id": 1}])
+                bindings.replace_task_bindings(db, task=task, app_id=1, bindings=[{"destination_id": 1}])
 
 
 # --------------------------------------------------------------------------- payloads
@@ -288,9 +298,9 @@ def test_webhook_event_respects_content_mode(mode):
 
 
 def test_json_body_is_bounded():
-    assert service._json_body({"b": 1, "a": "ñ"}) == '{"a":"ñ","b":1}'.encode("utf-8")
+    assert spool.json_body({"b": 1, "a": "ñ"}) == '{"a":"ñ","b":1}'.encode("utf-8")
     with pytest.raises(ValueError, match="256 KiB"):
-        service._json_body({"text": "x" * (256 * 1024)})
+        spool.json_body({"text": "x" * (256 * 1024)})
 
 
 # --------------------------------------------------------------------------- spool
@@ -300,12 +310,12 @@ class TestSpool:
     @pytest.mark.parametrize("key", ["/etc/passwd", "../escape", "a/../../escape"])
     def test_rejects_unsafe_references(self, outbox, key):
         with pytest.raises(ValueError, match="Invalid output spool reference"):
-            service._safe_spool_file(key)
+            spool.safe_spool_file(key)
 
     def test_rejects_symlinked_parents(self, outbox, tmp_path):
         (outbox.spool / "link").symlink_to(tmp_path)
         with pytest.raises(ValueError, match="Invalid output spool reference"):
-            service._safe_spool_file("link/file.bin")
+            spool.safe_spool_file("link/file.bin")
 
     def test_cleanup_removes_only_old_unreferenced_files(self, outbox, tmp_path):
         old = datetime.now().timestamp() - 7200
@@ -325,8 +335,8 @@ class TestSpool:
                                   size_bytes=4, sha256="0" * 64, object_key="artifacts/1/kept.bin"))
             db.add(OutputDelivery(run_id=1, binding_id=1, request_body_path="deliveries/kept.multipart"))
             db.commit()
-            assert service.cleanup_spool_files(db) == 1
-            assert service.cleanup_spool_files(db, grace_seconds=0, max_files=0) == 0
+            assert spool.cleanup_spool_files(db) == 1
+            assert spool.cleanup_spool_files(db, grace_seconds=0, max_files=0) == 0
         assert not orphan.exists()
         assert referenced_artifact.exists() and referenced_body.exists() and recent.exists()
         assert not (outbox.spool / "artifacts/2").exists()
@@ -362,7 +372,7 @@ class TestSpoolRelease:
                 "file_id", "filename", "content_type", "size_bytes", "sha256", "object_key")}))
             db.commit()
 
-            service.cleanup_spool_files(db)
+            spool.cleanup_spool_files(db)
 
             db.expire_all()
             delivery = db.get(OutputDelivery, 1)
@@ -377,7 +387,7 @@ class TestMultipart:
     def test_writes_payload_and_attachment_parts(self, outbox):
         artifact = _artifact(outbox.spool, filename="report.tar.gz")
         path = outbox.spool / "deliveries/request.multipart"
-        content_type, size, digest = service._write_multipart(path, {"event_id": "e"}, [artifact])
+        content_type, size, digest = spool.write_multipart(path, {"event_id": "e"}, [artifact])
         body = path.read_bytes()
         boundary = content_type.split("boundary=")[1]
         assert size == len(body) and digest == hashlib.sha256(body).hexdigest()
@@ -388,22 +398,22 @@ class TestMultipart:
         artifact = _artifact(outbox.spool)
         (outbox.spool / artifact["object_key"]).unlink()
         # Simulate the file disappearing after the boundary scan.
-        monkeypatch.setattr(service, "_file_contains", lambda path, needle: False)
+        monkeypatch.setattr(spool, "file_contains", lambda path, needle: False)
         path = outbox.spool / "deliveries/request.multipart"
         with pytest.raises(ValueError, match="missing"):
-            service._write_multipart(path, {"event_id": "e"}, [artifact])
+            spool.write_multipart(path, {"event_id": "e"}, [artifact])
         assert list(path.parent.iterdir()) == []
 
     def test_tampered_attachment_fails_integrity_check(self, outbox):
         artifact = {**_artifact(outbox.spool), "sha256": "0" * 64}
         with pytest.raises(ValueError, match="integrity"):
-            service._write_multipart(outbox.spool / "deliveries/request.multipart", {"event_id": "e"}, [artifact])
+            spool.write_multipart(outbox.spool / "deliveries/request.multipart", {"event_id": "e"}, [artifact])
 
     def test_file_contains_spans_chunk_boundaries(self, tmp_path):
         path = tmp_path / "blob"
         path.write_bytes(b"x" * (256 * 1024 - 3) + b"needle")
-        assert service._file_contains(path, b"needle") is True
-        assert service._file_contains(path, b"absent") is False
+        assert spool.file_contains(path, b"needle") is True
+        assert spool.file_contains(path, b"absent") is False
 
 
 # --------------------------------------------------------------------------- run file capture
@@ -428,9 +438,9 @@ class TestCaptureRunFiles:
             finally:
                 loop.close()
 
-        monkeypatch.setattr(service.asyncio, "run", run_on_private_loop)
-        monkeypatch.setattr("services.file_management_service.FileManagementService", FakeFileService)
-        monkeypatch.setattr("services.scheduled_task_service.task_user_context", lambda task: None)
+        monkeypatch.setattr(attachments.asyncio, "run", run_on_private_loop)
+        monkeypatch.setattr("services.output_channels.attachments.FileManagementService", FakeFileService)
+        monkeypatch.setattr("services.output_channels.attachments.task_user_context", lambda task: None)
         monkeypatch.setattr("utils.config.get_app_config", lambda: {"TMP_BASE_FOLDER": str(temp_root)})
         return SimpleNamespace(root=temp_root, refs=refs)
 
@@ -442,8 +452,8 @@ class TestCaptureRunFiles:
         capture_env.refs.append({"file_id": "f-1", "file_path": "uploads/report.csv", "mime_type": "bad mime"})
         run = self._run([{"file_id": "f-1", "filename": "report.csv"}, {"filename": "no id"}])
 
-        first = service._capture_run_files_sync(make_task(), run)
-        second = service._capture_run_files_sync(make_task(), run)
+        first = attachments.capture_run_files_sync(make_task(), run)
+        second = attachments.capture_run_files_sync(make_task(), run)
 
         assert first == second
         assert first[0]["content_type"] == "application/octet-stream"
@@ -459,21 +469,21 @@ class TestCaptureRunFiles:
     def test_rejects_unavailable_files(self, outbox, capture_env, files, refs, message):
         capture_env.refs.extend(refs)
         with pytest.raises((ValueError, FileNotFoundError), match=message):
-            service._capture_run_files_sync(make_task(), self._run(files))
+            attachments.capture_run_files_sync(make_task(), self._run(files))
 
     def test_rejects_symlinked_source(self, outbox, capture_env, tmp_path):
         (tmp_path / "secret").write_bytes(b"secret")
         (capture_env.root / "uploads/link.csv").symlink_to(tmp_path / "secret")
         capture_env.refs.append({"file_id": "f-1", "file_path": "uploads/link.csv"})
         with pytest.raises(ValueError, match="not safe"):
-            service._capture_run_files_sync(make_task(), self._run([{"file_id": "f-1"}]))
+            attachments.capture_run_files_sync(make_task(), self._run([{"file_id": "f-1"}]))
 
     def test_rejects_oversized_files(self, outbox, capture_env):
         with open(capture_env.root / "uploads/big.bin", "wb") as handle:
             handle.truncate(10 * 1024 * 1024 + 1)
         capture_env.refs.append({"file_id": "f-1", "file_path": "uploads/big.bin"})
         with pytest.raises(ValueError, match="10 MiB each"):
-            service._capture_run_files_sync(make_task(), self._run([{"file_id": "f-1"}]))
+            attachments.capture_run_files_sync(make_task(), self._run([{"file_id": "f-1"}]))
         assert list((outbox.spool / "artifacts/1").iterdir()) == []
 
 
@@ -484,31 +494,31 @@ class TestPrepareRunAttachments:
             task = make_task()
             db.add_all([task, make_destination(provider_key="webhook", config={"include_attachments": False})])
             _bind(db, make_destination(1))
-            assert await service.prepare_run_attachments(db, task=task, run=make_run()) == ([], None)
+            assert await attachments.prepare_run_attachments(db, task=task, run=make_run()) == ([], None)
 
     @pytest.mark.asyncio
     async def test_reports_capture_failures(self, outbox, monkeypatch):
         def fail(task, run):
             raise ValueError("boom")
 
-        monkeypatch.setattr(service, "_capture_run_files_sync", fail)
+        monkeypatch.setattr(attachments, "capture_run_files_sync", fail)
         with outbox() as db:
             task = make_task()
             destination = make_destination(provider_key="webhook", config={"include_attachments": True})
             db.add_all([task, destination])
             _bind(db, destination)
-            artifacts, error = await service.prepare_run_attachments(db, task=task, run=make_run())
+            artifacts, error = await attachments.prepare_run_attachments(db, task=task, run=make_run())
         assert artifacts == [] and "could not be captured" in error
 
     @pytest.mark.asyncio
     async def test_returns_captured_artifacts(self, outbox, monkeypatch):
-        monkeypatch.setattr(service, "_capture_run_files_sync", lambda task, run: [{"file_id": "f-1"}])
+        monkeypatch.setattr(attachments, "capture_run_files_sync", lambda task, run: [{"file_id": "f-1"}])
         with outbox() as db:
             task = make_task()
             destination = make_destination(provider_key="webhook", config={"include_attachments": True})
             db.add_all([task, destination])
             _bind(db, destination)
-            assert await service.prepare_run_attachments(db, task=task, run=make_run()) == ([{"file_id": "f-1"}], None)
+            assert await attachments.prepare_run_attachments(db, task=task, run=make_run()) == ([{"file_id": "f-1"}], None)
 
 
 # --------------------------------------------------------------------------- outbox creation
@@ -526,10 +536,10 @@ class TestCreateDeliveries:
         with outbox() as db:
             destination = make_destination(provider_key="webhook", config={"include_attachments": True, "auth_mode": "none"})
             task, run = self._setup(db, destination)
-            [delivery] = service.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact])
+            [delivery] = delivery_factory.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact])
             db.commit()
             # Idempotent: the same run/binding returns the existing outbox row.
-            assert service.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact]) == [delivery]
+            assert delivery_factory.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact]) == [delivery]
             assert db.query(OutputArtifact).one().file_id == "f-1"
         assert delivery.status == "pending"
         assert delivery.destination_snapshot["content_type"].startswith("multipart/form-data")
@@ -547,7 +557,7 @@ class TestCreateDeliveries:
             db.add_all([task, run, *destinations])
             for destination in destinations:
                 _bind(db, destination)
-            deliveries = service.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact])
+            deliveries = delivery_factory.create_deliveries_for_run(db, task=task, run=run, artifacts=[artifact])
             db.commit()
             assert [delivery.status for delivery in deliveries] == ["pending", "pending"]
             assert db.query(OutputArtifact).count() == 1
@@ -556,7 +566,7 @@ class TestCreateDeliveries:
         with outbox() as db:
             destination = make_destination(provider_key="webhook", config={"include_attachments": True})
             task, run = self._setup(db, destination)
-            [delivery] = service.create_deliveries_for_run(db, task=task, run=run, attachment_error="capture failed")
+            [delivery] = delivery_factory.create_deliveries_for_run(db, task=task, run=run, attachment_error="capture failed")
         assert (delivery.status, delivery.error_summary) == ("failed", "capture failed")
 
     def test_oversized_event_fails_delivery(self, outbox):
@@ -564,23 +574,23 @@ class TestCreateDeliveries:
             destination = make_destination(provider_key="webhook", config={"auth_mode": "none"})
             task, run = self._setup(db, destination)
             run.output_files = [{"file_id": f"f{index}", "filename": "x" * 6000} for index in range(50)]
-            [delivery] = service.create_deliveries_for_run(db, task=task, run=run)
+            [delivery] = delivery_factory.create_deliveries_for_run(db, task=task, run=run)
         assert delivery.status == "failed" and "256 KiB" in delivery.error_summary
         assert delivery.request_body is None
 
     def test_teams_delivery_stores_card(self, outbox):
         with outbox() as db:
             task, run = self._setup(db, make_destination())
-            [delivery] = service.create_deliveries_for_run(db, task=task, run=run)
+            [delivery] = delivery_factory.create_deliveries_for_run(db, task=task, run=run)
             db.commit()
-            dto = service.delivery_dto(delivery)
+            dto = delivery_dto(delivery)
         assert delivery.payload["type"] == "message"
         assert dto["provider_key"] == "teams_workflow" and dto["attempts"] == []
 
 
 def test_delivery_expiry_respects_file_retention(monkeypatch):
     monkeypatch.setenv("TMP_PERSISTENT_TTL_DAYS", "1")
-    remaining = service._delivery_expiry() - utcnow_naive()
+    remaining = delivery_policy.delivery_expiry() - utcnow_naive()
     assert timedelta(hours=22, minutes=59) < remaining <= timedelta(hours=23)
 
 
@@ -597,7 +607,7 @@ class TestRequestRetry:
     def test_requeues_failed_delivery_with_new_generation(self, outbox):
         with outbox() as db:
             delivery = self._delivery(db, status="failed", error_summary="boom", next_attempt_at=utcnow_naive())
-            service.request_retry(db, delivery)
+            delivery_processor.request_retry(db, delivery)
         assert (delivery.status, delivery.dispatch_generation, delivery.error_summary) == ("pending", 1, None)
 
     @pytest.mark.parametrize("fields, message", [
@@ -608,13 +618,13 @@ class TestRequestRetry:
         with outbox() as db:
             delivery = self._delivery(db, **fields)
             with pytest.raises(ValueError, match=message):
-                service.request_retry(db, delivery)
+                delivery_processor.request_retry(db, delivery)
 
 
 def test_retry_delay_backs_off_with_jitter_and_cap():
-    assert 22.5 <= service._retry_delay(1) <= 37.5
-    assert 90 <= service._retry_delay(3) <= 150
-    assert service._retry_delay(20) <= 4500
+    assert 22.5 <= delivery_policy.retry_delay(1) <= 37.5
+    assert 90 <= delivery_policy.retry_delay(3) <= 150
+    assert delivery_policy.retry_delay(20) <= 4500
 
 
 # --------------------------------------------------------------------------- connection test
@@ -626,7 +636,7 @@ class TestDestinationConnectionTest:
         provider = FakeProvider()
         _patch_provider(monkeypatch, provider)
         destination = make_destination()
-        assert await service.test_destination(destination) == {"http_status": 202}
+        assert await destination_test.test_destination(destination) == {"http_status": 202}
         secret, payload, _ = provider.calls[0]
         assert secret == TEAMS_URL and "connection test" in str(payload)
 
@@ -644,7 +654,7 @@ class TestDestinationConnectionTest:
         _patch_provider(monkeypatch, provider)
         destination = make_destination(provider_key="webhook", config={"include_attachments": attachments},
                                        credentials=HMAC_CREDENTIALS, content_mode="link_only")
-        await service.test_destination(destination)
+        await destination_test.test_destination(destination)
 
         _, payload, _ = provider.calls[0]
         assert payload["event_type"] == "destination.test" and payload["content"]["text"] is None
@@ -689,7 +699,7 @@ class TestProcessDelivery:
     async def test_accepted_teams_delivery_records_receipt(self, outbox, monkeypatch):
         provider = self._provider(monkeypatch, FakeProvider({"http_status": 202}))
         delivery_id = self._delivery(outbox)
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         delivery, attempts = self._load(outbox, delivery_id)
         assert (delivery.status, delivery.receipt, delivery.attempt_count) == ("accepted", {"http_status": 202}, 1)
         assert [(item.status, item.http_status) for item in attempts] == [("accepted", 202)]
@@ -703,7 +713,7 @@ class TestProcessDelivery:
         delivery_id = self._delivery(outbox, provider_key="webhook", request_body=b"{}",
                                      destination_fields={"credentials": HMAC_CREDENTIALS},
                                      snapshot={"include_attachments": False, "name": "ignored"})
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         _, _, options = provider.calls[0]
         assert options["body"] == b"{}" and options["body_path"] is None
         assert options["config"] == {"auth_mode": "hmac_sha256", "include_attachments": False}
@@ -718,7 +728,7 @@ class TestProcessDelivery:
         delivery_id = self._delivery(outbox, provider_key="webhook", request_body_path="deliveries/evt.multipart",
                                      request_body_size=14, request_body_sha256=hashlib.sha256(b"multipart-body").hexdigest(),
                                      snapshot={"include_attachments": True})
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         _, _, options = provider.calls[0]
         assert options["body"] is None and options["body_path"] == str(body)
         delivery, _ = self._load(outbox, delivery_id)
@@ -740,7 +750,7 @@ class TestProcessDelivery:
             path.write_bytes(content)
         delivery_id = self._delivery(outbox, provider_key="webhook", request_body_path="deliveries/evt.multipart",
                                      request_body_size=size, request_body_sha256=digest)
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         delivery, attempts = self._load(outbox, delivery_id)
         assert delivery.status == "failed" and message in delivery.error_summary
         assert attempts[0].status == "failed" and provider.calls == []
@@ -756,7 +766,7 @@ class TestProcessDelivery:
     async def test_failed_attempts_are_classified(self, outbox, monkeypatch, error, attempt_count, expected):
         self._provider(monkeypatch, FakeProvider(error))
         delivery_id = self._delivery(outbox, attempt_count=attempt_count)
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         delivery, attempts = self._load(outbox, delivery_id)
         assert delivery.status == expected and attempts[-1].status == expected
         assert delivery.error_summary == str(error) and delivery.lease_until is None
@@ -774,8 +784,8 @@ class TestProcessDelivery:
     async def test_stale_or_busy_deliveries_are_left_alone(self, outbox, monkeypatch, fields, generation):
         provider = self._provider(monkeypatch, FakeProvider())
         delivery_id = self._delivery(outbox, **fields)
-        await service.process_delivery(delivery_id, generation)
-        await service.process_delivery(9999, 0)
+        await delivery_processor.process_delivery(delivery_id, generation)
+        await delivery_processor.process_delivery(9999, 0)
         delivery, _ = self._load(outbox, delivery_id)
         assert delivery.attempt_count == 0 and provider.calls == []
 
@@ -787,7 +797,7 @@ class TestProcessDelivery:
     async def test_expired_or_disabled_deliveries_fail(self, outbox, monkeypatch, fields, destination_fields, message):
         provider = self._provider(monkeypatch, FakeProvider())
         delivery_id = self._delivery(outbox, destination_fields=destination_fields, **fields)
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         delivery, _ = self._load(outbox, delivery_id)
         assert delivery.status == "failed" and message in delivery.error_summary and provider.calls == []
 
@@ -804,7 +814,7 @@ class TestProcessDelivery:
         with outbox() as db:
             db.add(OutputDeliveryAttempt(delivery_id=delivery_id, attempt_number=1, status="sending"))
             db.commit()
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         delivery, attempts = self._load(outbox, delivery_id)
         assert delivery.status == expected and attempts[-1].status == expected
         assert (delivery.next_attempt_at is not None) is (expected == "retry_wait")
@@ -833,7 +843,7 @@ class TestProcessDelivery:
         delivery_id = self._delivery(outbox, provider_key=provider_key, request_body=b"{}",
                                      snapshot={"receiver_deduplicates": deduplicates})
 
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
 
         delivery, attempts = self._load(outbox, delivery_id)
         assert delivery.status == expected and attempts[0].status == expected
@@ -849,7 +859,7 @@ class TestProcessDelivery:
                 db.commit()
 
         self._provider(monkeypatch, FakeProvider(on_send=bump_generation))
-        await service.process_delivery(delivery_id, 0)
+        await delivery_processor.process_delivery(delivery_id, 0)
         delivery, attempts = self._load(outbox, delivery_id)
         assert delivery.status == "sending" and attempts[0].status == "sending"
 
@@ -858,4 +868,4 @@ class TestProcessDelivery:
         self._provider(monkeypatch, FakeProvider(RuntimeError("provider crashed")))
         delivery_id = self._delivery(outbox)
         with pytest.raises(RuntimeError, match="provider crashed"):
-            await service.process_delivery(delivery_id, 0)
+            await delivery_processor.process_delivery(delivery_id, 0)

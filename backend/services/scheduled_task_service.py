@@ -13,6 +13,8 @@ from models.conversation import Conversation
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 from models.output_delivery import OutputDelivery
 from schemas.scheduled_task_schemas import ScheduledTaskResponseSchema
+from services.output_channels.bindings import replace_task_bindings
+from services.scheduled_task_identity import task_user_context  # noqa: F401  re-export
 from services.service_lifecycle_service import ServiceLifecycleService
 from utils.logger import get_logger
 
@@ -25,23 +27,6 @@ _EDITABLE_FIELDS = {
 _FINISHED_STATUSES = ("succeeded", "failed")
 # Covers an hourly task for the full ~7-day notification lifetime.
 _MAX_NOTIFICATION_PROTECTED_RUNS = 200
-
-
-def task_user_context(task: ScheduledTask) -> Dict[str, Any]:
-    """Identity a scheduled task runs its agent with.
-
-    Its conversations belong to the task (no user), files are scoped by the task's own
-    session key, system-LLM usage is billed to the creator and metrics report the
-    SCHEDULED_TASK channel.
-    """
-    return {
-        "user_id": f"scheduled_task_{task.id}",
-        "app_id": task.app_id,
-        "scheduled_task_id": task.id,
-        "billing_user_id": task.created_by,
-        "caller_type_override": "SCHEDULED_TASK",
-        "trigger": "scheduled_task",
-    }
 
 
 def default_orchestrator():
@@ -107,7 +92,6 @@ class ScheduledTaskService:
         self.db.add(task)
         self.db.flush()
         if output_bindings:
-            from services.output_channels.service import replace_task_bindings
             replace_task_bindings(
                 self.db, task=task, app_id=app_id, bindings=output_bindings, commit=False,
             )

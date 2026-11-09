@@ -22,8 +22,16 @@ from schemas.output_provider_schemas import (
     OutputProviderDescriptorSchema,
     ScheduledTaskOutputBindingsRequestSchema,
 )
-from services.output_channels.service import create_destination, destination_dto, get_destination, request_retry, task_bindings, test_destination, update_destination, replace_task_bindings, delivery_dto
-from connectors.registry import list_output_providers as registered_output_providers
+from services.output_channels.bindings import replace_task_bindings, task_bindings
+from services.output_channels.delivery_processor import request_retry
+from services.output_channels.destination_test import test_destination
+from services.output_channels.destinations import (
+    create_destination,
+    get_destination,
+    list_provider_descriptors,
+    update_destination,
+)
+from services.output_channels.dto import delivery_dto, destination_dto
 from scheduling.output_delivery import enqueue_delivery
 
 router = APIRouter(prefix="/apps/{app_id}", tags=["Scheduled task output providers"])
@@ -54,11 +62,7 @@ def _delivery(db: Session, *, app_id: int, task_id: int, run_id: int, delivery_i
 
 @router.get("/output-providers", response_model=list[OutputProviderDescriptorSchema])
 async def list_output_providers(app_id: int, role: CanView):
-    return [{"key": provider.descriptor.key, "name": provider.descriptor.name,
-             "supports_links": provider.descriptor.supports_links,
-             "supports_native_attachments": provider.descriptor.supports_native_attachments,
-             "supports_binary_attachments": provider.descriptor.supports_binary_attachments,
-             "content_modes": list(provider.descriptor.content_modes)} for provider in registered_output_providers()]
+    return list_provider_descriptors()
 
 
 @router.get("/output-destinations", response_model=list[OutputDestinationResponseSchema])

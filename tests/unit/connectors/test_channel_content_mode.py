@@ -17,7 +17,8 @@ from schemas.output_provider_schemas import (
     OutputDestinationCreateSchema,
     OutputDestinationUpdateSchema,
 )
-from services.output_channels import service
+from services.output_channels import bindings, delivery_factory, destination_test, destinations
+from services.output_channels.dto import destination_dto
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -42,7 +43,7 @@ def task(task_id):
 
 @pytest.mark.parametrize("provider", ["teams_workflow", "webhook"])
 def test_channel_mode_is_shared_by_tasks_and_cannot_be_overridden_by_binding(db, provider):
-    destination = service.create_destination(
+    destination = destinations.create_destination(
         db, app_id=1, created_by=1, name="Alerts", webhook_url="https://prod.logic.azure.com/trigger",
         provider_key=provider, content_mode="excerpt", public_config={"auth_mode": "none"} if provider == "webhook" else {},
     )
@@ -51,10 +52,10 @@ def test_channel_mode_is_shared_by_tasks_and_cannot_be_overridden_by_binding(db,
     db.commit()
     for current in tasks:
         # Legacy clients cannot overwrite the shared channel mode via task settings.
-        service.replace_task_bindings(db, task=current, app_id=1, bindings=[{
+        bindings.replace_task_bindings(db, task=current, app_id=1, bindings=[{
             "destination_id": destination.id, "content_mode": "result",
         }])
-    assert service.destination_dto(destination)["content_mode"] == "excerpt"
+    assert destination_dto(destination)["content_mode"] == "excerpt"
 
     deliveries = []
     for current in tasks:
@@ -62,7 +63,7 @@ def test_channel_mode_is_shared_by_tasks_and_cannot_be_overridden_by_binding(db,
                                orchestrator_run_id=f"run-{current.id}", output_text="x" * 6000)
         db.add(run)
         db.flush()
-        deliveries.extend(service.create_deliveries_for_run(db, task=current, run=run))
+        deliveries.extend(delivery_factory.create_deliveries_for_run(db, task=current, run=run))
     db.commit()
     for delivery in deliveries:
         assert delivery.destination_snapshot["content_mode"] == "excerpt"
@@ -74,14 +75,14 @@ def test_channel_mode_is_shared_by_tasks_and_cannot_be_overridden_by_binding(db,
             assert "x" * 1199 in text
             assert "x" * 1201 not in text
 
-    service.update_destination(db, destination, {"content_mode": "link_only"})
+    destinations.update_destination(db, destination, {"content_mode": "link_only"})
     for delivery in deliveries:
         assert delivery.destination_snapshot["content_mode"] == "excerpt"
     run = ScheduledTaskRun(scheduled_task_id=1, status="succeeded", scheduled_time=datetime.utcnow(),
                            orchestrator_run_id="new-run", output_text="new output")
     db.add(run)
     db.flush()
-    latest = service.create_deliveries_for_run(db, task=tasks[0], run=run)[0]
+    latest = delivery_factory.create_deliveries_for_run(db, task=tasks[0], run=run)[0]
     assert latest.destination_snapshot["content_mode"] == "link_only"
     if provider == "webhook":
         assert latest.payload["content"]["mode"] == "link_only"
@@ -96,17 +97,17 @@ def test_mode_validation_and_patch_omission(db):
     with pytest.raises(ValueError):
         OutputDestinationUpdateSchema(content_mode="invalid")
     with pytest.raises(ValueError, match="content mode"):
-        service.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url="https://example.com", content_mode="invalid")
-    destination = service.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url="https://prod.logic.azure.com/trigger", content_mode="excerpt")
-    service.update_destination(db, destination, {"name": "Renamed"})
+        destinations.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url="https://example.com", content_mode="invalid")
+    destination = destinations.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url="https://prod.logic.azure.com/trigger", content_mode="excerpt")
+    destinations.update_destination(db, destination, {"name": "Renamed"})
     assert destination.content_mode == "excerpt"
-    assert service.destination_dto(destination)["content_mode"] == "excerpt"
+    assert destination_dto(destination)["content_mode"] == "excerpt"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider", ["teams_workflow", "webhook"])
 async def test_connection_test_uses_channel_content_mode(db, monkeypatch, provider):
-    destination = service.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url="https://prod.logic.azure.com/trigger",
+    destination = destinations.create_destination(db, app_id=1, created_by=1, name="Alerts", webhook_url="https://prod.logic.azure.com/trigger",
                                              provider_key=provider, content_mode="link_only",
                                              public_config={"auth_mode": "none"} if provider == "webhook" else {})
     payloads = []
@@ -114,7 +115,7 @@ async def test_connection_test_uses_channel_content_mode(db, monkeypatch, provid
         payloads.append(request.payload)
         return {"http_status": 202}
     monkeypatch.setattr(connector_registry.get_output_provider(provider), "send", send)
-    assert await service.test_destination(destination) == {"http_status": 202}
+    assert await destination_test.test_destination(destination) == {"http_status": 202}
     if provider == "webhook":
         assert payloads[0]["content"]["mode"] == "link_only"
         assert payloads[0]["content"]["text"] is None

@@ -10,7 +10,7 @@ in an ``output.*`` / ``connectors.*`` module):
 * ``httpx.AsyncClient``  - providers do ``import httpx`` and call
   ``httpx.AsyncClient(...)`` at send time, so the global patch is effective.
 * ``socket.getaddrinfo`` - used by ``utils.ssrf_guard.resolve_host`` at call time.
-* ``uuid.uuid4``         - ``service.py`` does ``import uuid`` and calls
+* ``uuid.uuid4``         - ``spool.py`` does ``import uuid`` and calls
   ``uuid.uuid4()`` (verified). DEPENDENCY: if the refactor ever switches to
   ``from uuid import uuid4`` in any module, the patch silently stops working
   and the golden comparison (event ids, multipart boundaries) will fail loudly.
@@ -23,14 +23,11 @@ Not refactor-stable by nature (documented, not patched): ``test_destination``
 reads ``datetime.now(timezone.utc)``; the tests normalise that value instead.
 """
 
-from services.output_channels.service import (  # noqa: F401
-    create_deliveries_for_run,
-    create_destination,
-    destination_dto,
-    process_delivery,
-    test_destination,
-    update_destination,
-)
+from services.output_channels.delivery_factory import create_deliveries_for_run  # noqa: F401
+from services.output_channels.delivery_processor import process_delivery  # noqa: F401
+from services.output_channels.destination_test import test_destination  # noqa: F401
+from services.output_channels.destinations import create_destination, update_destination  # noqa: F401
+from services.output_channels.dto import destination_dto  # noqa: F401
 
 # NOTE: ``test_destination`` is NOT a test; consumers must reference it as
 # ``targets.test_destination`` (never import the bare name into a test module).

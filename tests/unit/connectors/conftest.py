@@ -35,7 +35,7 @@ def outbox(monkeypatch, tmp_path):
     monkeypatch.setattr(database, "SessionLocal", factory)
     spool = tmp_path / "output-deliveries"
     spool.mkdir()
-    monkeypatch.setattr("services.output_channels.service._spool_root", lambda: spool)
+    monkeypatch.setattr("services.output_channels.spool.spool_root", lambda: spool)
     monkeypatch.setattr(core_http, "resolve_host", lambda host: ["20.1.2.3"])
     monkeypatch.setenv("FRONTEND_URL", "https://mattin.example")
     factory.spool = spool
