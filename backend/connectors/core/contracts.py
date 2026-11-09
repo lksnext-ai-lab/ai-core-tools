@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
+from connectors.core.inbound import InboundMessage, RawInboundRequest, VerifiedRequest
 from connectors.core.messages import (
     AttachmentStager,
     DestinationExample,
@@ -76,3 +77,12 @@ class OutboundProvider(Protocol):
     async def send(self, request: OutboundRequest) -> SendReceipt: ...
 
     def example_destination(self) -> DestinationExample: ...
+
+
+@runtime_checkable
+class InboundProvider(Protocol):
+    descriptor: ProviderDescriptor
+
+    def verify(self, raw: RawInboundRequest) -> VerifiedRequest: ...
+
+    def parse(self, verified: VerifiedRequest) -> InboundMessage: ...
