@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, Plug } from 'lucide-react';
 import type { ActionItem } from '../ui/ActionDropdown';
 import ServiceConnectionTestModal from './ServiceConnectionTestModal';
@@ -14,6 +15,7 @@ interface TestService {
 export type ServiceKindLabel = 'AI' | 'embedding' | 'sandbox';
 
 export function useServiceConnectionTest(serviceKind: ServiceKindLabel) {
+  const { t } = useTranslation('common');
   const [testService, setTestService] = useState<TestService | null>(null);
   const [testingServiceId, setTestingServiceId] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
@@ -32,7 +34,7 @@ export function useServiceConnectionTest(serviceKind: ServiceKindLabel) {
     } catch (err) {
       setTestResult({
         status: 'error',
-        message: err instanceof Error ? err.message : 'Failed to test connection',
+        message: err instanceof Error ? err.message : t('connectionTestResult.testFailed'),
       });
     } finally {
       setTestingServiceId(null);
@@ -44,7 +46,9 @@ export function useServiceConnectionTest(serviceKind: ServiceKindLabel) {
     serviceName: string,
     testConnection: TestConnection,
   ): ActionItem => ({
-    label: testingServiceId === serviceId ? 'Testing...' : 'Test Connection',
+    label: testingServiceId === serviceId
+      ? t('connectionTestResult.testingAction')
+      : t('connectionTestResult.testConnection'),
     onClick: () => {
       void runTest({ id: serviceId, name: serviceName }, testConnection);
     },

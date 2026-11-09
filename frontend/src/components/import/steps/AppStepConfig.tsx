@@ -1,5 +1,7 @@
 import Alert from '../../ui/Alert';
+import { FormField } from '../../ui/FormField';
 import type { ConflictMode } from '../../../types/import';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   appName: string;
@@ -9,22 +11,18 @@ interface Props {
   onConflictModeChange: (mode: ConflictMode) => void;
 }
 
-const MODES: Array<{
-  value: ConflictMode;
-  label: string;
-  desc: string;
-}> = [
+const MODES = [
   {
     value: 'fail',
-    label: 'Fail on Conflict',
-    desc: 'Import will be cancelled if name exists',
+    labelKey: 'importModal.conflict.options.fail',
+    descriptionKey: 'importModal.appConfig.failDescription',
   },
   {
     value: 'rename',
-    label: 'Rename',
-    desc: 'Import with the name you specify below',
+    labelKey: 'importModal.appConfig.rename',
+    descriptionKey: 'importModal.appConfig.renameDescription',
   },
-];
+] as const;
 
 function AppStepConfig({
   appName,
@@ -33,60 +31,52 @@ function AppStepConfig({
   conflictMode,
   onConflictModeChange,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
   return (
     <div className="space-y-4">
-      <div>
-        <label
-          htmlFor="app-name"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          App Name
-        </label>
-        <input
-          id="app-name"
-          type="text"
-          value={appName}
-          onChange={(e) => onAppNameChange(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      <FormField
+        id="app-name"
+        label={t('appForm.name')}
+        type="text"
+        value={appName}
+        onChange={(e) => onAppNameChange(e.target.value)}
+      />
 
       {hasConflict && (
         <>
           <Alert
             type="warning"
-            message={`An app named "${appName}" already exists. Choose how to handle the conflict.`}
+            message={t('importModal.appConfig.conflictWarning', {
+              name: appName,
+            })}
           />
           <div className="space-y-2">
             {MODES.map((m) => (
-              <label
+              <FormField
                 key={m.value}
-                aria-label={m.label}
-                className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer ${
-                  conflictMode === m.value
-                    ? 'border-blue-400 bg-blue-50'
-                    : 'border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="app_conflict_mode"
-                  value={m.value}
-                  checked={conflictMode === m.value}
-                  onChange={() =>
-                    onConflictModeChange(m.value)
-                  }
-                  className="mt-0.5 text-blue-600"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-900">
-                    {m.label}
-                  </span>
-                  <p className="text-xs text-gray-500">
-                    {m.desc}
-                  </p>
-                </div>
-              </label>
+                id={`app-conflict-${m.value}`}
+                type="radio"
+                name="app_conflict_mode"
+                value={m.value}
+                checked={conflictMode === m.value}
+                onChange={() =>
+                  onConflictModeChange(m.value)
+                }
+                className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3"
+                inputClassName="mt-0.5"
+                labelClassName="flex flex-col cursor-pointer"
+                label={(
+                  <>
+                    <span className="text-sm  text-fg dark:text-fg-dark">
+                      {t(m.labelKey)}
+                    </span>
+                    <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                      {t(m.descriptionKey)}
+                    </span>
+                  </>
+                )}
+              />
             ))}
           </div>
         </>
@@ -95,7 +85,7 @@ function AppStepConfig({
       {!hasConflict && (
         <Alert
           type="success"
-          message="No conflicts detected. This app name is available."
+          message={t('importModal.appConfig.noConflict')}
         />
       )}
     </div>

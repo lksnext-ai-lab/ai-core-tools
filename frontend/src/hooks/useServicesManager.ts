@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from './useApiMutation';
@@ -30,6 +31,7 @@ export function useServicesManager<T = any>(
   cache: CacheFns<T>,
   options: ServicesManagerOptions = {},
 ) {
+  const { t } = useTranslation('common');
   const entity = options.entity ?? 'item';
   const confirm = useConfirm();
   const mutate = useApiMutation();
@@ -87,19 +89,20 @@ export function useServicesManager<T = any>(
     if (!appId) return false;
 
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE(entity),
-      message: MESSAGES.CONFIRM_DELETE_MESSAGE(entity),
+      title: t('servicesManager.confirmDeleteTitle', { entity }),
+      message: t('servicesManager.confirmDeleteMessage', { entity }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
     });
     if (!ok) return false;
 
     const result = await mutate(
       () => api.delete(Number.parseInt(appId), id),
       {
-        loading: MESSAGES.DELETING(entity),
-        success: MESSAGES.DELETED(entity),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED(entity)),
+        loading: t('servicesManager.deleting', { entity }),
+        success: t('servicesManager.deleted', { entity }),
+        error: (err) => errorMessage(err, t('servicesManager.deleteFailed', { entity })),
       },
     );
     if (result === undefined) return false;
@@ -129,9 +132,9 @@ export function useServicesManager<T = any>(
     const result = await mutate(
       () => api.copy!(Number.parseInt(appId), id),
       {
-        loading: MESSAGES.COPYING(entity),
-        success: MESSAGES.COPIED(entity),
-        error: (err) => errorMessage(err, MESSAGES.COPY_FAILED(entity)),
+        loading: t('servicesManager.copying', { entity }),
+        success: t('servicesManager.copied', { entity }),
+        error: (err) => errorMessage(err, t('servicesManager.copyFailed', { entity })),
       },
     );
     if (result === undefined) return;

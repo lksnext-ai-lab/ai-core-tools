@@ -177,8 +177,8 @@ export default function DomainUrlDrawer({
             <div>
               <p className="text-xs font-medium text-fg dark:text-fg-dark uppercase tracking-wide mb-2">{t('domainDetailPage.urlDrawer.httpCacheHints')}</p>
               <dl className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <Field label="ETag" value={urlDetail.http_etag ?? '—'} />
-                <Field label="Last-Modified" value={urlDetail.http_last_modified ?? '—'} />
+                <Field label={t('domainDetailPage.urlDrawer.etagHeader')} value={urlDetail.http_etag ?? '—'} />
+                <Field label={t('domainDetailPage.urlDrawer.lastModifiedHeader')} value={urlDetail.http_last_modified ?? '—'} />
                 <Field label={t('domainDetailPage.urlDrawer.sitemapLastmod')} value={formatDate(urlDetail.sitemap_lastmod, i18n.resolvedLanguage)} />
               </dl>
             </div>

@@ -1,4 +1,6 @@
+import { Trans, useTranslation } from 'react-i18next';
 import Alert from '../../ui/Alert';
+import FormField from '../../ui/FormField';
 import type {
   AgentImportPreview,
   ConflictMode,
@@ -12,27 +14,7 @@ interface Props {
   onNewNameChange: (name: string) => void;
 }
 
-const MODES: Array<{
-  value: ConflictMode;
-  label: string;
-  desc: string;
-}> = [
-  {
-    value: 'fail',
-    label: 'Fail on Conflict',
-    desc: 'Import will be cancelled if name exists',
-  },
-  {
-    value: 'rename',
-    label: 'Rename',
-    desc: 'Import with a new name',
-  },
-  {
-    value: 'override',
-    label: 'Override',
-    desc: 'Replace the existing agent configuration',
-  },
-];
+const MODES: ConflictMode[] = ['fail', 'rename', 'override'];
 
 function AgentStepConflicts({
   preview,
@@ -41,11 +23,13 @@ function AgentStepConflicts({
   newName,
   onNewNameChange,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
   if (!preview.agent.has_conflict) {
     return (
       <Alert
         type="success"
-        message='No conflicts detected. The agent name does not exist in this app.'
+        message={t('importModal.agentConflict.noConflicts')}
       />
     );
   }
@@ -55,63 +39,45 @@ function AgentStepConflicts({
       <Alert
         type="warning"
         message={(
-          <>
-            An agent named{' '}
-            <strong>"{preview.agent.component_name}"</strong>{' '}
-            already exists in this app. Choose how to resolve
-            this conflict.
-          </>
+          <Trans
+            i18nKey="importModal.agentConflict.conflictWarning"
+            values={{ name: preview.agent.component_name }}
+            components={{ strong: <strong /> }}
+          />
         )}
       />
 
       <div className="space-y-2">
-        {MODES.map((m) => (
-          <label
-            key={m.value}
-            aria-label={m.label}
-            className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer ${
-              conflictMode === m.value
-                ? 'border-blue-400 bg-blue-50'
-                : 'border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            <input
+        {MODES.map((mode) => {
+          const label = t(`importModal.conflict.options.${mode}`);
+          return (
+            <FormField
+              key={mode}
               type="radio"
+              id={`agent-conflict-${mode}`}
               name="conflict_mode"
-              value={m.value}
-              checked={conflictMode === m.value}
-              onChange={() => onConflictModeChange(m.value)}
-              className="mt-0.5 text-blue-600"
+              label={label}
+              value={mode}
+              checked={conflictMode === mode}
+              onChange={() => onConflictModeChange(mode)}
+              className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3 [&>p]:col-start-2"
+              inputClassName="mt-0.5"
+              labelClassName="text-sm font-medium text-fg dark:text-fg-dark"
+              helpText={t(`importModal.conflict.help.${mode}`)}
             />
-            <div>
-              <span className="text-sm font-medium text-gray-900">
-                {m.label}
-              </span>
-              <p className="text-xs text-gray-500">
-                {m.desc}
-              </p>
-            </div>
-          </label>
-        ))}
+          );
+        })}
       </div>
 
       {conflictMode === 'rename' && (
-        <div>
-          <label
-            htmlFor="new-agent-name"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            New Name
-          </label>
-          <input
-            id="new-agent-name"
-            type="text"
-            value={newName}
-            onChange={(e) => onNewNameChange(e.target.value)}
-            placeholder="Enter a new name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+        <FormField
+          label={t('importModal.newName.label')}
+          id="new-agent-name"
+          type="text"
+          value={newName}
+          onChange={(e) => onNewNameChange(e.target.value)}
+          placeholder={t('importModal.newName.placeholder')}
+        />
       )}
     </div>
   );

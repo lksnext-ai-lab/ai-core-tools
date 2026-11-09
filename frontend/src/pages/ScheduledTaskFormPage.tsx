@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -18,6 +18,8 @@ import {
   FormTextArea,
 } from "../components/ui/FormField";
 import CardApp from "../components/ui/CardApp";
+import { SidePanel } from "../components/ui/SidePanel";
+import ScheduledTaskDetailPage from "./ScheduledTaskDetailPage";
 
 interface AgentOption {
   agent_id: number;
@@ -70,8 +72,15 @@ export default function ScheduledTaskFormPage() {
   const { t } = useTranslation("common");
   const { appId, taskId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const numericAppId = Number.parseInt(appId ?? "0", 10);
   const editing = taskId !== undefined && taskId !== "new";
+  // Detail side panel opened after "Save and activate"; the form stays on screen.
+  const [panelOpen, setPanelOpen] = useState(
+    Boolean((location.state as { openPanel?: boolean } | null)?.openPanel),
+  );
+  const [panelVersion, setPanelVersion] = useState(0);
+  const handleClosePanel = useCallback(() => setPanelOpen(false), []);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [task, setTask] = useState<ScheduledTask | null>(null);
   const [name, setName] = useState("");
@@ -239,7 +248,16 @@ export default function ScheduledTaskFormPage() {
           outputBindings,
         );
       toast.success(task ? t("scheduledTaskFormPage.updated") : t("scheduledTaskFormPage.created"));
-      navigate(`/apps/${appId}/scheduled-tasks/${saved.id}`);
+      if (task) {
+        setPanelVersion((version) => version + 1);
+        setPanelOpen(true);
+      } else {
+        // Created: continue in the edit form of the new task, with the panel open.
+        navigate(`/apps/${appId}/scheduled-tasks/${saved.id}/edit`, {
+          replace: true,
+          state: { openPanel: true },
+        });
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("scheduledTaskFormPage.saveFailed"),
@@ -357,15 +375,7 @@ export default function ScheduledTaskFormPage() {
             </p>
           )}
         </fieldset>
-        <CardApp className="p-4">
-          <div className="mb-3">
-            <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">
-              {t("scheduledTaskFormPage.schedule.title")}
-            </h3>
-            <p className="text-sm text-secondary dark:text-secondary-dark mt-1">
-              {t("scheduledTaskFormPage.schedule.description")}
-            </p>
-          </div>
+        <CardApp titulo= {t("scheduledTaskFormPage.schedule.title")} subtitulo={t("scheduledTaskFormPage.schedule.description")}>
           <div className="space-y-3">
             <FormSelect
               label={t("scheduledTaskFormPage.schedule.frequency")}
@@ -438,15 +448,7 @@ export default function ScheduledTaskFormPage() {
             </p>
           </div>
         </CardApp>
-        <CardApp className="p-4">
-          <div className="mb-3">
-            <h3 className="text-xl font-semibold text-fg dark:text-fg-dark">
-              {t("scheduledTaskFormPage.destinations.title")}
-            </h3>
-            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-              {t("scheduledTaskFormPage.destinations.description")}
-            </p>
-          </div>
+        <CardApp titulo={t("scheduledTaskFormPage.destinations.title")} subtitulo={t("scheduledTaskFormPage.destinations.description")}>
           {destinations.length === 0 ? (
             <div className="space-y-2">
               <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
@@ -541,13 +543,7 @@ export default function ScheduledTaskFormPage() {
             type="button"
             variant="secondary"
             size="medium"
-            onClick={() =>
-              navigate(
-                task
-                  ? `/apps/${appId}/scheduled-tasks/${task.id}`
-                  : `/apps/${appId}/scheduled-tasks`,
-              )
-            }
+            onClick={() => navigate(`/apps/${appId}/scheduled-tasks`)}
           />
           <ButtonApp
             label={saving ? t("scheduledTaskFormPage.saving") : t("scheduledTaskFormPage.saveAndActivate")}
@@ -562,6 +558,30 @@ export default function ScheduledTaskFormPage() {
           />
         </div>
       </div>
+
+      {panelOpen && task && (
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title={t("scheduledTasksPage.title")}
+            headerActions={(
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+                {t("scheduledTasksPage.detailView")}
+              </span>
+            )}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <ScheduledTaskDetailPage
+              key={`${task.id}-${panelVersion}`}
+              taskId={task.id}
+              variant="panel"
+              primaryAction="runNow"
+            />
+          </SidePanel>
+        </div>
+      )}
     </div>
   );
 }

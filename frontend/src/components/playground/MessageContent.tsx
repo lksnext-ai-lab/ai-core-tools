@@ -48,7 +48,7 @@ function formatJson(jsonStr: string): React.ReactNode {
   try {
     const parsed = JSON.parse(jsonStr);
     return (
-      <pre className="bg-gray-100 p-4 rounded-lg whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal'}}>
+      <pre className="bg-white dark:bg-black p-4 whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal'}}>
         <code className="text-sm">
           {JSON.stringify(parsed, null, 2)}
         </code>
@@ -205,7 +205,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
   const renderedContent = useMemo(() => {
     if (typeof content === 'object' && content !== null) {
       return (
-        <pre className="bg-surface dark:bg-surface-dark p-4 rounded-lg whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
+        <pre className="border border-line dark:border-line-dark bg-white dark:bg-black p-4 rounded-md whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
           <code className="text-sm text-fg  dark:text-fg-dark">{JSON.stringify(content, null, 2)}</code>
         </pre>
         

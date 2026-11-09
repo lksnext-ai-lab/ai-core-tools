@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowUpRight } from 'lucide-react';
 import Modal from '../ui/Modal';
+import { SidePanel } from '../ui/SidePanel';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import { FormField, FormCheckbox } from '../ui/FormField';
 import { FormActions } from '../ui/FormActions';
 import Alert from '../ui/Alert';
@@ -22,8 +25,8 @@ const MASKED_KEY_PREFIX = '****';
 
 /** Provider-specific label for the secret field. */
 const API_KEY_LABELS: Record<string, string> = {
-  GoogleCloud: 'Service Account JSON',
-  Bedrock: 'AWS Secret Access Key',
+  GoogleCloud: 'compactServiceEditor.apiKeyLabels.serviceAccountJson',
+  Bedrock: 'compactServiceEditor.apiKeyLabels.awsSecretAccessKey',
 };
 
 interface CompactServiceEditorProps {
@@ -33,6 +36,11 @@ interface CompactServiceEditorProps {
   readonly appId?: number;
   readonly service: ExistingService | ExistingSandboxService;
   readonly existingNames?: readonly string[];
+  /**
+   * `modal` (default) keeps the original centred dialog; `panel` renders the editor in a right
+   * side panel (480 px) below the app header, with a fixed footer.
+   */
+  readonly variant?: 'modal' | 'panel';
   readonly onClose: () => void;
   /**
    * Method shorthand on purpose — see the identical note on
@@ -49,9 +57,13 @@ function CompactServiceEditor({
   appId,
   service,
   existingNames = [],
+  variant = 'modal',
   onClose,
   onSave,
 }: Readonly<CompactServiceEditorProps>) {
+  const { t } = useTranslation('common');
+  const confirm = useConfirm();
+  const isPanel = variant === 'panel';
   const isSandbox = kind === 'sandbox';
   // Narrowed views of `service` — the two shapes only overlap on
   // name/provider/api_key/base_url/service_id. Field access for the
@@ -102,6 +114,55 @@ function CompactServiceEditor({
     setError(null);
   }, [service.service_id]);
 
+  // ---- Unsaved changes: current editable values vs. the ones the service was opened with ----
+  const currentSnapshot = JSON.stringify([
+    name, apiKey, baseUrl, apiVersion, awsAccessKeyId, awsRegion, supportsVideo,
+    image, target, template, endOfServiceDate, deprecationNotice,
+  ]);
+  const initialSnapshot = useMemo(
+    () => JSON.stringify([
+      service.name,
+      service.api_key || '',
+      service.base_url || '',
+      aiService?.api_version || '',
+      aiService?.aws_access_key_id || '',
+      aiService?.aws_region || '',
+      !!aiService?.supports_video,
+      sandboxService?.opensandbox_image || '',
+      sandboxService?.daytona_target || '',
+      sandboxService?.e2b_template || '',
+      dateInputValueFromIso(storedEndOfService),
+      service.deprecation_notice || '',
+    ]),
+    // Same trigger as the reset effect above: a different service was opened.
+    [service.service_id],
+  );
+  const isDirty = currentSnapshot !== initialSnapshot;
+  const isConfirmingCloseRef = useRef(false);
+
+  /**
+   * Every way out (Cancel, X, Esc, backdrop) goes through here: with unsaved changes it asks
+   * before discarding them. While the "change model" wizard is open on top, Esc belongs to it.
+   */
+  const requestClose = async () => {
+    if (showWizard || isConfirmingCloseRef.current) return;
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+    isConfirmingCloseRef.current = true;
+    const discard = await confirm({
+      title: t('compactServiceEditor.discardTitle'),
+      message: t('compactServiceEditor.discardMessage', { name: service.name }),
+      confirmLabel: t('compactServiceEditor.discardConfirm'),
+      cancelLabel: t('compactServiceEditor.keepEditing'),
+      variant: 'danger',
+    });
+    // Released on the next tick so the same Esc keypress can't reopen the question.
+    setTimeout(() => { isConfirmingCloseRef.current = false; }, 0);
+    if (discard) onClose();
+  };
+
   const showSupportsVideo =
     kind === 'ai' && (service.provider === 'Google' || service.provider === 'GoogleCloud');
   const showApiVersion = !!descriptor?.manualFields?.includes('api_version');
@@ -109,11 +170,11 @@ function CompactServiceEditor({
   const showImage = !!descriptor?.manualFields?.includes('image');
   const showTarget = !!descriptor?.manualFields?.includes('target');
   const showTemplate = !!descriptor?.manualFields?.includes('template');
-  let baseUrlLabel = 'Base URL';
-  if (service.provider === 'GoogleCloud') baseUrlLabel = 'GCP Project ID';
-  else if (service.provider === 'opensandbox') baseUrlLabel = 'OpenSandbox server domain';
-  else if (service.provider === 'daytona') baseUrlLabel = 'Daytona API URL';
-  const apiKeyLabel = API_KEY_LABELS[service.provider] ?? 'API Key';
+  let baseUrlLabel = t('compactServiceEditor.baseUrl');
+  if (service.provider === 'GoogleCloud') baseUrlLabel = t('compactServiceEditor.gcpProjectId');
+  else if (service.provider === 'opensandbox') baseUrlLabel = t('compactServiceEditor.openSandboxDomain');
+  else if (service.provider === 'daytona') baseUrlLabel = t('compactServiceEditor.daytonaApiUrl');
+  const apiKeyLabel = t(API_KEY_LABELS[service.provider] ?? 'compactServiceEditor.apiKey');
 
   const handleApiKeyFocus = () => {
     if (!apiKeyChanged && apiKey.startsWith(MASKED_KEY_PREFIX)) {
@@ -125,7 +186,7 @@ function CompactServiceEditor({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('compactServiceEditor.nameRequired'));
       return;
     }
     setError(null);
@@ -171,7 +232,7 @@ function CompactServiceEditor({
     try {
       await onSave(payload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save service');
+      setError(err instanceof Error ? err.message : t('compactServiceEditor.saveFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -183,17 +244,20 @@ function CompactServiceEditor({
     setShowWizard(false);
   };
 
-  return (
-    <>
-      <Modal isOpen={isOpen && !showWizard} onClose={onClose} title="Edit service">
-        <form onSubmit={handleSubmit} className="space-y-4">
+  const form = (
+        <form onSubmit={handleSubmit} className={isPanel ? 'space-y-4 px-4 pt-3' : 'space-y-4'}>
+          {isPanel && (
+            <h2 className="font-display text-[21px] font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
+              {t('compactServiceEditor.title')}
+            </h2>
+          )}
           {error && <Alert type="error" message={error} />}
 
           <div className="rounded-md border border-line-strong dark:border-line-strong-dark bg-canvas-alt dark:bg-canvas-alt-dark p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase font-semibold text-bronze-dark tracking-wide">
-                  Provider
+                <p className="text-[11px] uppercase font-semibold text-bronze dark:text-bronze-dark tracking-wide">
+                  {t('compactServiceEditor.provider')}
                 </p>
                 <ProviderBadge
                   provider={service.provider}
@@ -203,8 +267,8 @@ function CompactServiceEditor({
               </div>
               {!isSandbox && (
                 <div className="text-right">
-                  <p className="text-[11px] uppercase font-semibold text-bronze-dark tracking-wide">
-                    Model
+                  <p className="text-[11px] uppercase font-semibold text-bronze dark:text-bronze-dark tracking-wide">
+                    {t('compactServiceEditor.model')}
                   </p>
                   <p className="text-sm font-mono text-fg dark:text-fg-dark mt-1">
                     {aiService?.model_name}
@@ -216,7 +280,7 @@ function CompactServiceEditor({
                 onClick={() => setShowWizard(true)}
                 className="text-sm font-medium text-bronze  dark:text-bronze-dark inline-block items-center gap-1"
               >
-                 {isSandbox ? 'Edit configuration' : 'Change model'}
+                 {isSandbox ? t('compactServiceEditor.editConfiguration') : t('compactServiceEditor.changeModel')}
                  <ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
 
               </button>
@@ -225,11 +289,11 @@ function CompactServiceEditor({
 
           <FormField
             id="name"
-            label="Name"
+            label={t('compactServiceEditor.name')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            helpText="The label shown in agent dropdowns and lists."
+            helpText={t('compactServiceEditor.nameHelp')}
           />
 
           {descriptor?.apiKey !== 'none' && (
@@ -239,7 +303,7 @@ function CompactServiceEditor({
               label={<>
                 {apiKeyLabel}
                 {descriptor?.apiKey === 'optional' && (
-                  <span className="text-gray-400 font-normal"> (optional)</span>
+                  <span className="text-fg-tertiary dark:text-fg-tertiary-dark font-normal"> ({t('compactServiceEditor.optional')})</span>
                 )}
               </>}
               autoComplete="off"
@@ -251,7 +315,7 @@ function CompactServiceEditor({
               }}
               onFocus={handleApiKeyFocus}
               placeholder={descriptor?.apiKeyPlaceholder}
-              helpText="Leave the masked value to keep the existing key."
+              helpText={t('compactServiceEditor.keepMaskedApiKey')}
             />
           )}
 
@@ -268,7 +332,7 @@ function CompactServiceEditor({
           {showApiVersion && (
             <FormField
               id="api_version"
-              label={service.provider === 'GoogleCloud' ? 'Region' : 'API version'}
+              label={service.provider === 'GoogleCloud' ? t('compactServiceEditor.region') : t('compactServiceEditor.apiVersion')}
               value={apiVersion}
               onChange={(e) => setApiVersion(e.target.value)}
             />
@@ -278,7 +342,7 @@ function CompactServiceEditor({
             <>
               <FormField
                 id="aws_access_key_id"
-                label="AWS Access Key ID"
+                label={t('compactServiceEditor.awsAccessKeyId')}
                 value={awsAccessKeyId}
                 onChange={(e) => setAwsAccessKeyId(e.target.value)}
                 placeholder="AKIA..."
@@ -286,7 +350,7 @@ function CompactServiceEditor({
               />
               <FormField
                 id="aws_region"
-                label="AWS Region"
+                label={t('compactServiceEditor.awsRegion')}
                 value={awsRegion}
                 onChange={(e) => setAwsRegion(e.target.value)}
                 placeholder="us-east-1"
@@ -298,33 +362,33 @@ function CompactServiceEditor({
           {showImage && (
             <FormField
               id="image"
-              label="Container image"
+              label={t('compactServiceEditor.containerImage')}
               value={image}
               onChange={(e) => setImage(e.target.value)}
               placeholder="python:3.11-slim"
-              helpText="Docker image used to create sandbox containers. Leave empty to use the server default."
+              helpText={t('compactServiceEditor.containerImageHelp')}
             />
           )}
 
           {showTarget && (
             <FormField
               id="target"
-              label="Target"
+              label={t('compactServiceEditor.target')}
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder="us"
-              helpText="Daytona target/region identifier. Leave empty to use the account default."
+              helpText={t('compactServiceEditor.targetHelp')}
             />
           )}
 
           {showTemplate && (
             <FormField
               id="template"
-              label="Template"
+              label={t('compactServiceEditor.template')}
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
               placeholder="base"
-              helpText="E2B sandbox template id. Leave empty to use the default template."
+              helpText={t('compactServiceEditor.templateHelp')}
             />
           )}
 
@@ -338,22 +402,56 @@ function CompactServiceEditor({
           {showSupportsVideo && (
             <FormCheckbox
               id="supports_video"
-              label="Video analysis capable"
+              label={t('compactServiceEditor.videoAnalysisCapable')}
               checked={supportsVideo}
               onChange={(e) => setSupportsVideo(e.target.checked)}
             />
           )}
 
-          <div className="pt-2">
+          <div
+            className={isPanel
+              // Fixed footer: sticks to the bottom of the side panel's scroll area.
+              ? 'sticky -bottom-4 z-10 -mx-[1.625rem] -mb-4 border-t border-line bg-surface px-[1.625rem] py-4 dark:border-line-dark dark:bg-surface-dark'
+              : 'pt-2'}
+          >
             <FormActions
-              onCancel={onClose}
+              onCancel={() => { void requestClose(); }}
               isSubmitting={submitting}
               isEditing
-              submitDisabled={!name.trim()}
+              submitDisabled={!name.trim() || !isDirty}
+              containerClassName={isPanel ? '!border-t-0 !pt-0' : ''}
             />
           </div>
         </form>
-      </Modal>
+  );
+
+  return (
+    <>
+      {isPanel ? (
+        isOpen && (
+          // Fixed wrapper starting below the 56px (h-14) app header, like the "Used by" panel.
+          <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
+            <SidePanel
+              open
+              side="right"
+              onClose={() => { void requestClose(); }}
+              title={t('compactServiceEditor.panelLabel')}
+              closeLabel={t('compactServiceEditor.closePanel')}
+              widthClassName="w-[480px] max-w-full"
+            >
+              {form}
+            </SidePanel>
+          </div>
+        )
+      ) : (
+        <Modal
+          isOpen={isOpen && !showWizard}
+          onClose={() => { void requestClose(); }}
+          title={t('compactServiceEditor.title')}
+        >
+          {form}
+        </Modal>
+      )}
 
       {showWizard && (
         <ServiceWizard

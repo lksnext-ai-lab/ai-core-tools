@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import { authService } from '../services/auth';
 import { ButtonApp } from '../components/ui/ButtonApp';
@@ -12,6 +13,7 @@ export interface SetPasswordPageProps {
 const MIN_PASSWORD_LENGTH = 12;
 
 function SetPasswordPage() {
+  const { t } = useTranslation('common');
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
 
@@ -39,10 +41,10 @@ function SetPasswordPage() {
 
   const validationError = (): string | null => {
     if (password.length < MIN_PASSWORD_LENGTH) {
-      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+      return t('setPasswordPage.passwordTooShort', { count: MIN_PASSWORD_LENGTH });
     }
     if (password !== confirm) {
-      return 'Passwords do not match.';
+      return t('setPasswordPage.passwordsDoNotMatch');
     }
     return null;
   };
@@ -62,7 +64,7 @@ function SetPasswordPage() {
       await authService.setPassword(token, password);
       setSuccess(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Set password failed. The link may have expired.');
+      setError(err instanceof Error ? err.message : t('setPasswordPage.setFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -83,17 +85,17 @@ function SetPasswordPage() {
               tabIndex={-1}
               className="font-display text-xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-2 focus:outline-none"
             >
-              Invalid Link
+              {t('setPasswordPage.invalidLinkTitle')}
             </h1>
             <p className="text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark mb-6">
-              This set-password link is missing a token. Please use the full link from your invitation email.
+              {t('setPasswordPage.missingTokenMessage')}
             </p>
           </div>
           <Link
             to="/login"
             className="inline-flex items-center gap-2 text-sm font-medium text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark"
           >
-            Back to sign in
+            {t('setPasswordPage.backToSignIn')}
           </Link>
         </main>
       </div>
@@ -115,17 +117,17 @@ function SetPasswordPage() {
               tabIndex={-1}
               className="font-display text-xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-2 focus:outline-none"
             >
-              Password Set
+              {t('setPasswordPage.successTitle')}
             </h1>
             <p className="text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark mb-6">
-              Your password has been set successfully. You can now sign in.
+              {t('setPasswordPage.successMessage')}
             </p>
           </div>
           <Link
             to="/login"
             className="inline-flex items-center justify-center w-full px-4 py-3 rounded-lg text-[15px] font-medium border border-transparent bg-ink text-ink-on hover:bg-ink-hover dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-hover-dark transition-colors"
           >
-            Go to sign in
+            {t('setPasswordPage.goToSignIn')}
           </Link>
         </main>
       </div>
@@ -136,9 +138,9 @@ function SetPasswordPage() {
     <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
       <main className="max-w-md w-full rounded-md border px-[30px] py-8 bg-surface border-line dark:bg-surface-dark dark:border-line-dark">
         <div className="mb-6">
-          <h1 className="font-display text-2xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">Set your password</h1>
+          <h1 className="font-display text-2xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">{t('setPasswordPage.title')}</h1>
           <p className="mt-1.5 text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
-            Choose a strong password to activate your account.
+            {t('setPasswordPage.description')}
           </p>
         </div>
 
@@ -173,7 +175,7 @@ function SetPasswordPage() {
 
           <FormField
             id="new-password"
-            label="New Password"
+            label={t('setPasswordPage.newPassword')}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -183,12 +185,12 @@ function SetPasswordPage() {
             ariaDescribedBy="set-password-error"
             autoComplete="new-password"
             disabled={isLoading}
-            helpText={`Minimum ${MIN_PASSWORD_LENGTH} characters`}
+            helpText={t('setPasswordPage.passwordMinLength', { count: MIN_PASSWORD_LENGTH })}
           />
 
           <FormField
             id="confirm-password"
-            label="Confirm Password"
+            label={t('setPasswordPage.confirmPassword')}
             type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
@@ -202,7 +204,7 @@ function SetPasswordPage() {
 
           <ButtonApp
             type="submit"
-            label={isLoading ? 'Setting password...' : 'Set password'}
+            label={isLoading ? t('setPasswordPage.submitting') : t('setPasswordPage.submit')}
             disabled={!password || !confirm}
             loading={isLoading}
             size="spacious"
@@ -215,7 +217,7 @@ function SetPasswordPage() {
             to="/login"
             className="font-medium text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark"
           >
-            Back to sign in
+            {t('setPasswordPage.backToSignIn')}
           </Link>
         </p>
       </main>

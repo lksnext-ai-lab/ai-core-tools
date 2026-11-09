@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Modal from '../../ui/Modal';
 import { StepperContainer } from '../../ui/Stepper';
 import type { StepDefinition, StepStatus } from '../../ui/Stepper';
@@ -21,20 +22,6 @@ import type {
   ServiceScope,
   ServiceWizardMode,
 } from '../../../types/services';
-
-const STEPS_WITH_MODEL: StepDefinition[] = [
-  { id: 'provider', label: 'Provider' },
-  { id: 'credentials', label: 'Credentials' },
-  { id: 'model', label: 'Model' },
-  { id: 'confirm', label: 'Confirm' },
-];
-
-/** Sandbox services have no model to pick — the Model step is skipped entirely. */
-const STEPS_WITHOUT_MODEL: StepDefinition[] = [
-  { id: 'provider', label: 'Provider' },
-  { id: 'credentials', label: 'Credentials' },
-  { id: 'confirm', label: 'Confirm' },
-];
 
 const EMPTY_CREDENTIALS: CredentialsState = {
   api_key: '',
@@ -74,6 +61,7 @@ function ServiceWizard({
   onClose,
   onSave,
 }: Readonly<ServiceWizardProps>) {
+  const { t } = useTranslation('common');
   const [provider, setProvider] = useState('');
   const [credentials, setCredentials] = useState<CredentialsState>(EMPTY_CREDENTIALS);
   const [selectedModel, setSelectedModel] = useState<ProviderModelInfo | null>(null);
@@ -143,7 +131,18 @@ function ServiceWizard({
 
   // Sandbox services have no "model" concept — the Model step is skipped
   // entirely (see `steps` below), so a model name never drives the name.
-  const steps = kind === 'sandbox' ? STEPS_WITHOUT_MODEL : STEPS_WITH_MODEL;
+  const stepsWithModel: StepDefinition[] = [
+    { id: 'provider', label: t('serviceWizard.steps.provider') },
+    { id: 'credentials', label: t('serviceWizard.steps.credentials') },
+    { id: 'model', label: t('serviceWizard.steps.model') },
+    { id: 'confirm', label: t('serviceWizard.steps.confirm') },
+  ];
+  const stepsWithoutModel: StepDefinition[] = [
+    { id: 'provider', label: t('serviceWizard.steps.provider') },
+    { id: 'credentials', label: t('serviceWizard.steps.credentials') },
+    { id: 'confirm', label: t('serviceWizard.steps.confirm') },
+  ];
+  const steps = kind === 'sandbox' ? stepsWithoutModel : stepsWithModel;
 
   const autoName = useMemo(() => {
     if (!provider) return '';
@@ -247,7 +246,7 @@ function ServiceWizard({
       await onSave(buildPayload());
       onClose();
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Failed to save service');
+      setSubmitError(e instanceof Error ? e.message : t('serviceWizard.saveFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -266,20 +265,29 @@ function ServiceWizard({
     } catch (e) {
       setTestResult({
         status: 'error',
-        message: e instanceof Error ? e.message : 'Test failed',
+        message: e instanceof Error ? e.message : t('serviceWizard.testFailed'),
       });
     } finally {
       setTesting(false);
     }
   };
 
-  let title = 'Add Sandbox Service';
-  if (kind === 'ai') title = 'Add AI Service';
-  else if (kind === 'embedding') title = 'Add Embedding Service';
-  if (mode === 'edit-model') title = kind === 'sandbox' ? 'Edit sandbox service' : 'Change model';
+  let titleKey = 'serviceWizard.titles.addSandboxService';
+  if (kind === 'ai') titleKey = 'serviceWizard.titles.addAIService';
+  else if (kind === 'embedding') titleKey = 'serviceWizard.titles.addEmbeddingService';
+  if (mode === 'edit-model') {
+    titleKey = kind === 'sandbox'
+      ? 'serviceWizard.titles.editSandboxService'
+      : 'serviceWizard.titles.changeModel';
+  }
+  let nextLabel = t('serviceWizard.next');
+  if (steps[currentStep].id === 'confirm') {
+    nextLabel = t('serviceWizard.save');
+    if (submitting) nextLabel = t('serviceWizard.saving');
+  }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="xlarge">
+    <Modal isOpen={isOpen} onClose={onClose} title={t(titleKey)} size="xlarge">
       <div className="flex flex-col">
         <StepperContainer
           steps={steps}
@@ -290,7 +298,10 @@ function ServiceWizard({
           onCancel={onClose}
           nextDisabled={stepDisabled}
           isSubmitting={submitting}
-          nextLabel={steps[currentStep].id === 'confirm' ? (submitting ? 'Saving...' : 'Save') : undefined}
+          nextLabel={nextLabel}
+          backLabel={t('serviceWizard.back')}
+          cancelLabel={t('cancel')}
+          submittingLabel={t('serviceWizard.saving')}
           showBack={mode === 'create' || currentStep > 1}
         >
           <div className="px-2 py-3">

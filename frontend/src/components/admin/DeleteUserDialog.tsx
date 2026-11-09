@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Trash2, ArrowRightLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Modal from '../ui/Modal';
 import Alert from '../ui/Alert';
 import { ButtonCard } from '../ui/ButtonCard';
@@ -21,8 +22,6 @@ export interface DeleteUserDialogProps {
   readonly onDeleted: () => void;
 }
 
-const CASCADE_CONFIRM_PHRASE = 'delete all apps';
-
 const TRANSFER_PICKER_ID = 'delete-dialog-transfer-section';
 const CASCADE_INPUT_ID = 'cascade-confirm-input';
 const CASCADE_ERROR_ID = 'cascade-confirm-error';
@@ -33,6 +32,7 @@ function DeleteUserDialog({
   targetUser,
   onDeleted,
 }: Readonly<DeleteUserDialogProps>) {
+  const { t } = useTranslation('common');
   const [branch, setBranch] = useState<DialogBranch>('choose');
   const [transferTarget, setTransferTarget] = useState<User | null>(null);
   const [cascadeConfirm, setCascadeConfirm] = useState('');
@@ -44,7 +44,8 @@ function DeleteUserDialog({
 
   const targetLabel = targetUser.name || targetUser.email;
   const appCount = targetUser.owned_apps_count;
-  const appWord = appCount === 1 ? 'app' : 'apps';
+  const appWord = t('deleteUserDialog.app', { count: appCount });
+  const cascadeConfirmPhrase = t('deleteUserDialog.cascadeConfirmPhrase');
 
   // Focus the entry point of each branch on transition; Modal handles 'choose' initial focus.
   useEffect(() => {
@@ -76,7 +77,7 @@ function DeleteUserDialog({
       handleClose();
       onDeleted();
     } catch (err: unknown) {
-      setSubmitError(errorMessage(err, 'Failed to delete user'));
+      setSubmitError(errorMessage(err, t('userManagement.deleteFailed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -90,14 +91,14 @@ function DeleteUserDialog({
       handleClose();
       onDeleted();
     } catch (err: unknown) {
-      setSubmitError(errorMessage(err, 'Failed to delete user'));
+      setSubmitError(errorMessage(err, t('userManagement.deleteFailed')));
     } finally {
       setIsSubmitting(false);
     }
   }
 
   const cascadeConfirmPhraseMatches =
-    cascadeConfirm.trim().toLowerCase() === CASCADE_CONFIRM_PHRASE;
+    cascadeConfirm.trim().toLowerCase() === cascadeConfirmPhrase.toLowerCase();
 
   const showCascadeInputError = cascadeConfirm.length > 0 && !cascadeConfirmPhraseMatches;
 
@@ -105,7 +106,7 @@ function DeleteUserDialog({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Delete user: ${targetLabel}`}
+      title={t('deleteUserDialog.title', { name: targetLabel })}
       size="medium"
     >
       <div className="space-y-5">
@@ -113,8 +114,9 @@ function DeleteUserDialog({
           type="warning"
           message={(
             <>
-              <strong>{targetLabel}</strong> owns <strong>{appCount} {appWord}</strong>
-              . Choose what to do with their {appWord} before deleting this account.
+              <strong>{targetLabel}</strong> {t('deleteUserDialog.owns')}{' '}
+              <strong>{appCount} {appWord}</strong>.{' '}
+              {t('deleteUserDialog.chooseWhatToDo', { app: appWord })}
             </>
           )}
         />
@@ -124,13 +126,13 @@ function DeleteUserDialog({
         {branch === 'choose' && (
           <div className="space-y-3">
             <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
-              Choose an option:
+              {t('deleteUserDialog.chooseOption')}
             </p>
 
             <ButtonCard
               variant="selectable"
               className="w-full"
-              ariaLabel={`Transfer ${appWord} to another user`}
+              ariaLabel={t('deleteUserDialog.transferApps', { app: appWord })}
               onClick={() => setBranch('transfer')}
             >
               <div className="flex items-start gap-4">
@@ -140,11 +142,10 @@ function DeleteUserDialog({
                 />
                 <div>
                   <p className="text-sm font-semibold text-fg dark:text-fg-dark">
-                    Transfer {appWord} to another user
+                    {t('deleteUserDialog.transferApps', { app: appWord })}
                   </p>
                   <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-0.5">
-                    Reassign ownership of all {appCount} {appWord} to a user you choose, then
-                    delete this account.
+                    {t('deleteUserDialog.transferDescription', { count: appCount, app: appWord })}
                   </p>
                 </div>
               </div>
@@ -153,7 +154,7 @@ function DeleteUserDialog({
             <ButtonCard
               variant="selectable"
               className="w-full"
-              ariaLabel={`Delete user and all their ${appWord}`}
+              ariaLabel={t('deleteUserDialog.deleteUserAndApps', { app: appWord })}
               onClick={() => setBranch('cascade')}
             >
               <div className="flex items-start gap-4">
@@ -163,11 +164,10 @@ function DeleteUserDialog({
                 />
                 <div>
                   <p className="text-sm font-semibold text-fg dark:text-fg-dark">
-                    Delete user and all their {appWord}
+                    {t('deleteUserDialog.deleteUserAndApps', { app: appWord })}
                   </p>
                   <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-0.5">
-                    Permanently delete all {appCount} {appWord} and all their data (agents,
-                    silos, vector collections). This cannot be undone.
+                    {t('deleteUserDialog.cascadeDescription', { count: appCount, app: appWord })}
                   </p>
                 </div>
               </div>
@@ -175,7 +175,7 @@ function DeleteUserDialog({
 
             <div className="flex justify-end pt-2">
               <ButtonApp
-                label="Cancel"
+                label={t('cancel')}
                 variant="secondary"
                 size="medium"
                 onClick={handleClose}
@@ -194,7 +194,7 @@ function DeleteUserDialog({
               className="focus:outline-none"
             >
               <UserPicker
-                label={`Transfer ${appWord} to`}
+                label={t('deleteUserDialog.transferAppsTo')}
                 value={transferTarget}
                 onSelect={setTransferTarget}
                 onClear={() => setTransferTarget(null)}
@@ -206,20 +206,19 @@ function DeleteUserDialog({
 
             {transferTarget && (
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                All {appCount} {appWord} owned by{' '}
-                <strong className="text-gray-900 dark:text-slate-100">{targetLabel}</strong> will
-                be transferred to{' '}
-                <strong className="text-gray-900 dark:text-slate-100">
-                  {transferTarget.name || transferTarget.email}
-                </strong>
-                , then the account will be permanently deleted.
+                {t('deleteUserDialog.transferConfirmation', {
+                  count: appCount,
+                  app: appWord,
+                  name: targetLabel,
+                  transferName: transferTarget.name || transferTarget.email,
+                })}
               </p>
             )}
 
             <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
               <ButtonApp
-                label="Back"
-                ariaLabel="Back to options"
+                label={t('deleteUserDialog.back')}
+                ariaLabel={t('deleteUserDialog.backToOptions')}
                 variant="secondary"
                 size="medium"
                 onClick={() => {
@@ -230,7 +229,9 @@ function DeleteUserDialog({
                 disabled={isSubmitting}
               />
               <ButtonApp
-                label={isSubmitting ? 'Transferring…' : `Transfer ${appWord} and delete user`}
+                label={isSubmitting
+                  ? t('deleteUserDialog.transferring')
+                  : t('deleteUserDialog.transferAndDelete', { app: appWord })}
                 onClick={() => { void handleTransferAndDelete(); }}
                 disabled={!transferTarget}
                 loading={isSubmitting}
@@ -253,13 +254,19 @@ function DeleteUserDialog({
                 type="info"
                 message={(
                   <>
-                    <p className="font-medium">This will permanently delete:</p>
+                    <p className="font-medium">{t('deleteUserDialog.permanentlyDelete')}</p>
                     <ul className="mt-1 list-inside list-disc space-y-0.5">
-                      <li>All {appCount} {appWord} owned by {targetLabel}</li>
-                      <li>All agents, silos, vector collections, and API keys in those {appWord}</li>
-                      <li>The user account itself</li>
+                      <li>
+                        {t('deleteUserDialog.appsOwnedBy', {
+                          count: appCount,
+                          app: appWord,
+                          name: targetLabel,
+                        })}
+                      </li>
+                      <li>{t('deleteUserDialog.resourcesInApps', { app: appWord })}</li>
+                      <li>{t('deleteUserDialog.userAccount')}</li>
                     </ul>
-                    <p className="mt-2 font-medium">This action cannot be undone.</p>
+                    <p className="mt-2 font-medium">{t('deleteUserDialog.cannotUndo')}</p>
                   </>
                 )}
               />
@@ -270,11 +277,11 @@ function DeleteUserDialog({
                 htmlFor={CASCADE_INPUT_ID}
                 className="block text-sm font-medium text-fg dark:text-fg-dark mb-1.5"
               >
-                Type{' '}
+                {t('deleteUserDialog.typeToConfirm')}{' '}
                 <code className="px-1 py-0.5 bg-canvas-alt dark:bg-canvas-alt-dark rounded text-xs font-mono text-fg-secondary dark:text-fg-secondary-dark">
-                  {CASCADE_CONFIRM_PHRASE}
+                  {cascadeConfirmPhrase}
                 </code>{' '}
-                to confirm:
+                {t('deleteUserDialog.confirmSuffix')}
               </label>
               <FormField
                 id={CASCADE_INPUT_ID}
@@ -285,7 +292,7 @@ function DeleteUserDialog({
                 ariaRequired
                 ariaInvalid={showCascadeInputError}
                 ariaDescribedBy={showCascadeInputError ? CASCADE_ERROR_ID : undefined}
-                placeholder={CASCADE_CONFIRM_PHRASE}
+                placeholder={cascadeConfirmPhrase}
                 inputClassName={showCascadeInputError
                   ? 'border-error focus:border-error dark:border-error-dark dark:focus:border-error-dark'
                   : ''}
@@ -296,15 +303,15 @@ function DeleteUserDialog({
                   role="alert"
                   className="mt-1 text-xs text-error dark:text-error-dark"
                 >
-                  Type exactly: {CASCADE_CONFIRM_PHRASE}
+                  {t('deleteUserDialog.typeExactly', { phrase: cascadeConfirmPhrase })}
                 </p>
               )}
             </div>
 
             <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
               <ButtonApp
-                label="Back"
-                ariaLabel="Back to options"
+                label={t('deleteUserDialog.back')}
+                ariaLabel={t('deleteUserDialog.backToOptions')}
                 variant="secondary"
                 size="medium"
                 onClick={() => {
@@ -315,7 +322,9 @@ function DeleteUserDialog({
                 disabled={isSubmitting}
               />
               <ButtonApp
-                label={isSubmitting ? 'Deleting…' : `Delete user and all ${appWord}`}
+                label={isSubmitting
+                  ? t('deleteUserDialog.deleting')
+                  : t('deleteUserDialog.deleteUserAndApps', { app: appWord })}
                 variant="dangerSolid"
                 size="medium"
                 onClick={() => { void handleCascadeDelete(); }}

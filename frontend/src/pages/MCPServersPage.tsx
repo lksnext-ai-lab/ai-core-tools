@@ -235,7 +235,7 @@ function MCPServersPage() {
                   actions={[
                     {
                       label: t('mcpServersPage.actions.viewDetails'),
-                      onClick: () => navigate(`/apps/${appId}/mcp-servers/${server.server_id}`),
+                      onClick: () => setSelectedServerId(server.server_id),
                       icon: <Eye className="w-4 h-4" />,
                       variant: 'primary'
                     },

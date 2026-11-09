@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Pencil} from 'lucide-react';
+import { MessageSquare, Pencil } from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
@@ -10,7 +10,7 @@ import PromptModal from '../components/playground/PromptModal';
 import ConversationSidebar from '../components/playground/ConversationSidebar';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
-import { ButtonApp } from '../components/ui/ButtonApp';
+import { ButtonApp, buttonAppSizeClasses, buttonAppVariantClasses } from '../components/ui/ButtonApp';
 import { Tabs } from '../components/ui/Tabs';
 import { Badge } from '../components/ui/Badge';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
@@ -62,6 +62,7 @@ function AgentPlaygroundPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('playground');
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+  const [isConversationPanelOpen, setIsConversationPanelOpen] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(() => {
     const value = searchParams.get('conversation_id');
     return value ? Number.parseInt(value, 10) : null;
@@ -197,9 +198,9 @@ function AgentPlaygroundPage() {
     { id: 'playground', label: t('agentPlayground.tabs.playground') },
     { id: 'api', label: t('agentPlayground.tabs.apiExamples') },
   ];
-
+  
   return (
-    <div className="flex flex-col gap-3 h-[calc(100vh-4rem)] animate-fade-in">
+    <div className="flex flex-col gap-3 animate-fade-in mx-auto max-w-7xl">
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <Title
@@ -216,6 +217,7 @@ function AgentPlaygroundPage() {
               {agent.silo && <Badge label="RAG" variant="custom" className="bg-teal-100/80 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300" />}
             </div>
           )}
+          subtitleMarginBottom={0}
         />
         <div className="flex items-center space-x-3">
           <ButtonApp
@@ -232,12 +234,12 @@ function AgentPlaygroundPage() {
       <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="flex-shrink-0 max-h-48 overflow-y-auto" />
 
       {/* Tab Navigation + Content */}
-      <div className="flex flex-col flex-1 min-h-0 gap-2">
+      <div className="flex flex-col gap-2">
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="flex-shrink-0" />
 
         {/* Tab Content */}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Conversation Sidebar - Only show for non-OCR agents with memory */}
+        <div className="flex">
+          {/* Conversations side panel (anchored to Layout's main area) - Only for non-OCR agents with memory */}
           {activeTab === 'playground' && !isOCRAgent && agent.has_memory && (
             <ConversationSidebar
               key={conversationReloadTrigger}
@@ -245,12 +247,15 @@ function AgentPlaygroundPage() {
               currentConversationId={currentConversationId}
               onConversationSelect={handleConversationSelect}
               onNewConversation={handleNewConversation}
+              open={isConversationPanelOpen}
+              onClose={() => setIsConversationPanelOpen(false)}
             />
           )}
 
           {/* Main Content Area */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0">
             {activeTab === 'playground' && (
+              
               <>
                 {isOCRAgent ? (
                   <OCRInterface
@@ -271,6 +276,20 @@ function AgentPlaygroundPage() {
                     onMessageSent={handleMessageSent}
                     metadataFields={agent.silo?.metadata_definition?.fields}
                     vectorDbType={agent.silo?.vector_db_type}
+                    toolbarStart={agent.has_memory ? (
+                      <button
+                        type="button"
+                        aria-haspopup="dialog"
+                        aria-expanded={isConversationPanelOpen}
+                        onClick={() => setIsConversationPanelOpen(true)}
+                        className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
+                                    ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}
+                                    ${isConversationPanelOpen ? '!bg-surface-hover dark:!bg-surface-hover-dark' : ''}`}
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                        {t('agentPlayground.conversations')}
+                      </button>
+                    ) : undefined}
                   />
                 )}
               </>

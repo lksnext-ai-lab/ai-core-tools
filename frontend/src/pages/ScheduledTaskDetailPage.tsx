@@ -39,10 +39,13 @@ interface PanelViewProps {
   readonly agent: Agent | null;
   readonly runs: ScheduledTaskRun[] | null;
   readonly base: string;
+  readonly primaryAction: 'edit' | 'runNow';
+  readonly onRunNow: () => void;
+  readonly running: boolean;
 }
 
 /** Compact single-column task detail shown in the scheduled tasks side panel. */
-function ScheduledTaskPanelView({ task, agent, runs, base }: Readonly<PanelViewProps>) {
+function ScheduledTaskPanelView({ task, agent, runs, base, primaryAction, onRunNow, running }: Readonly<PanelViewProps>) {
   const { t } = useTranslation('common');
   const [tab, setTab] = useState<PanelTab>('info');
   const lastRun = runs?.[0];
@@ -75,14 +78,29 @@ function ScheduledTaskPanelView({ task, agent, runs, base }: Readonly<PanelViewP
         )}
       </div>
 
-      <ButtonLink
-        label={t('scheduledTaskDetailPage.editSchedule')}
-        to={`${base}/edit`}
-        variant="primary"
-        size="medium"
-        className="w-full"
-        icon={<Pencil className="h-4 w-4" aria-hidden="true" />}
-      />
+      {primaryAction === 'runNow' ? (
+        task.status === 'active' && (
+          <ButtonApp
+            label={t('scheduledTaskDetailPage.runNow')}
+            type="button"
+            variant="primary"
+            size="medium"
+            className="w-full"
+            onClick={onRunNow}
+            loading={running}
+            icon={<PlayCircle className="h-4 w-4" aria-hidden="true" />}
+          />
+        )
+      ) : (
+        <ButtonLink
+          label={t('scheduledTaskDetailPage.editSchedule')}
+          to={`${base}/edit`}
+          variant="primary"
+          size="medium"
+          className="w-full"
+          icon={<Pencil className="h-4 w-4" aria-hidden="true" />}
+        />
+      )}
 
       <SegmentedTabs
         tabs={panelTabs}
@@ -165,9 +183,11 @@ interface DetailPageProps {
   /** Overrides the `:taskId` route param when embedded in the side panel. */
   readonly taskId?: number;
   readonly variant?: 'page' | 'panel';
+  /** Main button of the side panel: edit the schedule (default) or run the task now. */
+  readonly primaryAction?: 'edit' | 'runNow';
 }
 
-export default function ScheduledTaskDetailPage({ taskId: taskIdProp, variant = 'page' }: Readonly<DetailPageProps>) {
+export default function ScheduledTaskDetailPage({ taskId: taskIdProp, variant = 'page', primaryAction = 'edit' }: Readonly<DetailPageProps>) {
   const { t } = useTranslation('common');
   const { appId, taskId } = useParams();
   const isPanel = variant === 'panel';
@@ -228,7 +248,7 @@ export default function ScheduledTaskDetailPage({ taskId: taskIdProp, variant = 
     private: t('scheduledTaskDetailPage.visibility.private'),
     public: t('scheduledTaskDetailPage.visibility.public'),
   };
-  if (isPanel) return <ScheduledTaskPanelView task={task} agent={agent} runs={runs} base={base} />;
+  if (isPanel) return <ScheduledTaskPanelView task={task} agent={agent} runs={runs} base={base} primaryAction={primaryAction} onRunNow={() => { void runNow(); }} running={running} />;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

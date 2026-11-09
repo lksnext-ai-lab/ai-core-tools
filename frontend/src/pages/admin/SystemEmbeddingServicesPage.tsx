@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Users, Pencil, Trash2, Brain } from 'lucide-react';
 import { apiService } from '../../services/api';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
@@ -15,7 +16,7 @@ import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { errorMessage, MESSAGES } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import Title from '../../components/ui/Title';
 import ButtonApp from '../../components/ui/ButtonApp';
 import Table, { type TableColumn } from '../../components/ui/Table';
@@ -53,6 +54,7 @@ interface DeletionImpact {
 }
 
 const SystemEmbeddingServicesPage: React.FC = () => {
+  const { t } = useTranslation('common');
   const confirm = useConfirm();
   const settingsCache = useSettingsCache();
   const mutate = useApiMutation();
@@ -72,11 +74,11 @@ const SystemEmbeddingServicesPage: React.FC = () => {
       const data = (await apiService.getSystemEmbeddingServices()) as SystemEmbeddingService[];
       setServices(data);
     } catch (err) {
-      setError(errorMessage(err, 'Failed to load services'));
+      setError(errorMessage(err, t('systemEmbeddingServicesPage.loadFailed')));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void fetchServices();
@@ -105,18 +107,17 @@ const SystemEmbeddingServicesPage: React.FC = () => {
           : apiService.createSystemEmbeddingService(data),
       {
         loading: editingService
-          ? MESSAGES.SAVING('embedding service')
-          : MESSAGES.CREATING('embedding service'),
+          ? t('systemEmbeddingServicesPage.updating')
+          : t('systemEmbeddingServicesPage.creating'),
         success: editingService
-          ? MESSAGES.UPDATED('embedding service')
-          : MESSAGES.CREATED('embedding service'),
-        error: (err) =>
-          errorMessage(
-            err,
-            editingService
-              ? MESSAGES.UPDATE_FAILED('embedding service')
-              : MESSAGES.CREATE_FAILED('embedding service'),
-          ),
+          ? t('systemEmbeddingServicesPage.updated')
+          : t('systemEmbeddingServicesPage.created'),
+        error: (err) => errorMessage(
+          err,
+          editingService
+            ? t('systemEmbeddingServicesPage.updateFailed')
+            : t('systemEmbeddingServicesPage.createFailed'),
+        ),
       },
     );
     if (result === undefined) return;
@@ -128,7 +129,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
 
   const testConnection = (serviceId: number) => {
     const service = services.find((item) => item.service_id === serviceId);
-    if (!service) throw new Error('Embedding service not found');
+    if (!service) throw new Error(t('systemEmbeddingServicesPage.serviceNotFound'));
     return getServiceApiClient('embedding', 'system', undefined).testConnection({
       name: service.name,
       provider: service.provider,
@@ -149,15 +150,17 @@ const SystemEmbeddingServicesPage: React.FC = () => {
       )) as DeletionImpact;
     } catch (err) {
       const result = await confirm({
-        title: MESSAGES.CONFIRM_DELETE_TITLE('embedding service'),
+        title: t('systemEmbeddingServicesPage.deleteTitle'),
         message: (
           <>
-            <p>{`Could not check deletion impact: ${errorMessage(err, 'unknown error')}.`}</p>
-            <p className="mt-2">Delete this embedding service anyway?</p>
+            <p>{t('systemEmbeddingServicesPage.impactCheckFailed', {
+              error: errorMessage(err, t('systemEmbeddingServicesPage.unknownError')),
+            })}</p>
+            <p className="mt-2">{t('systemEmbeddingServicesPage.deleteAnyway')}</p>
           </>
         ),
         variant: 'danger',
-        confirmLabel: 'Delete',
+        confirmLabel: t('embeddingServicesPage.actions.delete'),
       });
       if (!result) return;
       await runDelete(svc.service_id);
@@ -165,22 +168,18 @@ const SystemEmbeddingServicesPage: React.FC = () => {
     }
 
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('embedding service'),
+      title: t('systemEmbeddingServicesPage.deleteTitle'),
       message:
         impact.affected_silos_count > 0 ? (
           <div>
             <p>
-              This embedding service is used by{' '}
-              <span className="font-semibold">
-                {impact.affected_silos_count} silo
-                {impact.affected_silos_count !== 1 ? 's' : ''}
-              </span>{' '}
-              across{' '}
-              <span className="font-semibold">
-                {impact.affected_apps_count} app
-                {impact.affected_apps_count !== 1 ? 's' : ''}
-              </span>
-              . Deleting it will leave those silos without an embedding service.
+              {t('systemEmbeddingServicesPage.deletionImpact', {
+                name: svc.name,
+                siloCount: impact.affected_silos_count,
+                siloLabel: t('systemEmbeddingServicesPage.silo', { count: impact.affected_silos_count }),
+                appCount: impact.affected_apps_count,
+                appLabel: t('systemEmbeddingServicesPage.app', { count: impact.affected_apps_count }),
+              })}
             </p>
             {impact.affected_silos.length < 20 && impact.affected_silos.length > 0 && (
               <ul className="mt-2 text-xs text-gray-500 list-disc list-inside space-y-0.5 max-h-40 overflow-y-auto">
@@ -193,10 +192,10 @@ const SystemEmbeddingServicesPage: React.FC = () => {
             )}
           </div>
         ) : (
-          <p>Delete "{svc.name}"? This action cannot be undone.</p>
+          <p>{t('systemEmbeddingServicesPage.deleteMessage', { name: svc.name })}</p>
         ),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('embeddingServicesPage.actions.delete'),
     });
     if (!ok) return;
     await runDelete(svc.service_id);
@@ -206,9 +205,9 @@ const SystemEmbeddingServicesPage: React.FC = () => {
     const result = await mutate(
       () => apiService.deleteSystemEmbeddingService(serviceId),
       {
-        loading: MESSAGES.DELETING('embedding service'),
-        success: MESSAGES.DELETED('embedding service'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('embedding service')),
+        loading: t('systemEmbeddingServicesPage.deleting'),
+        success: t('systemEmbeddingServicesPage.deleted'),
+        error: (err) => errorMessage(err, t('systemEmbeddingServicesPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -218,7 +217,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
 
   const columns: TableColumn<SystemEmbeddingService>[] = [
     {
-      header: 'Name',
+      header: t('embeddingServicesPage.columns.name'),
       className: 'px-6 py-4 whitespace-nowrap',
       render: (svc) => (
         <div className="flex items-center gap-2">
@@ -235,17 +234,17 @@ const SystemEmbeddingServicesPage: React.FC = () => {
       ),
     },
     {
-      header: 'Provider',
+      header: t('embeddingServicesPage.columns.provider'),
       accessor: 'provider',
       className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
     },
     {
-      header: 'Model',
+      header: t('embeddingServicesPage.columns.model'),
       accessor: 'model_name',
       className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
     },
     {
-      header: 'Status',
+      header: t('embeddingServicesPage.columns.status'),
       className: 'px-6 py-4 text-sm',
       render: (svc) => (
         <ServiceStatusBadge
@@ -258,7 +257,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
       ),
     },
     {
-      header: 'Actions',
+      header: t('embeddingServicesPage.columns.actions'),
       sticky: 'right' as const,
       headerClassName: 'text-right',
       className: 'px-6 py-4 whitespace-nowrap text-right',
@@ -266,7 +265,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
         <div className="inline-flex justify-end">
           <ActionDropdown
             size="sm"
-            triggerAriaLabel={`Actions for ${svc.name}`}
+            triggerAriaLabel={t('embeddingServicesPage.actions.menuForService', { name: svc.name })}
             actions={[
               {
                 label: SERVICE_USAGE_STRINGS.action,
@@ -275,12 +274,12 @@ const SystemEmbeddingServicesPage: React.FC = () => {
               },
               testAction(svc.service_id, svc.name, () => testConnection(svc.service_id)),
               {
-                label: 'Edit',
+                label: t('embeddingServicesPage.actions.edit'),
                 icon: <Pencil className="w-4 h-4" />,
                 onClick: () => handleOpenEdit(svc),
               },
               {
-                label: 'Delete',
+                label: t('embeddingServicesPage.actions.delete'),
                 icon: <Trash2 className="w-4 h-4" />,
                 variant: 'danger',
                 onClick: () => {
@@ -298,10 +297,10 @@ const SystemEmbeddingServicesPage: React.FC = () => {
     <div className="space-y-6">
             {/* Page Header */}
             <div className="flex items-center justify-between">
-              <Title variant='titPrincipal' titulo='System Embedding Services' subtitulo='Shared embedding provider configurations available to every app.'></Title>
+              <Title variant='titPrincipal' titulo={t('systemEmbeddingServicesPage.title')} subtitulo={t('systemEmbeddingServicesPage.subtitle')}></Title>
             </div>
     
-            <LoadingState variant="page" message="Loading system embedding services..." />
+            <LoadingState variant="page" message={t('systemEmbeddingServicesPage.loading')} />
           </div>
   ) ;
   if (error) return <ErrorState error={error} onRetry={fetchServices} />;
@@ -309,9 +308,9 @@ const SystemEmbeddingServicesPage: React.FC = () => {
   return (
     <div className="mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <Title variant='titPrincipal' titulo='System Embedding Services' subtitulo='Shared embedding provider configurations available to every app.'></Title>
+        <Title variant='titPrincipal' titulo={t('systemEmbeddingServicesPage.title')} subtitulo={t('systemEmbeddingServicesPage.subtitle')}></Title>
         <ButtonApp
-              label='Add service'
+              label={t('embeddingServicesPage.addService')}
               onClick={handleOpenCreate}
               variant="primary"
               size="medium"
@@ -324,13 +323,13 @@ const SystemEmbeddingServicesPage: React.FC = () => {
         data={services}
         keyExtractor={(svc) => svc.service_id}
         emptyIcon={<BackgroundImage icon={Brain} size={64} iconSize={32} />}
-        emptyMessage="No system embedding services configured."
+        emptyMessage={t('systemEmbeddingServicesPage.empty')}
       />
 
       {services.length === 0 && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Add First Embedding Service"
+            label={t('embeddingServicesPage.addFirstService')}
             onClick={handleOpenCreate}
             variant="primary"
             size="medium"
@@ -352,6 +351,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
       {showForm && editingService && (
         <CompactServiceEditor
           isOpen
+          variant="panel"
           kind="embedding"
           scope="system"
           service={editingService}
@@ -363,12 +363,12 @@ const SystemEmbeddingServicesPage: React.FC = () => {
 
       {/* Service usage side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {usageService && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
           <SidePanel
             open
             side="right"
             onClose={() => setUsageService(null)}
-            title="System Embedding Services"
+            title={t('systemEmbeddingServicesPage.title')}
             headerActions={(
               <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
                 {SERVICE_USAGE_STRINGS.action}

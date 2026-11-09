@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Users, Pencil, Trash2, Cpu } from 'lucide-react';
 import { apiService } from '../../services/api';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
@@ -15,7 +16,7 @@ import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useSettingsCache } from '../../contexts/SettingsCacheContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { errorMessage, MESSAGES } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import Title from '../../components/ui/Title';
 import ButtonApp from '../../components/ui/ButtonApp';
 import Table, { type TableColumn } from '../../components/ui/Table';
@@ -38,6 +39,7 @@ interface SystemAIService extends Partial<ServiceLifecycleFields> {
 }
 
 const SystemAIServicesPage: React.FC = () => {
+  const { t } = useTranslation('common');
   const confirm = useConfirm();
   const settingsCache = useSettingsCache();
   const mutate = useApiMutation();
@@ -57,11 +59,11 @@ const SystemAIServicesPage: React.FC = () => {
       const data = (await apiService.getSystemAIServices()) as SystemAIService[];
       setServices(data);
     } catch (err) {
-      setError(errorMessage(err, 'Failed to load services'));
+      setError(errorMessage(err, t('systemAiServicesPage.loadFailed')));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void fetchServices();
@@ -95,18 +97,17 @@ const SystemAIServicesPage: React.FC = () => {
           : apiService.createSystemAIService(data),
       {
         loading: editingService
-          ? MESSAGES.SAVING('AI service')
-          : MESSAGES.CREATING('AI service'),
+          ? t('systemAiServicesPage.updating')
+          : t('systemAiServicesPage.creating'),
         success: editingService
-          ? MESSAGES.UPDATED('AI service')
-          : MESSAGES.CREATED('AI service'),
-        error: (err) =>
-          errorMessage(
-            err,
-            editingService
-              ? MESSAGES.UPDATE_FAILED('AI service')
-              : MESSAGES.CREATE_FAILED('AI service'),
-          ),
+          ? t('systemAiServicesPage.updated')
+          : t('systemAiServicesPage.created'),
+        error: (err) => errorMessage(
+          err,
+          editingService
+            ? t('systemAiServicesPage.updateFailed')
+            : t('systemAiServicesPage.createFailed'),
+        ),
       },
     );
     if (result === undefined) return;
@@ -133,19 +134,19 @@ const SystemAIServicesPage: React.FC = () => {
 
   const handleDelete = async (service: SystemAIService) => {
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('system AI service'),
-      message: `Delete "${service.name}"? Agents using this service will need to be reassigned.`,
+      title: t('systemAiServicesPage.deleteTitle'),
+      message: t('systemAiServicesPage.deleteMessage', { name: service.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('aiServicesPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteSystemAIService(service.service_id),
       {
-        loading: MESSAGES.DELETING('AI service'),
-        success: MESSAGES.DELETED('AI service'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('AI service')),
+        loading: t('systemAiServicesPage.deleting'),
+        success: t('systemAiServicesPage.deleted'),
+        error: (err) => errorMessage(err, t('systemAiServicesPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -155,7 +156,7 @@ const SystemAIServicesPage: React.FC = () => {
 
   const columns: TableColumn<SystemAIService>[] = [
     {
-      header: 'Name',
+      header: t('aiServicesPage.columns.name'),
       className: 'px-6 py-4 whitespace-nowrap',
       render: (svc) => (
         <div className="flex items-center gap-2">
@@ -171,17 +172,17 @@ const SystemAIServicesPage: React.FC = () => {
       ),
     },
     {
-      header: 'Provider',
+      header: t('aiServicesPage.columns.provider'),
       accessor: 'provider',
       className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
     },
     {
-      header: 'Model',
+      header: t('aiServicesPage.columns.model'),
       accessor: 'model_name',
       className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
     },
     {
-      header: 'Status',
+      header: t('aiServicesPage.columns.status'),
       className: 'px-6 py-4 text-sm',
       render: (svc) => (
         <ServiceStatusBadge
@@ -194,7 +195,7 @@ const SystemAIServicesPage: React.FC = () => {
       ),
     },
     {
-      header: 'Actions',
+      header: t('aiServicesPage.columns.actions'),
       sticky: 'right' as const,
       headerClassName: 'text-right',
       className: 'px-6 py-4 whitespace-nowrap text-right',
@@ -202,7 +203,7 @@ const SystemAIServicesPage: React.FC = () => {
         <div className="inline-flex justify-end">
           <ActionDropdown
             size="sm"
-            triggerAriaLabel={`Actions for ${svc.name}`}
+            triggerAriaLabel={t('aiServicesPage.actions.menuForService', { name: svc.name })}
             actions={[
               {
                 label: SERVICE_USAGE_STRINGS.action,
@@ -211,14 +212,14 @@ const SystemAIServicesPage: React.FC = () => {
               },
               testAction(svc.service_id, svc.name, () => testConnection(svc.service_id)),
               {
-                label: 'Edit',
+                label: t('aiServicesPage.actions.edit'),
                 icon: <Pencil className="w-4 h-4" />,
                 onClick: () => {
                   void handleOpenEdit(svc);
                 },
               },
               {
-                label: 'Delete',
+                label: t('aiServicesPage.actions.delete'),
                 icon: <Trash2 className="w-4 h-4" />,
                 variant: 'danger',
                 onClick: () => {
@@ -236,10 +237,9 @@ const SystemAIServicesPage: React.FC = () => {
     <div className="space-y-6">
                 {/* Page Header */}
                 <div className="flex items-center justify-between">
-                  <Title variant='titPrincipal' titulo='System AI Services' subtitulo='Shared LLM provider configurations available to every app.'></Title>
+                  <Title variant='titPrincipal' titulo={t('systemAiServicesPage.title')} subtitulo={t('systemAiServicesPage.subtitle')}></Title>
                 </div>
-        
-                <LoadingState variant="page" message="Loading system AI services..." />
+                <LoadingState variant="page" message={t('systemAiServicesPage.loading')} />
               </div>
   );
   if (error) return <ErrorState error={error} onRetry={fetchServices} />;
@@ -247,9 +247,9 @@ const SystemAIServicesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <Title variant='titPrincipal' titulo='System AI Services' subtitulo='Shared LLM provider configurations available to every app.'></Title>
+        <Title variant='titPrincipal' titulo={t('systemAiServicesPage.title')} subtitulo={t('systemAiServicesPage.subtitle')}></Title>
         <ButtonApp
-          label='Add service'
+          label={t('aiServicesPage.addService')}
           onClick={handleOpenCreate}
           variant="primary"
           size="medium"
@@ -262,13 +262,13 @@ const SystemAIServicesPage: React.FC = () => {
         data={services}
         keyExtractor={(svc) => svc.service_id}
         emptyIcon={<BackgroundImage icon={Cpu} size={64} iconSize={32} />}
-        emptyMessage="No system AI services configured."
+        emptyMessage={t('systemAiServicesPage.empty')}
       />
 
       {services.length === 0 && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Add First AI Service"
+            label={t('aiServicesPage.addFirstService')}
             onClick={handleOpenCreate}
             variant="primary"
             size="medium"
@@ -290,6 +290,7 @@ const SystemAIServicesPage: React.FC = () => {
       {showForm && editingService && (
         <CompactServiceEditor
           isOpen
+          variant="panel"
           kind="ai"
           scope="system"
           service={editingService}
@@ -301,12 +302,12 @@ const SystemAIServicesPage: React.FC = () => {
 
       {/* Service usage side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {usageService && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
           <SidePanel
             open
             side="right"
             onClose={() => setUsageService(null)}
-            title="System AI Services"
+            title={t('systemAiServicesPage.title')}
             headerActions={(
               <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
                 {SERVICE_USAGE_STRINGS.action}

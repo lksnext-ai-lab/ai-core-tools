@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
 
 interface VersionFooterProps {
@@ -11,6 +12,7 @@ interface VersionInfo {
 }
 
 const VersionFooter: React.FC<VersionFooterProps> = ({ className = '' }) => {
+  const { t } = useTranslation('common');
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({ name: 'ia-core-tools', version: '0.1.0' });
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +35,7 @@ const VersionFooter: React.FC<VersionFooterProps> = ({ className = '' }) => {
   if (loading) {
     return (
       <div className={`version-info text-end text-fg-faint dark:text-fg-faint-dark text-xs py-2 px-4 ${className}`}>
-        Loading version...
+        {t('versionFooter.loading')}
       </div>
     );
   }

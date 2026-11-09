@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Modal from './Modal';
 import Alert from './Alert';
 import FormField from './FormField';
@@ -21,9 +22,9 @@ function buildSetPasswordLink(token: string): string {
   return `${window.location.origin}/set-password?token=${encodeURIComponent(token)}`;
 }
 
-function formatExpiry(isoString: string): string {
+function formatExpiry(isoString: string, language: string): string {
   try {
-    return new Date(isoString).toLocaleString(undefined, {
+    return new Date(isoString).toLocaleString(language, {
       dateStyle: 'medium',
       timeStyle: 'short',
     });
@@ -32,7 +33,8 @@ function formatExpiry(isoString: string): string {
   }
 }
 
-function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Password Link Ready' }: OneTimeLinkModalProps) {
+function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title }: OneTimeLinkModalProps) {
+  const { t, i18n } = useTranslation('common');
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,16 +69,16 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={title} size="large">
+    <Modal isOpen={isOpen} onClose={handleClose} title={title ?? t('oneTimeLink.title')} size="large">
       <div className="space-y-5">
         <Alert
           type="success"
-          message="The one-time link has been generated. Copy it now and send it to the user over a secure channel (e.g. direct message or encrypted email). The link will not be shown again."
+          message={t('oneTimeLink.generatedMessage')}
         />
 
         <div>
           <label htmlFor="onetimelink-value" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
-            Set-password link
+            {t('oneTimeLink.label')}
           </label>
           <div className="flex gap-2">
             <FormField
@@ -90,9 +92,9 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
               onFocus={(e) => e.currentTarget.select()}
             />
             <ButtonApp
-              label={copied ? 'Copied' : 'Copy'}
+              label={copied ? t('oneTimeLink.copied') : t('oneTimeLink.copy')}
               onClick={handleCopy}
-              ariaLabel={copied ? 'Link copied to clipboard' : 'Copy link to clipboard'}
+              ariaLabel={copied ? t('oneTimeLink.linkCopied') : t('oneTimeLink.copyLink')}
               variant="primary"
               size="medium"
               icon={copied
@@ -107,26 +109,26 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title = 'Set-Pass
             aria-live="polite"
             className={`mt-1.5 text-xs ${copyFailed ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'}`}
           >
-            {copied && 'Link copied to clipboard.'}
-            {copyFailed && 'Auto-copy unavailable — select the link above and copy it manually.'}
+            {copied && t('oneTimeLink.linkCopied')}
+            {copyFailed && t('oneTimeLink.copyUnavailable')}
           </p>
         </div>
 
         <Alert
           type="warning"
-          title="This link is shown only once."
+          title={t('oneTimeLink.shownOnce')}
           message={(
             <ul className="list-disc list-inside space-y-0.5">
-              <li>It expires on <strong>{formatExpiry(expiresAt)}</strong>.</li>
-              <li>Send it to the user over a secure, private channel.</li>
-              <li>It can only be used once to set a password.</li>
+              <li>{t('oneTimeLink.expiresOn')} <strong>{formatExpiry(expiresAt, i18n.language)}</strong>.</li>
+              <li>{t('oneTimeLink.sendSecurely')}</li>
+              <li>{t('oneTimeLink.singleUse')}</li>
             </ul>
           )}
         />
 
         <div className="flex justify-end border-t border-line dark:border-line-dark pt-4">
           <ButtonApp
-            label="Cancel"
+            label={t('formActions.cancel')}
             onClick={handleClose}
             variant="secondary"
             size="medium"

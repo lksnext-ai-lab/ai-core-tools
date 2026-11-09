@@ -105,6 +105,14 @@ function stateFromSkill(skill: Skill | null | undefined): SkillFormState {
   };
 }
 
+function hasRuntimeConfigIn(state: SkillFormState): boolean {
+  return (
+    state.runtime.trim() !== '' ||
+    state.bootstrap_script_path.trim() !== '' ||
+    state.runtime_options_text.trim() !== ''
+  );
+}
+
 // ==================== Allowed tools chip input (case-preserving; TagInput lowercases, which
 // would silently corrupt tool names like "WebSearch") ====================
 
@@ -561,6 +569,11 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
     return { valid: true, value: parsed as Record<string, unknown> };
   }, [formState.runtime_options_text, t]);
 
+  const hasRuntimeConfig = hasRuntimeConfigIn(formState);
+  // Open state follows the loaded skill only — tying it to live values would collapse the
+  // section under the user while they clear a field.
+  const startsWithRuntimeConfig = useMemo(() => hasRuntimeConfigIn(stateFromSkill(skill)), [skill]);
+
   const isValid =
     formState.name.trim() !== '' &&
     formState.description.trim() !== '' &&
@@ -618,6 +631,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
 
       {error && <Alert type="error" message={error} />}
 
+      <div className="max-w-[720px] space-y-6">
       <FormField
         label={t('skillForm.fields.name')}
         id="name"
@@ -639,7 +653,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         helpText={t('skillForm.help.displayName')}
       />
 
-      <FormField
+      <FormTextArea
         label={t('skillForm.fields.description')}
         id="description"
         value={formState.description}
@@ -647,6 +661,8 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         placeholder={t('skillForm.fields.descriptionPlaceholder')}
         disabled={disabled}
         required
+        rows={3}
+        textareaClassName="max-sm:min-h-[3.625rem] resize-y"
         helpText={t('skillForm.help.description')}
       />
 
@@ -661,16 +677,23 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         helpText={t('skillForm.help.whenToUse')}
       />
 
-      <FormTextArea
-        label={t('skillForm.fields.instructions')}
-        id="content"
-        value={formState.content}
-        onChange={(e) => setFormState((prev) => ({ ...prev, content: e.target.value }))}
-        rows={12}
-        disabled={disabled}
-        required
-        helpText={t('skillForm.help.instructions')}
-      />
+      <div className="relative">
+        <span className="absolute right-0 top-0 rounded-lg bg-surface-hover px-2 py-0.5 text-[11px] text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+          markdown
+        </span>
+        <FormTextArea
+          label={t('skillForm.fields.instructions')}
+          id="content"
+          value={formState.content}
+          onChange={(e) => setFormState((prev) => ({ ...prev, content: e.target.value }))}
+          rows={12}
+          disabled={disabled}
+          required
+          labelClassName="block text-sm font-medium text-fg dark:text-fg-dark mb-1.5 pr-24"
+          textareaClassName="font-mono text-[13px] leading-relaxed"
+          helpText={t('skillForm.help.instructions')}
+        />
+      </div>
 
       <div>
         <label
@@ -686,40 +709,56 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField
-          label={t('skillForm.fields.runtime')}
-          id="runtime"
-          value={formState.runtime}
-          onChange={(e) => setFormState((prev) => ({ ...prev, runtime: e.target.value }))}
-          placeholder={t('skillForm.fields.runtimePlaceholder')}
-          disabled={disabled}
-          helpText={t('skillForm.help.runtime')}
-        />
+      {/* Execution environment (advanced): starts open only when the skill already has something configured */}
+      <details
+        open={startsWithRuntimeConfig}
+        className="group rounded-lg border border-line dark:border-line-dark"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-left [&::-webkit-details-marker]:hidden">
+          <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('skillForm.advanced.title')}</span>
+          <span className="flex items-center gap-1.5 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+            {hasRuntimeConfig ? t('skillForm.advanced.configured') : t('skillForm.advanced.notConfigured')}
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </span>
+        </summary>
+        <div className="space-y-6 border-t border-line px-3.5 pb-4 pt-4 dark:border-line-dark">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField
+              label={t('skillForm.fields.runtime')}
+              id="runtime"
+              value={formState.runtime}
+              onChange={(e) => setFormState((prev) => ({ ...prev, runtime: e.target.value }))}
+              placeholder={t('skillForm.fields.runtimePlaceholder')}
+              disabled={disabled}
+              helpText={t('skillForm.help.runtime')}
+            />
 
-        <FormField
-          label={t('skillForm.fields.bootstrapScriptPath')}
-          id="bootstrap_script_path"
-          value={formState.bootstrap_script_path}
-          onChange={(e) => setFormState((prev) => ({ ...prev, bootstrap_script_path: e.target.value }))}
-          placeholder="scripts/bootstrap.sh"
-          disabled={disabled}
-          inputClassName="font-mono text-sm"
-          helpText={t('skillForm.help.bootstrapScriptPath')}
-        />
-      </div>
+            <FormField
+              label={t('skillForm.fields.bootstrapScriptPath')}
+              id="bootstrap_script_path"
+              value={formState.bootstrap_script_path}
+              onChange={(e) => setFormState((prev) => ({ ...prev, bootstrap_script_path: e.target.value }))}
+              placeholder="scripts/bootstrap.sh"
+              disabled={disabled}
+              inputClassName="font-mono text-sm"
+              helpText={t('skillForm.help.bootstrapScriptPath')}
+            />
+          </div>
 
-      <FormTextArea
-        label={t('skillForm.fields.runtimeOptions')}
-        id="runtime_options"
-        value={formState.runtime_options_text}
-        onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
-        disabled={disabled}
-        rows={6}
-        error={'error' in runtimeOptionsValidation ? runtimeOptionsValidation.error : undefined}
-        helpText={runtimeOptionsValidation.valid ? t('skillForm.help.runtimeOptions') : undefined}
-        placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
-      />
+          <FormTextArea
+            label={t('skillForm.fields.runtimeOptions')}
+            id="runtime_options"
+            value={formState.runtime_options_text}
+            onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
+            disabled={disabled}
+            rows={6}
+            error={'error' in runtimeOptionsValidation ? runtimeOptionsValidation.error : undefined}
+            helpText={runtimeOptionsValidation.valid ? t('skillForm.help.runtimeOptions') : undefined}
+            placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
+            textareaClassName="font-mono text-[13px]"
+          />
+        </div>
+      </details>
 
       <FormCheckbox
         label={t('skillForm.fields.enabled')}
@@ -729,6 +768,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         disabled={disabled}
         helpText={t('skillForm.help.enabled')}
       />
+      </div>
 
       {isEditing && (
         <div>
@@ -772,11 +812,11 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
       )}
 
       {isReadOnly ? (
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end pt-4 border-t border-line dark:border-line-dark">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-fg dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-fg dark:text-fg-dark bg-surface-hover dark:bg-surface-hover-dark hover:bg-surface-ash dark:hover:bg-line-dark rounded-lg transition-colors"
           >
             {t('skillForm.actions.close')}
           </button>

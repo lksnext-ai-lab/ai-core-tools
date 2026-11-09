@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { FormActions } from '../ui/FormActions';
 import { FormCheckbox, FormField, FormTextArea } from '../ui/FormField';
 import Alert from '../ui/Alert';
@@ -30,6 +31,7 @@ interface MCPConfigFormProps {
 
 function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigFormProps>) {
   const { appId } = useParams();
+  const { t } = useTranslation('common');
   const [formData, setFormData] = useState<MCPConfigFormData>({
     name: '',
     description: '',
@@ -70,7 +72,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     try {
       JSON.parse(formData.config);
     } catch {
-      setError('Invalid JSON format in config');
+      setError(t('mcpConfigsPage.form.invalidJson'));
       return;
     }
     
@@ -87,7 +89,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       });
       setTestResult(result);
     } catch (err) {
-      setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
+      setTestResult({ status: 'error', message: err instanceof Error ? err.message : t('mcpConfigsPage.form.testFailed') });
     } finally {
       setIsTesting(false);
     }
@@ -98,12 +100,12 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     
     // Basic validation
     if (!formData.name.trim()) {
-      setError('Config name is required');
+      setError(t('mcpConfigsPage.form.nameRequired'));
       return;
     }
     
     if (!formData.config.trim()) {
-      setError('Config is required');
+      setError(t('mcpConfigsPage.form.configRequired'));
       return;
     }
 
@@ -111,7 +113,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     try {
       JSON.parse(formData.config);
     } catch {
-      setError('Invalid JSON format in config');
+      setError(t('mcpConfigsPage.form.invalidJson'));
       return;
     }
 
@@ -120,7 +122,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       setError(null);
       await onSubmit(formData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save MCP config');
+      setError(err instanceof Error ? err.message : t('mcpConfigsPage.form.saveFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -135,59 +137,59 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       {/* Config Name */}
       <FormField
         id="name"
-        label="Configuration Name"
+        label={t('mcpConfigsPage.form.configurationName')}
         value={formData.name}
         onChange={handleChange}
-        placeholder="e.g., Playwright MCP, Filesystem Server"
+        placeholder={t('mcpConfigsPage.form.namePlaceholder')}
         required
       />
 
       {/* Description */}
       <FormTextArea
         id="description"
-        label="Description"
+        label={t('mcpConfigsPage.form.description')}
         value={formData.description}
         onChange={handleChange}
         rows={2}
-        placeholder="Optional description of this MCP configuration"
+        placeholder={t('mcpConfigsPage.form.descriptionPlaceholder')}
       />
 
       {/* Config JSON */}
       <FormTextArea
         id="config"
-        label="MCP Server Configuration (JSON)"
+        label={t('mcpConfigsPage.form.configurationJson')}
         value={formData.config}
         onChange={handleChange}
         rows={12}
         textareaClassName="font-mono"
         placeholder={'{\n  "playwright": {\n    "command": "npx",\n    "args": ["@playwright/mcp@latest", "--isolated"]\n  }\n}'}
         required
-        helpText="Full MCP server configuration in JSON format. This matches the structure used in your mcp.json file."
+        helpText={t('mcpConfigsPage.form.configurationHelp')}
       />
 
       {/* SSL Verify */}
       <FormCheckbox
         id="ssl_verify"
-        label="Verify SSL Certificates"
+        label={t('mcpConfigsPage.form.verifySsl')}
         checked={formData.ssl_verify}
         onChange={(e) =>
           setFormData((prev) => ({ ...prev, ssl_verify: e.target.checked }))
         }
         variant="toggle"
-        helpText="Disable this if the MCP server uses a self-signed certificate."
+        helpText={t('mcpConfigsPage.form.verifySslHelp')}
       />
 
       {/* Test Result */}
       {testResult && (
         <Alert
           type={testResult.status === 'success' ? 'success' : 'error'}
-          title={testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
+          title={testResult.status === 'success' ? t('mcpConfigsPage.form.connectionSuccessful') : t('mcpConfigsPage.form.connectionFailed')}
           message={(
             <>
               {testResult.message}
               {testResult.tools && testResult.tools.length > 0 && (
                 <div className="mt-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider mb-2">Available Tools</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider mb-2">{t('mcpConfigsPage.form.availableTools')}</h4>
                   <div className="bg-surface dark:bg-surface-dark rounded border border-success-border dark:border-success-border-dark max-h-40 overflow-y-auto">
                     <table className="min-w-full divide-y divide-line dark:divide-line-dark">
                       <tbody className="divide-y divide-line dark:divide-line-dark">
@@ -210,18 +212,18 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       {/* MCP Info Box */}
       <Alert
         type="info"
-        title="About Model Context Protocol (MCP)"
+        title={t('mcpConfigsPage.form.aboutTitle')}
         message={(
           <div className="text-xs space-y-2">
             <p>
-              MCP enables AI agents to connect to external tools and data sources securely.
+              {t('mcpConfigsPage.form.aboutDescription')}
             </p>
             <p className="font-mono bg-surface-ash dark:bg-surface-hover-dark p-2 rounded text-xs">
-              Example stdio config:<br/>
+              {t('mcpConfigsPage.form.stdioExample')}<br/>
               &#123;"server-name": &#123;"command": "npx", "args": ["package@latest"]&#125;&#125;
             </p>
             <p className="font-mono bg-surface-ash dark:bg-surface-hover-dark p-2 rounded text-xs">
-              Example SSE config:<br/>
+              {t('mcpConfigsPage.form.sseExample')}<br/>
               &#123;"server-name": &#123;"url": "https://server.com", "transport": "sse"&#125;&#125;
             </p>
           </div>
@@ -232,7 +234,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
         <div>
           <ButtonApp
             type="button"
-            label={isTesting ? 'Testing...' : 'Test Connection'}
+            label={isTesting ? t('mcpConfigsPage.form.testing') : t('mcpConfigsPage.form.testConnection')}
             onClick={handleTestConnection}
             disabled={isTesting || isSubmitting}
             loading={isTesting}
@@ -244,7 +246,6 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
           onCancel={onCancel}
           isSubmitting={isSubmitting}
           isEditing={isEditing}
-          submitLabel={isEditing ? 'Update Config' : 'Create Config'}
           submitDisabled={!isValid}
           containerClassName="!border-t-0 !pt-0"
         />

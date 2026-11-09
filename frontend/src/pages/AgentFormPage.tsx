@@ -227,7 +227,7 @@ function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: nu
   const { t } = useTranslation('common');
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
-  return <section className="mb-6 rounded-md border border-line bg-surface dark:border-line-dark dark:bg-surface-dark p-6 "><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-fg dark:text-fg-dark">{t('agentFormPage.scheduledTasks.title')}</h3><p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('agentFormPage.scheduledTasks.description')}</p></div>
+  return <section className="mb-6 rounded-md border border-line bg-surface dark:border-line-dark dark:bg-surface-dark p-6 "><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-display text-2xl font-normal tracking-[-0.02em] text-ink dark:text-ink-dark">{t('agentFormPage.scheduledTasks.title')}</h3><p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('agentFormPage.scheduledTasks.description')}</p></div>
     <ButtonApp
       type="button"
       onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)}
@@ -237,6 +237,18 @@ function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: nu
     
     </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-md bg-surface dark:bg-surface-dark border border-line dark:border-btCard-border-dark px-3 py-2 text-sm"><span>{task.name}</span><span className="text-fg-tertiary dark:text-fg-tertiary-dark">{t(task.status === 'active' ? 'agentFormPage.scheduledTasks.active' : 'agentFormPage.scheduledTasks.paused')}</span></a>)}</div>}</section>;
 }
+
+/** Fields validated before saving: the tab each lives in and the id of its control. */
+const AGENT_FIELDS = {
+  name: { tab: 'basic', id: 'name' },
+  prompt_template: { tab: 'prompts', id: 'prompt_template' },
+  service_id: { tab: 'configuration', id: 'ai_service' },
+  rag_score_threshold: { tab: 'configuration', id: 'rag_score_threshold' },
+  media_embedding_service_id: { tab: 'configuration', id: 'media_embedding_service' },
+} as const;
+type AgentFieldKey = keyof typeof AGENT_FIELDS;
+/** Field -> message. Insertion order follows tab order, then visual order within the tab. */
+type AgentFieldErrors = Partial<Record<AgentFieldKey, string>>;
 
 function AgentFormPage() {
   const { t } = useTranslation('common');
@@ -285,7 +297,24 @@ function AgentFormPage() {
     );
   };
   const [saving, setSaving] = useState(false);
+  /** Load / server errors (not field validation) — banner at the top of the page. */
   const [error, setError] = useState<string | null>(null);
+  const errorBannerRef = useRef<HTMLDivElement>(null);
+  /** Field validation shows only after the first save attempt; from then on it updates live. */
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  /** Field to focus once its tab has rendered (fields of other tabs aren't in the DOM). */
+  const [pendingFocusField, setPendingFocusField] = useState<AgentFieldKey | null>(null);
+
+  // Bring the error banner into view and move focus to it, so it can't go unnoticed.
+  useEffect(() => {
+    if (error) errorBannerRef.current?.focus();
+  }, [error]);
+
+  useEffect(() => {
+    if (!pendingFocusField) return;
+    document.getElementById(AGENT_FIELDS[pendingFocusField].id)?.focus();
+    setPendingFocusField(null);
+  }, [pendingFocusField, activeTab]);
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
     description: '',
@@ -616,6 +645,41 @@ function AgentFormPage() {
     });
   }, [appId, agentId, marketplaceProfile, mutate, t]);
 
+  /** All field errors at once, each on its field (tab order). */
+  const validateAgent = (): AgentFieldErrors => {
+    const errors: AgentFieldErrors = {};
+    // Same as the `required` on the field, but checked even when its tab isn't open.
+    if (!formData.name.trim()) errors.name = t('agentFormPage.validation.nameRequired');
+    // The template is formatted with the user message; without {question} the message is lost.
+    if (!formData.prompt_template.includes(DEFAULT_PROMPT_TEMPLATE)) {
+      errors.prompt_template = t('agentFormPage.validation.promptTemplateQuestion');
+    }
+    // Same as the `required` AI service select, which only regular (non-OCR) agents show.
+    if (formData.type !== 'ocr_agent' && !formData.service_id) {
+      errors.service_id = t('agentFormPage.validation.aiServiceRequired');
+    }
+    // Mirror the backend invariant: a threshold strategy needs a threshold value.
+    if (formData.rag_search_type === 'similarity_score_threshold' && formData.rag_score_threshold == null) {
+      errors.rag_score_threshold = t('agentFormPage.validation.scoreThresholdRequired');
+    }
+    // Mirror the backend invariant: conversational agents keep uploaded documents in a
+    // per-conversation temp silo, which needs an embedding service.
+    if (formData.has_memory && !formData.media_embedding_service_id) {
+      errors.media_embedding_service_id = t('agentFormPage.validation.mediaEmbeddingRequired');
+    }
+    return errors;
+  };
+
+  const validationErrors = validateAgent();
+  const fieldErrors: AgentFieldErrors = submitAttempted ? validationErrors : {};
+  const errorFields = Object.keys(fieldErrors) as AgentFieldKey[];
+
+  /** Switch to the field's tab and focus it once the tab has rendered. */
+  const goToField = (field: AgentFieldKey) => {
+    setActiveTab(AGENT_FIELDS[field].tab);
+    setPendingFocusField(field);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -624,25 +688,11 @@ function AgentFormPage() {
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
 
-    // The template is formatted with the user message; without {question} the message is lost.
-    if (!formData.prompt_template.includes(DEFAULT_PROMPT_TEMPLATE)) {
-      setActiveTab('prompts');
-      setError(t('agentFormPage.validation.promptTemplateQuestion'));
-      return;
-    }
-
-    // Mirror the backend invariant: a threshold strategy needs a threshold value.
-    if (usesThreshold && formData.rag_score_threshold == null) {
-      setActiveTab('configuration');
-      setError(t('agentFormPage.validation.scoreThresholdRequired'));
-      return;
-    }
-
-    // Mirror the backend invariant: conversational agents keep uploaded documents in a
-    // per-conversation temp silo, which needs an embedding service.
-    if (formData.has_memory && !formData.media_embedding_service_id) {
-      setActiveTab('configuration');
-      setError(t('agentFormPage.validation.mediaEmbeddingRequired'));
+    setSubmitAttempted(true);
+    const firstInvalid = (Object.keys(validationErrors) as AgentFieldKey[])[0];
+    if (firstInvalid) {
+      // Take the user to the first field to fix, in its tab.
+      goToField(firstInvalid);
       return;
     }
 
@@ -774,10 +824,18 @@ function AgentFormPage() {
     submitButtonLabel = t('agentFormPage.saving.saveChanges');
   }
 
+  // Per-tab error counter (spec): "Configuración (2)" while that tab has fields to fix.
+  const tabErrorCount = (tabId: string) =>
+    errorFields.filter((field) => AGENT_FIELDS[field].tab === tabId).length;
+  const tabLabel = (tabId: string, label: string) => {
+    const count = tabErrorCount(tabId);
+    return count > 0 ? `${label} (${count})` : label;
+  };
+
   const tabs: TabItem[] = [
-    { id: 'basic', label: t('agentFormPage.tabs.basic') },
-    { id: 'prompts', label: t('agentFormPage.tabs.prompts') },
-    { id: 'configuration', label: t('agentFormPage.tabs.configuration') },
+    { id: 'basic', label: tabLabel('basic', t('agentFormPage.tabs.basic')) },
+    { id: 'prompts', label: tabLabel('prompts', t('agentFormPage.tabs.prompts')) },
+    { id: 'configuration', label: tabLabel('configuration', t('agentFormPage.tabs.configuration')) },
     { id: 'advanced', label: t('agentFormPage.tabs.advanced') },
     { id: 'marketplace', label: t('agentFormPage.tabs.marketplace') },
     {
@@ -796,42 +854,52 @@ function AgentFormPage() {
       <div className="max-w-4xl mx-auto">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
-          {/*<div>
-            <h1 className="text-3xl font-bold text-fg dark:text-fg-dark">
-              {pageTitle}
-            </h1>
-            <p className="text-gray-600 mt-2">
-              {pageDescription}
-            </p>
-          </div>*/}
           <Title
             titulo={pageTitle}
             subtitulo={pageDescription}
             variant="titPrincipal"
             subtitleMarginBottom={0}
           />
-          {/*<button
-            onClick={() => navigate(`/apps/${appId}/agents`)}
-            className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-fg-secondary dark:text-fg-secondary-dark shadow-sm border border-gray-200 transition-all duration-200"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {' '}
-            Back to Agents
-          </button>*/}
         </div>
 
         {agent && (
           <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="mb-6" />
         )}
 
-        {/* Error Message */}
+        {/* Load / server error */}
         {error && (
+          <div ref={errorBannerRef} tabIndex={-1} className="mb-6 scroll-mt-4 rounded-lg outline-none">
+            <Alert
+              type="error"
+              title={t('agentFormPage.errors.title')}
+              message={error}
+              onDismiss={() => setError(null)}
+            />
+          </div>
+        )}
+
+        {/* Validation summary: with 2+ errors, or when the field isn't on screen (threshold
+            without a silo hides the RAG section). Each item opens its tab and focuses the field. */}
+        {(errorFields.length >= 2 || (fieldErrors.rag_score_threshold && !formData.silo_id)) && (
           <Alert
             type="error"
-            title={t('agentFormPage.errors.title')}
-            message={error}
+            title={t('agentFormPage.validation.summaryTitle', { count: errorFields.length })}
             className="mb-6"
-            onDismiss={() => setError(null)}
+            message={(
+              <ul className="list-disc space-y-1 pl-4">
+                {errorFields.map((field) => (
+                  <li key={field}>
+                    <button
+                      type="button"
+                      onClick={() => goToField(field)}
+                      className="text-left underline underline-offset-2"
+                    >
+                      {fieldErrors[field]}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           />
         )}
 
@@ -848,16 +916,6 @@ function AgentFormPage() {
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (
             <section className="">
-              {/*<div className="mb-7 flex items-center gap-3 border-b border-line pb-5 dark:border-line-dark">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-hover dark:bg-surface-hover-dark">
-                  <FileText className="h-5 w-5 text-ink dark:text-ink-dark" aria-hidden="true" />
-                </div>
-                <div>
-                  <h3 className="font-display text-lg font-medium text-ink dark:text-ink-dark">Basic Information</h3>
-                  <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">Agent identity and type</p>
-                </div>
-              </div>*/}
-
               <div className="grid grid-cols-1 gap-y-5">
                 <div className="w-full">
                 <FormField
@@ -866,6 +924,7 @@ function AgentFormPage() {
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   required
+                  error={fieldErrors.name}
                   placeholder={t('agentFormPage.fields.namePlaceholder')}
                   className="mb-4"
                 />
@@ -897,7 +956,7 @@ function AgentFormPage() {
 
           {/* TAB 2: PROMPTS */}
           {activeTab === 'prompts' && (
-            <CardApp variant="white" className="p-8" icon={MessageSquare} titulo={t('agentFormPage.prompts.title')}>
+            <CardApp variant="white" icon={MessageSquare} titulo={t('agentFormPage.prompts.title')}>
               <div className="space-y-6">
                 <FormTextArea
                   label={t('agentFormPage.prompts.systemPrompt')}
@@ -915,6 +974,7 @@ function AgentFormPage() {
                     value={formData.prompt_template}
                     onChange={(e) => handleInputChange('prompt_template', e.target.value)}
                     rows={4}
+                    error={fieldErrors.prompt_template}
                     placeholder={t('agentFormPage.prompts.templatePlaceholder')}
                   />
                   <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> {t('agentFormPage.prompts.templateHint', { question: '{question}' })}</p>
@@ -929,7 +989,7 @@ function AgentFormPage() {
               {/* Configuration for regular agents */}
               {formData.type !== 'ocr_agent' && (
                 <>
-                  <CardApp variant="white" className="p-8" icon={Settings} titulo={t('agentFormPage.configuration.title')}>
+                  <CardApp variant="white" icon={Settings} titulo={t('agentFormPage.configuration.title')}>
                     {/* No AI Services Warning */}
                     {agent?.ai_services.length === 0 && renderNoAIServicesWarning(false)}
 
@@ -942,6 +1002,7 @@ function AgentFormPage() {
                           value={formData.service_id || ''}
                           onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                           required
+                          error={fieldErrors.service_id}
                           options={[
                             { value: '', label: t('agentFormPage.configuration.selectAiService') },
                             ...selectableServiceOptions(agent?.ai_services, agent?.service_id).map((service) => ({
@@ -1024,7 +1085,7 @@ function AgentFormPage() {
                   )}
 
                   {/* Agent Capabilities Card */}
-                  <CardApp variant="white" className="p-8" icon={Zap} titulo="Capabilities">
+                  <CardApp variant="white" icon={Zap} titulo={t('agentFormPage.capabilities.title')}>
                     {/* MCP Warning Dialog */}
                     {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
                       <Alert
@@ -1115,7 +1176,7 @@ function AgentFormPage() {
                       {formData.enable_code_interpreter && (
                         <div className="md:col-span-2">
                           <FormSelect
-                            label="Sandbox Service"
+                            label={t('agentFormPage.capabilities.sandboxService')}
                             id="sandbox_service"
                             ariaDescribedBy={serviceStatusId(agent?.sandbox_services, formData.sandbox_service_id, 'sandbox_service')}
                             value={formData.sandbox_service_id || ''}
@@ -1218,7 +1279,6 @@ function AgentFormPage() {
 
                   {/* Media Processing Card */}
                   <CardApp
-                    className="p-8"
                     icon={Tv}
                     titulo={t('agentFormPage.media.title')}
                     subtitulo={t('agentFormPage.media.description')}
@@ -1239,6 +1299,7 @@ function AgentFormPage() {
                           })),
                         ]}
                         helpText={t('agentFormPage.media.embeddingServiceHelp')}
+                        error={fieldErrors.media_embedding_service_id}
                       />
                       <ServiceOptionStatus selectId="media_embedding_service" options={embeddingServices} selectedId={formData.media_embedding_service_id} />
                     </div>
@@ -1333,25 +1394,17 @@ function AgentFormPage() {
               )}
               {/* Configuration for OCR agents */}
               {formData.type === 'ocr_agent' && (
-                <CardApp   className="p-8">
-                  <div className="flex items-center mb-6">
-                    <BackgroundImage icon={FileText} size={40} iconSize={20} className='mr-2'/>
-                      <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">OCR Configuration</h3>
-                  </div>
-
+                <CardApp titulo={t('agentFormPage.ocr.title')} icon={FileText}>
+                  
                   {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
-                  <CardApp variant="canvas" className="p-6 mb-6">
-                    <div className="flex items-center mb-4">
-                      <BackgroundImage icon={Zap} size={40} iconSize={20} className='mr-2'/>
-                      <h4 className="text-base font-semibold text-fg dark:text-fg-dark">Capabilities</h4>
-                    </div>
+                  <CardApp variant="canvas" icon={Zap} titulo={t('agentFormPage.capabilities.title')} className="p-6">
                     <div className="space-y-4">
                       <ButtonCard
                         variant="selectable-check"
                         selected={formData.is_tool}
-                        ariaLabel="Toggle Tool Agent"
-                        checkboxLabel="Tool Agent"
-                        checkboxHelpText="Can be used by other agents (including OCR tools)"
+                        ariaLabel={t('agentFormPage.capabilities.toggle', { item: t('agentFormPage.capabilities.toolAgent') })}
+                        checkboxLabel={t('agentFormPage.capabilities.toolAgent')}
+                        checkboxHelpText={t('agentFormPage.ocr.toolAgentHelp')}
                         onClick={() => {
                           if (formData.is_tool && mcpUsage && mcpUsage.mcp_servers.length > 0) {
                             setShowMcpWarning(true);
@@ -1363,7 +1416,7 @@ function AgentFormPage() {
                       >
                         {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
                           <p className="ml-7 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                            Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
+                            {t('agentFormPage.capabilities.usedInMcpServers', { count: mcpUsage.mcp_servers.length })}
                           </p>
                         )}
                       </ButtonCard>
@@ -1376,13 +1429,13 @@ function AgentFormPage() {
                   <div className="space-y-6">
                     <div>
                       <FormSelect
-                        label="Modelo de Visión"
+                        label={t('agentFormPage.ocr.visionModel')}
                         id="vision_service"
                         ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.vision_service_id, "vision_service")}
                         value={formData.vision_service_id || ''}
                         onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         options={[
-                          { value: '', label: '-- Seleccionar modelo de visión --' },
+                          { value: '', label: t('agentFormPage.ocr.selectVisionModel') },
                           ...selectableServiceOptions(agent?.ai_services, agent?.vision_service_id).map((service) => ({
                             value: service.service_id,
                             label: serviceOptionLabel(service),
@@ -1394,24 +1447,24 @@ function AgentFormPage() {
 
                     <div>
                       <FormTextArea
-                        label="System Prompt (Visión)"
+                        label={t('agentFormPage.ocr.visionPrompt')}
                         id="vision_system_prompt"
                         value={formData.vision_system_prompt || ''}
                         onChange={(e) => handleInputChange('vision_system_prompt', e.target.value)}
                         rows={2}
-                        placeholder="Añade el system prompt para el modelo de visión..."
+                        placeholder={t('agentFormPage.ocr.visionPromptPlaceholder')}
                       />
                     </div>
 
                     <div>
                       <FormSelect
-                        label="Modelo de Texto"
+                        label={t('agentFormPage.ocr.textModel')}
                         id="text_service"
                         ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.service_id, "text_service")}
                         value={formData.service_id || ''}
                         onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
                         options={[
-                          { value: '', label: '-- Seleccionar modelo de texto --' },
+                          { value: '', label: t('agentFormPage.ocr.selectTextModel') },
                           ...selectableServiceOptions(agent?.ai_services, agent?.service_id).map((service) => ({
                             value: service.service_id,
                             label: serviceOptionLabel(service),
@@ -1423,12 +1476,12 @@ function AgentFormPage() {
 
                     <div>
                       <FormTextArea
-                        label="System Prompt (Texto)"
+                        label={t('agentFormPage.ocr.textPrompt')}
                         id="text_system_prompt"
                         value={formData.text_system_prompt || ''}
                         onChange={(e) => handleInputChange('text_system_prompt', e.target.value)}
                         rows={2}
-                        placeholder="Añade el system prompt para el modelo de texto..."
+                        placeholder={t('agentFormPage.ocr.textPromptPlaceholder')}
                       />
                     </div>
 
@@ -1451,14 +1504,12 @@ function AgentFormPage() {
               {/* Tools Card - Only for regular agents */}
               {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
                 <CardApp
-                  className="p-8"
                   icon={Wrench}
-                  titulo="Available Tools"
+                  titulo={t('agentFormPage.advanced.availableTools')}
                   headerExtra={formData.tool_ids.length > 0 && (
-                    <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-                      <span className="font-medium">{formData.tool_ids.length}</span>{' '}
-                      tool{formData.tool_ids.length === 1 ? '' : 's'} selected
-                    </span>
+                      <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                        {t('agentFormPage.advanced.toolsSelected', { count: formData.tool_ids.length })}
+                      </span>
                   )}
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1469,7 +1520,7 @@ function AgentFormPage() {
                           key={tool.agent_id}
                           variant="selectable-check"
                           selected={selected}
-                          ariaLabel={`Toggle ${tool.name}`}
+                          ariaLabel={t('agentFormPage.capabilities.toggle', { item: tool.name })}
                           checkboxLabel={tool.name}
                           onClick={() => handleToolToggle(tool.agent_id)}
                           className="w-full"
@@ -1485,16 +1536,15 @@ function AgentFormPage() {
                 <CardApp
                   variant="white"
                   icon={Plug}
-                  titulo="MCP Servers"
+                  titulo={t('agentFormPage.advanced.mcpServers')}
                   headerExtra={(
                     <div className="flex items-center gap-3">
                       {formData.mcp_config_ids.length > 0 && (
                         <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-                          <span className="font-medium">{formData.mcp_config_ids.length}</span>{' '}
-                          MCP server{formData.mcp_config_ids.length === 1 ? '' : 's'} selected
+                          {t('agentFormPage.advanced.mcpServersSelected', { count: formData.mcp_config_ids.length })}
                         </span>
                       )}
-                      <Badge variant="primary" label="Model Context Protocol" />
+                      <Badge variant="primary" label={t('agentFormPage.advanced.mcpProtocol')} />
                     </div>
                   )}
                 >
@@ -1502,8 +1552,8 @@ function AgentFormPage() {
                     <>
                       <Alert
                         type="info"
-                        title="What are MCP Servers?"
-                        message={'MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources.\nSelect the servers this agent should have access to.'}
+                        title={t('agentFormPage.advanced.mcpInfoTitle')}
+                        message={t('agentFormPage.advanced.mcpInfoMessage')}
                         className="mb-4"
                       />
                       
@@ -1524,12 +1574,12 @@ function AgentFormPage() {
                   ) : (
                     <div className="text-center py-8">
                       <BackgroundImage icon={Plug} size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
-                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No MCP Servers Available</h4>
+                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">{t('agentFormPage.advanced.noMcpServers')}</h4>
                       <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
-                        You haven't configured any MCP servers yet. Create MCP configurations in the settings to enable external tool access.
+                        {t('agentFormPage.advanced.noMcpServersDescription')}
                       </p>
                       <ButtonApp
-                        label="Configure MCP Servers"
+                        label={t('agentFormPage.advanced.configureMcpServers')}
                         onClick={() => navigate(`/apps/${appId}/settings/mcp-configs`)}
                         variant="primary"
                         size="medium"
@@ -1555,10 +1605,9 @@ function AgentFormPage() {
               {/* Skills Card - Only for regular agents */}
               {agent?.skills && formData.type !== 'ocr_agent' && (
                 <CardApp
-                  className="p-8"
                   icon={Target}
-                  titulo="Skills"
-                  subtitulo="Assign specialized behaviors that the agent can activate on-demand"
+                  titulo={t('agentFormPage.advanced.skills')}
+                  subtitulo={t('agentFormPage.advanced.skillsDescription')}
                 >
                   {agent.skills.length > 0 ? (
                     <>
@@ -1567,14 +1616,14 @@ function AgentFormPage() {
                           const selected = formData.skill_ids.includes(skill.skill_id);
                           const checkboxHelpText = [
                             skill.description,
-                            skill.is_system ? 'System skill.' : undefined,
-                            skill.is_enabled === false ? 'Disabled; ignored at execution until re-enabled.' : undefined,
+                            skill.is_system ? t('agentFormPage.advanced.systemSkill') : undefined,
+                            skill.is_enabled === false ? t('agentFormPage.advanced.disabledSkillHelp') : undefined,
                           ].filter(Boolean).join(' ') || undefined;
                           return (
                             <ButtonCard
                               key={skill.skill_id}
                               onClick={() => handleSkillToggle(skill.skill_id)}
-                              ariaLabel={`Toggle ${skill.name}`}
+                              ariaLabel={t('agentFormPage.capabilities.toggle', { item: skill.name })}
                               variant="selectable-check"
                               selected={selected}
                               checkboxLabel={skill.name}
@@ -1582,11 +1631,11 @@ function AgentFormPage() {
                               className="w-full"
                             >
                               {skill.is_system && (
-                                <Badge label="System" variant="info" className="mt-2 self-start" />
+                                <Badge label={t('agentFormPage.advanced.system')} variant="info" className="mt-2 self-start" />
                               )}
                               {skill.is_enabled === false && (
                                 <Badge
-                                  label="Disabled — ignored at execution until re-enabled"
+                                  label={t('agentFormPage.advanced.disabledSkillBadge')}
                                   variant="warning"
                                   icon={<AlertTriangle className="w-3 h-3" aria-hidden="true" />}
                                   className="mt-2 self-start"
@@ -1600,8 +1649,10 @@ function AgentFormPage() {
                       {formData.skill_ids.length > 0 && (
                         <div className="mt-4 rounded-md border border-line bg-surface-hover p-4 dark:border-line-dark dark:bg-surface-hover-dark">
                           <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-                            <span className="font-medium">{formData.skill_ids.length}</span> skill{formData.skill_ids.length === 1 ? '' : 's'} selected.
-                            The agent will have a <code className="rounded bg-surface-ash px-1 dark:bg-surface-dark">load_skill</code> tool to activate these skills.
+                            {t('agentFormPage.advanced.skillsSelected', { count: formData.skill_ids.length })}{' '}
+                            {t('agentFormPage.advanced.skillActivationPrefix')}{' '}
+                            <code className="rounded bg-surface-ash px-1 dark:bg-surface-dark">load_skill</code>{' '}
+                            {t('agentFormPage.advanced.skillActivationSuffix')}
                           </p>
                         </div>
                       )}
@@ -1609,12 +1660,12 @@ function AgentFormPage() {
                   ) : (
                     <div className="text-center py-8">
                       <BackgroundImage icon={Target} size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
-                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No Skills Available</h4>
+                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">{t('agentFormPage.advanced.noSkills')}</h4>
                       <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
-                        You haven't created any skills yet. Create skills in the settings to enable specialized agent behaviors.
+                        {t('agentFormPage.advanced.noSkillsDescription')}
                       </p>
                       <ButtonApp
-                        label="Manage Skills"
+                        label={t('agentFormPage.advanced.manageSkills')}
                         onClick={() => navigate(`/apps/${appId}/skills`)}
                         variant="primary"
                         size="medium"
@@ -1629,14 +1680,14 @@ function AgentFormPage() {
 
           {/* TAB 5: MARKETPLACE */}
           {activeTab === 'marketplace' && (
-            <CardApp className="p-8 mb-8" icon={Store} titulo="Marketplace Publishing">
+            <CardApp icon={Store} titulo={t('agentFormPage.marketplace.title')}>
               {/* New agent: prompt user to save first */}
               {isNewAgent ? (
                 <Alert
                   type="info"
-                  title="Agent not saved"
+                  title={t('agentFormPage.marketplace.agentNotSaved')}
                   className="mb-8"
-                  message="Save the agent first to configure marketplace publishing."
+                  message={t('agentFormPage.marketplace.saveFirstMessage')}
                 />
               ) : (
               <>
@@ -1644,21 +1695,21 @@ function AgentFormPage() {
               <div className="mb-6">
                 <div className="flex items-center gap-4">
                   <FormSelect
-                    label="Marketplace Visibility"
+                    label={t('agentFormPage.marketplace.visibility')}
                     id="marketplace-visibility"
                     value={marketplaceVisibility}
                     onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
                     disabled={formData.is_tool}
                     options={[
-                      { value: 'unpublished', label: 'Unpublished (not listed)' },
-                      { value: 'private', label: 'Private (visible to app members only)' },
-                      { value: 'public', label: 'Public (visible to all users)' },
+                      { value: 'unpublished', label: t('agentFormPage.marketplace.unpublished') },
+                      { value: 'private', label: t('agentFormPage.marketplace.private') },
+                      { value: 'public', label: t('agentFormPage.marketplace.public') },
                     ]}
                     className="w-fit"
                     
                   />
                   {formData.is_tool && (
-                    <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark ml-2">Tool agents cannot be published to the marketplace</span>
+                    <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark ml-2">{t('agentFormPage.marketplace.toolCannotPublish')}</span>
                   )}
                 </div>
               </div>
@@ -1666,55 +1717,55 @@ function AgentFormPage() {
               {showMarketplace && (
                 <div className="space-y-6">
                   <FormField
-                    label="Display Name"
+                    label={t('agentFormPage.marketplace.displayName')}
                     id="marketplace-display-name"
                     value={marketplaceProfile.display_name ?? ''}
                     onChange={(e) => handleMarketplaceProfileChange('display_name', e.target.value)}
                     maxLength={255}
-                    placeholder="Defaults to agent name if empty"
+                    placeholder={t('agentFormPage.marketplace.displayNamePlaceholder')}
                   />
                   <FormTextArea
-                    label="Short Description"
+                    label={t('agentFormPage.marketplace.shortDescription')}
                     id="marketplace-short-description"
                     value={marketplaceProfile.short_description ?? ''}
                     onChange={(e) => handleMarketplaceProfileChange('short_description', e.target.value)}
                     maxLength={200}
                     rows={2}
-                    helpText={`${marketplaceProfile.short_description?.length ?? 0}/200 characters`}
+                    helpText={t('agentFormPage.marketplace.charactersCount', { count: marketplaceProfile.short_description?.length ?? 0, max: 200 })}
                   />
                   <FormTextArea
-                    label="Long Description"
+                    label={t('agentFormPage.marketplace.longDescription')}
                     id="marketplace-long-description"
                     value={marketplaceProfile.long_description ?? ''}
                     onChange={(e) => handleMarketplaceProfileChange('long_description', e.target.value)}
                     rows={4}
-                    placeholder="Supports Markdown"
+                    placeholder={t('agentFormPage.marketplace.markdownPlaceholder')}
                   />
                   <FormSelect
-                    label="Category"
+                    label={t('agentFormPage.marketplace.category')}
                     id="marketplace-category"
                     value={marketplaceProfile.category ?? ''}
                     onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
                     options={[
-                      { value: '', label: '-- Select a category --' },
+                      { value: '', label: t('agentFormPage.marketplace.selectCategory') },
                       ...MARKETPLACE_CATEGORIES.map((category) => ({
                         value: category,
-                        label: category,
+                        label: t(`agentFormPage.marketplace.categories.${category.replace(/\s/g, '')}`, { defaultValue: category }),
                       })),
                     ]}
                   />
                   <div>
-                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">Tags</label>
+                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">{t('agentFormPage.marketplace.tags')}</label>
                     <TagInput
                       id="marketplace-tags"
                       tags={marketplaceProfile.tags ?? []}
                       onChange={(tags) => handleMarketplaceProfileChange('tags', tags)}
                       maxTags={5}
-                      placeholder="Add up to 5 tags"
+                      placeholder={t('agentFormPage.marketplace.tagsPlaceholder')}
                     />
                   </div>
                     <FormField
-                      label="Icon URL"
+                      label={t('agentFormPage.marketplace.iconUrl')}
                       id="marketplace-icon-url"
                       value={marketplaceProfile.icon_url ?? ''}
                       onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
@@ -1723,13 +1774,13 @@ function AgentFormPage() {
                     {marketplaceProfile.icon_url && (
                       <img
                         src={marketplaceProfile.icon_url}
-                        alt="Icon preview"
+                        alt={t('agentFormPage.marketplace.iconPreview')}
                         className="mt-2 w-10 h-10 rounded"
                         onError={(e) => (e.currentTarget.style.display = 'none')}
                       />
                     )}
                     <FormField
-                      label="Cover Image URL"
+                      label={t('agentFormPage.marketplace.coverImageUrl')}
                       id="marketplace-cover-image-url"
                       value={marketplaceProfile.cover_image_url ?? ''}
                       onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
@@ -1738,15 +1789,15 @@ function AgentFormPage() {
                     {marketplaceProfile.cover_image_url && (
                       <img
                         src={marketplaceProfile.cover_image_url}
-                        alt="Cover preview"
+                        alt={t('agentFormPage.marketplace.coverPreview')}
                         className="mt-2 w-32 h-16 rounded object-cover"
                         onError={(e) => (e.currentTarget.style.display = 'none')}
                       />
                     )}
                    <div>
-                     <label className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-3">Conversation Starters</label>
+                     <label className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-3">{t('agentFormPage.marketplace.conversationStarters')}</label>
                      <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
-                       Suggested opening messages for users. These only appear at the start of a new conversation.
+                       {t('agentFormPage.marketplace.conversationStartersDescription')}
                      </p>
                      <div className="space-y-3">
                        {marketplaceProfile.conversation_starters?.map((starter, idx) => (
@@ -1755,7 +1806,7 @@ function AgentFormPage() {
                              ref={(el) => {
                                starterRefs.current[idx] = el;
                              }}
-                             label={`Conversation starter ${idx + 1}`}
+                             label={t('agentFormPage.marketplace.conversationStarterLabel', { number: idx + 1 })}
                              id={`marketplace-conversation-starter-${idx}`}
                              value={starter}
                              onChange={(e) => {
@@ -1766,10 +1817,11 @@ function AgentFormPage() {
                              className="flex-1"
                              labelClassName="sr-only"
                              inputClassName="px-4 py-2"
-                             placeholder="Enter a starter prompt..."
+                             placeholder={t('agentFormPage.marketplace.starterPlaceholder')}
                            />
                            <button
                              type="button"
+                             aria-label={t('agentFormPage.marketplace.removeStarter')}
                              onClick={() => {
                                const newStarters = marketplaceProfile.conversation_starters?.filter((_, i) => i !== idx) || [];
                                handleMarketplaceProfileChange('conversation_starters', newStarters);
@@ -1781,7 +1833,7 @@ function AgentFormPage() {
                          </div>
                        ))}
                        <ButtonApp
-                         label="Add Starter"
+                         label={t('agentFormPage.marketplace.addStarter')}
                          onClick={() => {
                            const newStarters = [...(marketplaceProfile.conversation_starters || []), ''];
                            handleMarketplaceProfileChange('conversation_starters', newStarters);

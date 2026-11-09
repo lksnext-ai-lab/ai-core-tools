@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpRight, Bot, Copy, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Bot, Copy, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
@@ -135,6 +135,25 @@ function MCPServerPanelView({ server, appId, canEdit, onDelete }: Readonly<Panel
         </div>
       )}
 
+      <Alert
+        type="info"
+        title={t('mcpServerDetailPage.sections.authenticationRequired')}
+        message={
+          <>
+            <p>
+              {t('mcpServerDetailPage.messages.apiKeyRequired')} <code>X-API-KEY</code>.
+            </p>
+            <Link
+              to={`/apps/${appId}/settings/api-keys`}
+              className="mt-1 inline-block text-sm text-info dark:text-info-dark"
+            >
+              {t('mcpServerDetailPage.actions.manageApiKeys')}
+              <ArrowUpRight className="ml-1 inline-block h-4 w-4" aria-hidden="true" />
+            </Link>
+          </>
+        }
+      />
+
       <SegmentedTabs
         tabs={panelTabs}
         activeTab={tab}
@@ -263,23 +282,6 @@ function MCPServerPanelView({ server, appId, canEdit, onDelete }: Readonly<Panel
           ) : (
             <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{t('mcpServerDetailPage.messages.noConnectionInstructions')}</p>
           )}
-          <div className="mt-5 space-y-1.5">
-            <h5 className="flex items-center gap-2 text-sm font-medium text-fg dark:text-fg-dark">
-              <ShieldCheck className="h-4 w-4 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
-              {t('mcpServerDetailPage.sections.authenticationRequired')}
-            </h5>
-            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-              {t('mcpServerDetailPage.messages.apiKeyRequired')} <code>X-API-KEY</code>.
-            </p>
-            <Link
-              to={`/apps/${appId}/settings/api-keys`}
-              className="text-sm text-bronze  dark:text-bronze-dark inline-block"
-            >
-              {t('mcpServerDetailPage.actions.manageApiKeys')}
-              <ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
-
-            </Link>
-          </div>
         </CardApp>
       )}
     </div>

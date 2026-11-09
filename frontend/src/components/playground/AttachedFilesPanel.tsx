@@ -1,4 +1,4 @@
-import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Film } from 'lucide-react';
+import { FileText, Image, FileType, ArrowDown, FolderOpen, Paperclip, Check, X, Film, Download } from 'lucide-react';
 import { Spinner } from '../ui/Spinner';
 import { useTranslation } from 'react-i18next';
 
@@ -19,6 +19,9 @@ interface AttachedFilesPanelProps {
   onRemoveFile: (id: string) => void;
   onDownloadFile?: (id: string) => void;
   title?: string;
+  /** `panel` (default): bordered side column. `section`: bordered card with
+   *  separator rows, used in the Agent Playground right column. */
+  variant?: 'panel' | 'section';
 }
 
 // Same palette as the Badge component variants (success / error / warning / info).
@@ -57,8 +60,113 @@ export default function AttachedFilesPanel({
   onRemoveFile,
   onDownloadFile,
   title,
+  variant = 'panel',
 }: Readonly<AttachedFilesPanelProps>) {
   const { t } = useTranslation('common');
+
+  if (variant === 'section') {
+    const heading = title ?? t('attachedFiles.title');
+    return (
+      <section
+        aria-label={heading}
+        className="rounded-lg border border-line px-3.5 pb-1.5 pt-3.5 dark:border-line-dark"
+      >
+        <h2 className="mb-2 font-display text-[15px] font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
+          {heading}{' '}
+          <span className="font-sans text-[12px] tracking-normal text-fg-tertiary dark:text-fg-tertiary-dark">
+            {files.length}
+          </span>
+        </h2>
+
+        {isLoading && (
+          <div className="flex items-center gap-2 border-t border-line py-2 text-[12.5px] text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark">
+            <Spinner size="sm" tone="muted" />
+            {t('attachedFiles.uploading')}
+          </div>
+        )}
+
+        {!isLoading && files.length === 0 && (
+          <p className="border-t border-line py-2 text-[12.5px] text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark">
+            {t('attachedFiles.emptyTitle')}. {t('attachedFiles.emptyDescription')}
+          </p>
+        )}
+
+        {files.map((file) => {
+          const displayStatus = getDisplayStatus(file.processing_status);
+          return (
+            <div
+              key={file.id}
+              className="group flex items-center justify-between gap-2.5 border-t border-line py-2 text-[12.5px] dark:border-line-dark"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-fg dark:text-fg-dark" title={file.filename}>
+                  {file.filename}
+                </span>
+                <span className="block truncate text-fg-tertiary dark:text-fg-tertiary-dark">
+                  {[
+                    file.file_size_display,
+                    file.has_extractable_content !== undefined
+                      ? t(`attachedFiles.${getExtractableLabel(file.file_type, file.has_extractable_content)}`)
+                      : undefined,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+                {displayStatus === 'error' && file.error_message && (
+                  <span className="mt-0.5 block line-clamp-2 text-error dark:text-error-dark" title={file.error_message}>
+                    {file.error_message}
+                  </span>
+                )}
+              </span>
+
+              {file.file_type === 'output' && (
+                <span className="flex-none rounded-full bg-info-bg px-[9px] py-0.5 text-[11px] text-info dark:bg-info-bg-dark dark:text-info-dark">
+                  {t('attachedFiles.generated')}
+                </span>
+              )}
+              {file.processing_status && file.file_type !== 'output' && (
+                <span className={`inline-flex flex-none items-center gap-1 rounded-full px-[9px] py-0.5 text-[11px] ${getStatusClassName(file.processing_status)}`}>
+                  {displayStatus !== 'ready' && displayStatus !== 'error' && (
+                    <Spinner size="xs" tone="current" />
+                  )}
+                  {displayStatus === 'ready' && t('attachedFiles.status.ready')}
+                  {displayStatus === 'error' && t('attachedFiles.status.error')}
+                  {displayStatus === 'pending' && t('attachedFiles.status.pending')}
+                  {displayStatus === 'processing' && t('attachedFiles.status.processing')}
+                  {displayStatus === 'transcribing' && t('attachedFiles.status.transcribing')}
+                  {displayStatus === 'analyzing_video' && t('attachedFiles.status.analyzingVideo')}
+                  {displayStatus === 'downloading' && t('attachedFiles.status.downloading')}
+                  {displayStatus === 'indexing' && t('attachedFiles.status.indexing')}
+                </span>
+              )}
+
+              <span className="flex flex-none items-center">
+                {onDownloadFile && (
+                  <button
+                    type="button"
+                    onClick={() => onDownloadFile(file.id)}
+                    className="rounded p-1 text-fg-tertiary transition-colors hover:text-fg dark:text-fg-tertiary-dark dark:hover:text-fg-dark"
+                    title={t('attachedFiles.downloadFile')}
+                    aria-label={t('attachedFiles.downloadFileNamed', { filename: file.filename })}
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemoveFile(file.id)}
+                  className="rounded p-1 text-fg-tertiary transition-colors hover:text-error dark:text-fg-tertiary-dark dark:hover:text-error-dark"
+                  title={t('attachedFiles.removeFile')}
+                  aria-label={t('attachedFiles.removeFileNamed', { filename: file.filename })}
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </span>
+            </div>
+          );
+        })}
+      </section>
+    );
+  }
+
   return (
     <div className="w-64 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-full max-h-full min-h-0">
       {/* Header */}

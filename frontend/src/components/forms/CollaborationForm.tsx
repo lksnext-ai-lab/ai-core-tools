@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type SubmitEvent } from "react";
+import { useTranslation } from 'react-i18next';
 import Alert from '../ui/Alert';
 import { Spinner } from '../ui/Spinner';
 import { ButtonApp } from '../ui/ButtonApp';
@@ -18,13 +19,8 @@ interface CollaborationFormProps {
   readonly loading?: boolean;
 }
 
-const ROLE_DESCRIPTIONS: Record<string, string> = {
-  editor: "Can view and edit app content, agents, and settings. Cannot invite users or manage collaborators.",
-  administrator: "Same as editor but can also change roles of other collaborators.",
-  viewer: "Can view app content and analytics but cannot modify settings or manage collaborators.",
-};
-
 function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps) {
+  const { t } = useTranslation('common');
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PlatformUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<PlatformUser | null>(null);
@@ -143,16 +139,16 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
     setResults([]);
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedUser) { setError("Please select a user from the list"); return; }
+    if (!selectedUser) { setError(t('collaborationForm.errors.selectUser')); return; }
     setIsSubmitting(true);
     setError(null);
     try {
       await onSubmit(selectedUser.email, role);
       clearSelection();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send invitation");
+      setError(err instanceof Error ? err.message : t('collaborationForm.errors.sendInvitationFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -170,7 +166,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
           <div ref={dropdownRef} className="relative">
             <div className="relative">
               <FormField
-                label="User"
+                label={t('collaborationForm.user')}
                 id="collab-user"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); if (selectedUser) setSelectedUser(null); }}
@@ -180,7 +176,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                 }}
                 onBlur={() => { isInputFocusedRef.current = false; }}
                 onKeyDown={handleInputKeyDown}
-                placeholder="Search by name or email…"
+                placeholder={t('collaborationForm.searchPlaceholder')}
                 disabled={isSubmitting || loading}
                 inputClassName="pr-10"
                 autoComplete="off"
@@ -198,7 +194,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                 <button
                   type="button"
                   onClick={clearSelection}
-                  aria-label="Clear selection"
+                  aria-label={t('collaborationForm.clearSelection')}
                   className="absolute right-3 top-[calc(100%-1.1875rem)] -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   ✕
@@ -233,12 +229,12 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                       </div>
                       {u.is_omniadmin && (
                         <span className="shrink-0 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                          Protected · Admin
+                          {t('collaborationForm.protectedAdmin')}
                         </span>
                       )}
                       {!u.is_omniadmin && u.platform_role === 'viewer' && (
                         <span className="shrink-0 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                          Viewer
+                          {t('collaborationForm.viewer')}
                         </span>
                       )}
                     </button>
@@ -248,7 +244,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
             )}
 
             {query.length >= 1 && !searching && results.length === 0 && !selectedUser && (
-              <p className="mt-1 text-sm text-gray-500">No users found matching "{query}"</p>
+              <p className="mt-1 text-sm text-gray-500">{t('collaborationForm.noUsersFound', { query })}</p>
             )}
           </div>
         </div>
@@ -257,30 +253,30 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
         <div>
           <FormSelect
             id="collab-role"
-            label="Invitation Role"
+            label={t('collaborationForm.invitationRole')}
             value={role}
             onChange={(e) => setRole(e.target.value)}
             disabled={isViewerLocked || isSubmitting || loading}
             options={[
               ...(isViewerLocked ? [] : [
-                { value: 'editor', label: 'Editor' },
-                { value: 'administrator', label: 'Administrator' },
+                { value: 'editor', label: t('collaborationForm.roles.editor') },
+                { value: 'administrator', label: t('collaborationForm.roles.administrator') },
               ]),
-              { value: 'viewer', label: 'Viewer' },
+              { value: 'viewer', label: t('collaborationForm.roles.viewer') },
             ]}
           />
           {selectedUser?.is_omniadmin && (
             <p className="mt-1 text-sm text-amber-600">
-              This is a protected admin account (configured via server settings).
+              {t('collaborationForm.protectedAdminNotice')}
             </p>
           )}
           {isViewerLocked && (
             <p className="mt-1 text-sm text-amber-600">
-              This user has a Viewer platform role and can only be invited as a Viewer.
+              {t('collaborationForm.viewerRoleNotice')}
             </p>
           )}
           {!isViewerLocked && !selectedUser?.is_omniadmin && (
-            <p className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{ROLE_DESCRIPTIONS[role]}</p>
+            <p className="mt-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{t(`collaborationForm.roleDescriptions.${role}`)}</p>
           )}
         </div>
       </div>
@@ -288,7 +284,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
       <div className="flex justify-end">
         <ButtonApp
           type="submit"
-          label={isSubmitting ? "Sending…" : "Send Invitation"}
+          label={isSubmitting ? t('collaborationForm.sending') : t('collaborationForm.sendInvitation')}
           disabled={!selectedUser || loading}
           loading={isSubmitting}
         />

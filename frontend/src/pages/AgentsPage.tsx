@@ -21,6 +21,7 @@ import Title from '../components/ui/Title';
 import LoadingState from '../components/ui/LoadingState';
 import ButtonApp from '../components/ui/ButtonApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
+import Modal from '../components/ui/Modal';
 import { FormCheckbox } from '../components/ui/FormField';
 import { useTranslation } from 'react-i18next';
 
@@ -186,6 +187,11 @@ function AgentsPage() {
     setShowExportDialog(true);
   };
 
+  const handleCloseExportDialog = () => {
+    setShowExportDialog(false);
+    setAgentToExport(null);
+  };
+
   const handleExport = async () => {
     if (!agentToExport || !appId) return;
 
@@ -217,7 +223,7 @@ function AgentsPage() {
 
       setShowExportDialog(false);
       setAgentToExport(null);
-      toast.warning(t('agentsPage.export.successWarning'), {
+      toast.info(t('agentsPage.export.successWarning'), {
         duration: 7000,
       });
     } catch (err) {
@@ -279,10 +285,6 @@ function AgentsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        {/*<div>
-          <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-          <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
-        </div>*/}
         <Title
           titulo={t('agentsPage.title')}
           subtitulo={t('agentsPage.subtitle', { app: app?.name || appId })}
@@ -519,10 +521,13 @@ function AgentsPage() {
       )}
 
       {/* Export Dialog */}
-      {showExportDialog && agentToExport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-md p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('agentsPage.export.title')}</h3>
+      {agentToExport && (
+        <Modal
+          isOpen={showExportDialog}
+          onClose={handleCloseExportDialog}
+          title={t('agentsPage.export.title')}
+          size="medium"
+        >
             <p className="text-fg-secondary dark:text-fg-secondary-dark mb-4">
               {t('agentsPage.export.description', { name: agentToExport.name })}
             </p>
@@ -572,10 +577,7 @@ function AgentsPage() {
                 label={t('cancel')}
                 variant="secondary"
                 size="medium"
-                onClick={() => {
-                  setShowExportDialog(false);
-                  setAgentToExport(null);
-                }}
+                onClick={handleCloseExportDialog}
                 className="flex-1"
               />
               <ButtonApp
@@ -586,8 +588,7 @@ function AgentsPage() {
                 className="flex-1"
               />
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Import Stepper */}

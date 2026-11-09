@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Users, Upload, ArrowDownToLine, Pencil, Trash2,  BarChart2, Globe } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
@@ -43,6 +44,7 @@ interface EmbeddingService extends Partial<ServiceLifecycleFields> {
 
 function EmbeddingServicesPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -75,7 +77,7 @@ function EmbeddingServicesPage() {
     setIsModalOpen,
     setEditingService,
     forceReload,
-  } = useServicesManager<EmbeddingService>(appId, api as any, cache as any, { entity: 'embedding service' });
+  } = useServicesManager<EmbeddingService>(appId, api as any, cache as any, { entity: t('embeddingServicesPage.entity') });
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [usageService, setUsageService] = useState<{ id: number; name: string } | null>(null);
@@ -84,7 +86,7 @@ function EmbeddingServicesPage() {
   const { testAction, modal: connectionTestModal } = useServiceConnectionTest('embedding');
 
   async function testConnection(serviceId: number) {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('embeddingServicesPage.appIdNotFound'));
     const numericAppId = Number.parseInt(appId, 10);
     const apiService = (await import('../../services/api')).apiService;
     const detail = await apiService.getEmbeddingService(numericAppId, serviceId);
@@ -125,7 +127,7 @@ function EmbeddingServicesPage() {
       globalThis.URL.revokeObjectURL(url);
       a.remove();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to export service');
+      alert(err instanceof Error ? err.message : t('embeddingServicesPage.exportFailed'));
     } finally {
       setExportingServiceId(null);
     }
@@ -136,7 +138,7 @@ function EmbeddingServicesPage() {
     conflictMode: ConflictMode,
     newName?: string
   ): Promise<ImportResponse> {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('embeddingServicesPage.appIdNotFound'));
     
     try {
       const apiService = (await import('../../services/api')).apiService;
@@ -152,7 +154,7 @@ function EmbeddingServicesPage() {
         setShowImportModal(false);
         // Show success notification
         setNotification({
-          message: result.message || 'Import completed successfully',
+          message: result.message || t('embeddingServicesPage.importSucceeded'),
           type: 'success'
         });
         // Refresh the list
@@ -165,7 +167,7 @@ function EmbeddingServicesPage() {
     } catch (err) {
       // Show error notification
       setNotification({
-        message: err instanceof Error ? err.message : 'Import failed',
+        message: err instanceof Error ? err.message : t('embeddingServicesPage.importFailed'),
         type: 'error'
       });
       setTimeout(() => setNotification(null), 5000);
@@ -178,24 +180,24 @@ function EmbeddingServicesPage() {
     <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant='titSecundario' titulo="Embedding Services" subtitulo="Manage vector embedding models for document processing and search" />
+          <Title variant='titSecundario' titulo={t('embeddingServicesPage.title')} subtitulo={t('embeddingServicesPage.subtitle')} />
         </div>
-        <LoadingState variant="page" message="Loading embedding services..." />
+        <LoadingState variant="page" message={t('embeddingServicesPage.loading')} />
       </div>
   );
 
   if (error) return (
     <div className="p-6">
       <div className="flex items-center justify-between">
-          <Title variant='titSecundario' titulo="Embedding Services" subtitulo="Manage vector embedding models for document processing and search" />
+          <Title variant='titSecundario' titulo={t('embeddingServicesPage.title')} subtitulo={t('embeddingServicesPage.subtitle')} />
         </div>
 
       <Alert
         type="error"
         message={(
           <>
-            Error: {error}
-            <button type="button" onClick={() => { setIsModalOpen(false); setEditingService(null); }} className="mt-2 block underline">Try again</button>
+            {t('embeddingServicesPage.loadError', { error })}
+            <button type="button" onClick={() => { setIsModalOpen(false); setEditingService(null); }} className="mt-2 block underline">{t('embeddingServicesPage.tryAgain')}</button>
           </>
         )}
       />
@@ -205,18 +207,18 @@ function EmbeddingServicesPage() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <Title variant='titSecundario' titulo="Embedding Services" subtitulo="Manage vector embedding models for document processing and search" />
+        <Title variant='titSecundario' titulo={t('embeddingServicesPage.title')} subtitulo={t('embeddingServicesPage.subtitle')} />
         {canEdit && (
           <div className="flex gap-2">
             <ButtonApp
-              label="Import"
+              label={t('embeddingServicesPage.import')}
               onClick={() => setShowImportModal(true)}
               icon={<Upload className="w-4 h-4" aria-hidden="true" />}
               variant="secondary"
               size="medium"
             />
             <ButtonApp
-              label="Add Embedding Service"
+              label={t('embeddingServicesPage.addService')}
               onClick={handleCreate}
               icon={<span aria-hidden="true">+</span>}
               variant="primary"
@@ -242,7 +244,7 @@ function EmbeddingServicesPage() {
         stickyEdgeColumns
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
-          { header: 'Name', render: (service: EmbeddingService) => (
+          { header: t('embeddingServicesPage.columns.name'), render: (service: EmbeddingService) => (
             <div className="flex items-center gap-1.5">
               <BackgroundImage icon={Globe} variant='marron' />
               {canEdit && !service.is_system ? (
@@ -255,49 +257,55 @@ function EmbeddingServicesPage() {
               )}
             </div>
           ) },
-          { header: 'Model', accessor: 'model_name', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark' },
-          { header: 'Provider', render: (service: EmbeddingService) => (
+          { header: t('embeddingServicesPage.columns.model'), accessor: 'model_name', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark' },
+          { header: t('embeddingServicesPage.columns.provider'), render: (service: EmbeddingService) => (
             <ProviderBadge provider={service.provider} />
           ) },
-          { header: 'Status', render: (service: EmbeddingService) => (
+          { header: t('embeddingServicesPage.columns.status'), render: (service: EmbeddingService) => (
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           ) },
-          { header: 'Created', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
-          { header: 'Actions', sticky: 'right', className: 'relative', render: (service: EmbeddingService) => (
-            service.is_system ? (
-              <span className="flex flex-col items-center gap-1">
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">System</span>
-                <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
-              </span>
-            ) : canEdit ? (
-              <ActionDropdown triggerAriaLabel={`Actions for ${service.name}`} actions={[
+          { header: t('embeddingServicesPage.columns.created'), className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark', render: (service: EmbeddingService) => (service.created_at ? new Date(service.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('embeddingServicesPage.notAvailable')) },
+          { header: t('embeddingServicesPage.columns.actions'), sticky: 'right', className: 'relative', render: (service: EmbeddingService) => {
+            if (service.is_system) {
+              return (
+                <span className="flex flex-col items-center gap-1">
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">{t('embeddingServicesPage.system')}</span>
+                  <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
+                </span>
+              );
+            }
+
+            if (!canEdit) {
+              return <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />;
+            }
+
+            return (
+              <ActionDropdown triggerAriaLabel={t('embeddingServicesPage.actions.menuForService', { name: service.name })} actions={[
                 { label: SERVICE_USAGE_STRINGS.action, onClick: () => setUsageService({ id: service.service_id, name: service.name }), icon: <Users className="w-4 h-4" /> },
                 testAction(service.service_id, service.name, () => testConnection(service.service_id)),
                 {
-                  label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
+                  label: exportingServiceId === service.service_id ? t('embeddingServicesPage.actions.exporting') : t('embeddingServicesPage.actions.export'),
                   onClick: () => void handleExport(service.service_id),
                   icon: exportingServiceId === service.service_id ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                   variant: 'primary' as const,
                   disabled: exportingServiceId === service.service_id
                 },
-                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' },
-                { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' }
+                { label: t('embeddingServicesPage.actions.edit'), onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' },
+                { label: t('embeddingServicesPage.actions.delete'), onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' }
               ]} size="sm" />
-            ) : (
-              <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
-            )
-          ) }
+            );
+          } }
         ]}
         emptyIcon={<BackgroundImage icon={BarChart2} size={64} iconSize={32} />}
-        emptyMessage="No Embedding Services"
-        emptySubMessage="Add your first embedding service to enable vector search and document processing."
+        emptyMessage={t('embeddingServicesPage.empty.title')}
+        emptySubMessage={t('embeddingServicesPage.empty.subtitle')}
         loading={loading}
       />
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Add First Embedding Service"
+            label={t('embeddingServicesPage.addFirstService')}
             onClick={handleCreate}
             icon={<span aria-hidden="true">+</span>}
             variant="primary"
@@ -306,7 +314,7 @@ function EmbeddingServicesPage() {
         </div>
       )}
 
-      <Alert type="info" title="About Embedding Services" message="Embedding services convert text into high-dimensional vectors for semantic search, document similarity, and RAG (Retrieval-Augmented Generation) applications. Popular models include OpenAI's text-embedding-3-large, Mistral's mistral-embed, and local options like Ollama." className="mt-6" />
+      <Alert type="info" title={t('embeddingServicesPage.about.title')} message={t('embeddingServicesPage.about.message')} className="mt-6" />
 
       {isModalOpen && !editingService && (
         <ServiceWizard
@@ -323,6 +331,7 @@ function EmbeddingServicesPage() {
       {isModalOpen && editingService && (
         <CompactServiceEditor
           isOpen
+          variant="panel"
           kind="embedding"
           scope="app"
           appId={appId ? Number.parseInt(appId) : undefined}
@@ -335,12 +344,12 @@ function EmbeddingServicesPage() {
 
       {/* Service usage side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {usageService && appId && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
           <SidePanel
             open
             side="right"
             onClose={() => setUsageService(null)}
-            title="Embedding Services"
+            title={t('embeddingServicesPage.title')}
             headerActions={(
               <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
                 {SERVICE_USAGE_STRINGS.action}
@@ -371,7 +380,7 @@ function EmbeddingServicesPage() {
         onClose={() => setShowImportModal(false)}
         onImport={handleImport}
         componentType="embedding_service"
-        componentLabel="Embedding Service"
+            componentLabel={t('embeddingServicesPage.componentLabel')}
       />
     </div>
   );

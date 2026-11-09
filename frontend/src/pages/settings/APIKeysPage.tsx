@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { KeyRound, Pencil, PauseCircle, PlayCircle, Plus, Trash2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import APIKeyForm from '../../components/forms/APIKeyForm';
@@ -16,7 +17,7 @@ import ButtonApp from '../../components/ui/ButtonApp';
 import { Badge } from '../../components/ui/Badge';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
 import Title from '../../components/ui/Title';
 import BackgroundImage from '../../components/ui/BackgroundImage';
@@ -32,6 +33,7 @@ interface APIKey {
 
 function APIKeysPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -70,7 +72,7 @@ function APIKeysPage() {
       // Cache the response
       settingsCache.setAPIKeys(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      setError(err instanceof Error ? err.message : t('apiKeysPage.loadFailed'));
       console.error('Error loading API keys:', err);
     } finally {
       setLoading(false);
@@ -88,7 +90,7 @@ function APIKeysPage() {
       // Cache the response
       settingsCache.setAPIKeys(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      setError(err instanceof Error ? err.message : t('apiKeysPage.loadFailed'));
       console.error('Error loading API keys:', err);
     } finally {
       setLoading(false);
@@ -100,21 +102,22 @@ function APIKeysPage() {
 
     const target = apiKeys.find((k) => k.key_id === keyId);
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('API key'),
+      title: t('servicesManager.confirmDeleteTitle', { entity: t('apiKeysPage.entity') }),
       message: target
-        ? `Are you sure you want to delete "${target.name}"? Any application using it will lose access immediately.`
-        : MESSAGES.CONFIRM_DELETE_MESSAGE('API key'),
+        ? t('apiKeysPage.confirmDeleteNamed', { name: target.name })
+        : t('servicesManager.confirmDeleteMessage', { entity: t('apiKeysPage.entity') }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('apiKeysPage.actions.delete'),
+      cancelLabel: t('cancel'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteAPIKey(Number.parseInt(appId), keyId),
       {
-        loading: MESSAGES.DELETING('API key'),
-        success: MESSAGES.DELETED('API key'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('API key')),
+        loading: t('apiKeysPage.deleting'),
+        success: t('apiKeysPage.deleted'),
+        error: (err) => errorMessage(err, t('apiKeysPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -129,14 +132,12 @@ function APIKeysPage() {
 
     const target = apiKeys.find((k) => k.key_id === keyId);
     const willActivate = !target?.is_active;
-    const verb = willActivate ? 'Activating' : 'Deactivating';
-
     const result = await mutate(
       () => apiService.toggleAPIKey(Number.parseInt(appId), keyId),
       {
-        loading: `${verb} API key…`,
-        success: willActivate ? 'API key activated' : 'API key deactivated',
-        error: (err) => errorMessage(err, 'Failed to toggle API key'),
+        loading: willActivate ? t('apiKeysPage.activating') : t('apiKeysPage.deactivating'),
+        success: willActivate ? t('apiKeysPage.activated') : t('apiKeysPage.deactivated'),
+        error: (err) => errorMessage(err, t('apiKeysPage.toggleFailed')),
       },
     );
     if (result === undefined) return;
@@ -161,7 +162,7 @@ function APIKeysPage() {
       setEditingKey(key);
       setIsModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load API key details');
+      setError(err instanceof Error ? err.message : t('apiKeysPage.loadDetailsFailed'));
       console.error('Error loading API key:', err);
     }
   }
@@ -177,9 +178,9 @@ function APIKeysPage() {
           ? apiService.updateAPIKey(Number.parseInt(appId), editingKey.key_id, data)
           : apiService.createAPIKey(Number.parseInt(appId), data),
       {
-        loading: isUpdate ? MESSAGES.UPDATING('API key') : MESSAGES.CREATING('API key'),
-        success: isUpdate ? MESSAGES.UPDATED('API key') : MESSAGES.CREATED('API key'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('API key')),
+        loading: isUpdate ? t('apiKeysPage.updating') : t('apiKeysPage.creating'),
+        success: isUpdate ? t('apiKeysPage.updated') : t('apiKeysPage.created'),
+        error: (err) => errorMessage(err, t('apiKeysPage.saveFailed')),
       },
     );
     if (result === undefined) return;
@@ -226,10 +227,10 @@ function APIKeysPage() {
      <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="API Keys" subtitulo="Manage API keys for external application access" />
+          <Title variant="titSecundario" titulo={t('apiKeysPage.title')} subtitulo={t('apiKeysPage.subtitle')} />
         </div>
 
-        <LoadingState variant="page" message="Loading API keys..." />
+        <LoadingState variant="page" message={t('apiKeysPage.loading')} />
       </div>
 
       
@@ -241,7 +242,7 @@ function APIKeysPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="API Keys" subtitulo="Manage API keys for external application access" />
+          <Title variant="titSecundario" titulo={t('apiKeysPage.title')} subtitulo={t('apiKeysPage.subtitle')} />
         </div>
 
         <Alert type="error" message={error} onDismiss={() => loadAPIKeys()} />
@@ -255,10 +256,10 @@ function APIKeysPage() {
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <Title variant="titSecundario" titulo="API Keys" subtitulo="Manage API keys for external application access" />
+          <Title variant="titSecundario" titulo={t('apiKeysPage.title')} subtitulo={t('apiKeysPage.subtitle')} />
           {canEdit && (
             <ButtonApp
-              label="Create New API Key"
+              label={t('apiKeysPage.createKey')}
               onClick={handleCreateKey}
               variant="primary"
               size="medium"
@@ -277,7 +278,7 @@ function APIKeysPage() {
           keyExtractor={(apiKey) => apiKey.key_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('apiKeysPage.columns.name'),
               render: (apiKey) => (
                 <div className="flex items-center">
                   <BackgroundImage icon={KeyRound} size={28} iconSize={14} variant="marron" className="mr-2" />
@@ -298,27 +299,27 @@ function APIKeysPage() {
               )
             },
             {
-              header: 'Key',
+              header: t('apiKeysPage.columns.key'),
               render: (apiKey) => <Badge label={maskApiKey(apiKey.key_preview)} variant="default" />
             },
             {
-              header: 'Created',
-              render: (apiKey) => apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString() : 'N/A',
+              header: t('apiKeysPage.columns.created'),
+              render: (apiKey) => apiKey.created_at ? new Date(apiKey.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('apiKeysPage.notAvailable'),
               className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Last Used',
-              render: (apiKey) => apiKey.last_used_at ? new Date(apiKey.last_used_at).toLocaleDateString() : 'Never',
+              header: t('apiKeysPage.columns.lastUsed'),
+              render: (apiKey) => apiKey.last_used_at ? new Date(apiKey.last_used_at).toLocaleDateString(i18n.resolvedLanguage) : t('apiKeysPage.never'),
               className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Status',
+              header: t('apiKeysPage.columns.status'),
               render: (apiKey) => (
-                <Badge label={apiKey.is_active ? 'Active' : 'Inactive'} variant={apiKey.is_active ? 'success' : 'error'} />
+                <Badge label={apiKey.is_active ? t('apiKeysPage.status.active') : t('apiKeysPage.status.inactive')} variant={apiKey.is_active ? 'success' : 'error'} />
               )
             },
             {
-              header: 'Actions',
+              header: t('apiKeysPage.columns.actions'),
               sticky: 'right',
               className: 'relative',
               render: (apiKey) => (
@@ -326,42 +327,43 @@ function APIKeysPage() {
                   <ActionDropdown
                     actions={[
                       {
-                        label: 'Edit',
+                        label: t('apiKeysPage.actions.edit'),
                         onClick: () => { void handleEditKey(apiKey.key_id); },
                         icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary'
                       },
                       {
-                        label: apiKey.is_active ? 'Deactivate' : 'Activate',
+                        label: apiKey.is_active ? t('apiKeysPage.actions.deactivate') : t('apiKeysPage.actions.activate'),
                         onClick: () => { void handleToggle(apiKey.key_id); },
                         icon: apiKey.is_active ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />,
                         variant: apiKey.is_active ? 'warning' : 'success'
                       },
                       {
-                        label: 'Delete',
+                        label: t('apiKeysPage.actions.delete'),
                         onClick: () => { void handleDelete(apiKey.key_id); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
                     ]}
                     size="sm"
+                    triggerAriaLabel={t('apiKeysPage.actions.menuForKey', { name: apiKey.name })}
                   />
                 ) : (
-                  <span className="text-gray-400 text-sm">View only</span>
+                  <span className="text-gray-400 text-sm">{t('apiKeysPage.viewOnly')}</span>
                 )
               )
             }
           ]}
           emptyIcon={<BackgroundImage icon={KeyRound} size={64} iconSize={32} />}
-          emptyMessage="No API Keys"
-          emptySubMessage="Create your first API key to enable programmatic access to your application."
+          emptyMessage={t('apiKeysPage.empty.title')}
+          emptySubMessage={t('apiKeysPage.empty.subtitle')}
           loading={loading}
         />
 
         {!loading && apiKeys.length === 0 && (
           <div className="text-center py-6">
             <ButtonApp
-              label="Create First API Key"
+              label={t('apiKeysPage.createFirstKey')}
               onClick={handleCreateKey}
               variant="primary"
               size="medium"
@@ -373,16 +375,16 @@ function APIKeysPage() {
         {/* Security Notice */}
         <Alert
           type="warning"
-          title="Security Notice"
+          title={t('apiKeysPage.security.title')}
           className="mt-6"
-          message="Keep your API keys secure and never share them publicly. Deactivate or delete keys that are no longer needed. Monitor usage regularly to detect any unauthorized access."
+          message={t('apiKeysPage.security.message')}
         />
 
         {/* Create/Edit Modal */}
         <Modal
           isOpen={isModalOpen}
           onClose={handleCloseModal}
-          title={editingKey ? 'Edit API Key' : 'Create New API Key'}
+          title={editingKey ? t('apiKeysPage.editTitle') : t('apiKeysPage.createTitle')}
         >
           <APIKeyForm
             apiKey={editingKey}

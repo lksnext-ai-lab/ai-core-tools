@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Copy, FileJson, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { apiService } from '../../services/api';
 import { Spinner } from '../ui/Spinner';
 
@@ -31,17 +33,17 @@ type SourceInfo =
   | { type: 'url'; label: string; href: string }
   | { type: 'generic' };
 
-function detectSource(metadata: Record<string, unknown>): SourceInfo {
+function detectSource(metadata: Record<string, unknown>, t: TFunction<'common'>): SourceInfo {
   if (metadata.media_id !== undefined) {
     const id = metadata.media_id as string | number;
     const name = metadata.name as string | undefined;
-    const label = name ?? `Media #${id}`;
+    const label = name ?? t('resultCard.mediaFallback', { id });
     return { type: 'media', label };
   }
   if (metadata.resource_id !== undefined) {
     const id = metadata.resource_id as string | number;
     const name = metadata.name as string | undefined;
-    const label = name ?? `Document #${id}`;
+    const label = name ?? t('resultCard.documentFallback', { id });
     return { type: 'resource', label };
   }
   if (metadata.url !== undefined) {
@@ -51,35 +53,31 @@ function detectSource(metadata: Record<string, unknown>): SourceInfo {
   return { type: 'generic' };
 }
 
-function MetaValue({ value }: Readonly<{ value: unknown }>) {
+function MetaValue({ value, t }: Readonly<{ value: unknown; t: TFunction<'common'> }>) {
   if (value === null || value === undefined) {
-    return <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-500">null</span>;
+    return <span className="font-mono text-fg-tertiary dark:text-fg-tertiary-dark">null</span>;
   }
   if (typeof value === 'boolean') {
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">
-        {value ? 'true' : 'false'}
-      </span>
-    );
+    return <span className="font-mono">{value ? 'true' : 'false'}</span>;
   }
   if (typeof value === 'number') {
-    return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{value}</span>;
+    return <span className="font-mono">{value}</span>;
   }
   if (typeof value === 'string') {
-    return <span className="text-xs text-gray-700">{value}</span>;
+    return <span>{value}</span>;
   }
   if (Array.isArray(value)) {
-    return <span className="text-xs text-gray-400 italic">▸ {value.length} items</span>;
+    return <span className="italic text-fg-tertiary dark:text-fg-tertiary-dark">▸ {t('resultCard.items', { count: value.length })}</span>;
   }
   if (typeof value === 'object') {
     return (
-      <span className="text-xs text-gray-400 italic">
-        ▸ {Object.keys(value as Record<string, unknown>).length} keys
+      <span className="italic text-fg-tertiary dark:text-fg-tertiary-dark">
+        ▸ {t('resultCard.keys', { count: Object.keys(value as Record<string, unknown>).length })}
       </span>
     );
   }
   // bigint, symbol, function
-  return <span className="text-xs text-gray-700">{`${value as string | number | boolean | bigint}`}</span>;
+  return <span>{`${value as string | number | boolean | bigint}`}</span>;
 }
 
 export default function ResultCard({
@@ -94,6 +92,7 @@ export default function ResultCard({
   onSelect,
   onReindex,
 }: Readonly<ResultCardProps>) {
+  const { t } = useTranslation('common');
   const [expanded, setExpanded] = useState(false);
   const [metaView, setMetaView] = useState<'pretty' | 'raw'>('pretty');
   const [lastCopied, setLastCopied] = useState<string | null>(null);
@@ -105,7 +104,7 @@ export default function ResultCard({
   const [showNeighbors, setShowNeighbors] = useState(false);
 
   const { metadata, page_content, score } = result;
-  const source = detectSource(metadata);
+  const source = detectSource(metadata, t);
 
   // FR-2.1 score bar — TypeScript 4.4+ narrows score through aliased condition
   const showScore = score != null && maxScore > 0;
@@ -154,7 +153,7 @@ export default function ResultCard({
       setNeighbors((data as { chunks: SearchResult[] }).chunks);
       setShowNeighbors(true);
     } catch (err) {
-      setNeighborsError(err instanceof Error ? err.message : 'Failed to load neighbors');
+      setNeighborsError(err instanceof Error ? err.message : t('resultCard.loadNeighborsFailed'));
     } finally {
       setLoadingNeighbors(false);
     }
@@ -177,45 +176,42 @@ export default function ResultCard({
   const showNeighborsButton = source.type === 'media' || source.type === 'resource';
 
   function neighborButtonLabel(): string {
-    if (loadingNeighbors) return 'Loading…';
-    return showNeighbors ? 'Hide neighbors' : 'Neighbors';
+    if (loadingNeighbors) return t('resultCard.loading');
+    return showNeighbors ? t('resultCard.hideNeighbors') : t('resultCard.neighbors');
   }
 
+  const iconButtonClass = 'rounded p-1.5 text-fg-tertiary hover:bg-surface-hover hover:text-fg-secondary dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark dark:hover:text-fg-secondary-dark';
+  const pillClass = 'rounded-lg bg-surface-hover px-[9px] py-0.5 text-[11.5px] text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark';
+  const linkClass = 'text-[12.5px] text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark';
+
   return (
-    <div className="relative border border-gray-200 rounded-lg p-4">
-      {onSelect && (
-        <div className="absolute top-3 left-3 z-10">
-          <input
-            type="checkbox"
-            checked={isSelected ?? false}
-            onChange={(e) => onSelect(result.id ?? '', e.target.checked)}
-            onClick={(e) => e.stopPropagation()}
-            className="w-4 h-4 accent-amber-500 cursor-pointer"
-            aria-label="Select document"
-          />
-        </div>
-      )}
+    <article className="rounded-lg border border-line px-4 py-3.5 dark:border-line-dark">
       {/* Header row */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-gray-500">Result #{index + 1}</span>
+      <div className="mb-2.5 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          {onSelect && (
+            <input
+              type="checkbox"
+              checked={isSelected ?? false}
+              onChange={(e) => onSelect(result.id ?? '', e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 cursor-pointer accent-ink dark:accent-ink-dark"
+              aria-label={t('resultCard.selectDocument')}
+            />
+          )}
+          <span className="text-[13px] font-semibold text-fg dark:text-fg-dark">{t('resultCard.resultNumber', { number: index + 1 })}</span>
           {result.id && (
-            <span className="text-xs text-gray-400" title={`Document ID: ${result.id}`}>
-              (ID: {result.id.substring(0, 8)}...)
+            <span className="font-mono text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark" title={t('resultCard.documentId', { id: result.id })}>
+              {result.id.substring(0, 8)}…
             </span>
           )}
-          <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-            📏 {page_content.length} chars
+          <span className={pillClass}>
+            {t('resultCard.characterCount', { count: page_content.length })}
           </span>
 
           {/* FR-2.2 source badges */}
-          {source.type === 'media' && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-              {source.label}
-            </span>
-          )}
-          {source.type === 'resource' && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+          {(source.type === 'media' || source.type === 'resource') && (
+            <span className={`max-w-[260px] truncate ${pillClass}`} title={source.label}>
               {source.label}
             </span>
           )}
@@ -224,7 +220,8 @@ export default function ResultCard({
               href={source.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 hover:underline"
+              className={`max-w-[260px] truncate hover:underline ${pillClass}`}
+              title={source.href}
             >
               {source.label}
             </a>
@@ -232,46 +229,46 @@ export default function ResultCard({
         </div>
 
         {/* FR-2.5 copy + delete buttons */}
-        <div className="flex items-center gap-1 ml-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           {lastCopied && (
-            <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
-              Copied!
+            <span className="rounded bg-success-bg px-2 py-0.5 text-xs text-success dark:bg-success-bg-dark dark:text-success-dark">
+              {t('resultCard.copied')}
             </span>
           )}
           <button
             onClick={handleCopyText}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-            title="Copy text"
+            className={iconButtonClass}
+            title={t('resultCard.copyText')}
           >
-            <Copy className="w-3.5 h-3.5" />
+            <Copy className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={handleCopyJson}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-            title="Copy JSON"
+            className={iconButtonClass}
+            title={t('resultCard.copyJson')}
           >
-            <FileJson className="w-3.5 h-3.5" />
+            <FileJson className="h-3.5 w-3.5" />
           </button>
           {onReindex && result.metadata?.resource_id !== undefined && (
             <button
               onClick={(e) => { e.stopPropagation(); onReindex(String(result.metadata.resource_id as string | number)); }}
-              className="text-xs px-2 py-1 text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors"
-              title="Re-extract and reindex this source document"
+              className="rounded-md border border-line px-2 py-1 text-xs text-fg-secondary transition-colors hover:bg-surface-hover dark:border-line-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
+              title={t('resultCard.reindexSourceDocument')}
             >
-              Reindex
+              {t('resultCard.reindex')}
             </button>
           )}
           {result.id && onDelete && (
             <button
               onClick={() => onDelete(result, index)}
               disabled={!!isDeleting}
-              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Delete this document from silo"
+              className="rounded p-1.5 text-error hover:bg-error-bg disabled:cursor-not-allowed disabled:opacity-50 dark:text-error-dark dark:hover:bg-error-bg-dark"
+              title={t('resultCard.deleteDocument')}
             >
               {isDeleting ? (
                 <Spinner size="xs" tone="current" />
               ) : (
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="h-3.5 w-3.5" />
               )}
             </button>
           )}
@@ -280,68 +277,68 @@ export default function ResultCard({
 
       {/* FR-2.1 Score bar */}
       {showScore && (
-        <div className="flex items-center gap-2 mb-3">
-          <div className="flex-1 bg-gray-100 rounded h-1.5">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="h-1.5 flex-1 rounded bg-surface-hover dark:bg-surface-hover-dark">
             <div
-              className="bg-yellow-400 h-1.5 rounded"
+              className="h-1.5 rounded bg-accent dark:bg-accent-dark"
               style={{ width: `${scoreBarWidth}%` }}
             />
           </div>
-          <span className="text-xs text-gray-500 shrink-0">Score: {score.toFixed(3)}</span>
+          <span className="shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('resultCard.score', { score: score.toFixed(3) })}</span>
         </div>
       )}
 
       {/* FR-2.3 Content */}
-      <div className="mb-3">
-        <h3 className="text-sm font-medium text-gray-700 mb-1">Content:</h3>
-        <p className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
+      <div>
+        <p className="m-0 whitespace-pre-wrap text-[13.5px] leading-[1.6] text-fg dark:text-fg-dark">
           {displayContent}
         </p>
         {isLong && (
           <button
             onClick={() => setExpanded((e) => !e)}
-            className="mt-1 text-xs text-yellow-600 hover:text-yellow-800"
+            aria-expanded={expanded}
+            className={`mt-1.5 ${linkClass}`}
           >
-            {expanded ? 'Show less' : 'Show more'}
+            {expanded ? t('resultCard.showLess') : t('resultCard.showMore')}
           </button>
         )}
       </div>
 
       {/* FR-2.4 Neighboring chunks */}
       {showNeighborsButton && (
-        <div className="mb-3">
+        <div className="mt-3">
           <button
             onClick={handleNeighbors}
             disabled={loadingNeighbors}
-            className="text-xs px-2 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded hover:bg-yellow-100 disabled:opacity-50"
+            className="rounded-md border border-line px-2 py-1 text-xs text-fg-secondary hover:bg-surface-hover disabled:opacity-50 dark:border-line-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
           >
             {neighborButtonLabel()}
           </button>
           {neighborsError && (
-            <span className="ml-2 text-xs text-red-500">{neighborsError}</span>
+            <span className="ml-2 text-xs text-error dark:text-error-dark">{neighborsError}</span>
           )}
           {showNeighbors && neighbors && (
-            <div className="mt-3 border-l-2 border-yellow-300 pl-3 bg-gray-50 rounded-r-lg space-y-2 py-2">
+            <div className="mt-3 space-y-2 rounded-r-lg border-l-2 border-accent bg-surface-tint py-2 pl-3 dark:border-accent-dark dark:bg-surface-tint-dark">
               {neighbors.map((neighbor, ni) => {
                 const isCurrent = isCurrentChunk(neighbor);
                 const chunkIndex = neighbor.metadata.chunk_index as MetadataPrimitive;
                 const page = neighbor.metadata.page as MetadataPrimitive;
                 const chunkLabel =
                   neighbor.metadata.media_id !== undefined
-                    ? `chunk ${chunkIndex}`
-                    : `page ${page}`;
+                    ? t('resultCard.chunkLabel', { index: chunkIndex })
+                    : t('resultCard.pageLabel', { page });
                 const neighborId = neighbor.metadata._id as MetadataPrimitive;
                 const neighborKey = neighborId !== undefined ? `${neighborId}` : ni;
                 return (
                   <div
                     key={neighborKey}
-                    className={`text-xs p-2 rounded ${
+                    className={`rounded p-2 text-xs text-fg dark:text-fg-dark ${
                       isCurrent
-                        ? 'bg-yellow-100 border border-yellow-300 font-medium'
-                        : 'bg-white'
+                        ? 'border border-bronze-border bg-bronze-bg font-medium dark:border-bronze-border-dark dark:bg-bronze-bg-dark'
+                        : 'bg-surface dark:bg-surface-dark'
                     }`}
                   >
-                    <span className="text-gray-400 mr-1">[{chunkLabel}]</span>
+                    <span className="mr-1 text-fg-tertiary dark:text-fg-tertiary-dark">[{chunkLabel}]</span>
                     {neighbor.page_content.slice(0, 120)}
                     {neighbor.page_content.length > 120 ? '…' : ''}
                   </div>
@@ -354,42 +351,43 @@ export default function ResultCard({
 
       {/* FR-2.6 Metadata */}
       {Object.keys(metadata).length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-medium text-gray-700">Metadata:</h3>
-            <button
-              onClick={() => setMetaView((v) => (v === 'pretty' ? 'raw' : 'pretty'))}
-              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded border border-gray-200"
-            >
-              {metaView === 'pretty' ? 'Raw JSON' : 'Pretty'}
-            </button>
-          </div>
-          <div className="bg-gray-50 rounded p-2">
+        <details className="group mt-2.5 border-t border-line pt-2.5 dark:border-line-dark">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-fg dark:text-fg-dark [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="inline-block transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none">▸</span>
+            {t('resultCard.metadata')}
+            <span className="font-normal text-fg-tertiary dark:text-fg-tertiary-dark">· {t('resultCard.fieldCount', { count: Object.keys(metadata).length })}</span>
+          </summary>
+          <div className="mt-2.5">
             {metaView === 'raw' ? (
-              <pre className="text-xs text-gray-600 overflow-x-auto whitespace-pre-wrap">
+              <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-[#33302a] bg-[#1c1b18] px-3.5 py-3 font-mono text-xs leading-relaxed text-[#f2efe9]">
                 {JSON.stringify(metadata, null, 2)}
               </pre>
             ) : (
-              <div className="space-y-1">
+              <dl className="m-0 grid grid-cols-[150px_minmax(0,1fr)] gap-x-3.5 gap-y-1.5 rounded-md border border-line bg-surface-tint px-3.5 py-3 text-[12.5px] text-fg dark:border-line-dark dark:bg-surface-tint-dark dark:text-fg-dark">
                 {Object.entries(metadata).map(([key, value]) => {
                   const isInternal = ['_id', '_score', 'silo_id'].includes(key);
                   return (
-                    <div
-                      key={key}
-                      className={`flex items-start gap-2 ${isInternal ? 'opacity-60' : ''}`}
-                    >
-                      <span className="text-xs font-mono text-gray-500 shrink-0 min-w-[100px]">
-                        {key}:
-                      </span>
-                      <MetaValue value={value} />
+                    <div key={key} className={`contents ${isInternal ? '[&>*]:opacity-60' : ''}`}>
+                      <dt className="truncate font-mono text-fg-tertiary dark:text-fg-tertiary-dark" title={key}>
+                        {key}
+                      </dt>
+                      <dd className="m-0 break-words">
+                        <MetaValue value={value} t={t} />
+                      </dd>
                     </div>
                   );
                 })}
-              </div>
+              </dl>
             )}
+            <button
+              onClick={() => setMetaView((v) => (v === 'pretty' ? 'raw' : 'pretty'))}
+              className={`mt-2 ${linkClass}`}
+            >
+              {metaView === 'pretty' ? t('resultCard.rawJson') : t('resultCard.pretty')}
+            </button>
           </div>
-        </div>
+        </details>
       )}
-    </div>
+    </article>
   );
 }

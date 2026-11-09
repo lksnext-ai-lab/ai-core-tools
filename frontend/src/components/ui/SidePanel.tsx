@@ -14,6 +14,8 @@ export interface SidePanelProps {
   readonly headerActions?: React.ReactNode;
   /** Content rendered under the title row inside the header (e.g. a search input). */
   readonly toolbar?: React.ReactNode;
+  /** Content pinned to the bottom of the panel, outside the scroll area. */
+  readonly footer?: React.ReactNode;
   /** Tailwind width classes for the panel. */
   readonly widthClassName?: string;
   readonly closeLabel?: string;
@@ -32,6 +34,7 @@ export function SidePanel({
   side = 'left',
   headerActions,
   toolbar,
+  footer,
   widthClassName = 'w-[310px] max-w-[88%]',
   closeLabel = 'Close panel',
   children,
@@ -61,7 +64,7 @@ export function SidePanel({
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         className={`absolute inset-y-0 z-[25] flex flex-col ${widthClassName}
-                    bg-canvas-alt dark:bg-canvas-alt-dark border-line dark:border-line-dark
+                    bg-surface dark:bg-surface-dark border-line dark:border-line-dark
                     ${isLeft
                       ? 'left-0 border-r shadow-[14px_0_40px_rgba(0,0,0,0.12)] animate-slide-in-left'
                       : 'right-0 border-l shadow-[-14px_0_40px_rgba(0,0,0,0.12)] animate-slide-in-right'}`}
@@ -90,6 +93,11 @@ export function SidePanel({
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 pt-2 pb-4">
           {children}
         </div>
+        {footer && (
+          <div className="flex-none px-4 py-3 border-t border-line dark:border-line-dark">
+            {footer}
+          </div>
+        )}
       </aside>
     </>
   );

@@ -1,8 +1,15 @@
+import { Bot, Database, Plug, Webhook } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Trans, useTranslation } from 'react-i18next';
 import Alert from '../../ui/Alert';
 import type { AgentImportPreview } from '../../../types/import';
-import { COMPONENT_TYPE_ICONS } from '../../../types/import';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../../ui/ServiceOptionStatus';
+import { ServiceOptionStatus, serviceStatusId } from '../../ui/ServiceOptionStatus';
+import { FormSelect } from '../../ui/FormField';
 import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
+import { selectableServiceOptions, serviceOptionLabel } from '../../../utils/serviceLifecycle';
+import CardApp from '../../ui/CardApp';
+import { Badge } from '../../ui/Badge';
+import { FormField } from '../../ui/FormField';
 
 interface Props {
   preview: AgentImportPreview;
@@ -25,34 +32,26 @@ function DepCard({
   icon,
   title,
   badge,
+  badgeVariant,
   children,
 }: Readonly<{
-  icon: string;
+  icon: LucideIcon;
   title: string;
-  badge: 'Required' | 'Optional';
+  badge: string;
+  badgeVariant: 'error' | 'default';
   children: React.ReactNode;
 }>) {
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <span>{icon}</span>
-          <span className="font-medium text-gray-900">
-            {title}
-          </span>
-        </div>
-        <span
-          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            badge === 'Required'
-              ? 'bg-red-100 text-red-700'
-              : 'bg-gray-200 text-gray-600'
-          }`}
-        >
-          {badge}
-        </span>
-      </div>
+    <CardApp
+      className="p-4 space-y-3"
+      icon={icon}
+      titulo={title}
+      headerExtra={(
+        <Badge label={badge} variant={badgeVariant} />
+      )}
+    >
       {children}
-    </div>
+    </CardApp>
   );
 }
 
@@ -72,61 +71,75 @@ function AgentStepDeps({
   importBundledAgentTools,
   onImportBundledAgentToolsChange,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+  const aiServiceOptions = [
+    { value: '', label: t('importModal.agentDependencies.selectAIService') },
+    ...selectableServiceOptions(availableAIServices, undefined).map((service) => ({
+      value: service.service_id,
+      label: serviceOptionLabel(service),
+    })),
+  ];
+
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Configure how dependencies are resolved for this agent.
+      <p className="text-sm text-fg dark:text-fg-dark">
+        {t('importModal.agentDependencies.description')}
       </p>
 
-      {/* AI Service - Mandatory */}
       <DepCard
-        icon={COMPONENT_TYPE_ICONS.ai_service}
-        title="AI Service"
-        badge="Required"
+        icon={Bot}
+        title={t('importModal.agentUpload.components.aiService')}
+        badge={t('importModal.agentDependencies.required')}
+        badgeVariant="error"
       >
         {preview.ai_service ? (
           <>
             <div className="space-y-2">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="ai_service_source"
-                  checked={!useExistingAIService}
-                  onChange={() =>
-                    onUseExistingAIServiceChange(false)
-                  }
-                  className="text-blue-600"
-                />
-                <span className="text-sm text-gray-700">
-                  Import bundled:{' '}
-                  <strong>
-                    {preview.ai_service.component_name}
-                  </strong>
-                  {preview.ai_service.provider && (
-                    <span className="text-gray-500 ml-1">
-                      ({preview.ai_service.provider})
-                    </span>
-                  )}
-                </span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="ai_service_source"
-                  checked={useExistingAIService}
-                  onChange={() =>
-                    onUseExistingAIServiceChange(true)
-                  }
-                  className="text-blue-600"
-                />
-                <span className="text-sm text-gray-700">
-                  Use existing AI service
-                </span>
-              </label>
+              <FormField
+                type="radio"
+                id="agent-import-ai-service-bundled"
+                name="ai_service_source"
+                value="bundled"
+                className="flex items-center gap-2"
+                labelClassName="text-sm text-fg dark:text-fg-dark"
+                checked={!useExistingAIService}
+                onChange={() =>
+                  onUseExistingAIServiceChange(false)
+                }
+                label={(
+                  <>
+                    <Trans
+                      i18nKey="importModal.agentDependencies.importBundledAIService"
+                      values={{ name: preview.ai_service.component_name }}
+                      components={{ strong: <strong /> }}
+                    />
+                    {preview.ai_service.provider && (
+                      <span className="text-fg-secondary dark:text-fg-secondary-dark ml-1">
+                        ({preview.ai_service.provider})
+                      </span>
+                    )}
+                  </>
+                )}
+              />
+              <FormField
+                type="radio"
+                id="agent-import-ai-service-existing"
+                name="ai_service_source"
+                value="existing"
+                className="flex items-center gap-2"
+                labelClassName="text-sm text-fg dark:text-fg-dark"
+                checked={useExistingAIService}
+                onChange={() =>
+                  onUseExistingAIServiceChange(true)
+                }
+                label={t('importModal.agentDependencies.useExistingAIService')}
+              />
             </div>
             {useExistingAIService && (
-              <select
+              <FormSelect
+                label={t('importModal.agentUpload.components.aiService')}
                 value={selectedAIServiceId ?? ''}
+                options={aiServiceOptions}
                 onChange={(e) =>
                   onSelectedAIServiceIdChange(
                     e.target.value
@@ -135,15 +148,10 @@ function AgentStepDeps({
                   )
                 }
                 id="agent-import-ai-service"
-                aria-label="AI service"
-                aria-describedby={serviceStatusId(availableAIServices, selectedAIServiceId, 'agent-import-ai-service')}
-                className="w-full mt-2 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="">
-                  -- Select AI Service --
-                </option>
-                <ServiceSelectOptions options={availableAIServices} savedValue={undefined} />
-              </select>
+                ariaDescribedBy={serviceStatusId(availableAIServices, selectedAIServiceId, 'agent-import-ai-service')}
+                className="mt-2"
+                labelClassName="sr-only"
+              />
             )}
             {useExistingAIService && (
               <ServiceOptionStatus
@@ -153,19 +161,23 @@ function AgentStepDeps({
               />
             )}
             {!useExistingAIService && (
-              <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
-                API key will need to be configured after import.
-              </p>
+              <CardApp variant="canvas" className="text-xs text-bronze dark:text-bronze-dark">
+                {t('importModal.agentDependencies.apiKeyWarning')}
+              </CardApp>
             )}
           </>
         ) : (
           <>
             <Alert
               type="warning"
-              message={`AI service "${preview.agent.component_name}" requires is not bundled. Select an existing one.`}
+              message={t('importModal.agentDependencies.missingAIService', {
+                name: preview.agent.component_name,
+              })}
             />
-            <select
+            <FormSelect
+              label={t('importModal.agentUpload.components.aiService')}
               value={selectedAIServiceId ?? ''}
+              options={aiServiceOptions}
               onChange={(e) =>
                 onSelectedAIServiceIdChange(
                   e.target.value
@@ -174,15 +186,9 @@ function AgentStepDeps({
                 )
               }
               id="agent-import-ai-service-required"
-              aria-label="AI service"
-              aria-describedby={serviceStatusId(availableAIServices, selectedAIServiceId, 'agent-import-ai-service-required')}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">
-                -- Select AI Service --
-              </option>
-              <ServiceSelectOptions options={availableAIServices} savedValue={undefined} />
-            </select>
+              ariaDescribedBy={serviceStatusId(availableAIServices, selectedAIServiceId, 'agent-import-ai-service-required')}
+              labelClassName="sr-only"
+            />
             <ServiceOptionStatus
               options={availableAIServices}
               selectedId={selectedAIServiceId}
@@ -192,90 +198,91 @@ function AgentStepDeps({
         )}
       </DepCard>
 
-      {/* Silo - Optional */}
       {preview.silo && (
         <DepCard
-          icon={COMPONENT_TYPE_ICONS.silo}
-          title="Silo (Knowledge Base)"
-          badge="Optional"
+          icon={Database}
+          title={t('importModal.agentDependencies.siloTitle')}
+          badge={t('importModal.agentDependencies.optional')}
+          badgeVariant="default"
         >
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={importBundledSilo}
-              onChange={(e) =>
-                onImportBundledSiloChange(e.target.checked)
-              }
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-700">
-              Import: {preview.silo.component_name}
-            </span>
-          </label>
+          <FormField
+            type="checkbox"
+            id="import-bundled-silo"
+            checked={importBundledSilo}
+            onChange={(e) =>
+              onImportBundledSiloChange(e.target.checked)
+            }
+            className="flex items-center gap-2"
+            labelClassName="text-sm text-fg dark:text-fg-dark"
+            label={t('importModal.agentDependencies.importComponent', {
+              name: preview.silo.component_name,
+            })}
+          />
           {preview.silo_embedding_service && importBundledSilo && (
-            <p className="text-xs text-gray-500 ml-6">
-              Includes embedding service:{' '}
-              {preview.silo_embedding_service.component_name}
+            <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark ml-6">
+              {t('importModal.agentDependencies.includesEmbeddingService', {
+                name: preview.silo_embedding_service.component_name,
+              })}
             </p>
           )}
           {preview.silo_output_parser && importBundledSilo && (
-            <p className="text-xs text-gray-500 ml-6">
-              Includes output parser:{' '}
-              {preview.silo_output_parser.component_name}
+            <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark ml-6">
+              {t('importModal.agentDependencies.includesOutputParser', {
+                name: preview.silo_output_parser.component_name,
+              })}
             </p>
           )}
         </DepCard>
       )}
 
-      {/* Output Parser - Optional */}
       {preview.output_parser && (
         <DepCard
-          icon={COMPONENT_TYPE_ICONS.output_parser}
-          title="Output Parser"
-          badge="Optional"
+          icon={Webhook}
+          title={t('importModal.agentUpload.components.outputParser')}
+          badge={t('importModal.agentDependencies.optional')}
+          badgeVariant="default"
         >
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={importBundledOutputParser}
-              onChange={(e) =>
-                onImportBundledOutputParserChange(
-                  e.target.checked
-                )
-              }
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-700">
-              Import:{' '}
-              {preview.output_parser.component_name}
-            </span>
-          </label>
+          <FormField
+            type="checkbox"
+            id="import-bundled-output-parser"
+            checked={importBundledOutputParser}
+            onChange={(e) =>
+              onImportBundledOutputParserChange(
+                e.target.checked
+              )
+            }
+            className="flex items-center gap-2"
+            labelClassName="text-sm text-fg dark:text-fg-dark"
+            label={t('importModal.agentDependencies.importComponent', {
+              name: preview.output_parser.component_name,
+            })}
+          />
         </DepCard>
       )}
 
-      {/* MCP Configs - Optional */}
       {preview.mcp_configs.length > 0 && (
         <DepCard
-          icon={COMPONENT_TYPE_ICONS.mcp_config}
-          title={`MCP Configs (${preview.mcp_configs.length})`}
-          badge="Optional"
+          icon={Plug}
+          title={t('importModal.agentUpload.components.mcpConfigs', {
+            count: preview.mcp_configs.length,
+          })}
+          badge={t('importModal.agentDependencies.optional')}
+          badgeVariant="default"
         >
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={importBundledMCPConfigs}
-              onChange={(e) =>
-                onImportBundledMCPConfigsChange(
-                  e.target.checked
-                )
-              }
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-700">
-              Import all MCP configs
-            </span>
-          </label>
-          <ul className="ml-6 text-xs text-gray-500 space-y-0.5">
+          <FormField
+            type="checkbox"
+            id="import-bundled-mcp-configs"
+            checked={importBundledMCPConfigs}
+            onChange={(e) =>
+              onImportBundledMCPConfigsChange(
+                e.target.checked
+              )
+            }
+            className="flex items-center gap-2"
+            labelClassName="text-sm text-fg dark:text-fg-dark"
+            label={t('importModal.agentDependencies.importAllMCPConfigs')}
+          />
+          <ul className="ml-6 text-xs text-fg-secondary dark:text-fg-secondary-dark space-y-0.5">
             {preview.mcp_configs.map((m) => (
               <li key={m.component_name}>
                 {m.component_name}
@@ -285,29 +292,29 @@ function AgentStepDeps({
         </DepCard>
       )}
 
-      {/* Agent Tools - Optional */}
       {preview.agent_tools.length > 0 && (
         <DepCard
-          icon={COMPONENT_TYPE_ICONS.agent}
-          title={`Agent Tools (${preview.agent_tools.length})`}
-          badge="Optional"
+          icon={Bot}
+          title={t('importModal.agentUpload.components.agentTools', {
+            count: preview.agent_tools.length,
+          })}
+          badge={t('importModal.agentDependencies.optional')}
+          badgeVariant="default"
         >
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={importBundledAgentTools}
-              onChange={(e) =>
-                onImportBundledAgentToolsChange(
-                  e.target.checked
-                )
-              }
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-700">
-              Import all agent tools
-            </span>
-          </label>
-          <ul className="ml-6 text-xs text-gray-500 space-y-0.5">
+          <FormField
+            type="checkbox"
+            id="import-bundled-agent-tools"
+            checked={importBundledAgentTools}
+            onChange={(e) =>
+              onImportBundledAgentToolsChange(
+                e.target.checked
+              )
+            }
+            className="flex items-center gap-2"
+            labelClassName="text-sm text-fg dark:text-fg-dark"
+            label={t('importModal.agentDependencies.importAllAgentTools')}
+          />
+          <ul className="ml-6 text-xs text-fg-secondary dark:text-fg-secondary-dark space-y-0.5">
             {preview.agent_tools.map((t) => (
               <li key={t.component_name}>
                 {t.component_name}

@@ -50,6 +50,7 @@ import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import OutputDestinationsPage from '../pages/settings/OutputDestinationsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
+import SkillFormPage from '../pages/settings/SkillFormPage';
 import MiddlewaresPage from '../pages/settings/MiddlewaresPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
@@ -71,6 +72,7 @@ import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
 import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage';
 import SystemSkillsPage from '../pages/admin/SystemSkillsPage';
+import SystemSkillFormPage from '../pages/admin/SystemSkillFormPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
 import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
@@ -158,7 +160,42 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
   return (
     <I18nextProvider i18n={i18n}>
     <ThemeProvider theme={clientConfig.theme}>
-      <Toaster richColors closeButton position="top-right" />
+      
+<Toaster
+  position="bottom-center"
+  closeButton
+  toastOptions={{
+    unstyled: true,
+    classNames: {
+      toast: `
+        relative flex items-center gap-3
+        rounded-lg
+        bg-ink dark:bg-ink-dark
+        px-4 py-3 pr-12 shadow-lg
+      `,
+
+      title: "text-sm font-medium",
+      description: "text-xs opacity-80",
+
+      error: "text-error-dark dark:text-error",
+      success: "text-success-dark dark:text-success",
+      warning: "text-bronze-dark dark:text-bronze",
+      info: "text-info-dark dark:text-info",
+
+      icon: "text-current [&_svg]:stroke-current",
+
+      closeButton: `
+        !absolute !left-auto !right-3 !top-1/2
+        !-translate-y-1/2
+        !bg-transparent !border-0 !shadow-none
+        !text-ink-on dark:!text-ink-on-dark
+        [&_svg]:!w-5 [&_svg]:!h-5
+        cursor-pointer
+      `,
+    },
+  }}
+/>
+
       <AuthProvider config={config.authProps}>
         <UserProvider>
           <SettingsCacheProvider>
@@ -372,6 +409,18 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                   </EditorLayoutRoute>
                 } />
 
+                <Route path="/apps/:appId/skills/new" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SkillFormPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/skills/:skillId/edit" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SkillFormPage />
+                  </EditorLayoutRoute>
+                } />
+
                 <Route path="/apps/:appId/middlewares" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                     <MiddlewaresPage />
@@ -489,6 +538,18 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/system-skills" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemSkillsPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-skills/new" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSkillFormPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-skills/:skillId/edit" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSkillFormPage />
                   </AdminLayoutRoute>
                 } />
 

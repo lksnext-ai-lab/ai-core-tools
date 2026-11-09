@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Activity, Ban, ChevronRight, ChevronLeft, ChevronDown, Clock, Pencil, Terminal, Trash2, Wrench } from 'lucide-react';
+import { Ban, ChevronDown, ChevronUp, Clock, Pencil, Terminal, Trash2 } from 'lucide-react';
 import type { ToolExecutionRecord } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
 
@@ -67,19 +67,19 @@ function CodeBlock({
   showCursor?: boolean;
 }>) {
   return (
-    <div className="mx-2 mb-2">
-      <span className="block text-[9px] font-semibold uppercase tracking-wider text-fg dark:text-fg-dark mb-0.5 px-0.5">
+    <div className="mb-3 last:mb-0">
+      <span className="mb-1.5 mt-0.5 block text-[11px] font-semibold uppercase tracking-[0.05em] text-fg-tertiary dark:text-fg-tertiary-dark">
         {label}
       </span>
       <pre
         ref={scrollRef}
-        className="max-h-36 overflow-y-auto rounded bg-neutral-900 dark:bg-neutral-950
-                   px-2.5 py-1.5 text-[10px] leading-[1.5] text-neutral-200
-                   whitespace-pre-wrap break-all font-mono"
+        className="m-0 max-h-56 overflow-y-auto rounded-lg border border-[#33302a] bg-[#1c1b18]
+                   px-3.5 py-3 font-mono text-[12px] leading-[1.6] text-[#f2efe9]
+                   whitespace-pre-wrap break-all"
       >
         {text}{' '}
         {showCursor && (
-          <span className="inline-block h-3 w-0.5 bg-neutral-400 animate-pulse align-middle ml-0.5" />
+          <span className="ml-0.5 inline-block h-3 w-0.5 animate-pulse bg-[#b9b3a4] align-middle" />
         )}
       </pre>
     </div>
@@ -139,71 +139,74 @@ function ToolEntryRow({
   // Format the output: try pretty JSON first, then raw
   const outputDisplay = record.toolOutput ? prettyJson(record.toolOutput) : null;
 
+  const elapsed = record.status === 'complete'
+    ? formatDuration((record.endedAt ?? Date.now()) - record.startedAt, {
+        showMillisecondsBelowSecond: true,
+      })
+    : null;
+
   return (
-    <div className="border-b border-line dark:border-line-dark last:border-0">
+    <div className="border-t border-line dark:border-line-dark">
       {/* Row header */}
       <button
         type="button"
         onClick={() => canExpand && setExpanded((v) => !v)}
-        className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors
-          ${canExpand ? 'hover:bg-surface-hover dark:hover:bg-surface-hover-dark cursor-pointer' : 'cursor-default'}`}
+        aria-expanded={canExpand ? expanded : undefined}
+        className={`flex w-full items-center justify-between gap-2.5 py-2.5 text-left
+          ${canExpand ? 'cursor-pointer' : 'cursor-default'}`}
       >
-        {isCode ? (
-          <Terminal className="h-3.5 w-3.5 shrink-0 text-fg-secondary dark:text-fg-secondary-dark" />
-        ) : (
-          <Wrench className="h-3.5 w-3.5 shrink-0 text-fg-secondary dark:text-fg-secondary-dark" />
-        )}
-        <span className="flex-1 text-[11px] font-medium text-fg-secondary dark:text-fg-secondary-dark truncate">
-          {displayName}
+        <span className="min-w-0">
+          <span className="flex items-center gap-1.5 text-[13px] font-medium text-fg dark:text-fg-dark">
+            {isCode && <Terminal className="h-3.5 w-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />}
+            <span className="truncate">{displayName}</span>
+          </span>
+          <span className="flex flex-wrap items-center gap-x-1 text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
+            {elapsed && <span className="tabular-nums">{elapsed} ·</span>}
+            {record.status === 'complete' && (
+              <span className="text-success-strong dark:text-success-strong-dark">{t('toolHistory.completed')}</span>
+            )}
+            {record.status === 'running' && (
+              <span className="inline-flex items-center gap-1 text-info dark:text-info-dark">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                {t('toolHistory.running')}
+              </span>
+            )}
+            {record.status === 'awaiting_approval' && (
+              <span className="inline-flex items-center gap-1 text-bronze dark:text-bronze-dark">
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                {t('toolHistory.awaitingApproval')}
+              </span>
+            )}
+            {(record.status === 'rejected' || record.status === 'expired' || record.status === 'cancelled') && (
+              <span className="inline-flex items-center gap-1 text-error dark:text-error-dark">
+                <Ban className="h-3 w-3" aria-hidden="true" />
+                {record.status === 'rejected'
+                  ? t('toolHistory.rejected')
+                  : t('toolHistory.notRun', { status: t(`toolHistory.status.${record.status}`) })}
+              </span>
+            )}
+            {record.edited && (
+              <span className="inline-flex items-center gap-0.5">
+                · <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
+                {t('toolHistory.edited')}
+              </span>
+            )}
+          </span>
         </span>
-        
-        {record.edited && (
-          <span className="flex items-center gap-0.5 text-[10px] text-violet-600 dark:text-violet-400 shrink-0">
-            <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
-            {t('toolHistory.edited')}
-          </span>
-        )}
-        {record.status === 'running' && (
-          <span className="flex items-center gap-1 text-[10px] text-blue-500 shrink-0">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            {t('toolHistory.running')}
-          </span>
-        )}
-        {record.status === 'awaiting_approval' && (
-          <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
-            <Clock className="h-3 w-3" aria-hidden="true" />
-            {t('toolHistory.awaitingApproval')}
-          </span>
-        )}
-        {(record.status === 'rejected' || record.status === 'expired' || record.status === 'cancelled') && (
-          <span className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 shrink-0">
-            <Ban className="h-3 w-3" aria-hidden="true" />
-            {record.status === 'rejected'
-              ? t('toolHistory.rejected')
-              : t('toolHistory.notRun', { status: t(`toolHistory.status.${record.status}`) })}
-          </span>
-        )}
-        {record.status === 'complete' && (
-          <span className="text-[10px] text-neutral-400 shrink-0 tabular-nums">
-            {formatDuration((record.endedAt ?? Date.now()) - record.startedAt, {
-              showMillisecondsBelowSecond: true,
-            })}
-          </span>
-        )}
         {canExpand && (
           expanded
-            ? <ChevronDown className="h-3 w-3 text-fg-secondary dark:text-fg-secondary-dark shrink-0" />
-            : <ChevronRight className="h-3 w-3 text-fg-secondary dark:text-fg-secondary-dark shrink-0" />
+            ? <ChevronUp className="h-4 w-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
+            : <ChevronDown className="h-4 w-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
         )}
       </button>
 
       {/* Expanded content */}
       {canExpand && expanded && (
-        <div className="pb-1">
+        <div className="pb-3">
           {/* Input */}
           {inputDisplay && (
             <CodeBlock
-              label={isCode ? 'code' : 'input'}
+              label={isCode ? t('toolHistory.labels.code') : t('toolHistory.labels.input')}
               text={inputDisplay}
             />
           )}
@@ -229,18 +232,21 @@ function ToolEntryRow({
 
           {/* Output / result */}
           {outputDisplay && (
-            <CodeBlock label={record.status === 'rejected' ? 'reason' : 'output'} text={outputDisplay} />
+            <CodeBlock
+              label={record.status === 'rejected' ? t('toolHistory.labels.reason') : t('toolHistory.labels.output')}
+              text={outputDisplay}
+            />
           )}
 
           {/* Running: show placeholder when no output yet */}
           {record.status === 'running' && !hasStdout && !outputDisplay && (
-            <div className="mx-2 mb-2 text-[10px] text-neutral-400 italic px-0.5">
+            <div className="text-[12px] italic text-fg-tertiary dark:text-fg-tertiary-dark">
               {t('toolHistory.waitingForResult')}
             </div>
           )}
 
           {record.status === 'awaiting_approval' && (
-            <div className="mx-2 mb-2 text-[10px] text-neutral-400 italic px-0.5">
+            <div className="text-[12px] italic text-fg-tertiary dark:text-fg-tertiary-dark">
               {t('toolHistory.waitingForApproval')}
             </div>
           )}
@@ -270,96 +276,88 @@ export default function ToolHistoryPanel({ history, onClear }: Readonly<ToolHist
   const groupedHistory = groupHistoryRecords(history);
 
   return (
-    <div className="w-full shrink-0 min-h-0">
-      <div className="bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark rounded-md overflow-hidden h-full">
-        {/* Header */}
-        <div className="flex items-center gap-1 px-1.5 py-2 border-b border-line dark:border-line-dark ">
+    <section
+      aria-label={t('toolHistory.title')}
+      className="rounded-lg border border-line p-3.5 dark:border-line-dark"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="m-0 font-display text-[15px] font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">
+          {t('toolHistory.title')}{' '}
+          <span className="font-sans text-[12px] tracking-normal text-fg-tertiary dark:text-fg-tertiary-dark">
+            {history.length}
+          </span>
+        </h2>
+        <span className="flex flex-none items-center gap-1">
+          {anyRunning ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-info-bg px-2 py-0.5 text-[11px] text-info dark:bg-info-bg-dark dark:text-info-dark">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+              {runningCount}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onClear}
+              className="rounded p-1 text-fg-tertiary transition-colors hover:text-error dark:text-fg-tertiary-dark dark:hover:text-error-dark"
+              aria-label={t('toolHistory.clearHistory')}
+              title={t('toolHistory.clearHistory')}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setPanelOpen((v) => !v)}
-            className="p-1 rounded text-fg-secondary dark:text-fg-secondary-dark"
+            aria-expanded={panelOpen}
+            className="rounded p-1 text-fg-secondary transition-colors hover:text-fg dark:text-fg-secondary-dark dark:hover:text-fg-dark"
             aria-label={panelOpen
               ? t('toolHistory.collapsePanel')
               : t('toolHistory.expandPanel')}
           >
             {panelOpen
-              ? <ChevronRight className="h-3.5 w-3.5 rotate-90" />
-              : <ChevronLeft className="h-3.5 w-3.5 rotate-180" />
-            } 
+              ? <ChevronUp className="h-4 w-4" aria-hidden="true" />
+              : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
           </button>
-
-          {panelOpen && (
-            <>
-              <Activity className="h-3.5 w-3.5 text-fg-secondary dark:text-fg-secondary-dark shrink-0" />
-              <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-fg dark:text-fg-dark select-none">
-                {t('toolHistory.title')}
-              </span>
-              {anyRunning ? (
-                <span className="flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-600 dark:text-blue-400 shrink-0">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse inline-block" />
-                  {runningCount}
-                </span>
-              ) : (
-                <>
-                  <span className="text-[10px] text-fg dark:text-fg-dark shrink-0 mr-0.5">{history.length}</span>
-                  <button
-                    type="button"
-                    onClick={onClear}
-                    className="p-1 rounded  text-fg dark:text-fg-dark hover:text-error"
-                    aria-label={t('toolHistory.clearHistory')}
-                    title={t('toolHistory.clearHistory')}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </>
-              )}
-            </>
-          )}
-
-          {!panelOpen && anyRunning && (
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
-          )}
-        </div>
-
-        {/* Entries */}
-        {panelOpen && (
-          <div className="max-h-[calc(100vh-24rem)] overflow-y-auto">
-            {groupedHistory.map((group) => {
-              if (!group.label) {
-                return group.records.map((record) => (
-                  <ToolEntryRow key={record.id} record={record} />
-                ));
-              }
-
-              return (
-                <div
-                  key={`${group.key}-${group.records[0]?.id}`}
-                  className="m-1.5 overflow-hidden rounded-md border border-sky-200/70 dark:border-sky-700/40 bg-sky-50/60 dark:bg-sky-950/20"
-                >
-                  <div className="flex items-center gap-1.5 border-b border-sky-200/60 dark:border-sky-700/30 px-2.5 py-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
-                      {group.label}
-                    </span>
-                    <span className="text-[10px] text-sky-600/70 dark:text-sky-300/70">
-                      {group.records.length}
-                    </span>
-                  </div>
-                  <div className="bg-white/70 dark:bg-neutral-900/40">
-                    {group.records.map((record) => (
-                      <ToolEntryRow
-                        key={record.id}
-                        record={record}
-                        hideSubagentName
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </span>
       </div>
-    </div>
+
+      {/* Entries */}
+      {panelOpen && (
+        <div className="mt-2.5">
+          {groupedHistory.map((group) => {
+            if (!group.label) {
+              return group.records.map((record) => (
+                <ToolEntryRow key={record.id} record={record} />
+              ));
+            }
+
+            return (
+              <div
+                key={`${group.key}-${group.records[0]?.id}`}
+                className="my-1.5 overflow-hidden rounded-md border border-line dark:border-line-dark"
+              >
+                <div className="flex items-center gap-1.5 bg-surface-hover px-2.5 py-1.5 dark:bg-surface-hover-dark">
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.05em] text-fg-secondary dark:text-fg-secondary-dark">
+                    {group.label}
+                  </span>
+                  <span className="text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                    {group.records.length}
+                  </span>
+                </div>
+                <div className="px-2.5">
+                  {group.records.map((record) => (
+                    <ToolEntryRow
+                      key={record.id}
+                      record={record}
+                      hideSubagentName
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

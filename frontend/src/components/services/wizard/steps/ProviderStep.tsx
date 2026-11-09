@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { getProvidersForKind } from '../providers';
 import type { ServiceKind } from '../../../../types/services';
 import { ButtonCard } from '../../../ui/ButtonCard';
@@ -15,17 +16,17 @@ function ProviderStep({
   selected,
   onSelect,
 }: Readonly<ProviderStepProps>) {
+  const { t } = useTranslation('common');
   const providers = getProvidersForKind(kind);
-  const subtitle =
-    kind === 'ai'
-      ? 'Pick the provider that hosts the chat, vision or audio model you want to use.'
-      : 'Pick the provider for the embedding model that will index your data.';
+  let subtitleKey = 'serviceWizard.providerStep.subtitleEmbedding';
+  if (kind === 'ai') subtitleKey = 'serviceWizard.providerStep.subtitleAi';
+  else if (kind === 'sandbox') subtitleKey = 'serviceWizard.providerStep.subtitleSandbox';
 
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">Choose a provider</h3>
-        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{subtitle}</p>
+        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">{t('serviceWizard.providerStep.title')}</h3>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{t(subtitleKey)}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -43,7 +44,7 @@ function ProviderStep({
                 <ProviderBadge provider={p.value} label={p.label} className="text-md" />
                 {!p.supportsModelListing && (
                   <span className="text-[10px] uppercase tracking-wide font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                    Manual
+                    {t('serviceWizard.providerStep.manual')}
                   </span>
                 )}
               </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { CheckCircle2, XCircle, Ban, Clock } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { CrawlJob, CrawlJobStatus } from '../../types/crawl';
@@ -37,15 +38,21 @@ function statusBadge(status: CrawlJobStatus): { text: string; variant: BadgeVari
   }
 }
 
-function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+function formatDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+  t: TFunction<'common'>,
+): string {
   if (!startedAt) return '—';
   const start = new Date(startedAt).getTime();
   const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
   const seconds = Math.round((end - start) / 1000);
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return t('domainDetailPage.crawlProgress.seconds', { count: seconds });
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}m ${secs}s`;
+  return t('domainDetailPage.crawlProgress.minutesAndSeconds', {
+    minutes: mins,
+    seconds: seconds % 60,
+  });
 }
 
 export default function CrawlJobProgressPanel({
@@ -170,7 +177,7 @@ export default function CrawlJobProgressPanel({
 
       {/* Timing */}
       <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark flex gap-4">
-        <span>{t('domainDetailPage.crawlProgress.duration')}: {formatDuration(currentJob.started_at, currentJob.finished_at)}</span>
+        <span>{t('domainDetailPage.crawlProgress.duration')}: {formatDuration(currentJob.started_at, currentJob.finished_at, t)}</span>
         {currentJob.started_at && (
           <span>{t('domainDetailPage.crawlProgress.started')}: {new Date(currentJob.started_at).toLocaleString(i18n.resolvedLanguage)}</span>
         )}

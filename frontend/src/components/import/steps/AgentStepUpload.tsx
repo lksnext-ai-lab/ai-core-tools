@@ -1,11 +1,13 @@
-import { useRef, type ChangeEvent } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { type ChangeEvent } from 'react';
 import Alert from '../../ui/Alert';
 import type { AgentImportPreview } from '../../../types/import';
 import {
   COMPONENT_TYPE_ICONS,
 } from '../../../types/import';
+import { FormField } from '../../ui/FormField';
 import { LoadingState } from '../../ui/LoadingState';
+import CardApp from '../../ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   file: File | null;
@@ -22,7 +24,7 @@ function AgentStepUpload({
   isValidating,
   validationError,
 }: Readonly<Props>) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation('common');
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -35,29 +37,33 @@ function AgentStepUpload({
     preview
       ? [
           preview.ai_service && {
-            label: 'AI Service',
+            label: t('importModal.agentUpload.components.aiService'),
             icon: COMPONENT_TYPE_ICONS.ai_service,
             name: preview.ai_service.component_name,
           },
           preview.silo && {
-            label: 'Silo',
+            label: t('importModal.agentUpload.components.silo'),
             icon: COMPONENT_TYPE_ICONS.silo,
             name: preview.silo.component_name,
           },
           preview.output_parser && {
-            label: 'Output Parser',
+            label: t('importModal.agentUpload.components.outputParser'),
             icon: COMPONENT_TYPE_ICONS.output_parser,
             name: preview.output_parser.component_name,
           },
           preview.mcp_configs.length > 0 && {
-            label: `MCP Configs (${preview.mcp_configs.length})`,
+            label: t('importModal.agentUpload.components.mcpConfigs', {
+              count: preview.mcp_configs.length,
+            }),
             icon: COMPONENT_TYPE_ICONS.mcp_config,
             name: preview.mcp_configs
               .map((m) => m.component_name)
               .join(', '),
           },
           preview.agent_tools.length > 0 && {
-            label: `Agent Tools (${preview.agent_tools.length})`,
+            label: t('importModal.agentUpload.components.agentTools', {
+              count: preview.agent_tools.length,
+            }),
             icon: COMPONENT_TYPE_ICONS.agent,
             name: preview.agent_tools
               .map((t) => t.component_name)
@@ -69,39 +75,23 @@ function AgentStepUpload({
 
   return (
     <div className="space-y-4">
-      <div>
-        <label
-          htmlFor="agent-export-file-input"
-          className="block text-sm font-medium text-gray-700 mb-2"
-        >
-          Select Export File
-        </label>
-        <input
-          ref={fileInputRef}
-          id="agent-export-file-input"
-          type="file"
-          accept=".json,application/json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isValidating}
-          className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
-        >
-          <FolderOpen className="w-5 h-5 mr-2" />
-          {file ? 'Change File' : 'Select JSON File'}
-        </button>
-        {file && (
-          <p className="mt-1 text-sm text-gray-500">
-            {file.name}
-          </p>
-        )}
-      </div>
+      <FormField
+        id="agent-export-file-input"
+        label={t('importModal.agentUpload.selectExportFile')}
+        type="file"
+        accept=".json,application/json"
+        fileName={file?.name}
+        fileButtonLabel={t('importModal.file.choose')}
+        noFileSelectedLabel={t('importModal.file.noFileSelected')}
+        onChange={handleFileChange}
+        disabled={isValidating}
+      />
 
       {isValidating && (
-        <LoadingState variant="inline" message="Validating export file..." />
+        <LoadingState
+          variant="inline"
+          message={t('importModal.agentUpload.validating')}
+        />
       )}
 
       {validationError && (
@@ -109,40 +99,43 @@ function AgentStepUpload({
       )}
 
       {preview && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-          <h4 className="text-sm font-medium text-blue-900">
-            Export File Summary
-          </h4>
-          <div className="flex items-center space-x-3">
-            <span className="text-2xl">
+        <CardApp
+          variant="canvas"
+          className="p-4"
+          titulo={t('importModal.agentUpload.summary')}
+        >
+          <div className="flex items-top space-x-3">
+            <span className="text-md text-bronze dark:text-bronze-dark">
               {COMPONENT_TYPE_ICONS.agent}
             </span>
             <div>
-              <p className="font-medium text-blue-900">
+              <p className="font-xs text-fg dark:text-fg-dark">
                 {preview.agent.component_name}
               </p>
-              <p className="text-xs text-blue-700">
-                Version {preview.export_version}
+              <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                {t('importModal.agentUpload.version', {
+                  version: preview.export_version,
+                })}
               </p>
             </div>
           </div>
 
           {inventoryItems.length > 0 && (
-            <div className="border-t border-blue-200 pt-3">
-              <p className="text-xs font-medium text-blue-800 mb-2">
-                Bundled Components
+            <div className="border-t border-line dark:border-line-dark pt-3">
+              <p className="text-md font-medium text-fg dark:text-fg-dark mb-2">
+                {t('importModal.agentUpload.bundledComponents')}
               </p>
               <div className="space-y-1">
                 {inventoryItems.map((item) => (
                   <div
                     key={item.label}
-                    className="flex items-center text-sm text-blue-800"
+                    className="flex items-center text-sm text-md text-bronze dark:text-bronze-dark"
                   >
                     <span className="mr-2">{item.icon}</span>
                     <span className="font-medium mr-1">
                       {item.label}:
                     </span>
-                    <span>{item.name}</span>
+                    <span className="text-fg dark:text-fg-dark">{item.name}</span>
                   </div>
                 ))}
               </div>
@@ -161,7 +154,7 @@ function AgentStepUpload({
               }
             />
           )}
-        </div>
+        </CardApp>
       )}
     </div>
   );

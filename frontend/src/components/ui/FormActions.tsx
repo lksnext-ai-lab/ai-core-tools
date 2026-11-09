@@ -1,9 +1,10 @@
 import { ButtonApp } from './ButtonApp';
+import { useTranslation } from 'react-i18next';
 
 interface FormActionsProps {
   onCancel: () => void;
   isSubmitting: boolean;
-  /** Picks the default submit label ("Update" / "Create") when no submitLabel is given. */
+  /** Picks a translated default submit label when no submitLabel is given. */
   isEditing?: boolean;
   submitLabel?: string;
   submittingLabel?: string;
@@ -15,11 +16,6 @@ interface FormActionsProps {
   submitDisabled?: boolean; // Additional condition to disable submit button
 }
 
-function getDefaultSubmitLabel(isEditing: boolean | undefined): string {
-  if (isEditing === undefined) return 'Save';
-  return isEditing ? 'Update' : 'Create';
-}
-
 /**
  * Reusable form action buttons (Cancel/Submit) built on ButtonApp.
  * Provides consistent button styling and behavior across all forms.
@@ -29,21 +25,27 @@ export function FormActions({
   isSubmitting,
   isEditing,
   submitLabel,
-  submittingLabel = 'Saving...',
-  cancelLabel = 'Cancel',
+  submittingLabel,
+  cancelLabel,
   submitClassName = '',
   cancelClassName = '',
   containerClassName = '',
   showCancel = true,
   submitDisabled = false,
 }: Readonly<FormActionsProps>) {
-  const finalSubmitLabel = submitLabel || getDefaultSubmitLabel(isEditing);
+  const { t } = useTranslation('common');
+  let defaultSubmitLabel = t('formActions.save');
+  if (isEditing === true) defaultSubmitLabel = t('formActions.update');
+  else if (isEditing === false) defaultSubmitLabel = t('formActions.create');
+  const finalSubmitLabel = submitLabel || defaultSubmitLabel;
+  const finalSubmittingLabel = submittingLabel ?? t('formActions.saving');
+  const finalCancelLabel = cancelLabel ?? t('formActions.cancel');
 
   return (
     <div className={`flex items-center justify-end gap-3 pt-4 border-t border-line dark:border-line-dark ${containerClassName}`}>
       {showCancel && (
         <ButtonApp
-          label={cancelLabel}
+          label={finalCancelLabel}
           type="button"
           onClick={onCancel}
           disabled={isSubmitting}
@@ -53,7 +55,7 @@ export function FormActions({
         />
       )}
       <ButtonApp
-        label={isSubmitting ? submittingLabel : finalSubmitLabel}
+        label={isSubmitting ? finalSubmittingLabel : finalSubmitLabel}
         type="submit"
         disabled={submitDisabled}
         loading={isSubmitting}

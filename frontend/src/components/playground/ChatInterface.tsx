@@ -20,6 +20,7 @@ import type { HitlDecision } from '../../types/streaming';
 import type { VideoTimestamp } from './VideoPlayer';
 import { LoadingState } from '../ui/LoadingState';
 import ButtonApp from '../ui/ButtonApp';
+import { SegmentedTabs } from '../ui/SegmentedTabs';
 
 interface Message {
   id: string;
@@ -57,6 +58,8 @@ interface ChatInterfaceProps {
   onMessageSent?: () => void;
   metadataFields?: SearchFilterMetadataField[];
   vectorDbType?: string;
+  /** Extra controls rendered at the start of the chat toolbar (left of "Reset"). */
+  toolbarStart?: React.ReactNode;
 }
 
 function ChatInterface({
@@ -69,6 +72,7 @@ function ChatInterface({
   onMessageSent,
   metadataFields,
   vectorDbType,
+  toolbarStart,
 }: Readonly<ChatInterfaceProps>) {
   const { t } = useTranslation('common');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -76,7 +80,7 @@ function ChatInterface({
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [persistentFiles, setPersistentFiles] = useState<RawAttachedFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [sidePanelTab, setSidePanelTab] = useState<'info' | 'filters'>('info');
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(
     conversationId || null
   );
@@ -105,6 +109,7 @@ function ChatInterface({
   const userScrolledUpRef = useRef(false);
   const lastScrollTopRef = useRef(0);
   const filterPanelId = `metadata-filters-${agentId}`;
+  const hasMetadataFilters = !!metadataFields && metadataFields.length > 0;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -890,76 +895,16 @@ function ChatInterface({
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      {/* Metadata Filters Section */}
-      {metadataFields && metadataFields.length > 0 && (
-        <div className="pg-glass rounded-xl overflow-hidden">
-          <button
-            type="button"
-            className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/30 dark:hover:bg-gray-700/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
-            onClick={() => setIsFilterExpanded((prev) => !prev)}
-            aria-expanded={isFilterExpanded}
-            aria-controls={filterPanelId}
-          >
-            <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              <svg
-                className="w-4 h-4 text-indigo-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
-                />
-              </svg>
-              {t('agentPlayground.chat.filterByMetadata')}
-            </span>
-            <svg
-              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                isFilterExpanded ? 'rotate-180' : ''
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-
-          <div
-            id={filterPanelId}
-            className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 ${
-              isFilterExpanded ? '' : 'hidden'
-            }`}
-          >
-            <SearchFilters
-              key={filtersKey}
-              metadataFields={metadataFields}
-              dbType={vectorDbType?.toUpperCase()}
-              disabled={isStreaming}
-              onFilterMetadataChange={handleFilterMetadataChange}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Chat Interface + File Panel */}
-      <div className="flex gap-4 items-start">
+    <div className="flex flex-col gap-4">
+      {/* Chat Interface + right column (info / filters) */}
+      <div className="grid grid-cols-1 items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* Chat card */}
-        <div className="flex-1 min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
-          {/* Reset button — subtle, top-right corner */}
-          <div className="flex justify-end px-6 pt-3 pb-1">
+        <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
+          {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
+          <div className="flex items-center gap-2 px-6 pt-3 pb-1">
+            {toolbarStart}
             <ButtonApp
+              className="ml-auto"
               label={t('agentPlayground.chat.reset')}
               variant="secondary"
               size="compact"
@@ -1346,22 +1291,62 @@ function ChatInterface({
           </div>
         </div>
 
-        {/* Right column: attached files on top, tool activity below */}
-        <div className="w-72 shrink-0 flex flex-col gap-3 h-full min-h-0 [&>*:first-child]:w-full [&>*:first-child]:h-auto [&>*:first-child]:max-h-[50%]">
-          {/* Attached Files Panel */}
-          <AttachedFilesPanel
-            files={panelFiles}
-            isLoading={isLoadingFiles}
-            onRemoveFile={handleRemovePersistentFile}
-            onDownloadFile={handleDownloadFile}
-          />
+        {/* Right column: Información (attached files + tool activity) / Filtros de metadatos */}
+        <aside
+          aria-label={t('agentPlayground.chat.sidePanel')}
+          className="flex min-w-0 flex-col gap-3.5"
+        >
+          {hasMetadataFilters && (
+            <SegmentedTabs
+              ariaLabel={t('agentPlayground.chat.sidePanel')}
+              tabs={[
+                { id: 'info', label: t('agentPlayground.chat.infoTab') },
+                { id: 'filters', label: t('agentPlayground.chat.filtersTab') },
+              ]}
+              activeTab={sidePanelTab}
+              onChange={setSidePanelTab}
+              className="flex-none"
+            />
+          )}
 
-          {/* Tool Execution History Panel */}
-          <ToolHistoryPanel
-            history={toolExecutionHistory}
-            onClear={clearToolHistory}
-          />
-        </div>
+          <div className={`flex flex-col gap-3.5 ${sidePanelTab === 'info' || !hasMetadataFilters ? '' : 'hidden'}`}>
+            {/* Attached Files Panel */}
+            <AttachedFilesPanel
+              variant="section"
+              files={panelFiles}
+              isLoading={isLoadingFiles}
+              onRemoveFile={handleRemovePersistentFile}
+              onDownloadFile={handleDownloadFile}
+            />
+
+            {/* Tool Execution History Panel */}
+            <ToolHistoryPanel
+              history={toolExecutionHistory}
+              onClear={clearToolHistory}
+            />
+          </div>
+
+          {/* Metadata filters — kept mounted (hidden) so their values survive tab switches */}
+          {hasMetadataFilters && (
+            <section
+              id={filterPanelId}
+              aria-label={t('agentPlayground.chat.filterByMetadata')}
+              className={`rounded-lg border border-line p-3.5 dark:border-line-dark ${sidePanelTab === 'filters' ? '' : 'hidden'}`}
+            >
+              <p className="mb-3 text-[12.5px] leading-normal text-fg-secondary dark:text-fg-secondary-dark">
+                {t('agentPlayground.chat.filtersHelp')}
+              </p>
+              <SearchFilters
+                key={filtersKey}
+                layout="stacked"
+                metadataFields={metadataFields}
+                dbType={vectorDbType?.toUpperCase()}
+                disabled={isStreaming}
+                onFilterMetadataChange={handleFilterMetadataChange}
+              />
+            </section>
+          )}
+        </aside>
       </div>
 
       {/* Media Upload Modal */}

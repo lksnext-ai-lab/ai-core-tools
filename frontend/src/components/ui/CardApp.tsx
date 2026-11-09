@@ -37,23 +37,25 @@ export function CardApp({
       className={`group relative flex h-full flex-col rounded-md ${variant === 'selected' ? 'p-3 transition-colors' : 'p-4'} text-left ${variantClasses[variant]} ${className}`}
     >
       {(icon || titulo || subtitulo || headerExtra) && (
-        <div className="mb-6 flex items-center">
-          {icon && (
-            <BackgroundImage
-              icon={icon}
-              size={40}
-              iconSize={20}
-              variant="marron"
-              className="mr-4 rounded-xl"
-            />
+        <div className="mb-4">
+          <div className="flex items-center">
+            {icon && (
+              <BackgroundImage
+                icon={icon}
+                size={32}
+                iconSize={16}
+                variant="marron"
+                className="mr-3"
+              />
+            )}
+            {titulo && <h4 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">{titulo}</h4>}
+            {headerExtra && <div className="ml-auto">{headerExtra}</div>}
+          </div>
+          {subtitulo && (
+            <p className={`${icon && titulo ? 'ml-11' : ''} text-sm text-fg-secondary dark:text-fg-secondary-dark`}>
+              {subtitulo}
+            </p>
           )}
-          {(titulo || subtitulo) && (
-            <div>
-              {titulo && <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">{titulo}</h3>}
-              {subtitulo && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{subtitulo}</p>}
-            </div>
-          )}
-          {headerExtra && <div className="ml-auto">{headerExtra}</div>}
         </div>
       )}
       {children}

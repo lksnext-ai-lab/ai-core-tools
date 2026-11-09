@@ -21,24 +21,24 @@ interface DomainUrlsTableProps {
   onViewUrl?: (urlId: number) => void;
 }
 
-function getStatusBadge(status: DomainUrlStatus): { text: string; variant: BadgeVariant; className?: string } {
+function getStatusBadge(status: DomainUrlStatus): { variant: BadgeVariant; className?: string } {
   switch (status) {
     case 'PENDING':
-      return { text: 'Pending', variant: 'warning' };
+      return { variant: 'warning' };
     case 'CRAWLING':
-      return { text: 'Crawling', variant: 'info' };
+      return { variant: 'info' };
     case 'INDEXED':
-      return { text: 'Indexed', variant: 'success' };
+      return { variant: 'success' };
     case 'SKIPPED':
-      return { text: 'Skipped', variant: 'default' };
+      return { variant: 'default' };
     case 'FAILED':
-      return { text: 'Failed', variant: 'error' };
+      return { variant: 'error' };
     case 'REMOVED':
-      return { text: 'Removed', variant: 'default', className: 'line-through opacity-70' };
+      return { variant: 'default', className: 'line-through opacity-70' };
     case 'EXCLUDED':
-      return { text: 'Excluded', variant: 'secondary' };
+      return { variant: 'secondary' };
     default:
-      return { text: status, variant: 'default' };
+      return { variant: 'default' };
   }
 }
 
@@ -172,7 +172,7 @@ export default function DomainUrlsTable({
         const badge = getStatusBadge(url.status as DomainUrlStatus);
         return (
           <Badge
-            label={t(`domainDetailPage.urls.statuses.${url.status.toLowerCase()}`, { defaultValue: badge.text })}
+            label={t(`domainDetailPage.urls.statuses.${url.status.toLowerCase()}`, { defaultValue: url.status })}
             variant={badge.variant}
             className={badge.className}
             icon={url.status === 'CRAWLING' ? <Spinner size="xs" tone="current" /> : undefined}
@@ -202,7 +202,9 @@ export default function DomainUrlsTable({
         <span title={url.consecutive_skips > 1 ? t('domainDetailPage.urls.backoffTooltip', { count: url.consecutive_skips }) : undefined}>
           {formatDate(url.next_crawl_at, i18n.resolvedLanguage)}
           {url.consecutive_skips > 1 && (
-            <span className="ml-1 text-orange-500">({url.consecutive_skips}x)</span>
+            <span className="ml-1 text-orange-500">
+              {t('domainDetailPage.urls.backoffShort', { count: url.consecutive_skips })}
+            </span>
           )}
         </span>
       ),

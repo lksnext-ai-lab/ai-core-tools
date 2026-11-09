@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import SearchFilters from '../components/playground/SearchFilters';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
@@ -9,6 +10,7 @@ import ButtonApp from '../components/ui/ButtonApp';
 import { Search } from 'lucide-react';
 import Alert from '../components/ui/Alert';
 import CardApp from '../components/ui/CardApp';
+import HelpRow from '../components/ui/HelpRow';
 import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 
 // Define the repository type
@@ -32,6 +34,7 @@ interface SearchResult {
 
 const RepositoryPlaygroundPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
+  const { t, i18n } = useTranslation('common');
   {/*const navigate = useNavigate();*/}
   
   const [query, setQuery] = useState('');
@@ -68,7 +71,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading repository info:', err);
-      setError('Failed to load repository information');
+      setError(t('repositoryPlayground.loadError'));
     }
   };
 
@@ -97,7 +100,7 @@ const RepositoryPlaygroundPage: React.FC = () => {
 
     } catch (err) {
       console.error('Error searching repository:', err);
-      setError('Failed to search repository');
+      setError(t('repositoryPlayground.searchError'));
     } finally {
       setSearching(false);
     }
@@ -119,59 +122,104 @@ const RepositoryPlaygroundPage: React.FC = () => {
     }
   }, [repository, filterMetadata]);
 
+  const maxScore = results.reduce((max, result) => Math.max(max, result.score ?? 0), 0);
+
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 pb-4">
       {/* Header */}
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <Title variant="titSecundario" titulo="Repository Search" subtitulo={`Search within "${repository?.name || 'Repository'}" repository`} subtitleMarginBottom={20} />
-        </div>
+      <div className="flex justify-between items-start">
+          <Title
+            variant="titSecundario"
+            titulo={t('repositoryPlayground.title')}
+            subtitulo={t('repositoryPlayground.subtitle', {
+              name: repository?.name || t('repositoryPlayground.repositoryFallback'),
+            })}
+            subtitleMarginBottom={20}
+          />
       </div>
 
-      {/* Search Form */}
-      <CardApp variant="white" className=" p-6 mb-8">
-        <form onSubmit={handleSearch} className="space-y-4">
-          {/* Metadata Filters */}
-          {repository?.metadata_fields && repository.metadata_fields.length > 0 && (
-            <SearchFilters
-              metadataFields={repository.metadata_fields}
-              dbType={repository.vector_db_type?.toUpperCase()}
-              disabled={searching}
-              onFilterMetadataChange={handleFilterMetadataChange}
-            />
-          )}
-          
-          <div className="flex items-end gap-3">
+      <HelpRow title={t('repositoryPlayground.helpTitle')}>
+        <p>{t('repositoryPlayground.helpDescription')}</p>
+        <p className="mt-2 font-medium text-fg dark:text-fg-dark">
+          {t('repositoryPlayground.tipsTitle')}
+        </p>
+        <ul className="mt-1 space-y-1">
+          <li>• {t('repositoryPlayground.tipNaturalLanguage')}</li>
+          <li>• {t('repositoryPlayground.tipBrowseAll')}</li>
+          <li>• {t('repositoryPlayground.tipDifferentPhrasing')}</li>
+          <li>• {t('repositoryPlayground.tipRelevance')}</li>
+          <li>• {t('repositoryPlayground.tipMetadataFilters')}</li>
+        </ul>
+      </HelpRow>
+
+      {/* Search Interface */}
+      <section className="mb-6 mt-6" aria-labelledby="search-documents-title">
+        <h2 id="search-documents-title" className="mb-3 font-display text-[20px] tracking-[-0.02em] text-ink dark:text-ink-dark">
+          {t('repositoryPlayground.searchDocuments')}
+        </h2>
+
+        <form onSubmit={handleSearch} className="space-y-3">
+          <div className="relative">
+            <label htmlFor="searchQuery" className="sr-only">
+              {t('repositoryPlayground.searchQuery')}
+            </label>
+            <div className="flex gap-2.5">
               <FormField
-                label="Search Query"
-                id="query"
+                type="text"
+                id="searchQuery"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter your search query (leave empty to browse all documents)..."
+                autoComplete="off"
+                placeholder={t('repositoryPlayground.searchPlaceholder')}
+                className="min-w-0 flex-1"
+                inputClassName="!px-[15px] !py-[13px] !text-[15px]"
                 disabled={searching}
-                className="flex-1"
               />
               <ButtonApp
                 type="submit"
-                disabled={searching}
+                label={searching ? t('repositoryPlayground.searching') : t('repositoryPlayground.search')}
                 loading={searching}
-                icon={<Search className="w-4 h-4" aria-hidden="true" />}
-                label="Search"
-                variant="secondary"
-                size="medium"
               />
+            </div>
           </div>
+
+          {repository?.metadata_fields && repository.metadata_fields.length > 0 && (
+            <details className="group rounded-md border border-bg-soft bg-canvas-alt dark:border-bronze-border-dark dark:bg-canvas-alt-dark">
+              <summary
+                className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-4 py-3 text-fg dark:text-fg-dark
+                           [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus dark:focus-visible:outline-focus-dark"
+              >
+                <span className="text-sm font-medium">{t('repositoryPlayground.metadataFilters')}</span>
+                <span className="flex min-w-0 items-center gap-2.5 text-[12.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                  <span
+                    aria-hidden="true"
+                    className="text-lg leading-none text-fg-tertiary transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none dark:text-fg-tertiary-dark"
+                  >
+                    ›
+                  </span>
+                </span>
+              </summary>
+              <div className="border-t border-bg-soft p-4 dark:border-bronze-border-dark">
+                <SearchFilters
+                  metadataFields={repository.metadata_fields}
+                  dbType={repository.vector_db_type?.toUpperCase()}
+                  disabled={searching}
+                  onFilterMetadataChange={handleFilterMetadataChange}
+                />
+              </div>
+            </details>
+          )}
         </form>
-      </CardApp>
+      </section>
 
       {/* Error Message */}
       {error && <Alert type="error" message={error} className="mb-6" />}
 
       {/* Search Results */}
       {results.length > 0 && (
-        <CardApp variant="white" className="p-6">
-          <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">
-            Search Results ({results.length})
+        <div>
+          <h2 className="mb-3 font-display text-[20px] tracking-[-0.02em] text-ink dark:text-ink-dark">
+            {t('repositoryPlayground.searchResults', { count: results.length })}
           </h2>
           
           <div className="space-y-4">
@@ -179,41 +227,75 @@ const RepositoryPlaygroundPage: React.FC = () => {
               const source = result.metadata.source as string | undefined;
               const page = result.metadata.page as number | undefined;
               const uniqueKey = `${source}-${page ?? 'no-page'}-${result.page_content.substring(0, 30).replaceAll(/\s+/g, '-').replaceAll(/[^a-zA-Z0-9-]/g, '')}`;
+              const scoreDisplay = result.score != null && maxScore > 0
+                ? {
+                    barWidth: Math.min((result.score / maxScore) * 100, 100),
+                    label: new Intl.NumberFormat(i18n.resolvedLanguage, {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    }).format(result.score),
+                  }
+                : null;
+
               return (
-              <CardApp variant="white" key={uniqueKey} className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500">
-                    Result #{index + 1}
-                  </span>
-                  {result.score && (
-                    <span className="text-sm text-gray-500">
-                      Score: {result.score.toFixed(3)}
+                <article key={uniqueKey} className="rounded-lg border border-line px-4 py-3.5 dark:border-line-dark">
+                  <div className="mb-2.5 flex items-start justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-fg dark:text-fg-dark">
+                      {t('repositoryPlayground.result', { number: index + 1 })}
                     </span>
-                  )}
-                </div>
-                
-                <div className="mb-3">
-                  <h3 className="text-sm font-medium text-gray-700 mb-1">Content:</h3>
-                  <p className="text-gray-900 text-sm leading-relaxed">
-                    {result.page_content}
-                  </p>
-                </div>
-                
-                {result.metadata && Object.keys(result.metadata).length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">Metadata:</h3>
-                    <div className="bg-gray-50 rounded p-2">
-                      <pre className="text-xs text-gray-600 overflow-x-auto">
-                        {JSON.stringify(result.metadata, null, 2)}
-                      </pre>
-                    </div>
                   </div>
-                )}
-              </CardApp>
-            );
+
+                  {scoreDisplay && (
+                    <div className="mb-3 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 rounded bg-surface-hover dark:bg-surface-hover-dark">
+                        <div
+                          className="h-1.5 rounded bg-accent dark:bg-accent-dark"
+                          style={{ width: `${scoreDisplay.barWidth}%` }}
+                        />
+                      </div>
+                      <span className="shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                        {t('repositoryPlayground.score', { score: scoreDisplay.label })}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <h3 className="mb-1 text-[13px] font-medium text-fg-secondary dark:text-fg-secondary-dark">
+                      {t('repositoryPlayground.content')}
+                    </h3>
+                    <p className="m-0 whitespace-pre-wrap text-[13.5px] leading-[1.6] text-fg dark:text-fg-dark">
+                      {result.page_content}
+                    </p>
+                  </div>
+
+                  {Object.keys(result.metadata).length > 0 && (
+                    <details className="group mt-2.5 border-t border-line pt-2.5 dark:border-line-dark">
+                      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-fg dark:text-fg-dark [&::-webkit-details-marker]:hidden">
+                        <span
+                          aria-hidden="true"
+                          className="inline-block transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
+                        >
+                          ▸
+                        </span>
+                        {t('repositoryPlayground.metadata')}
+                        <span className="font-normal text-fg-tertiary dark:text-fg-tertiary-dark">
+                          · {t('repositoryPlayground.metadataFields', {
+                            count: Object.keys(result.metadata).length,
+                          })}
+                        </span>
+                      </summary>
+                      <div className="mt-2.5">
+                        <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-line bg-surface-tint px-3.5 py-3 font-mono text-xs leading-relaxed text-fg-secondary dark:border-line-dark dark:bg-surface-tint-dark dark:text-fg-secondary-dark">
+                          {JSON.stringify(result.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    </details>
+                  )}
+                </article>
+              );
             })}
           </div>
-        </CardApp>
+        </div>
       )}
 
       {/* No Results State */}
@@ -221,44 +303,18 @@ const RepositoryPlaygroundPage: React.FC = () => {
         <CardApp variant="white" className="p-6">
           <div className="text-center">
             <Search className="w-10 h-10 text-fg-secondary dark:text-fg-secondary-dark mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">No Results Found</h3>
+            <h3 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">
+              {t('repositoryPlayground.noResultsFound')}
+            </h3>
             <p className="text-fg-secondary dark:text-fg-secondary-dark">
-              {query ? 
-                "Try adjusting your search query or check if the repository contains documents." :
-                "Enter a search query to find documents, or leave empty to see all available documents."
-              }
+              {query
+                ? t('repositoryPlayground.noResultsWithQuery')
+                : t('repositoryPlayground.noResultsWithoutQuery')}
             </p>
           </div>
         </CardApp>
       )}
 
-      {/* Help Section */}
-      <Alert
-        type="info"
-        title="How to Use the Repository Playground"
-        className="mt-2"
-        message={(
-          <>
-            <p>
-              The playground allows you to test semantic search within your repository. 
-              Enter natural language queries to find relevant documents.
-            </p>
-            <p className="mt-2">
-              <span className="font-medium">Tips:</span>
-              <br />
-              • Use natural language (e.g., "What is machine learning?")
-              <br />
-              • Leave empty to browse all available documents
-              <br />
-              • Try different phrasings for better results
-              <br />
-              • Results are ranked by relevance score
-              <br />
-              • Use metadata filters to narrow down your search
-            </p>
-          </>
-        )}
-      />
     </div>
   );
 };

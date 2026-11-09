@@ -1,7 +1,7 @@
 import { useState, useRef, type ChangeEvent } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Modal from './Modal';
-import { FormSelect } from './FormField';
+import { FormField, FormSelect } from './FormField';
 import Alert from './Alert';
 import { FormActions } from './FormActions';
 import {
@@ -51,21 +51,6 @@ export interface ImportResponse {
   };
 }
 
-const CONFLICT_MODE_OPTIONS = [
-  { 
-    value: 'fail', 
-    label: 'Fail on Conflict',
-  },
-  { 
-    value: 'rename', 
-    label: 'Rename if Exists',
-  },
-  { 
-    value: 'override', 
-    label: 'Override Existing',
-  },
-];
-
 function ImportModal({
   isOpen,
   onClose,
@@ -77,6 +62,12 @@ function ImportModal({
   selectedEmbeddingServiceId,
   onEmbeddingServiceChange,
 }: Readonly<ImportModalProps>) {
+  const { t } = useTranslation('common');
+  const conflictModeOptions = [
+    { value: 'fail', label: t('importModal.conflict.options.fail') },
+    { value: 'rename', label: t('importModal.conflict.options.rename') },
+    { value: 'override', label: t('importModal.conflict.options.override') },
+  ];
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [conflictMode, setConflictMode] = useState<ConflictMode>('fail');
   const [newName, setNewName] = useState('');
@@ -92,7 +83,7 @@ function ImportModal({
 
     // Validate file type
     if (!file.name.endsWith('.json')) {
-      setError('Please select a valid JSON file');
+      setError(t('importModal.errors.invalidJsonFile'));
       setSelectedFile(null);
       setFilePreviewName(null);
       return;
@@ -106,7 +97,7 @@ function ImportModal({
     void file.text().then((text) => {
       try {
         const content = JSON.parse(text) as Record<string, { name?: string }>;
-        const name = content.metadata?.name ?? content[componentType]?.name ?? 'Unknown';
+        const name = content.metadata?.name ?? content[componentType]?.name ?? t('importModal.unknown');
         setFilePreviewName(name);
       } catch {
         setFilePreviewName(file.name);
@@ -118,12 +109,12 @@ function ImportModal({
 
   const handleImport = async () => {
     if (!selectedFile) {
-      setError('Please select a file to import');
+      setError(t('importModal.errors.selectFileRequired'));
       return;
     }
 
     if (conflictMode === 'rename' && !newName.trim()) {
-      setError('Please provide a new name for rename mode');
+      setError(t('importModal.errors.renameRequiresName'));
       return;
     }
 
@@ -144,7 +135,7 @@ function ImportModal({
         setImportResult(result);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed');
+      setError(err instanceof Error ? err.message : t('importModal.errors.importFailed'));
     } finally {
       setImporting(false);
     }
@@ -177,53 +168,39 @@ function ImportModal({
 
   let conflictModeHelpText: string;
   if (conflictMode === 'fail') {
-    conflictModeHelpText = 'Import will fail if a component with the same name already exists';
+    conflictModeHelpText = t('importModal.conflict.help.fail');
   } else if (conflictMode === 'rename') {
-    conflictModeHelpText = 'Component will be imported with a new name if it already exists';
+    conflictModeHelpText = t('importModal.conflict.help.rename');
   } else {
-    conflictModeHelpText = 'Existing component will be updated with the imported configuration';
+    conflictModeHelpText = t('importModal.conflict.help.override');
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={`Import ${componentLabel}`} size="medium">
+    <Modal isOpen={isOpen} onClose={handleClose} title={t('importModal.title', { component: componentLabel })} size="medium">
       <form onSubmit={(e) => { e.preventDefault(); void handleImport(); }} className="space-y-4">
-        {/* File Selection */}
         <div>
-          <label htmlFor="import-file" className="block text-sm font-medium text-gray-700 mb-2">
-            Select File <span className="text-red-500">*</span>
-          </label>
-          <input
+          <FormField
             ref={fileInputRef}
             id="import-file"
             type="file"
+            label={<>{t('importModal.file.select')} <span className="text-red-500">*</span></>}
             accept=".json,application/json"
             onChange={handleFileSelect}
             disabled={importing}
-            className="hidden"
+            helpText={filePreviewName ? (
+              <>{t('importModal.file.componentToImport')}: <span className="font-medium">{filePreviewName}</span></>
+            ) : undefined}
+            helpTextAriaLive="polite"
           />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FolderOpen className="w-5 h-5 mr-2" />
-            {selectedFile ? 'Change File' : 'Select File'}
-          </button>
-          {filePreviewName && (
-            <p className="mt-2 text-sm text-gray-600">
-              Component to import: <span className="font-medium">{filePreviewName}</span>
-            </p>
-          )}
         </div>
 
         {/* Conflict Resolution Mode */}
         <FormSelect
-          label="Conflict Resolution"
+          label={t('importModal.conflict.label')}
           id="conflict-mode"
           value={conflictMode}
           onChange={handleConflictModeChange}
-          options={CONFLICT_MODE_OPTIONS}
+          options={conflictModeOptions}
           disabled={importing}
           required
           helpText={conflictModeHelpText}
@@ -231,20 +208,15 @@ function ImportModal({
 
         {/* New Name Input (only for rename mode) */}
         {conflictMode === 'rename' && (
-          <div>
-            <label htmlFor="new-name" className="block text-sm font-medium text-gray-700 mb-2">
-              New Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="new-name"
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              disabled={importing}
-              placeholder="Enter a new name for the component"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
-          </div>
+          <FormField
+            id="new-name"
+            label={t('importModal.newName.label')}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            disabled={importing}
+            placeholder={t('importModal.newName.placeholder')}
+            required
+          />
         )}
 
         {/* Embedding Service Selection (for silos without bundled service) */}
@@ -252,10 +224,10 @@ function ImportModal({
           <div className="space-y-3">
             <Alert
               type="warning"
-              message="This silo requires an embedding service, but none is bundled in the export file. Please select an existing embedding service to use:"
+              message={t('importModal.embedding.warning')}
             />
             <FormSelect
-              label="Embedding Service"
+              label={t('importModal.embedding.label')}
               id="embedding-service-select"
               value={selectedEmbeddingServiceId?.toString() || ''}
               onChange={(e) => {
@@ -265,7 +237,7 @@ function ImportModal({
                 }
               }}
               options={[
-                { value: '', label: 'Select an embedding service...' },
+                { value: '', label: t('importModal.embedding.select') },
                 ...selectableServiceOptions(availableEmbeddingServices, undefined).map((svc) => ({
                   value: svc.service_id.toString(),
                   label: serviceOptionLabel(svc),
@@ -273,7 +245,7 @@ function ImportModal({
               ]}
               disabled={importing}
               required
-              helpText="The selected embedding service will be used for vectorizing documents in this silo."
+              helpText={t('importModal.embedding.help')}
             />
           </div>
         )}
@@ -287,7 +259,7 @@ function ImportModal({
         {importResult?.success && (
           <Alert
             type="success"
-            title="Import Successful"
+            title={t('importModal.result.success')}
             message={importResult.message}
           />
         )}
@@ -297,18 +269,18 @@ function ImportModal({
           <div className="space-y-3">
             <Alert
               type="info"
-              title="Import Summary"
+              title={t('importModal.result.summary')}
               message={(
                 <ul className="space-y-1">
                   <li>
-                    <strong>Component:</strong> {importResult.summary.component_name}
+                    <strong>{t('importModal.result.component')}:</strong> {importResult.summary.component_name}
                   </li>
                   <li>
-                    <strong>Action:</strong> {importResult.summary.created ? 'Created' : 'Updated'}
+                    <strong>{t('importModal.result.action')}:</strong> {importResult.summary.created ? t('importModal.result.created') : t('importModal.result.updated')}
                   </li>
                   {importResult.summary.dependencies_created && importResult.summary.dependencies_created.length > 0 && (
                     <li>
-                      <strong>Dependencies Created:</strong> {importResult.summary.dependencies_created.join(', ')}
+                      <strong>{t('importModal.result.dependenciesCreated')}:</strong> {importResult.summary.dependencies_created.join(', ')}
                     </li>
                   )}
                 </ul>
@@ -319,7 +291,7 @@ function ImportModal({
             {importResult.summary.warnings && importResult.summary.warnings.length > 0 && (
               <Alert
                 type="warning"
-                title="Warnings"
+                title={t('importModal.result.warnings')}
                 message={
                   <ul className="list-disc list-inside space-y-1">
                     {importResult.summary.warnings.map((warning) => (
@@ -333,7 +305,7 @@ function ImportModal({
             {/* Next Steps */}
             {importResult.summary.next_steps && importResult.summary.next_steps.length > 0 && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Next Steps</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">{t('importModal.result.nextSteps')}</h4>
                 <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
                   {importResult.summary.next_steps.map((step) => (
                     <li key={step}>{step}</li>
@@ -348,9 +320,9 @@ function ImportModal({
         <FormActions
           onCancel={handleClose}
           isSubmitting={importing}
-          submitLabel="Import"
-          submittingLabel="Importing..."
-          cancelLabel={importResult?.success ? 'Close' : 'Cancel'}
+          submitLabel={t('importModal.actions.import')}
+          submittingLabel={t('importModal.actions.importing')}
+          cancelLabel={importResult?.success ? t('importModal.actions.close') : t('importModal.actions.cancel')}
           showCancel={!importing}
           submitDisabled={!selectedFile || (requiresEmbeddingServiceSelection && !selectedEmbeddingServiceId)}
         />

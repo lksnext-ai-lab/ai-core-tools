@@ -170,10 +170,6 @@ function AppsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        {/*<div>
-          <h1 className="text-2xl font-bold text-gray-900">My Apps</h1>
-          <p className="text-gray-600">Manage your AI applications and workspaces</p>
-        </div>*/}
         <Title
           titulo={t('appsPage.title')}
           subtitulo={t('appsPage.subtitle')}
@@ -246,18 +242,19 @@ function AppsPage() {
               interactiveChildren
             >
               <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-md border-[0.8px] border-[#FF682C] text-sm font-medium">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border-[1.5px] border-accent bg-surface font-display text-[15px] font-medium text-ink dark:border-accent-dark dark:bg-surface-dark dark:text-ink-dark">
                     TP
                   </div>
-                  <span className="min-w-0 text-[18px] leading-tight text-ink dark:text-ink-dark">{app.name}</span>
+                  <div className="flex min-w-0 flex-col items-start">
+                    <span className="min-w-0 font-display text-[18px] leading-[1.3] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] dark:text-ink-dark">{app.name}</span>
+                    <p className="mt-0.5 whitespace-pre-line text-[12px] leading-[1.45] text-fg-tertiary dark:text-fg-tertiary-dark">
+                      {app.created_at ? new Date(app.created_at).toLocaleDateString(i18n.resolvedLanguage) : '-'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-fg-secondary">
-                  {getAppRoleTranslationKey(app.role)
-                    ? t(getAppRoleTranslationKey(app.role)!)
-                    : app.role}
-                  </span>
+                  
                   <ActionDropdown
                     actions={actions}
                     size="sm"
@@ -267,58 +264,35 @@ function AppsPage() {
                   />
                 </div>
               </div>
-              <p className="mb-4 whitespace-pre-line text-[13.5px] leading-[1.45] text-fg-secondary dark:text-fg-secondary-dark">
-                {app.created_at ? new Date(app.created_at).toLocaleDateString(i18n.resolvedLanguage) : '-'}
-              </p>
-              <div className="mb-4 flex flex-wrap gap-2">
+              
+              <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <span className="whitespace-nowrap rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-fg-secondary dark:bg-surface-dark dark:text-fg-secondary-dark">
+                  {getAppRoleTranslationKey(app.role)
+                    ? t(getAppRoleTranslationKey(app.role)!)
+                    : app.role}
+                </span>
                 <Badge
                   key="langsmith-configuration"
                   label={app.langsmith_configured ? t('appsPage.configured') : t('appsPage.notConfigured')}
-                  variant={app.langsmith_configured ? 'success' : 'error'}
+                  variant={app.langsmith_configured ? 'success' : 'warning'}
                 />
               </div>
-              <div className="pointer-events-none relative z-0 mt-auto border-t border-[#e0ddd6] dark:border-line-dark">
-                <div className="overflow-x-auto pt-2">
-                  <table className="table-fixed text-center leading-none">
-                    <thead>
-                      <tr>
-                        {[
-                          { label: t('appsPage.stats.agents'), value: app.agent_count },
-                          { label: t('appsPage.stats.repositories'), value: app.repository_count },
-                          { label: t('appsPage.stats.domains'), value: app.domain_count },
-                          { label: t('appsPage.stats.silos'), value: app.silo_count },
-                          { label: t('appsPage.stats.collaborators'), value: totalCollaborators },
-                        ].map((stat, index, stats) => (
-                          <th
-                            key={stat.label}
-                            className={`px-2 py-0 text-[8px] font-medium uppercase tracking-[0.04em] text-fg-tertiary dark:text-fg-tertiary-dark ${index < stats.length - 1 ? 'border-r border-[#e0ddd6] dark:border-line-dark' : ''}`}
-                          >
-                            {stat.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        {[
-                          { label: t('appsPage.stats.agents'), value: app.agent_count },
-                          { label: t('appsPage.stats.repositories'), value: app.repository_count },
-                          { label: t('appsPage.stats.domains'), value: app.domain_count },
-                          { label: t('appsPage.stats.silos'), value: app.silo_count },
-                          { label: t('appsPage.stats.collaborators'), value: totalCollaborators },
-                        ].map((stat, index, stats) => (
-                          <td
-                            key={stat.label}
-                            className={`px-2 py-0 text-sm font-semibold text-ink dark:text-ink-dark ${index < stats.length - 1 ? 'border-r border-[#e0ddd6] dark:border-line-dark' : ''}`}
-                          >
-                            {stat.value}
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <dl className="pointer-events-none relative z-0 mt-auto grid grid-cols-5 gap-x-2 gap-y-2.5 border-t border-line pt-3 dark:border-line-dark">
+                {[
+                  { label: t('appsPage.stats.agents'), value: app.agent_count },
+                  { label: t('appsPage.stats.repositories'), value: app.repository_count },
+                  { label: t('appsPage.stats.domains'), value: app.domain_count },
+                  { label: t('appsPage.stats.silos'), value: app.silo_count },
+                  { label: t('appsPage.stats.collaborators'), value: totalCollaborators },
+                ].map((stat) => (
+                  <div key={stat.label} className="flex min-w-0 flex-col-reverse gap-px">
+                    <dt className="truncate text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">{stat.label}</dt>
+                    <dd className={`font-display text-[18px] font-medium leading-[1.2] ${stat.value === 0 ? 'text-fg-tertiary dark:text-fg-tertiary-dark' : 'text-ink dark:text-ink-dark'}`}>
+                      {stat.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             </ButtonCard>
           );
         })}

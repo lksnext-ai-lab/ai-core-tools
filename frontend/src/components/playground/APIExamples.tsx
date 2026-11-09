@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { Bot, KeyRound, Lightbulb, ClipboardList, AlertTriangle, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { KeyRound, ClipboardList, AlertTriangle, Check, CheckCircle2 } from 'lucide-react';
+import Alert from '../ui/Alert';
+import { Badge } from '../ui/Badge';
+import CardApp from '../ui/CardApp';
+import ButtonApp from '../ui/ButtonApp';
+import SegmentedTabs from '../ui/SegmentedTabs';
 
 interface APIExamplesProps {
   appId: number;
@@ -116,6 +122,7 @@ function buildAgentSnippetVars(agentType: string, hasSilo: boolean): AgentSnippe
 }
 
 function APIExamples({ appId, agentId, agentName, agentType = 'agent', hasSilo = false, siloName }: Readonly<APIExamplesProps>) {
+  const { t } = useTranslation('common');
   const [copied, setCopied] = useState<string | null>(null);
   const [selectedExample, setSelectedExample] = useState('curl');
 
@@ -404,142 +411,131 @@ async function resetConversation(conversationId = null) {
 
   const selectedExampleData = examples.find(ex => ex.id === selectedExample);
 
+  const cardClasses = 'rounded-lg border border-line bg-surface p-5 dark:border-line-dark dark:bg-surface-dark';
+  const sectionTitleClasses = 'mb-3 flex items-center gap-2 font-display text-base font-normal text-fg dark:text-fg-dark';
+  const iconClasses = 'w-4 h-4 text-fg-tertiary dark:text-fg-tertiary-dark';
+  const codeBlockClasses = 'overflow-x-auto rounded-md border border-line bg-surface-tint p-3 font-mono text-xs text-fg dark:border-line-dark dark:bg-surface-tint-dark dark:text-fg-dark';
+  const inlineCodeClasses = 'rounded border border-line bg-surface-tint px-2 py-1 font-mono text-xs text-fg break-all dark:border-line-dark dark:bg-surface-tint-dark dark:text-fg-dark';
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center">
-          <Bot className="w-4 h-4 text-blue-500 mr-3 shrink-0" />
+    <div className="space-y-5 pt-4">
+      {/* Page header + Agent Capabilities */}
+      <CardApp variant="canvas" className="p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-blue-900">API Integration Examples</h3>
-            <p className="text-blue-700 text-sm mt-1">
-              Use these examples to integrate <strong>{agentName}</strong> into your applications
+            <h3 className="font-display text-2xl font-normal tracking-[-0.02em] text-ink dark:text-ink-dark">{t('agentPlayground.apiExamples.title')}</h3>
+            <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              {t('agentPlayground.apiExamples.description', { agentName })}
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Agent Capabilities Info */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2"><Bot className="w-4 h-4" /> Agent Capabilities</h4>
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center">
-            <span className="w-20 text-gray-600">Type:</span>
-            <span className="font-medium">{agentType === 'ocr_agent' ? 'OCR Agent' : 'AI Agent'}</span>
-          </div>
-          {hasSilo && (
-            <div className="flex items-center">
-              <span className="w-20 text-gray-600">RAG:</span>
-              <span className="font-medium text-green-600 flex items-center gap-1"><Check className="w-3 h-3" /> Enabled ({siloName})</span>
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <div>
+              <h4 className="mb-1 text-xs uppercase tracking-wider text-bronze dark:text-bronze-dark">{t('agentPlayground.apiExamples.type')}</h4>
+              <Badge label={t(agentType === 'ocr_agent' ? 'agentPlayground.apiExamples.ocrAgent' : 'agentPlayground.apiExamples.aiAgent')} />
             </div>
-          )}
-          {agentType === 'ocr_agent' && (
-            <div className="flex items-center">
-              <span className="w-20 text-gray-600">Files:</span>
-              <span className="font-medium text-green-600 flex items-center gap-1"><Check className="w-3 h-3" /> Supports attachments</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* API Info */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2"><KeyRound className="w-4 h-4" /> API Information</h4>
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-600">Endpoint:</span>
-            <code className="bg-white px-2 py-1 rounded border text-xs">{endpoint}</code>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-600">Authentication:</span>
-            <code className="bg-white px-2 py-1 rounded border text-xs">X-API-KEY header</code>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-600">Method:</span>
-            <code className="bg-white px-2 py-1 rounded border text-xs">POST</code>
+            {hasSilo && (
+              <div>
+                <h4 className="mb-1 text-xs uppercase tracking-wider text-bronze dark:text-bronze-dark">RAG</h4>
+                <Badge variant="success" icon={<Check className="w-3 h-3" />} label={t('agentPlayground.apiExamples.enabled', { name: siloName })} />
+              </div>
+            )}
+            {agentType === 'ocr_agent' && (
+              <div>
+                <h4 className="mb-1 text-xs uppercase tracking-wider text-bronze dark:text-bronze-dark">{t('agentPlayground.apiExamples.files')}</h4>
+                <Badge variant="success" icon={<Check className="w-3 h-3" />} label={t('agentPlayground.apiExamples.supportsAttachments')} />
+              </div>
+            )}
           </div>
         </div>
-        <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-          <Lightbulb className="w-4 h-4 mr-2 shrink-0" />
-          Get your API key from the <strong>Settings → API Keys</strong> page
-        </div>
-      </div>
+      </CardApp>
 
-      {/* Request Body Schema */}
-      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-        <h4 className="font-medium text-indigo-900 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Request Body for {agentName}</h4>
-        <pre className="bg-white p-3 rounded border text-sm overflow-x-auto">
-          <code>{requestBodyJson}</code>
-        </pre>
-      </div>
-
-      {/* Language Selector */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
-        {examples.map((example) => (
-          <button
-            key={example.id}
-            onClick={() => setSelectedExample(example.id)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              selectedExample === example.id
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {example.title}
-          </button>
-        ))}
-      </div>
-
-      {/* Code Example */}
-      {selectedExampleData && (
-        <div className="relative">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="font-medium text-gray-900">{selectedExampleData.title} Example</h4>
-            <button
-              onClick={() => copyToClipboard(selectedExampleData.code, selectedExampleData.id)}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                copied === selectedExampleData.id
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {copied === selectedExampleData.id ? <span className="flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Copied!</span> : <span className="flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Copy</span>}
-            </button>
+      {/* API Information */}
+      <CardApp icon={KeyRound} titulo={t('agentPlayground.apiExamples.information')}>
+        <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark">{t('agentPlayground.apiExamples.endpoint')}:</span>
+            <code className={inlineCodeClasses}>{endpoint}</code>
           </div>
-          <div className="relative">
-            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
-              <code>{selectedExampleData.code}</code>
-            </pre>
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark">{t('agentPlayground.apiExamples.authentication')}:</span>
+            <code className={inlineCodeClasses}>X-API-KEY header</code>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark">{t('agentPlayground.apiExamples.method')}:</span>
+            <code className={inlineCodeClasses}>POST</code>
           </div>
         </div>
-      )}
+        <Alert
+          type="warning"
+          polite
+          className="mt-4 !p-3"
+          message={t('agentPlayground.apiExamples.apiKeyNotice')}
+        />
+      </CardApp>
 
-      {/* Response Format Info */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <h4 className="font-medium text-green-900 mb-3">Expected Response Format</h4>
-        <pre className="bg-white p-3 rounded border text-sm overflow-x-auto">
-          <code>{`{
+      {/* Request Body + Response Format */}
+      <CardApp className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <CardApp  titulo={t('agentPlayground.apiExamples.requestBodyFor', { agentName })} icon={ClipboardList}>
+          <pre className={codeBlockClasses}>
+            <code>{requestBodyJson}</code>
+          </pre>
+        </CardApp>
+
+        <CardApp  titulo={t('agentPlayground.apiExamples.expectedResponse')} icon={CheckCircle2}>
+          <pre className={codeBlockClasses}>
+            <code>{`{
   "response": "Agent's response text",
-  "conversation_id": "unique-conversation-identifier", 
+  "conversation_id": "unique-conversation-identifier",
   "usage": {
     "agent_name": "${agentName}",
     "agent_type": "${agentType}",
     "files_processed": ${agentType === 'ocr_agent' ? '1' : '0'},
     "has_memory": false
   }
-}`}</code>
-        </pre>
-      </div>
+}`}
+            </code>
+          </pre>
+        </CardApp>
+      </CardApp>
 
-      {/* Error Handling Info */}
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <h4 className="font-medium text-red-900 mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Error Handling</h4>
-        <div className="space-y-2 text-sm text-red-800">
-          <div><strong>401 Unauthorized:</strong> Invalid or missing API key</div>
-          <div><strong>404 Not Found:</strong> Agent not found or no access</div>
-          <div><strong>500 Internal Server Error:</strong> Agent execution failed</div>
+      {/* Code Example */}
+      <CardApp className="space-y-4">
+        {/* Language Selector */}
+        <SegmentedTabs
+          tabs={examples.map((example) => ({ id: example.id, label: example.title }))}
+          activeTab={selectedExample}
+          onChange={setSelectedExample}
+          ariaLabel={t('agentPlayground.apiExamples.exampleLanguage')}
+          className="overflow-x-auto [&>button]:flex-[1_0_auto] [&>button]:whitespace-nowrap [&>button]:px-3"
+        />
+
+        {selectedExampleData && (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="font-display text-base font-normal text-fg dark:text-fg-dark">{t('agentPlayground.apiExamples.exampleTitle', { title: selectedExampleData.title })}</h4>
+              <ButtonApp
+                variant={copied === selectedExampleData.id ? 'secondary' : 'muted'}
+                size="small"
+                icon={copied === selectedExampleData.id ? <Check className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+                label={copied === selectedExampleData.id ? t('agentPlayground.apiExamples.copied') : t('agentPlayground.apiExamples.copy')}
+                onClick={() => { void copyToClipboard(selectedExampleData.code, selectedExampleData.id); }}
+              />
+            </div>
+            <pre className="overflow-x-auto rounded-lg bg-ink p-4 font-mono text-xs leading-relaxed text-ink-on dark:border dark:border-line-dark dark:bg-canvas-dark dark:text-fg-dark">
+              <code>{selectedExampleData.code}</code>
+            </pre>
+          </div>
+        )}
+      </CardApp>
+
+      {/* Error Handling */}
+      <CardApp titulo={t('agentPlayground.apiExamples.errorHandling')} icon={AlertTriangle }>
+        <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          <div className="flex items-center gap-3"><Badge variant="error" label="401" className="w-12 justify-center" /><span><strong className="font-medium text-fg dark:text-fg-dark">{t('agentPlayground.apiExamples.unauthorized')}:</strong> {t('agentPlayground.apiExamples.invalidApiKey')}</span></div>
+          <div className="flex items-center gap-3"><Badge variant="error" label="404" className="w-12 justify-center" /><span><strong className="font-medium text-fg dark:text-fg-dark">{t('agentPlayground.apiExamples.notFound')}:</strong> {t('agentPlayground.apiExamples.agentNotFound')}</span></div>
+          <div className="flex items-center gap-3"><Badge variant="error" label="500" className="w-12 justify-center" /><span><strong className="font-medium text-fg dark:text-fg-dark">{t('agentPlayground.apiExamples.internalServerError')}:</strong> {t('agentPlayground.apiExamples.agentExecutionFailed')}</span></div>
         </div>
-      </div>
+      </CardApp>
     </div>
   );
 }

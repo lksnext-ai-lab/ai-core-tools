@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import {
   Target,
   Pencil,
@@ -9,8 +10,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
-import Modal from '../../components/ui/Modal';
-import SkillForm, { type SkillFormSubmitData } from '../../components/forms/SkillForm';
+import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import ActionDropdown, { type ActionItem } from '../../components/ui/ActionDropdown';
 import { LoadingState } from '../../components/ui/LoadingState';
@@ -20,7 +20,7 @@ import { Badge } from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import type { Skill } from '../../core/types';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
@@ -28,14 +28,14 @@ import Title from '../../components/ui/Title';
 import BackgroundImage from '../../components/ui/BackgroundImage';
 
 function SystemSkillsPage() {
+  const { t, i18n } = useTranslation('common');
   const confirm = useConfirm();
   const mutate = useApiMutation();
 
   const [skills, setSkills] = useState<Skill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const navigate = useNavigate();
 
   // Import/export/enable state
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -52,63 +52,30 @@ function SystemSkillsPage() {
       const data = await apiService.getSystemSkills();
       setSkills(data);
     } catch (err) {
-      setError(errorMessage(err, MESSAGES.LOAD_FAILED('system skills')));
+      setError(errorMessage(err, t('systemSkillsPage.loadFailed')));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void fetchSkills();
   }, [fetchSkills]);
 
   function handleOpenCreate() {
-    setEditingSkill(null);
-    setIsModalOpen(true);
+    navigate('/admin/system-skills/new');
   }
 
-  async function handleOpenEdit(skill: Skill) {
-    try {
-      const detail = await apiService.getSystemSkill(skill.skill_id);
-      setEditingSkill(detail);
-    } catch {
-      setEditingSkill(skill);
-    }
-    setIsModalOpen(true);
-  }
-
-  function handleCloseModal() {
-    setIsModalOpen(false);
-    setEditingSkill(null);
-  }
-
-  async function handleSave(data: SkillFormSubmitData) {
-    const isUpdate = editingSkill !== null;
-
-    const result = await mutate(
-      () =>
-        isUpdate
-          ? apiService.updateSystemSkill(editingSkill.skill_id, data)
-          : apiService.createSystemSkill(data),
-      {
-        loading: isUpdate ? MESSAGES.UPDATING('skill') : MESSAGES.CREATING('skill'),
-        success: isUpdate ? MESSAGES.UPDATED('skill') : MESSAGES.CREATED('skill'),
-        error: (err) =>
-          errorMessage(err, isUpdate ? MESSAGES.UPDATE_FAILED('skill') : MESSAGES.CREATE_FAILED('skill')),
-      },
-    );
-    if (result === undefined) return;
-
-    handleCloseModal();
-    await fetchSkills();
+  function handleOpenEdit(skill: Skill) {
+    navigate(`/admin/system-skills/${skill.skill_id}/edit`);
   }
 
   async function handleDelete(skill: Skill) {
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('system skill'),
-      message: `Delete "${skill.name}"? Apps using it will lose this specialization.`,
+      title: t('skillsPage.confirmDeleteTitle'),
+      message: t('skillsPage.confirmDeleteMessage', { name: skill.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('skillsPage.actions.delete'),
     });
     if (!ok) return;
 
@@ -119,9 +86,9 @@ function SystemSkillsPage() {
     const result = await mutate(
       () => apiService.deleteSystemSkill(skill.skill_id),
       {
-        loading: MESSAGES.DELETING('skill'),
-        success: MESSAGES.DELETED('skill'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('skill')),
+        loading: t('skillsPage.notifications.deleting'),
+        success: t('skillsPage.notifications.deleted'),
+        error: (err) => errorMessage(err, t('skillsPage.notifications.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -143,7 +110,7 @@ function SystemSkillsPage() {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.zip')) {
-      setImportError('Please select a valid skill package (.zip file).');
+      setImportError(t('skillsPage.import.invalidFile'));
       return;
     }
 
@@ -152,10 +119,10 @@ function SystemSkillsPage() {
     try {
       await apiService.importSystemSkill(file);
       await fetchSkills();
-      toast.success(MESSAGES.IMPORTED('skill'));
+      toast.success(t('skillsPage.notifications.imported'));
     } catch (err) {
       // Surface the backend's actual 400/409 reason (duplicate name, archive limits, etc.)
-      const message = errorMessage(err, MESSAGES.IMPORT_FAILED('skill'));
+      const message = errorMessage(err, t('skillsPage.import.failed'));
       setImportError(message);
       toast.error(message);
     } finally {
@@ -180,9 +147,9 @@ function SystemSkillsPage() {
       // Revoke immediately after the download has been kicked off — never leak object URLs.
       URL.revokeObjectURL(url);
 
-      toast.success(MESSAGES.EXPORTED('skill'));
+      toast.success(t('skillsPage.notifications.exported'));
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('skill')));
+      toast.error(errorMessage(err, t('skillsPage.notifications.exportFailed')));
     } finally {
       setExportingSkillId(null);
     }
@@ -194,9 +161,9 @@ function SystemSkillsPage() {
     try {
       const updated = await apiService.setSystemSkillEnabled(skill.skill_id, nextEnabled);
       setSkills((prev) => prev.map((s) => (s.skill_id === skill.skill_id ? updated : s)));
-      toast.success(nextEnabled ? 'Skill enabled' : 'Skill disabled');
+      toast.success(nextEnabled ? t('skillsPage.notifications.enabled') : t('skillsPage.notifications.disabled'));
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to update skill status'));
+      toast.error(errorMessage(err, t('skillsPage.notifications.statusUpdateFailed')));
     } finally {
       setTogglingSkillId(null);
     }
@@ -205,9 +172,9 @@ function SystemSkillsPage() {
   if (isLoading) return(
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <Title variant="titPrincipal" titulo="System Skills" subtitulo="Shared prompt-driven specializations, including disabled ones, available to every app." />
+            <Title variant="titPrincipal" titulo={t('systemSkillsPage.title')} subtitulo={t('systemSkillsPage.subtitle')} />
           </div>
-          <LoadingState message="Loading system skills..." />
+          <LoadingState message={t('systemSkillsPage.loading')} />
         </div>
       ) ;
   if (error) return <ErrorState error={error} onRetry={fetchSkills} />;
@@ -216,18 +183,18 @@ function SystemSkillsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Title variant="titPrincipal" titulo="System Skills" subtitulo="Shared prompt-driven specializations, including disabled ones, available to every app." />
+          <Title variant="titPrincipal" titulo={t('systemSkillsPage.title')} subtitulo={t('systemSkillsPage.subtitle')} />
         </div>
         <div className="flex gap-2">
           <ButtonApp
-            label={importing ? 'Importing…' : 'Import package'}
+            label={importing ? t('skillsPage.actions.importing') : t('skillsPage.actions.importPackage')}
             onClick={handleImportClick}
             loading={importing}
             variant="secondary"
             icon={<Upload className="w-4 h-4" />}
           />
           <ButtonApp
-            label="Add System Skill"
+            label={t('systemSkillsPage.addSkill')}
             onClick={handleOpenCreate}
             variant="primary"
             size="medium"
@@ -242,13 +209,13 @@ function SystemSkillsPage() {
         accept=".zip,application/zip"
         onChange={(e) => { void handleImportFile(e); }}
         className="hidden"
-        aria-label="Import system skill package file"
+        aria-label={t('skillsPage.import.fileInputLabel')}
       />
 
       {importError && (
         <Alert
           type="error"
-          title="Import failed"
+          title={t('skillsPage.import.failedTitle')}
           message={importError}
           onDismiss={() => setImportError(null)}
         />
@@ -261,7 +228,7 @@ function SystemSkillsPage() {
           keyExtractor={(skill) => skill.skill_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('skillsPage.columns.name'),
               render: (skill) => (
                 <div className="flex items-center">
                   <BackgroundImage icon={Target} variant="marron" className="mr-2"/>
@@ -276,25 +243,25 @@ function SystemSkillsPage() {
               ),
             },
             {
-              header: 'Description',
+              header: t('skillsPage.columns.description'),
               render: (skill) => (
                 <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs truncate">
-                  {skill.description || "No description"}
+                  {skill.description || t('skillsPage.noDescription')}
                 </div>
               ),
               className: 'px-6 py-4',
             },
             {
-              header: 'Status',
+              header: t('skillsPage.columns.status'),
               render: (skill) => {
                 const isEnabled = skill.is_enabled !== false;
                 return (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {skill.source === 'yaml' && (
-                      <Badge label="Seeded" variant="default" />
+                      <Badge label={t('systemSkillsPage.seeded')} variant="default" />
                     )}
                     <Badge
-                      label={isEnabled ? 'Enabled' : 'Disabled'}
+                      label={isEnabled ? t('skillsPage.statuses.enabled') : t('skillsPage.statuses.disabled')}
                       variant={isEnabled ? 'success' : 'error'}
                     />
                   </div>
@@ -303,12 +270,12 @@ function SystemSkillsPage() {
               className: 'px-6 py-4 whitespace-nowrap',
             },
             {
-              header: 'Created',
-              render: (skill) => (skill.created_at ? new Date(skill.created_at).toLocaleDateString() : 'N/A'),
+              header: t('skillsPage.columns.created'),
+              render: (skill) => (skill.created_at ? new Date(skill.created_at).toLocaleDateString(i18n.language) : t('skillsPage.notAvailable')),
               className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
             },
             {
-              header: 'Actions',
+              header: t('skillsPage.columns.actions'),
               sticky: 'right' as const,
               className: 'relative',
               render: (skill) => {
@@ -318,20 +285,22 @@ function SystemSkillsPage() {
 
                 const actions: ActionItem[] = [
                   {
-                    label: 'Edit',
+                    label: t('skillsPage.actions.edit'),
                     onClick: () => { void handleOpenEdit(skill); },
                     icon: <Pencil className="w-4 h-4" />,
                     variant: 'primary',
                   },
                   {
-                    label: isExporting ? 'Exporting...' : 'Export',
+                    label: isExporting ? t('skillsPage.actions.exporting') : t('skillsPage.actions.export'),
                     onClick: () => { void handleExport(skill); },
                     icon: isExporting ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                     disabled: isExporting,
                     variant: 'secondary',
                   },
                   {
-                    label: isToggling ? 'Updating...' : (isEnabled ? 'Disable' : 'Enable'),
+                    label: isToggling
+                      ? t('skillsPage.actions.updating')
+                      : (isEnabled ? t('skillsPage.actions.disable') : t('skillsPage.actions.enable')),
                     onClick: () => { void handleToggleEnabled(skill); },
                     icon: isToggling
                       ? <Spinner size="sm" tone="current" />
@@ -340,7 +309,7 @@ function SystemSkillsPage() {
                     variant: isEnabled ? 'warning' : 'success',
                   },
                   {
-                    label: 'Delete',
+                    label: t('skillsPage.actions.delete'),
                     onClick: () => { void handleDelete(skill); },
                     icon: <Trash2 className="w-4 h-4" />,
                     variant: 'danger',
@@ -352,11 +321,13 @@ function SystemSkillsPage() {
                     <ActionDropdown
                       actions={actions}
                       size="sm"
-                      triggerAriaLabel={`Actions for skill ${skill.name}`}
+                      triggerAriaLabel={t('skillsPage.actions.forSkill', { name: skill.name })}
                     />
                     {(isExporting || isToggling) && (
                       <span role="status" aria-live="polite" className="sr-only">
-                        {isExporting ? `Exporting skill ${skill.name}…` : `Updating skill ${skill.name}…`}
+                        {isExporting
+                          ? t('skillsPage.actions.exportingSkill', { name: skill.name })
+                          : t('skillsPage.actions.updatingSkill', { name: skill.name })}
                       </span>
                     )}
                   </>
@@ -365,8 +336,8 @@ function SystemSkillsPage() {
             },
           ]}
           emptyIcon={<BackgroundImage icon={Target} size={64} iconSize={32} />}
-          emptyMessage="No system skills"
-          emptySubMessage="Add the first system skill to make it available across every app."
+          emptyMessage={t('systemSkillsPage.emptyTitle')}
+          emptySubMessage={t('systemSkillsPage.emptyDescription')}
           loading={isLoading}
         />
       </div>
@@ -374,7 +345,7 @@ function SystemSkillsPage() {
       {!isLoading && skills.length === 0 && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Add First System Skill"
+            label={t('systemSkillsPage.addFirstSkill')}
             onClick={handleOpenCreate}
             variant="primary"
             size="medium"
@@ -384,30 +355,14 @@ function SystemSkillsPage() {
 
       <Alert
         type="info"
-        title="About system skills"
+        title={t('systemSkillsPage.aboutTitle')}
         message={(
           <p>
-            System skills are shared across every app. Skills marked <strong>Seeded</strong> come from
-            <code className="px-1 rounded ml-1 font-mono">system_defaults.yaml</code> and are
-            recreated on startup — they can&apos;t be deleted, only disabled.
+            {t('systemSkillsPage.aboutIntro')} <strong>{t('systemSkillsPage.seeded')}</strong> {t('systemSkillsPage.aboutSource')}
+            <code className="px-1 rounded ml-1 font-mono">system_defaults.yaml</code> {t('systemSkillsPage.aboutOutro')}
           </p>
         )}
       />
-
-      {/* Create/Edit Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingSkill ? 'Edit System Skill' : 'Create System Skill'}
-        size="large"
-      >
-        <SkillForm
-          skill={editingSkill}
-          readOnly={false}
-          onSubmit={handleSave}
-          onCancel={handleCloseModal}
-        />
-      </Modal>
     </div>
   );
 }

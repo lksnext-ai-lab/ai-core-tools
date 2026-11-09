@@ -30,6 +30,7 @@ import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
 import { LoadingState } from '../components/ui/LoadingState';
 import { Skeleton } from '../components/ui/Skeleton';
+import Speedometer from '../components/ui/Speedometer';
 import { useTranslation } from 'react-i18next';
 
 interface App {
@@ -66,6 +67,13 @@ interface FeatureCard {
 }
 
 const EDITOR_ROLES = new Set(['owner', 'administrator', 'editor']);
+
+function getUsageStressLevel(usage: AgentRateLimitUsage): 'low' | 'moderate' | 'high' | 'critical' {
+  if (usage.is_over_limit || usage.usage_percentage >= 95) return 'critical';
+  if (usage.usage_percentage >= 80) return 'high';
+  if (usage.usage_percentage >= 50) return 'moderate';
+  return 'low';
+}
 
 function AppDashboard() {
   const { appId } = useParams();
@@ -267,24 +275,79 @@ function AppDashboard() {
   const showChecklist = !currentApp.onboarding_dismissed && !allComplete;
 
   // --- Most-called agents ---
-  const agentUsageById = new Map(
-    (agentUsageStats ?? []).map((usage) => [usage.agent_id, usage]),
-  );
+  const highestAgentUsage = [...(agentUsageStats ?? [])]
+    .sort((a, b) => b.usage_percentage - a.usage_percentage)[0] ?? null;
+  const highestUsageAgent = highestAgentUsage
+    ? agents.find((agent) => agent.agent_id === highestAgentUsage.agent_id)
+    : undefined;
+  const rateLimitSummary = highestAgentUsage
+    ? {
+        usage_percentage: Math.max(0, Math.min(highestAgentUsage.usage_percentage, 100)),
+        stress_level: getUsageStressLevel(highestAgentUsage),
+        current_usage: highestAgentUsage.current_usage,
+        limit: highestAgentUsage.limit,
+        remaining: highestAgentUsage.remaining,
+        reset_in_seconds: highestAgentUsage.reset_in_seconds,
+        is_over_limit: highestAgentUsage.is_over_limit,
+      }
+    : null;
   const topAgents = [...agents]
-    .sort((a, b) => (
-      (b.request_count ?? 0) - (a.request_count ?? 0)
-      || (agentUsageById.get(b.agent_id)?.current_usage ?? 0)
-        - (agentUsageById.get(a.agent_id)?.current_usage ?? 0)
-    ))
+    .sort((a, b) => (b.request_count ?? 0) - (a.request_count ?? 0))
     .slice(0, 5);
-  const hasCurrentAgentUsage = topAgents.some(
-    (agent) => (agentUsageById.get(agent.agent_id)?.current_usage ?? 0) > 0,
+  const maxRequests = topAgents.reduce(
+    (maximum, agent) => Math.max(maximum, agent.request_count ?? 0),
+    0,
   );
-
   const canEdit = EDITOR_ROLES.has(currentApp.role);
 
+  let rateLimitContent: React.ReactNode;
+  if (currentApp.agent_rate_limit === 0) {
+    rateLimitContent = (
+      <div className="flex flex-col items-center justify-center py-6 gap-3">
+        <BackgroundImage icon={InfinityIcon} size={64} iconSize={32} />        
+        <p className="text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark">
+          {t('appDashboard.noLimitConfigured')}
+        </p>
+        <p className="text-center text-xs text-fg-secondary dark:text-fg-secondary-dark">
+          {t('appDashboard.unlimitedRequestCapacity')}
+        </p>
+      </div>
+    );
+  } else if (usageLoading) {
+    rateLimitContent = (
+      <div className="flex flex-col items-center justify-center gap-3 py-6">
+        <Skeleton shape="round" className="h-16 w-16" />
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-3 w-32" />
+      </div>
+    );
+  } else if (!agentUsageStats || !rateLimitSummary) {
+    rateLimitContent = (
+      <p className="py-6 text-center text-xs text-fg-secondary dark:text-fg-secondary-dark">
+        {t('appDashboard.usageDataUnavailable')}
+      </p>
+    );
+  } else {
+    rateLimitContent = (
+      <div className="flex flex-col items-center gap-4">
+        <Speedometer usageStats={rateLimitSummary} size="lg" showDetails />
+        <div className="w-full border-t border-gray-100 pt-2">
+          <p className="mb-2 text-center text-xs text-fg-secondary dark:text-fg-secondary-dark">
+            {t('appDashboard.highestAgentUsage', {
+              name: highestUsageAgent?.name ?? t('appDashboard.unknownAgent'),
+            })}
+          </p>
+          <div className="flex justify-between gap-2 text-xs text-gray-500">
+            <span>{t('appDashboard.limitRequestsPerMinute', { limit: rateLimitSummary.limit })}</span>
+            <span>{t('appDashboard.remaining', { count: rateLimitSummary.remaining })}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   let agentsContent: React.ReactNode;
-  if (agentsLoading || usageLoading) {
+  if (agentsLoading) {
     agentsContent = (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
@@ -313,69 +376,36 @@ function AppDashboard() {
   } else {
     agentsContent = (
       <>
-        {agentUsageStats && currentApp.agent_rate_limit > 0 && !hasCurrentAgentUsage && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
-            No requests in the current minute for these agents.
-          </p>
-        )}
         <div className="space-y-3">
           {topAgents.map((agent) => {
-            const agentUsage = agentUsageById.get(agent.agent_id);
-            const currentUsage = agentUsage?.current_usage ?? 0;
-            const limit = currentApp.agent_rate_limit;
-            const usagePercentage = Math.min(agentUsage?.usage_percentage ?? 0, 100);
-            const remaining = agentUsage?.remaining ?? limit;
-            const usageBarColor = usagePercentage >= 95
-              ? 'bg-red-500'
-              : usagePercentage >= 80
-                ? 'bg-amber-500'
-                : 'bg-blue-400';
+            const requestCount = agent.request_count ?? 0;
+            const activityPercentage = maxRequests > 0
+              ? Math.round((requestCount / maxRequests) * 100)
+              : 0;
             return (
               <Link
                 key={agent.agent_id}
                 to={`/apps/${appId}/agents`}
-                className="block group rounded-lg px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                className="block group rounded-lg px-1 -mx-1 transition-colors"
                 aria-label={`Go to ${agent.name}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-700 dark:text-gray-200 truncate group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors" title={agent.name}>
+                  <span className="text-xs text-fg dark:text-fg-dark truncate" title={agent.name}>
                     {agent.name}
                   </span>
-                  <span className="text-xs text-gray-600 dark:text-gray-300 shrink-0">
-                    {agent.request_count ?? 0} total calls
+                  <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark shrink-0">
+                    {requestCount} total calls
                   </span>
                 </div>
-                {limit > 0 && (
-                  <>
-                    <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                      <span>Current minute</span>
-                      <span>{currentUsage}/{limit} req/min</span>
-                    </div>
-                    <div
-                      className="h-2 mt-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden"
-                      role="progressbar"
-                      aria-label={`${agent.name} rate limit usage`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={usagePercentage}
-                    >
-                      <div
-                        className={`h-full ${usageBarColor} rounded-full transition-all duration-300`}
-                        style={{ width: `${usagePercentage}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {agentUsageStats
-                        ? `${remaining} remaining${agentUsage ? ` · resets in ${agentUsage.reset_in_seconds}s` : ''}`
-                        : 'Usage data unavailable'}
-                    </p>
-                  </>
-                )}
-                {limit === 0 && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                    No rate limit
-                  </p>
-                )}
+                <div
+                  className="h-2 mt-1 bg-line dark:bg-line-dark rounded-full overflow-hidden"
+                  aria-hidden="true"
+                >
+                  <div
+                    className="h-full bg-accent dark:bg-fg-dark rounded-full transition-all duration-300"
+                    style={{ width: `${activityPercentage}%` }}
+                  />
+                </div>
               </Link>
             );
           })}
@@ -383,7 +413,7 @@ function AppDashboard() {
         {agents.length > topAgents.length && (
           <Link
             to={`/apps/${appId}/agents`}
-            className="mt-3 inline-flex items-center gap-0.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+            className="mt-3 inline-flex items-center gap-0.5 text-xs text-fg dark:text-fg-dark font-medium"
           >
             View all {agents.length} agents
             <ChevronRight className="w-3 h-3" />
@@ -507,14 +537,18 @@ function AppDashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Per-agent call and rate-limit usage                                 */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 gap-4">
-        <CardApp className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Trophy className="w-4 h-4 text-blue-500" />
-            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Most Called Agents</h2>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">
-            Total calls and current-minute rate-limit usage.
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <CardApp className="p-5" icon={Zap} titulo={t('appDashboard.rateLimitUsage')}>
+            
+          <p className="-mt-2 mb-3 text-xs text-fg-secondary dark:text-fg-secondary-dark">
+            {t('appDashboard.rateLimitPeakDescription')}
+          </p>
+          {rateLimitContent}
+        </CardApp>
+
+        <CardApp className="p-5" icon={Trophy} titulo={t('appDashboard.topAgentsByUsage')}>
+          <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark -mt-2 mb-3">
+            {t('appDashboard.topAgentsDescription')}
           </p>
 
           {agentsContent}
@@ -525,31 +559,28 @@ function AppDashboard() {
       {/* Block 4: Getting Started Checklist                                  */}
       {/* ------------------------------------------------------------------ */}
       {showChecklist && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          {/* Header row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-sm font-semibold text-ink dark:dark:text-ink-dark">{t('appDashboard.checklist.title')}</h2>
-              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark font-normal">
-                {t('appDashboard.checklist.steps', { count: checklistSteps.length, completed: completedCount })}
-              </span>
-            </div>
-            {canEdit && (
-              <button
-                onClick={() => void dismissChecklist()}
-                className="text-gray-300 hover:text-gray-500 transition-colors rounded p-0.5"
-                aria-label={t('appDashboard.checklist.dismiss')}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+        <CardApp
+          className="p-5"
+          icon={Sparkles}
+          titulo={t('appDashboard.checklist.title')}
+          headerExtra={canEdit && (
+            <button
+              onClick={() => void dismissChecklist()}
+              className="text-gray-300 hover:text-gray-500 transition-colors rounded p-0.5"
+              aria-label={t('appDashboard.checklist.dismiss')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        >
+          <p className="-mt-2 mb-3 text-xs text-fg-secondary dark:text-fg-secondary-dark">
+            {t('appDashboard.checklist.steps', { count: checklistSteps.length, completed: completedCount })}
+          </p>
 
           {/* Progress bar */}
-          <div className="w-full h-1.5 bg-gray-100 rounded-full mb-4 overflow-hidden">
+          <div className="w-full h-1.5 bg-line dark:bg-line-dark rounded-full mb-4 overflow-hidden">
             <div
-              className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+              className="h-full bg-accent dark:bg-fg-dark rounded-full transition-all duration-500"
               style={{ width: `${(completedCount / checklistSteps.length) * 100}%` }}
             />
           </div>
@@ -560,15 +591,15 @@ function AppDashboard() {
               const row = (
                 <>
                   {step.done ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-fg dark:text-fg-dark shrink-0" />
                   ) : (
-                    <Circle className="w-4 h-4 text-gray-300 shrink-0 group-hover:text-indigo-400 transition-colors" />
+                    <Circle className="w-4 h-4 text-fg-tertiary dark:text-fg-tertiary-dark shrink-0 transition-colors" />
                   )}
-                  <span className={`text-sm flex-1 ${step.done ? 'text-gray-400 line-through' : 'text-gray-700 group-hover:text-indigo-700 transition-colors'}`}>
+                  <span className={`text-sm flex-1 ${step.done ? 'text-fg dark:text-fg-dark line-through' : 'text-fg-tertiary dark:text-fg-tertiary-dark transition-colors'}`}>
                     {step.label}
                   </span>
                   {!step.done && (
-                    <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-500 transition-colors shrink-0" />
+                    <ChevronRight className="w-3.5 h-3.5 text-fg dark:text-fg-dark shrink-0" />
                   )}
                 </>
               );
@@ -581,7 +612,7 @@ function AppDashboard() {
                 <Link
                   key={step.href}
                   to={step.href}
-                  className="flex items-center gap-3 group rounded-lg px-1 -mx-1 hover:bg-indigo-50 transition-colors"
+                  className="flex items-center gap-3 group rounded-lg px-1 -mx-1  transition-colors"
                   aria-label={t('appDashboard.checklist.goToStep', { step: step.label })}
                 >
                   {row}
@@ -589,7 +620,7 @@ function AppDashboard() {
               );
             })}
           </div>
-        </div>
+        </CardApp>
       )}
     </div>
   );

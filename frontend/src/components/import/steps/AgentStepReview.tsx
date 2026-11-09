@@ -5,6 +5,9 @@ import type {
 } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
 import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
+import Table, { type TableColumn } from '../../ui/Table';
+import { Badge, type BadgeVariant } from '../../ui/Badge';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   preview: AgentImportPreview;
@@ -19,6 +22,35 @@ interface Props {
   importBundledAgentTools: boolean;
 }
 
+type ReviewAction =
+  | 'create'
+  | 'update'
+  | 'createRenamed'
+  | 'fail'
+  | 'useExisting'
+  | 'importNew'
+  | 'import'
+  | 'skip';
+
+type ReviewRow = {
+  icon: string;
+  type: string;
+  name: string;
+  action: ReviewAction;
+  actionName?: string;
+};
+
+const ACTION_BADGE_VARIANTS: Record<ReviewAction, BadgeVariant> = {
+  create: 'success',
+  update: 'success',
+  createRenamed: 'success',
+  fail: 'error',
+  useExisting: 'success',
+  importNew: 'success',
+  import: 'success',
+  skip: 'default',
+};
+
 function AgentStepReview({
   preview,
   conflictMode,
@@ -31,11 +63,13 @@ function AgentStepReview({
   importBundledMCPConfigs,
   importBundledAgentTools,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
   const agentAction = () => {
-    if (!preview.agent.has_conflict) return 'Create';
-    if (conflictMode === 'override') return 'Update';
-    if (conflictMode === 'rename') return 'Create (renamed)';
-    return 'Fail';
+    if (!preview.agent.has_conflict) return 'create';
+    if (conflictMode === 'override') return 'update';
+    if (conflictMode === 'rename') return 'createRenamed';
+    return 'fail';
   };
 
   const agentDisplayName =
@@ -43,130 +77,129 @@ function AgentStepReview({
       ? newName
       : preview.agent.component_name;
 
-  const aiServiceAction = () => {
+  const aiServiceAction = (): Pick<ReviewRow, 'action' | 'actionName'> => {
     if (useExistingAIService || !preview.ai_service) {
       const svc = availableAIServices.find(
         (s) => s.service_id === selectedAIServiceId
       );
-      return `Use existing: ${svc?.name || 'None'}`;
+      return { action: 'useExisting', actionName: svc?.name };
     }
-    return 'Import new';
+    return { action: 'importNew' };
   };
-
-  type ReviewRow = { icon: string; type: string; name: string; action: string };
-
-  const ACTION_BADGE_CLASSES: Record<string, string> = {
-    Skip: 'bg-gray-100 text-gray-600',
-    Fail: 'bg-red-100 text-red-700',
-  };
-  const DEFAULT_BADGE_CLASS = 'bg-green-100 text-green-700';
 
   const rows: ReviewRow[] = [
     {
       icon: COMPONENT_TYPE_ICONS.agent,
-      type: 'Agent',
+      type: t('importModal.agentUpload.components.agent'),
       name: agentDisplayName,
       action: agentAction(),
     },
     {
       icon: COMPONENT_TYPE_ICONS.ai_service,
-      type: 'AI Service',
+      type: t('importModal.agentUpload.components.aiService'),
       name: preview.ai_service?.component_name || '—',
-      action: aiServiceAction(),
+      ...aiServiceAction(),
     },
     preview.silo
       ? {
           icon: COMPONENT_TYPE_ICONS.silo,
-          type: 'Silo',
+          type: t('importModal.agentUpload.components.silo'),
           name: preview.silo.component_name,
-          action: importBundledSilo ? 'Import' : 'Skip',
+          action: importBundledSilo ? 'import' : 'skip',
         }
       : null,
     preview.output_parser
       ? {
           icon: COMPONENT_TYPE_ICONS.output_parser,
-          type: 'Output Parser',
+          type: t('importModal.agentUpload.components.outputParser'),
           name: preview.output_parser.component_name,
-          action: importBundledOutputParser ? 'Import' : 'Skip',
+          action: importBundledOutputParser ? 'import' : 'skip',
         }
       : null,
     preview.mcp_configs.length > 0
       ? {
           icon: COMPONENT_TYPE_ICONS.mcp_config,
-          type: 'MCP Configs',
-          name: `${preview.mcp_configs.length} config(s)`,
-          action: importBundledMCPConfigs ? 'Import' : 'Skip',
+          type: t('importModal.agentUpload.components.mcpConfigs', {
+            count: preview.mcp_configs.length,
+          }),
+          name: t('importModal.agentReview.counts.mcpConfigs', {
+            count: preview.mcp_configs.length,
+          }),
+          action: importBundledMCPConfigs ? 'import' : 'skip',
         }
       : null,
     preview.agent_tools.length > 0
       ? {
           icon: COMPONENT_TYPE_ICONS.agent,
-          type: 'Agent Tools',
-          name: `${preview.agent_tools.length} tool(s)`,
-          action: importBundledAgentTools ? 'Import' : 'Skip',
+          type: t('importModal.agentUpload.components.agentTools', {
+            count: preview.agent_tools.length,
+          }),
+          name: t('importModal.agentReview.counts.agentTools', {
+            count: preview.agent_tools.length,
+          }),
+          action: importBundledAgentTools ? 'import' : 'skip',
         }
       : null,
   ].filter((row): row is ReviewRow => row !== null);
 
+  const actionLabel = (row: ReviewRow) =>
+    row.action === 'useExisting'
+      ? t('importModal.agentReview.actions.useExisting', {
+          name: row.actionName ?? t('importModal.agentReview.none'),
+        })
+      : t(`importModal.agentReview.actions.${row.action}`);
+
+  const columns: TableColumn<ReviewRow>[] = [
+    {
+      header: t('importModal.agentReview.columns.component'),
+      render: (row) => (
+        <>
+          <span className="mr-1">{row.icon}</span>
+          {row.type}
+        </>
+      ),
+    },
+    {
+      header: t('importModal.agentReview.columns.name'),
+      accessor: 'name',
+      className: 'px-6 py-4 text-sm text-fg dark:text-fg-dark',
+    },
+    {
+      header: t('importModal.agentReview.columns.action'),
+      render: (row) => {
+        return (
+          <Badge
+            label={actionLabel(row)}
+            variant={ACTION_BADGE_VARIANTS[row.action]}
+          />
+        );
+      },
+    },
+  ];
+
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-gray-900">
-        Import Summary
+      <h4 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+        {t('importModal.result.summary')}
       </h4>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Component
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Name
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {rows.map((row) => {
-              const actionClass =
-                ACTION_BADGE_CLASSES[row.action] ?? DEFAULT_BADGE_CLASS;
-              return (
-                <tr key={row.type}>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <span className="mr-1">{row.icon}</span>
-                    {row.type}
-                  </td>
-                  <td className="px-4 py-2 font-medium text-gray-900">
-                    {row.name}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${actionClass}`}
-                    >
-                      {row.action}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        columns={columns}
+        data={rows}
+        keyExtractor={(row) => row.type}
+      />
 
       {(!useExistingAIService && preview.ai_service) && (
         <Alert
           type="info"
-          message="API keys for imported services will need to be configured after import."
+          message={t('importModal.agentReview.apiKeysWarning')}
         />
       )}
 
       {preview.global_warnings.length > 0 && (
         <Alert
           type="warning"
-          title="Warnings"
+          title={t('importModal.result.warnings')}
           message={
             <ul className="list-disc list-inside space-y-1">
               {preview.global_warnings.map((w) => (

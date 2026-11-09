@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Users, Handshake, Crown, AlertTriangle } from 'lucide-react';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
@@ -41,6 +42,7 @@ interface AppOwner {
 
 function CollaborationPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const { user } = useUser();
   const settingsCache = useSettingsCache();
   const confirm = useConfirm();
@@ -161,7 +163,7 @@ function CollaborationPage() {
       // Cache the response
       settingsCache.setCollaborators(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load collaborators');
+      setError(err instanceof Error ? err.message : t('collaborationPage.errors.loadFailed'));
       console.error('Error loading collaborators:', err);
     } finally {
       setLoading(false);
@@ -183,7 +185,7 @@ function CollaborationPage() {
       // Cache the response
       settingsCache.setCollaborators(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load collaborators');
+      setError(err instanceof Error ? err.message : t('collaborationPage.errors.loadFailed'));
       console.error('Error loading collaborators:', err);
     } finally {
       setLoading(false);
@@ -196,9 +198,9 @@ function CollaborationPage() {
     const result = await mutate(
       () => apiService.inviteCollaborator(Number.parseInt(appId), email, role),
       {
-        loading: 'Sending invitation…',
-        success: `Invitation sent to ${email}`,
-        error: (err) => errorMessage(err, 'Failed to send invitation'),
+        loading: t('collaborationPage.notifications.sendingInvitation'),
+        success: t('collaborationPage.notifications.invitationSent', { email }),
+        error: () => t('collaborationPage.errors.sendInvitationFailed'),
       },
     );
     if (result === undefined) return;
@@ -217,9 +219,9 @@ function CollaborationPage() {
     const result = await mutate(
       () => apiService.updateCollaboratorRole(Number.parseInt(appId), userId, newRole),
       {
-        loading: 'Updating role…',
-        success: 'Role updated',
-        error: (err) => errorMessage(err, 'Failed to update role'),
+        loading: t('collaborationPage.notifications.updatingRole'),
+        success: t('collaborationPage.notifications.roleUpdated'),
+        error: (err) => errorMessage(err, t('collaborationPage.errors.updateRoleFailed')),
       },
     );
     if (result === undefined) return;
@@ -237,21 +239,21 @@ function CollaborationPage() {
 
     const target = collaborators.find((c) => c.user_id === userId);
     const ok = await confirm({
-      title: 'Remove collaborator?',
+      title: t('collaborationPage.remove.title'),
       message: target
-        ? `Remove ${target.user_name || target.user_email} from this app? They will lose access immediately.`
-        : 'Remove this collaborator? They will lose access to this app.',
+        ? t('collaborationPage.remove.namedMessage', { name: target.user_name || target.user_email })
+        : t('collaborationPage.remove.message'),
       variant: 'danger',
-      confirmLabel: 'Remove',
+      confirmLabel: t('collaborationPage.actions.remove'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.removeCollaborator(Number.parseInt(appId), userId),
       {
-        loading: 'Removing collaborator…',
-        success: 'Collaborator removed',
-        error: (err) => errorMessage(err, 'Failed to remove collaborator'),
+        loading: t('collaborationPage.notifications.removingCollaborator'),
+        success: t('collaborationPage.notifications.collaboratorRemoved'),
+        error: (err) => errorMessage(err, t('collaborationPage.errors.removeCollaboratorFailed')),
       },
     );
     if (result === undefined) return;
@@ -289,10 +291,18 @@ function CollaborationPage() {
     }
   };
 
+  const getRoleLabel = (role: string) => t(`collaborationPage.roles.${role.toLowerCase()}`, {
+    defaultValue: role.charAt(0).toUpperCase() + role.slice(1),
+  });
+
+  const getStatusLabel = (status: string) => t(`collaborationPage.status.${status.toLowerCase()}`, {
+    defaultValue: status.charAt(0).toUpperCase() + status.slice(1),
+  });
+
   if (loading) {
     return (
       
-        <LoadingState variant="page" message="Loading collaboration settings..." />
+        <LoadingState variant="page" message={t('collaborationPage.loading')} />
       
     );
   }
@@ -312,10 +322,10 @@ function CollaborationPage() {
       <CardApp className="px-6 py-4">
         <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
             <Users className="w-5 h-5 text-bronze dark:text-bronze-dark mr-2" />
-            {' '}Invite Collaborator
+            {' '}{t('collaborationPage.invite.title')}
           </h3>
           <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
-            Invite users to collaborate on this app. They'll receive an email invitation.
+            {t('collaborationPage.invite.description')}
           </p>
       
         <div className="py-6">
@@ -327,8 +337,8 @@ function CollaborationPage() {
     inviteCollaboratorSection = (
       <Alert
         type="warning"
-        title="Collaborator Access"
-        message="You have collaborator access to this app. Only administrators can invite new collaborators."
+        title={t('collaborationPage.access.title')}
+        message={t('collaborationPage.access.message')}
       />
     );
   }
@@ -337,7 +347,7 @@ function CollaborationPage() {
     
       <div className="p-6 space-y-8">
         {/* Header */}
-        <Title variant='titSecundario' titulo='Collaboration' subtitulo='Manage team access and permissions for this app'/>
+        <Title variant="titSecundario" titulo={t('collaborationPage.title')} subtitulo={t('collaborationPage.subtitle')} />
 
         {!canManage && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
@@ -347,10 +357,10 @@ function CollaborationPage() {
         <div>
           <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
             <Handshake className="w-5 h-5 text-bronze dark:text-bronze-dark mr-2" />
-            Team Members ({allMembers.length})
+            {t('collaborationPage.teamMembers', { count: allMembers.length })}
           </h3>
           <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
-            {canManage ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
+            {canManage ? t('collaborationPage.team.manageDescription') : t('collaborationPage.team.viewDescription')}
           </p>
           
           <Table
@@ -360,7 +370,7 @@ function CollaborationPage() {
             keyExtractor={(member) => member.id.toString()}
             columns={[
               {
-                header: 'User',
+                header: t('collaborationPage.table.user'),
                 render: (member) => (
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-8 w-8">
@@ -375,7 +385,7 @@ function CollaborationPage() {
                         {member.user_name || member.user_email}
                         {user?.user_id === member.user_id && (
                           <span className="ml-2 text-xs font-semibold text-fg dark:text-fg-dark">
-                            (You)
+                            ({t('collaborationPage.you')})
                           </span>
                         )}
                       </div>
@@ -389,19 +399,19 @@ function CollaborationPage() {
                 )
               },
               {
-                header: 'Role',
+                header: t('collaborationPage.table.role'),
                 render: (member) => (
                   <div className="flex items-center gap-1">
                     
                     {member.role === 'owner' ? (
                       <Badge
-                        label="Owner"
+                        label={t('collaborationPage.roles.owner')}
                         variant="secondary"
                         icon={<Crown className="w-3 h-3" />}
                       />
                     ) : (
                       <Badge
-                        label={member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                        label={getRoleLabel(member.role)}
                         variant="custom"
                         className={getRoleBadge(member.role)}
                       />
@@ -411,8 +421,8 @@ function CollaborationPage() {
                       <span className="relative group inline-flex items-center">
                         <AlertTriangle className="w-3.5 h-3.5 text-bronze dark:text-bronze-dark cursor-help flex-shrink-0" />
                         <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block w-56 rounded-lg bg-bronze-bg border border-bronze-border dark:bg-bronze-bg-dark dark:border-bronze-border-dark px-3 py-2.5 text-xs shadow-md z-50">
-                          <span className="block font-semibold text-bronze-strong dark:text-bronze-strong-dark mb-1">Platform viewer</span>
-                          <span className="text-bronze dark:text-bronze-dark leading-relaxed whitespace-normal">This user can only see agents published in the marketplace. They cannot edit app content.</span>
+                          <span className="block font-semibold text-bronze-strong dark:text-bronze-strong-dark mb-1">{t('collaborationPage.platformViewer.title')}</span>
+                          <span className="text-bronze dark:text-bronze-dark leading-relaxed whitespace-normal">{t('collaborationPage.platformViewer.description')}</span>
                         </span>
                       </span>
                     )}
@@ -420,38 +430,36 @@ function CollaborationPage() {
                 )
               },
               {
-                header: 'Status',
+                header: t('collaborationPage.table.status'),
                 render: (member) => (
                   member.role === 'owner' ? (
-                    <StatusBadge status="active" customLabel="Active" />
+                    <StatusBadge status="active" customLabel={t('collaborationPage.status.active')} />
                   ) : (
                     <StatusBadge
                       status={getStatusType(member.status)}
-                      customLabel={member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                      customLabel={getStatusLabel(member.status)}
                     />
                   )
                 )
               },
               {
-                header: 'Since',
+                header: t('collaborationPage.table.since'),
                 render: (member) => (
                   member.role === 'owner' ? (
                     <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
-                      App creator
+                      {t('collaborationPage.appCreator')}
                     </div>
                   ) : (
-                    <>
-                      <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
-                        {new Date(member.invited_at).toLocaleDateString()}<br />
-                        by {member.invited_by_name || 'Unknown'}
-                      </div>
-                    </>
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                      {new Date(member.invited_at).toLocaleDateString(i18n.resolvedLanguage)}<br />
+                      {t('collaborationPage.invitedBy', { name: member.invited_by_name || t('collaborationPage.unknown') })}
+                    </div>
                   )
                 ),
                 className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
               },
               ...(canManage ? [{
-                header: 'Actions',
+                header: t('collaborationPage.table.actions'),
                 sticky: 'right' as const,
                 render: (member: Collaborator) => (
                   member.role === 'owner' ? (
@@ -460,28 +468,28 @@ function CollaborationPage() {
                     <div className="flex space-x-2">
                       {member.status === 'accepted' && member.role !== 'owner' && (
                         <FormSelect
-                          label="Role"
+                          label={t('collaborationPage.table.role')}
                           labelClassName="sr-only"
                           id={`collaborator-role-${member.user_id}`}
                           value={member.role}
                           onChange={(e) => void handleUpdateRole(member.user_id, e.target.value)}
                           disabled={member.platform_role === 'viewer'}
-                          title={member.platform_role === 'viewer' ? 'Viewer platform role — cannot be promoted' : undefined}
+                          title={member.platform_role === 'viewer' ? t('collaborationPage.platformViewer.cannotPromote') : undefined}
                           className="min-w-32"
                           options={[
                             ...(member.platform_role !== 'viewer'
                               ? [
-                                  { value: 'editor', label: 'Editor' },
-                                  { value: 'administrator', label: 'Administrator' },
+                                  { value: 'editor', label: t('collaborationPage.roles.editor') },
+                                  { value: 'administrator', label: t('collaborationPage.roles.administrator') },
                                 ]
                               : []),
-                            { value: 'viewer', label: 'Viewer' },
+                            { value: 'viewer', label: t('collaborationPage.roles.viewer') },
                           ]}
                         />
                       )}
                       {member.role !== 'owner' && (
                         <ButtonApp
-                          label="Remove"
+                          label={t('collaborationPage.actions.remove')}
                           onClick={() => void handleRemoveCollaborator(member.user_id)}
                           variant="dangerSolid"
                           size="small"
@@ -495,10 +503,10 @@ function CollaborationPage() {
             ]}
             rowClassName={(member) => member.role === 'owner' ? "bg-surface-tint dark:bg-surface-tint-dark" : ""}
             emptyIcon={<Users className="w-10 h-10 text-gray-300" />}
-            emptyMessage="No Collaborators Yet"
+            emptyMessage={t('collaborationPage.empty.title')}
             emptySubMessage={canManage 
-              ? "This app doesn't have any collaborators. Invite users above to start sharing."
-              : "This app doesn't have any other collaborators yet."}
+              ? t('collaborationPage.empty.manageMessage')
+              : t('collaborationPage.empty.viewMessage')}
             loading={loading}
           />
         </div>
@@ -508,12 +516,11 @@ function CollaborationPage() {
           {/* Collaboration Info */}
           <Alert
             type="info"
-            title="About Collaboration"
+            title={t('collaborationPage.about.title')}
             message={(
               <>
-                Collaboration allows multiple users to work on the same app. Invited users will
-                receive an email invitation and can access the app once they accept.
-                {!isOwner && " You can leave this collaboration anytime from the apps list."}
+                {t('collaborationPage.about.description')}
+                {!isOwner && <> {t('collaborationPage.about.leaveNotice')}</>}
               </>
             )}
           />
@@ -521,15 +528,15 @@ function CollaborationPage() {
           {/* Security Notice */}
           <Alert
             type="warning"
-            title="Collaboration Rules"
+            title={t('collaborationPage.rules.title')}
             message={(
               <ul className="list-disc list-inside space-y-1">
-                <li>Only app owners can invite new collaborators</li>
-                <li>Collaborators can be invited as editors or administrators</li>
-                <li>Administrators have the same permissions as owners except managing collaborators</li>
-                <li>Editors can modify app content but cannot manage collaborators or settings</li>
-                <li>Owners have full control and can manage all collaborators</li>
-                {!isOwner && <li>You can leave this collaboration from the main apps list</li>}
+                <li>{t('collaborationPage.rules.ownerInvites')}</li>
+                <li>{t('collaborationPage.rules.invitedRoles')}</li>
+                <li>{t('collaborationPage.rules.administratorPermissions')}</li>
+                <li>{t('collaborationPage.rules.editorPermissions')}</li>
+                <li>{t('collaborationPage.rules.ownerPermissions')}</li>
+                {!isOwner && <li>{t('collaborationPage.rules.leave')}</li>}
               </ul>
             )}
           />

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { MessageSquare, Webhook } from 'lucide-react';
 import { apiService, type OutputContentMode, type OutputDestination } from '../../services/api';
 import Modal from '../ui/Modal';
@@ -12,32 +14,27 @@ import {
   type AuthMode, type OutputChannelForm, type ProviderKey,
 } from './outputChannelForm';
 
-const steps = [
-  { id: 'channel', label: 'Canal' },
-  { id: 'configuration', label: 'Configuración' },
-  { id: 'review', label: 'Revisión' },
-];
-const authLabels: Record<AuthMode, string> = { hmac_sha256: 'HMAC-SHA256', bearer: 'Bearer token', none: 'Sin autenticación' };
-
-function getChannelUrlLabel(provider: ProviderKey, isEditing: boolean): string {
-  if (provider === 'webhook') return 'URL HTTPS del endpoint';
-  if (isEditing) return 'Nueva URL secreta del Workflow (opcional)';
-  return 'URL del trigger de Teams';
+function getChannelUrlLabel(provider: ProviderKey, isEditing: boolean, t: TFunction<'common'>): string {
+  if (provider === 'webhook') return t('outputChannelWizard.fields.endpointUrl');
+  if (isEditing) return t('outputChannelWizard.fields.newTeamsUrl');
+  return t('outputChannelWizard.fields.teamsUrl');
 }
 
-function getChannelUrlHelpText(provider: ProviderKey, isEditing: boolean): string {
-  if (provider === 'webhook') return 'El endpoint debe usar HTTPS y resolver únicamente a direcciones IP públicas.';
-  if (isEditing) return 'Permite renovar la URL secreta del mismo Workflow. Para cambiar de Workflow o canal, crea un nuevo canal.';
-  return 'La URL se guarda como credencial y no vuelve a mostrarse. Usa un trigger que acepte llamadas mediante URL.';
+function getChannelUrlHelpText(provider: ProviderKey, isEditing: boolean, t: TFunction<'common'>): string {
+  if (provider === 'webhook') return t('outputChannelWizard.help.endpointUrl');
+  if (isEditing) return t('outputChannelWizard.help.newTeamsUrl');
+  return t('outputChannelWizard.help.teamsUrl');
 }
 
-function getCredentialLabel(authMode: AuthMode): string {
-  return authMode === 'hmac_sha256' ? 'Clave HMAC en Base64 (32 bytes)' : 'Bearer token';
+function getCredentialLabel(authMode: AuthMode, t: TFunction<'common'>): string {
+  return authMode === 'hmac_sha256'
+    ? t('outputChannelWizard.fields.hmacCredential')
+    : t('outputDestinationsPage.authentication.bearer');
 }
 
-function getCredentialHelpText(destination: OutputDestination | null, authMode: AuthMode): string | undefined {
+function getCredentialHelpText(destination: OutputDestination | null, authMode: AuthMode, t: TFunction<'common'>): string | undefined {
   if (!destination?.has_credentials || destination.public_config.auth_mode !== authMode) return undefined;
-  return 'Deja este campo vacío para conservar la credencial guardada o introduce una nueva para renovarla.';
+  return t('outputChannelWizard.help.credential');
 }
 
 interface OutputChannelWizardProps {
@@ -50,6 +47,17 @@ interface OutputChannelWizardProps {
 }
 
 export default function OutputChannelWizard({ isOpen, appId, destination, destinations, onClose, onSaved }: Readonly<OutputChannelWizardProps>) {
+  const { t } = useTranslation('common');
+  const steps = [
+    { id: 'channel', label: t('outputChannelWizard.steps.channel') },
+    { id: 'configuration', label: t('outputChannelWizard.steps.configuration') },
+    { id: 'review', label: t('outputChannelWizard.steps.review') },
+  ];
+  const authLabels: Record<AuthMode, string> = {
+    hmac_sha256: t('outputDestinationsPage.authentication.hmac'),
+    bearer: t('outputDestinationsPage.authentication.bearer'),
+    none: t('outputDestinationsPage.authentication.none'),
+  };
   const [form, setForm] = useState<OutputChannelForm>(() => initialChannelForm(null));
   const [currentStep, setCurrentStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -92,7 +100,7 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
 
   const next = async () => {
     if (submittingRef.current) return;
-    const identityError = validateChannelIdentity(form, destinations, destination);
+    const identityError = validateChannelIdentity(form, destinations, destination, t);
     if (identityError) {
       setError(null);
       setFieldErrors(identityError);
@@ -105,7 +113,7 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
       setCurrentStep(1);
       return;
     }
-    const configurationError = validateChannelConfiguration(form, destination);
+    const configurationError = validateChannelConfiguration(form, destination, t);
     if (configurationError) {
       setError(null);
       setFieldErrors(configurationError);
@@ -131,32 +139,70 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
       onSaved(saved);
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo guardar el canal.');
+      setError(cause instanceof Error ? cause.message : t('outputChannelWizard.saveFailed'));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
-  const channelUrlLabel = getChannelUrlLabel(form.provider, Boolean(destination));
-  const channelUrlHelpText = getChannelUrlHelpText(form.provider, Boolean(destination));
-  const credentialLabel = getCredentialLabel(form.authMode);
-  const credentialHelpText = getCredentialHelpText(destination, form.authMode);
+  const channelUrlLabel = getChannelUrlLabel(form.provider, Boolean(destination), t);
+  const channelUrlHelpText = getChannelUrlHelpText(form.provider, Boolean(destination), t);
+  const credentialLabel = getCredentialLabel(form.authMode, t);
+  const credentialHelpText = getCredentialHelpText(destination, form.authMode, t);
+  let nextLabel = t('outputChannelWizard.actions.next');
+  if (currentStep === 2) {
+    nextLabel = destination
+      ? t('outputChannelWizard.actions.saveChanges')
+      : t('outputChannelWizard.actions.create');
+  }
+  let reviewUrl = t('outputChannelWizard.review.urlRetained');
+  if (form.url.trim()) {
+    reviewUrl = t(destination
+      ? 'outputChannelWizard.review.urlWillRenew'
+      : 'outputChannelWizard.review.urlConfigured', {
+      host: new URL(form.url.trim()).hostname,
+    });
+  }
+  let credentialReview = t('outputChannelWizard.review.credentialRetained');
+  if (form.credential.trim()) {
+    credentialReview = t(destination
+      ? 'outputChannelWizard.review.credentialRenewed'
+      : 'outputChannelWizard.review.credentialConfigured');
+  }
+  const attachmentsReview = form.includeAttachments
+    ? t('outputChannelWizard.review.attachmentsIncluded')
+    : t('outputChannelWizard.review.attachmentsDisabled');
+  const deduplicationReview = form.receiverDeduplicates
+    ? t('outputChannelWizard.review.deduplicationConfirmed')
+    : t('outputChannelWizard.review.deduplicationUnconfirmed');
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title={destination ? 'Editar canal de salida' : 'Añadir canal de salida'} size="large">
+    <Modal isOpen={isOpen} onClose={close} title={destination
+      ? t('outputChannelWizard.editTitle')
+      : t('outputChannelWizard.createTitle')} size="large">
       <div className="flex min-h-[420px] flex-col">
         <StepperHeader steps={steps} currentStep={currentStep} onStepClick={moveBack} />
         <form className="flex flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void next(); }}>
           <fieldset disabled={submitting} className="min-w-0 flex-1 space-y-5 px-2 py-3">
             <h4 ref={stepTitleRef} tabIndex={-1} className="text-md font-medium text-fg dark:text-fg-dark outline-none mb-1">{steps[currentStep].label}</h4>
             {currentStep === 0 && <>
-              <p className="text-sm text-fg dark:text-fg-dark">Elige el tipo de canal y un nombre para identificarlo en las tareas programadas.</p>
+              <p className="text-sm text-fg dark:text-fg-dark">{t('outputChannelWizard.intro')}</p>
               <fieldset className="grid gap-3 sm:grid-cols-2">
-                <legend className="sr-only">Tipo de canal</legend>
+                <legend className="sr-only">{t('outputChannelWizard.fields.channelType')}</legend>
                 {([
-                  { key: 'teams_workflow', label: 'Teams Workflow', description: 'Envía notificaciones a un canal de Teams.', icon: MessageSquare },
-                  { key: 'webhook', label: 'Webhook HTTP', description: 'Envía resultados a un endpoint HTTPS.', icon: Webhook },
+                  {
+                    key: 'teams_workflow',
+                    label: t('outputDestinationsPage.providers.teamsWorkflow'),
+                    description: t('outputChannelWizard.providers.teamsDescription'),
+                    icon: MessageSquare,
+                  },
+                  {
+                    key: 'webhook',
+                    label: t('outputDestinationsPage.providers.webhook'),
+                    description: t('outputChannelWizard.providers.webhookDescription'),
+                    icon: Webhook,
+                  },
                 ] as const).map(({ key, label, description, icon: Icon }) => (
                   <ButtonCard
                     key={key}
@@ -174,14 +220,18 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
                   </ButtonCard>
                 ))}
               </fieldset>
-              {destination && <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">El tipo de canal se conserva. Para usar otro tipo, crea un nuevo canal.</p>}
+              {destination && (
+                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                  {t('outputChannelWizard.typeLocked')}
+                </p>
+              )}
               <FormField
                 id="channel-name"
-                label="Nombre del canal"
+                label={t('outputChannelWizard.fields.channelName')}
                 value={form.name}
                 onChange={(event) => update({ name: event.target.value })}
                 maxLength={255}
-                placeholder="Por ejemplo: Alertas"
+                placeholder={t('outputChannelWizard.fields.channelNamePlaceholder')}
                 autoComplete="off"
                 error={fieldErrors.name}
               />
@@ -195,23 +245,25 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
                   value={form.url}
                   onChange={(event) => update({ url: event.target.value })}
                   autoComplete="off"
-                  placeholder={destination ? 'Déjala vacía para conservar la URL guardada' : 'https://…'}
+                  placeholder={destination
+                    ? t('outputChannelWizard.fields.keepSavedUrl')
+                    : 'https://…'}
                   helpText={channelUrlHelpText}
                   error={fieldErrors.url}
-                /> : <Alert type="info" message="URL del endpoint guardada. Para cambiar el endpoint, crea un nuevo canal." />}
+                /> : <Alert type="info" message={t('outputChannelWizard.help.endpointSaved')} />}
                 <FormSelect
                   id="channel-content-mode"
-                  label="Contenido de la notificación"
+                  label={t('outputChannelWizard.fields.contentMode')}
                   value={form.contentMode}
                   onChange={(event) => update({ contentMode: event.target.value as OutputContentMode })}
-                  options={Object.entries(contentModeLabels(form.provider)).map(([value, label]) => ({ value, label }))}
-                  helpText="Se aplica a todas las tareas vinculadas a este canal."
+                  options={Object.entries(contentModeLabels(form.provider, t)).map(([value, label]) => ({ value, label }))}
+                  helpText={t('outputChannelWizard.help.contentMode')}
                   error={fieldErrors.contentMode}
                 />
               {form.provider === 'webhook' && <>
                 <FormSelect
                   id="channel-auth-mode"
-                  label="Autenticación"
+                  label={t('outputDestinationsPage.columns.authentication')}
                   value={form.authMode}
                   onChange={(event) => update({ authMode: event.target.value as AuthMode, credential: '' })}
                   options={Object.entries(authLabels).map(([value, label]) => ({ value, label }))}
@@ -230,41 +282,45 @@ export default function OutputChannelWizard({ isOpen, appId, destination, destin
                   <ButtonCard
                     variant="selectable-check"
                     selected={form.includeAttachments}
-                    ariaLabel="Enviar archivos adjuntos"
-                    checkboxLabel="Enviar archivos adjuntos"
-                    checkboxHelpText="Incluye los archivos en la llamada al webhook mediante multipart/form-data. Desactivado: envío JSON."
+                    ariaLabel={t('outputChannelWizard.fields.includeAttachments')}
+                    checkboxLabel={t('outputChannelWizard.fields.includeAttachments')}
+                    checkboxHelpText={t('outputChannelWizard.help.includeAttachments')}
                     onClick={() => update({ includeAttachments: !form.includeAttachments })}
                   />
                   <ButtonCard
                     variant="selectable-check"
                     selected={form.receiverDeduplicates}
-                    ariaLabel="El receptor deduplica los eventos"
-                    checkboxLabel="El receptor deduplica los eventos"
-                    checkboxHelpText="Confirma que admite Idempotency-Key para permitir reintentos automáticos de resultado incierto."
+                    ariaLabel={t('outputChannelWizard.fields.receiverDeduplicates')}
+                    checkboxLabel={t('outputChannelWizard.fields.receiverDeduplicates')}
+                    checkboxHelpText={t('outputChannelWizard.help.receiverDeduplicates')}
                     onClick={() => update({ receiverDeduplicates: !form.receiverDeduplicates })}
                   />
                 </div>
               </>}
             </>}
             {currentStep === 2 && <>
-              <p className="text-sm text-fg dark:text-fg-dark">Revisa la configuración antes de {destination ? 'guardar los cambios' : 'crear el canal'}.</p>
+              <p className="text-sm text-fg dark:text-fg-dark">
+                {t(destination
+                  ? 'outputChannelWizard.review.introEdit'
+                  : 'outputChannelWizard.review.introCreate')}
+              </p>
               <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-md bg-canvas-alt dark:bg-canvas-alt-dark p-4 text-sm">
-                <dt className="text-fg-secondary dark:text-fg-secondary-dark">Nombre</dt><dd className="break-words font-medium text-fg dark:text-fg-dark">{form.name.trim()}</dd>
-                <dt className="text-fg-secondary dark:text-fg-secondary-dark">Tipo</dt><dd className="text-fg dark:text-fg-dark">{form.provider === 'webhook' ? 'Webhook HTTP' : 'Teams Workflow'}</dd>
-                <dt className="text-fg-secondary dark:text-fg-secondary-dark">Contenido</dt><dd className="text-fg dark:text-fg-dark">{contentModeLabels(form.provider)[form.contentMode]}</dd>
-                <dt className="text-fg-secondary dark:text-fg-secondary-dark">URL</dt><dd className="break-all text-fg dark:text-fg-dark">{form.url.trim() ? `${new URL(form.url.trim()).hostname} · ${destination ? 'Se renovará la URL secreta' : 'URL configurada'}` : 'Se conserva la URL guardada'}</dd>
+                <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputChannelWizard.review.name')}</dt><dd className="break-words font-medium text-fg dark:text-fg-dark">{form.name.trim()}</dd>
+                <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputChannelWizard.review.type')}</dt><dd className="text-fg dark:text-fg-dark">{form.provider === 'webhook' ? t('outputDestinationsPage.providers.webhook') : t('outputDestinationsPage.providers.teamsWorkflow')}</dd>
+                <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputDestinationsPage.columns.content')}</dt><dd className="text-fg dark:text-fg-dark">{contentModeLabels(form.provider, t)[form.contentMode]}</dd>
+                <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputChannelWizard.review.url')}</dt><dd className="break-all text-fg dark:text-fg-dark">{reviewUrl}</dd>
                 {form.provider === 'webhook' && <>
-                  <dt className="text-fg-secondary dark:text-fg-secondary-dark">Autenticación</dt><dd className="text-fg dark:text-fg-dark">{authLabels[form.authMode]}</dd>
-                  {form.authMode !== 'none' && <><dt className="text-fg-secondary dark:text-fg-secondary-dark">Credencial</dt><dd className="text-fg dark:text-fg-dark">{form.credential.trim() ? destination ? 'Se guardará una nueva credencial' : 'Configurada' : 'Se conserva la credencial guardada'}</dd></>}
-                  <dt className="text-fg-secondary dark:text-fg-secondary-dark">Adjuntos</dt><dd className="text-fg dark:text-fg-dark">{form.includeAttachments ? 'Incluidos como archivos' : 'Desactivados'}</dd>
-                  <dt className="text-fg-secondary dark:text-fg-secondary-dark">Deduplicación</dt><dd className="text-fg dark:text-fg-dark">{form.receiverDeduplicates ? 'Confirmada por el receptor' : 'Sin confirmar'}</dd>
+                  <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputDestinationsPage.columns.authentication')}</dt><dd className="text-fg dark:text-fg-dark">{authLabels[form.authMode]}</dd>
+                  {form.authMode !== 'none' && <><dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputChannelWizard.review.credential')}</dt><dd className="text-fg dark:text-fg-dark">{credentialReview}</dd></>}
+                  <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputDestinationsPage.columns.attachments')}</dt><dd className="text-fg dark:text-fg-dark">{attachmentsReview}</dd>
+                  <dt className="text-fg-secondary dark:text-fg-secondary-dark">{t('outputChannelWizard.review.deduplication')}</dt><dd className="text-fg dark:text-fg-dark">{deduplicationReview}</dd>
                 </>}
               </dl>
-              <Alert type="info" message="Tras guardar, podrás probar el destino desde el menú de acciones del listado." />
+              <Alert type="info" message={t('outputChannelWizard.review.testAfterSave')} />
             </>}
           </fieldset>
           {error && <Alert type="error" message={error} className="mx-2 mt-3" />}
-          <StepperNavigation currentStep={currentStep} totalSteps={steps.length} onNext={() => { void next(); }} onBack={() => moveBack(currentStep - 1)} onCancel={close} backLabel="Atrás" cancelLabel="Cancelar" nextLabel={currentStep === 2 ? destination ? 'Guardar cambios' : 'Crear canal' : 'Siguiente'} isSubmitting={submitting} submittingLabel="Guardando…" />
+          <StepperNavigation currentStep={currentStep} totalSteps={steps.length} onNext={() => { void next(); }} onBack={() => moveBack(currentStep - 1)} onCancel={close} backLabel={t('outputChannelWizard.actions.back')} cancelLabel={t('outputChannelWizard.actions.cancel')} nextLabel={nextLabel} isSubmitting={submitting} submittingLabel={t('outputChannelWizard.actions.saving')} />
         </form>
       </div>
     </Modal>

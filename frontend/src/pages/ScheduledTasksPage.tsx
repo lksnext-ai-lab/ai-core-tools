@@ -23,11 +23,13 @@ import ServiceLifecycleAlert from "../components/services/ServiceLifecycleAlert"
 import { SidePanel } from "../components/ui/SidePanel";
 import ScheduledTaskDetailPage from "./ScheduledTaskDetailPage";
 import BackgroundImage from "../components/ui/BackgroundImage";
+import { useConfirm } from "../contexts/ConfirmContext";
 
 export default function ScheduledTasksPage() {
   const { t, i18n } = useTranslation("common");
   const { appId } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const numericAppId = Number.parseInt(appId ?? "0", 10);
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [agentNames, setAgentNames] = useState<Record<number, string>>({});
@@ -81,7 +83,14 @@ export default function ScheduledTasksPage() {
   };
 
   const remove = async (task: ScheduledTask) => {
-    if (!window.confirm(t("scheduledTasksPage.confirmDelete", { name: task.name }))) return;
+    const confirmed = await confirm({
+      title: t("scheduledTasksPage.confirmDeleteTitle"),
+      message: t("scheduledTasksPage.confirmDelete", { name: task.name }),
+      confirmLabel: t("delete"),
+      cancelLabel: t("cancel"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
     try {
       await apiService.deleteScheduledTask(numericAppId, task.id);
       await load();

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ExternalLink, Filter, Search } from 'lucide-react';
 import { FormField } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
@@ -29,11 +30,11 @@ interface ModelSelectionStepProps {
 
 type CapabilityFilter = 'vision' | 'function_calling' | 'reasoning' | 'audio';
 
-const FILTER_OPTIONS: readonly { id: CapabilityFilter; label: string }[] = [
-  { id: 'vision', label: 'Vision' },
-  { id: 'function_calling', label: 'Function calling' },
-  { id: 'reasoning', label: 'Reasoning' },
-  { id: 'audio', label: 'Audio' },
+const FILTER_OPTIONS: readonly { id: CapabilityFilter; labelKey: string }[] = [
+  { id: 'vision', labelKey: 'vision' },
+  { id: 'function_calling', labelKey: 'functionCalling' },
+  { id: 'reasoning', labelKey: 'reasoning' },
+  { id: 'audio', labelKey: 'audio' },
 ];
 
 const SIXTY_DAYS_SECONDS = 60 * 24 * 60 * 60;
@@ -55,6 +56,7 @@ function ModelSelectionStep({
   manualModelName,
   onManualModelNameChange,
 }: Readonly<ModelSelectionStepProps>) {
+  const { t } = useTranslation('common');
   const descriptor = getProviderDescriptor(provider);
   const [search, setSearch] = useState('');
   const [activeFilters, setActiveFilters] = useState<readonly CapabilityFilter[]>([]);
@@ -104,28 +106,31 @@ function ModelSelectionStep({
 
   // ----- Manual input mode -----
   if (descriptor && !descriptor.supportsModelListing) {
-    let manualHelp = 'Enter the model identifier you want to use.';
-    if (provider === 'Azure') {
-      manualHelp = 'Enter the deployment name configured in your Azure OpenAI resource.';
-    } else if (provider === 'GoogleCloud') {
-      manualHelp = kind === 'embedding'
-        ? 'Enter the Vertex AI Gemini embedding model id you want to use.'
-        : 'Enter the Vertex AI model id you want to use.';
-    }
+    let manualHelpKey = 'manualHelp.default';
+    let manualFieldLabelKey = 'modelId';
     let manualPlaceholder = 'sentence-transformers/all-MiniLM-L6-v2';
-    if (provider === 'Azure') manualPlaceholder = 'my-gpt-4o-deployment';
-    else if (provider === 'GoogleCloud') {
-      manualPlaceholder = kind === 'embedding' ? 'gemini-embedding-2-preview' : 'gemini-2.5-pro';
+    if (provider === 'Azure') {
+      manualHelpKey = 'manualHelp.azure';
+      manualFieldLabelKey = 'deploymentName';
+      manualPlaceholder = 'my-gpt-4o-deployment';
+    } else if (provider === 'GoogleCloud') {
+      if (kind === 'embedding') {
+        manualHelpKey = 'manualHelp.googleCloudEmbedding';
+        manualPlaceholder = 'gemini-embedding-2-preview';
+      } else {
+        manualHelpKey = 'manualHelp.googleCloud';
+        manualPlaceholder = 'gemini-2.5-pro';
+      }
     }
 
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold text-fg dark:text-fg-dark">Model identifier</h3>
-          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{manualHelp}</p>
+          <h3 className="text-base font-semibold text-fg dark:text-fg-dark">{t('serviceWizard.modelStep.modelIdentifier')}</h3>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{t(`serviceWizard.modelStep.${manualHelpKey}`)}</p>
         </div>
         <FormField
-          label={provider === 'Azure' ? 'Deployment name' : 'Model id'}
+          label={t(`serviceWizard.modelStep.${manualFieldLabelKey}`)}
           id="manual_model_name"
           type="text"
           value={manualModelName}
@@ -160,11 +165,11 @@ function ModelSelectionStep({
       <div className="space-y-4">
         <Alert
           type="warning"
-          title="No models returned"
-          message="The provider returned an empty list. You can type a model id manually below if you know it."
+          title={t('serviceWizard.modelStep.noModelsTitle')}
+          message={t('serviceWizard.modelStep.noModelsMessage')}
         />
         <FormField
-          label="Model id"
+          label={t('serviceWizard.modelStep.modelId')}
           id="manual_model_name_empty"
           type="text"
           value={manualModelName}
@@ -178,11 +183,13 @@ function ModelSelectionStep({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">Choose a model</h3>
+        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">{t('serviceWizard.modelStep.chooseModel')}</h3>
         <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
-          {filteredModels.length} of {data.models.length} model
-          {data.models.length === 1 ? '' : 's'} available from{' '}
-          {descriptor?.label || provider}. Newest models are shown first.
+          {t('serviceWizard.modelStep.availableModels', {
+            count: data.models.length,
+            visibleCount: filteredModels.length,
+            provider: descriptor?.label || provider,
+          })}
         </p>
       </div>
 
@@ -192,10 +199,10 @@ function ModelSelectionStep({
           <FormField
             id="model-search"
             type="text"
-            ariaLabel="Search by id or name"
+            ariaLabel={t('serviceWizard.modelStep.search')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by id or name"
+            placeholder={t('serviceWizard.modelStep.search')}
             inputClassName="pl-9 pr-3"
           />
         </div>
@@ -206,7 +213,7 @@ function ModelSelectionStep({
               return (
                 <ButtonApp
                   key={f.id}
-                  label={f.label}
+                  label={t(`serviceWizard.modelStep.filters.${f.labelKey}`)}
                   onClick={() => toggleFilter(f.id)}
                   icon={<Filter className="w-4 h-4" aria-hidden="true" />}
                   variant="muted"
@@ -222,7 +229,7 @@ function ModelSelectionStep({
 
       {filteredModels.length === 0 ? (
         <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark italic px-2 py-8 text-center">
-          No models match your filters.
+          {t('serviceWizard.modelStep.noMatches')}
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1">
@@ -247,12 +254,13 @@ interface ModelCardProps {
 }
 
 function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
+  const { t } = useTranslation('common');
   const recent = isRecent(model.created_at);
   return (
     <ButtonCard
       variant="selectable"
       selected={selected}
-      ariaLabel={`Select ${model.display_name}`}
+      ariaLabel={t('serviceWizard.modelStep.selectModel', { model: model.display_name })}
       onClick={onSelect}
     >
       <div className="space-y-1">
@@ -262,10 +270,10 @@ function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
           </span>
           <div className="flex flex-wrap gap-1 flex-shrink-0">
             {recent && (
-              <Badge label="New" variant="success" className="uppercase" />
+              <Badge label={t('serviceWizard.modelStep.new')} variant="success" className="uppercase" />
             )}
             {model.deprecated && (
-              <Badge label="Deprecated" variant="warning" className="uppercase" />
+              <Badge label={t('serviceWizard.modelStep.deprecated')} variant="warning" className="uppercase" />
             )}
           </div>
         </div>
@@ -273,7 +281,10 @@ function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
         <CapabilityChips info={model} />
         {model.context_window != null && (
           <p className="text-[11px] text-fg-secondary dark:text-fg-secondary-dark pt-0.5">
-            {Intl.NumberFormat().format(model.context_window)} ctx tokens
+            {t('serviceWizard.modelStep.contextTokens', {
+              count: model.context_window,
+              formattedCount: Intl.NumberFormat().format(model.context_window),
+            })}
           </p>
         )}
       </div>
@@ -282,13 +293,14 @@ function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
 }
 
 function CapabilityChips({ info }: { readonly info: ProviderModelInfo }) {
-  const chips: { label: string; tone: string }[] = [];
+  const { t } = useTranslation('common');
+  const chips: { labelKey: string; tone: string }[] = [];
   const c = info.capabilities;
-  if (c.vision) chips.push({ label: 'Vision', tone: 'bg-purple-100 text-purple-800' });
-  if (c.audio) chips.push({ label: 'Audio', tone: 'bg-orange-100 text-orange-800' });
-  if (c.reasoning) chips.push({ label: 'Reasoning', tone: 'bg-indigo-100 text-indigo-800' });
-  if (c.function_calling) chips.push({ label: 'Tools', tone: 'bg-blue-100 text-blue-800' });
-  if (c.embedding) chips.push({ label: 'Embedding', tone: 'bg-green-100 text-green-800' });
+  if (c.vision) chips.push({ labelKey: 'vision', tone: 'bg-purple-100 text-purple-800' });
+  if (c.audio) chips.push({ labelKey: 'audio', tone: 'bg-orange-100 text-orange-800' });
+  if (c.reasoning) chips.push({ labelKey: 'reasoning', tone: 'bg-indigo-100 text-indigo-800' });
+  if (c.function_calling) chips.push({ labelKey: 'tools', tone: 'bg-blue-100 text-blue-800' });
+  if (c.embedding) chips.push({ labelKey: 'embedding', tone: 'bg-green-100 text-green-800' });
 
   if (chips.length === 0) return null;
 
@@ -296,10 +308,10 @@ function CapabilityChips({ info }: { readonly info: ProviderModelInfo }) {
     <div className="flex flex-wrap gap-1 pt-1">
       {chips.map((chip) => (
         <span
-          key={chip.label}
+          key={chip.labelKey}
           className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${chip.tone}`}
         >
-          {chip.label}
+          {t(`serviceWizard.modelStep.capabilities.${chip.labelKey}`)}
         </span>
       ))}
     </div>
@@ -356,6 +368,7 @@ function ProviderListingError({
   manualModelName,
   onManualModelNameChange,
 }: Readonly<ProviderListingErrorProps>) {
+  const { t } = useTranslation('common');
   // 404 from a Custom OpenAI-compatible endpoint that doesn't expose
   // /models — fall back to manual entry inline.
   if (status === 404) {
@@ -363,11 +376,11 @@ function ProviderListingError({
       <div className="space-y-3">
         <Alert
           type="info"
-          title="Endpoint did not return a model list"
-          message="Some self-hosted servers do not implement the Ollama tags endpoint or OpenAI's /models route. Type the model id manually below."
+          title={t('serviceWizard.modelStep.endpointNoModelsTitle')}
+          message={t('serviceWizard.modelStep.endpointNoModelsMessage')}
         />
         <FormField
-          label="Model id"
+          label={t('serviceWizard.modelStep.modelId')}
           id="manual_model_name_fallback"
           type="text"
           value={manualModelName}
@@ -379,31 +392,28 @@ function ProviderListingError({
     );
   }
 
-  let title = 'Failed to load models';
+  let titleKey = 'serviceWizard.modelStep.errors.loadFailed';
   let description = message;
   if (status === 401) {
-    title = 'Invalid API key';
-    description =
-      'The provider rejected your credentials. Double-check the key was copied without extra spaces and that it has the right permissions.';
+    titleKey = 'serviceWizard.modelStep.errors.invalidApiKey';
+    description = t('serviceWizard.modelStep.errors.invalidApiKeyMessage');
   } else if (status === 408) {
-    title = 'Request timed out';
-    description =
-      'The provider did not respond within 15 seconds. Check your network or the endpoint URL and retry.';
+    titleKey = 'serviceWizard.modelStep.errors.timeout';
+    description = t('serviceWizard.modelStep.errors.timeoutMessage');
   } else if (status === 502) {
-    title = 'Could not reach the provider';
-    description =
-      'A network error stopped the request. If you are using a self-hosted endpoint, verify the URL and that the service is running.';
+    titleKey = 'serviceWizard.modelStep.errors.providerUnreachable';
+    description = t('serviceWizard.modelStep.errors.providerUnreachableMessage');
   }
 
   return (
     <Alert
       type="error"
-      title={title}
+      title={t(titleKey)}
       message={(
         <>
           {description}
           <span className="mt-3 flex flex-wrap items-center gap-3">
-            <ButtonApp label="Retry listing" variant="danger" size="compact" onClick={onRetry} />
+            <ButtonApp label={t('serviceWizard.modelStep.errors.retry')} variant="danger" size="compact" onClick={onRetry} />
             {status === 401 && descriptorDocUrl && (
               <a
                 href={descriptorDocUrl}
@@ -412,7 +422,7 @@ function ProviderListingError({
                 className="inline-flex items-center gap-1 text-xs font-medium underline"
               >
                 <ExternalLink className="w-3 h-3" />
-                Get a {provider} key
+                {t('serviceWizard.modelStep.errors.getProviderKey', { provider })}
               </a>
             )}
           </span>

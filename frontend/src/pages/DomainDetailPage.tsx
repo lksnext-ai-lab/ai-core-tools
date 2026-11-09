@@ -285,27 +285,25 @@ const DomainDetailPage: React.FC = () => {
       {activeTab === 'configuration' && (
         <div className="space-y-6">
           {/* Scraping config (read-only display) */}
-          <CardApp className="p-6">
-            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.configuration.title')}</h2>
+          <CardApp variant="canvas" titulo={t('domainDetailPage.configuration.title')} >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">{t('domainDetailPage.configuration.contentTag')}</span>
+                <h3 className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('domainDetailPage.configuration.contentTag')}</h3>
                 <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_tag || 'body'}</p>
               </div>
               <div>
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">{t('domainDetailPage.configuration.contentClass')}</span>
+                <h3 className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('domainDetailPage.configuration.contentClass')}</h3>
                 <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_class || '—'}</p>
               </div>
               <div>
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs font-medium uppercase tracking-wide">{t('domainDetailPage.configuration.contentId')}</span>
+                <h3 className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('domainDetailPage.configuration.contentId')}</h3>
                 <p className="text-fg dark:text-fg-dark mt-0.5">{domain.content_id || '—'}</p>
               </div>
             </div>
           </CardApp>
 
           {/* Crawl policy */}
-          <CardApp className="p-6">
-            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.crawlPolicy')}</h2>
+          <CardApp titulo={t('domainDetailPage.crawlPolicy')}>
             <CrawlPolicyForm
               appId={numericAppId}
               domainId={numericDomainId}
@@ -325,7 +323,7 @@ const DomainDetailPage: React.FC = () => {
           {/* Crawl job controls */}
           <CardApp className=" p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-fg dark:text-fg-dark">{t('domainDetailPage.crawlJob')}</h2>
+              <h4 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">{t('domainDetailPage.crawlJob')}</h4>
               {canEdit && (
                 <RunCrawlNowButton
                   appId={numericAppId}
@@ -347,8 +345,7 @@ const DomainDetailPage: React.FC = () => {
           </CardApp>
 
           {/* URL table */}
-          <CardApp>
-            <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.urlsCount', { count: domain.url_count })}</h2>
+          <CardApp titulo={t('domainDetailPage.urlsCount', { count: domain.url_count })}>
             <DomainUrlsTable
               appId={numericAppId}
               domainId={numericDomainId}
@@ -370,8 +367,7 @@ const DomainDetailPage: React.FC = () => {
 
       {/* Tab: Job history */}
       {activeTab === 'job-history' && (
-        <CardApp>
-          <h2 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('domainDetailPage.crawlJobHistory')}</h2>
+        <CardApp titulo={t('domainDetailPage.crawlJobHistory')}>
           <JobHistoryTab appId={numericAppId} domainId={numericDomainId} />
         </CardApp>
       )}

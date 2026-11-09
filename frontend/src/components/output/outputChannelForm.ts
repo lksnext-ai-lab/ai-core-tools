@@ -1,13 +1,15 @@
 import type { OutputContentMode, OutputDestination } from '../../services/api';
+import type { TFunction } from 'i18next';
 
 export type ProviderKey = 'teams_workflow' | 'webhook';
 export type AuthMode = 'hmac_sha256' | 'bearer' | 'none';
 
-export function contentModeLabels(provider: ProviderKey): Record<OutputContentMode, string> {
+export function contentModeLabels(provider: ProviderKey, t: TFunction<'common'>): Record<OutputContentMode, string> {
+  const isWebhook = provider === 'webhook';
   return {
-    result: provider === 'webhook' ? 'Resultado (hasta 100.000 caracteres)' : 'Resultado (hasta 5.000 caracteres)',
-    excerpt: provider === 'webhook' ? 'Extracto (hasta 4.000 caracteres)' : 'Extracto (hasta 1.200 caracteres)',
-    link_only: 'Sólo enlace',
+    result: t('outputDestinationsPage.contentModes.result', { maxCharacters: isWebhook ? 100000 : 5000 }),
+    excerpt: t('outputDestinationsPage.contentModes.excerpt', { maxCharacters: isWebhook ? 4000 : 1200 }),
+    link_only: t('outputDestinationsPage.contentModes.link_only'),
   };
 }
 
@@ -37,41 +39,41 @@ export function initialChannelForm(destination: OutputDestination | null): Outpu
   };
 }
 
-export function validateChannelIdentity(form: OutputChannelForm, existing: OutputDestination[], destination: OutputDestination | null): ChannelFieldErrors | null {
-  if (!form.name.trim()) return { name: 'Indica el nombre del canal.' };
-  if (form.name.trim().length > 255) return { name: 'El nombre puede tener hasta 255 caracteres.' };
+export function validateChannelIdentity(form: OutputChannelForm, existing: OutputDestination[], destination: OutputDestination | null, t: TFunction<'common'>): ChannelFieldErrors | null {
+  if (!form.name.trim()) return { name: t('outputChannelWizard.validation.nameRequired') };
+  if (form.name.trim().length > 255) return { name: t('outputChannelWizard.validation.nameMaxLength') };
   if (existing.some((item) => item.id !== destination?.id && item.name === form.name.trim())) {
-    return { name: 'Ya existe un canal con este nombre.' };
+    return { name: t('outputChannelWizard.validation.nameDuplicate') };
   }
   return null;
 }
 
-export function validateChannelConfiguration(form: OutputChannelForm, destination: OutputDestination | null): ChannelFieldErrors | null {
-  if (!['result', 'excerpt', 'link_only'].includes(form.contentMode)) return { contentMode: 'Selecciona un modo de contenido válido.' };
+export function validateChannelConfiguration(form: OutputChannelForm, destination: OutputDestination | null, t: TFunction<'common'>): ChannelFieldErrors | null {
+  if (!['result', 'excerpt', 'link_only'].includes(form.contentMode)) return { contentMode: t('outputChannelWizard.validation.contentMode') };
   if (!destination || (form.provider === 'teams_workflow' && form.url.trim())) {
     try {
       const url = new URL(form.url.trim());
       if (url.protocol !== 'https:' || (url.port && url.port !== '443') || url.username || url.password || url.hash) {
-        return { url: 'Usa una URL HTTPS en el puerto 443, sin usuario, contraseña ni fragmento.' };
+        return { url: t('outputChannelWizard.validation.urlHttps') };
       }
     } catch {
-      return { url: 'Indica una URL HTTPS válida.' };
+      return { url: t('outputChannelWizard.validation.urlInvalid') };
     }
   }
   if (form.provider !== 'webhook' || form.authMode === 'none') return null;
   const credential = form.credential.trim();
   const credentialRequired = !destination || !destination.has_credentials || destination.public_config.auth_mode !== form.authMode;
-  if (!credential) return credentialRequired ? { credential: 'Indica la credencial de autenticación del webhook.' } : null;
+  if (!credential) return credentialRequired ? { credential: t('outputChannelWizard.validation.credentialRequired') } : null;
   if (form.authMode === 'hmac_sha256') {
     try {
       if (!/^[A-Za-z0-9+/]+={0,2}$/.test(credential) || atob(credential).length !== 32 || credential.length % 4 !== 0) {
-        return { credential: 'La clave HMAC debe estar en Base64 y contener exactamente 32 bytes.' };
+        return { credential: t('outputChannelWizard.validation.hmacKey') };
       }
     } catch {
-      return { credential: 'La clave HMAC debe estar en Base64 y contener exactamente 32 bytes.' };
+      return { credential: t('outputChannelWizard.validation.hmacKey') };
     }
   } else if (credential.length > 4096 || !/^[\x21-\x7e]+$/.test(credential)) {
-    return { credential: 'El token debe contener caracteres ASCII imprimibles, sin espacios (máximo 4096).' };
+    return { credential: t('outputChannelWizard.validation.bearerToken') };
   }
   return null;
 }

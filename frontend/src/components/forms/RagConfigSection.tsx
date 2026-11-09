@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Target, Trash2 } from 'lucide-react';
 import type { MetadataOperator, SearchFilterMetadataField } from '../playground/SearchFilters';
 import { randomId } from '../../utils/randomId';
-import BackgroundImage from '../ui/BackgroundImage';
 import CardApp from '../ui/CardApp';
 import FormField, { FormSelect } from '../ui/FormField';
 import ButtonApp from '../ui/ButtonApp';
@@ -33,22 +33,6 @@ interface RagConfigSectionProps {
 
 // Mirrors backend SYSTEM_METADATA_FIELDS — always filterable regardless of metadata_definition.
 const SYSTEM_FIELDS = ['name', 'file_type', 'url', 'page'];
-
-const SEARCH_TYPES: Array<{ value: RagSearchType; label: string }> = [
-  { value: 'similarity', label: 'Similarity (default)' },
-  { value: 'mmr', label: 'MMR — diverse results' },
-  { value: 'similarity_score_threshold', label: 'Similarity + score threshold' },
-];
-
-const OPERATORS: Array<{ value: MetadataOperator; label: string }> = [
-  { value: '$eq', label: 'equals' },
-  { value: '$ne', label: 'not equals' },
-  { value: '$gt', label: 'greater than' },
-  { value: '$gte', label: 'greater or equal' },
-  { value: '$lt', label: 'less than' },
-  { value: '$lte', label: 'less or equal' },
-  { value: '$in', label: 'in (comma-separated)' },
-];
 
 const MAX_FIXED_FILTERS = 10;
 
@@ -83,8 +67,23 @@ function inputToFilterValue(op: MetadataOperator, raw: string): unknown {
  * at execution time (caller > agent > system).
  */
 function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = false }: Readonly<RagConfigSectionProps>) {
+  const { t } = useTranslation('common');
   const fieldOptions = [...SYSTEM_FIELDS, ...metadataFields.map((f) => f.name)];
   const filters = value.rag_fixed_filters;
+  const searchTypes: Array<{ value: RagSearchType; label: string }> = [
+    { value: 'similarity', label: t('agentFormPage.ragConfig.searchTypes.similarity') },
+    { value: 'mmr', label: t('agentFormPage.ragConfig.searchTypes.mmr') },
+    { value: 'similarity_score_threshold', label: t('agentFormPage.ragConfig.searchTypes.similarityScoreThreshold') },
+  ];
+  const operators: Array<{ value: MetadataOperator; label: string }> = [
+    { value: '$eq', label: t('agentFormPage.ragConfig.operators.equals') },
+    { value: '$ne', label: t('agentFormPage.ragConfig.operators.notEquals') },
+    { value: '$gt', label: t('agentFormPage.ragConfig.operators.greaterThan') },
+    { value: '$gte', label: t('agentFormPage.ragConfig.operators.greaterThanOrEqual') },
+    { value: '$lt', label: t('agentFormPage.ragConfig.operators.lessThan') },
+    { value: '$lte', label: t('agentFormPage.ragConfig.operators.lessThanOrEqual') },
+    { value: '$in', label: t('agentFormPage.ragConfig.operators.in') },
+  ];
   const thresholdMissing =
     value.rag_search_type === 'similarity_score_threshold' && value.rag_score_threshold == null;
 
@@ -137,39 +136,36 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
   };
 
   return (
-    <CardApp className=" p-8">
-      <div className="flex items-center mb-6">
-        <BackgroundImage icon={Target} iconSize={20} size={40} className='mr-2' />  
-        <div>
-          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark">Retrieval (RAG)</h3>
-          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">How this agent searches its knowledge base</p>
-        </div>
-      </div>
-
+    <CardApp
+      icon={Target}
+      titulo={t('agentFormPage.ragConfig.title')}
+      subtitulo={t('agentFormPage.ragConfig.subtitle')}
+    >
+     
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <FormField
-            label="Documents to retrieve (k)"
+            label={t('agentFormPage.ragConfig.documentsToRetrieve')}
             id="rag_k"
             type="number"
             min={1}
             max={100}
             value={value.rag_k}
-            helpText="Number of chunks fetched per search (1–100)."
+            helpText={t('agentFormPage.ragConfig.documentsToRetrieveHelp')}
             onChange={(e) => onChange({ rag_k: clampInt(e.target.value, 1, 100, value.rag_k) })}
           />
         </div>
 
         <div>
           <FormField
-            label="Max retrieval calls per turn"
+            label={t('agentFormPage.ragConfig.maxRetrievalCalls')}
             id="rag_max_retrieval_calls"
             type="number"
             min={1}
             max={20}
             value={value.rag_max_retrieval_calls ?? ''}
-            placeholder="Unlimited"
-            helpText="Caps how often the agent can search in one turn (1–20). Empty = unlimited."
+            placeholder={t('agentFormPage.ragConfig.unlimited')}
+            helpText={t('agentFormPage.ragConfig.maxRetrievalCallsHelp')}
             onChange={(e) =>
               onChange({
                 rag_max_retrieval_calls: e.target.value ? clampInt(e.target.value, 1, 20, 4) : null,
@@ -179,25 +175,25 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
         </div>
 
         <FormSelect
-          label="Search strategy"
+          label={t('agentFormPage.ragConfig.searchStrategy')}
             id="rag_search_type"
             value={value.rag_search_type}
-          options={SEARCH_TYPES}
+          options={searchTypes}
             onChange={(e) => onChange({ rag_search_type: e.target.value as RagSearchType })}
         />
 
         {value.rag_search_type === 'similarity_score_threshold' && (
           <div>
             <FormField
-              label="Score threshold"
+              label={t('agentFormPage.ragConfig.scoreThreshold')}
               id="rag_score_threshold"
               type="text"
               inputMode="decimal"
               required
               value={thresholdText}
               placeholder="0.75"
-              error={thresholdMissing ? 'Required for the threshold strategy (0–1).' : undefined}
-              helpText={thresholdMissing ? undefined : 'Minimum relevance score, 0–1. Lower returns more, higher is stricter.'}
+              error={thresholdMissing ? t('agentFormPage.ragConfig.scoreThresholdRequired') : undefined}
+              helpText={thresholdMissing ? undefined : t('agentFormPage.ragConfig.scoreThresholdHelp')}
               onChange={(e) => handleThresholdChange(e.target.value)}
               onBlur={handleThresholdBlur}
             />
@@ -209,11 +205,11 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
       <div className="mt-8">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h4 className="text-sm font-semibold text-fg dark:text-fg-dark">Fixed metadata filters</h4>
-            <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">Applied to every search. Leave empty to search the whole knowledge base.</p>
+            <h4 className="text-sm font-semibold text-fg dark:text-fg-dark">{t('agentFormPage.ragConfig.fixedMetadataFilters')}</h4>
+            <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('agentFormPage.ragConfig.fixedMetadataFiltersHelp')}</p>
           </div>
           <ButtonApp
-            label="Add filter"
+            label={t('agentFormPage.ragConfig.addFilter')}
             type="button"
             onClick={addFilter}
             disabled={filters.length >= MAX_FIXED_FILTERS}
@@ -222,7 +218,7 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
           />
         </div>
 
-        {loadingMetadata && <p className="text-sm text-gray-500">Loading metadata fields…</p>}
+        {loadingMetadata && <p className="text-sm text-gray-500">{t('agentFormPage.ragConfig.loadingMetadataFields')}</p>}
 
         {filters.length > 0 && (
           <div className="space-y-2">
@@ -230,7 +226,7 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
               <div key={filter._key ?? `${filter.field}-${index}`} className="grid grid-cols-12 gap-2 items-start">
                 <FormSelect
                   id={`rag-filter-field-${index}`}
-                  label={`Filter field, row ${index + 1}`}
+                  label={t('agentFormPage.ragConfig.filterField', { row: index + 1 })}
                   labelClassName="sr-only"
                   value={filter.field}
                   className="col-span-4"
@@ -245,11 +241,11 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
 
                 <FormSelect
                   id={`rag-filter-operator-${index}`}
-                  label={`Filter operator, row ${index + 1}`}
+                  label={t('agentFormPage.ragConfig.filterOperator', { row: index + 1 })}
                   labelClassName="sr-only"
                   value={filter.op}
                   className="col-span-3"
-                  options={OPERATORS}
+                  options={operators}
                   onChange={(e) => {
                     const op = e.target.value as MetadataOperator;
                     updateFilter(index, { op, value: inputToFilterValue(op, filterValueToInput(filter.value)) });
@@ -259,9 +255,11 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
                 <FormField
                   id={`rag-filter-value-${index}`}
                   type="text"
-                  ariaLabel={`Filter value, row ${index + 1}`}
+                  ariaLabel={t('agentFormPage.ragConfig.filterValue', { row: index + 1 })}
                   value={filterValueToInput(filter.value)}
-                  placeholder={filter.op === '$in' ? 'a, b, c' : 'value'}
+                  placeholder={filter.op === '$in'
+                    ? t('agentFormPage.ragConfig.valuesAnyPlaceholder')
+                    : t('agentFormPage.ragConfig.valuePlaceholder')}
                   className="col-span-4"
                   inputClassName="text-sm"
                   onChange={(e) => updateFilter(index, { value: inputToFilterValue(filter.op, e.target.value) })}
@@ -270,8 +268,8 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
                 <button
                   type="button"
                   onClick={() => removeFilter(index)}
-                  title="Remove filter"
-                  aria-label={`Remove filter, row ${index + 1}`}
+                  title={t('agentFormPage.ragConfig.removeFilter')}
+                  aria-label={t('agentFormPage.ragConfig.removeFilterRow', { row: index + 1 })}
                   className="col-span-1 flex justify-center text-red-600 hover:text-red-800 transition-colors p-2 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
                   <Trash2 className="w-4 h-4" />

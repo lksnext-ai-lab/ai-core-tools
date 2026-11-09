@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import Alert from '../ui/Alert';
-import ButtonApp from '../ui/ButtonApp';
 import { LoadingState } from '../ui/LoadingState';
+import { SidePanel } from '../ui/SidePanel';
 
 interface Conversation {
   conversation_id: number;
@@ -24,6 +24,8 @@ interface ConversationSidebarProps {
   readonly onConversationSelect: (conversationId: number) => void;
   readonly onNewConversation: () => void;
   readonly onReloadRequest?: () => void;
+  readonly open: boolean;
+  readonly onClose: () => void;
 }
 
 function formatDate(dateString: string): string {
@@ -50,13 +52,14 @@ export default function ConversationSidebar({
   currentConversationId,
   onConversationSelect,
   onNewConversation,
-  onReloadRequest: _onReloadRequest
+  onReloadRequest: _onReloadRequest,
+  open,
+  onClose,
 }: ConversationSidebarProps) {
   const confirm = useConfirm();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [editingConvId, setEditingConvId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
 
@@ -169,18 +172,15 @@ export default function ConversationSidebar({
 
     if (conversations.length === 0) {
       return (
-        <div className="p-6 text-center text-gray-500">
-          <svg className="w-16 h-16 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <p className="text-sm text-gray-600 dark:text-gray-400">No hay conversaciones aún</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Crea una nueva para empezar</p>
+        <div className="px-1.5 py-3">
+          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark">No hay conversaciones aún</p>
+          <p className="mt-1 text-[12px] text-fg-tertiary dark:text-fg-tertiary-dark">Crea una nueva para empezar</p>
         </div>
       );
     }
 
     return (
-      <div className="overflow-hidden rounded-md border border-line dark:border-line-dark">
+      <div>
         {conversations.map((conversation) => {
           const isActive = conversation.conversation_id === currentConversationId;
           const isEditing = editingConvId === conversation.conversation_id;
@@ -188,7 +188,7 @@ export default function ConversationSidebar({
           return (
             <div
               key={conversation.conversation_id}
-              className={`group flex items-start gap-2 border-b border-line bg-white px-2.5 py-[9px] transition-colors duration-150 last:border-b-0 hover:bg-surface-hover dark:border-line-dark dark:bg-surface-dark dark:hover:bg-surface-hover-dark ${
+              className={`group mb-0.5 flex items-start gap-2 rounded-md px-2.5 py-2.5 transition-colors duration-150 hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${
                 isActive ? 'bg-surface-hover dark:bg-surface-hover-dark' : ''
               }`}
             >
@@ -206,27 +206,30 @@ export default function ConversationSidebar({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onConversationSelect(conversation.conversation_id)}
+                    onClick={() => {
+                      onClose();
+                      onConversationSelect(conversation.conversation_id);
+                    }}
                     aria-current={isActive ? 'page' : undefined}
                     className="w-full text-left"
                   >
-                    <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-fg dark:text-fg-dark">
+                    <span className="flex min-w-0 items-baseline justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg dark:text-fg-dark">
                         {conversation.title || 'New conversation'}
                       </span>
-                      <time className="flex-none text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                      <time className="flex-none text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
                         {formatDate(conversation.updated_at)}
                       </time>
                     </span>
                     {conversation.last_message && (
-                      <span className="mt-[3px] block max-w-full truncate text-[12.5px] leading-snug text-fg-tertiary dark:text-fg-tertiary-dark">
+                      <span className="mt-0.5 block max-w-full truncate text-[12px] text-fg-secondary dark:text-fg-secondary-dark">
                         {conversation.last_message}
                       </span>
                     )}
                   </button>
                 )}
 
-                <div className="mt-1 text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                <div className="mt-[3px] text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
                   {conversation.message_count} mensajes
                 </div>
               </div>
@@ -262,72 +265,42 @@ export default function ConversationSidebar({
     );
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="w-14 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] items-center py-4">
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="shrink-0 p-2 hover:bg-white/30 dark:hover:bg-gray-700/40 rounded-lg transition-colors"
-          title="Expandir conversaciones"
-        >
-          <svg className="w-6 h-6 text-fg dark:text-fg-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-          <div className="whitespace-nowrap text-xs text-fg dark:text-fg-dark" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}>
-            {conversations.length} conversaciones
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-80 shrink-0 bg-canvas-alt dark:bg-canvas-alt-dark border-[0.5px] border-line dark:border-line-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] animate-fade-in">
-      {/* Header */}
-      <div className="p-4 border-b border-white/10 dark:border-gray-700/30">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Conversaciones</h3>
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="p-1 hover:bg-white/30 dark:hover:bg-gray-700/40 rounded transition-colors"
-            title="Contraer"
-          >
-            <svg className="w-5 h-5 text-fg dark:text-fg-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
-        
-        <ButtonApp
-          label="Nueva Conversación"
-          variant="primary"
-          size="medium"
-          onClick={onNewConversation}
-          icon={<Plus className="h-5 w-5" aria-hidden="true" />}
-          className="w-full shadow-sm hover:shadow-md"
-        />
-      </div>
-
-      {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto p-2">
-        {renderContent()}
-      </div>
-      
-      {/* Footer */}
-      <div className="p-3 border-t border-white/10 dark:border-gray-700/30">
-        <ButtonApp
-          label="Actualizar"
-          variant="secondary"
-          size="compact"
-          onClick={loadConversations}
-          icon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
-          className="w-full"
-        />
-      </div>
-    </div>
+    <SidePanel
+      open={open}
+      onClose={onClose}
+      side="right"
+      title="Conversaciones"
+      closeLabel="Cerrar conversaciones"
+      widthClassName="w-[340px] max-w-full"
+      headerActions={
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onNewConversation();
+          }}
+          className="font-display text-[12.5px] px-[11px] py-[5px] rounded-md
+                     border border-ink dark:border-ink-dark text-fg dark:text-fg-dark
+                     hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150"
+        >
+          Nueva
+        </button>
+      }
+      footer={
+        <button
+          type="button"
+          onClick={() => void loadConversations()}
+          className="w-full font-display text-[13px] px-3 py-2 rounded-md
+                     border border-ink dark:border-ink-dark text-fg dark:text-fg-dark
+                     hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150"
+        >
+          Actualizar
+        </button>
+      }
+    >
+      {renderContent()}
+    </SidePanel>
   );
 }
 

@@ -11,6 +11,9 @@ interface FormFieldProps {
   ariaHidden?: boolean;
   tabIndex?: number;
   value?: string | number;
+  fileName?: string;
+  fileButtonLabel?: string;
+  noFileSelectedLabel?: string;
   checked?: boolean;
   accept?: string;
   autoComplete?: string;
@@ -58,6 +61,9 @@ export function FormField({
   ariaHidden,
   tabIndex,
   value,
+  fileName,
+  fileButtonLabel = 'Choose file',
+  noFileSelectedLabel = 'No file selected',
   checked,
   accept,
   autoComplete,
@@ -91,6 +97,7 @@ export function FormField({
   ref
 }: Readonly<FormFieldProps>) {
   const [selectedFileName, setSelectedFileName] = React.useState('');
+  const displayedFileName = fileName ?? selectedFileName;
   const inlineLabel = type === 'radio' || type === 'checkbox';
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
@@ -131,14 +138,14 @@ export function FormField({
           } ${inputClassName}`}
         >
           <span className="min-w-0 flex-1 truncate px-3">
-            {selectedFileName || 'No file selected'}
+            {displayedFileName || noFileSelectedLabel}
           </span>
           <span
             className={`inline-flex min-h-10 shrink-0 items-center justify-center border-l border-transparent bg-ink px-4 font-display font-normal tracking-[-0.02em] text-ink-on transition-colors dark:bg-ink-dark dark:text-ink-on-dark ${
               disabled ? 'opacity-50' : 'group-hover:bg-ink-hover dark:group-hover:bg-ink-hover-dark'
             }`}
           >
-            Choose file
+              {fileButtonLabel}
           </span>
           <input
             ref={ref}
@@ -333,6 +340,7 @@ interface FormSelectProps {
   title?: string;
   ariaDescribedBy?: string;
   className?: string;
+  selectClassName?: string;
   labelClassName?: string;
 }
 
@@ -352,6 +360,7 @@ export function FormSelect({
   title,
   ariaDescribedBy,
   className = '',
+  selectClassName = '',
   labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1'
 }: Readonly<FormSelectProps>) {
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
@@ -384,7 +393,7 @@ export function FormSelect({
             : 'border-line-strong focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
         } ${
           disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
-        }`}
+        } ${selectClassName}`}
       >
         {options.map(option => (
           <option key={option.value} value={option.value}>
@@ -536,4 +545,3 @@ export function FormRadio({
 }
 
 export default FormField;
-

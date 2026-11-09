@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Modal from './Modal';
 import Alert from './Alert';
 import { ButtonApp } from './ButtonApp';
@@ -15,6 +16,7 @@ interface APIKeyDisplayModalProps {
 }
 
 function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayModalProps>) {
+  const { t } = useTranslation('common');
   const [copied, setCopied] = useState(false);
 
   const copyToClipboard = async () => {
@@ -38,16 +40,16 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="API Key Created Successfully"
+      title={t('apiKeysPage.displayModal.title')}
     >
       <div className="space-y-6">
         {/* Success Message */}
-        <Alert type="success" title="API Key Created" message={apiKey?.message} />
+        <Alert type="success" title={t('apiKeysPage.displayModal.created')} message={apiKey?.message} />
 
         {/* API Key Details */}
         <div>
           <p className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
-            API Key Name
+            {t('apiKeysPage.displayModal.name')}
           </p>
           <CardApp className="px-3 py-2">
             {apiKey?.name}
@@ -57,7 +59,7 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
         {/* API Key Value */}
         <div>
           <label htmlFor="api-key-value" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
-            API Key
+            {t('apiKeysPage.displayModal.key')}
           </label>
           <div className="relative">
             <textarea
@@ -68,7 +70,7 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
               rows={3}
             />
             <ButtonApp
-              label={copied ? 'Copied!' : 'Copy'}
+              label={copied ? t('apiKeysPage.displayModal.copied') : t('apiKeysPage.displayModal.copy')}
               variant="primary"
               size="medium"
               onClick={copyToClipboard}
@@ -80,13 +82,13 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
         {/* Security Warning */}
         <Alert
           type="warning"
-          title="Important Security Notice"
+          title={t('apiKeysPage.displayModal.securityTitle')}
           message={(
             <ul className="list-disc list-inside space-y-1">
-              <li>This is the only time you will see this API key</li>
-              <li>Copy and store it in a secure location immediately</li>
-              <li>Never share this key publicly or commit it to version control</li>
-              <li>If you lose this key, you'll need to create a new one</li>
+              <li>{t('apiKeysPage.displayModal.onlyViewOnce')}</li>
+              <li>{t('apiKeysPage.displayModal.storeSecurely')}</li>
+              <li>{t('apiKeysPage.displayModal.neverShare')}</li>
+              <li>{t('apiKeysPage.displayModal.createReplacement')}</li>
             </ul>
           )}
         />
@@ -94,7 +96,7 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
         {/* Close Button */}
         <div className="flex justify-end pt-4 border-t border-gray-200">
           <ButtonApp
-            label="I've Saved the Key"
+            label={t('apiKeysPage.displayModal.saved')}
             variant="primary"
             size="medium"
             onClick={handleClose}

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { errorMessage, MESSAGES } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import { Title } from '../../components/ui/Title';
 import { Tabs } from '../../components/ui/Tabs';
 import { ButtonApp } from '../../components/ui/ButtonApp';
@@ -45,6 +46,7 @@ function getSourceBadgeColor(source: SystemSetting['source']): string {
 }
 
 function SystemSettingsPage() {
+  const { t } = useTranslation('common');
   const confirm = useConfirm();
   const mutate = useApiMutation();
 
@@ -69,11 +71,11 @@ function SystemSettingsPage() {
         return Array.from(categoriesSet)[0] ?? 'marketplace';
       });
     } catch (err) {
-      setLoadError(errorMessage(err, 'Failed to load system settings'));
+      setLoadError(errorMessage(err, t('systemSettingsPage.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadSettings();
@@ -116,7 +118,10 @@ function SystemSettingsPage() {
   async function handleSaveSetting(setting: SystemSetting) {
     const newValue = editingValues[setting.key];
     if (!validateValue(newValue, setting.type)) {
-      toast.error(`Invalid ${setting.type} value for ${setting.key}`);
+      toast.error(t('systemSettingsPage.invalidValue', {
+        type: t(`systemSettingsPage.types.${setting.type}`, { defaultValue: setting.type }),
+        key: setting.key,
+      }));
       return;
     }
 
@@ -124,9 +129,9 @@ function SystemSettingsPage() {
     const result = await mutate(
       () => apiService.updateSystemSetting(setting.key, newValue),
       {
-        loading: MESSAGES.SAVING(`"${setting.key}"`),
-        success: MESSAGES.UPDATED(`Setting "${setting.key}"`),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED(`"${setting.key}"`)),
+        loading: t('systemSettingsPage.saving', { key: setting.key }),
+        success: t('systemSettingsPage.saved', { key: setting.key }),
+        error: (err) => errorMessage(err, t('systemSettingsPage.saveFailed', { key: setting.key })),
       },
     );
     updateSavingKeys(setting.key, 'remove');
@@ -136,10 +141,10 @@ function SystemSettingsPage() {
 
   async function handleResetSetting(setting: SystemSetting) {
     const ok = await confirm({
-      title: 'Reset setting?',
-      message: `Reset "${setting.key}" to its default value?`,
+      title: t('systemSettingsPage.resetTitle'),
+      message: t('systemSettingsPage.resetMessage', { key: setting.key }),
       variant: 'warning',
-      confirmLabel: 'Reset',
+      confirmLabel: t('systemSettingsPage.reset'),
     });
     if (!ok) return;
 
@@ -147,9 +152,9 @@ function SystemSettingsPage() {
     const result = await mutate(
       () => apiService.resetSystemSetting(setting.key),
       {
-        loading: `Resetting "${setting.key}"…`,
-        success: `Setting "${setting.key}" reset to default`,
-        error: (err) => errorMessage(err, `Failed to reset setting "${setting.key}"`),
+        loading: t('systemSettingsPage.resetting', { key: setting.key }),
+        success: t('systemSettingsPage.resetSuccess', { key: setting.key }),
+        error: (err) => errorMessage(err, t('systemSettingsPage.resetFailed', { key: setting.key })),
       },
     );
     updateSavingKeys(setting.key, 'remove');
@@ -221,9 +226,9 @@ function SystemSettingsPage() {
     return(
       <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <Title variant='titPrincipal' titulo='System Settings' subtitulo='Manage global system configuration'></Title>
+                <Title variant='titPrincipal' titulo={t('systemSettingsPage.title')} subtitulo={t('systemSettingsPage.subtitle')}></Title>
               </div>
-              <LoadingState variant="page" message="Loading system settings..." />
+              <LoadingState variant="page" message={t('systemSettingsPage.loading')} />
             </div>
     );
   }
@@ -234,13 +239,15 @@ function SystemSettingsPage() {
 
   return (
     <div className="">
-      <Title variant='titPrincipal' titulo='System Settings' subtitulo='Manage global system configuration'></Title>
+      <Title variant='titPrincipal' titulo={t('systemSettingsPage.title')} subtitulo={t('systemSettingsPage.subtitle')}></Title>
 
       <div>
         <Tabs
           tabs={categories.map((category) => ({
             id: category,
-            label: category.charAt(0).toUpperCase() + category.slice(1),
+            label: t(`systemSettingsPage.categories.${category}`, {
+              defaultValue: category.charAt(0).toUpperCase() + category.slice(1),
+            }),
           }))}
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -249,7 +256,7 @@ function SystemSettingsPage() {
         <CardApp variant="white" className="divide-y divide-btCard-border dark:divide-btCard-border-dark mt-2">
           {currentCategorySettings.length === 0 ? (
             <div className="rounded-md border border-dashed border-line px-6 py-9 text-center text-sm text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark">
-              No settings found in this category.
+              {t('systemSettingsPage.noSettings')}
             </div>
           ) : (
             currentCategorySettings.map((setting) => {
@@ -270,9 +277,11 @@ function SystemSettingsPage() {
                             setting.source,
                           )}`}
                         >
-                          {setting.source === 'env' ? 'Environment Variable' : setting.source}
+                          {t(`systemSettingsPage.sources.${setting.source}`, { defaultValue: setting.source })}
                         </span>
-                        <span className="text-[11px] text-fg-faint dark:text-fg-faint-dark">{setting.type}</span>
+                        <span className="text-[11px] text-fg-faint dark:text-fg-faint-dark">
+                          {t(`systemSettingsPage.types.${setting.type}`, { defaultValue: setting.type })}
+                        </span>
                       </div>
                       <p className="mt-1.5 text-[13px] leading-relaxed text-fg-secondary dark:text-fg-secondary-dark">
                         {setting.description || setting.key}
@@ -283,9 +292,9 @@ function SystemSettingsPage() {
                       <div>{renderInputField(setting)}</div>
                       <div id={`${setting.key}-help`} className="space-y-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                         <p>
-                          Current Value:{' '}
+                          {t('systemSettingsPage.currentValue')}{' '}
                           <span className="break-words font-mono text-fg dark:text-fg-dark">
-                            {String(setting.resolved_value ?? 'N/A')}
+                            {String(setting.resolved_value ?? t('systemSettingsPage.notAvailable'))}
                           </span>
                         </p>
                       </div>
@@ -293,7 +302,7 @@ function SystemSettingsPage() {
                         <div className="flex justify-end gap-2 pt-1">
                           {setting.source === 'db' && (
                             <ButtonApp
-                              label="Reset"
+                              label={t('systemSettingsPage.reset')}
                               onClick={() => handleResetSetting(setting)}
                               disabled={isSaving}
                               variant="muted"
@@ -301,7 +310,7 @@ function SystemSettingsPage() {
                             />
                           )}
                           <ButtonApp
-                            label={isSaving ? 'Saving…' : 'Save'}
+                            label={isSaving ? t('systemSettingsPage.savingButton') : t('systemSettingsPage.save')}
                             onClick={() => handleSaveSetting(setting)}
                             disabled={isSaving || isUnchanged}
                             variant="primary"

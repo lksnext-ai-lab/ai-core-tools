@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { BarChart2, Upload, ArrowDownToLine, Pencil, Trash2} from 'lucide-react';
 import Modal from '../../components/ui/Modal';
@@ -15,7 +16,7 @@ import Table from '../../components/ui/Table';
 import ImportModal, { type ConflictMode, type ImportResponse } from '../../components/ui/ImportModal';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Spinner } from '../../components/ui/Spinner';
 import { Title } from '../../components/ui/Title';
@@ -33,6 +34,7 @@ interface DataStructure {
 
 function DataStructuresPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -71,7 +73,7 @@ function DataStructuresPage() {
       // Cache the response
       settingsCache.setDataStructures(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data structures');
+      setError(err instanceof Error ? err.message : t('dataStructuresPage.loadFailed'));
       console.error('Error loading data structures:', err);
     } finally {
       setLoading(false);
@@ -89,7 +91,7 @@ function DataStructuresPage() {
       // Cache the response
       settingsCache.setDataStructures(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data structures');
+      setError(err instanceof Error ? err.message : t('dataStructuresPage.loadFailed'));
       console.error('Error loading data structures:', err);
     } finally {
       setLoading(false);
@@ -100,19 +102,20 @@ function DataStructuresPage() {
     if (!appId) return;
 
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('data structure'),
-      message: `Are you sure you want to delete "${structure.name}"? This action cannot be undone.`,
+      title: t('servicesManager.confirmDeleteTitle', { entity: t('dataStructuresPage.entity') }),
+      message: t('dataStructuresPage.confirmDeleteNamed', { name: structure.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('dataStructuresPage.actions.delete'),
+      cancelLabel: t('cancel'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteOutputParser(Number.parseInt(appId), structure.parser_id),
       {
-        loading: MESSAGES.DELETING('data structure'),
-        success: MESSAGES.DELETED('data structure'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('data structure')),
+        loading: t('dataStructuresPage.deleting'),
+        success: t('dataStructuresPage.deleted'),
+        error: (err) => errorMessage(err, t('dataStructuresPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -131,7 +134,7 @@ function DataStructuresPage() {
       setEditingStructure(blankStructure);
       setIsModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load parser options');
+      setError(err instanceof Error ? err.message : t('dataStructuresPage.loadParserOptionsFailed'));
       console.error('Error loading blank structure:', err);
     }
   }
@@ -144,7 +147,7 @@ function DataStructuresPage() {
       setEditingStructure(structure);
       setIsModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data structure details');
+      setError(err instanceof Error ? err.message : t('dataStructuresPage.loadDetailsFailed'));
       console.error('Error loading data structure:', err);
     }
   }
@@ -160,9 +163,9 @@ function DataStructuresPage() {
           ? apiService.updateOutputParser(Number.parseInt(appId), editingStructure.parser_id, data)
           : apiService.createOutputParser(Number.parseInt(appId), data),
       {
-        loading: isUpdate ? MESSAGES.UPDATING('data structure') : MESSAGES.CREATING('data structure'),
-        success: isUpdate ? MESSAGES.UPDATED('data structure') : MESSAGES.CREATED('data structure'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('data structure')),
+        loading: isUpdate ? t('dataStructuresPage.updating') : t('dataStructuresPage.creating'),
+        success: isUpdate ? t('dataStructuresPage.updated') : t('dataStructuresPage.created'),
+        error: (err) => errorMessage(err, t('dataStructuresPage.saveFailed')),
       },
     );
     if (result === undefined) return;
@@ -203,9 +206,9 @@ function DataStructuresPage() {
       a.click();
       globalThis.URL.revokeObjectURL(url);
       a.remove();
-      toast.success(MESSAGES.EXPORTED('data structure'));
+      toast.success(t('dataStructuresPage.exported'));
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('data structure')));
+      toast.error(errorMessage(err, t('dataStructuresPage.exportFailed')));
     } finally {
       setExportingParserId(null);
     }
@@ -216,7 +219,7 @@ function DataStructuresPage() {
     conflictMode: ConflictMode,
     newName?: string
   ): Promise<ImportResponse> {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('dataStructuresPage.appIdNotFound'));
     
     try {
       const result = await apiService.importOutputParser(
@@ -228,13 +231,13 @@ function DataStructuresPage() {
       
       if (result.success) {
         setShowImportModal(false);
-        toast.success(result.message || MESSAGES.IMPORTED('data structure'));
+        toast.success(result.message || t('dataStructuresPage.imported'));
         await forceReloadDataStructures();
       }
 
       return result;
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.IMPORT_FAILED('data structure')));
+      toast.error(errorMessage(err, t('dataStructuresPage.importFailed')));
       throw err;
     }
   }
@@ -245,10 +248,10 @@ function DataStructuresPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="Data Structures" subtitulo='Define schemas for structured data extraction and validation'/>
+          <Title variant="titSecundario" titulo={t('dataStructuresPage.title')} subtitulo={t('dataStructuresPage.subtitle')} />
         </div>
 
-        <LoadingState variant="page" message="Loading data structures..." />
+        <LoadingState variant="page" message={t('dataStructuresPage.loading')} />
       </div>
 
     );
@@ -259,7 +262,7 @@ function DataStructuresPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <Title variant="titSecundario" titulo="Data Structures" subtitulo='Define schemas for structured data extraction and validation'/>
+          <Title variant="titSecundario" titulo={t('dataStructuresPage.title')} subtitulo={t('dataStructuresPage.subtitle')} />
         </div>
 
         <Alert type="error" message={error} onDismiss={() => loadDataStructures()} />
@@ -273,19 +276,19 @@ function DataStructuresPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <Title variant="titSecundario" titulo="Data Structures" subtitulo='Define schemas for structured data extraction and validation'/>
+            <Title variant="titSecundario" titulo={t('dataStructuresPage.title')} subtitulo={t('dataStructuresPage.subtitle')} />
           </div>
           {canEdit && (
             <div className="flex gap-2">
               <ButtonApp
-                label="Import"
+                label={t('dataStructuresPage.import')}
                 onClick={() => setShowImportModal(true)}
                 icon={<Upload className="w-4 h-4" />}
                 variant="secondary"
                 size="medium"
               />
               <ButtonApp
-                label="Create Data Structure"
+                label={t('dataStructuresPage.createStructure')}
                 onClick={handleCreateStructure}
                 icon={<span aria-hidden="true">+</span>}
                 variant="primary"
@@ -305,7 +308,7 @@ function DataStructuresPage() {
           keyExtractor={(structure) => structure.parser_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('dataStructuresPage.columns.name'),
               render: (structure) => (
                 <div className="flex items-center">
                  <BackgroundImage icon={BarChart2} iconSize={20} size={40} className="mr-2"/>
@@ -326,70 +329,71 @@ function DataStructuresPage() {
               )
             },
             {
-              header: 'Description',
+              header: t('dataStructuresPage.columns.description'),
               render: (structure) => (
                 <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs truncate">
-                  {structure.description || 'No description'}
+                  {structure.description || t('dataStructuresPage.noDescription')}
                 </div>
               ),
               className: 'px-6 py-4'
             },
             {
-              header: 'Fields',
+              header: t('dataStructuresPage.columns.fields'),
               render: (structure) => (
-                <Badge variant='success' label={`${structure.field_count} field${structure.field_count === 1 ? '' : 's'}`} />
+                <Badge variant='success' label={t('dataStructuresPage.fieldCount', { count: structure.field_count })} />
               )
             },
             {
-              header: 'Created',
-              render: (structure) => structure.created_at ? new Date(structure.created_at).toLocaleDateString() : 'N/A',
+              header: t('dataStructuresPage.columns.created'),
+              render: (structure) => structure.created_at ? new Date(structure.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('dataStructuresPage.notAvailable'),
               className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Actions',
+              header: t('dataStructuresPage.columns.actions'),
               sticky: 'right',
               render: (structure) => (
                 canEdit ? (
                   <ActionDropdown
                     actions={[
                       {
-                        label: exportingParserId === structure.parser_id ? 'Exporting...' : 'Export',
+                        label: exportingParserId === structure.parser_id ? t('dataStructuresPage.exporting') : t('dataStructuresPage.export'),
                         onClick: () => { void handleExport(structure.parser_id); },
                         icon: exportingParserId === structure.parser_id ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                         variant: 'primary' as const,
                         disabled: exportingParserId === structure.parser_id
                       },
                       {
-                        label: 'Edit',
+                        label: t('dataStructuresPage.actions.edit'),
                         onClick: () => { void handleEditStructure(structure.parser_id); },
                         icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary'
                       },
                       {
-                        label: 'Delete',
+                        label: t('dataStructuresPage.actions.delete'),
                         onClick: () => { void handleDelete(structure); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
                     ]}
                     size="sm"
+                    triggerAriaLabel={t('dataStructuresPage.actions.menuForStructure', { name: structure.name })}
                   />
                 ) : (
-                  <span className="text-gray-400 text-sm">View only</span>
+                  <span className="text-gray-400 text-sm">{t('dataStructuresPage.viewOnly')}</span>
                 )
               )
             }
           ]}
           emptyIcon={<BackgroundImage icon={BarChart2} size={64} iconSize={32} />}
-          emptyMessage="No Data Structures"
-          emptySubMessage="Create your first data structure to define schemas for structured data extraction."
+          emptyMessage={t('dataStructuresPage.empty.title')}
+          emptySubMessage={t('dataStructuresPage.empty.subtitle')}
           loading={loading}
         />
 
         {!loading && dataStructures.length === 0 && (
           <div className="text-center py-6">
             <ButtonApp
-              label="Create First Data Structure"
+              label={t('dataStructuresPage.createFirstStructure')}
               onClick={handleCreateStructure}
               variant="primary"
               size="medium"
@@ -402,21 +406,21 @@ function DataStructuresPage() {
           {/* Main Info */}
           <Alert
             type="info"
-            title="About Data Structures"
-            message="Data structures are dynamic schemas that define the format for structured data extraction. They automatically generate Pydantic models for validation and can reference other structures for complex nested data patterns."
+            title={t('dataStructuresPage.about.title')}
+            message={t('dataStructuresPage.about.message')}
           />
 
           {/* Examples */}
           <Alert
             type="info"
-            title="Common Use Cases"
+            title={t('dataStructuresPage.useCases.title')}
             message={(
               <ul className="list-disc list-inside space-y-1">
-                <li><strong>Document Analysis:</strong> Extract structured metadata from documents</li>
-                <li><strong>Agent Responses:</strong> Ensure consistent output format from AI agents</li>
-                <li><strong>Data Validation:</strong> Validate and type-check extracted information</li>
-                <li><strong>API Integration:</strong> Define schemas for external data sources</li>
-                <li><strong>Complex Objects:</strong> Build nested structures with references</li>
+                <li><strong>{t('dataStructuresPage.useCases.documentAnalysis')}:</strong> {t('dataStructuresPage.useCases.documentAnalysisHelp')}</li>
+                <li><strong>{t('dataStructuresPage.useCases.agentResponses')}:</strong> {t('dataStructuresPage.useCases.agentResponsesHelp')}</li>
+                <li><strong>{t('dataStructuresPage.useCases.dataValidation')}:</strong> {t('dataStructuresPage.useCases.dataValidationHelp')}</li>
+                <li><strong>{t('dataStructuresPage.useCases.apiIntegration')}:</strong> {t('dataStructuresPage.useCases.apiIntegrationHelp')}</li>
+                <li><strong>{t('dataStructuresPage.useCases.complexObjects')}:</strong> {t('dataStructuresPage.useCases.complexObjectsHelp')}</li>
               </ul>
             )}
           />
@@ -426,7 +430,7 @@ function DataStructuresPage() {
         <Modal
           isOpen={isModalOpen}
           onClose={handleCloseModal}
-          title={editingStructure ? 'Edit Data Structure' : 'Create New Data Structure'}
+          title={editingStructure ? t('dataStructuresPage.editTitle') : t('dataStructuresPage.createTitle')}
           size="xlarge"
         >
           <DataStructureForm
@@ -442,7 +446,7 @@ function DataStructuresPage() {
           onClose={() => setShowImportModal(false)}
           onImport={handleImport}
           componentType="output_parser"
-          componentLabel="Output Parser"
+          componentLabel={t('dataStructuresPage.componentLabel')}
         />
       </div>
     

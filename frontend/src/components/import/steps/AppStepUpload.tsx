@@ -1,9 +1,11 @@
-import { useRef, type ChangeEvent } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { type ChangeEvent } from 'react';
 import Alert from '../../ui/Alert';
 import type { AppImportPreview } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
+import { FormField } from '../../ui/FormField';
 import { LoadingState } from '../../ui/LoadingState';
+import CardApp from '../../ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   file: File | null;
@@ -20,7 +22,7 @@ function AppStepUpload({
   isValidating,
   validationError,
 }: Readonly<Props>) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation('common');
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -30,46 +32,70 @@ function AppStepUpload({
   const countRows = preview
     ? [
         {
+          key: 'aiServices',
           icon: COMPONENT_TYPE_ICONS.ai_service,
-          label: 'AI Services',
+          label: t('importModal.appUpload.components.aiServices', {
+            count: preview.component_counts.ai_services ?? 0,
+          }),
           count: preview.component_counts.ai_services ?? 0,
         },
         {
+          key: 'embeddingServices',
           icon: COMPONENT_TYPE_ICONS.embedding_service,
-          label: 'Embedding Services',
+          label: t('importModal.appUpload.components.embeddingServices', {
+            count: preview.component_counts.embedding_services ?? 0,
+          }),
           count:
             preview.component_counts.embedding_services ?? 0,
         },
         {
+          key: 'outputParsers',
           icon: COMPONENT_TYPE_ICONS.output_parser,
-          label: 'Output Parsers',
+          label: t('importModal.appUpload.components.outputParsers', {
+            count: preview.component_counts.output_parsers ?? 0,
+          }),
           count:
             preview.component_counts.output_parsers ?? 0,
         },
         {
+          key: 'mcpConfigs',
           icon: COMPONENT_TYPE_ICONS.mcp_config,
-          label: 'MCP Configs',
+          label: t('importModal.appUpload.components.mcpConfigs', {
+            count: preview.component_counts.mcp_configs ?? 0,
+          }),
           count: preview.component_counts.mcp_configs ?? 0,
         },
         {
+          key: 'silos',
           icon: COMPONENT_TYPE_ICONS.silo,
-          label: 'Silos',
+          label: t('importModal.appUpload.components.silos', {
+            count: preview.component_counts.silos ?? 0,
+          }),
           count: preview.component_counts.silos ?? 0,
         },
         {
+          key: 'repositories',
           icon: COMPONENT_TYPE_ICONS.repository,
-          label: 'Repositories',
+          label: t('importModal.appUpload.components.repositories', {
+            count: preview.component_counts.repositories ?? 0,
+          }),
           count:
             preview.component_counts.repositories ?? 0,
         },
         {
+          key: 'domains',
           icon: COMPONENT_TYPE_ICONS.domain,
-          label: 'Domains',
+          label: t('importModal.appUpload.components.domains', {
+            count: preview.component_counts.domains ?? 0,
+          }),
           count: preview.component_counts.domains ?? 0,
         },
         {
+          key: 'agents',
           icon: COMPONENT_TYPE_ICONS.agent,
-          label: 'Agents',
+          label: t('importModal.appUpload.components.agents', {
+            count: preview.component_counts.agents ?? 0,
+          }),
           count: preview.component_counts.agents ?? 0,
         },
       ].filter((r) => r.count > 0)
@@ -77,39 +103,23 @@ function AppStepUpload({
 
   return (
     <div className="space-y-4">
-      <div>
-        <label
-          htmlFor="app-export-file-input"
-          className="block text-sm font-medium text-gray-700 mb-2"
-        >
-          Select App Export File
-        </label>
-        <input
-          ref={fileInputRef}
-          id="app-export-file-input"
-          type="file"
-          accept=".json,application/json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isValidating}
-          className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
-        >
-          <FolderOpen className="w-5 h-5 mr-2" />
-          {file ? 'Change File' : 'Select JSON File'}
-        </button>
-        {file && (
-          <p className="mt-1 text-sm text-gray-500">
-            {file.name}
-          </p>
-        )}
-      </div>
+      <FormField
+        id="app-export-file-input"
+        label={t('importModal.appUpload.selectExportFile')}
+        type="file"
+        accept=".json,application/json"
+        fileName={file?.name}
+        fileButtonLabel={t('importModal.file.choose')}
+        noFileSelectedLabel={t('importModal.file.noFileSelected')}
+        onChange={handleFileChange}
+        disabled={isValidating}
+      />
 
       {isValidating && (
-        <LoadingState variant="inline" message="Validating export file..." />
+        <LoadingState
+          variant="inline"
+          message={t('importModal.appUpload.validating')}
+        />
       )}
 
       {validationError && (
@@ -117,37 +127,40 @@ function AppStepUpload({
       )}
 
       {preview && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-          <h4 className="text-sm font-medium text-blue-900">
-            Export File Summary
-          </h4>
-          <div className="flex items-center space-x-3">
-            <span className="text-2xl">
+        <CardApp
+          variant="canvas"
+          className="p-4"
+          titulo={t('importModal.appUpload.summary')}
+        >
+          <div className="flex items-top space-x-3">
+            <span className="text-md text-bronze dark:text-bronze-dark">
               {COMPONENT_TYPE_ICONS.app}
             </span>
             <div>
-              <p className="font-medium text-blue-900">
+              <p className="font-xs text-fg dark:text-fg-dark">
                 {preview.app_name}
               </p>
-              <p className="text-xs text-blue-700">
-                Version {preview.export_version}
+              <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                {t('importModal.appUpload.version', {
+                  version: preview.export_version,
+                })}
               </p>
             </div>
           </div>
 
           {countRows.length > 0 && (
-            <div className="border-t border-blue-200 pt-3">
-              <p className="text-xs font-medium text-blue-800 mb-2">
-                Component Inventory
+            <div className="border-t border-line dark:border-line-dark pt-3">
+              <p className="text-md font-medium text-fg dark:text-fg-dark mb-2">
+                {t('importModal.appUpload.componentInventory')}
               </p>
               <div className="grid grid-cols-2 gap-1">
                 {countRows.map((r) => (
                   <div
-                    key={r.label}
-                    className="flex items-center text-sm text-blue-800"
+                    key={r.key}
+                    className="flex items-center text-sm text-md text-bronze dark:text-bronze-dark"
                   >
                     <span className="mr-2">{r.icon}</span>
-                    <span>
+                    <span className="text-sm text-fg dark:text-fg-dark">
                       {r.count} {r.label}
                     </span>
                   </div>
@@ -168,7 +181,7 @@ function AppStepUpload({
               }
             />
           )}
-        </div>
+        </CardApp>
       )}
     </div>
   );

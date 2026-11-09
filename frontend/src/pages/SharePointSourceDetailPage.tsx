@@ -257,11 +257,11 @@ function SharePointSourceDetailPage() {
       )}
 
       {/* Sync status panel */}
-      <CardApp className="p-5">
-        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.syncStatus')}</h3>
+      <CardApp variant="canvas" className="p-5">
+        <h1 className="m-0 font-display text-ink dark:text-ink-dark font-normal leading-[1.1] text-[20px] pb-1">{t('sharePointSourceDetailPage.sections.syncStatus')}</h1>
         <div className="flex flex-wrap justify-between gap-6">
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.status')}</span>
+            <span className="text-xs  text-bronze dark:text-bronze-dark uppercase tracking-wider mb-1">{t('sharePointSourceDetailPage.fields.status')}</span>
             <div className="mt-1">
               <Badge
                 label={t(statusBadge.label)}
@@ -271,7 +271,7 @@ function SharePointSourceDetailPage() {
             </div>
           </div>
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.lastSynced')}</span>
+            <span className="text-xs  text-bronze dark:text-bronze-dark uppercase tracking-wider mb-1">{t('sharePointSourceDetailPage.fields.lastSynced')}</span>
             <p
               className="text-sm text-fg dark:text-fg-dark mt-1"
               title={
@@ -284,7 +284,7 @@ function SharePointSourceDetailPage() {
             </p>
           </div>
           <div>
-            <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointSourceDetailPage.fields.filesIndexed')}</span>
+            <span className="text-xs text-bronze dark:text-bronze-dark uppercase tracking-wider mb-1">{t('sharePointSourceDetailPage.fields.filesIndexed')}</span>
             <p className="text-sm text-fg dark:text-fg-dark mt-1">{source.file_count}</p>
           </div>
         </div>
@@ -300,8 +300,7 @@ function SharePointSourceDetailPage() {
 
       {/* General section */}
       {canEdit && (
-        <CardApp className="p-5">
-          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.general')}</h3>
+        <CardApp titulo={t('sharePointSourceDetailPage.sections.general')}>
           {generalError && (
             <Alert
               type="error"
@@ -339,9 +338,8 @@ function SharePointSourceDetailPage() {
       )}
 
       {/* SharePoint connection section */}
-      <CardApp className="p-5">
-        <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.connection')}</h3>
-
+      <CardApp titulo={t('sharePointSourceDetailPage.sections.connection')}>
+        
         {/* Read-only site/drive info */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
@@ -419,8 +417,7 @@ function SharePointSourceDetailPage() {
 
       {/* Indexing config section */}
       {canEdit && (
-        <CardApp className="p-5">
-          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-3">{t('sharePointSourceDetailPage.sections.indexingConfig')}</h3>
+        <CardApp titulo={t('sharePointSourceDetailPage.sections.indexingConfig')}>
           {filtersError && (
             <Alert
               type="error"
@@ -432,7 +429,7 @@ function SharePointSourceDetailPage() {
           )}
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
                 {t('sharePointSourceDetailPage.fields.fileExtensionFilters')}
               </label>
               <TagInput
@@ -441,7 +438,7 @@ function SharePointSourceDetailPage() {
                 maxTags={20}
                 placeholder={t('sharePointSourceDetailPage.fields.fileExtensionsPlaceholder')}
               />
-              <p className="text-xs text-gray-500 mt-1">{t('sharePointSourceDetailPage.help.emptyExtensions')}</p>
+              <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-1">{t('sharePointSourceDetailPage.help.emptyExtensions')}</p>
             </div>
             <div className="flex justify-end">
               <ButtonApp
@@ -459,17 +456,19 @@ function SharePointSourceDetailPage() {
       {/* Danger zone */}
       {canDelete && (
         <CardApp className="border-error p-5">
-          <h3 className="text-lg font-semibold text-error mb-3">{t('sharePointSourceDetailPage.sections.dangerZone')}</h3>
-          <p className="text-sm text-gray-600 mb-3">
+          <h3 className="font-display text-[17px] font-medium leading-8 text-error mb-3">{t('sharePointSourceDetailPage.sections.dangerZone')}</h3>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mb-3">
             {t('sharePointSourceDetailPage.help.deleteWarning')}
           </p>
-          <ButtonApp
-            label={t('sharePointSourceDetailPage.actions.deleteSource')}
-            onClick={() => { void handleDelete(); }}
-            variant="dangerSolid"
-            size="medium"
-            icon={<Trash2 className="w-4 h-4" />}
-          />
+          <div className="mt-auto flex justify-end">
+            <ButtonApp
+              label={t('sharePointSourceDetailPage.actions.deleteSource')}
+              onClick={() => { void handleDelete(); }}
+              variant="dangerSolid"
+              size="medium"
+              icon={<Trash2 className="w-4 h-4" />}
+            />
+          </div>
         </CardApp>
       )}
     </div>

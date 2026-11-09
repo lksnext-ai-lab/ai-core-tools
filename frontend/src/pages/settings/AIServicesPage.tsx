@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Bot, Users, ArrowDownToLine, ClipboardCopy, Pencil, Trash2, Upload} from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
@@ -19,7 +20,6 @@ import UsedByButton from '../../components/services/UsedByButton';
 import SystemServiceBadge from '../../components/services/SystemServiceBadge';
 import ServiceUsageModal from '../../components/services/ServiceUsageModal';
 import { useServiceConnectionTest } from '../../components/services/useServiceConnectionTest';
-import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
 import LoadingState from '../../components/ui/LoadingState';
 import Title from '../../components/ui/Title';
 import ButtonApp from '../../components/ui/ButtonApp';
@@ -41,6 +41,7 @@ interface AIService extends Partial<ServiceLifecycleFields> {
 
 function AIServicesPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -75,7 +76,7 @@ function AIServicesPage() {
     setIsModalOpen,
     setEditingService,
     forceReload,
-  } = useServicesManager<AIService>(appId, api as any, cache as any, { entity: 'AI service' });
+  } = useServicesManager<AIService>(appId, api as any, cache as any, { entity: t('aiServicesPage.entity') });
 
   const { testAction, modal: connectionTestModal } = useServiceConnectionTest('AI');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -88,7 +89,7 @@ function AIServicesPage() {
   const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null);
 
   async function testConnection(serviceId: number) {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('aiServicesPage.appIdNotFound'));
     const apiService = (await import('../../services/api')).apiService;
     return apiService.testAIServiceConnection(Number.parseInt(appId, 10), serviceId);
   }
@@ -118,7 +119,7 @@ function AIServicesPage() {
       globalThis.URL.revokeObjectURL(url);
       a.remove();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to export service');
+      alert(err instanceof Error ? err.message : t('aiServicesPage.exportFailed'));
     } finally {
       setExportingServiceId(null);
     }
@@ -129,7 +130,7 @@ function AIServicesPage() {
     conflictMode: ConflictMode,
     newName?: string
   ): Promise<ImportResponse> {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('aiServicesPage.appIdNotFound'));
     
     try {
       const apiService = (await import('../../services/api')).apiService;
@@ -145,7 +146,7 @@ function AIServicesPage() {
         setShowImportModal(false);
         // Show success notification
         setNotification({
-          message: result.message || 'Import completed successfully',
+          message: result.message || t('aiServicesPage.importSucceeded'),
           type: 'success'
         });
         // Refresh the list
@@ -158,7 +159,7 @@ function AIServicesPage() {
     } catch (err) {
       // Show error notification
       setNotification({
-        message: err instanceof Error ? err.message : 'Import failed',
+        message: err instanceof Error ? err.message : t('aiServicesPage.importFailed'),
         type: 'error'
       });
       setTimeout(() => setNotification(null), 5000);
@@ -168,7 +169,7 @@ function AIServicesPage() {
   }
 
   if (loading) return (
-    <LoadingState variant="page" message="Loading AI services..." />
+    <LoadingState variant="page" message={t('aiServicesPage.loading')} />
   );
 
   if (error) return (
@@ -181,18 +182,18 @@ function AIServicesPage() {
     <div className="p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <Title variant='titSecundario' titulo='Ai Services' subtitulo='Manage language models and AI providers for your agents'></Title>
+        <Title variant='titSecundario' titulo={t('aiServicesPage.title')} subtitulo={t('aiServicesPage.subtitle')}></Title>
         {canEdit && (
           <div className="flex gap-2">
             <ButtonApp
-              label="Import"
+              label={t('aiServicesPage.import')}
               onClick={() => setShowImportModal(true)}
               icon={<Upload className="w-4 h-4" aria-hidden="true" />}
               variant="secondary"
               size="medium"
             />
             <ButtonApp
-              label="Add AI Service"
+              label={t('aiServicesPage.addService')}
               onClick={handleCreate}
               icon={<span aria-hidden="true">+</span>}
               variant="primary"
@@ -210,7 +211,7 @@ function AIServicesPage() {
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('aiServicesPage.columns.name'),
             render: (service: AIService) => (
               <span className="flex items-center gap-1.5">
                 <BackgroundImage icon={Bot} variant="marron" />
@@ -225,51 +226,56 @@ function AIServicesPage() {
               </span>
             )
           },
-          { header: 'Model', accessor: 'model_name', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark' },
-          { header: 'Provider', render: (service: AIService) => (
+          { header: t('aiServicesPage.columns.model'), accessor: 'model_name', className: 'text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark' },
+          { header: t('aiServicesPage.columns.provider'), render: (service: AIService) => (
             <ProviderBadge provider={service.provider} />
           )},
-          { header: 'Status', render: (service: AIService) => (
+          { header: t('aiServicesPage.columns.status'), render: (service: AIService) => (
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lastError={service.last_error} lastErrorAt={service.last_error_at} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           )},
-          { header: 'Created', className:'text-xs text-fg-secondary dark:text-fg-secondary-dark', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
-          { header: 'Actions', sticky: 'right', className: 'relative', render: (service: AIService) => (
-            service.is_system ? (
-              // System services are managed by platform admins; the app can only see where they are used.
-              <span className="flex flex-col items-center gap-1">
-                <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">System</span>
-                <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
-              </span>
-            ) : canEdit ? (
-              <ActionDropdown triggerAriaLabel={`Actions for ${service.name}`} actions={[
-                { label: SERVICE_USAGE_STRINGS.action, onClick: () => setUsageService({ id: service.service_id, name: service.name }), icon: <Users className="w-4 h-4" /> },
+          { header: t('aiServicesPage.columns.created'), className:'text-xs text-fg-secondary dark:text-fg-secondary-dark', render: (service: AIService) => (service.created_at ? new Date(service.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('aiServicesPage.notAvailable')) },
+          { header: t('aiServicesPage.columns.actions'), sticky: 'right', className: 'relative', render: (service: AIService) => {
+            if (service.is_system) {
+              return (
+                <span className="flex flex-col items-center gap-1">
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">{t('aiServicesPage.system')}</span>
+                  <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
+                </span>
+              );
+            }
+
+            if (!canEdit) {
+              return <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />;
+            }
+
+            return (
+              <ActionDropdown triggerAriaLabel={t('aiServicesPage.actions.menuForService', { name: service.name })} actions={[
+                { label: t('aiServicesPage.actions.usedBy'), onClick: () => setUsageService({ id: service.service_id, name: service.name }), icon: <Users className="w-4 h-4" /> },
                 testAction(service.service_id, service.name, () => testConnection(service.service_id)),
                 {
-                  label: exportingServiceId === service.service_id ? 'Exporting...' : 'Export',
+                  label: exportingServiceId === service.service_id ? t('aiServicesPage.actions.exporting') : t('aiServicesPage.actions.export'),
                   onClick: () => void handleExport(service.service_id),
                   icon: exportingServiceId === service.service_id ? <Spinner size="sm" tone="current" /> : <ArrowDownToLine className="w-4 h-4" />,
                   variant: 'primary' as const,
                   disabled: exportingServiceId === service.service_id
                 },
-                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
-                { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
-                { label: 'Delete', onClick: () => setUsageService({ id: service.service_id, name: service.name, deleteRequested: true }), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
+                { label: t('aiServicesPage.actions.edit'), onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
+                { label: t('aiServicesPage.actions.copy'), onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
+                { label: t('aiServicesPage.actions.delete'), onClick: () => setUsageService({ id: service.service_id, name: service.name, deleteRequested: true }), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
               ]} size="sm" />
-            ) : (
-              <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
-            )
-          ) }
+            );
+          } }
         ]}
         emptyIcon={<BackgroundImage icon={Bot} size={64} iconSize={32} />}
-        emptyMessage="No AI Services"
-        emptySubMessage="Add your first AI service to start using language models in your agents."
+        emptyMessage={t('aiServicesPage.empty.title')}
+        emptySubMessage={t('aiServicesPage.empty.subtitle')}
         loading={loading}
       />
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
           <ButtonApp
-            label="Add First AI Service"
+            label={t('aiServicesPage.addFirstService')}
             onClick={handleCreate}
             variant="primary"
             size="medium"
@@ -288,9 +294,9 @@ function AIServicesPage() {
 
       <Alert
         type="info"
-        title="About AI Services"
+        title={t('aiServicesPage.about.title')}
         className="mt-6"
-        message="AI Services define the language models your agents can use. Configure OpenAI, Azure OpenAI, Anthropic Claude, or local models like Ollama. Each service requires proper authentication and endpoint configuration."
+        message={t('aiServicesPage.about.message')}
       />
 
       {isModalOpen && !editingService && (
@@ -308,6 +314,7 @@ function AIServicesPage() {
       {isModalOpen && editingService && (
         <CompactServiceEditor
           isOpen
+          variant="panel"
           kind="ai"
           scope="app"
           appId={appId ? Number.parseInt(appId) : undefined}
@@ -322,15 +329,15 @@ function AIServicesPage() {
 
       {/* Service usage side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {usageService && appId && (
-        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
           <SidePanel
             open
             side="right"
             onClose={() => setUsageService(null)}
-            title="AI Services"
+            title={t('aiServicesPage.title')}
             headerActions={(
               <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
-                {SERVICE_USAGE_STRINGS.action}
+                {t('aiServicesPage.actions.usedBy')}
               </span>
             )}
             widthClassName="w-[640px] max-w-full"

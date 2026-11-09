@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
@@ -13,8 +13,6 @@ import {
   PackagePlus,
   Plus,
 } from 'lucide-react';
-import Modal from '../../components/ui/Modal';
-import SkillForm from '../../components/forms/SkillForm';
 import ClaudePluginImportModal from '../../components/forms/ClaudePluginImportModal';
 import { apiService } from '../../services/api';
 import ActionDropdown, { type ActionItem } from '../../components/ui/ActionDropdown';
@@ -46,15 +44,7 @@ function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSkill, setEditingSkill] = useState<any>(null);
-
-  // The name-cell click-through (and the "View" affordance) must open every visible skill,
-  // regardless of role — but only skills the viewer can actually manage should render editable.
-  const editingSkillReadOnly = useMemo(
-    () => Boolean(editingSkill) && !(canEdit && !editingSkill?.is_system),
-    [editingSkill, canEdit],
-  );
+  const navigate = useNavigate();
 
   // Import/export/enable state
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -144,60 +134,11 @@ function SkillsPage() {
   }
 
   function handleCreateSkill() {
-    setEditingSkill(null);
-    setIsModalOpen(true);
+    navigate(`/apps/${appId}/skills/new`);
   }
 
-  async function handleEditSkill(skillId: number) {
-    if (!appId) return;
-
-    try {
-      const skill = await apiService.getSkill(Number.parseInt(appId), skillId);
-      setEditingSkill(skill);
-      setIsModalOpen(true);
-    } catch (err) {
-      setError(errorMessage(err, t('skillsPage.loadDetailsFailed')));
-      console.error('Error loading skill:', err);
-    }
-  }
-
-  async function handleSaveSkill(data: any) {
-    if (!appId) return;
-
-    const isUpdate = Boolean(editingSkill && editingSkill.skill_id !== 0);
-
-    const result = await mutate<Skill>(
-      () =>
-        isUpdate
-          ? apiService.updateSkill(Number.parseInt(appId), editingSkill.skill_id, data)
-          : apiService.createSkill(Number.parseInt(appId), data),
-      {
-        loading: t(isUpdate ? 'skillsPage.notifications.updating' : 'skillsPage.notifications.creating'),
-        success: t(isUpdate ? 'skillsPage.notifications.updated' : 'skillsPage.notifications.created'),
-        error: (err) => errorMessage(err, t('skillsPage.notifications.saveFailed')),
-      },
-    );
-    if (result === undefined) return;
-
-    setIsModalOpen(false);
-    setEditingSkill(null);
-
-    if (isUpdate) {
-      try {
-        await loadSkills();
-      } catch (err) {
-        console.error('Refetch after update failed:', err);
-      }
-    } else {
-      const updatedSkills = [...skills, result];
-      setSkills(updatedSkills);
-      settingsCache.setSkills(appId, updatedSkills);
-    }
-  }
-
-  function handleCloseModal() {
-    setIsModalOpen(false);
-    setEditingSkill(null);
+  function handleEditSkill(skillId: number) {
+    navigate(`/apps/${appId}/skills/${skillId}/edit`);
   }
 
   function handleImportClick() {
@@ -437,13 +378,6 @@ function SkillsPage() {
     [canEdit, hasMinRole, exportingSkillId, togglingSkillId, t, i18n.resolvedLanguage],
   );
 
-  let modalTitle = t('skillsPage.modal.createSkill');
-  if (editingSkill) {
-    modalTitle = editingSkillReadOnly
-      ? t('skillsPage.modal.viewSkill')
-      : t('skillsPage.modal.editSkill');
-  }
-
   if (loading) {
     return (
       <div className="space-y-6">
@@ -572,22 +506,6 @@ function SkillsPage() {
           </>
         )}
       />
-
-      {/* Create/Edit Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={modalTitle}
-        size="large"
-      >
-        <SkillForm
-          skill={editingSkill}
-          readOnly={editingSkillReadOnly}
-          userRole={userRole}
-          onSubmit={handleSaveSkill}
-          onCancel={handleCloseModal}
-        />
-      </Modal>
 
       {appId && (
         <ClaudePluginImportModal

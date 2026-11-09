@@ -175,7 +175,9 @@ interface StepperContainerProps {
   onStepClick?: (stepIndex: number) => void;
   stepStatuses?: Record<string, StepStatus>;
   nextLabel?: string;
+  backLabel?: string;
   cancelLabel?: string;
+  submittingLabel?: string;
   nextDisabled?: boolean;
   isSubmitting?: boolean;
   showBack?: boolean;
@@ -192,7 +194,9 @@ function StepperContainer({
   onStepClick,
   stepStatuses,
   nextLabel,
+  backLabel,
   cancelLabel,
+  submittingLabel,
   nextDisabled,
   isSubmitting,
   showBack = true,
@@ -214,9 +218,11 @@ function StepperContainer({
         onBack={onBack}
         onCancel={onCancel}
         nextLabel={nextLabel}
+        backLabel={backLabel}
         cancelLabel={cancelLabel}
         nextDisabled={nextDisabled}
         isSubmitting={isSubmitting}
+        submittingLabel={submittingLabel}
         showBack={showBack}
         showNext={showNext}
       />
