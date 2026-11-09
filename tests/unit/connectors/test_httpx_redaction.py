@@ -10,6 +10,7 @@ import httpx
 import pytest
 from connectors.core import http as core_http
 from connectors.core.http import install_httpx_redaction
+from connectors.core.messages import OutboundRequest
 from connectors.providers.webhook import provider as module
 
 SECRET_URL = "https://hooks.example.com/mattin?token=s3cr3t"
@@ -38,11 +39,13 @@ async def test_webhook_send_does_not_log_url_or_token(monkeypatch, caplog):
     monkeypatch.setattr(httpx, "AsyncClient", factory)
 
     with caplog.at_level(logging.INFO, logger="httpx"):
-        receipt = await module.WebhookProvider().send(
-            SECRET_URL, {"event_type": "task.run.succeeded"},
-            config={"schema_version": "1", "auth_mode": "none", "receiver_deduplicates": False, "include_attachments": False},
+        receipt = await module.WebhookProvider().send(OutboundRequest(
+            url=SECRET_URL, payload={"event_type": "task.run.succeeded"},
+            public_config={"schema_version": "1", "auth_mode": "none", "receiver_deduplicates": False,
+                           "include_attachments": False},
             credentials={}, event_id="evt-1", attempt_number=1, content_type="application/json", body=b"{}",
-        )
+            body_path=None,
+        ))
 
     assert receipt["http_status"] == 202
     # Positive check: httpx did log the request, so the negative checks below are meaningful.

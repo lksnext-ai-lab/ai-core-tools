@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_
 from db.database import SessionLocal
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from services.output_channels import delivery_policy
 from services.output_channels.service import cleanup_spool_files, create_deliveries_for_run, process_delivery
 from utils.clock import utcnow_naive
 
@@ -102,8 +103,7 @@ async def _reconcile_pending_deliveries() -> int:
             if item.status == "sending":
                 snapshot = item.destination_snapshot or {}
                 retry_deduplicated = (
-                    snapshot.get("provider_key") == "webhook"
-                    and snapshot.get("receiver_deduplicates") is True
+                    delivery_policy.receiver_can_deduplicate(snapshot.get("provider_key"), snapshot)
                     and item.attempt_count < 5
                 )
                 item.status = "retry_wait" if retry_deduplicated else "unknown"

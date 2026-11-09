@@ -8,6 +8,7 @@ import httpx
 import pytest
 from connectors.core import http as core_http
 from connectors.core.errors import DeliveryError
+from connectors.core.messages import OutboundRequest
 from connectors.providers.teams_workflow import provider as teams_workflow
 from connectors.providers.webhook import provider as module
 
@@ -130,7 +131,11 @@ def _send(**overrides):
         "event_id": "evt-1", "attempt_number": 2, "content_type": "application/json", "body": b"{}",
     }
     options.update(overrides)
-    return module.WebhookProvider().send(WEBHOOK_URL, {"event_type": "task.run.succeeded"}, **options)
+    return module.WebhookProvider().send(OutboundRequest(
+        url=WEBHOOK_URL, payload={"event_type": "task.run.succeeded"}, public_config=options["config"],
+        credentials=options["credentials"], event_id=options["event_id"], attempt_number=options["attempt_number"],
+        content_type=options["content_type"], body=options.get("body"), body_path=options.get("body_path"),
+    ))
 
 
 class TestSend:
@@ -219,7 +224,8 @@ class TestSend:
 def test_provider_validates_destination_and_secret():
     provider = module.WebhookProvider()
     assert provider.validate_secret(WEBHOOK_URL) == WEBHOOK_URL
-    url, config = provider.validate_destination(WEBHOOK_URL, {"auth_mode": "none"}, None)
+    validated = provider.validate_destination(WEBHOOK_URL, {"auth_mode": "none"}, None)
+    url, config = validated.url, validated.public_config
     assert url == WEBHOOK_URL and config["auth_mode"] == "none"
     assert provider.descriptor.supports_binary_attachments is True
 

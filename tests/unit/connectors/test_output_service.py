@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from connectors import registry as connector_registry
 from connectors.core.errors import DeliveryError
 from connectors.providers.teams_workflow.card import build_run_card
 from connectors.providers.webhook.events import build_run_event
@@ -16,7 +17,7 @@ from models.output_delivery import (
     OutputDeliveryAttempt,
     ScheduledTaskOutputBinding,
 )
-from services.output_channels import service
+from services.output_channels import delivery_policy, service
 from services.output_channels.messages import run_message_from
 from utils.clock import utcnow_naive
 
@@ -59,13 +60,34 @@ class FakeProvider:
         self.on_send = on_send
         self.calls = []
 
-    async def send(self, secret, payload, **options):
-        self.calls.append((secret, payload, options))
-        if self.on_send:
-            self.on_send(secret, payload, options)
-        if isinstance(self.outcome, Exception):
-            raise self.outcome
-        return self.outcome
+    def wrapping(self, real):
+        """Proxy that delegates everything to ``real`` except ``send``."""
+        fake = self
+
+        class _Proxy:
+            def __getattr__(self, name):
+                return getattr(real, name)
+
+            async def send(self, request):
+                options = {
+                    "config": dict(request.public_config), "credentials": dict(request.credentials),
+                    "event_id": request.event_id, "attempt_number": request.attempt_number,
+                    "content_type": request.content_type, "body": request.body, "body_path": request.body_path,
+                }
+                fake.calls.append((request.url, request.payload, options))
+                if fake.on_send:
+                    fake.on_send(request.url, request.payload, options)
+                if isinstance(fake.outcome, Exception):
+                    raise fake.outcome
+                return fake.outcome
+
+        return _Proxy()
+
+
+def _patch_provider(monkeypatch, provider):
+    real = connector_registry.get_output_provider
+    monkeypatch.setattr(connector_registry, "get_output_provider", lambda key: provider.wrapping(real(key)))
+    return provider
 
 
 # --------------------------------------------------------------------------- destinations
@@ -602,7 +624,7 @@ class TestDestinationConnectionTest:
     @pytest.mark.asyncio
     async def test_teams_sends_test_card(self, outbox, monkeypatch):
         provider = FakeProvider()
-        monkeypatch.setattr(service, "get_output_provider", lambda key: provider)
+        _patch_provider(monkeypatch, provider)
         destination = make_destination()
         assert await service.test_destination(destination) == {"http_status": 202}
         secret, payload, _ = provider.calls[0]
@@ -619,7 +641,7 @@ class TestDestinationConnectionTest:
                 assert os.path.isfile(options["body_path"])
 
         provider = FakeProvider(on_send=inspect)
-        monkeypatch.setattr(service, "get_webhook_provider", lambda: provider)
+        _patch_provider(monkeypatch, provider)
         destination = make_destination(provider_key="webhook", config={"include_attachments": attachments},
                                        credentials=HMAC_CREDENTIALS, content_mode="link_only")
         await service.test_destination(destination)
@@ -661,9 +683,7 @@ class TestProcessDelivery:
             return delivery, list(delivery.attempts)
 
     def _provider(self, monkeypatch, provider):
-        monkeypatch.setattr(service, "get_output_provider", lambda key: provider)
-        monkeypatch.setattr(service, "get_webhook_provider", lambda: provider)
-        return provider
+        return _patch_provider(monkeypatch, provider)
 
     @pytest.mark.asyncio
     async def test_accepted_teams_delivery_records_receipt(self, outbox, monkeypatch):
@@ -673,7 +693,9 @@ class TestProcessDelivery:
         delivery, attempts = self._load(outbox, delivery_id)
         assert (delivery.status, delivery.receipt, delivery.attempt_count) == ("accepted", {"http_status": 202}, 1)
         assert [(item.status, item.http_status) for item in attempts] == [("accepted", 202)]
-        assert provider.calls[0][0] == TEAMS_URL and provider.calls[0][2] == {}
+        assert provider.calls[0][0] == TEAMS_URL and provider.calls[0][2]["body"] is None \
+            and provider.calls[0][2]["body_path"] is None and provider.calls[0][2]["credentials"] == {} \
+            and provider.calls[0][2]["config"] == {}
 
     @pytest.mark.asyncio
     async def test_webhook_delivery_sends_inline_body_with_public_config_only(self, outbox, monkeypatch):
@@ -728,7 +750,7 @@ class TestProcessDelivery:
         (DeliveryError("maybe", kind="unknown", http_status=503), 0, "unknown"),
         (DeliveryError("slow down", kind="retryable", http_status=429, retry_after=5), 0, "retry_wait"),
         (DeliveryError("slow down", kind="retryable"), 0, "retry_wait"),
-        (DeliveryError("slow down", kind="retryable"), service.MAX_ATTEMPTS - 1, "failed"),
+        (DeliveryError("slow down", kind="retryable"), delivery_policy.MAX_ATTEMPTS - 1, "failed"),
         (DeliveryError("bad request", kind="permanent", http_status=400), 0, "failed"),
     ])
     async def test_failed_attempts_are_classified(self, outbox, monkeypatch, error, attempt_count, expected):
@@ -798,12 +820,16 @@ class TestProcessDelivery:
         self, outbox, monkeypatch, provider_key, deduplicates, expected,
     ):
         class SlowProvider:
+            def wrapping(self, real):
+                self.snapshot_public_config = real.snapshot_public_config
+                return self
+
             async def send(self, *args, **kwargs):
                 await asyncio.sleep(5)
 
         self._provider(monkeypatch, SlowProvider())
-        monkeypatch.setattr(service, "LEASE_SECONDS", 1)
-        monkeypatch.setattr(service, "SEND_DEADLINE_MARGIN_SECONDS", 0.9)
+        monkeypatch.setattr(delivery_policy, "LEASE_SECONDS", 1)
+        monkeypatch.setattr(delivery_policy, "SEND_DEADLINE_MARGIN_SECONDS", 0.9)
         delivery_id = self._delivery(outbox, provider_key=provider_key, request_body=b"{}",
                                      snapshot={"receiver_deduplicates": deduplicates})
 

@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-from utils.ssrf_guard import is_blocked_ip, resolve_host
+import httpx
+from utils.ssrf_guard import is_blocked_ip, pinned_async_transport, resolve_host
 
 
 class _RedactHttpxRequestUrls(logging.Filter):
@@ -22,6 +23,19 @@ def install_httpx_redaction() -> None:
     httpx_logger = logging.getLogger("httpx")
     if not any(isinstance(existing, _RedactHttpxRequestUrls) for existing in httpx_logger.filters):
         httpx_logger.addFilter(_RedactHttpxRequestUrls())
+
+
+def pinned_client(timeout: float, *, connect_timeout: float = 5.0) -> httpx.AsyncClient:
+    """Build the outbound HTTP client: pinned SSRF transport, no proxy env, no redirects.
+
+    Webhook URLs are bearer credentials, so redirects are never followed.
+    """
+    return httpx.AsyncClient(
+        transport=pinned_async_transport(),
+        timeout=httpx.Timeout(timeout, connect=connect_timeout),
+        follow_redirects=False,
+        trust_env=False,
+    )
 
 
 def ensure_public_host(hostname: str, label: str) -> None:

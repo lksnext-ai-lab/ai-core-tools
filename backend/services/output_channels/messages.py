@@ -2,7 +2,8 @@
 
 import os
 
-from connectors.core.messages import RunMessage
+from connectors.core.messages import DestinationView, RunMessage
+from models.output_delivery import OutputDestination
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
 
 
@@ -24,4 +25,12 @@ def run_message_from(task: ScheduledTask, run: ScheduledTaskRun) -> RunMessage:
         output_text=run.output_text or "",
         output_files=tuple(dict(item) for item in run.output_files or []),
         base_url=base_url(),
+    )
+
+
+def destination_view(destination: OutputDestination) -> DestinationView:
+    """Provider-facing view of a destination: never carries the URL or credentials."""
+    return DestinationView(
+        app_id=destination.app_id, name=destination.name, provider_key=destination.provider_key,
+        content_mode=destination.content_mode, public_config=dict(destination.public_config or {}),
     )

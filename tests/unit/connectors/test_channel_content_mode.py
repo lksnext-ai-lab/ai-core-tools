@@ -3,6 +3,7 @@
 from datetime import datetime
 
 import pytest
+from connectors import registry as connector_registry
 from connectors.core import http as core_http
 from db.database import Base
 from models.output_delivery import (
@@ -109,10 +110,10 @@ async def test_connection_test_uses_channel_content_mode(db, monkeypatch, provid
                                              provider_key=provider, content_mode="link_only",
                                              public_config={"auth_mode": "none"} if provider == "webhook" else {})
     payloads = []
-    async def send(url, payload, **kwargs):
-        payloads.append(payload)
+    async def send(request):
+        payloads.append(request.payload)
         return {"http_status": 202}
-    monkeypatch.setattr(service.get_output_provider(provider), "send", send)
+    monkeypatch.setattr(connector_registry.get_output_provider(provider), "send", send)
     assert await service.test_destination(destination) == {"http_status": 202}
     if provider == "webhook":
         assert payloads[0]["content"]["mode"] == "link_only"

@@ -12,12 +12,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
+from connectors import registry as connector_registry
+from connectors.core.contracts import UpdatePolicy
 from connectors.core.errors import DeliveryError
-from connectors.providers.teams_workflow.card import build_run_card, build_test_card
-from connectors.providers.webhook.events import build_run_event, build_test_event
-from connectors.registry import get_output_provider, get_webhook_provider
+from connectors.core.messages import BodyEncoding, OutboundRequest, RunDeliveryContext, TestDeliveryContext
 from models.output_delivery import (
     OutputArtifact,
     OutputDelivery,
@@ -26,22 +25,11 @@ from models.output_delivery import (
     ScheduledTaskOutputBinding,
 )
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
-from services.output_channels import messages
+from services.output_channels import delivery_policy, messages, spool
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from utils.clock import utcnow_naive
-
-MAX_ATTEMPTS = 5
-# A prepared request body is still needed while a send can happen: automatically
-# (pending/retry_wait/sending) or by manual retry (failed/unknown) until expiry.
-BODY_NEEDED_STATUSES = ("pending", "retry_wait", "sending", "failed", "unknown")
-LEASE_SECONDS = 120
-# A send must finish (or give up) this long before its lease expires, so the
-# worker always records the outcome before the reconciler treats the attempt
-# as abandoned.
-SEND_DEADLINE_MARGIN_SECONDS = 15
-
 
 def _delivery_expiry() -> datetime:
     # Keep pending deliveries inside the file cleanup worker's persistent-file
@@ -69,7 +57,7 @@ def destination_dto(destination: OutputDestination) -> dict[str, Any]:
 
 def create_destination(
     db: Session, *, app_id: int, created_by: int, name: str, webhook_url: str,
-    provider_key: str = "teams_workflow", public_config: dict[str, Any] | None = None,
+    provider_key: str = connector_registry.LEGACY_DEFAULT_PROVIDER_KEY, public_config: dict[str, Any] | None = None,
     credentials: dict[str, str] | None = None,
     content_mode: str = "result",
 ) -> OutputDestination:
@@ -78,19 +66,13 @@ def create_destination(
         raise ValueError("Destination name is required")
     if len(name) > 255:
         raise ValueError("Destination name is too long")
-    provider = get_output_provider(provider_key)
+    provider = connector_registry.get_output_provider(provider_key)
     if content_mode not in provider.descriptor.content_modes:
         raise ValueError("Unsupported output content mode")
-    config = dict(public_config or {})
-    if provider_key == "webhook":
-        webhook_url, config = get_webhook_provider().validate_destination(webhook_url, config, credentials)
-    else:
-        webhook_url = provider.validate_secret(webhook_url)
-        if config or credentials:
-            raise ValueError("Teams destinations do not accept webhook settings or credentials")
+    validated = provider.validate_destination(webhook_url, dict(public_config or {}), credentials)
     destination = OutputDestination(
         app_id=app_id, created_by=created_by, name=name,
-        provider_key=provider_key, public_config=config, webhook_url=webhook_url,
+        provider_key=provider_key, public_config=validated.public_config, webhook_url=validated.url,
         content_mode=content_mode,
         credentials=credentials,
     )
@@ -112,37 +94,30 @@ def update_destination(db: Session, destination: OutputDestination, changes: dic
         destination.name = name
     if "enabled" in changes and changes["enabled"] is not None:
         destination.enabled = changes["enabled"]
-    provider = get_output_provider(destination.provider_key)
+    provider = connector_registry.get_output_provider(destination.provider_key)
     if changes.get("content_mode") is not None:
         if changes["content_mode"] not in provider.descriptor.content_modes:
             raise ValueError("Unsupported output content mode")
         destination.content_mode = changes["content_mode"]
-    new_url = changes.get("webhook_url") or destination.webhook_url
-    new_config = changes.get("public_config") if changes.get("public_config") is not None else dict(destination.public_config or {})
-    new_credentials = dict(destination.credentials or {})
-    if changes.get("clear_credentials"):
-        new_credentials = {}
-    if changes.get("credentials") is not None:
-        new_credentials = dict(changes["credentials"])
-    if destination.provider_key == "webhook":
-        new_url, new_config = get_webhook_provider().validate_destination(new_url, new_config, new_credentials)
+    update_policy = provider.descriptor.outbound.update_policy if provider.descriptor.outbound else None
+    if update_policy == UpdatePolicy.REVALIDATE_ALL:
+        new_url = changes.get("webhook_url") or destination.webhook_url
+        new_config = changes.get("public_config") if changes.get("public_config") is not None else dict(destination.public_config or {})
+        new_credentials = dict(destination.credentials or {})
+        if changes.get("clear_credentials"):
+            new_credentials = {}
+        if changes.get("credentials") is not None:
+            new_credentials = dict(changes["credentials"])
+        validated = provider.validate_destination(new_url, new_config, new_credentials)
         if "webhook_url" in changes and changes["webhook_url"]:
-            old = urlparse(destination.webhook_url)
-            new = urlparse(new_url)
-            if (old.scheme, old.netloc, old.path, old.query) != (new.scheme, new.netloc, new.path, new.query):
-                raise ValueError("Changing a webhook endpoint requires creating a new destination")
-        destination.public_config = new_config
+            provider.ensure_same_endpoint(destination.webhook_url, validated.url)
+        destination.public_config = validated.public_config
         destination.credentials = new_credentials or None
-        destination.webhook_url = new_url
+        destination.webhook_url = validated.url
     elif changes.get("webhook_url"):
-        rotated_url = provider.validate_secret(changes["webhook_url"])
-        current_endpoint = urlparse(destination.webhook_url)
-        rotated_endpoint = urlparse(rotated_url)
-        if (current_endpoint.scheme, current_endpoint.netloc, current_endpoint.path) != (
-            rotated_endpoint.scheme, rotated_endpoint.netloc, rotated_endpoint.path,
-        ):
-            raise ValueError("Changing the Workflow or channel requires creating a new destination")
-        destination.webhook_url = rotated_url
+        validated = provider.validate_destination(changes["webhook_url"], None, None)
+        provider.ensure_same_endpoint(destination.webhook_url, validated.url)
+        destination.webhook_url = validated.url
     try:
         db.commit()
     except IntegrityError as exc:
@@ -189,12 +164,17 @@ def replace_task_bindings(
     return task_bindings(db, task=task, app_id=app_id)
 
 
+def _binding_includes_attachments(destination: OutputDestination) -> bool:
+    provider = connector_registry.find_output_provider(destination.provider_key)
+    return bool(provider and provider.includes_attachments(destination.public_config))
+
+
 def task_bindings(db: Session, *, task: ScheduledTask, app_id: int) -> list[dict[str, Any]]:
     return [
         {"destination_id": binding.destination_id, "enabled": binding.enabled,
          "destination_name": binding.destination.name,
          "provider_key": binding.destination.provider_key,
-         "include_attachments": bool((binding.destination.public_config or {}).get("include_attachments", False))}
+         "include_attachments": _binding_includes_attachments(binding.destination)}
         for binding in db.query(ScheduledTaskOutputBinding).join(OutputDestination)
         .filter(ScheduledTaskOutputBinding.scheduled_task_id == task.id,
                 OutputDestination.app_id == app_id, ScheduledTaskOutputBinding.enabled.is_(True))
@@ -230,7 +210,7 @@ def _release_unneeded_bodies(db: Session) -> None:
     """Drop prepared bodies and artifact rows that no future send can use."""
     now = utcnow_naive()
     needed = and_(
-        OutputDelivery.status.in_(BODY_NEEDED_STATUSES),
+        OutputDelivery.status.in_(delivery_policy.BODY_NEEDED_STATUSES),
         or_(OutputDelivery.expires_at.is_(None), OutputDelivery.expires_at > now),
     )
     db.query(OutputDelivery).filter(
@@ -372,10 +352,15 @@ async def prepare_run_attachments(db: Session, *, task: ScheduledTask, run: Sche
         ScheduledTaskOutputBinding.scheduled_task_id == task.id,
         ScheduledTaskOutputBinding.enabled.is_(True),
         OutputDestination.enabled.is_(True),
-        OutputDestination.provider_key == "webhook",
+        OutputDestination.provider_key.in_(connector_registry.spool_attachment_provider_keys()),
         OutputDestination.app_id == task.app_id,
     ).all()
-    if not any((binding.destination.public_config or {}).get("include_attachments", False) for binding in requested):
+    if not any(
+        connector_registry.get_output_provider(binding.destination.provider_key).includes_attachments(
+            binding.destination.public_config,
+        )
+        for binding in requested
+    ):
         return [], None
     try:
         artifacts = await asyncio.to_thread(_capture_run_files_sync, task, run)
@@ -494,48 +479,41 @@ def create_deliveries_for_run(
             deliveries.append(existing)
             continue
         destination = binding.destination
-        config = dict(destination.public_config or {})
-        snapshot = {"provider_key": destination.provider_key, "name": destination.name,
-                    "content_mode": destination.content_mode}
-        if destination.provider_key == "webhook":
-            snapshot.update(config)
-            event_id = str(uuid.uuid4())
-            destination_artifacts = artifacts or [] if config.get("include_attachments") else []
-            payload = build_run_event(
-                messages.run_message_from(task, run), content_mode=destination.content_mode,
-                event_id=event_id, artifacts=destination_artifacts,
-            )
-            body = None
-            request_body_path = None
-            request_body_size = None
-            request_body_sha256 = None
-            content_type = "application/json"
-            status = "pending"
-            error = attachment_error if config.get("include_attachments") else None
-            if error:
+        provider = connector_registry.find_output_provider(destination.provider_key) \
+            or connector_registry.get_output_provider(connector_registry.LEGACY_DEFAULT_PROVIDER_KEY)
+        view = messages.destination_view(destination)
+        snapshot = provider.build_snapshot(view)
+        prepared = provider.build_run_delivery(
+            RunDeliveryContext(messages.run_message_from(task, run), view, tuple(artifacts or ())),
+        )
+        payload = prepared.payload
+        destination_artifacts = list(prepared.attachments)
+        body = None
+        request_body_path = None
+        request_body_size = None
+        request_body_sha256 = None
+        content_type = "application/json"
+        status = "pending"
+        error = attachment_error if prepared.requires_attachments else None
+        if error:
+            status = "failed"
+        elif prepared.body_encoding != BodyEncoding.NONE:
+            try:
+                body = _json_body(payload)
+                if prepared.body_encoding == BodyEncoding.MULTIPART:
+                    if not prepared.event_id:
+                        raise ValueError("multipart deliveries require an event_id")
+                    key = f"deliveries/{prepared.event_id.replace('-', '')}.multipart"
+                    content_type, request_body_size, request_body_sha256 = _write_multipart(
+                        _safe_spool_file(key), payload, destination_artifacts,
+                    )
+                    request_body_path = key
+            except Exception as exc:
                 status = "failed"
-            else:
-                try:
-                    body = _json_body(payload)
-                    if config.get("include_attachments"):
-                        key = f"deliveries/{event_id.replace('-', '')}.multipart"
-                        content_type, request_body_size, request_body_sha256 = _write_multipart(
-                            _safe_spool_file(key), payload, destination_artifacts,
-                        )
-                        request_body_path = key
-                except Exception as exc:
-                    status = "failed"
-                    error = str(exc)[:300]
-                    body = None
+                error = str(exc)[:300]
+                body = None
+        if prepared.body_encoding != BodyEncoding.NONE:
             snapshot["content_type"] = content_type
-        else:
-            payload = build_run_card(messages.run_message_from(task, run), content_mode=destination.content_mode)
-            body = None
-            request_body_path = None
-            request_body_size = None
-            request_body_sha256 = None
-            status = "pending"
-            error = None
         delivery = OutputDelivery(
             run_id=run.id,
             binding_id=binding.id,
@@ -553,7 +531,7 @@ def create_deliveries_for_run(
         )
         db.add(delivery)
         deliveries.append(delivery)
-        if destination.provider_key == "webhook" and config.get("include_attachments") and not attachment_error:
+        if prepared.requires_attachments and not attachment_error:
             if known_artifacts is None:
                 known_artifacts = {row.file_id for row in db.query(OutputArtifact).filter_by(run_id=run.id).all()}
             for artifact in destination_artifacts:
@@ -573,7 +551,7 @@ def delivery_dto(delivery: OutputDelivery) -> dict[str, Any]:
     return {
         "id": delivery.id,
         "destination_name": (delivery.destination_snapshot or {}).get("name", "Output destination"),
-        "provider_key": (delivery.destination_snapshot or {}).get("provider_key", "teams_workflow"),
+        "provider_key": (delivery.destination_snapshot or {}).get("provider_key", connector_registry.LEGACY_DEFAULT_PROVIDER_KEY),
         "event_type": delivery.event_type,
         "status": delivery.status,
         "attempt_count": delivery.attempt_count,
@@ -593,51 +571,32 @@ def delivery_dto(delivery: OutputDelivery) -> dict[str, Any]:
 
 
 async def test_destination(destination: OutputDestination) -> dict[str, Any]:
-    if destination.provider_key == "webhook":
-        event_id = str(uuid.uuid4())
-        payload = build_test_event(
-            app_id=destination.app_id, content_mode=destination.content_mode, event_id=event_id,
-            base_url=messages.base_url(), now=datetime.now(timezone.utc),
-        )
-        config = dict(destination.public_config or {})
-        body = _json_body(payload)
-        path = None
-        content_type = "application/json"
-        test_file = None
-        if config.get("include_attachments"):
-            root = _spool_root()
-            test_file = root / "tests" / f"{event_id}.txt"
-            test_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            test_file.write_bytes(b"Mattin AI webhook attachment test.\n")
-            file_digest = hashlib.sha256(test_file.read_bytes()).hexdigest()
-            payload["attachments"] = [{
-                "file_id": "destination-test-file", "filename": "prueba.txt",
-                "content_type": "text/plain", "size_bytes": test_file.stat().st_size,
-                "sha256": file_digest, "part_name": "file_1",
-            }]
-            artifact = {"file_id": "destination-test-file", "filename": "prueba.txt", "content_type": "text/plain",
-                        "size_bytes": test_file.stat().st_size, "sha256": file_digest,
-                        "part_name": "file_1", "object_key": test_file.relative_to(root).as_posix()}
-            path = root / "tests" / f"{event_id}.multipart"
-            content_type, size, digest = _write_multipart(path, payload, [artifact])
-            body = None
-        try:
-            return await get_webhook_provider().send(
-                destination.webhook_url, payload, config=config, credentials=destination.credentials or {},
-                event_id=event_id, attempt_number=1, content_type=content_type,
-                body=body, body_path=str(path) if path else None,
-            )
-        finally:
-            if path:
-                path.unlink(missing_ok=True)
-            if test_file:
-                test_file.unlink(missing_ok=True)
-
-    payload = build_test_card(
-        destination_name=destination.name, content_mode=destination.content_mode,
-        base_url=messages.base_url(), now=datetime.now(timezone.utc),
+    provider = connector_registry.get_output_provider(destination.provider_key)
+    root = _spool_root()
+    stager = spool.SpoolAttachmentStager(root)
+    prepared = provider.build_test_delivery(
+        TestDeliveryContext(messages.destination_view(destination), messages.base_url(), datetime.now(timezone.utc)),
+        stager,
     )
-    return await get_output_provider(destination.provider_key).send(destination.webhook_url, payload)
+    body = None
+    path = None
+    content_type = "application/json"
+    if prepared.body_encoding == BodyEncoding.JSON:
+        body = _json_body(prepared.payload)
+    elif prepared.body_encoding == BodyEncoding.MULTIPART:
+        path = root / "tests" / f"{prepared.event_id}.multipart"
+        content_type, _size, _digest = _write_multipart(path, prepared.payload, list(prepared.attachments))
+    try:
+        return dict(await provider.send(OutboundRequest(
+            url=destination.webhook_url, payload=prepared.payload,
+            public_config=dict(destination.public_config or {}), credentials=destination.credentials or {},
+            event_id=prepared.event_id, attempt_number=1, content_type=content_type,
+            body=body, body_path=str(path) if path else None,
+        )))
+    finally:
+        if path:
+            path.unlink(missing_ok=True)
+        stager.cleanup()
 
 
 def request_retry(db: Session, delivery: OutputDelivery) -> None:
@@ -672,9 +631,8 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
                 return
             snapshot = delivery.destination_snapshot or {}
             retry_deduplicated = (
-                snapshot.get("provider_key") == "webhook"
-                and snapshot.get("receiver_deduplicates") is True
-                and delivery.attempt_count < MAX_ATTEMPTS
+                delivery_policy.receiver_can_deduplicate(snapshot.get("provider_key"), snapshot)
+                and delivery.attempt_count < delivery_policy.MAX_ATTEMPTS
                 and (not delivery.expires_at or delivery.expires_at > now)
             )
             delivery.status = "retry_wait" if retry_deduplicated else "unknown"
@@ -719,7 +677,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         db.add(attempt)
         delivery.status = "sending"
         snapshot = delivery.destination_snapshot or {}
-        lease_seconds = 180 if snapshot.get("provider_key") == "webhook" and snapshot.get("include_attachments") else LEASE_SECONDS
+        lease_seconds = delivery_policy.lease_seconds_for(snapshot)
         delivery.lease_until = now + timedelta(seconds=lease_seconds)
         delivery.error_summary = None
         db.commit()
@@ -728,35 +686,31 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         db = None
 
         try:
-            async with asyncio.timeout(lease_seconds - SEND_DEADLINE_MARGIN_SECONDS):
-                if provider_key == "webhook":
-                    body = request_body
-                    body_path = None
-                    if request_body_key:
-                        path = _safe_spool_file(request_body_key)
-                        if not path.is_file() or path.stat().st_size != request_body_size:
-                            raise DeliveryError("Prepared webhook request body is missing or incomplete", kind="permanent")
-                        if await asyncio.to_thread(_file_sha256, path) != request_body_sha256:
-                            raise DeliveryError("Prepared webhook request body failed integrity validation", kind="permanent")
-                        body_path = str(path)
-                        body = None
-                    receipt = await get_webhook_provider().send(
-                        webhook_url, payload, config={key: value for key, value in snapshot.items()
-                            if key in {"schema_version", "auth_mode", "receiver_deduplicates", "include_attachments"}},
-                        credentials=credentials, event_id=payload["event_id"],
-                        attempt_number=attempt_number,
-                        content_type=snapshot.get("content_type", "application/json"),
-                        body=body, body_path=body_path,
-                    )
-                else:
-                    receipt = await get_output_provider(provider_key).send(webhook_url, payload)
+            async with asyncio.timeout(lease_seconds - delivery_policy.SEND_DEADLINE_MARGIN_SECONDS):
+                body = request_body
+                body_path = None
+                if request_body_key:
+                    path = _safe_spool_file(request_body_key)
+                    if not path.is_file() or path.stat().st_size != request_body_size:
+                        raise DeliveryError("Prepared webhook request body is missing or incomplete", kind="permanent")
+                    if await asyncio.to_thread(_file_sha256, path) != request_body_sha256:
+                        raise DeliveryError("Prepared webhook request body failed integrity validation", kind="permanent")
+                    body_path = str(path)
+                    body = None
+                provider = connector_registry.get_output_provider(provider_key)
+                receipt = await provider.send(OutboundRequest(
+                    url=webhook_url, payload=payload, public_config=provider.snapshot_public_config(snapshot),
+                    credentials=credentials, event_id=payload.get("event_id"), attempt_number=attempt_number,
+                    content_type=snapshot.get("content_type", "application/json"),
+                    body=body, body_path=body_path,
+                ))
             outcome = ("accepted", receipt, None, None, None)
         except DeliveryError as exc:
             outcome = (exc.kind, None, exc.http_status, str(exc), exc.retry_after)
         except TimeoutError:
-            # Bytes may already have reached the receiver: only a deduplicating
-            # webhook can safely be retried.
-            deduplicates = provider_key == "webhook" and snapshot.get("receiver_deduplicates") is True
+            # Bytes may already have reached the receiver: only a destination whose
+            # receiver deduplicates can safely be retried.
+            deduplicates = delivery_policy.receiver_can_deduplicate(provider_key, snapshot)
             outcome = (
                 "retryable" if deduplicates else "unknown", None, None,
                 "Delivery did not finish within its lease; acceptance may be unknown", None,
@@ -786,7 +740,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         elif kind == "unknown":
             attempt.status = delivery.status = "unknown"
             attempt.error_summary = delivery.error_summary = message
-        elif kind == "retryable" and delivery.attempt_count < MAX_ATTEMPTS:
+        elif kind == "retryable" and delivery.attempt_count < delivery_policy.MAX_ATTEMPTS:
             attempt.status = "retry_wait"
             delivery.status = "retry_wait"
             delay = retry_after if retry_after is not None else _retry_delay(delivery.attempt_count)
