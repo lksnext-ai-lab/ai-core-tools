@@ -32,7 +32,9 @@ from connectors.core.messages import (
     TestDeliveryContext,
     ValidatedDestination,
 )
+from connectors.core.settings import DestinationSettingsBase
 from connectors.providers.teams_workflow.card import build_run_card, build_test_card
+from connectors.providers.teams_workflow.config import parse_teams_workflow_settings
 
 ALLOWED_WEBHOOK_HOST_SUFFIXES = (
     ".logic.azure.com", ".logic.azure.us", ".logic.azure.cn", ".api.powerplatform.com",
@@ -115,9 +117,13 @@ class TeamsWorkflowProvider:
         self, url: str, public_config: Mapping[str, JsonValue] | None, credentials: Mapping[str, str] | None,
     ) -> ValidatedDestination:
         url = validate_teams_workflow_url(url)
-        if public_config or credentials:
-            raise ValueError("Teams destinations do not accept webhook settings or credentials")
-        return ValidatedDestination(url, {}, dict(credentials or {}))
+        settings = parse_teams_workflow_settings(public_config, credentials)
+        return ValidatedDestination(url, settings.public_config_json(), settings.credentials_json())
+
+    def parse_settings(
+        self, public_config: Mapping[str, JsonValue] | None, credentials: Mapping[str, str] | None,
+    ) -> DestinationSettingsBase:
+        return parse_teams_workflow_settings(public_config, credentials)
 
     def ensure_same_endpoint(self, current_url: str, new_url: str) -> None:
         current, new = urlparse(current_url), urlparse(new_url)

@@ -19,6 +19,7 @@ from connectors.core.messages import (
     TestDeliveryContext,
     ValidatedDestination,
 )
+from connectors.core.settings import DestinationSettingsBase
 
 
 class Direction(StrEnum):
@@ -59,6 +60,10 @@ class OutboundProvider(Protocol):
     def validate_destination(
         self, url: str, public_config: Mapping[str, JsonValue] | None, credentials: Mapping[str, str] | None,
     ) -> ValidatedDestination: ...
+
+    def parse_settings(
+        self, public_config: Mapping[str, JsonValue] | None, credentials: Mapping[str, str] | None,
+    ) -> DestinationSettingsBase: ...
 
     def ensure_same_endpoint(self, current_url: str, new_url: str) -> None: ...
 
