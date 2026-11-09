@@ -4,13 +4,13 @@ from typing import Any
 
 from connectors import registry as connector_registry
 from connectors.core.messages import BodyEncoding, RunDeliveryContext
-from models.output_delivery import (
-    OutputArtifact,
-    OutputDelivery,
-    OutputDestination,
-    ScheduledTaskOutputBinding,
-)
+from models.output_delivery import OutputArtifact, OutputDelivery
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from repositories.output_artifact_repository import OutputArtifactRepository
+from repositories.output_delivery_repository import OutputDeliveryRepository
+from repositories.scheduled_task_output_binding_repository import (
+    ScheduledTaskOutputBindingRepository,
+)
 from services.output_channels import delivery_policy, messages, spool
 from sqlalchemy.orm import Session
 
@@ -20,21 +20,14 @@ def create_deliveries_for_run(
     artifacts: list[dict[str, Any]] | None = None, attachment_error: str | None = None,
 ) -> list[OutputDelivery]:
     """Create immutable outbox rows in the caller's run-finalization transaction."""
-    bindings = db.query(ScheduledTaskOutputBinding).join(OutputDestination).filter(
-        ScheduledTaskOutputBinding.scheduled_task_id == task.id,
-        ScheduledTaskOutputBinding.enabled.is_(True),
-        OutputDestination.enabled.is_(True),
-        OutputDestination.app_id == task.app_id,
-    ).all()
+    bindings = ScheduledTaskOutputBindingRepository.list_enabled_with_enabled_destination(db, task.id, task.app_id)
     deliveries = []
     # One artifact row per run file, shared by every attachment destination.
     # Tracked in memory: with autoflush off, rows added for an earlier binding
     # are not visible to a query yet.
     known_artifacts: set[str] | None = None
     for binding in bindings:
-        existing = db.query(OutputDelivery).filter_by(
-            run_id=run.id, binding_id=binding.id, event_type="succeeded",
-        ).one_or_none()
+        existing = OutputDeliveryRepository.find_existing(db, run.id, binding.id, "succeeded")
         if existing:
             deliveries.append(existing)
             continue
@@ -89,15 +82,15 @@ def create_deliveries_for_run(
             error_summary=error,
             expires_at=delivery_policy.delivery_expiry(),
         )
-        db.add(delivery)
+        OutputDeliveryRepository.add(db, delivery)
         deliveries.append(delivery)
         if prepared.requires_attachments and not attachment_error:
             if known_artifacts is None:
-                known_artifacts = {row.file_id for row in db.query(OutputArtifact).filter_by(run_id=run.id).all()}
+                known_artifacts = OutputArtifactRepository.file_ids_for_run(db, run.id)
             for artifact in destination_artifacts:
                 if artifact["file_id"] not in known_artifacts:
                     known_artifacts.add(artifact["file_id"])
-                    db.add(OutputArtifact(
+                    OutputArtifactRepository.add(db, OutputArtifact(
                         run_id=run.id,
                         file_id=artifact["file_id"], filename=artifact["filename"],
                         content_type=artifact["content_type"], size_bytes=artifact["size_bytes"],

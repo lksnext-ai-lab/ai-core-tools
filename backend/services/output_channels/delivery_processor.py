@@ -7,6 +7,7 @@ from connectors import registry as connector_registry
 from connectors.core.errors import DeliveryError
 from connectors.core.messages import OutboundRequest
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt
+from repositories.output_delivery_repository import OutputDeliveryRepository
 from services.output_channels import delivery_policy, spool
 from sqlalchemy.orm import Session
 from utils.clock import utcnow_naive
@@ -31,7 +32,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
     try:
         from db.database import SessionLocal
         db = SessionLocal()
-        delivery = db.query(OutputDelivery).filter(OutputDelivery.id == delivery_id).with_for_update().one_or_none()
+        delivery = OutputDeliveryRepository.get_for_update(db, delivery_id)
         if delivery is None or delivery.dispatch_generation != generation:
             return
         now = utcnow_naive()
@@ -83,7 +84,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         delivery.attempt_count += 1
         attempt_number = delivery.attempt_count
         attempt = OutputDeliveryAttempt(delivery_id=delivery.id, attempt_number=delivery.attempt_count, status="sending")
-        db.add(attempt)
+        OutputDeliveryRepository.add_attempt(db, attempt)
         delivery.status = "sending"
         snapshot = delivery.destination_snapshot or {}
         lease_seconds = delivery_policy.lease_seconds_for(snapshot)
@@ -126,8 +127,8 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
             )
 
         db = SessionLocal()
-        delivery = db.query(OutputDelivery).filter_by(id=delivery_id).with_for_update().one_or_none()
-        attempt = db.query(OutputDeliveryAttempt).filter_by(id=attempt_id).one_or_none()
+        delivery = OutputDeliveryRepository.get_for_update(db, delivery_id)
+        attempt = OutputDeliveryRepository.get_attempt(db, attempt_id)
         if delivery is None or attempt is None:
             return
         # A late response must not overwrite a retried generation or a lease

@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from connectors import registry as connector_registry
-from models.output_delivery import OutputDestination, ScheduledTaskOutputBinding
 from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from repositories.scheduled_task_output_binding_repository import (
+    ScheduledTaskOutputBindingRepository,
+)
 from services.file_management_service import FileManagementService
 from services.output_channels import spool
 from services.scheduled_task_identity import task_user_context
@@ -107,13 +109,9 @@ def capture_run_files_sync(task: ScheduledTask, run: ScheduledTaskRun) -> list[d
 
 
 async def prepare_run_attachments(db: Session, *, task: ScheduledTask, run: ScheduledTaskRun) -> tuple[list[dict[str, Any]], str | None]:
-    requested = db.query(ScheduledTaskOutputBinding).join(OutputDestination).filter(
-        ScheduledTaskOutputBinding.scheduled_task_id == task.id,
-        ScheduledTaskOutputBinding.enabled.is_(True),
-        OutputDestination.enabled.is_(True),
-        OutputDestination.provider_key.in_(connector_registry.spool_attachment_provider_keys()),
-        OutputDestination.app_id == task.app_id,
-    ).all()
+    requested = ScheduledTaskOutputBindingRepository.list_enabled_attachment_candidates(
+        db, task.id, task.app_id, connector_registry.spool_attachment_provider_keys(),
+    )
     if not any(
         connector_registry.get_output_provider(binding.destination.provider_key).includes_attachments(
             binding.destination.public_config,

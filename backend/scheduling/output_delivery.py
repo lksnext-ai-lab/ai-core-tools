@@ -5,11 +5,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, or_
-
 from db.database import SessionLocal
-from models.output_delivery import OutputDelivery, OutputDeliveryAttempt, OutputDestination, ScheduledTaskOutputBinding
-from models.scheduled_task import ScheduledTask, ScheduledTaskRun
+from repositories.output_delivery_repository import OutputDeliveryRepository
 from services.output_channels import delivery_policy
 from services.output_channels.delivery_factory import create_deliveries_for_run
 from services.output_channels.delivery_processor import process_delivery
@@ -47,22 +44,7 @@ async def _reconcile_pending_deliveries() -> int:
         now = utcnow_naive()
         # Repair the exceptional case where a completed durable agent step was
         # persisted after an outbox transaction failure.
-        missing_outbox_runs = (
-            db.query(ScheduledTaskRun)
-            .join(ScheduledTask)
-            .join(ScheduledTaskOutputBinding, ScheduledTaskOutputBinding.scheduled_task_id == ScheduledTask.id)
-            .join(OutputDestination, OutputDestination.id == ScheduledTaskOutputBinding.destination_id)
-            .filter(
-                ScheduledTaskRun.status == "succeeded",
-                ScheduledTaskRun.outputs_reconciled.is_(False),
-                ScheduledTaskOutputBinding.enabled.is_(True),
-                OutputDestination.enabled.is_(True),
-                ~ScheduledTaskRun.output_deliveries.any(),
-            )
-            .order_by(ScheduledTaskRun.id)
-            .limit(100)
-            .all()
-        )
+        missing_outbox_runs = OutputDeliveryRepository.find_runs_missing_outbox(db, limit=100)
         for run in missing_outbox_runs:
             run_id = run.id
             try:
@@ -79,24 +61,7 @@ async def _reconcile_pending_deliveries() -> int:
                     run.outputs_reconciled = True
             except Exception:
                 logger.exception("Could not repair output deliveries for scheduled task run %s", run_id)
-        rows = (
-            db.query(OutputDelivery)
-            .filter(or_(
-                OutputDelivery.status == "pending",
-                and_(
-                    OutputDelivery.status == "retry_wait",
-                    or_(OutputDelivery.next_attempt_at.is_(None), OutputDelivery.next_attempt_at <= now),
-                ),
-                and_(
-                    OutputDelivery.status == "sending",
-                    or_(OutputDelivery.lease_until.is_(None), OutputDelivery.lease_until <= now),
-                ),
-            ))
-            .order_by(OutputDelivery.id)
-            .limit(200)
-            .with_for_update(skip_locked=True)
-            .all()
-        )
+        rows = OutputDeliveryRepository.lock_due_for_reconcile(db, now, limit=200)
         for item in rows:
             if item.expires_at and item.expires_at <= now and item.status != "sending":
                 item.status = "failed"

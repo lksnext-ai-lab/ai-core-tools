@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from connectors.core.messages import ArtifactDict
-from models.output_delivery import OutputArtifact, OutputDelivery
+from repositories.output_artifact_repository import OutputArtifactRepository
+from repositories.output_delivery_repository import OutputDeliveryRepository
 from services.output_channels import delivery_policy
-from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from utils.clock import utcnow_naive
 from utils.logger import get_logger
@@ -99,16 +99,8 @@ def safe_spool_file(relative_key: str) -> Path:
 def release_unneeded_bodies(db: Session) -> None:
     """Drop prepared bodies and artifact rows that no future send can use."""
     now = utcnow_naive()
-    needed = and_(
-        OutputDelivery.status.in_(delivery_policy.BODY_NEEDED_STATUSES),
-        or_(OutputDelivery.expires_at.is_(None), OutputDelivery.expires_at > now),
-    )
-    db.query(OutputDelivery).filter(
-        ~needed,
-        or_(OutputDelivery.request_body.is_not(None), OutputDelivery.request_body_path.is_not(None)),
-    ).update({OutputDelivery.request_body: None, OutputDelivery.request_body_path: None}, synchronize_session=False)
-    still_needed = db.query(OutputDelivery.id).filter(OutputDelivery.run_id == OutputArtifact.run_id, needed).exists()
-    db.query(OutputArtifact).filter(~still_needed).delete(synchronize_session=False)
+    OutputDeliveryRepository.release_unneeded_bodies(db, now, delivery_policy.BODY_NEEDED_STATUSES)
+    OutputArtifactRepository.delete_unneeded(db, now, delivery_policy.BODY_NEEDED_STATUSES)
     db.commit()
 
 
@@ -116,13 +108,8 @@ def cleanup_spool_files(db: Session, *, grace_seconds: int = 3600, max_files: in
     """Release unneeded prepared bodies, then remove unreferenced spool objects."""
     release_unneeded_bodies(db)
     root = spool_root()
-    referenced = {
-        key for (key,) in db.query(OutputArtifact.object_key).all() if key
-    }
-    referenced.update(
-        key for (key,) in db.query(OutputDelivery.request_body_path)
-        .filter(OutputDelivery.request_body_path.is_not(None)).all() if key
-    )
+    referenced = OutputArtifactRepository.all_object_keys(db)
+    referenced.update(OutputDeliveryRepository.referenced_body_paths(db))
     cutoff = datetime.now(UTC).timestamp() - grace_seconds
     removed = 0
     for candidate in root.rglob("*"):

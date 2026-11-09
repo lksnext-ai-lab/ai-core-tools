@@ -166,3 +166,37 @@ async def test_manual_retry_without_queue_is_unavailable(db, monkeypatch):
     monkeypatch.setattr(router, "enqueue_delivery", unavailable)
     delivery = _delivery(db)
     assert await _status_of(router.retry_run_delivery(app_id=1, task_id=1, run_id=1, delivery_id=delivery.id, role=None, db=db)) == 503
+
+
+def _sync_error_of(handler, **kwargs):
+    with pytest.raises(HTTPException) as caught:
+        handler(**kwargs)
+    return caught.value.status_code, caught.value.detail
+
+
+async def _error_of(coroutine):
+    with pytest.raises(HTTPException) as caught:
+        await coroutine
+    return caught.value.status_code, caught.value.detail
+
+
+@pytest.mark.asyncio
+async def test_resources_of_another_app_are_not_found(db, monkeypatch):
+    """AC-9: every id-addressed route answers 404/400-not-found for a resource that belongs to another app."""
+    delivery = _delivery(db)
+    update = OutputDestinationUpdateSchema(name="Hijacked")
+    assert _sync_error_of(router.patch_output_destination, app_id=2, destination_id=1, payload=update, role=None, db=db) == (404, "Output destination not found")
+    assert await _error_of(router.delete_output_destination(app_id=2, destination_id=1, role=None, db=db)) == (404, "Output destination not found")
+    # The connection test maps "not found" to 400 today (ValueError).
+    assert await _error_of(router.test_output_destination(app_id=2, destination_id=1, role=None, db=db)) == (400, "Output destination not found")
+    assert await _error_of(router.get_task_outputs(app_id=2, task_id=1, role=None, db=db)) == (404, "Scheduled task not found")
+    payload = ScheduledTaskOutputBindingsRequestSchema(bindings=[{"destination_id": 1}])
+    assert await _error_of(router.put_task_outputs(app_id=2, task_id=1, payload=payload, role=None, db=db)) == (404, "Scheduled task not found")
+    assert await _error_of(router.list_run_deliveries(app_id=2, task_id=1, run_id=1, role=None, db=db)) == (404, "Scheduled task not found")
+    monkeypatch.setattr(router, "enqueue_delivery", lambda delivery_id, generation: "wf")
+    assert await _error_of(
+        router.retry_run_delivery(app_id=2, task_id=1, run_id=1, delivery_id=delivery.id, role=None, db=db),
+    ) == (404, "Output delivery not found")
+    db.expire_all()
+    assert db.get(OutputDestination, 1).name == "Alerts" and db.get(OutputDestination, 1).enabled is True
+    assert db.get(OutputDelivery, delivery.id).status == "failed"

@@ -5,6 +5,9 @@ from typing import Any
 from connectors import registry as connector_registry
 from connectors.core.contracts import UpdatePolicy
 from models.output_delivery import OutputDestination
+from repositories.output_delivery_repository import OutputDeliveryRepository
+from repositories.output_destination_repository import OutputDestinationRepository
+from services.output_channels.dto import destination_dto
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,13 +43,11 @@ def create_destination(
         content_mode=content_mode,
         credentials=credentials,
     )
-    db.add(destination)
     try:
-        db.commit()
+        OutputDestinationRepository.create(db, destination)
     except IntegrityError as exc:
         db.rollback()
         raise ValueError("A destination with this name already exists in the app") from exc
-    db.refresh(destination)
     return destination
 
 
@@ -83,18 +84,32 @@ def update_destination(db: Session, destination: OutputDestination, changes: dic
         provider.ensure_same_endpoint(destination.webhook_url, validated.url)
         destination.webhook_url = validated.url
     try:
-        db.commit()
+        OutputDestinationRepository.save(db, destination)
     except IntegrityError as exc:
         db.rollback()
         raise ValueError("A destination with this name already exists in the app") from exc
-    db.refresh(destination)
     return destination
 
 
 def get_destination(db: Session, *, app_id: int, destination_id: int) -> OutputDestination:
-    destination = db.query(OutputDestination).filter(
-        OutputDestination.id == destination_id, OutputDestination.app_id == app_id,
-    ).one_or_none()
+    destination = OutputDestinationRepository.get_by_id_and_app_id(db, destination_id, app_id)
     if destination is None:
         raise ValueError("Output destination not found")
     return destination
+
+
+def list_destinations(db: Session, app_id: int) -> list[dict[str, Any]]:
+    """Enabled destinations of an app as dtos, ordered by name."""
+    return [destination_dto(item) for item in OutputDestinationRepository.list_enabled_by_app(db, app_id)]
+
+
+def delete_destination(db: Session, *, app_id: int, destination_id: int) -> None:
+    """Delete a destination, or only deactivate it (keeping delivery history) when tasks are bound to it."""
+    destination = get_destination(db, app_id=app_id, destination_id=destination_id)
+    if destination.bindings:
+        # Keep delivery history but remove this destination from every task.
+        OutputDestinationRepository.deactivate_with_bindings(db, destination)
+        OutputDeliveryRepository.cancel_pending_for_destination(db, destination_id)
+    else:
+        OutputDestinationRepository.delete(db, destination)
+    db.commit()

@@ -2,15 +2,12 @@
 
 from typing import Annotated
 
+from db.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, status
 from lks_idprovider.models.auth import AuthContext
-from sqlalchemy.orm import Session
-
-from db.database import get_db
-from models.output_delivery import OutputDelivery, OutputDestination
-from models.scheduled_task import ScheduledTask
 from routers.controls.role_authorization import AppRole, require_min_role
 from routers.internal.auth_utils import get_current_user_oauth
+from scheduling.output_delivery import enqueue_delivery
 from schemas.output_provider_schemas import (
     OutputBindingsResponseSchema,
     OutputDeliveryListResponseSchema,
@@ -22,17 +19,21 @@ from schemas.output_provider_schemas import (
     OutputProviderDescriptorSchema,
     ScheduledTaskOutputBindingsRequestSchema,
 )
+from services.output_channels import deliveries
 from services.output_channels.bindings import replace_task_bindings, task_bindings
 from services.output_channels.delivery_processor import request_retry
 from services.output_channels.destination_test import test_destination
 from services.output_channels.destinations import (
     create_destination,
+    delete_destination,
     get_destination,
+    list_destinations,
     list_provider_descriptors,
     update_destination,
 )
-from services.output_channels.dto import delivery_dto, destination_dto
-from scheduling.output_delivery import enqueue_delivery
+from services.output_channels.dto import destination_dto
+from services.scheduled_task_service import ScheduledTaskService
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/apps/{app_id}", tags=["Scheduled task output providers"])
 Auth = Annotated[AuthContext, Depends(get_current_user_oauth)]
@@ -41,23 +42,11 @@ CanView = Annotated[AppRole, Depends(require_min_role("viewer"))]
 CanEdit = Annotated[AppRole, Depends(require_min_role("editor"))]
 
 
-def _task(db: Session, app_id: int, task_id: int) -> ScheduledTask:
-    task = db.query(ScheduledTask).filter_by(id=task_id, app_id=app_id).one_or_none()
-    if not task:
-        raise HTTPException(status_code=404, detail="Scheduled task not found")
-    return task
-
-
-def _delivery(db: Session, *, app_id: int, task_id: int, run_id: int, delivery_id: int) -> OutputDelivery:
-    delivery = db.query(OutputDelivery).join(OutputDelivery.run).join(ScheduledTask).filter(
-        OutputDelivery.id == delivery_id,
-        ScheduledTask.app_id == app_id,
-        ScheduledTask.id == task_id,
-        OutputDelivery.run_id == run_id,
-    ).one_or_none()
-    if not delivery:
-        raise HTTPException(status_code=404, detail="Output delivery not found")
-    return delivery
+def _task(db: Session, app_id: int, task_id: int):
+    try:
+        return ScheduledTaskService(db).get(task_id, app_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Scheduled task not found") from exc
 
 
 @router.get("/output-providers", response_model=list[OutputProviderDescriptorSchema])
@@ -67,8 +56,7 @@ async def list_output_providers(app_id: int, role: CanView):
 
 @router.get("/output-destinations", response_model=list[OutputDestinationResponseSchema])
 async def list_output_destinations(app_id: int, role: CanView, db: DB):
-    items = db.query(OutputDestination).filter_by(app_id=app_id, enabled=True).order_by(OutputDestination.name).all()
-    return [destination_dto(item) for item in items]
+    return list_destinations(db, app_id)
 
 
 # Destination validation resolves DNS synchronously: these handlers are plain
@@ -97,19 +85,7 @@ def patch_output_destination(app_id: int, destination_id: int, payload: OutputDe
 @router.delete("/output-destinations/{destination_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_output_destination(app_id: int, destination_id: int, role: CanEdit, db: DB):
     try:
-        item = get_destination(db, app_id=app_id, destination_id=destination_id)
-        if item.bindings:
-            # Keep delivery history but remove this destination from every task.
-            item.enabled = False
-            for binding in item.bindings:
-                binding.enabled = False
-            db.query(OutputDelivery).filter(
-                OutputDelivery.destination_id == destination_id,
-                OutputDelivery.status.in_(["pending", "retry_wait"]),
-            ).update({OutputDelivery.status: "cancelled"}, synchronize_session=False)
-        else:
-            db.delete(item)
-        db.commit()
+        delete_destination(db, app_id=app_id, destination_id=destination_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -142,23 +118,23 @@ async def put_task_outputs(app_id: int, task_id: int, payload: ScheduledTaskOutp
         )
         return {"bindings": bindings}
     except ValueError as exc:
-        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/scheduled-tasks/{task_id}/runs/{run_id}/deliveries", response_model=OutputDeliveryListResponseSchema)
 async def list_run_deliveries(app_id: int, task_id: int, run_id: int, role: CanView, db: DB):
     task = _task(db, app_id, task_id)
-    run = next((item for item in task.runs if item.id == run_id), None)
-    if not run:
+    items = deliveries.list_run_deliveries(db, task, run_id)
+    if items is None:
         raise HTTPException(status_code=404, detail="Scheduled task run not found")
-    items = db.query(OutputDelivery).filter_by(run_id=run_id).order_by(OutputDelivery.id).all()
-    return {"deliveries": [delivery_dto(item) for item in items]}
+    return {"deliveries": items}
 
 
 @router.post("/scheduled-tasks/{task_id}/runs/{run_id}/deliveries/{delivery_id}/retry", response_model=OutputDeliveryRetryResponseSchema, status_code=status.HTTP_202_ACCEPTED)
 async def retry_run_delivery(app_id: int, task_id: int, run_id: int, delivery_id: int, role: CanEdit, db: DB):
-    item = _delivery(db, app_id=app_id, task_id=task_id, run_id=run_id, delivery_id=delivery_id)
+    item = deliveries.find_task_delivery(db, app_id=app_id, task_id=task_id, run_id=run_id, delivery_id=delivery_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Output delivery not found")
     try:
         request_retry(db, item)
         workflow_id = enqueue_delivery(item.id, item.dispatch_generation)
