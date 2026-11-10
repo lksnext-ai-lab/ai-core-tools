@@ -225,12 +225,12 @@ class WebhookProvider:
         return (public_config or {}).get("receiver_deduplicates") is True
 
     def build_snapshot(self, destination: DestinationView) -> JsonDict:
-        snapshot: JsonDict = {
+        reserved: JsonDict = {
             "provider_key": destination.provider_key, "name": destination.name,
             "content_mode": destination.content_mode,
         }
-        snapshot.update(dict(destination.public_config or {}))
-        return snapshot
+        # Reserved keys come first (stored key order) and always win over public_config.
+        return {**reserved, **dict(destination.public_config or {}), **reserved}
 
     def snapshot_public_config(self, snapshot: Mapping[str, JsonValue]) -> JsonDict:
         return {key: value for key, value in snapshot.items() if key in PUBLIC_CONFIG_KEYS}
