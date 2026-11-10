@@ -68,25 +68,7 @@ async def _reconcile_pending_deliveries() -> int:
                 item.error_summary = "Delivery expired before it was sent."
                 continue
             if item.status == "sending":
-                snapshot = item.destination_snapshot or {}
-                retry_deduplicated = (
-                    delivery_policy.receiver_can_deduplicate(snapshot.get("provider_key"), snapshot)
-                    and item.attempt_count < 5
-                )
-                item.status = "retry_wait" if retry_deduplicated else "unknown"
-                item.error_summary = (
-                    "Webhook worker stopped during an idempotent request; retry scheduled."
-                    if retry_deduplicated else
-                    "Worker stopped while the external request was in flight; verify receipt before resending."
-                )
-                if retry_deduplicated:
-                    item.next_attempt_at = now + timedelta(seconds=30)
-                item.lease_until = None
-                if item.attempts:
-                    attempt = item.attempts[-1]
-                    attempt.status = item.status
-                    attempt.finished_at = now
-                    attempt.error_summary = item.error_summary
+                delivery_policy.apply_stale_sending(item, now)
                 continue
             if item.status == "retry_wait":
                 if item.next_attempt_at and item.next_attempt_at > now:

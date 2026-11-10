@@ -40,25 +40,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         if delivery.status == "sending":
             if delivery.lease_until and delivery.lease_until > now:
                 return
-            snapshot = delivery.destination_snapshot or {}
-            retry_deduplicated = (
-                delivery_policy.receiver_can_deduplicate(snapshot.get("provider_key"), snapshot)
-                and delivery.attempt_count < delivery_policy.MAX_ATTEMPTS
-                and (not delivery.expires_at or delivery.expires_at > now)
-            )
-            delivery.status = "retry_wait" if retry_deduplicated else "unknown"
-            delivery.error_summary = (
-                "Webhook worker stopped during an idempotent request; retry scheduled."
-                if retry_deduplicated else
-                "Worker stopped while the external request was in flight; verify receipt before resending."
-            )
-            if retry_deduplicated:
-                delivery.next_attempt_at = now + timedelta(seconds=30)
-            delivery.lease_until = None
-            if delivery.attempts:
-                delivery.attempts[-1].status = delivery.status
-                delivery.attempts[-1].finished_at = now
-                delivery.attempts[-1].error_summary = delivery.error_summary
+            delivery_policy.apply_stale_sending(delivery, now)
             db.commit()
             return
         if delivery.status != "pending":

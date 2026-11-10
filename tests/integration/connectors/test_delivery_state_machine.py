@@ -230,9 +230,8 @@ STALE_SENDING_CASES = [
     ),
     pytest.param(
         "webhook", {"receiver_deduplicates": True}, {"attempt_count": 1, "expires_at": past()},
-        # CB-3 (FR-15): este caso pasa a "unknown" en step_012. Today the two paths
-        # DIVERGE: process_delivery honors expires_at, the reconciler ignores it.
-        "unknown", "retry_wait", id="webhook-dedupe-expired-DIVERGENCE",
+        # CB-3 (FR-15): both paths now share delivery_policy.apply_stale_sending.
+        "unknown", "unknown", id="webhook-dedupe-expired",
     ),
 ]
 
