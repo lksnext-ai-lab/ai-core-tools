@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from langchain_core.documents import Document
 
 from models.resource import RESOURCE_STATUS_ERROR
 from services import silo_service
@@ -153,7 +154,11 @@ class TestIndexResourceRetired:
         store = MagicMock()
         with patch.object(silo_service, "SessionLocal", return_value=session), \
                 patch.object(silo_service, "_get_vector_store", return_value=store), \
-                patch.object(SiloService, "extract_documents_from_file", return_value=["doc"]), \
+                patch.object(
+                    SiloService,
+                    "extract_documents_from_file",
+                    return_value=[Document(page_content="Resource content", metadata={})],
+                ), \
                 patch.object(silo_service, "ServiceHealthService") as health:
             with pytest.raises(ResourceIndexingError) as raised:
                 SiloService.index_resource(resource)
