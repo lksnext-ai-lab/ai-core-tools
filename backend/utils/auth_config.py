@@ -46,12 +46,17 @@ class AuthConfig:
     ENTRA_CLIENT_SECRET: Optional[str] = None
     ENTRA_TENANT_ID: Optional[str] = None
     ENTRA_REDIRECT_URI: str = DEFAULT_LOCAL_CALLBACK_URI
+    KEYCLOAK_ISSUER: Optional[str] = None
+    KEYCLOAK_CLIENT_ID: Optional[str] = None
+    KEYCLOAK_DISCOVERY_URL: Optional[str] = None
+    KEYCLOAK_JWKS_URL: Optional[str] = None
+    KEYCLOAK_LEEWAY: int = 60
 
     @classmethod
     def load_config(cls):
         """Load configuration from environment variables"""
         cls.OAUTH_PROVIDER = os.getenv('OAUTH_PROVIDER', 'ENTRAID').upper()
-        if cls.OAUTH_PROVIDER not in ['GOOGLE', 'ENTRAID']:
+        if cls.OAUTH_PROVIDER not in ['GOOGLE', 'ENTRAID', 'KEYCLOAK']:
             logger.warning(f"Invalid OAUTH_PROVIDER value '{cls.OAUTH_PROVIDER}', defaulting to ENTRAID")
             cls.OAUTH_PROVIDER = 'ENTRAID'
 
@@ -64,6 +69,11 @@ class AuthConfig:
         cls.ENTRA_CLIENT_SECRET = os.getenv('ENTRA_CLIENT_SECRET')
         cls.ENTRA_TENANT_ID = os.getenv('ENTRA_TENANT_ID')
         cls.ENTRA_REDIRECT_URI = os.getenv('ENTRA_REDIRECT_URI', cls.DEFAULT_LOCAL_CALLBACK_URI)
+        cls.KEYCLOAK_ISSUER = os.getenv('KEYCLOAK_ISSUER')
+        cls.KEYCLOAK_CLIENT_ID = os.getenv('KEYCLOAK_CLIENT_ID')
+        cls.KEYCLOAK_DISCOVERY_URL = os.getenv('KEYCLOAK_DISCOVERY_URL')
+        cls.KEYCLOAK_JWKS_URL = os.getenv('KEYCLOAK_JWKS_URL')
+        cls.KEYCLOAK_LEEWAY = int(os.getenv('KEYCLOAK_LEEWAY', '60'))
         cls.FRONTEND_URL = os.getenv('FRONTEND_URL', cls.FRONTEND_URL)
 
         cls.JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', cls.JWT_ALGORITHM)
@@ -134,6 +144,9 @@ class AuthConfig:
         if cls.OAUTH_PROVIDER == 'ENTRAID':
             logger.info("[OK] EntraID (Azure AD) OAuth is properly configured")
             logger.info(f"   Tenant ID: {cls.ENTRA_TENANT_ID}")
+        elif cls.OAUTH_PROVIDER == 'KEYCLOAK':
+            logger.info("[OK] Keycloak OIDC is properly configured")
+            logger.info(f"   Issuer: {cls.KEYCLOAK_ISSUER}")
 
     @classmethod
     def _log_unconfigured_oauth_status(cls) -> None:
@@ -152,6 +165,8 @@ class AuthConfig:
             logger.error("   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables")
         elif cls.OAUTH_PROVIDER == 'ENTRAID':
             logger.error("   Set ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET, and ENTRA_TENANT_ID environment variables")
+        elif cls.OAUTH_PROVIDER == 'KEYCLOAK':
+            logger.error("   Set KEYCLOAK_ISSUER and KEYCLOAK_CLIENT_ID environment variables")
         logger.error("   Or set OIDC_ENABLED=false for development mode testing")
 
     @classmethod
@@ -161,6 +176,8 @@ class AuthConfig:
             return bool(cls.GOOGLE_CLIENT_ID and cls.GOOGLE_CLIENT_SECRET)
         elif cls.OAUTH_PROVIDER == 'ENTRAID':
             return bool(cls.ENTRA_CLIENT_ID and cls.ENTRA_CLIENT_SECRET and cls.ENTRA_TENANT_ID)
+        elif cls.OAUTH_PROVIDER == 'KEYCLOAK':
+            return bool(cls.KEYCLOAK_ISSUER and cls.KEYCLOAK_CLIENT_ID)
         return False
 
     @classmethod
@@ -192,6 +209,8 @@ class AuthConfig:
         elif cls.OAUTH_PROVIDER == 'ENTRAID':
             summary["redirect_uri"] = cls.ENTRA_REDIRECT_URI
             summary["tenant_id"] = cls.ENTRA_TENANT_ID
+        elif cls.OAUTH_PROVIDER == 'KEYCLOAK':
+            summary["issuer"] = cls.KEYCLOAK_ISSUER
 
         return summary
 

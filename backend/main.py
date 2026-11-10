@@ -101,16 +101,16 @@ async def lifespan(app: FastAPI):
         AuthConfig.load_config()
 
         if AuthConfig.LOGIN_MODE == "OIDC":
-            logger.info("🔐 Initializing EntraID provider for OIDC authentication")
+            logger.info("🔐 Initializing %s provider for OIDC authentication", AuthConfig.OAUTH_PROVIDER)
             await initialize_provider()
             
             # Override the default provider dependency
             app.dependency_overrides[get_default_provider] = get_provider
-            logger.info("✅ EntraID provider initialized successfully")
+            logger.info("✅ %s provider initialized successfully", AuthConfig.OAUTH_PROVIDER)
         else:
             logger.warning(
                 f"⚠️  Running in {AuthConfig.LOGIN_MODE} mode - "
-                "EntraID provider NOT initialized (development/testing only)"
+                "OIDC provider NOT initialized (development/testing only)"
             )
         
         if AuthConfig.LOGIN_MODE == "LOCAL":
@@ -264,7 +264,7 @@ async def lifespan(app: FastAPI):
         try:
             if AuthConfig.LOGIN_MODE == "OIDC":
                 await shutdown_provider()
-                logger.info("✅ EntraID provider shutdown complete")
+                logger.info("✅ %s provider shutdown complete", AuthConfig.OAUTH_PROVIDER)
         except Exception as exc:
             logger.warning("OIDC provider shutdown failed: %s", exc, exc_info=True)
         print("✅ Application shutdown complete")
