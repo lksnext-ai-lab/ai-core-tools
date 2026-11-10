@@ -1,9 +1,10 @@
 """Output destination management (create, update, read) and provider descriptors."""
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, assert_never
 
 from connectors import registry as connector_registry
-from connectors.core.contracts import UpdatePolicy
+from connectors.core.contracts import OutboundProvider, UpdatePolicy
 from models.output_delivery import OutputDestination
 from repositories.output_delivery_repository import OutputDeliveryRepository
 from repositories.output_destination_repository import OutputDestinationRepository
@@ -51,38 +52,84 @@ def create_destination(
     return destination
 
 
+_UNCHANGED: Any = object()  # sentinel: leave the column untouched (None is a real value for credentials)
+
+
+@dataclass(frozen=True)
+class _EndpointPatch:
+    """Validated URL/config/credentials values to write; ``_UNCHANGED`` leaves a column alone."""
+
+    url: Any = _UNCHANGED
+    public_config: Any = _UNCHANGED
+    credentials: Any = _UNCHANGED
+
+
+def _validate_endpoint_changes(
+    provider: OutboundProvider, destination: OutputDestination, changes: dict[str, Any],
+) -> _EndpointPatch:
+    """Validate URL/config/credentials according to the provider's update policy, without mutating anything."""
+    outbound = provider.descriptor.outbound
+    assert outbound is not None, "the registry only returns providers that declare outbound capabilities"
+    match outbound.update_policy:
+        case UpdatePolicy.REVALIDATE_ALL:
+            candidate_url = changes.get("webhook_url") or destination.webhook_url
+            new_config = (
+                changes.get("public_config") if changes.get("public_config") is not None
+                else dict(destination.public_config or {})
+            )
+            new_credentials = dict(destination.credentials or {})
+            if changes.get("clear_credentials"):
+                new_credentials = {}
+            if changes.get("credentials") is not None:
+                new_credentials = dict(changes["credentials"])
+            validated = provider.validate_destination(candidate_url, new_config, new_credentials)
+            if changes.get("webhook_url"):
+                provider.ensure_same_endpoint(destination.webhook_url, validated.url)
+            return _EndpointPatch(
+                url=validated.url, public_config=validated.public_config, credentials=new_credentials or None,
+            )
+        case UpdatePolicy.ROTATE_URL_ONLY:
+            new_url: Any = _UNCHANGED
+            if changes.get("webhook_url"):
+                validated = provider.validate_destination(changes["webhook_url"], None, None)
+                provider.ensure_same_endpoint(destination.webhook_url, validated.url)
+                new_url = validated.url
+            if changes.get("public_config") is not None or changes.get("credentials") is not None:
+                # Providers with this policy take no settings: any non-empty config/credentials is rejected here.
+                provider.parse_settings(changes.get("public_config") or {}, changes.get("credentials") or {})
+            return _EndpointPatch(url=new_url)
+        case unexpected:
+            assert_never(unexpected)
+
+
 def update_destination(db: Session, destination: OutputDestination, changes: dict[str, Any]) -> OutputDestination:
+    """Update a destination atomically: validate everything first, then apply and save.
+
+    The validation phase never touches the ORM object, so a rejected request leaves no partial changes.
+    """
+    # Phase 1: validation (no mutation). Order preserves the historical error precedence.
+    new_name: str | None = None
     if "name" in changes and changes["name"] is not None:
-        name = changes["name"].strip()
-        if not name or len(name) > 255:
+        new_name = changes["name"].strip()
+        if not new_name or len(new_name) > 255:
             raise ValueError("Destination name is required and must be at most 255 characters")
-        destination.name = name
+    provider = connector_registry.get_output_provider(destination.provider_key)
+    if changes.get("content_mode") is not None and changes["content_mode"] not in provider.descriptor.content_modes:
+        raise ValueError("Unsupported output content mode")
+    patch = _validate_endpoint_changes(provider, destination, changes)
+    # Phase 2: apply (same field order as before) and save.
+    if new_name is not None:
+        destination.name = new_name
     if "enabled" in changes and changes["enabled"] is not None:
         destination.enabled = changes["enabled"]
-    provider = connector_registry.get_output_provider(destination.provider_key)
     if changes.get("content_mode") is not None:
-        if changes["content_mode"] not in provider.descriptor.content_modes:
-            raise ValueError("Unsupported output content mode")
         destination.content_mode = changes["content_mode"]
-    update_policy = provider.descriptor.outbound.update_policy if provider.descriptor.outbound else None
-    if update_policy == UpdatePolicy.REVALIDATE_ALL:
-        new_url = changes.get("webhook_url") or destination.webhook_url
-        new_config = changes.get("public_config") if changes.get("public_config") is not None else dict(destination.public_config or {})
-        new_credentials = dict(destination.credentials or {})
-        if changes.get("clear_credentials"):
-            new_credentials = {}
-        if changes.get("credentials") is not None:
-            new_credentials = dict(changes["credentials"])
-        validated = provider.validate_destination(new_url, new_config, new_credentials)
-        if "webhook_url" in changes and changes["webhook_url"]:
-            provider.ensure_same_endpoint(destination.webhook_url, validated.url)
-        destination.public_config = validated.public_config
-        destination.credentials = new_credentials or None
-        destination.webhook_url = validated.url
-    elif changes.get("webhook_url"):
-        validated = provider.validate_destination(changes["webhook_url"], None, None)
-        provider.ensure_same_endpoint(destination.webhook_url, validated.url)
-        destination.webhook_url = validated.url
+    if patch.public_config is not _UNCHANGED:
+        destination.public_config = patch.public_config
+    if patch.credentials is not _UNCHANGED:
+        destination.credentials = patch.credentials
+    if patch.url is not _UNCHANGED:
+        destination.webhook_url = patch.url
     try:
         OutputDestinationRepository.save(db, destination)
     except IntegrityError as exc:

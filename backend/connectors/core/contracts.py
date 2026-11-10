@@ -29,7 +29,10 @@ class Direction(StrEnum):
 
 class UpdatePolicy(StrEnum):
     REVALIDATE_ALL = "revalidate_all"  # every PATCH revalidates URL+config+credentials and persists the three
-    ROTATE_URL_ONLY = "rotate_url_only"  # only a new webhook_url is validated/persisted
+    # Only a new webhook_url is validated/persisted. Invariant: a provider with this policy takes no settings --
+    # ``parse_settings`` accepts only empty public_config/credentials and rejects any key -- so URL rotation is
+    # validated without settings (``validate_destination(url, None, None)``).
+    ROTATE_URL_ONLY = "rotate_url_only"
 
 
 @dataclass(frozen=True)
