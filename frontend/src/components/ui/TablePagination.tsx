@@ -12,29 +12,61 @@ export default function TablePagination({ page, totalPages, totalItems, onPageCh
 
   if (totalPages <= 1) return null;
 
-  const pageLabel = totalItems === undefined
-    ? t('pagination.pageOf', { page, totalPages })
-    : t('pagination.pageOfWithTotal', { page, totalPages, total: totalItems });
+  const pageLabel = t('pagination.pageOf', { page, totalPages });
 
   return (
-    <nav className="mt-4 flex items-center justify-center gap-1" aria-label={t('pagination.ariaLabel')}>
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-        className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+    <div className="mt-4 flex min-w-0 items-center gap-4">
+      <nav
+        className="flex min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto whitespace-nowrap"
+        aria-label={t('pagination.ariaLabel')}
       >
-        {t('pagination.previous')}
-      </button>
-      <span className="px-2 text-sm text-gray-600">{pageLabel}</span>
-      <button
-        type="button"
-        disabled={page >= totalPages}
-        onClick={() => onPageChange(page + 1)}
-        className="rounded-lg border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {t('pagination.next')}
-      </button>
-    </nav>
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          className="h-8 text-xs px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
+        >
+          {t('pagination.previous')}
+        </button>
+        {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            disabled={pageNumber === page}
+            onClick={() => onPageChange(pageNumber)}
+            aria-label={t('pagination.pageOf', { page: pageNumber, totalPages })}
+            aria-current={pageNumber === page ? 'page' : undefined}
+            className={`h-8  text-xs  min-w-10 shrink-0 rounded-lg border px-3 disabled:cursor-default disabled:opacity-100 ${
+              pageNumber === page
+                ? 'bg-fg text-white border-fg dark:bg-fg-dark dark:text-ink-on-dark dark:border-fg-dark'
+              : 'border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark'
+            }`}
+          >
+            {pageNumber}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          className="h-8  text-xs px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
+        >
+          {t('pagination.next')}
+        </button>
+      </nav>
+      <span className="shrink-0 text-xs text-fg-secondary dark:text-fg-secondary-dark">
+        {totalItems === undefined
+          ? pageLabel
+          : t('pagination.totalRecords', { count: totalItems })}
+      </span>
+    </div>
   );
 }

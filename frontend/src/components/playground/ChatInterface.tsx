@@ -1242,7 +1242,7 @@ function ChatInterface({
                 />
               </div>
             )}
-            <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
+            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark transition-colors duration-150">
               {/* File attach button */}
               <div>
                 <input

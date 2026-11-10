@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Tv } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import Modal from '../ui/Modal';
+import ButtonApp from '../ui/ButtonApp';
+import { SegmentedTabs } from '../ui/SegmentedTabs';
+import { FormField } from '../ui/FormField';
+import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 
 interface MediaUploadModalProps {
@@ -24,6 +28,7 @@ function MediaUploadModal({
   const { t } = useTranslation('common');
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const mediaFileInputRef = useRef<HTMLInputElement>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -66,48 +71,37 @@ function MediaUploadModal({
     <Modal isOpen={isOpen} onClose={handleClose} title={t('playgroundMedia.title')} size="large">
       <div className="space-y-4">
         {/* Upload Type Tabs */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setUploadType('file')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              uploadType === 'file'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            <FolderOpen className="w-4 h-4 inline-block mr-1" /> {t('playgroundMedia.fileUpload')}
-          </button>
-          <button
-            onClick={() => setUploadType('youtube')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              uploadType === 'youtube'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            <Tv className="w-4 h-4 inline-block mr-1" /> {t('playgroundMedia.youtubeUrl')}
-          </button>
-        </div>
+        <SegmentedTabs
+          tabs={[
+            { id: 'file', label: t('playgroundMedia.fileUpload') },
+            { id: 'youtube', label: t('playgroundMedia.youtubeUrl') },
+          ]}
+          activeTab={uploadType}
+          onChange={setUploadType}
+          ariaLabel={t('playgroundMedia.title')}
+        />
 
         {/* File Upload */}
         {uploadType === 'file' && (
           <div>
-            <label
-              htmlFor="pg-media-files-input"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-            >
-              {t('playgroundMedia.selectFiles')}
-            </label>
+            <ButtonApp
+              label={t('playgroundMedia.selectFiles')}
+              onClick={() => mediaFileInputRef.current?.click()}
+              variant="primary"
+              size="medium"
+              icon={<FolderOpen className="w-4 h-4" aria-hidden="true" />}
+            />
             <input
+              ref={mediaFileInputRef}
               id="pg-media-files-input"
               type="file"
               multiple
               accept="video/*,audio/*"
               onChange={(e) => setMediaFiles(Array.from(e.target.files || []))}
-              className="w-full"
+              className="hidden"
             />
             {mediaFiles.length > 0 && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-2">
                 {t('playgroundMedia.selectedFiles', { count: mediaFiles.length })}
               </p>
             )}
@@ -117,51 +111,42 @@ function MediaUploadModal({
         {/* YouTube URL */}
         {uploadType === 'youtube' && (
           <div>
-            <label
-              htmlFor="pg-youtube-url-input"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-            >
-              YouTube URL
-            </label>
-            <input
+            <FormField
               id="pg-youtube-url-input"
               type="text"
+              label="YouTube URL"
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               placeholder="https://youtube.com/watch?v=..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md
-                         bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
           </div>
         )}
 
-        <p className="text-xs text-gray-500 dark:text-gray-400">
+        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
           {t('playgroundMedia.configurationNote')}
         </p>
 
         {/* Error */}
         {errorMessage && (
-          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-2">
-            {errorMessage}
-          </div>
+          <Alert type="error" message={errorMessage} />
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t dark:border-gray-700">
-          <button
+        <div className="flex justify-end gap-3 pt-4 border-t border-line dark:border-line-dark">
+          <ButtonApp
+            label={t('cancel')}
             onClick={handleClose}
-            className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-          >
-            {t('cancel')}
-          </button>
-          <button
+            variant="secondary"
+            size="medium"
+          />
+          <ButtonApp
+            label={uploading ? t('playgroundMedia.uploading') : t('playgroundMedia.upload')}
             onClick={handleUpload}
-            disabled={!canUpload || uploading}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {uploading ? t('playgroundMedia.uploading') : t('playgroundMedia.upload')}
-          </button>
+            disabled={!canUpload}
+            loading={uploading}
+            variant="primary"
+            size="medium"
+          />
         </div>
       </div>
     </Modal>

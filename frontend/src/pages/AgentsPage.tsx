@@ -329,8 +329,8 @@ function AgentsPage() {
               <div className="flex items-center">
                 <BackgroundImage
                   icon={getAgentTypeIcon(agent.type)}
-                  size={28}
-                  iconSize={14}
+                  size={34}
+                  iconSize={17}
                   variant="marron"
                   className="rounded-lg"
                 />

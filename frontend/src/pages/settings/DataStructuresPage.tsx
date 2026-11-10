@@ -311,7 +311,7 @@ function DataStructuresPage() {
               header: t('dataStructuresPage.columns.name'),
               render: (structure) => (
                 <div className="flex items-center">
-                 <BackgroundImage icon={BarChart2} iconSize={20} size={40} className="mr-2"/>
+                 <BackgroundImage icon={BarChart2} iconSize={17} size={34} className="mr-2"/>
                   {canEdit ? (
                     <button
                       type="button"

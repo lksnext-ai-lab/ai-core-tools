@@ -171,7 +171,7 @@ const RepositoriesPage: React.FC = () => {
                 className="flex items-center cursor-pointer  p-2 w-full text-left"
                 onClick={() => handleManageResources(repository.repository_id)}
               >
-                <BackgroundImage icon={FolderOpen} size={40} iconSize={20} variant="marron" />
+                <BackgroundImage icon={FolderOpen} size={34} iconSize={17} variant="marron" />
                 <div className="ml-4">
                   <div className="text-sm font-medium text-fg dark:text-fg-dark transition-colors">
                     {repository.name}

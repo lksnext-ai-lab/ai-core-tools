@@ -265,8 +265,8 @@ function SilosPage() {
               render: (silo) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <BackgroundImage variant="marron" icon={Database} size={28}
-                      iconSize={14}
+                    <BackgroundImage variant="marron" icon={Database} size={34}
+                      iconSize={17}
                       className="rounded-lg"/>
                   </div>
                   <div className="ml-4">

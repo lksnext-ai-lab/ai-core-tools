@@ -1,4 +1,6 @@
 import Alert from '../../ui/Alert';
+import { FormField } from '../../ui/FormField';
+import { useTranslation } from 'react-i18next';
 import type { AppImportPreview } from '../../../types/import';
 import { COMPONENT_TYPE_ICONS } from '../../../types/import';
 
@@ -15,6 +17,8 @@ function AppStepApiKeys({
   apiKeys,
   onApiKeyChange,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
   // Collect all selected services that need API keys
   const servicesNeedingKeys = [
     ...preview.ai_services,
@@ -28,48 +32,45 @@ function AppStepApiKeys({
     return (
       <Alert
         type="info"
-        message="No selected services require API key configuration. You can proceed."
+        message={t('importModal.appApiKeys.noSelectedServices')}
       />
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Optionally provide API keys for the selected services.
-        You can also configure them later after import.
+      <p className="text-sm text-fg dark:text-fg-dark">
+        {t('importModal.appApiKeys.description')}
       </p>
 
       <div className="space-y-3">
         {servicesNeedingKeys.map((svc) => (
           <div
             key={`${svc.component_type}:${svc.component_name}`}
-            className="bg-gray-50 border border-gray-200 rounded-lg p-4"
+            className="p-4"
           >
             <div className="flex items-center space-x-2 mb-2">
-              <span>
+              <span className="text-md text-bronze-dark">
                 {COMPONENT_TYPE_ICONS[svc.component_type]}
               </span>
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm font-medium text-fg dark:text-fg-dark">
                 {svc.component_name}
               </span>
               {svc.provider && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                   ({svc.provider})
                 </span>
               )}
             </div>
-            <input
+            <FormField
+              id={`api-key-${svc.component_type}-${svc.component_name}`}
               type="password"
-              placeholder="API key (optional)"
+              ariaLabel={t('importModal.appApiKeys.keyLabel', {
+                service: svc.component_name,
+              })}
+              placeholder={t('importModal.appApiKeys.keyPlaceholder')}
               value={apiKeys[svc.component_name] || ''}
-              onChange={(e) =>
-                onApiKeyChange(
-                  svc.component_name,
-                  e.target.value
-                )
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => onApiKeyChange(svc.component_name, e.target.value)}
             />
           </div>
         ))}
@@ -77,7 +78,7 @@ function AppStepApiKeys({
 
       <Alert
         type="info"
-        message='Services without API keys will use the placeholder value "CHANGE_ME" and must be configured after import.'
+        message={t('importModal.appApiKeys.missingKeysInfo')}
       />
     </div>
   );

@@ -411,9 +411,6 @@ async function resetConversation(conversationId = null) {
 
   const selectedExampleData = examples.find(ex => ex.id === selectedExample);
 
-  const cardClasses = 'rounded-lg border border-line bg-surface p-5 dark:border-line-dark dark:bg-surface-dark';
-  const sectionTitleClasses = 'mb-3 flex items-center gap-2 font-display text-base font-normal text-fg dark:text-fg-dark';
-  const iconClasses = 'w-4 h-4 text-fg-tertiary dark:text-fg-tertiary-dark';
   const codeBlockClasses = 'overflow-x-auto rounded-md border border-line bg-surface-tint p-3 font-mono text-xs text-fg dark:border-line-dark dark:bg-surface-tint-dark dark:text-fg-dark';
   const inlineCodeClasses = 'rounded border border-line bg-surface-tint px-2 py-1 font-mono text-xs text-fg break-all dark:border-line-dark dark:bg-surface-tint-dark dark:text-fg-dark';
 

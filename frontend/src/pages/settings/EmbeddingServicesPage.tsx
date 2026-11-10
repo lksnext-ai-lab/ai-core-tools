@@ -246,7 +246,7 @@ function EmbeddingServicesPage() {
         columns={[
           { header: t('embeddingServicesPage.columns.name'), render: (service: EmbeddingService) => (
             <div className="flex items-center gap-1.5">
-              <BackgroundImage icon={Globe} variant='marron' />
+              <BackgroundImage icon={Globe} variant='marron' size={34} iconSize={17} />
               {canEdit && !service.is_system ? (
                 <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark text-left" onClick={() => handleEdit(service.service_id)}>{service.name}</button>
               ) : (

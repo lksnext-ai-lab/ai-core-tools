@@ -19,6 +19,12 @@
     "saving": "Guardando...",
     "cancel": "Cancelar"
   },
+  "formField": {
+    "file": {
+      "choose": "Elegir archivo",
+      "noFileSelected": "Ningún archivo seleccionado"
+    }
+  },
   "versionFooter": {
     "loading": "Cargando versión..."
   },
@@ -90,6 +96,89 @@
       "tierConfig": "Configuración de niveles"
     }
   },
+  "aboutPage": {
+    "hero": {
+      "tagline": "Tu caja de herramientas de IA integral",
+      "description": "Una plataforma potente y extensible que simplifica la integración y el uso de tecnologías de IA, ofreciendo una solución unificada para crear aplicaciones inteligentes con facilidad."
+    },
+    "overview": {
+      "title": "¿Qué es Mattin AI?",
+      "description1": "Mattin AI es una completa caja de herramientas de IA desarrollada por LKS Next que ofrece una amplia variedad de capacidades y herramientas de inteligencia artificial. Está creada con tecnologías modernas y diseñada para escalar, y proporciona todo lo necesario para crear, desplegar y gestionar aplicaciones basadas en IA.",
+      "description2": "Tanto si eres desarrollador y quieres integrar IA en tus aplicaciones, científico de datos que trabaja con bases de datos vectoriales u organización que busca aprovechar los agentes de IA y la automatización, Mattin AI te ofrece las herramientas y la infraestructura necesarias.",
+      "highlightsTitle": "Características destacadas",
+      "highlightOpenSource": "Código abierto con opciones de licencia comercial",
+      "highlightExtensible": "Arquitectura extensible para soluciones personalizadas",
+      "highlightProviders": "Integración de servicios de IA de varios proveedores",
+      "highlightEnterprise": "Lista para producción con funcionalidades empresariales"
+    },
+    "features": {
+      "title": "Funcionalidades principales",
+      "llmTitle": "Integración de LLM",
+      "llmDescription": "Acceso y gestión sencillos de diversos modelos de lenguaje de gran tamaño, como OpenAI, Anthropic, Azure OpenAI, Mistral AI y Ollama para despliegues locales.",
+      "ragTitle": "Sistemas RAG",
+      "ragDescription": "Implementación de generación aumentada por recuperación para mejorar las respuestas de IA mediante búsqueda semántica y procesamiento inteligente de documentos.",
+      "vectorTitle": "Bases de datos vectoriales",
+      "vectorDescription": "Almacenamiento y recuperación eficientes de vectores de embedding mediante PostgreSQL y la extensión pgvector para búsquedas semánticas de alto rendimiento.",
+      "agentsTitle": "Agentes de IA",
+      "agentsDescription": "Marco para crear y desplegar agentes de IA inteligentes con flujos de trabajo personalizables, integración de herramientas y capacidad de toma de decisiones automatizada.",
+      "modularTitle": "Arquitectura modular",
+      "modularDescription": "Fácil de ampliar y personalizar según las necesidades gracias a una arquitectura basada en complementos y una API completa para integraciones de terceros.",
+      "performanceTitle": "Alto rendimiento",
+      "performanceDescription": "Desarrollada con FastAPI y React para ofrecer un rendimiento óptimo, procesamiento asíncrono, caché e infraestructura escalable para cargas de trabajo empresariales."
+    },
+    "architecture": {
+      "title": "Visión general de la arquitectura",
+      "technologyStack": "Tecnologías",
+      "backend": "Backend",
+      "backendDescription": "FastAPI con Python 3.11+",
+      "frontend": "Frontend",
+      "frontendDescription": "React con TypeScript",
+      "database": "Base de datos",
+      "databaseDescription": "PostgreSQL con pgvector",
+      "aiServices": "Servicios de IA",
+      "aiServicesDescription": "Integración de LLM de varios proveedores",
+      "keyComponents": "Componentes principales",
+      "restApi": "API REST",
+      "restApiDescription": "API completa para todas las funcionalidades de la plataforma",
+      "authentication": "Autenticación",
+      "authenticationDescription": "Gestión segura de usuarios y sesiones",
+      "vectorStorage": "Almacenamiento vectorial",
+      "vectorStorageDescription": "Capacidades de búsqueda semántica de alto rendimiento",
+      "agentFramework": "Framework de agentes",
+      "agentFrameworkDescription": "Plataforma extensible para desarrollar agentes de IA",
+      "webInterface": "Interfaz web",
+      "webInterfaceDescription": "Interfaz intuitiva basada en React"
+    },
+    "licensing": {
+      "title": "Licencias y opciones comerciales",
+      "openSource": "Código abierto",
+      "agpl": "GNU Affero General Public License v3.0 (AGPL 3.0)",
+      "freeUse": "Gratuito para desarrollo y uso personal",
+      "community": "Se aceptan contribuciones de la comunidad",
+      "networkDisclosure": "Requiere publicar el código fuente para el uso en red",
+      "copyleft": "Obligaciones de copyleft para las modificaciones",
+      "commercial": "Comercial",
+      "commercialLicense": "Licencia propietaria con derechos ampliados",
+      "fullFunctionality": "Todas las funcionalidades sin restricciones",
+      "commercialUse": "Derechos de uso comercial sin obligaciones de copyleft",
+      "clientModifications": "Derechos de modificación para clientes en proyectos específicos",
+      "enterpriseSupport": "Funcionalidades y soporte empresariales",
+      "noDisclosure": "Sin obligación de publicar el código fuente",
+      "contact": "Contacta con LKS Next para consultas sobre licencias comerciales.",
+      "viewOnGitHub": "Ver en GitHub",
+      "getStarted": "Empezar"
+    },
+    "gettingStarted": {
+      "title": "¿Todo listo para empezar?",
+      "description": "Únete a la comunidad de desarrolladores y organizaciones que están construyendo el futuro con IA.",
+      "createApp": "Crea tu primera aplicación",
+      "configureServices": "Configura los servicios de IA"
+    },
+    "footer": {
+      "copyright": "© 2024 Mattin AI - Desarrollado por LKS Next",
+      "builtWith": "Creado con ♥ usando FastAPI, React y PostgreSQL"
+    }
+  },
   "login": {
     "title": "Te damos la bienvenida de nuevo",
     "subtitle": "Inicia sesión en <brand>{{brand}}</brand>",
@@ -141,7 +230,9 @@
     "previous": "Anterior",
     "next": "Siguiente",
     "pageOf": "Página {{page}} de {{totalPages}}",
-    "pageOfWithTotal": "Página {{page}} de {{totalPages}} ({{total}} en total)"
+    "pageOfWithTotal": "Página {{page}} de {{totalPages}} ({{total}} en total)",
+    "totalRecords_one": "{{count}} registro",
+    "totalRecords_other": "{{count}} registros"
   },
   "appsPage": {
     "title": "Mis aplicaciones",
@@ -196,6 +287,71 @@
     "nameRequired": "El nombre de la aplicación es obligatorio",
     "saveFailed": "No se pudo guardar la aplicación",
     "update": "Actualizar aplicación"
+  },
+  "appSettingsPage": {
+    "loading": "Cargando la configuración de la aplicación...",
+    "loadFailed": "No se pudieron cargar los datos de la aplicación",
+    "saveFailed": "No se pudo guardar la configuración",
+    "loadErrorTitle": "Error al cargar la configuración",
+    "generalSettings": "Configuración general",
+    "subtitle": "Configura los ajustes básicos y las integraciones de la aplicación",
+    "appName": "Nombre de la aplicación",
+    "appNamePlaceholder": "Introduce el nombre de la aplicación",
+    "appSlug": "Slug de la aplicación",
+    "appSlugPlaceholder": "mi-aplicacion",
+    "appSlugHelp": "Identificador de la aplicación apto para URL. Usa solo minúsculas, números y guiones.",
+    "saving": "Guardando...",
+    "updateSlug": "Actualizar slug",
+    "slugSaved": "El slug se ha guardado correctamente",
+    "slugUpdateFailed": "No se pudo actualizar el slug",
+    "langsmithApiKey": "Clave de API de LangSmith",
+    "keepCurrentKeyPlaceholder": "Déjalo vacío para conservar la clave actual",
+    "enterLangsmithKeyPlaceholder": "Introduce la clave de API de LangSmith",
+    "langsmithHelpBeforeKey": "Tu clave de API de LangSmith para supervisión y trazas. Déjala vacía para usar la variable global",
+    "langsmithHelpBetweenKeys": "(cuando",
+    "testLangsmithTitle": "Verificar la clave de API con LangSmith",
+    "testing": "Probando…",
+    "testConnection": "Probar conexión",
+    "connectedToProject": "Conectado a LangSmith: proyecto \"{{projectName}}\"",
+    "langsmithTestFailed": "No se pudo probar la conexión con LangSmith",
+    "agentRateLimit": "Límite de solicitudes de agentes",
+    "agentRateLimitPlaceholder": "Introduce el límite de solicitudes de agentes",
+    "agentRateLimitHelp": "Limita el número de llamadas por minuto que pueden realizar los agentes de la aplicación.",
+    "maxFileSize": "Tamaño máximo de archivo (MB)",
+    "maxFileSizePlaceholder": "Introduce el tamaño máximo en MB (0 = sin límite)",
+    "maxFileSizeHelp": "Tamaño máximo en megabytes de los archivos que se suben a los repositorios. Usa 0 para no establecer un límite.",
+    "agentCorsOrigins": "Orígenes CORS de los agentes",
+    "agentCorsOriginsPlaceholder": "Introduce los orígenes CORS permitidos (p. ej., https://ejemplo.com, https://app.ejemplo.com)",
+    "agentCorsOriginsHelp": "Lista separada por comas de los orígenes permitidos para las solicitudes CORS a tus agentes.",
+    "enableOpenAiApi": "Habilitar API compatible con OpenAI",
+    "enableOpenAiApiHelp": "Permite que aplicaciones externas interactúen con tus agentes usando el formato de API de OpenAI. Al habilitarla, tus agentes serán compatibles con herramientas y clientes que esperan endpoints de API compatibles con OpenAI.",
+    "sandboxService": "Servicio sandbox del intérprete de código",
+    "inheritSystemDefault": "Heredar valor predeterminado del sistema",
+    "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
+    "sandboxServicesSettings": "Configuración → Servicios sandbox",
+    "saveErrorTitle": "Error al guardar la configuración",
+    "settingsSaved": "La configuración se ha guardado correctamente",
+    "saveChanges": "Guardar cambios",
+    "aboutAppSlug": "Acerca del slug de la aplicación",
+    "aboutAppSlugDescription": "El slug es un identificador único de la aplicación, apto para URL. Se usa en varios endpoints, incluidas las URL de servidores MCP, para que sean más legibles (p. ej.,",
+    "aboutAppSlugSuffix": "en lugar de usar identificadores numéricos).",
+    "aboutLangsmithTitle": "Acerca de la integración con LangSmith",
+    "aboutLangsmithMessage": "LangSmith ofrece capacidades de supervisión, trazas y depuración para tus agentes de IA. Conecta tu cuenta de LangSmith para seguir el rendimiento de los agentes y diagnosticar problemas.",
+    "aboutOpenAiApiTitle": "Acerca de la API compatible con OpenAI",
+    "aboutOpenAiApiMessage": "Al habilitarla, se podrá acceder a tus agentes mediante endpoints de API compatibles con OpenAI. Esto permite integrarlos con herramientas y clientes de terceros que esperan el formato de API de OpenAI.",
+    "openAiApiImpact": "Efectos de esta opción:",
+    "openAiApiImpactCompatibility": "Habilita la compatibilidad con clientes y SDK compatibles con OpenAI",
+    "openAiApiImpactEndpoints": "Proporciona endpoints estándar de finalización de chat",
+    "openAiApiImpactIntegration": "Permite integrar fácilmente herramientas que esperan la interfaz de API de OpenAI",
+    "openAiApiImpactExisting": "No afecta a las API internas ni a la funcionalidad actual de los agentes",
+    "appConfigurationTitle": "Configuración de la aplicación",
+    "appConfigurationMessage": "Estos ajustes afectan al comportamiento general de la aplicación. El nombre se muestra en la navegación y en las respuestas de la API. Los cambios se aplican de inmediato.",
+    "aboutSandboxServicesTitle": "Acerca de los servicios sandbox",
+    "aboutSandboxServicesMessageBeforeSettings": "Un servicio sandbox controla el entorno aislado donde los agentes ejecutan código Python cuando está habilitada la capacidad de intérprete de código. Configura los servicios OpenSandbox (autohospedado y aislado en contenedores), Daytona o E2B (sandboxes gestionados en la nube) en",
+    "selectService": "Seleccionar un servicio",
+    "selectServiceDescription": "fija los agentes de esta aplicación a una configuración sandbox específica.",
+    "inherit": "Heredar",
+    "inheritDescription": "usa el valor predeterminado de la plataforma configurado por el administrador del sistema."
   },
   "domainsPage": {
     "title": "Dominios",
@@ -256,6 +412,7 @@
     "confirmDeleteFallback": "¿Seguro que quieres eliminar esta skill? Esta acción no se puede deshacer.",
     "noDescription": "Sin descripción",
     "notAvailable": "No disponible",
+    "defaultExportName": "skill",
     "emptyTitle": "No hay skills",
     "emptyDescription": "Añade tu primera skill para crear comportamientos especializados para tus agentes.",
     "columns": {
@@ -1796,6 +1953,7 @@
     "agentUpload": {
       "selectExportFile": "Seleccionar archivo de exportación",
       "validating": "Validando archivo de exportación...",
+      "validationFailed": "No se pudo validar el archivo de exportación",
       "summary": "Resumen del archivo de exportación",
       "version": "Versión {{version}}",
       "bundledComponents": "Componentes incluidos",
@@ -1810,9 +1968,17 @@
         "agentTools_other": "Herramientas de agente ({{count}})"
       }
     },
+    "agentSteps": {
+      "upload": "Archivo",
+      "dependencies": "Dependencias",
+      "conflicts": "Conflictos",
+      "review": "Revisión",
+      "result": "Resultado"
+    },
     "appUpload": {
       "selectExportFile": "Seleccionar archivo de exportación de la aplicación",
       "validating": "Validando archivo de exportación de la aplicación...",
+      "validationFailed": "No se pudo validar el archivo de exportación de la aplicación",
       "summary": "Resumen del archivo de exportación de la aplicación",
       "version": "Versión {{version}}",
       "componentInventory": "Inventario de componentes",
@@ -1832,7 +1998,46 @@
         "domains_one": "Dominio",
         "domains_other": "Dominios",
         "agents_one": "Agente",
-        "agents_other": "Agentes"
+        "agents_other": "Agentes",
+        "apps_one": "Aplicación",
+        "apps_other": "Aplicaciones"
+      }
+    },
+    "appSteps": {
+      "upload": "Archivo",
+      "config": "Configuración de la aplicación",
+      "components": "Componentes",
+      "apiKeys": "Claves API",
+      "conflicts": "Conflictos",
+      "review": "Revisión",
+      "result": "Resultado"
+    },
+    "appSelect": {
+      "description": "Selecciona qué componentes quieres importar.",
+      "selectedCount": "{{selected}} de {{total}} seleccionados",
+      "selectAllCategory": "Seleccionar todos: {{category}}",
+      "apiKeyRequired": "Necesita una clave API",
+      "dependencies_one": "{{count}} dependencia: {{items}}",
+      "dependencies_other": "{{count}} dependencias: {{items}}",
+      "noneSelected": "No hay componentes seleccionados. Selecciona al menos uno para importar."
+    },
+    "appApiKeys": {
+      "noSelectedServices": "Ninguno de los servicios seleccionados necesita una clave API. Puedes continuar.",
+      "description": "Puedes proporcionar claves API para los servicios seleccionados. También puedes configurarlas después de importar.",
+      "keyLabel": "Clave API para {{service}}",
+      "keyPlaceholder": "Clave API (opcional)",
+      "missingKeysInfo": "Los servicios sin clave API usarán el valor provisional \"CHANGE_ME\" y deberán configurarse después de importar."
+    },
+    "appReview": {
+      "appName": "Nombre de la aplicación",
+      "conflictMode": "Modo de conflicto",
+      "componentsToImport": "Componentes que se importarán",
+      "skipped_one": "Omitido ({{count}})",
+      "skipped_other": "Omitidos ({{count}})",
+      "apiKeyLabel": "Clave: {{status}}",
+      "apiKeyStatus": {
+        "provided": "Proporcionada",
+        "placeholder": "CHANGE_ME"
       }
     },
     "agentReview": {
@@ -1866,6 +2071,18 @@
       "viewAgent": "Ver agente",
       "mode": "Modo",
       "yes": "Sí"
+    },
+    "appResult": {
+      "importing": "Importando aplicación...",
+      "app": "Aplicación",
+      "totalComponents": "Componentes totales",
+      "duration": "Duración",
+      "importedComponents": "Componentes importados",
+      "warnings_one": "Advertencia ({{count}})",
+      "warnings_other": "Advertencias ({{count}})",
+      "errors_one": "Error ({{count}})",
+      "errors_other": "Errores ({{count}})",
+      "openAppDashboard": "Abrir panel de la aplicación"
     },
     "agentDependencies": {
       "description": "Configura cómo se resolverán las dependencias de este agente.",
@@ -1907,6 +2124,10 @@
       "noConflicts": "No se han detectado conflictos. No existe ningún agente con ese nombre en esta aplicación.",
       "conflictWarning": "Ya existe un agente llamado <strong>{{name}}</strong> en esta aplicación. Elige cómo resolver el conflicto."
     },
+    "appConflicts": {
+      "noConflicts": "No se han detectado conflictos. Se creará una aplicación nueva con todos los componentes seleccionados.",
+      "conflictWarning": "Algunos nombres de componentes podrían entrar en conflicto con los existentes. Elige cómo resolverlo."
+    },
     "newName": {
       "label": "Nombre nuevo",
       "placeholder": "Introduce un nombre nuevo para el componente"
@@ -1932,7 +2153,10 @@
       "import": "Importar",
       "importing": "Importando...",
       "cancel": "Cancelar",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "back": "Atrás",
+      "next": "Siguiente",
+      "confirmImport": "Confirmar importación"
     }
   },
   "collaborationPage": {
@@ -1977,6 +2201,22 @@
       "accepted": "Aceptada",
       "pending": "Pendiente",
       "declined": "Rechazada"
+    },
+    "pendingInvitations": {
+      "count_one": "{{count}} invitación pendiente",
+      "count_other": "{{count}} invitaciones pendientes",
+      "title": "Invitaciones pendientes ({{count}})",
+      "closePanel": "Cerrar el panel de notificaciones",
+      "dismissMessage": "Descartar mensaje",
+      "ownershipTransfer": "Transferencia de propiedad",
+      "transferOwnershipMessage": "{{inviter}} quiere transferirte la propiedad de esta aplicación. Si aceptas, pasarás a ser el propietario y el propietario actual pasará a ser administrador.",
+      "invitedAs": "{{inviter}} te ha invitado con el rol: {{role}}",
+      "accept": "Aceptar",
+      "decline": "Rechazar",
+      "acceptSuccess": "Se aceptó la invitación correctamente.",
+      "declineSuccess": "Se rechazó la invitación correctamente.",
+      "acceptFailed": "No se pudo aceptar la invitación",
+      "declineFailed": "No se pudo rechazar la invitación"
     },
     "invite": {
       "title": "Invitar colaborador",
@@ -3728,6 +3968,12 @@
       "requestCouldNotBeCancelled": "No se pudo cancelar la solicitud",
       "sendMessageFailed": "Se produjo un error",
       "removePlaygroundMediaConfirm": "Al quitar este elemento multimedia, se eliminará todo el contenido multimedia subido para esta sesión del entorno de pruebas. ¿Quieres continuar?"
+    },
+    "codeExecution": {
+      "title": "Salida del código",
+      "running": "En ejecución",
+      "lines_one": "{{count}} línea",
+      "lines_other": "{{count}} líneas"
     },
     "tabs": {
       "playground": "Entorno de pruebas",

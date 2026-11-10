@@ -121,7 +121,7 @@ export default function ScheduledTasksPage() {
       className: "px-5 py-4",
       render: (task) => (
         <div className="flex items-start gap-2">
-          <BackgroundImage icon={CalendarClock} variant="marron" />
+          <BackgroundImage icon={CalendarClock} size={34} iconSize={17} variant="marron" />
           <div className="flex min-w-0 flex-col items-start gap-1">
             <Link
               className="font-medium text-fg dark:text-fg-dark"

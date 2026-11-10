@@ -178,7 +178,7 @@ function SharePointSourcesPage() {
             render: (source) => (
               <div className="flex items-center">
                 <div className="flex-shrink-0 h-10 w-10">
-                  <BackgroundImage variant="marron" icon={Cloud} size={40} />
+                  <BackgroundImage variant="marron" icon={Cloud} size={34} iconSize={17} />
                 </div>
                 <div className="ml-4">
                   <Link

@@ -14,14 +14,7 @@ import AgentStepConflicts from './steps/AgentStepConflicts';
 import AgentStepReview from './steps/AgentStepReview';
 import AgentStepResult from './steps/AgentStepResult';
 import Modal from '../ui/Modal';
-
-const STEPS: StepDefinition[] = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'deps', label: 'Dependencies' },
-  { id: 'conflicts', label: 'Conflicts', optional: true },
-  { id: 'review', label: 'Review' },
-  { id: 'result', label: 'Result' },
-];
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   appId: number;
@@ -36,6 +29,20 @@ function AgentImportStepper({
   onClose,
   onImportComplete,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
+  const steps: StepDefinition[] = [
+    { id: 'upload', label: t('importModal.agentSteps.upload') },
+    { id: 'deps', label: t('importModal.agentSteps.dependencies') },
+    {
+      id: 'conflicts',
+      label: t('importModal.agentSteps.conflicts'),
+      optional: true,
+    },
+    { id: 'review', label: t('importModal.agentSteps.review') },
+    { id: 'result', label: t('importModal.agentSteps.result') },
+  ];
+
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<
@@ -127,13 +134,15 @@ function AgentImportStepper({
         }
       } catch (err: unknown) {
         setValidationError(
-          err instanceof Error ? err.message : 'Failed to validate export file'
+          err instanceof Error
+            ? err.message
+            : t('importModal.agentUpload.validationFailed')
         );
       } finally {
         setIsValidating(false);
       }
     },
-    [appId]
+    [appId, t]
   );
 
   const isNextDisabled = (): boolean => {
@@ -236,7 +245,9 @@ function AgentImportStepper({
       }
     } catch (err: unknown) {
       setImportError(
-        err instanceof Error ? err.message : 'Import failed unexpectedly'
+        err instanceof Error
+          ? err.message
+          : t('importModal.errors.importFailed')
       );
       setStepStatuses((prev) => ({
         ...prev,
@@ -276,11 +287,13 @@ function AgentImportStepper({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Import Agent"
+      title={t('importModal.title', {
+        component: t('importModal.agentUpload.components.agent'),
+      })}
       size="medium"
     >
       <StepperContainer
-        steps={STEPS}
+        steps={steps}
         currentStep={currentStep}
         stepStatuses={stepStatuses}
         onStepClick={handleStepClick}
@@ -293,10 +306,16 @@ function AgentImportStepper({
         showNext={!isFinalStep}
         nextLabel={
           currentStep === 3
-            ? 'Confirm Import'
-            : undefined
+            ? t('importModal.actions.confirmImport')
+            : t('importModal.actions.next')
         }
-        cancelLabel={isFinalStep ? 'Close' : 'Cancel'}
+        backLabel={t('importModal.actions.back')}
+        cancelLabel={
+          isFinalStep
+            ? t('importModal.actions.close')
+            : t('importModal.actions.cancel')
+        }
+        submittingLabel={t('importModal.agentResult.importing')}
       >
         {currentStep === 0 && (
           <AgentStepUpload

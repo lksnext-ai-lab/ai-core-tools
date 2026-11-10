@@ -1,351 +1,341 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Bot, Search, Database, Wrench, Zap, Sprout, Building2, Brain } from 'lucide-react';
 import { ButtonLink } from '../components/ui/ButtonLink';
+import CardApp from '../components/ui/CardApp';
 
 const AboutPage: React.FC = () => {
+  const { t } = useTranslation('common');
+
   return (
     <div className="max-w-6xl mx-auto p-8">
       {/* Hero Section */}
       <div className="text-center mb-12">
         <div className="flex justify-center mb-6">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <Bot className="w-12 h-12 text-white" />
+          <div className="w-24 h-24 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark rounded-lg flex items-center justify-center">
+            <Bot className="w-12 h-12 text-bronze dark:text-bronze-dark" />
           </div>
         </div>
-        <h1 className="text-5xl font-bold text-gray-900 mb-4">
+        <h1 className="text-5xl text-ink dark:text-ink-dark font-normal leading-[1.1]  tracking-[-0.8px] mb-4">
           Mattin AI
         </h1>
-        <p className="text-xl text-gray-600 mb-6">
-          Your Comprehensive AI Toolbox
+        <p className="text-xl text-fg-secondary dark:text-fg-secondary-dark">
+          {t('aboutPage.hero.tagline')}
         </p>
-        <p className="text-lg text-gray-700 max-w-3xl mx-auto">
-          A powerful, extensible platform that simplifies the integration and use of AI technologies, 
-          providing a unified solution for building intelligent applications with ease.
+        <p className="text-lg text-fg-tertiary dark:text-fg-tertiary-dark max-w-3xl mx-auto">
+          {t('aboutPage.hero.description')}
         </p>
       </div>
 
       {/* Overview Section */}
-      <div className="bg-white rounded-xl shadow-lg border p-8 mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">What is Mattin AI?</h2>
+      <CardApp className="p-8 mb-8">
+        <h2 className="text-3xl font-bold text-fg dark:text-fg-dark mb-6">{t('aboutPage.overview.title')}</h2>
         <div className="grid md:grid-cols-2 gap-8">
           <div>
-            <p className="text-lg text-gray-700 mb-4">
-              Mattin AI is a comprehensive AI toolbox developed by LKS Next that provides a wide range 
-              of artificial intelligence capabilities and tools. Built with modern technologies and 
-              designed for scalability, it offers everything you need to build, deploy, and manage 
-              AI-powered applications.
+            <p className="text-lg text-fg-secondary dark:text-fg-secondary-dark mb-4">
+              {t('aboutPage.overview.description1')}
             </p>
-            <p className="text-lg text-gray-700 mb-4">
-              Whether you're a developer looking to integrate AI into your applications, a data scientist 
-              working with vector databases, or an organization seeking to leverage AI agents and 
-              automation, Mattin AI provides the tools and infrastructure you need.
+            <p className="text-lg text-fg-secondary dark:text-fg-secondary-dark mb-4">
+              {t('aboutPage.overview.description2')}
             </p>
           </div>
-          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Key Highlights</h3>
-            <ul className="space-y-3">
+          <CardApp variant="canvas" className="p-6" titulo={t('aboutPage.overview.highlightsTitle')}>
+             <ul className="space-y-3">
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Open source with commercial licensing options</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.overview.highlightOpenSource')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Extensible architecture for custom solutions</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.overview.highlightExtensible')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Multi-provider AI service integration</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.overview.highlightProviders')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Production-ready with enterprise features</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.overview.highlightEnterprise')}</span>
               </li>
             </ul>
-          </div>
+          </CardApp>
         </div>
-      </div>
+      </CardApp>
 
       {/* Features Section */}
-      <div className="bg-white rounded-xl shadow-lg border p-8 mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">Core Features</h2>
+      <CardApp className="p-8 mb-8">
+        <h2 className="text-3xl font-bold text-fg dark:text-fg-dark mb-8 text-center">{t('aboutPage.features.title')}</h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
-            <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mb-4">
-              <Brain className="w-8 h-8 text-white" />
+          <CardApp variant='canvas' className="p-6 ">
+            <div className="w-12 h-12 border border-accent rounded-md flex items-center justify-center mb-4">
+              <Brain className="w-8 h-8 text-fg dark:text-fg-dark" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">LLM Integration</h3>
-            <p className="text-gray-700">
-              Easy access and management of various Large Language Models including OpenAI, Anthropic, 
-              Azure OpenAI, Mistral AI, and Ollama for local deployment.
+            <h3 className="text-xl font-semibold text-fg dark:text-fg-dark mb-3">{t('aboutPage.features.llmTitle')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark">
+              {t('aboutPage.features.llmDescription')}
             </p>
-          </div>
+          </CardApp>
 
-          <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-6 border border-blue-200">
-            <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-white" />
+          <CardApp variant="canvas" className="p-6">
+            <div className="w-12 h-12 border border-accent rounded-md flex items-center justify-center mb-4">
+              <Search className="w-8 h-8 text-fg dark:text-fg-dark" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">RAG Systems</h3>
-            <p className="text-gray-700">
-              Implementation of Retrieval-Augmented Generation for enhanced AI responses with 
-              semantic search capabilities and intelligent document processing.
+            <h3 className="text-xl font-semibold text-fg dark:text-fg-dark mb-3">{t('aboutPage.features.ragTitle')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark">
+              {t('aboutPage.features.ragDescription')}
             </p>
-          </div>
+          </CardApp>
 
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
-            <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center mb-4">
-              <Database className="w-8 h-8 text-white" />
+          <CardApp variant="canvas" className="p-6">
+            <div className="w-12 h-12 border border-accent rounded-md flex items-center justify-center mb-4">
+              <Database className="w-8 h-8  text-fg dark:text-fg-dark" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Vector Databases</h3>
-            <p className="text-gray-700">
-              Efficient storage and retrieval of vector embeddings using PostgreSQL with pgvector 
-              extension for high-performance semantic search.
+            <h3 className="text-xl font-semibold  text-fg dark:text-fg-dark mb-3">{t('aboutPage.features.vectorTitle')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark">
+              {t('aboutPage.features.vectorDescription')}
             </p>
-          </div>
+          </CardApp>
 
-          <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg p-6 border border-orange-200">
-            <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center mb-4">
-              <Bot className="w-8 h-8 text-white" />
+          <CardApp variant="canvas" className="p-6">
+            <div className="w-12 h-12 border border-accent rounded-md flex items-center justify-center mb-4">
+              <Bot className="w-8 h-8  text-fg dark:text-fg-dark" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Agents</h3>
-            <p className="text-gray-700">
-              Framework for building and deploying intelligent AI agents with customizable 
-              workflows, tool integration, and automated decision-making capabilities.
+            <h3 className="text-xl font-semibold  text-fg dark:text-fg-dark mb-3">{t('aboutPage.features.agentsTitle')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark">
+              {t('aboutPage.features.agentsDescription')}
             </p>
-          </div>
+          </CardApp>
 
-          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-6 border border-indigo-200">
-            <div className="w-12 h-12 bg-indigo-500 rounded-lg flex items-center justify-center mb-4">
-              <Wrench className="w-8 h-8 text-white" />
+          <CardApp variant="canvas" className="p-6">
+            <div className="w-12 h-12 border border-accent rounded-md flex items-center justify-center mb-4">
+              <Wrench className="w-8 h-8  text-fg dark:text-fg-dark" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Modular Architecture</h3>
-            <p className="text-gray-700">
-              Easy to extend and customize for specific needs with a plugin-based architecture 
-              and comprehensive API for third-party integrations.
+            <h3 className="text-xl font-semibold  text-fg dark:text-fg-dark mb-3">{t('aboutPage.features.modularTitle')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark">
+              {t('aboutPage.features.modularDescription')}
             </p>
-          </div>
+          </CardApp>
 
-          <div className="bg-gradient-to-br from-teal-50 to-green-50 rounded-lg p-6 border border-teal-200">
-            <div className="w-12 h-12 bg-teal-500 rounded-lg flex items-center justify-center mb-4">
-              <Zap className="w-8 h-8 text-white" />
+          <CardApp variant="canvas" className="p-6">
+            <div className="w-12 h-12 border border-accent rounded-md flex items-center justify-center mb-4">
+              <Zap className="w-8 h-8  text-fg dark:text-fg-dark" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">High Performance</h3>
-            <p className="text-gray-700">
-              Built with FastAPI and React for optimal performance, with async processing, 
-              caching, and scalable infrastructure for enterprise workloads.
+            <h3 className="text-xl font-semibold  text-fg dark:text-fg-dark mb-3">{t('aboutPage.features.performanceTitle')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark">
+              {t('aboutPage.features.performanceDescription')}
             </p>
-          </div>
+          </CardApp>
         </div>
-      </div>
+      </CardApp>
 
       {/* Architecture Section */}
-      <div className="bg-white rounded-xl shadow-lg border p-8 mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">Architecture Overview</h2>
+      <CardApp className=" p-8 mb-8">
+        <h2 className="text-3xl font-bold text-fg dark:text-fg-dark mb-8 text-center">{t('aboutPage.architecture.title')}</h2>
         <div className="grid lg:grid-cols-2 gap-8">
           <div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Technology Stack</h3>
+            <h3 className="text-xl font-semibold text-fg dark:text-fg-dark mb-4">{t('aboutPage.architecture.technologyStack')}</h3>
             <div className="space-y-4">
-              <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-white font-bold">P</span>
+              <CardApp variant="canvas" className="!flex-row items-center">
+                <div className="w-10 h-10  p-4 rounded-md border-[1.5px] border-accent bg-surface text-[15px] font-medium text-ink dark:border-accent-dark dark:bg-surface-dark dark:text-ink-dark flex items-center justify-center mr-4">
+                  <span className="text-fg dark:text-fg-dark font-bold">P</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Backend</h4>
-                  <p className="text-gray-600">FastAPI with Python 3.11+</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.backend')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.architecture.backendDescription')}</p>
                 </div>
-              </div>
-              <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-white font-bold">R</span>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900">Frontend</h4>
-                  <p className="text-gray-600">React with TypeScript</p>
-                </div>
-              </div>
-              <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-white font-bold">DB</span>
+              </CardApp>
+              <CardApp variant="canvas" className="!flex-row items-center">
+                <div className="w-10 h-10  p-4 rounded-md border-[1.5px] border-accent bg-surface text-[15px] font-medium text-ink dark:border-accent-dark dark:bg-surface-dark dark:text-ink-dark flex items-center justify-center mr-4">
+                  <span className="text-fg dark:text-fg-dark font-bold">R</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Database</h4>
-                  <p className="text-gray-600">PostgreSQL with pgvector</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.frontend')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.architecture.frontendDescription')}</p>
                 </div>
-              </div>
-              <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-white font-bold">AI</span>
+              </CardApp>
+              <CardApp variant="canvas" className="!flex-row items-center">
+                <div className="w-10 h-10  p-4 rounded-md border-[1.5px] border-accent bg-surface text-[15px] font-medium text-ink dark:border-accent-dark dark:bg-surface-dark dark:text-ink-dark flex items-center justify-center mr-4">
+                  <span className="text-fg dark:text-fg-dark font-bold">DB</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">AI Services</h4>
-                  <p className="text-gray-600">Multi-provider LLM integration</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.database')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.architecture.databaseDescription')}</p>
                 </div>
-              </div>
+              </CardApp>
+              <CardApp variant="canvas" className="!flex-row items-center">
+                <div className="w-10 h-10  p-4 rounded-md border-[1.5px] border-accent bg-surface text-[15px] font-medium text-ink dark:border-accent-dark dark:bg-surface-dark dark:text-ink-dark flex items-center justify-center mr-4">
+                  <span className="text-fg dark:text-fg-dark font-bold">AI</span>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.aiServices')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.architecture.aiServicesDescription')}</p>
+                </div>
+              </CardApp>
             </div>
           </div>
           <div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Key Components</h3>
+            <h3 className="text-xl font-semibold text-fg dark:text-fg-dark mb-4">{t('aboutPage.architecture.keyComponents')}</h3>
             <div className="space-y-3">
               <div className="flex items-start">
-                <div className="w-3 h-3 bg-blue-500 rounded-full mt-2 mr-3"></div>
+                <div className="w-3 h-3 bg-bronze dark:bg-bronze-dark rounded-full mt-2 mr-3"></div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">REST API</h4>
-                  <p className="text-gray-600 text-sm">Comprehensive API for all platform functionality</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.restApi')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('aboutPage.architecture.restApiDescription')}</p>
                 </div>
               </div>
               <div className="flex items-start">
-                <div className="w-3 h-3 bg-green-500 rounded-full mt-2 mr-3"></div>
+                <div className="w-3 h-3 bg-bronze dark:bg-bronze-dark rounded-full mt-2 mr-3"></div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Authentication</h4>
-                  <p className="text-gray-600 text-sm">Secure user management and session handling</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.authentication')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('aboutPage.architecture.authenticationDescription')}</p>
                 </div>
               </div>
               <div className="flex items-start">
-                <div className="w-3 h-3 bg-purple-500 rounded-full mt-2 mr-3"></div>
+                <div className="w-3 h-3 bg-bronze dark:bg-bronze-dark rounded-full mt-2 mr-3"></div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Vector Storage</h4>
-                  <p className="text-gray-600 text-sm">High-performance semantic search capabilities</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.vectorStorage')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('aboutPage.architecture.vectorStorageDescription')}</p>
                 </div>
               </div>
               <div className="flex items-start">
-                <div className="w-3 h-3 bg-orange-500 rounded-full mt-2 mr-3"></div>
+                <div className="w-3 h-3 bg-bronze dark:bg-bronze-dark rounded-full mt-2 mr-3"></div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Agent Framework</h4>
-                  <p className="text-gray-600 text-sm">Extensible AI agent development platform</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.agentFramework')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('aboutPage.architecture.agentFrameworkDescription')}</p>
                 </div>
               </div>
               <div className="flex items-start">
-                <div className="w-3 h-3 bg-teal-500 rounded-full mt-2 mr-3"></div>
+                <div className="w-3 h-3 bg-bronze dark:bg-bronze-dark rounded-full mt-2 mr-3"></div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Web Interface</h4>
-                  <p className="text-gray-600 text-sm">Intuitive React-based user interface</p>
+                  <h4 className="font-semibold text-fg dark:text-fg-dark">{t('aboutPage.architecture.webInterface')}</h4>
+                  <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('aboutPage.architecture.webInterfaceDescription')}</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </CardApp>
 
       {/* Licensing Section */}
-      <div className="bg-white rounded-xl shadow-lg border p-8 mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Licensing & Commercial Options</h2>
-        <div className="grid md:grid-cols-2 gap-8">
-          <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
+      <CardApp className="p-8 mb-8">
+        <h2 className="text-3xl font-bold text-fg dark:text-fg-dark mb-8 text-center">{t('aboutPage.licensing.title')}</h2>
+        <div className="!grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+          <CardApp className="p-6">
             <div className="flex items-center mb-4">
-              <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mr-4">
-                <Sprout className="w-8 h-8 text-white" />
+              <div className="w-12 h-12 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark rounded-lg flex items-center justify-center mr-4">
+                <Sprout className="w-8 h-8 text-bronze dark:text-bronze-dark" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900">Open Source</h3>
+              <h3 className="text-2xl font-bold text-fg dark:text-fg-dark">{t('aboutPage.licensing.openSource')}</h3>
             </div>
-            <p className="text-gray-700 mb-4">
-              <strong>GNU Affero General Public License v3.0 (AGPL 3.0)</strong>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark mb-4">
+              <strong>{t('aboutPage.licensing.agpl')}</strong>
             </p>
-            <ul className="space-y-2 text-gray-700">
+            <ul className="space-y-2 text-fg-secondary dark:text-fg-secondary-dark">
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-3" />
-                <span className="text-gray-700">Free for development and personal use</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.freeUse')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-3" />
-                <span className="text-gray-700">Community contributions welcome</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.community')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-3" />
-                <span className="text-gray-700">Source code disclosure required for network use</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.networkDisclosure')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-3" />
-                <span className="text-gray-700">Copyleft obligations for modifications</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.copyleft')}</span>
               </li>
             </ul>
-          </div>
+          </CardApp>
 
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
+          <CardApp className="p-6">
             <div className="flex items-center mb-4">
-              <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
-                <Building2 className="w-8 h-8 text-white" />
+              <div className="w-12 h-12 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark rounded-lg flex items-center justify-center mr-4">
+                <Building2 className="w-8 h-8 text-bronze dark:text-bronze-dark" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900">Commercial</h3>
+              <h3 className="text-2xl font-bold text-fg dark:text-fg-dark">{t('aboutPage.licensing.commercial')}</h3>
             </div>
-            <p className="text-gray-700 mb-4">
-              <strong>Proprietary License with Enhanced Rights</strong>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark mb-4">
+              <strong>{t('aboutPage.licensing.commercialLicense')}</strong>
             </p>
-            <ul className="space-y-2 text-gray-700">
+            <ul className="space-y-2 text-fg-secondary dark:text-fg-secondary-dark">
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Full functionality without restrictions</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.fullFunctionality')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Commercial use rights without copyleft obligations</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.commercialUse')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Client modification rights for specific projects</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.clientModifications')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">Enterprise features and support</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.enterpriseSupport')}</span>
               </li>
               <li className="flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3" />
-                <span className="text-gray-700">No source code disclosure requirements</span>
+                <span className="w-2 h-2 bg-bronze dark:bg-bronze-dark rounded-full mr-3" />
+                <span className="text-fg-secondary dark:text-fg-secondary-dark">{t('aboutPage.licensing.noDisclosure')}</span>
               </li>
             </ul>
-          </div>
+          </CardApp>
         </div>
         <div className="mt-6 text-center">
-          <p className="text-gray-600 mb-4">
-            <strong>Contact LKS Next for commercial licensing inquiries.</strong>
+          <p className="text-fg-secondary dark:text-fg-secondary-dark mb-4">
+            <strong>{t('aboutPage.licensing.contact')}</strong>
           </p>
           <div className="flex justify-center space-x-4">
-            <a 
-              href="https://github.com/lksnext-ai-lab/ai-core-tools" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-3 rounded-lg transition-colors"
-            >
-              View on GitHub
-            </a>
-            <Link 
-              to="/apps" 
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors"
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Getting Started Section */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-8 mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Ready to Get Started?</h2>
-        <div className="text-center">
-          <p className="text-lg text-gray-700 mb-6">
-            Join the community of developers and organizations building the future with AI.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <ButtonLink
-              to="/apps"
-              label="Create Your First App"
+              to="https://github.com/lksnext-ai-lab/ai-core-tools"
+              label={t('aboutPage.licensing.viewOnGitHub')}
+              target="_blank"
+              rel="noopener noreferrer"
               variant="primary"
               size="medium"
             />
             <ButtonLink
               to="/apps"
-              label="Configure AI Services"
+              label={t('aboutPage.licensing.getStarted')}
               variant="secondary"
               size="medium"
             />
           </div>
         </div>
-      </div>
+      </CardApp>
+
+      {/* Getting Started Section */}
+      <CardApp className="p-8 mb-8">
+        <h2 className="text-3xl font-bold text-fg dark:text-fg-dark mb-8 text-center">{t('aboutPage.gettingStarted.title')}</h2>
+        <div className="text-center">
+          <p className="text-lg text-fg-secondary dark:text-fg-secondary-dark mb-6">
+            {t('aboutPage.gettingStarted.description')}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <ButtonLink
+              to="/apps"
+              label={t('aboutPage.gettingStarted.createApp')}
+              variant="primary"
+              size="medium"
+            />
+            <ButtonLink
+              to="/apps"
+              label={t('aboutPage.gettingStarted.configureServices')}
+              variant="secondary"
+              size="medium"
+            />
+          </div>
+        </div>
+      </CardApp>
 
       {/* Footer Info */}
-      <div className="text-center text-gray-500 text-sm">
-        <p>© 2024 Mattin AI - Powered by LKS Next</p>
+      <div className="text-center text-fg-tertiary dark:text-fg-tertiary-dark text-sm">
+        <p>{t('aboutPage.footer.copyright')}</p>
         <p className="mt-2">
-          Built with ♥ using FastAPI, React, and PostgreSQL
+          {t('aboutPage.footer.builtWith')}
         </p>
       </div>
     </div>

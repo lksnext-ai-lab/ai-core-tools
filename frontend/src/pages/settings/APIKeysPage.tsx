@@ -281,7 +281,7 @@ function APIKeysPage() {
               header: t('apiKeysPage.columns.name'),
               render: (apiKey) => (
                 <div className="flex items-center">
-                  <BackgroundImage icon={KeyRound} size={28} iconSize={14} variant="marron" className="mr-2" />
+                  <BackgroundImage icon={KeyRound} size={34} iconSize={17} variant="marron" className="mr-2" />
                   {canEdit ? (
                     <button
                       type="button"

@@ -231,7 +231,7 @@ function SystemSkillsPage() {
               header: t('skillsPage.columns.name'),
               render: (skill) => (
                 <div className="flex items-center">
-                  <BackgroundImage icon={Target} variant="marron" className="mr-2"/>
+                  <BackgroundImage icon={Target} variant="marron" className="mr-2" size={34} iconSize={17} />
                   <button
                     type="button"
                     className="text-sm font-medium text-fg dark:text-fg-dark text-left"

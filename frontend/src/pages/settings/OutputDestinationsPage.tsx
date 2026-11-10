@@ -184,7 +184,7 @@ export default function OutputDestinationsPage() {
               header: t("outputDestinationsPage.columns.name"),
               render: (destination) => (
                 <div className="flex items-center">
-                  <BackgroundImage icon={Webhook} variant="marron" iconSize={20} className="mr-2" />
+                  <BackgroundImage icon={Webhook} variant="marron" size={34} iconSize={17} className="mr-2" />
                   {canEdit ? (
                     <button
                       type="button"

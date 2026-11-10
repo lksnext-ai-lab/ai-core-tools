@@ -1,4 +1,6 @@
 import Alert from '../../ui/Alert';
+import { FormField } from '../../ui/FormField';
+import { useTranslation } from 'react-i18next';
 import type { ConflictMode } from '../../../types/import';
 
 interface Props {
@@ -9,24 +11,10 @@ interface Props {
 
 const MODES: Array<{
   value: ConflictMode;
-  label: string;
-  desc: string;
 }> = [
-  {
-    value: 'fail',
-    label: 'Fail on Conflict',
-    desc: 'Import will stop if a component name already exists',
-  },
-  {
-    value: 'rename',
-    label: 'Rename',
-    desc: 'Automatically rename conflicting components',
-  },
-  {
-    value: 'override',
-    label: 'Override',
-    desc: 'Replace existing component configurations',
-  },
+  { value: 'fail' },
+  { value: 'rename' },
+  { value: 'override' },
 ];
 
 function AppStepConflicts({
@@ -34,11 +22,13 @@ function AppStepConflicts({
   conflictMode,
   onConflictModeChange,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
   if (!hasConflicts) {
     return (
       <Alert
         type="success"
-        message="No conflicts detected. A new app will be created with all selected components."
+        message={t('importModal.appConflicts.noConflicts')}
       />
     );
   }
@@ -47,37 +37,23 @@ function AppStepConflicts({
     <div className="space-y-4">
       <Alert
         type="warning"
-        message="Some component names may conflict with existing ones. Choose a strategy for handling conflicts."
+        message={t('importModal.appConflicts.conflictWarning')}
       />
 
       <div className="space-y-2">
         {MODES.map((m) => (
-          <label
+          <FormField
             key={m.value}
-            aria-label={m.label}
-            className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer ${
-              conflictMode === m.value
-                ? 'border-blue-400 bg-blue-50'
-                : 'border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            <input
-              type="radio"
-              name="app_component_conflict_mode"
-              value={m.value}
-              checked={conflictMode === m.value}
-              onChange={() => onConflictModeChange(m.value)}
-              className="mt-0.5 text-blue-600"
-            />
-            <div>
-              <span className="text-sm font-medium text-gray-900">
-                {m.label}
-              </span>
-              <p className="text-xs text-gray-500">
-                {m.desc}
-              </p>
-            </div>
-          </label>
+            id={`app-component-conflict-${m.value}`}
+            type="radio"
+            name="app_component_conflict_mode"
+            value={m.value}
+            checked={conflictMode === m.value}
+            onChange={() => onConflictModeChange(m.value)}
+            label={t(`importModal.conflict.options.${m.value}`)}
+            helpText={t(`importModal.conflict.help.${m.value}`)}
+            className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 [&>p]:col-start-2"
+          />
         ))}
       </div>
     </div>

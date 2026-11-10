@@ -3,18 +3,20 @@ import { ChevronDown } from 'lucide-react';
 
 export interface ExpansionDetailsProps {
   readonly header: ReactNode;
+  readonly headerStart?: ReactNode;
   readonly headerExtra?: ReactNode;
   readonly children: ReactNode;
 }
 
 /** Collapsible section used to group related content, e.g. in CrawlPolicyForm. */
-export function ExpansionDetails({ header, headerExtra, children }: Readonly<ExpansionDetailsProps>) {
+export function ExpansionDetails({ header, headerStart, headerExtra, children }: Readonly<ExpansionDetailsProps>) {
   const [isOpen, setIsOpen] = useState(true);
   const contentId = useId();
 
   return (
     <div className="overflow-hidden rounded-md border border-line dark:border-line-dark">
       <div className="flex items-center gap-3 bg-tableCab px-4 py-3 dark:bg-tableCab-dark">
+        {headerStart}
         <button
           type="button"
           aria-expanded={isOpen}

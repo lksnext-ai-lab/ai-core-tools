@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from 'react';
+import type { AriaAttributes, ReactNode, Ref } from 'react';
 
 import { Spinner } from './Spinner';
 
@@ -13,6 +13,7 @@ export interface ButtonAppProps {
   readonly onClick?: () => void;
   readonly ariaLabel?: string;
   readonly ariaDescribedBy?: string;
+  readonly ariaCurrent?: AriaAttributes['aria-current'];
   readonly variant?: ButtonAppVariant;
   readonly size?: ButtonAppSize;
   readonly icon?: ReactNode;
@@ -48,6 +49,7 @@ export function ButtonApp({
   onClick,
   ariaLabel,
   ariaDescribedBy,
+  ariaCurrent,
   variant = 'primary',
   size = 'medium',
   icon,
@@ -66,6 +68,7 @@ export function ButtonApp({
       disabled={disabled || loading}
       aria-label={ariaLabel}
       aria-describedby={ariaDescribedBy}
+      aria-current={ariaCurrent}
       aria-pressed={ariaPressed}
       aria-busy={loading}
       className={`${baseClasses} ${buttonAppSizeClasses[size]} rounded-md ${buttonAppVariantClasses[variant]} ${className}`}

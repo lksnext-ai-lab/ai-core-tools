@@ -214,7 +214,7 @@ function AIServicesPage() {
             header: t('aiServicesPage.columns.name'),
             render: (service: AIService) => (
               <span className="flex items-center gap-1.5">
-                <BackgroundImage icon={Bot} variant="marron" />
+                <BackgroundImage icon={Bot} variant="marron" size={34} iconSize={17} />
                 {canEdit && !service.is_system ? (
                   <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark text-left" onClick={() => handleEdit(service.service_id)}>
                     {service.name}

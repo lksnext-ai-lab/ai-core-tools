@@ -196,7 +196,7 @@ function SkillsPage() {
     setExportingSkillId(skill.skill_id);
     try {
       const blob = await apiService.exportSkill(Number.parseInt(appId), skill.skill_id);
-      const sanitizedName = (skill.name || 'skill').replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
+      const sanitizedName = (skill.name || t('skillsPage.defaultExportName')).replaceAll(/[^a-z0-9]/gi, '-').toLowerCase();
       const filename = `skill-${sanitizedName || skill.skill_id}.zip`;
 
       const url = URL.createObjectURL(blob);
@@ -249,7 +249,7 @@ function SkillsPage() {
           const canManageSkill = canEdit && !skill.is_system;
           return (
             <div className="flex items-center">
-              <BackgroundImage icon={Target} iconSize={20} size={40} className="mr-2" />
+              <BackgroundImage icon={Target} iconSize={17} size={34} className="mr-2" />
               <button
                 type="button"
                 className="text-sm font-medium text-fg dark:text-fg-dark text-left"

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { apiService } from '../services/api';
+import ButtonApp from './ui/ButtonApp';
+import { useTranslation } from 'react-i18next';
 
 interface PendingInvitation {
   id: number;
@@ -13,6 +15,7 @@ interface PendingInvitation {
 }
 
 function PendingInvitationsNotification() {
+  const { t, i18n } = useTranslation('common');
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -47,13 +50,18 @@ function PendingInvitationsNotification() {
       await apiService.respondToInvitation(invitationId, action);
       
       setInvitations(prev => prev.filter(inv => inv.id !== invitationId));
-      const actionText = action === 'accept' ? 'accepted' : 'declined';
-      setMessage({ type: 'success', text: `Invitation ${actionText} successfully!` });
+      setMessage({
+        type: 'success',
+        text: t(`collaborationPage.pendingInvitations.${action}Success`),
+      });
       setTimeout(() => setMessage(null), 3000);
       
     } catch (error) {
       console.error(`Failed to ${action} invitation:`, error);
-      setMessage({ type: 'error', text: `Failed to ${action} invitation` });
+      setMessage({
+        type: 'error',
+        text: t(`collaborationPage.pendingInvitations.${action}Failed`),
+      });
     } finally {
       setLoading(false);
     }
@@ -68,7 +76,8 @@ function PendingInvitationsNotification() {
       <button
         onClick={toggleDetails}
         className="relative w-[34px] h-[34px] flex items-center justify-center text-fg-secondary hover:bg-surface-hover transition-colors rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark"
-        title={`${invitations.length} pending invitation${invitations.length === 1 ? '' : 's'}`}
+        title={t('collaborationPage.pendingInvitations.count', { count: invitations.length })}
+        aria-label={t('collaborationPage.pendingInvitations.count', { count: invitations.length })}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-3.5-3.5a2.5 2.5 0 010-3.5L19 7h-5M9 17H4l3.5-3.5a2.5 2.5 0 000-3.5L4 7h5m0 0V4a2 2 0 112 4h2a2 2 0 112 4v3" />
@@ -83,21 +92,21 @@ function PendingInvitationsNotification() {
         <>
           <button
             type="button"
-            aria-label="Close notifications panel"
+            aria-label={t('collaborationPage.pendingInvitations.closePanel')}
             className="fixed inset-0 z-10 cursor-default bg-transparent border-0 p-0 w-full h-full"
             onClick={() => setShowDetails(false)}
             onKeyDown={(e) => { if (e.key === 'Escape') setShowDetails(false); }}
           />
           
-          <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
-            <div className="p-3 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">
-                Pending Invitations ({invitations.length})
+          <div className="absolute top-full right-0 mt-2 w-80 bg-surface border border-line rounded-lg shadow-[0_14px_40px_rgba(32,28,20,0.14)] overflow-visible  dark:bg-surface-dark dark:border-line-dark dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)] z-20">
+            <div className="p-3 border-b border-line dark:border-line-dark">
+              <h3 className="text-sm  text-fg dark:text-fg-dark">
+                {t('collaborationPage.pendingInvitations.title', { count: invitations.length })}
               </h3>
             </div>
             
             {message && (
-              <div className={`p-3 border-b border-gray-200 ${
+              <div className={`p-3 border-b border-line dark:border-line-dark ${
                 message.type === 'success' ? 'bg-green-50' : 'bg-red-50'
               }`}>
                 <div className="flex items-center">
@@ -113,6 +122,7 @@ function PendingInvitationsNotification() {
                   </p>
                   <button
                     onClick={() => setMessage(null)}
+                    aria-label={t('collaborationPage.pendingInvitations.dismissMessage')}
                     className={`ml-auto text-xs ${
                       message.type === 'success' ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'
                     }`}
@@ -125,50 +135,60 @@ function PendingInvitationsNotification() {
             
             <div className="max-h-60 overflow-y-auto">
               {invitations.map((invitation) => (
-                <div key={invitation.id} className="p-3 border-b border-gray-100 last:border-b-0">
+                <div key={invitation.id} className="p-3 border-b border-line dark:border-line-dark last:border-b-0">
                   <div className="space-y-2">
                     {/* Ownership offers (role=owner) render differently from normal collaboration invites */}
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-medium text-gray-900 dark:text-slate-100 text-sm">{invitation.app_name}</h4>
+                        <h4 className="font-medium text-fg dark:text-fg-dark text-sm">{invitation.app_name}</h4>
                         {invitation.role.toLowerCase() === 'owner' && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                            Ownership transfer
+                            {t('collaborationPage.pendingInvitations.ownershipTransfer')}
                           </span>
                         )}
                       </div>
                       {invitation.role.toLowerCase() === 'owner' ? (
-                        <p className="text-xs text-gray-600 dark:text-slate-300">
-                          {invitation.inviter_name || invitation.inviter_email} wants to transfer{' '}
-                          <span className="font-medium">ownership</span> of this app to you. Accepting makes you
-                          the owner; the current owner becomes an administrator.
+                        <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                          {t('collaborationPage.pendingInvitations.transferOwnershipMessage', {
+                            inviter: invitation.inviter_name || invitation.inviter_email,
+                          })}
                         </p>
                       ) : (
-                        <p className="text-xs text-gray-600 dark:text-slate-300">
-                          {invitation.inviter_name || invitation.inviter_email} invited you as an{' '}
-                          <span className="font-medium">{invitation.role}</span>
+                        <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                          {t('collaborationPage.pendingInvitations.invitedAs', {
+                            inviter: invitation.inviter_name || invitation.inviter_email,
+                            role: t(`collaborationPage.roles.${invitation.role.toLowerCase()}`, {
+                              defaultValue: invitation.role,
+                            }),
+                          })}
                         </p>
                       )}
-                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-                        {new Date(invitation.invited_at).toLocaleDateString()}
+                      <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-1">
+                        {new Date(invitation.invited_at).toLocaleDateString(
+                          i18n.resolvedLanguage ?? i18n.language,
+                        )}
                       </p>
                     </div>
 
                     <div className="flex space-x-2">
-                      <button
+                      <ButtonApp
+                        label={t('collaborationPage.pendingInvitations.accept')}
+                        type="button"
                         onClick={() => handleInvitationResponse(invitation.id, 'accept')}
                         disabled={loading}
-                        className="flex-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors disabled:opacity-50"
-                      >
-                        Accept
-                      </button>
-                      <button
+                        variant="primary"
+                        size="small"
+                        className="flex-1"
+                      />
+                      <ButtonApp
+                        label={t('collaborationPage.pendingInvitations.decline')}
+                        type="button"
                         onClick={() => handleInvitationResponse(invitation.id, 'decline')}
                         disabled={loading}
-                        className="flex-1 px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded transition-colors disabled:opacity-50"
-                      >
-                        Decline
-                      </button>
+                        variant="secondary"
+                        size="small"
+                        className="flex-1"
+                      />
                     </div>
                   </div>
                 </div>

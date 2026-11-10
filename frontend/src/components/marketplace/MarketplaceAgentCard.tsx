@@ -117,12 +117,12 @@ export function MarketplaceAgentCard({ agent, onClick }: MarketplaceAgentCardPro
             )}
           </div>
           <ButtonApp
-            label={starting ? '…' : t('marketplacePage.startChat')}
+            label={t('marketplacePage.startChat')}
             variant="primary"
             size="compact"
             type="button"
             onClick={() => void handleStartChat()}
-            disabled={starting}
+            loading={starting}
             className="pointer-events-auto relative z-10 shrink-0"
           />
         </div>

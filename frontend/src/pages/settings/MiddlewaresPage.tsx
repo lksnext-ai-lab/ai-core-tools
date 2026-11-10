@@ -280,7 +280,7 @@ function MiddlewaresPage() {
                         header: t('middlewaresPage.columns.name'),
                         render: (mw) => (
                             <div className="flex min-w-0 items-center">
-                                <BackgroundImage icon={Layers} variant='marron' className="mr-2 shrink-0" />
+                                <BackgroundImage icon={Layers} variant='marron' className="mr-2 shrink-0" size={34} iconSize={17} />
                                 {canEdit ? (
                                     <button
                                         type="button"

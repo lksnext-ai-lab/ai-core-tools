@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface FormFieldProps {
   label?: React.ReactNode;
@@ -62,8 +63,8 @@ export function FormField({
   tabIndex,
   value,
   fileName,
-  fileButtonLabel = 'Choose file',
-  noFileSelectedLabel = 'No file selected',
+  fileButtonLabel,
+  noFileSelectedLabel,
   checked,
   accept,
   autoComplete,
@@ -96,6 +97,9 @@ export function FormField({
   labelClassName = 'block text-sm font-medium text-fg dark:text-fg-dark mb-1',
   ref
 }: Readonly<FormFieldProps>) {
+  const { t } = useTranslation('common');
+  const resolvedFileButtonLabel = fileButtonLabel ?? t('formField.file.choose');
+  const resolvedNoFileSelectedLabel = noFileSelectedLabel ?? t('formField.file.noFileSelected');
   const [selectedFileName, setSelectedFileName] = React.useState('');
   const displayedFileName = fileName ?? selectedFileName;
   const inlineLabel = type === 'radio' || type === 'checkbox';
@@ -138,14 +142,14 @@ export function FormField({
           } ${inputClassName}`}
         >
           <span className="min-w-0 flex-1 truncate px-3">
-            {displayedFileName || noFileSelectedLabel}
+            {displayedFileName || resolvedNoFileSelectedLabel}
           </span>
           <span
             className={`inline-flex min-h-10 shrink-0 items-center justify-center border-l border-transparent bg-ink px-4 font-display font-normal tracking-[-0.02em] text-ink-on transition-colors dark:bg-ink-dark dark:text-ink-on-dark ${
               disabled ? 'opacity-50' : 'group-hover:bg-ink-hover dark:group-hover:bg-ink-hover-dark'
             }`}
           >
-              {fileButtonLabel}
+              {resolvedFileButtonLabel}
           </span>
           <input
             ref={ref}

@@ -221,7 +221,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
       className: 'px-6 py-4 whitespace-nowrap',
       render: (svc) => (
         <div className="flex items-center gap-2">
-          <BackgroundImage icon={Brain} variant="marron" size={32} iconSize={16} />
+          <BackgroundImage icon={Brain} variant="marron" size={34} iconSize={17} />
           <button
             type="button"
             onClick={() => handleOpenEdit(svc)}

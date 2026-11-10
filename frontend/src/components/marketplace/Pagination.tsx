@@ -23,7 +23,11 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
         type="button"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+        className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+          disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
       >
         {t('pagination.previous')}
       </button>
@@ -33,7 +37,12 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           <button
             type="button"
             onClick={() => onPageChange(1)}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+            className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
+          
           >
             1
           </button>
@@ -46,7 +55,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           key={p}
           type="button"
           onClick={() => onPageChange(p)}
-          className={`px-3 py-2 text-sm rounded-lg border ${
+          className={`h-10 px-3 py-2 text-sm rounded-lg border ${
             p === page
               ? 'bg-fg text-white border-fg dark:bg-fg-dark dark:text-ink-on-dark dark:border-fg-dark'
               : 'border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark'
@@ -62,7 +71,11 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           <button
             type="button"
             onClick={() => onPageChange(totalPages)}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+            className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
           >
             {totalPages}
           </button>
@@ -73,7 +86,11 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
         type="button"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+        className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
       >
         {t('pagination.next')}
       </button>

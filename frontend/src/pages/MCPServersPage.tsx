@@ -161,7 +161,7 @@ function MCPServersPage() {
               render: (server) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <BackgroundImage icon={Plug} size={40} iconSize={20} variant="marron" />
+                    <BackgroundImage icon={Plug} size={34} iconSize={17} variant="marron" />
                   </div>
                   <div className="ml-4">
                     <div className="text-sm font-medium text-gray-900">

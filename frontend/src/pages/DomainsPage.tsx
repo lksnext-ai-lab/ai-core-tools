@@ -145,7 +145,7 @@ function DomainsPage() {
             header: t('domainsPage.columns.name'),
             render: (domain) => (
               <div className="flex items-center">
-                <BackgroundImage icon={Globe} size={40} iconSize={20} variant="marron" />
+                <BackgroundImage icon={Globe} size={34} iconSize={17} variant="marron" />
                 <div className="ml-4">
                   <div className="text-sm font-medium text-fg dark:text-fg-dark">
                     {canEdit ? (

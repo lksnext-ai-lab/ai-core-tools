@@ -158,7 +158,7 @@ const SystemSandboxServicesPage: React.FC = () => {
       className: 'px-6 py-4 whitespace-nowrap',
       render: (svc) => (
         <div className="flex items-center gap-2">
-          <BackgroundImage icon={Box} variant="marron" />
+          <BackgroundImage icon={Box} variant="marron" size={34} iconSize={17} />
           <button
             type="button"
             onClick={() => void handleOpenEdit(svc)}

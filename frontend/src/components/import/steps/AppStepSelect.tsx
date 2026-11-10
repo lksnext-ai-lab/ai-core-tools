@@ -1,12 +1,14 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import Alert from '../../ui/Alert';
+import ExpansionDetails from '../../ui/ExpansionDetails';
+import { FormField } from '../../ui/FormField';
 import type {
   AppImportPreview,
   DependencyInfo,
 } from '../../../types/import';
 import {
   COMPONENT_TYPE_ICONS,
-  COMPONENT_TYPE_LABELS,
 } from '../../../types/import';
 import {
   buildDependencyGraph,
@@ -38,17 +40,30 @@ function makeKey(type: string, name: string): string {
   return `${type}:${name}`;
 }
 
+const COMPONENT_TYPE_TRANSLATION_KEYS: Record<string, string> = {
+  ai_service: 'aiServices',
+  embedding_service: 'embeddingServices',
+  output_parser: 'outputParsers',
+  mcp_config: 'mcpConfigs',
+  silo: 'silos',
+  repository: 'repositories',
+  domain: 'domains',
+  agent: 'agents',
+  app: 'apps',
+};
+
 function AppStepSelect({
   preview,
   selection,
   onSelectionChange,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
   const graph = buildDependencyGraph(preview.dependencies);
 
   const categories: CategoryConfig[] = [
     {
       type: 'ai_service',
-      label: 'AI Services',
+      label: t('importModal.appUpload.components.aiServices', { count: preview.ai_services.length }),
       icon: COMPONENT_TYPE_ICONS.ai_service,
       items: preview.ai_services.map((c) => ({
         key: makeKey('ai_service', c.component_name),
@@ -63,7 +78,7 @@ function AppStepSelect({
     },
     {
       type: 'embedding_service',
-      label: 'Embedding Services',
+      label: t('importModal.appUpload.components.embeddingServices', { count: preview.embedding_services.length }),
       icon: COMPONENT_TYPE_ICONS.embedding_service,
       items: preview.embedding_services.map((c) => ({
         key: makeKey(
@@ -81,7 +96,7 @@ function AppStepSelect({
     },
     {
       type: 'output_parser',
-      label: 'Output Parsers',
+      label: t('importModal.appUpload.components.outputParsers', { count: preview.output_parsers.length }),
       icon: COMPONENT_TYPE_ICONS.output_parser,
       items: preview.output_parsers.map((c) => ({
         key: makeKey('output_parser', c.component_name),
@@ -92,7 +107,7 @@ function AppStepSelect({
     },
     {
       type: 'mcp_config',
-      label: 'MCP Configs',
+      label: t('importModal.appUpload.components.mcpConfigs', { count: preview.mcp_configs.length }),
       icon: COMPONENT_TYPE_ICONS.mcp_config,
       items: preview.mcp_configs.map((c) => ({
         key: makeKey('mcp_config', c.component_name),
@@ -103,7 +118,7 @@ function AppStepSelect({
     },
     {
       type: 'silo',
-      label: 'Silos',
+      label: t('importModal.appUpload.components.silos', { count: preview.silos.length }),
       icon: COMPONENT_TYPE_ICONS.silo,
       items: preview.silos.map((c) => ({
         key: makeKey('silo', c.component_name),
@@ -118,7 +133,7 @@ function AppStepSelect({
     },
     {
       type: 'repository',
-      label: 'Repositories',
+      label: t('importModal.appUpload.components.repositories', { count: preview.repositories.length }),
       icon: COMPONENT_TYPE_ICONS.repository,
       items: preview.repositories.map((c) => ({
         key: makeKey('repository', c.component_name),
@@ -133,7 +148,7 @@ function AppStepSelect({
     },
     {
       type: 'domain',
-      label: 'Domains',
+      label: t('importModal.appUpload.components.domains', { count: preview.domains.length }),
       icon: COMPONENT_TYPE_ICONS.domain,
       items: preview.domains.map((c) => ({
         key: makeKey('domain', c.component_name),
@@ -148,7 +163,7 @@ function AppStepSelect({
     },
     {
       type: 'agent',
-      label: 'Agents',
+      label: t('importModal.appUpload.components.agents', { count: preview.agents.length }),
       icon: COMPONENT_TYPE_ICONS.agent,
       items: preview.agents.map((c) => ({
         key: makeKey('agent', c.component_name),
@@ -236,10 +251,13 @@ if (selected) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">
-          Select which components to import.
+          {t('importModal.appSelect.description')}
         </p>
         <span className="text-xs text-gray-500">
-          {selectedCount}/{totalCount} selected
+          {t('importModal.appSelect.selectedCount', {
+            selected: selectedCount,
+            total: totalCount,
+          })}
         </span>
       </div>
 
@@ -251,93 +269,77 @@ if (selected) {
           catSelectedCount === cat.items.length;
 
         return (
-          <div
+          <ExpansionDetails
             key={cat.type}
-            className="border border-gray-200 rounded-lg overflow-hidden"
-          >
-            {/* Category header */}
-            <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={() =>
-                    toggleCategory(cat, !allSelected)
-                  }
-                  className="rounded border-gray-300"
-                />
-                <span className="mr-1">{cat.icon}</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {cat.label}
-                </span>
-              </label>
+            header={(
+              <span className="flex items-center space-x-2">
+                <span aria-hidden="true">{cat.icon}</span>
+                <span>{cat.label}</span>
+              </span>
+            )}
+            headerStart={(
+              <FormField
+                id={`select-all-${cat.type}`}
+                type="checkbox"
+                checked={allSelected}
+                ariaLabel={t('importModal.appSelect.selectAllCategory', {
+                  category: cat.label,
+                })}
+                onChange={(e) => toggleCategory(cat, e.target.checked)}
+              />
+            )}
+            headerExtra={(
               <span className="text-xs text-gray-500">
                 {catSelectedCount}/{cat.items.length}
               </span>
-            </div>
-
-            {/* Items */}
-            <div className="divide-y divide-gray-100">
+            )}
+          >
+            <div className="divide-y divide-line dark:divide-line-dark">
               {cat.items.map((item) => {
                 const depLabels = item.deps.map((d) => {
-                  const label =
-                    COMPONENT_TYPE_LABELS[
-                      d.depends_on_type
-                    ] || d.depends_on_type;
+                  const translationKey = COMPONENT_TYPE_TRANSLATION_KEYS[d.depends_on_type];
+                  const label = translationKey
+                    ? t(`importModal.appUpload.components.${translationKey}`, { count: 1 })
+                    : t('importModal.unknown');
                   return `${label}: ${d.depends_on_name}`;
                 });
+                const itemHelpText = [
+                  item.needsApiKey ? t('importModal.appSelect.apiKeyRequired') : undefined,
+                  depLabels.length > 0
+                    ? t('importModal.appSelect.dependencies', {
+                      count: depLabels.length,
+                      items: depLabels.join(', '),
+                    })
+                    : undefined,
+                ].filter(Boolean).join(' · ');
 
                 return (
                   <div
                     key={item.key}
                     className="px-4 py-2 flex items-center justify-between"
                   >
-                    <label className="flex items-center space-x-2 cursor-pointer flex-1 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={!!selection[item.key]}
-                        onChange={(e) =>
-                          toggleItem(
-                            item.key,
-                            e.target.checked
-                          )
-                        }
-                        className="rounded border-gray-300"
-                      />
-                      <span className="text-sm text-gray-800 truncate">
-                        {item.name}
-                      </span>
-                    </label>
-                    <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
-                      {item.needsApiKey && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
-                          Needs API Key
-                        </span>
-                      )}
-                      {depLabels.length > 0 && (
-                        <span
-                          className="text-xs text-gray-400"
-                          title={depLabels.join(', ')}
-                        >
-                          {depLabels.length} dep
-                          {depLabels.length > 1
-                            ? 's'
-                            : ''}
-                        </span>
-                      )}
-                    </div>
+                    <FormField
+                      id={`component-${item.key}`}
+                      type="checkbox"
+                      label={item.name}
+                      checked={!!selection[item.key]}
+                      onChange={(e) => toggleItem(item.key, e.target.checked)}
+                      helpText={itemHelpText || undefined}
+                      className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 [&>p]:col-span-2"
+                      labelClassName="mb-0 min-w-0 truncate text-sm font-medium text-fg dark:text-fg-dark"
+                    />
                   </div>
                 );
               })}
             </div>
-          </div>
+          </ExpansionDetails>
         );
       })}
 
       {selectedCount === 0 && (
         <Alert
           type="warning"
-          message="No components selected. Select at least one component to import."
+          message={t('importModal.appSelect.noneSelected')}
         />
       )}
     </div>

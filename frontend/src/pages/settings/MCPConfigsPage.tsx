@@ -352,7 +352,7 @@ function MCPConfigsPage() {
               header: t('mcpConfigsPage.columns.name'),
               render: (config) => (
                 <div className="flex items-center">
-                  <BackgroundImage icon={Plug} size={28} iconSize={14} variant="marron" className="mr-2" />
+                  <BackgroundImage icon={Plug} size={34} iconSize={17} variant="marron" className="mr-2" />
                   {canEdit ? (
                     <button
                       type="button"

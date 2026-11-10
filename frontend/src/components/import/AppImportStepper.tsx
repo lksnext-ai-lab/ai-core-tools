@@ -16,16 +16,7 @@ import AppStepApiKeys from './steps/AppStepApiKeys';
 import AppStepConflicts from './steps/AppStepConflicts';
 import AppStepReview from './steps/AppStepReview';
 import AppStepResult from './steps/AppStepResult';
-
-const STEPS: StepDefinition[] = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'config', label: 'App Config' },
-  { id: 'select', label: 'Components' },
-  { id: 'apikeys', label: 'API Keys', optional: true },
-  { id: 'conflicts', label: 'Conflicts', optional: true },
-  { id: 'review', label: 'Review' },
-  { id: 'result', label: 'Result' },
-];
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   isOpen: boolean;
@@ -43,6 +34,25 @@ function AppImportStepper({
   onImportComplete,
 }: Readonly<Props>) {
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
+
+  const steps: StepDefinition[] = [
+    { id: 'upload', label: t('importModal.appSteps.upload') },
+    { id: 'config', label: t('importModal.appSteps.config') },
+    { id: 'select', label: t('importModal.appSteps.components') },
+    {
+      id: 'apikeys',
+      label: t('importModal.appSteps.apiKeys'),
+      optional: true,
+    },
+    {
+      id: 'conflicts',
+      label: t('importModal.appSteps.conflicts'),
+      optional: true,
+    },
+    { id: 'review', label: t('importModal.appSteps.review') },
+    { id: 'result', label: t('importModal.appSteps.result') },
+  ];
 
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
@@ -149,13 +159,15 @@ function AppImportStepper({
         setSelection(sel);
       } catch (err: unknown) {
         setValidationError(
-          err instanceof Error ? err.message : 'Failed to validate export file'
+          err instanceof Error
+            ? err.message
+            : t('importModal.appUpload.validationFailed')
         );
       } finally {
         setIsValidating(false);
       }
     },
-    []
+    [t]
   );
 
   const hasServicesNeedingKeys = (): boolean => {
@@ -295,7 +307,9 @@ function AppImportStepper({
       }
     } catch (err: unknown) {
       setImportError(
-        err instanceof Error ? err.message : 'Import failed unexpectedly'
+        err instanceof Error
+          ? err.message
+          : t('importModal.errors.importFailed')
       );
       setStepStatuses((prev) => ({
         ...prev,
@@ -348,11 +362,13 @@ function AppImportStepper({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Import App"
+      title={t('importModal.title', {
+        component: t('importModal.appUpload.components.apps', { count: 1 }),
+      })}
       size="large"
     >
       <StepperContainer
-        steps={STEPS}
+        steps={steps}
         currentStep={currentStep}
         stepStatuses={stepStatuses}
         onStepClick={handleStepClick}
@@ -365,12 +381,16 @@ function AppImportStepper({
         showNext={!isFinalStep}
         nextLabel={
           currentStep === 5
-            ? 'Confirm Import'
-            : undefined
+            ? t('importModal.actions.confirmImport')
+            : t('importModal.actions.next')
         }
         cancelLabel={
-          isFinalStep ? 'Close' : 'Cancel'
+          isFinalStep
+            ? t('importModal.actions.close')
+            : t('importModal.actions.cancel')
         }
+        backLabel={t('importModal.actions.back')}
+        submittingLabel={t('importModal.appResult.importing')}
       >
         {currentStep === 0 && (
           <AppStepUpload

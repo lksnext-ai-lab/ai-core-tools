@@ -19,6 +19,12 @@
     "saving": "Saving...",
     "cancel": "Cancel"
   },
+  "formField": {
+    "file": {
+      "choose": "Choose file",
+      "noFileSelected": "No file selected"
+    }
+  },
   "versionFooter": {
     "loading": "Loading version..."
   },
@@ -90,6 +96,89 @@
       "tierConfig": "Tier Config"
     }
   },
+  "aboutPage": {
+    "hero": {
+      "tagline": "Your Comprehensive AI Toolbox",
+      "description": "A powerful, extensible platform that simplifies the integration and use of AI technologies, providing a unified solution for building intelligent applications with ease."
+    },
+    "overview": {
+      "title": "What is Mattin AI?",
+      "description1": "Mattin AI is a comprehensive AI toolbox developed by LKS Next that provides a wide range of artificial intelligence capabilities and tools. Built with modern technologies and designed for scalability, it offers everything you need to build, deploy, and manage AI-powered applications.",
+      "description2": "Whether you're a developer looking to integrate AI into your applications, a data scientist working with vector databases, or an organization seeking to leverage AI agents and automation, Mattin AI provides the tools and infrastructure you need.",
+      "highlightsTitle": "Key Highlights",
+      "highlightOpenSource": "Open source with commercial licensing options",
+      "highlightExtensible": "Extensible architecture for custom solutions",
+      "highlightProviders": "Multi-provider AI service integration",
+      "highlightEnterprise": "Production-ready with enterprise features"
+    },
+    "features": {
+      "title": "Core Features",
+      "llmTitle": "LLM Integration",
+      "llmDescription": "Easy access and management of various Large Language Models including OpenAI, Anthropic, Azure OpenAI, Mistral AI, and Ollama for local deployment.",
+      "ragTitle": "RAG Systems",
+      "ragDescription": "Implementation of Retrieval-Augmented Generation for enhanced AI responses with semantic search capabilities and intelligent document processing.",
+      "vectorTitle": "Vector Databases",
+      "vectorDescription": "Efficient storage and retrieval of vector embeddings using PostgreSQL with pgvector extension for high-performance semantic search.",
+      "agentsTitle": "AI Agents",
+      "agentsDescription": "Framework for building and deploying intelligent AI agents with customizable workflows, tool integration, and automated decision-making capabilities.",
+      "modularTitle": "Modular Architecture",
+      "modularDescription": "Easy to extend and customize for specific needs with a plugin-based architecture and comprehensive API for third-party integrations.",
+      "performanceTitle": "High Performance",
+      "performanceDescription": "Built with FastAPI and React for optimal performance, with async processing, caching, and scalable infrastructure for enterprise workloads."
+    },
+    "architecture": {
+      "title": "Architecture Overview",
+      "technologyStack": "Technology Stack",
+      "backend": "Backend",
+      "backendDescription": "FastAPI with Python 3.11+",
+      "frontend": "Frontend",
+      "frontendDescription": "React with TypeScript",
+      "database": "Database",
+      "databaseDescription": "PostgreSQL with pgvector",
+      "aiServices": "AI Services",
+      "aiServicesDescription": "Multi-provider LLM integration",
+      "keyComponents": "Key Components",
+      "restApi": "REST API",
+      "restApiDescription": "Comprehensive API for all platform functionality",
+      "authentication": "Authentication",
+      "authenticationDescription": "Secure user management and session handling",
+      "vectorStorage": "Vector Storage",
+      "vectorStorageDescription": "High-performance semantic search capabilities",
+      "agentFramework": "Agent Framework",
+      "agentFrameworkDescription": "Extensible AI agent development platform",
+      "webInterface": "Web Interface",
+      "webInterfaceDescription": "Intuitive React-based user interface"
+    },
+    "licensing": {
+      "title": "Licensing & Commercial Options",
+      "openSource": "Open Source",
+      "agpl": "GNU Affero General Public License v3.0 (AGPL 3.0)",
+      "freeUse": "Free for development and personal use",
+      "community": "Community contributions welcome",
+      "networkDisclosure": "Source code disclosure required for network use",
+      "copyleft": "Copyleft obligations for modifications",
+      "commercial": "Commercial",
+      "commercialLicense": "Proprietary License with Enhanced Rights",
+      "fullFunctionality": "Full functionality without restrictions",
+      "commercialUse": "Commercial use rights without copyleft obligations",
+      "clientModifications": "Client modification rights for specific projects",
+      "enterpriseSupport": "Enterprise features and support",
+      "noDisclosure": "No source code disclosure requirements",
+      "contact": "Contact LKS Next for commercial licensing inquiries.",
+      "viewOnGitHub": "View on GitHub",
+      "getStarted": "Get Started"
+    },
+    "gettingStarted": {
+      "title": "Ready to Get Started?",
+      "description": "Join the community of developers and organizations building the future with AI.",
+      "createApp": "Create Your First App",
+      "configureServices": "Configure AI Services"
+    },
+    "footer": {
+      "copyright": "© 2024 Mattin AI - Powered by LKS Next",
+      "builtWith": "Built with ♥ using FastAPI, React, and PostgreSQL"
+    }
+  },
   "login": {
     "title": "Welcome back",
     "subtitle": "Sign in to <brand>{{brand}}</brand>",
@@ -141,7 +230,9 @@
     "previous": "Previous",
     "next": "Next",
     "pageOf": "Page {{page}} of {{totalPages}}",
-    "pageOfWithTotal": "Page {{page}} of {{totalPages}} ({{total}} total)"
+    "pageOfWithTotal": "Page {{page}} of {{totalPages}} ({{total}} total)",
+    "totalRecords_one": "{{count}} record",
+    "totalRecords_other": "{{count}} records"
   },
   "appsPage": {
     "title": "My Apps",
@@ -196,6 +287,71 @@
     "nameRequired": "App name is required",
     "saveFailed": "Failed to save app",
     "update": "Update App"
+  },
+  "appSettingsPage": {
+    "loading": "Loading app settings...",
+    "loadFailed": "Failed to load app data",
+    "saveFailed": "Failed to save settings",
+    "loadErrorTitle": "Error Loading Settings",
+    "generalSettings": "General Settings",
+    "subtitle": "Configure basic app settings and integrations",
+    "appName": "App Name",
+    "appNamePlaceholder": "Enter app name",
+    "appSlug": "App Slug",
+    "appSlugPlaceholder": "my-app",
+    "appSlugHelp": "URL-friendly identifier for your app. Use lowercase letters, numbers, and hyphens only.",
+    "saving": "Saving...",
+    "updateSlug": "Update Slug",
+    "slugSaved": "Slug saved successfully",
+    "slugUpdateFailed": "Failed to update slug",
+    "langsmithApiKey": "LangSmith API Key",
+    "keepCurrentKeyPlaceholder": "Leave empty to keep current key",
+    "enterLangsmithKeyPlaceholder": "Enter LangSmith API key",
+    "langsmithHelpBeforeKey": "Your LangSmith API key for monitoring and tracing. Leave empty to use the global",
+    "langsmithHelpBetweenKeys": "environment variable (when",
+    "testLangsmithTitle": "Verify the API key against LangSmith",
+    "testing": "Testing…",
+    "testConnection": "Test connection",
+    "connectedToProject": "Connected to LangSmith — project \"{{projectName}}\"",
+    "langsmithTestFailed": "Failed to test LangSmith connection",
+    "agentRateLimit": "Agent Rate Limit",
+    "agentRateLimitPlaceholder": "Enter agent rate limit",
+    "agentRateLimitHelp": "This will limit the number of calls your agents can make per minute in your application.",
+    "maxFileSize": "Maximum File Size (MB)",
+    "maxFileSizePlaceholder": "Enter maximum file size in MB (0 = no limit)",
+    "maxFileSizeHelp": "Maximum size in megabytes for files uploaded to repositories. Set to 0 for no limit.",
+    "agentCorsOrigins": "Agent CORS Origins",
+    "agentCorsOriginsPlaceholder": "Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)",
+    "agentCorsOriginsHelp": "Comma-separated list of allowed origins for CORS requests to your agents.",
+    "enableOpenAiApi": "Enable OpenAI-compatible API",
+    "enableOpenAiApiHelp": "Allow external applications to interact with your agents using the OpenAI API format. When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.",
+    "sandboxService": "Code Interpreter Sandbox Service",
+    "inheritSystemDefault": "Inherit system default",
+    "sandboxServiceHelpBeforeSettings": "Default Sandbox Service used when agents in this app run the Code Interpreter capability. Leave at \"Inherit\" to use the system default. Manage available services under",
+    "sandboxServicesSettings": "Settings → Sandbox Services",
+    "saveErrorTitle": "Error Saving Settings",
+    "settingsSaved": "Settings saved successfully",
+    "saveChanges": "Save Changes",
+    "aboutAppSlug": "About App Slug",
+    "aboutAppSlugDescription": "The app slug is a unique, URL-friendly identifier for your app. It's used in various endpoints including MCP server URLs to make them more readable (e.g.,",
+    "aboutAppSlugSuffix": "instead of using numeric IDs).",
+    "aboutLangsmithTitle": "About LangSmith Integration",
+    "aboutLangsmithMessage": "LangSmith provides monitoring, tracing, and debugging capabilities for your AI agents. Connect your LangSmith account to track agent performance and troubleshoot issues.",
+    "aboutOpenAiApiTitle": "About OpenAI-compatible API",
+    "aboutOpenAiApiMessage": "When enabled, your agents can be accessed through OpenAI-compatible API endpoints. This allows integration with third-party tools and clients that expect OpenAI API format.",
+    "openAiApiImpact": "Impact of this setting:",
+    "openAiApiImpactCompatibility": "Enables compatibility with OpenAI-compatible clients and SDKs",
+    "openAiApiImpactEndpoints": "Provides standard chat completion endpoints",
+    "openAiApiImpactIntegration": "Allows seamless integration with tools expecting OpenAI API interface",
+    "openAiApiImpactExisting": "Does not affect your existing internal APIs or agent functionality",
+    "appConfigurationTitle": "App Configuration",
+    "appConfigurationMessage": "These settings affect the overall behavior of your app. The app name is used in navigation and API responses. Changes to these settings are applied immediately.",
+    "aboutSandboxServicesTitle": "About Sandbox Services",
+    "aboutSandboxServicesMessageBeforeSettings": "A Sandbox Service controls the isolated environment where agents execute Python code when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted, container-isolated), Daytona, or E2B (managed cloud sandboxes) services under",
+    "selectService": "Select a service",
+    "selectServiceDescription": "pins this app's agents to a specific sandbox configuration.",
+    "inherit": "Inherit",
+    "inheritDescription": "uses the platform default configured by your system administrator."
   },
   "domainsPage": {
     "title": "Domains",
@@ -256,6 +412,7 @@
     "confirmDeleteFallback": "Are you sure you want to delete this skill? This action cannot be undone.",
     "noDescription": "No description",
     "notAvailable": "N/A",
+    "defaultExportName": "skill",
     "emptyTitle": "No skills",
     "emptyDescription": "Add your first skill to create specialized behaviors for your agents.",
     "columns": {
@@ -1796,6 +1953,7 @@
     "agentUpload": {
       "selectExportFile": "Select Export File",
       "validating": "Validating export file...",
+      "validationFailed": "Failed to validate export file",
       "summary": "Export File Summary",
       "version": "Version {{version}}",
       "bundledComponents": "Bundled Components",
@@ -1810,9 +1968,17 @@
         "agentTools_other": "Agent Tools ({{count}})"
       }
     },
+    "agentSteps": {
+      "upload": "Upload",
+      "dependencies": "Dependencies",
+      "conflicts": "Conflicts",
+      "review": "Review",
+      "result": "Result"
+    },
     "appUpload": {
       "selectExportFile": "Select App Export File",
       "validating": "Validating app export file...",
+      "validationFailed": "Failed to validate app export file",
       "summary": "Export File Summary",
       "version": "Version {{version}}",
       "componentInventory": "Component Inventory",
@@ -1832,7 +1998,46 @@
         "domains_one": "Domain",
         "domains_other": "Domains",
         "agents_one": "Agent",
-        "agents_other": "Agents"
+        "agents_other": "Agents",
+        "apps_one": "App",
+        "apps_other": "Apps"
+      }
+    },
+    "appSteps": {
+      "upload": "Upload",
+      "config": "App Config",
+      "components": "Components",
+      "apiKeys": "API Keys",
+      "conflicts": "Conflicts",
+      "review": "Review",
+      "result": "Result"
+    },
+    "appSelect": {
+      "description": "Select which components to import.",
+      "selectedCount": "{{selected}} of {{total}} selected",
+      "selectAllCategory": "Select all {{category}}",
+      "apiKeyRequired": "Needs API key",
+      "dependencies_one": "{{count}} dependency: {{items}}",
+      "dependencies_other": "{{count}} dependencies: {{items}}",
+      "noneSelected": "No components selected. Select at least one component to import."
+    },
+    "appApiKeys": {
+      "noSelectedServices": "None of the selected services require an API key. You can continue.",
+      "description": "Optionally provide API keys for the selected services. You can also configure them after import.",
+      "keyLabel": "API key for {{service}}",
+      "keyPlaceholder": "API key (optional)",
+      "missingKeysInfo": "Services without API keys will use the placeholder value \"CHANGE_ME\" and must be configured after import."
+    },
+    "appReview": {
+      "appName": "App Name",
+      "conflictMode": "Conflict Mode",
+      "componentsToImport": "Components to Import",
+      "skipped_one": "Skipped ({{count}})",
+      "skipped_other": "Skipped ({{count}})",
+      "apiKeyLabel": "Key: {{status}}",
+      "apiKeyStatus": {
+        "provided": "Provided",
+        "placeholder": "CHANGE_ME"
       }
     },
     "agentReview": {
@@ -1866,6 +2071,18 @@
       "viewAgent": "View Agent",
       "mode": "Mode",
       "yes": "Yes"
+    },
+    "appResult": {
+      "importing": "Importing app...",
+      "app": "App",
+      "totalComponents": "Total Components",
+      "duration": "Duration",
+      "importedComponents": "Imported Components",
+      "warnings_one": "Warning ({{count}})",
+      "warnings_other": "Warnings ({{count}})",
+      "errors_one": "Error ({{count}})",
+      "errors_other": "Errors ({{count}})",
+      "openAppDashboard": "Open App Dashboard"
     },
     "agentDependencies": {
       "description": "Configure how dependencies are resolved for this agent.",
@@ -1907,6 +2124,10 @@
       "noConflicts": "No conflicts detected. The agent name does not exist in this app.",
       "conflictWarning": "An agent named <strong>{{name}}</strong> already exists in this app. Choose how to resolve this conflict."
     },
+    "appConflicts": {
+      "noConflicts": "No conflicts detected. A new app will be created with all selected components.",
+      "conflictWarning": "Some component names may conflict with existing ones. Choose a strategy for handling conflicts."
+    },
     "newName": {
       "label": "New Name",
       "placeholder": "Enter a new name for the component"
@@ -1932,7 +2153,10 @@
       "import": "Import",
       "importing": "Importing...",
       "cancel": "Cancel",
-      "close": "Close"
+      "close": "Close",
+      "back": "Back",
+      "next": "Next",
+      "confirmImport": "Confirm Import"
     }
   },
   "collaborationPage": {
@@ -1977,6 +2201,22 @@
       "accepted": "Accepted",
       "pending": "Pending",
       "declined": "Declined"
+    },
+    "pendingInvitations": {
+      "count_one": "{{count}} pending invitation",
+      "count_other": "{{count}} pending invitations",
+      "title": "Pending Invitations ({{count}})",
+      "closePanel": "Close notifications panel",
+      "dismissMessage": "Dismiss message",
+      "ownershipTransfer": "Ownership transfer",
+      "transferOwnershipMessage": "{{inviter}} wants to transfer ownership of this app to you. Accepting makes you the owner; the current owner becomes an administrator.",
+      "invitedAs": "{{inviter}} invited you with the role: {{role}}",
+      "accept": "Accept",
+      "decline": "Decline",
+      "acceptSuccess": "Invitation accepted successfully!",
+      "declineSuccess": "Invitation declined successfully!",
+      "acceptFailed": "Failed to accept invitation",
+      "declineFailed": "Failed to decline invitation"
     },
     "invite": {
       "title": "Invite Collaborator",
@@ -3728,6 +3968,12 @@
       "requestCouldNotBeCancelled": "The request could not be cancelled",
       "sendMessageFailed": "An error occurred",
       "removePlaygroundMediaConfirm": "Removing this media item will delete all uploaded media for this playground session. Do you want to continue?"
+    },
+    "codeExecution": {
+      "title": "Code output",
+      "running": "Running",
+      "lines_one": "{{count}} line",
+      "lines_other": "{{count}} lines"
     },
     "tabs": {
       "playground": "Playground",
