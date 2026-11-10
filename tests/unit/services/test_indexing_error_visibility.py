@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import openai
 import pytest
+from langchain_core.documents import Document
 
 from models.ai_service import AIService
 from models.embedding_service import EmbeddingService
@@ -40,12 +41,31 @@ def index_env():
     store = MagicMock()
     with patch.object(silo_service, "SessionLocal", return_value=session), \
             patch.object(silo_service, "_get_vector_store", return_value=store), \
-            patch.object(silo_service.SiloService, "extract_documents_from_file", return_value=["doc"]), \
+            patch.object(
+                silo_service.SiloService,
+                "extract_documents_from_file",
+                return_value=[Document(page_content="Resource content", metadata={})],
+            ), \
             patch.object(silo_service, "ServiceHealthService") as health:
         yield resource, store, health
 
 
 class TestResourceIndexingStatus:
+    def test_structured_pdf_marker_is_not_indexed(self, index_env):
+        from services.silo_service import SiloService
+
+        resource, store, _ = index_env
+        document = Document(
+            page_content="Structured PDF content",
+            metadata={"_aict_structured_pdf_chunk": True},
+        )
+
+        with patch.object(SiloService, "extract_documents_from_file", return_value=[document]):
+            SiloService.index_resource(resource)
+
+        indexed_docs = store.index_documents.call_args.args[1]
+        assert "_aict_structured_pdf_chunk" not in indexed_docs[0].metadata
+
     def test_success_marks_indexed_and_clears_service_error(self, index_env):
         from services.silo_service import SiloService
         resource, _, health = index_env
