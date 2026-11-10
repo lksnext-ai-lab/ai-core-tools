@@ -3,6 +3,7 @@
 from typing import Any
 
 from connectors import registry as connector_registry
+from connectors.core.settings import read_credentials
 from models.output_delivery import OutputDelivery, OutputDestination
 
 
@@ -16,7 +17,7 @@ def destination_dto(destination: OutputDestination) -> dict[str, Any]:
         "enabled": destination.enabled,
         "has_secret": bool(destination.webhook_url),
         "public_config": destination.public_config or {},
-        "has_credentials": bool(destination.credentials),
+        "has_credentials": bool(read_credentials(destination.credentials)),
         "created_at": destination.created_at,
         "updated_at": destination.updated_at,
     }

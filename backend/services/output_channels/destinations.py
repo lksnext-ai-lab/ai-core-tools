@@ -5,6 +5,7 @@ from typing import Any, assert_never
 
 from connectors import registry as connector_registry
 from connectors.core.contracts import OutboundProvider, UpdatePolicy
+from connectors.core.settings import normalize_credentials, read_credentials
 from models.output_delivery import OutputDestination
 from repositories.output_delivery_repository import OutputDeliveryRepository
 from repositories.output_destination_repository import OutputDestinationRepository
@@ -42,7 +43,7 @@ def create_destination(
         app_id=app_id, created_by=created_by, name=name,
         provider_key=provider_key, public_config=validated.public_config, webhook_url=validated.url,
         content_mode=content_mode,
-        credentials=credentials,
+        credentials=normalize_credentials(validated.credentials),
     )
     try:
         OutputDestinationRepository.create(db, destination)
@@ -77,7 +78,8 @@ def _validate_endpoint_changes(
                 changes.get("public_config") if changes.get("public_config") is not None
                 else dict(destination.public_config or {})
             )
-            new_credentials = dict(destination.credentials or {})
+            touches_credentials = changes.get("credentials") is not None or bool(changes.get("clear_credentials"))
+            new_credentials = read_credentials(destination.credentials)
             if changes.get("clear_credentials"):
                 new_credentials = {}
             if changes.get("credentials") is not None:
@@ -86,7 +88,8 @@ def _validate_endpoint_changes(
             if changes.get("webhook_url"):
                 provider.ensure_same_endpoint(destination.webhook_url, validated.url)
             return _EndpointPatch(
-                url=validated.url, public_config=validated.public_config, credentials=new_credentials or None,
+                url=validated.url, public_config=validated.public_config,
+                credentials=normalize_credentials(validated.credentials) if touches_credentials else _UNCHANGED,
             )
         case UpdatePolicy.ROTATE_URL_ONLY:
             new_url: Any = _UNCHANGED

@@ -6,6 +6,7 @@ from datetime import timedelta
 from connectors import registry as connector_registry
 from connectors.core.errors import DeliveryError
 from connectors.core.messages import OutboundRequest
+from connectors.core.settings import read_credentials
 from models.output_delivery import OutputDelivery, OutputDeliveryAttempt
 from repositories.output_delivery_repository import OutputDeliveryRepository
 from services.output_channels import delivery_policy, spool
@@ -76,7 +77,7 @@ async def process_delivery(delivery_id: int, generation: int) -> None:
         provider_key = (delivery.destination_snapshot or {}).get("provider_key", delivery.destination.provider_key)
         payload = delivery.payload
         snapshot = dict(delivery.destination_snapshot or {})
-        credentials = dict(delivery.destination.credentials or {})
+        credentials = read_credentials(delivery.destination.credentials)
         request_body = delivery.request_body
         request_body_key = delivery.request_body_path
         request_body_size = delivery.request_body_size

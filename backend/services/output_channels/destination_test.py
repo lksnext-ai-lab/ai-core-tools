@@ -5,6 +5,7 @@ from typing import Any
 
 from connectors import registry as connector_registry
 from connectors.core.messages import BodyEncoding, OutboundRequest, TestDeliveryContext
+from connectors.core.settings import read_credentials
 from models.output_delivery import OutputDestination
 from services.output_channels import messages, spool
 
@@ -30,7 +31,7 @@ async def test_destination(destination: OutputDestination) -> dict[str, Any]:
             content_type, _size, _digest = spool.write_multipart(path, prepared.payload, list(prepared.attachments))
         return dict(await provider.send(OutboundRequest(
             url=destination.webhook_url, payload=prepared.payload,
-            public_config=dict(destination.public_config or {}), credentials=destination.credentials or {},
+            public_config=dict(destination.public_config or {}), credentials=read_credentials(destination.credentials),
             event_id=prepared.event_id, attempt_number=1, content_type=content_type,
             body=body, body_path=str(path) if path else None,
         )))
