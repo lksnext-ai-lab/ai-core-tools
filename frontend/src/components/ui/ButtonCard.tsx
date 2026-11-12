@@ -1,7 +1,12 @@
 import { useId, type ReactNode } from 'react';
 import { FormCheckbox, FormField } from './FormField';
 
-export type ButtonCardVariant = 'default' | 'selectable' | 'selectable-radio' | 'selectable-check';
+export type ButtonCardVariant =
+  | 'default'
+  | 'selectable'
+  | 'selectable-radio'
+  | 'selectable-radio-trailing'
+  | 'selectable-check';
 
 export interface ButtonCardProps {
   readonly children?: ReactNode;
@@ -37,11 +42,14 @@ export function ButtonCard({
   className = '',
 }: ButtonCardProps) {
   const checkboxId = useId();
-  const radioVariant = variant === 'selectable-radio';
+  const trailingRadioVariant = variant === 'selectable-radio-trailing';
+  const radioVariant = variant === 'selectable-radio' || trailingRadioVariant;
   const checkboxVariant = variant === 'selectable-check';
   const inputVariant = radioVariant || checkboxVariant;
   const selectableClassName = selected
-    ? 'bg-surface-hover dark:bg-btCard-hover border-2 border-bg-soft dark:border-bronze-border-dark'
+    ? trailingRadioVariant
+      ? 'bg-surface-tint dark:bg-surface-hover-dark border border-ink dark:border-line-strong-dark'
+      : 'bg-surface-hover dark:bg-btCard-hover border-2 border-bg-soft dark:border-bronze-border-dark'
     : 'bg-surface dark:bg-surface-dark border border-line dark:border-line-dark';
   const variantClassName = variant === 'selectable' || inputVariant
     ? `rounded-md p-3 transition-colors ${selectableClassName}`
@@ -52,8 +60,11 @@ export function ButtonCard({
 
   return (
     <div
-      className={`group relative flex h-full flex-col text-left ${variantClassName} ${className}`}
-    >
+      className={`group relative flex h-full flex-col text-left
+        has-[:focus-visible]:ring-2
+        has-[:focus-visible]:ring-accent
+        ${variantClassName} ${className}`}
+      >
       <button
         type="button"
         onClick={() => {
@@ -66,7 +77,7 @@ export function ButtonCard({
         tabIndex={inputVariant ? -1 : undefined}
         className="absolute inset-0 z-0 h-full w-full cursor-pointer rounded-md outline-none focus-visible:outline-none disabled:cursor-default"
       />
-      <div className={`pointer-events-none relative z-10 flex min-h-0 flex-1 ${radioVariant ? 'flex-row items-start gap-3' : 'flex-col'} ${interactiveChildrenClassName}`}>
+      <div className={`pointer-events-none relative z-10 flex min-h-0 flex-1 ${radioVariant ? (trailingRadioVariant ? 'flex-row-reverse items-start gap-3' : 'flex-row items-start gap-3') : 'flex-col'} ${interactiveChildrenClassName}`}>
         {radioVariant && (
           <FormField
             id={`${radioName ?? 'button-card-radio'}-${radioValue ?? ariaLabel}`}
@@ -74,6 +85,8 @@ export function ButtonCard({
             type="radio"
             value={radioValue ?? ''}
             checked={selected}
+            ariaLabel={ariaLabel}
+            disabled={disabled}
             label={undefined}
             className="w-fit"
             inputClassName="mt-1 cursor-pointer"

@@ -207,6 +207,53 @@ frontend/src/
 - Global state via React Context (`useUser()`, `useTheme()`)
 - Route protection via `ProtectedRoute` and `AdminRoute` components
 
+
+### Frontend UI Design Rules
+
+The Mattin AI frontend redesign is complete.
+
+The current frontend implementation is the visual reference
+for all future UI development.
+
+These rules apply whenever creating or modifying React
+components, pages, forms, or other visual elements,
+including new features and maintenance tasks.
+
+Before implementing UI changes:
+
+1. Read and follow: `.github/instructions/frontend-design.instructions.md`
+2. Check `frontend/src/components/ui` for existing reusable components before creating new ones.
+3. Reuse existing components, props, and variants whenever possible.
+4. Respect the current design tokens, CSS variables, Tailwind CSS 3 conventions, responsive behavior, and light/dark themes.
+5. Preserve existing functionality and visual consistency.
+6. Do not redesign unrelated components or pages.
+7. Follow the project's Storybook conventions for reusable UI components.
+
+These instructions are mandatory for frontend UI tasks,
+not only for explicit redesign requests.
+
+
+### Frontend Internationalization (i18n)
+
+All user-facing text in React components must follow
+the existing project internationalization conventions.
+
+Before creating or modifying UI components, read and follow
+the internationalization rules defined in:
+
+`.github/instructions/react-conventions.instructions.md`
+
+In particular:
+- Reuse existing translation keys whenever possible.
+- Do not create duplicate translation keys.
+- Add new keys to all supported locale files.
+- Never hardcode user-facing text in JSX or TypeScript.
+- Follow the existing i18n naming conventions and namespaces.
+- Verify internationalization before completing UI changes.
+
+These rules apply to all frontend UI development tasks,
+not only explicit translation requests.
+
 ### Client Projects (`clients/<name>/`)
 
 Frontend-only projects consuming `@lksnext/ai-core-tools-base`. All customization via `src/config/clientConfig.ts` (theme, branding, auth config, API URL, feature flags, custom routes). Never modify the base library for client-specific features.

@@ -94,6 +94,28 @@ Do not introduce Redux/Jotai/Recoil for new features — the project standardize
 - **Accessibility (WCAG 2.1)**: semantic HTML, keyboard-navigable controls, visible focus rings, `aria-label` for icon-only buttons, no color-only signaling.
 - **Icons**: use the project's chosen icon library — do NOT introduce new icon libraries. Import individual icons, not the whole library.
 
+## Frontend Design System
+
+The Mattin AI frontend redesign is complete. The current UI is
+the visual reference for all future frontend development.
+
+When creating or modifying React components, pages, forms,
+or other visual elements, read and follow:
+
+`.github/instructions/frontend-design.instructions.md`
+
+These design rules apply to all frontend development tasks,
+not only explicit redesign requests.
+
+Before implementing UI changes:
+- Check `frontend/src/components/ui` for reusable components.
+- Reuse existing components and their props or variants whenever possible.
+- Follow the existing design tokens and CSS variables.
+- Preserve visual consistency across new and existing features.
+- Do not redesign unrelated components.
+- Follow the project's Storybook conventions for reusable UI components.
+
+
 ## Auth Flows (mirror the backend)
 
 `frontend/src/auth/` implements three modes that line up with backend `AICT_LOGIN`:
@@ -139,3 +161,32 @@ npm run lint               # ESLint
 - ❌ Forgetting the dark-mode variant on a new screen
 - ❌ Adding a `useEffect` to derive state from props — compute inline or `useMemo`
 - ❌ Drifting `agentConstants.ts` from backend defaults
+
+
+## Internationalization (i18n)
+
+All user-facing text in React components must use the
+existing internationalization system.
+
+This rule applies to both new components and modifications
+to existing components.
+
+- Never hardcode user-facing text in JSX or TypeScript.
+- Use the project's existing i18n library and conventions.
+- Before adding translations, inspect how i18n is implemented
+  in similar components.
+- Reuse existing translation keys whenever appropriate.
+- Do not create duplicate keys for equivalent texts.
+- When new keys are necessary, follow the existing naming
+  conventions and namespaces.
+- Add new translation keys to all supported locale files.
+- Keep translation keys consistent across all languages.
+- Translate labels, placeholders, buttons, validation messages,
+  tooltips, modal titles, and accessibility text.
+- Do not replace existing translation keys unnecessarily.
+- Do not introduce a new internationalization library.
+- Do not modify unrelated translations.
+
+Before completing a UI task, verify that all newly introduced
+user-facing text is internationalized and that the required
+translation keys exist in all supported locales.

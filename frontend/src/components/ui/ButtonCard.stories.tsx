@@ -17,7 +17,7 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['default', 'selectable', 'selectable-radio', 'selectable-check'],
+      options: ['default', 'selectable', 'selectable-radio', 'selectable-radio-trailing', 'selectable-check'],
     },
     selected: {
       control: 'boolean',
@@ -259,6 +259,49 @@ function SelectableRadioDemo() {
 
 export const SelectableRadio: Story = {
   render: () => <SelectableRadioDemo />,
+};
+
+function SelectableRadioTrailingDemo() {
+  const [selected, setSelected] = useState('OpenAI');
+  const options = [
+    { value: 'Anthropic', monogram: 'AN', description: 'Claude Opus, Sonnet y Haiku.' },
+    { value: 'OpenAI', monogram: 'OA', description: 'GPT-4o, serie o, embeddings y Whisper.' },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 gap-3">
+      {options.map((option) => (
+        <ButtonCard
+          key={option.value}
+          variant="selectable-radio-trailing"
+          radioName="provider-story"
+          radioValue={option.value}
+          selected={selected === option.value}
+          ariaLabel={option.value}
+          onClick={() => setSelected(option.value)}
+        >
+          <div className="flex items-start gap-4">
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-accent text-sm font-medium text-fg dark:border-accent-dark dark:text-fg-dark"
+            >
+              {option.monogram}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-base font-medium text-fg dark:text-fg-dark">{option.value}</span>
+              <p className="mt-1 text-sm leading-5 text-fg-secondary dark:text-fg-secondary-dark">
+                {option.description}
+              </p>
+            </div>
+          </div>
+        </ButtonCard>
+      ))}
+    </div>
+  );
+}
+
+export const SelectableRadioTrailing: Story = {
+  render: () => <SelectableRadioTrailingDemo />,
 };
 
 export const Grid: Story = {

@@ -1130,20 +1130,14 @@ export default function MarketplaceChatPage() {
         </div>
       </div>
 
-      <AttachedFilesPanel
-        files={panelFiles}
-        isLoading={isLoadingFiles}
-        onRemoveFile={handleRemoveFile}
-        onDownloadFile={handleDownloadFile}
-      />
-
-      {agentDetail && (
-        <aside
-          aria-label={t('marketplaceChat.agentDetails')}
-          className="w-80 flex-none h-full min-h-0 overflow-y-auto overscroll-contain p-5
-                     bg-canvas-alt dark:bg-canvas-alt-dark border-l border-line dark:border-line-dark"
-        >
-          <h2 className="font-display text-[17px] font-normal tracking-tight text-fg dark:text-fg-dark mb-4">
+      <div
+        className="w-80 flex-none h-full min-h-0 overflow-y-auto overscroll-contain p-5
+                   bg-canvas-alt dark:bg-canvas-alt-dark border-l border-line dark:border-line-dark
+                   flex flex-col gap-3.5"
+      >
+        {agentDetail && (
+          <aside aria-label={t('marketplaceChat.agentDetails')} className="flex flex-col gap-3.5">
+          <h2 className="font-display text-[17px] font-normal tracking-tight text-fg dark:text-fg-dark ">
             {t('marketplaceChat.agentDetails')}
           </h2>
 
@@ -1151,7 +1145,7 @@ export default function MarketplaceChatPage() {
             {/* Capabilities */}
             {(agentDetail.category || agentDetail.has_knowledge_base || agentDetail.has_memory || (agentDetail.tags && agentDetail.tags.length > 0)) && (
               <section className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg px-[18px] py-4">
-                <h3 className="text-[11px] font-[700] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark mb-3">
+                <h3 className="text-[11px] font-[700] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">
                   {t('marketplaceChat.capabilities')}
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
@@ -1250,8 +1244,17 @@ export default function MarketplaceChatPage() {
               </section>
             )}
           </div>
-        </aside>
-      )}
+          </aside>
+        )}
+
+        <AttachedFilesPanel
+          variant="section"
+          files={panelFiles}
+          isLoading={isLoadingFiles}
+          onRemoveFile={handleRemoveFile}
+          onDownloadFile={handleDownloadFile}
+        />
+      </div>
     </div>
   );
 }

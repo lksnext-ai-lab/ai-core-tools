@@ -471,7 +471,7 @@ async function resetConversation(conversationId = null) {
       </CardApp>
 
       {/* Request Body + Response Format */}
-      <CardApp className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <CardApp  titulo={t('agentPlayground.apiExamples.requestBodyFor', { agentName })} icon={ClipboardList}>
           <pre className={codeBlockClasses}>
             <code>{requestBodyJson}</code>
@@ -493,7 +493,7 @@ async function resetConversation(conversationId = null) {
             </code>
           </pre>
         </CardApp>
-      </CardApp>
+      </div>
 
       {/* Code Example */}
       <CardApp className="space-y-4">

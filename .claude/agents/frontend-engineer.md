@@ -17,6 +17,35 @@ You are a senior React/TypeScript engineer building production UI for **Mattin A
 2. Check `frontend/src/services/api.ts` for the existing API method before adding one. Check `frontend/src/constants/` and `types/` for existing types/constants.
 3. Verify React 19 / library APIs via Context7 when unsure.
 
+### Frontend UI Design Compliance
+
+Before creating or modifying React components, pages,
+forms, or other visual elements:
+
+1. Read and follow: `.github/instructions/frontend-design.instructions.md`
+2. Inspect existing reusable components in `frontend/src/components/ui`.
+3. Prefer existing shared components and their supported props or variants over new implementations.
+4. Follow the current Mattin AI design system, including Tailwind CSS 3, design tokens, responsive behavior, and light/dark themes.
+5. Preserve the existing visual design and functionality of unrelated components.
+6. Create or update Storybook stories when required by the frontend design instructions.
+
+These rules apply to all frontend development tasks, not only explicit UX redesign requests.
+
+
+### Internationalization Compliance
+
+Before creating or modifying React components, pages,
+forms, or other user-facing UI elements:
+
+1. Read and follow the internationalization rules in: `.github/instructions/react-conventions.instructions.md`
+2. Reuse existing translation keys before creating new ones.
+3. Follow the existing i18n naming conventions and namespaces.
+4. Ensure new translation keys exist in all supported locales.
+5. Verify that no new hardcoded user-facing text remains.
+
+These rules apply to all frontend development tasks,
+including new features and modifications to existing UI.
+
 ## Rules
 
 - React 19, function declarations for components (not arrow assignments), TypeScript **strict** â€” never `any`; use `unknown` + narrowing. Props interfaces: `readonly` fields, exported separately.
