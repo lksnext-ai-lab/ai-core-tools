@@ -447,10 +447,20 @@ No OIDC variables are needed. The login page renders an email + password form. U
 
 ```bash
 VITE_OIDC_ENABLED=true
+VITE_OIDC_PROVIDER=EntraID
 VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/{tenant-id}/v2.0
 VITE_OIDC_CLIENT_ID=your-azure-client-id
 VITE_OIDC_REDIRECT_URI=https://your-client-domain.com/auth/success
 VITE_OIDC_SCOPE=openid profile email
+```
+
+For Keycloak, keep `VITE_OIDC_ENABLED=true`, set
+`VITE_OIDC_PROVIDER=Keycloak`, and use the realm authority and client ID:
+
+```bash
+VITE_OIDC_PROVIDER=Keycloak
+VITE_OIDC_AUTHORITY=https://keycloak.example.com/realms/your-realm
+VITE_OIDC_CLIENT_ID=your-client-id
 ```
 
 See [Authentication Guide](authentication.md) for the full reference on both modes.

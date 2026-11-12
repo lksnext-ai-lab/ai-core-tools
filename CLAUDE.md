@@ -223,8 +223,9 @@ cd ../clients/<client-name> && npm install
 
 ```env
 SQLALCHEMY_DATABASE_URI=postgresql://user:pass@localhost:5432/dbname
-AICT_LOGIN=OIDC                 # OIDC (Microsoft Entra, default) | LOCAL (admin-provisioned email+password)
+AICT_LOGIN=OIDC                 # OIDC (provider selected by OAUTH_PROVIDER) | LOCAL (admin-provisioned email+password)
                                 # FAKE mode is retired — the dev-login endpoint no longer exists.
+OAUTH_PROVIDER=ENTRAID          # ENTRAID or KEYCLOAK when AICT_LOGIN=OIDC
 SECRET_KEY=                     # REQUIRED. No default. App fails fast if missing, too short (<32 chars),
                                 # or a known-insecure placeholder. Rotating this key invalidates ALL sessions.
                                 # Generate: python -c "import secrets; print(secrets.token_hex(32))"

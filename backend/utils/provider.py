@@ -6,11 +6,14 @@ Only initialized when AICT_LOGIN=OIDC. In LOCAL mode the provider is not used.
 import os
 from typing import Optional
 from lks_idprovider_entraid import EntraIDProvider, EntraIDConfig, TokenType
+from lks_idprovider.protocols import IdentityProvider
+from utils.keycloak_provider import KeycloakProvider
+from utils.auth_config import AuthConfig
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_provider_instance: Optional[EntraIDProvider] = None
+_provider_instance: Optional[IdentityProvider] = None
 
 # Clock skew tolerated on exp/nbf/iat. 300 s matches Microsoft.IdentityModel's
 # default ClockSkew and is the maximum EntraIDConfig accepts.
@@ -63,27 +66,35 @@ def get_entra_config() -> EntraIDConfig:
     return config
 
 
-async def initialize_provider() -> EntraIDProvider:
-    """Initialize the EntraID provider singleton; call during app startup."""
+async def initialize_provider() -> IdentityProvider:
+    """Initialize the configured OIDC provider singleton during app startup."""
     global _provider_instance
 
     if _provider_instance is not None:
         logger.warning("Provider already initialized, skipping re-initialization")
         return _provider_instance
 
-    config = get_entra_config()
-    provider = EntraIDProvider(config)
+    if AuthConfig.OAUTH_PROVIDER == "KEYCLOAK":
+        provider: IdentityProvider = KeycloakProvider(
+            issuer=AuthConfig.KEYCLOAK_ISSUER or "",
+            client_id=AuthConfig.KEYCLOAK_CLIENT_ID or "",
+            discovery_url=AuthConfig.KEYCLOAK_DISCOVERY_URL,
+            jwks_url=AuthConfig.KEYCLOAK_JWKS_URL,
+            leeway=AuthConfig.KEYCLOAK_LEEWAY,
+        )
+    else:
+        provider = EntraIDProvider(get_entra_config())
 
     await provider.__aenter__()
 
     try:
         health = await provider.health_check()
         if health.get("status") == "healthy":
-            logger.info("✅ EntraID provider initialized and healthy")
+            logger.info("%s provider initialized and healthy", AuthConfig.OAUTH_PROVIDER)
         else:
-            logger.warning(f"⚠️  EntraID provider initialized but unhealthy: {health}")
+            logger.warning("%s provider initialized but unhealthy: %s", AuthConfig.OAUTH_PROVIDER, health)
     except Exception as e:
-        logger.error(f"❌ EntraID provider health check failed: {e}")
+        logger.error("%s provider health check failed: %s", AuthConfig.OAUTH_PROVIDER, e)
 
     _provider_instance = provider
     return provider
@@ -99,14 +110,14 @@ async def shutdown_provider():
 
     try:
         await _provider_instance.__aexit__(None, None, None)
-        logger.info("EntraID provider shutdown complete")
+        logger.info("%s provider shutdown complete", AuthConfig.OAUTH_PROVIDER)
     except Exception as e:
         logger.error(f"Error shutting down provider: {e}")
     finally:
         _provider_instance = None
 
 
-def get_provider() -> EntraIDProvider:
+def get_provider() -> IdentityProvider:
     """Return the provider singleton for use as a FastAPI dependency.
 
     Raises:

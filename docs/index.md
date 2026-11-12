@@ -28,6 +28,7 @@
 - [Backend Architecture](architecture/backend.md) — FastAPI structure, services, repositories, and models
 - [Frontend Architecture](architecture/frontend.md) — React library, pages, components, contexts, and theming
 - [Database Schema](architecture/database.md) — SQLAlchemy models, migrations, and pgvector integration
+- [SCIM Provisioning RFC](architecture/rfc-scim-provisioning.md) — Provider-neutral SCIM 2.0 design, identity linking, group access, and client interoperability
 
 ### AI & LLM
 - [LLM Integration](ai/llm-integration.md) — Supported LLM providers, configuration, and structured output

@@ -165,6 +165,12 @@ function RobotGreeting() {
 type LoginErrorField = 'email' | 'password' | 'both' | null;
 
 function LoginPage() {
+  const runtimeConfig = (globalThis as unknown as {
+    __RUNTIME_CONFIG__?: Record<string, string>;
+  }).__RUNTIME_CONFIG__;
+  const oidcProviderName = runtimeConfig?.VITE_OIDC_PROVIDER
+    || import.meta.env.VITE_OIDC_PROVIDER
+    || 'SSO';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<LoginErrorField>(null);
@@ -413,7 +419,7 @@ function LoginPage() {
                     <path fill="#F25022" d="M12.623 12.628H24V24H12.623z" />
                   </svg>
                 )}
-                {loading ? 'Signing in...' : 'Sign in with Microsoft'}
+                {loading ? 'Signing in...' : `Sign in with ${oidcProviderName}`}
               </button>
             )}
 

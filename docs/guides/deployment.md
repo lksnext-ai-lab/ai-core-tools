@@ -396,6 +396,7 @@ SQLALCHEMY_DATABASE_URI=postgresql://mattin:password@postgres:5432/mattin_ai
 
 # Authentication
 AICT_LOGIN=OIDC
+OAUTH_PROVIDER=ENTRAID
 SECRET_KEY=production-secret-key-256-bit
 AICT_OMNIADMINS=admin@company.com
 
@@ -403,6 +404,14 @@ AICT_OMNIADMINS=admin@company.com
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_CLIENT_ID=your-client-id
 ENTRA_CLIENT_SECRET=your-client-secret
+```
+
+For Keycloak, replace `OAUTH_PROVIDER=ENTRAID` and the Entra variables with:
+
+```bash
+OAUTH_PROVIDER=KEYCLOAK
+KEYCLOAK_ISSUER=https://keycloak.example.com/realms/your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
 
 # LLM API Keys
 OPENAI_API_KEY=sk-proj-...
@@ -426,6 +435,14 @@ VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/{tenant-id}/v2.0
 VITE_OIDC_CLIENT_ID=your-azure-client-id
 VITE_OIDC_REDIRECT_URI=https://mattin.your-domain.com/auth/success
 ```
+
+For Docker deployments, these frontend values are written at container
+startup by `frontend/generate-config.sh` into the runtime `config.js`. Runtime
+values take precedence over values compiled into the bundle. In local Vite
+development, the placeholder `frontend/public/config.js` uses empty values so
+the corresponding variables from `frontend/.env` are used. Do not set
+`VITE_OIDC_ENABLED=false` in the runtime configuration unless OIDC is
+intentionally disabled.
 
 ## Library Publishing
 

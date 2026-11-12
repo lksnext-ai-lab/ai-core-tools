@@ -184,7 +184,8 @@ VITE_OIDC_ENABLED=false
 VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/success
 ```
 
-> **Note**: When running without Docker, the frontend runs on port 5173 (Vite default), so `VITE_OIDC_REDIRECT_URI` must be updated accordingly if you enable OIDC authentication.
+> To use OIDC locally, set `VITE_OIDC_ENABLED=true` and configure the provider
+> variables shown in the authentication section below. > **Note**: When running without Docker, the frontend runs on port 5173 (Vite default), so `VITE_OIDC_REDIRECT_URI` must be updated accordingly if you enable OIDC authentication.
 
 ```bash
 # Start development server
@@ -234,26 +235,57 @@ Configure these through the web interface or environment variables.
 
 ## Authentication Modes
 
-### Development Mode (AICT_LOGIN=FAKE)
+### Development Mode (AICT_LOGIN=LOCAL)
 
 - Simple email login
 - Ideal for testing and development
 - No additional configuration required
 - Email must exist in the database
 
-### Production Mode (AICT_LOGIN=OIDC)
+### OIDC Mode (AICT_LOGIN=OIDC)
 
-- Authentication with Microsoft Entra ID (Azure AD)
-- Requires configuration:
+- Authentication with the selected OIDC provider
+- Configure the backend and frontend separately.
+
+For Microsoft Entra ID, configure the backend `.env`:
 
 ```env
 AICT_LOGIN=OIDC
+OAUTH_PROVIDER=ENTRAID
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_CLIENT_ID=your-client-id
 ENTRA_CLIENT_SECRET=your-client-secret
+```
+
+Then configure the frontend `.env`:
+
+```env
 VITE_OIDC_ENABLED=true
+VITE_OIDC_PROVIDER=EntraID
 VITE_OIDC_AUTHORITY=https://login.microsoftonline.com/{tenant-id}/v2.0
 VITE_OIDC_CLIENT_ID=your-client-id
+VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/success
+VITE_OIDC_SCOPE=openid profile email
+```
+
+For Keycloak, configure the backend `.env` as follows:
+
+```env
+AICT_LOGIN=OIDC
+OAUTH_PROVIDER=KEYCLOAK
+KEYCLOAK_ISSUER=https://keycloak.example.com/realms/your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
+```
+
+Then configure the frontend `.env` with the matching realm and client:
+
+```env
+VITE_OIDC_ENABLED=true
+VITE_OIDC_PROVIDER=Keycloak
+VITE_OIDC_AUTHORITY=https://keycloak.example.com/realms/your-realm
+VITE_OIDC_CLIENT_ID=your-client-id
+VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/success
+VITE_OIDC_SCOPE=openid profile email
 ```
 
 ---

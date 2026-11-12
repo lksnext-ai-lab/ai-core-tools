@@ -401,9 +401,8 @@ The backend uses environment variables for client-specific configuration:
 # Backend .env configuration
 CLIENT_ID=my-client
 CLIENT_NAME="My Awesome Client AI"
-OIDC_ENABLED=false  # Set to true if using OIDC
-OIDC_AUTHORITY=https://your-oidc-provider.com
-OIDC_CLIENT_ID=my-client-backend
+AICT_LOGIN=LOCAL  # Use OIDC for an external identity provider
+OAUTH_PROVIDER=ENTRAID  # Or KEYCLOAK when AICT_LOGIN=OIDC
 ```
 
 ### 5.2. Client Configuration Endpoint
