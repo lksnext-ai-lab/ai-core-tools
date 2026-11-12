@@ -89,7 +89,10 @@ class AuthConfig:
             logger.warning(f"Invalid AICT_LOGIN value '{cls.LOGIN_MODE}', defaulting to OIDC")
             cls.LOGIN_MODE = 'OIDC'
 
-        cls.OIDC_ENABLED = os.getenv('OIDC_ENABLED', 'true').lower() == 'true'
+        # AICT_LOGIN is the single source of truth for the authentication mode.
+        # Keep OIDC_ENABLED as a derived compatibility field for callers of the
+        # configuration summary; it is no longer read from the environment.
+        cls.OIDC_ENABLED = cls.LOGIN_MODE == 'OIDC'
 
         if not cls.OIDC_ENABLED:
             cls._setup_dev_users()
@@ -129,6 +132,10 @@ class AuthConfig:
         logger.info(f"[LOCK] Login mode: {cls.LOGIN_MODE}")
         logger.info(f"[KEY] OAuth Provider: {cls.OAUTH_PROVIDER}")
 
+        if cls.LOGIN_MODE == 'LOCAL':
+            logger.info("[OK] LOCAL authentication is configured")
+            return
+
         if cls.is_oauth_configured():
             cls._log_configured_oauth_status()
             return
@@ -150,16 +157,6 @@ class AuthConfig:
 
     @classmethod
     def _log_unconfigured_oauth_status(cls) -> None:
-        if not cls.OIDC_ENABLED:
-            logger.warning(
-                f"[WARN] {cls.OAUTH_PROVIDER} OAuth not configured, running in DEVELOPMENT MODE "
-                "(OIDC_ENABLED=false) with test tokens"
-            )
-            logger.info("[KEY] Development tokens available:")
-            for token, user in cls.DEV_USERS.items():
-                logger.info(f"   {token} -> {user['email']} (ID: {user['user_id']})")
-            return
-
         logger.error(f"[ERROR] {cls.OAUTH_PROVIDER} OAuth not configured")
         if cls.OAUTH_PROVIDER == 'GOOGLE':
             logger.error("   Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables")
@@ -167,7 +164,7 @@ class AuthConfig:
             logger.error("   Set ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET, and ENTRA_TENANT_ID environment variables")
         elif cls.OAUTH_PROVIDER == 'KEYCLOAK':
             logger.error("   Set KEYCLOAK_ISSUER and KEYCLOAK_CLIENT_ID environment variables")
-        logger.error("   Or set OIDC_ENABLED=false for development mode testing")
+        logger.error("   Or set AICT_LOGIN=LOCAL for local authentication")
 
     @classmethod
     def is_oauth_configured(cls) -> bool:
@@ -182,8 +179,8 @@ class AuthConfig:
 
     @classmethod
     def is_development_mode(cls) -> bool:
-        """Check if running in development mode (OIDC disabled)"""
-        return not cls.OIDC_ENABLED
+        """Return whether the application uses LOCAL authentication."""
+        return cls.LOGIN_MODE == 'LOCAL'
 
     @classmethod
     def get_dev_user(cls, token: str) -> Optional[Dict[str, Any]]:
@@ -201,7 +198,7 @@ class AuthConfig:
             "development_mode": cls.is_development_mode(),
             "jwt_secret_set": _is_secret_key_valid(),
             "frontend_url": cls.FRONTEND_URL,
-            "dev_users_count": len(cls.DEV_USERS) if not cls.OIDC_ENABLED else 0
+            "dev_users_count": len(cls.DEV_USERS) if cls.LOGIN_MODE == 'LOCAL' else 0
         }
 
         if cls.OAUTH_PROVIDER == 'GOOGLE':

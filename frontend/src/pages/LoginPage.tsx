@@ -165,7 +165,12 @@ function RobotGreeting() {
 type LoginErrorField = 'email' | 'password' | 'both' | null;
 
 function LoginPage() {
-  const oidcProviderName = import.meta.env.VITE_OIDC_PROVIDER || 'SSO';
+  const runtimeConfig = (globalThis as unknown as {
+    __RUNTIME_CONFIG__?: Record<string, string>;
+  }).__RUNTIME_CONFIG__;
+  const oidcProviderName = runtimeConfig?.VITE_OIDC_PROVIDER
+    || import.meta.env.VITE_OIDC_PROVIDER
+    || 'SSO';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<LoginErrorField>(null);

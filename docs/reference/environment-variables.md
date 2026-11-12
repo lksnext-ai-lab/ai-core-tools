@@ -44,7 +44,7 @@ DATABASE_HOST=postgres  # Service name in docker-compose
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC` (Microsoft Entra) or `LOCAL` (admin-provisioned email+password). FAKE mode is retired. |
+| `AICT_LOGIN` | No | `OIDC` | Authentication mode: `OIDC` (provider selected with `OAUTH_PROVIDER`) or `LOCAL` (admin-provisioned email+password). FAKE mode is retired. |
 | `SECRET_KEY` | **Yes** | — | Application secret key. Must be at least 32 characters and not a known placeholder. App fails fast at startup if the check fails. Used to sign JWTs and set-password tokens — rotating this value invalidates all active sessions. |
 | `AICT_OMNIADMINS` | No | — | Comma-separated email addresses of superusers |
 | `JWT_ALGORITHM` | No | `HS256` | **Legacy — read but unused at runtime.** LOCAL mode hardcodes HS256. |
@@ -55,6 +55,7 @@ DATABASE_HOST=postgres  # Service name in docker-compose
 **OIDC mode**:
 ```bash
 AICT_LOGIN=OIDC
+OAUTH_PROVIDER=ENTRAID
 SECRET_KEY=<64-char hex string>
 AICT_OMNIADMINS=admin@example.com
 ```
@@ -148,15 +149,20 @@ QDRANT_URL=http://localhost:6333
 # QDRANT_API_KEY=...  # For Qdrant Cloud
 ```
 
-### Entra ID (OIDC)
+### OIDC providers
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OAUTH_PROVIDER` | No | `ENTRAID` | Provider: `ENTRAID` or `GOOGLE` |
+| `OAUTH_PROVIDER` | No | `ENTRAID` | Provider: `ENTRAID`, `GOOGLE`, or `KEYCLOAK` |
 | `ENTRA_TENANT_ID` | OIDC | — | Azure tenant ID |
 | `ENTRA_CLIENT_ID` | OIDC | — | Azure application (client) ID |
 | `ENTRA_CLIENT_SECRET` | OIDC | — | Azure client secret |
 | `ENTRA_REDIRECT_URI` | No | `/auth/callback` | OAuth redirect URI |
+| `KEYCLOAK_ISSUER` | Keycloak OIDC | — | Keycloak realm issuer URL |
+| `KEYCLOAK_CLIENT_ID` | Keycloak OIDC | — | Keycloak client ID |
+| `KEYCLOAK_DISCOVERY_URL` | No | `<issuer>/.well-known/openid-configuration` | Discovery document override |
+| `KEYCLOAK_JWKS_URL` | No | Discovery `jwks_uri` | JWKS endpoint override |
+| `KEYCLOAK_LEEWAY` | No | `60` | Clock skew tolerated while validating tokens (seconds) |
 
 **Example**:
 ```bash
@@ -166,6 +172,15 @@ ENTRA_TENANT_ID=your-tenant-id
 ENTRA_CLIENT_ID=your-client-id
 ENTRA_CLIENT_SECRET=your-client-secret
 ENTRA_REDIRECT_URI=http://localhost:8000/auth/callback
+```
+
+**Keycloak**:
+
+```bash
+AICT_LOGIN=OIDC
+OAUTH_PROVIDER=KEYCLOAK
+KEYCLOAK_ISSUER=https://keycloak.example.com/realms/your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
 ```
 
 **Google OAuth** (alternative):
@@ -354,6 +369,31 @@ VITE_API_BASE_URL=https://api.your-domain.com
 | `VITE_OIDC_REDIRECT_URI` | No | `/auth/success` | OIDC redirect URI |
 | `VITE_OIDC_SCOPE` | No | `openid profile email` | OIDC scopes |
 | `VITE_OIDC_AUDIENCE` | No | — | OIDC audience (optional) |
+
+#### Frontend runtime configuration precedence
+
+The frontend supports two configuration sources:
+
+1. `frontend/public/config.js`, exposed as `window.__RUNTIME_CONFIG__`.
+2. The build-time values from `frontend/.env` (or the Vite environment).
+
+When a runtime value is non-empty, it takes precedence over the build-time
+value. The `public/config.js` file committed to the repository is only a local
+development placeholder, so its values are intentionally empty. An empty
+runtime value allows the corresponding `VITE_*` value from `frontend/.env` to
+be used.
+
+This distinction is important for boolean settings. Values are strings:
+
+```javascript
+VITE_OIDC_ENABLED: ""       // use VITE_OIDC_ENABLED from frontend/.env
+VITE_OIDC_ENABLED: "true"   // explicitly enable OIDC
+VITE_OIDC_ENABLED: "false"  // explicitly disable OIDC
+```
+
+In Docker, `frontend/generate-config.sh` generates `config.js` at container
+startup. Set the `VITE_*` variables in the Docker environment to the desired
+values; those runtime values override values baked into the frontend bundle.
 
 **Example (Azure Entra ID)**:
 ```bash

@@ -8,7 +8,7 @@ Mattin AI supports two authentication modes, controlled by the `AICT_LOGIN` envi
 
 | Mode | Value | Use case |
 |------|-------|----------|
-| **OIDC** | `OIDC` | Enterprise identity provider (Azure Entra ID). Default. |
+| **OIDC** | `OIDC` | Enterprise identity provider selected with `OAUTH_PROVIDER`. |
 | **LOCAL** | `LOCAL` | Self-hosted deployments with admin-provisioned email + password accounts. |
 
 > **FAKE mode is retired.** The `dev-login` endpoint no longer exists and returns 404 in OIDC and LOCAL modes. Setting `AICT_LOGIN=FAKE` raises a `RuntimeError` at startup. Existing deployments must migrate to LOCAL or OIDC.
@@ -24,31 +24,54 @@ Authentication is split into two independent surfaces:
 
 **OpenID Connect** authentication via enterprise identity providers.
 
-**Supported provider**: Azure Entra ID (Microsoft Entra).
+**Supported providers**: Microsoft Entra ID and Keycloak.
 
 ### Configuration
 
 ```bash
 AICT_LOGIN=OIDC
+OAUTH_PROVIDER=ENTRAID
 
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_CLIENT_ID=your-client-id
 ENTRA_CLIENT_SECRET=your-client-secret
 ```
 
+To use Keycloak, select it explicitly and configure the realm issuer and
+client instead:
+
+```bash
+AICT_LOGIN=OIDC
+OAUTH_PROVIDER=KEYCLOAK
+
+KEYCLOAK_ISSUER=https://keycloak.example.com/realms/your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
+```
+
 ### Login flow
 
 ```
 1. User clicks "Login" → frontend redirects to /internal/auth/login
-2. Backend redirects to Azure Entra ID
-3. User authenticates with Entra
-4. Entra redirects to /internal/auth/callback with auth code
+2. Backend redirects to the configured OIDC provider
+3. User authenticates with the configured provider
+4. The provider redirects to /internal/auth/callback with auth code
 5. Backend exchanges code for tokens; user info is read from the id_token
 6. User record created/updated in the database
 7. Session cookie set → user redirected to frontend
 ```
 
-**Libraries used**: `lks-idprovider-fastapi`, `lks-idprovider-entraid`.
+**Libraries used**: `lks-idprovider-fastapi`, `lks-idprovider-entraid` for
+EntraID, and the built-in Keycloak provider for Keycloak.
+
+### Keycloak setup
+
+1. Create a client in the target Keycloak realm.
+2. Configure the frontend callback URI:
+   `https://<your-host>/auth/success`.
+3. Set `AICT_LOGIN=OIDC` and `OAUTH_PROVIDER=KEYCLOAK`.
+4. Set `KEYCLOAK_ISSUER` to the realm issuer URL and
+   `KEYCLOAK_CLIENT_ID` to the client ID.
+5. Ensure the backend can reach the issuer discovery document and JWKS URL.
 
 ### Azure setup
 
@@ -66,6 +89,13 @@ VITE_OIDC_CLIENT_ID=your-azure-client-id
 VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/success
 VITE_OIDC_SCOPE=openid profile email
 ```
+
+In local Vite development, `frontend/public/config.js` is a placeholder. Its
+empty runtime values allow the values in `frontend/.env` to take effect. In a
+Docker deployment, `frontend/generate-config.sh` replaces that file at startup;
+non-empty runtime values override the build-time `.env` values. In particular,
+`"false"` explicitly disables OIDC, while an empty runtime value means
+“fallback to `.env`”.
 
 ---
 

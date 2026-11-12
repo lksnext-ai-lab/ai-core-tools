@@ -9,6 +9,7 @@ export interface RuntimeConfig {
   VITE_OIDC_CLIENT_ID: string;
   VITE_OIDC_REDIRECT_URI: string;
   VITE_OIDC_SCOPE: string;
+  VITE_OIDC_PROVIDER: string;
   VITE_OIDC_AUDIENCE: string;
 }
 
