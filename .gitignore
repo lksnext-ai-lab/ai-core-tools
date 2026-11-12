@@ -105,8 +105,7 @@ specs/
 !/docker/envs/*.env.example
 
 # Dumps de BD locales (docker/mattin.ps1). Nunca al repo.
-<<<<<<< HEAD
-docker/backups/
-=======
 /docker/backups/
->>>>>>> develop
+
+# Subidas de repositorios en local (runtime). Nunca al repo.
+/backend/app/repositories/
