@@ -6,9 +6,10 @@ export interface SegmentedTab<T extends string = string> {
 }
 
 export interface SegmentedTabsProps<T extends string = string> {
-  readonly tabs: readonly SegmentedTab<T>[];
+  // NoInfer: infer T only from activeTab so useState setters of literal unions type-check in non-strict builds.
+  readonly tabs: readonly SegmentedTab<NoInfer<T>>[];
   readonly activeTab: T;
-  readonly onChange: (tabId: T) => void;
+  readonly onChange: (tabId: NoInfer<T>) => void;
   readonly ariaLabel: string;
   readonly className?: string;
 }

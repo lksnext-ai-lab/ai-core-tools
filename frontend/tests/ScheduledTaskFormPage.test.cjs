@@ -50,6 +50,7 @@ function mount(overrides = {}) {
         if (!(index in states)) states[index] = initial;
         return [states[index], (next) => { states[index] = typeof next === 'function' ? next(states[index]) : next; }];
       },
+      useCallback(callback) { return callback; },
       useEffect(callback, deps) {
         const index = effectIndex++;
         const old = effects[index];
@@ -60,7 +61,10 @@ function mount(overrides = {}) {
       },
     },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
-    'react-router-dom': { useNavigate: () => () => {}, useParams: () => params },
+    'react-router-dom': {
+      Link: 'Link', useNavigate: () => () => {}, useParams: () => params,
+      useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
+    },
     'react-i18next': { useTranslation: () => ({ t: (key) => key.split('.').reduce((value, part) => value?.[part], translations) ?? key }) },
     sonner: { toast: { error() {}, success() {} } },
     'lucide-react': { Trash2: () => null },
@@ -73,6 +77,8 @@ function mount(overrides = {}) {
     '../components/ui/CardApp': { __esModule: true, default: 'CardApp' },
     '../services/api': { apiService },
     '../components/ui/ConfirmationModal': () => null,
+    '../components/ui/SidePanel': { SidePanel: 'SidePanel' },
+    './ScheduledTaskDetailPage': { __esModule: true, default: 'ScheduledTaskDetailPage' },
   };
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: (name) => {

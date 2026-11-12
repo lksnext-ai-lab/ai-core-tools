@@ -8,6 +8,7 @@
     "allowImportingTsExtensions": false,
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     "strict": false,
     "noImplicitAny": false
   },

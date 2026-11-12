@@ -45,7 +45,7 @@ export const Interactive: Story = {
         {...args}
         value={value}
         onChange={(event) => {
-          args.onChange(event);
+          args.onChange?.(event);
           setValue(event.target.value);
         }}
       />
