@@ -1,5 +1,7 @@
 # RFC: Webhook como destino adicional de notificación
 
+> **Nota:** el código vive ahora en `backend/connectors/` y `backend/services/output_channels/` (las rutas `backend/output/` de abajo son históricas). Ver [Connectors: Adding an Output Provider](connectors-adding-a-provider.md).
+
 **Estado:** implementado.  
 **Fecha:** 2026-10-06.  
 **Ámbito:** resultados de tareas programadas de Mattin AI.  

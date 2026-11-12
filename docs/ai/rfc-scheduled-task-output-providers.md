@@ -1,5 +1,7 @@
 # RFC: Output Providers for Scheduled Tasks
 
+> **Note:** the code now lives in `backend/connectors/` and `backend/services/output_channels/` (the `backend/output/` paths below are historical). See [Connectors: Adding an Output Provider](connectors-adding-a-provider.md).
+
 **Status:** implemented; pilot validation with a real Teams Workflows tenant remains pending.  
 **Date:** 2026-09-27.  
 **First provider:** Teams channels through Workflows and Adaptive Cards.  

@@ -46,6 +46,7 @@ The project aims to simplify the integration and use of AI technologies within L
 - [Agent System](ai/agent-system.md) — Agent execution engine, memory management, skills, and tools
 - [Scheduled Task Output Providers RFC](ai/rfc-scheduled-task-output-providers.md) — Extensible delivery, Teams channels, retries, permissions, and retention
 - [Scheduled Task Webhooks RFC](ai/rfc-scheduled-task-webhooks.md) — Proposed generic webhook provider alongside Teams, JSON/multipart contract, optional attachments, authentication, and recovery
+- [Connectors: Adding an Output Provider](ai/connectors-adding-a-provider.md) — Connector layers, `OutboundProvider` contract, typed settings, registry, conformance suite, and refactor behavior changes
 - [Teams Channel Attachments — Future Design](ai/rfc-teams-channel-attachments.md) — Deferred native attachments, SharePoint uploads, Graph authorization, and recovery
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
 - [A2A Integration](ai/a2a-integration.md) — Agent2Agent protocol JSON-RPC server, visibility, task lifecycle, and deployment runbook
