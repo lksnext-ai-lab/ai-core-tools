@@ -49,6 +49,10 @@ class App(Base):
                         back_populates='app',
                         foreign_keys='SandboxService.app_id',
                         lazy=True)
+    system_one_services = relationship('SystemOneService',
+                        back_populates='app',
+                        foreign_keys='SystemOneService.app_id',
+                        lazy=True)
     mcp_servers = relationship('MCPServer', back_populates='app', lazy=True)
     sharepoint_sources = relationship('SharePointSource', back_populates='app', cascade='all, delete-orphan', lazy=True)
     onboarding_dismissed = Column(Boolean, default=False, nullable=False, server_default='false')

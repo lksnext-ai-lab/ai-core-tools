@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
+import { toast } from 'sonner';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
@@ -28,6 +29,11 @@ import { AppRole } from '../types/roles';
 import { randomId } from '../utils/randomId';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
+import SystemOneAgentSection from '../components/agents/SystemOneAgentSection';
+import { canBeScheduled } from '../utils/systemOneStatus';
+import { toEditorQuestions, toPayload, checkQuestions, validateMaxStateChars, validateQuestions, type EditorQuestion } from '../utils/systemOneQuestions';
+import { questionLimits, type QuestionLimits } from '../utils/systemOneLimits';
+import type { SystemOneQuestion } from '../types/systemOne';
 
 // Define the Agent types
 interface Agent {
@@ -67,6 +73,11 @@ interface Agent {
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
+  // System One-specific fields
+  system_one_service_id?: number | null;
+  questions?: SystemOneQuestion[] | null;
+  summarization_service_id?: number | null;
+  max_state_chars?: number | null;
   // RAG retrieval config
   rag_k?: number;
   rag_search_type?: RagSearchType;
@@ -81,8 +92,9 @@ interface Agent {
   media_chunk_min_duration?: number | null;
   media_chunk_max_duration?: number | null;
   media_chunk_overlap?: number | null;
-  ai_services: Array<ServiceOptionLike & { supports_video?: boolean }>;
+  ai_services: Array<ServiceOptionLike & { supports_video?: boolean; is_system?: boolean }>;
   sandbox_services: ServiceOptionLike[];
+  system_one_services?: ServiceOptionLike[];
   silos: Array<{ silo_id: number; name: string }>;
   output_parsers: Array<{ parser_id: number; name: string }>;
   tools: Array<{ agent_id: number; name: string }>;
@@ -116,6 +128,11 @@ interface AgentFormData {
   vision_service_id?: number;
   vision_system_prompt?: string;
   text_system_prompt?: string;
+  // System One-specific fields
+  system_one_service_id?: number;
+  summarization_service_id?: number;
+  max_state_chars: number;
+  questions: EditorQuestion[];
   // RAG retrieval config
   rag_k: number;
   rag_search_type: RagSearchType;
@@ -219,12 +236,14 @@ function extractA2AFieldErrors(err: unknown): AgentA2AFieldErrors | null {
 
 function getPageTitle(type: string, isNewAgent: boolean): string {
   if (type === 'ocr_agent') return 'Agente OCR';
+  if (type === 'system_one_agent') return isNewAgent ? 'Create System One Agent' : 'Edit System One Agent';
   if (isNewAgent) return 'Create Agent';
   return 'Edit Agent';
 }
 
 function getPageDescription(type: string, isNewAgent: boolean, agentName?: string): string {
   if (type === 'ocr_agent') return 'Configure OCR agent for document processing';
+  if (type === 'system_one_agent') return 'Classify, judge or decide over a text with fixed questions';
   if (isNewAgent) return 'Configure a new AI agent with advanced capabilities';
   return `Modify agent: ${agentName}`;
 }
@@ -249,6 +268,7 @@ function AgentFormPage() {
   const [mcpUsage, setMcpUsage] = useState<AgentMCPUsage | null>(null);
   const [showMcpWarning, setShowMcpWarning] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('basic');
+  const [showQuestionProblems, setShowQuestionProblems] = useState(false);
 
   const starterRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -305,6 +325,8 @@ function AgentFormPage() {
     rag_score_threshold: null,
     rag_max_retrieval_calls: 4,
     rag_fixed_filters: [],
+    max_state_chars: 6000,
+    questions: [],
     media_embedding_service_id: undefined,
     media_chunk_min_duration: 30,
     media_chunk_max_duration: 120,
@@ -316,6 +338,23 @@ function AgentFormPage() {
     a2a_skill_tags: [],
     a2a_examples: [],
   });
+
+  // What the chosen System One server accepts; unknown (empty) until it answers, and then nothing is capped by us.
+  const [serverQuestionLimits, setServerQuestionLimits] = useState<QuestionLimits>({});
+  useEffect(() => {
+    const serviceId = formData.type === 'system_one_agent' ? formData.system_one_service_id : undefined;
+    if (!appId || !serviceId) {
+      setServerQuestionLimits({});
+      return;
+    }
+    let cancelled = false;
+    // The status check, not the test: editors may read it, and it never spends a real (token) call.
+    apiService.getSystemOneServiceStatus(Number.parseInt(appId), serviceId)
+      .then((result) => { if (!cancelled) setServerQuestionLimits(questionLimits(result.limits)); })
+      .catch(() => { if (!cancelled) setServerQuestionLimits({}); });
+    return () => { cancelled = true; };
+  }, [appId, formData.type, formData.system_one_service_id]);
+  const questionContext = { ...serverQuestionLimits, maxStateChars: formData.max_state_chars };
   const [showOutputParser, setShowOutputParser] = useState(false);
   const [siloMetadataFields, setSiloMetadataFields] = useState<SearchFilterMetadataField[]>([]);
   const [loadingSiloMetadata, setLoadingSiloMetadata] = useState(false);
@@ -432,6 +471,11 @@ function AgentFormPage() {
         vision_service_id: response.vision_service_id || undefined,
         vision_system_prompt: response.vision_system_prompt || '',
         text_system_prompt: response.text_system_prompt || '',
+        // System One-specific fields
+        system_one_service_id: response.system_one_service_id ?? undefined,
+        summarization_service_id: response.summarization_service_id ?? undefined,
+        max_state_chars: response.max_state_chars ?? 6000,
+        questions: toEditorQuestions(response.questions, randomId),
         // RAG retrieval config
         rag_k: response.rag_k ?? 10,
         rag_search_type: response.rag_search_type ?? 'similarity',
@@ -508,6 +552,17 @@ function AgentFormPage() {
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleTypeChange = (type: string) => {
+    const creating = Number.parseInt(agentId || '0') === 0;
+    setFormData(prev => ({
+      ...prev,
+      type,
+      // A new System One agent is mostly used as a tool: on by default (the user can switch it off)
+      ...(type === 'system_one_agent' && creating ? { is_tool: true } : {}),
+    }));
+    setActiveTab('basic');
   };
 
   const handleToolToggle = (toolId: number) => {
@@ -615,10 +670,76 @@ function AgentFormPage() {
     });
   }, [appId, agentId, marketplaceProfile, mutate]);
 
+  /**
+   * Shared tail of both save paths: create or update with the shared toasts, then leave on success.
+   * The raw promise is returned too, for a caller that inspects the error itself (A2A field errors).
+   */
+  const saveAgent = async (submitData: Record<string, unknown>) => {
+    const isNew = Number.parseInt(agentId || '0') === 0;
+    // Created once so both the toast (via `mutate`) and a caller that inspects the raw error
+    // observe the same settled promise instead of issuing the request twice.
+    const submitPromise = isNew
+      ? apiService.createAgent(Number.parseInt(appId || '0'), 0, submitData)
+      : apiService.updateAgent(Number.parseInt(appId || '0'), Number.parseInt(agentId || '0'), submitData);
+    setSaving(true);
+    const result = await mutate(() => submitPromise, {
+      loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
+      success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
+      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
+    });
+    setSaving(false);
+    if (result !== undefined) navigate(`/apps/${appId}/agents`);
+    return { result, submitPromise };
+  };
+
+  const submitSystemOneAgent = async () => {
+    if (!appId || !agentId) return;
+    if (!formData.name.trim()) {
+      setActiveTab('basic');
+      setError('The name is required');
+      toast.error('The name is required');
+      return;
+    }
+    const problems = validateQuestions(formData.questions, questionContext);
+    const maxCharsProblem = validateMaxStateChars(formData.max_state_chars);
+    if (maxCharsProblem) problems.unshift(maxCharsProblem);
+    if (!formData.system_one_service_id) problems.unshift('Select a System One service');
+    if (problems.length > 0) {
+      setShowQuestionProblems(true);
+      setActiveTab('system_one');
+      setError(problems[0]);
+      // The banner can be scrolled out of sight: say it where the user is looking, then go to the first problem.
+      toast.error(problems.length === 1 ? problems[0] : `${problems[0]} (and ${problems.length - 1} more problem${problems.length === 2 ? '' : 's'})`);
+      window.setTimeout(() => document.querySelector('[data-question-problem]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+      return;
+    }
+
+    const submitData = {
+      name: formData.name,
+      description: formData.description,
+      type: formData.type,
+      is_tool: formData.is_tool,
+      system_one_service_id: formData.system_one_service_id,
+      questions: toPayload(formData.questions),
+      summarization_service_id: formData.summarization_service_id ?? null,
+      max_state_chars: formData.max_state_chars,
+      app_id: Number.parseInt(appId),
+    };
+
+    setError(null);
+    await saveAgent(submitData);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!appId || !agentId) return;
+
+    // System One agents have their own, much smaller form: none of the checks below apply to them.
+    if (formData.type === 'system_one_agent') {
+      await submitSystemOneAgent();
+      return;
+    }
 
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
@@ -708,33 +829,15 @@ function AgentFormPage() {
       ...a2aFields,
     };
 
-    const isNew = Number.parseInt(agentId) === 0;
-
     // Save the marketplace profile first, but only once the form is valid, and
     // wait for it so it never races with the agent save below.
     await handleSaveMarketplaceProfile();
 
     setError(null);
     setA2aFieldErrors({});
-    setSaving(true);
 
-    // Created once so both the toast (via `mutate`) and our own error inspection
-    // below observe the same settled promise instead of issuing the request twice.
-    const submitPromise = isNew
-      ? apiService.createAgent(Number.parseInt(appId), 0, submitData)
-      : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData);
-
-    const result = await mutate(() => submitPromise, {
-      loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
-      success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
-      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
-    });
-    setSaving(false);
-
-    if (result !== undefined) {
-      navigate(`/apps/${appId}/agents`);
-      return;
-    }
+    const { result, submitPromise } = await saveAgent(submitData);
+    if (result !== undefined) return;
 
     try {
       await submitPromise;
@@ -765,22 +868,33 @@ function AgentFormPage() {
   const pageTitle = getPageTitle(formData.type, isNewAgent);
   const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
 
-  const tabs: TabItem[] = [
-    { id: 'basic', label: 'Basic' },
-    { id: 'prompts', label: 'Prompts' },
-    { id: 'configuration', label: 'Configuration' },
-    { id: 'advanced', label: 'Advanced' },
-    { id: 'marketplace', label: 'Marketplace' },
-    {
-      id: 'a2a',
-      label: 'A2A',
-      disabled: isNewAgent,
-      disabledReason: isNewAgent ? 'Save the agent first to configure A2A settings' : undefined,
-    },
-    ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
-  ];
+  const isSystemOne = formData.type === 'system_one_agent';
+
+  // A System One agent evaluates a text: no prompts, marketplace chat or A2A server (it does not converse).
+  const tabs: TabItem[] = isSystemOne
+    ? [
+        { id: 'basic', label: 'Basic' },
+        { id: 'system_one', label: 'System One' },
+        ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
+      ]
+    : [
+        { id: 'basic', label: 'Basic' },
+        { id: 'prompts', label: 'Prompts' },
+        { id: 'configuration', label: 'Configuration' },
+        { id: 'advanced', label: 'Advanced' },
+        { id: 'marketplace', label: 'Marketplace' },
+        {
+          id: 'a2a',
+          label: 'A2A',
+          disabled: isNewAgent,
+          disabledReason: isNewAgent ? 'Save the agent first to configure A2A settings' : undefined,
+        },
+        ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
+      ];
 
   const videoServiceOptions = agent?.ai_services?.filter((service) => service.supports_video);
+  // Checked once per render; the System One tab shows it only when the problems were revealed.
+  const questionProblems = showQuestionProblems ? checkQuestions(formData.questions, questionContext) : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -828,7 +942,7 @@ function AgentFormPage() {
             activeTab={activeTab}
             onChange={setActiveTab}
           />
-          {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
+          {!isNewAgent && agent && canBeScheduled(agent) && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
 
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (
@@ -863,12 +977,18 @@ function AgentFormPage() {
                   <select
                     id="type"
                     value={formData.type}
-                    onChange={(e) => handleInputChange('type', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    onChange={(e) => handleTypeChange(e.target.value)}
+                    disabled={!isNewAgent && isSystemOne}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-500"
                   >
                     <option value="agent">AI Agent</option>
                     <option value="ocr_agent">OCR Agent</option>
+                    {/* An agent's type cannot change after creation: System One is offered only for new agents */}
+                    {(isNewAgent || isSystemOne) && <option value="system_one_agent">System One Agent</option>}
                   </select>
+                  {!isNewAgent && isSystemOne && (
+                    <p className="mt-1 text-xs text-gray-500">The type of an existing agent cannot be changed.</p>
+                  )}
                 </div>
 
                 <div className="md:col-span-2">
@@ -886,6 +1006,30 @@ function AgentFormPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* SYSTEM ONE TAB (System One agents only) */}
+          {isSystemOne && activeTab === 'system_one' && (
+            <SystemOneAgentSection
+              appId={appId ?? ''}
+              systemOneServices={agent?.system_one_services ?? []}
+              aiServices={(agent?.ai_services ?? []).filter((s) => !s.is_system)}
+              serviceId={formData.system_one_service_id}
+              savedServiceId={agent?.system_one_service_id}
+              onServiceChange={(id) => handleInputChange('system_one_service_id', id)}
+              summarizationServiceId={formData.summarization_service_id}
+              savedSummarizationServiceId={agent?.summarization_service_id}
+              onSummarizationChange={(id) => handleInputChange('summarization_service_id', id)}
+              maxStateChars={formData.max_state_chars}
+              onMaxStateCharsChange={(value) => handleInputChange('max_state_chars', value)}
+              isTool={formData.is_tool}
+              onIsToolChange={(value) => handleInputChange('is_tool', value)}
+              questions={formData.questions}
+              onQuestionsChange={(questions) => handleInputChange('questions', questions)}
+              limits={serverQuestionLimits}
+              generalProblems={questionProblems?.general ?? []}
+              problemsByQuestion={questionProblems?.byQuestion ?? []}
+            />
           )}
 
           {/* TAB 2: PROMPTS */}
@@ -2020,6 +2164,7 @@ function AgentFormPage() {
               <AgentMetricsTab
                 appId={Number(appId)}
                 agentId={Number(agentId)}
+                agentType={formData.type}
               />
             </div>
           )}

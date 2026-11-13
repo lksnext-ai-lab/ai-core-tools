@@ -519,6 +519,51 @@ Provides common fields and methods for AIService and EmbeddingService.
 **Relationships**:
 - `app` → Owning app
 
+### SystemOneService
+
+**Table**: `SystemOneService` (subclass of `BaseService`)
+**Purpose**: Per-app connection to a System One decision-model server (not an LLM)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `service_id` | Integer (PK) | From `BaseService` |
+| `app_id` | Integer (FK → App) | Owning app (per app only, no system-wide services) |
+| `endpoint` | String | Base URL of the server (`BaseService.endpoint`) |
+| `api_key` | String | Optional Bearer token |
+| `description` | String | The model name |
+| `extra_config` | JSON text | `{"max_concurrency": n, "provider": "system_one" \| "openai_decisions"}`; the cap is global, shared by all backend processes |
+| `end_of_service_at`, `deprecation_notice` | | Lifecycle columns, migration `sysone004` (see "End-of-service columns") |
+
+### SystemOneAgent
+
+**Table**: `SystemOneAgent` (joined-table subclass of `Agent`, `type = 'system_one_agent'`)
+**Purpose**: An agent that evaluates a text with fixed questions instead of chatting
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `agent_id` | Integer (PK, FK → Agent) | Shared with the `Agent` row |
+| `system_one_service_id` | Integer (FK → SystemOneService, `ON DELETE SET NULL`) | NULL = the service was deleted; the agent cannot run until another is chosen |
+| `questions` | JSON | `noul` / `choice` / `score` questions |
+| `summarization_service_id` | Integer (FK → AIService, nullable) | Optional app-level LLM that shortens long texts |
+| `max_state_chars` | Integer | Maximum text length before it is summarized or truncated (default 6000, at least 500) |
+
+### agent_system_one_answer
+
+**Table**: `agent_system_one_answer`
+**Purpose**: One row per question answered by a System One evaluation, linked to the agent metrics event
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `answer_id` | UUID (PK) | |
+| `event_id` | FK → metrics event | The evaluation it belongs to |
+| `question_key`, `question_type` | String | |
+| `decision` | Text | Serialized decision; NULL = undetermined |
+| `probability`, `expected_score`, `confidence` | Float | As returned by the server |
+| `probabilities` | JSON | Per option / level |
+| `state_reduction` | String | `none` / `summarized` / `truncated` |
+
+Migrations `sysone001`–`sysone004`; summarization usage lives in the `summarization_*` columns of the metrics event (`sysone003`).
+
 ### MarketplaceUsage
 
 **Table**: `marketplace_usage`  

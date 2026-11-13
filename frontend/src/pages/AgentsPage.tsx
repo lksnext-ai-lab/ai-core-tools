@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock } from 'lucide-react';
+import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock, Gauge } from 'lucide-react';
+import { agentRowStatus } from '../utils/systemOneStatus';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -35,6 +36,11 @@ interface Agent {
     provider: string;
   };
   lifecycle_warnings?: ServiceLifecycleWarning[];
+  system_one_service?: {
+    service_id: number;
+    name: string;
+    model: string;
+  } | null;
 }
 
 // Define the App type
@@ -52,6 +58,8 @@ function AgentsPage() {
   const mutate = useApiMutation();
 
   const [agents, setAgents] = useState<Agent[]>([]);
+  // The column is titled "AI/S1 Service" only when a System One agent is in the list.
+  const hasSystemOneAgents = agents.some((agent) => agent.type === 'system_one_agent');
   const [scheduledTaskCounts, setScheduledTaskCounts] = useState<Record<number, number>>({});
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
@@ -229,6 +237,8 @@ function AgentsPage() {
     switch (type) {
       case 'ocr_agent':
         return <FileText className="w-4 h-4" />;
+      case 'system_one_agent':
+        return <Gauge className="w-4 h-4" />;
       case 'agent':
       default:
         return <Bot className="w-4 h-4" />;
@@ -239,6 +249,8 @@ function AgentsPage() {
     switch (type) {
       case 'ocr_agent':
         return 'OCR Agent';
+      case 'system_one_agent':
+        return 'System One Agent';
       case 'agent':
       default:
         return 'AI Agent';
@@ -371,9 +383,20 @@ function AgentsPage() {
             )
           },
           {
-            header: 'AI Service',
-            render: (agent) => (
-              agent.ai_service ? (
+            // One column for both kinds: an LLM agent's AI service, a System One agent's S1 service.
+            header: hasSystemOneAgents ? 'AI/S1 Service' : 'AI Service',
+            render: (agent) => {
+              if (agent.type === 'system_one_agent') {
+                return agent.system_one_service ? (
+                  <div className="text-sm">
+                    <div className="font-medium text-gray-900">{agent.system_one_service.name}</div>
+                    <div className="text-xs text-gray-500">{agent.system_one_service.model} • System One</div>
+                  </div>
+                ) : (
+                  <span className="text-gray-400 italic text-sm">No System One service</span>
+                );
+              }
+              return agent.ai_service ? (
                 <div className="text-sm">
                   <div className="font-medium text-gray-900">
                     {agent.ai_service.name}
@@ -384,17 +407,22 @@ function AgentsPage() {
                 </div>
               ) : (
                 <span className="text-gray-400 italic text-sm">No AI Service</span>
-              )
-            )
+              );
+            }
           },
           {
             header: 'Status',
-            render: () => (
-              <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
-                {' '}Active
-              </span>
-            )
+            render: (agent) => {
+              const status = agentRowStatus(agent);
+              const inoperative = status.kind === 'inoperative';
+              return (
+                <span title={status.detail}
+                      className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${inoperative ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                  <span className={`w-2 h-2 rounded-full mr-2 ${inoperative ? 'bg-yellow-500' : 'bg-green-400'}`} />
+                  {' '}{status.label}
+                </span>
+              );
+            }
           },
           {
             header: 'Scheduling',

@@ -377,7 +377,7 @@ function ServiceWizard({
   );
 }
 
-function ensureUnique(base: string, existing: readonly string[]): string {
+export function ensureUnique(base: string, existing: readonly string[]): string {
   if (!existing.includes(base)) return base;
   let counter = 2;
   while (existing.includes(`${base} (${counter})`)) counter++;

@@ -8,6 +8,7 @@ from models.ai_service import AIService
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.mcp_config import MCPConfig
+from models.system_one_service import SystemOneService
 from schemas.export_schemas import (
     AgentExportFileSchema,
     ExportAgentSchema,
@@ -29,6 +30,7 @@ from services.output_parser_import_service import OutputParserImportService
 from services.mcp_config_import_service import MCPConfigImportService
 from services.middleware_import_service import MiddlewareImportService
 from repositories.agent_repository import AgentRepository
+from services.system_one_porting import import_system_one_agent
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
@@ -225,6 +227,10 @@ class AgentImportService:
                     f"Agent will be created without output parser."
                 )
 
+        missing_system_one = self._missing_system_one_service(export_data, app_id)
+        if missing_system_one:
+            missing_dependencies.append(missing_system_one)
+
         return ValidateImportResponseSchema(
             component_type=ComponentType.AGENT,
             component_name=export_data.agent.name,
@@ -395,6 +401,20 @@ class AgentImportService:
                 bundled=True,
             ))
 
+        if export_data.agent.type == "system_one_agent" and export_data.agent.system_one_service_name:
+            missing_system_one = self._missing_system_one_service(export_data, app_id)
+            if missing_system_one:
+                global_warnings.append(missing_system_one)
+            dependencies.append(DependencyInfo(
+                source_type="agent",
+                source_name=export_data.agent.name,
+                depends_on_type="system_one_service",
+                depends_on_name=export_data.agent.system_one_service_name,
+                mandatory=True,
+                bundled=any(b.name == export_data.agent.system_one_service_name
+                            for b in export_data.system_one_services),
+            ))
+
         return AgentImportPreviewSchema(
             valid=True,
             export_version=(
@@ -414,6 +434,19 @@ class AgentImportService:
                 requires_ai_service_selection
             ),
         )
+
+    def _missing_system_one_service(self, export_data: AgentExportFileSchema, app_id: int) -> Optional[str]:
+        """Message when a System One agent's service is neither bundled nor in this app (the import would fail)."""
+        name = export_data.agent.system_one_service_name
+        if export_data.agent.type != "system_one_agent" or not name:
+            return None
+        if any(b.name == name for b in export_data.system_one_services):
+            return None
+        exists = (self.session.query(SystemOneService)
+                  .filter(SystemOneService.name == name, SystemOneService.app_id == app_id).first())
+        if exists:
+            return None
+        return f"System One service: {name} not found in this app and not bundled; create it before importing"
 
     def _check_ai_service_conflict(
         self, name: str, app_id: int
@@ -458,6 +491,7 @@ class AgentImportService:
         import_bundled_mcp_configs: bool = True,
         import_bundled_agent_tools: bool = True,
         middleware_id_map: Optional[Dict[str, int]] = None,
+        system_one_service_id_map: Optional[dict] = None,
     ) -> ImportSummarySchema:
         """Import Agent configuration.
 
@@ -492,6 +526,14 @@ class AgentImportService:
 
         # Validate version
         validate_export_version(export_data.metadata.export_version)
+
+        # System One agents have no LLM service: they follow their own, shorter flow.
+        if export_data.agent.type == "system_one_agent":
+            return import_system_one_agent(
+                self.session, export_data, app_id, conflict_mode, new_name,
+                service_id_map=system_one_service_id_map,
+                bundled_services=export_data.system_one_services,
+            )
 
         # Step 0: Determine agent's final name (needed for dependency naming)
         agent_name = export_data.agent.name
@@ -770,6 +812,7 @@ class AgentImportService:
                     agent=tool_agent,
                     ai_service=export_data.ai_service,  # Share AI service
                     middlewares=export_data.middlewares,
+                    system_one_services=export_data.system_one_services,
                 )
                 tool_import_result = self.import_agent(
                     tool_export_data,
@@ -834,6 +877,8 @@ class AgentImportService:
                     export_data.agent.memory_summarize_threshold
                 )
                 existing_agent.temperature = export_data.agent.temperature
+                if export_data.agent.is_tool is not None:
+                    existing_agent.is_tool = export_data.agent.is_tool
 
                 # Restore A2A fields (FR-24, AC-39) via the shared helper, so
                 # this path and the create paths below can never drift apart
@@ -940,7 +985,7 @@ class AgentImportService:
                 text_system_prompt=export_data.agent.text_system_prompt,
                 create_date=datetime.now(),
                 request_count=0,
-                is_tool=bool(export_data.agent.is_tool),
+                is_tool=bool(export_data.agent.is_tool),  # None (old files): False
                 # A2A fields restored (FR-24, AC-39) via the shared helper;
                 # a2a_enabled is always forced to False there.
                 **_a2a_import_fields(export_data.agent),
@@ -965,7 +1010,7 @@ class AgentImportService:
                 temperature=export_data.agent.temperature,
                 create_date=datetime.now(),
                 request_count=0,
-                is_tool=bool(export_data.agent.is_tool),
+                is_tool=bool(export_data.agent.is_tool),  # None (old files): False
                 type="agent",
                 # A2A fields restored (FR-24, AC-39) via the shared helper;
                 # a2a_enabled is always forced to False there.

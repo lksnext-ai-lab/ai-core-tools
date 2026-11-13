@@ -78,6 +78,10 @@ class AgentExecutionEvent(Base):
     input_tokens = Column(Integer, nullable=True)
     output_tokens = Column(Integer, nullable=True)
     total_tokens = Column(Integer, nullable=True)
+    # System One agents: calls to the summarizing LLM (and what they used), apart from the server's own tokens above.
+    summarization_calls = Column(Integer, nullable=False, default=0, server_default='0')
+    summarization_input_tokens = Column(Integer, nullable=False, default=0, server_default='0')
+    summarization_output_tokens = Column(Integer, nullable=False, default=0, server_default='0')
     tool_calls = Column(JSON, nullable=True)
     retrieved_docs = Column(JSON, nullable=True)
     had_files = Column(Boolean, nullable=False, server_default='false')

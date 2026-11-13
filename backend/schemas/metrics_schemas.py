@@ -25,6 +25,10 @@ class SummaryStats(BaseModel):
     input_tokens: int
     output_tokens: int
     total_tokens: int
+    # System One agents only (0 elsewhere): the summarizing LLM, apart from the tokens above.
+    summarization_calls: int = 0
+    summarization_input_tokens: int = 0
+    summarization_output_tokens: int = 0
     avg_tokens_per_execution: Optional[float] = None
     latency_p50_ms: Optional[float] = None
     latency_p95_ms: Optional[float] = None

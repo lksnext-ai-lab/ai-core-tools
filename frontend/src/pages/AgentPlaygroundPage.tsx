@@ -4,6 +4,8 @@ import { Gamepad2, Link2, Pencil, ArrowLeft } from 'lucide-react';
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
+import { SystemOneInterface } from '../components/playground/SystemOneInterface';
+import type { SystemOneQuestion } from '../types/systemOne';
 import APIExamples from '../components/playground/APIExamples';
 import PromptModal from '../components/playground/PromptModal';
 import ConversationSidebar from '../components/playground/ConversationSidebar';
@@ -20,6 +22,10 @@ interface Agent {
   system_prompt?: string;
   prompt_template?: string;
   lifecycle_warnings?: ServiceLifecycleWarning[];
+  questions?: SystemOneQuestion[] | null;
+  max_state_chars?: number | null;
+  system_one_service_id?: number | null;
+  summarization_service_id?: number | null;
   silo?: {
     silo_id: number;
     name: string;
@@ -182,10 +188,12 @@ function AgentPlaygroundPage() {
   }
 
   const isOCRAgent = agent.type === 'ocr_agent';
+  const isSystemOneAgent = agent.type === 'system_one_agent';
 
   const tabs = [
     { id: 'playground', label: 'Playground', icon: <Gamepad2 className="w-4 h-4" /> },
-    { id: 'api', label: 'API Examples', icon: <Link2 className="w-4 h-4" /> },
+    // System One agents have no chat API to show: their evaluate endpoint is in the guide.
+    ...(isSystemOneAgent ? [] : [{ id: 'api', label: 'API Examples', icon: <Link2 className="w-4 h-4" /> }]),
   ];
 
   return (
@@ -196,13 +204,16 @@ function AgentPlaygroundPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Agent Playground</h1>
         </div>
         <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setIsPromptModalOpen(true)}
-            className="pg-glass px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
-          >
-            <Pencil className="w-4 h-4" />
-            <span>Edit Prompts</span>
-          </button>
+          {/* System One agents have no prompts */}
+          {!isSystemOneAgent && (
+            <button
+              onClick={() => setIsPromptModalOpen(true)}
+              className="pg-glass px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
+            >
+              <Pencil className="w-4 h-4" />
+              <span>Edit Prompts</span>
+            </button>
+          )}
           <button
             onClick={handleBack}
             className="pg-glass px-4 py-2 rounded-lg text-gray-600 dark:text-gray-300 font-medium text-sm hover:bg-white/90 dark:hover:bg-gray-800/80 transition-colors flex items-center space-x-2"
@@ -282,14 +293,26 @@ function AgentPlaygroundPage() {
           <div className="flex-1 min-h-0 overflow-y-auto">
             {activeTab === 'playground' && (
               <>
-                {isOCRAgent ? (
+                {isOCRAgent && (
                   <OCRInterface
                     appId={Number.parseInt(appId!)}
                     agentId={Number.parseInt(agentId!)}
                     agentName={agent.name}
                     outputParser={agent.output_parser}
                   />
-                ) : (
+                )}
+                {isSystemOneAgent && (
+                  <SystemOneInterface
+                    appId={Number.parseInt(appId!)}
+                    agentId={Number.parseInt(agentId!)}
+                    agentName={agent.name}
+                    questions={agent.questions ?? []}
+                    maxStateChars={agent.max_state_chars ?? 6000}
+                    summarizes={agent.summarization_service_id != null}
+                    serviceId={agent.system_one_service_id}
+                  />
+                )}
+                {!isOCRAgent && !isSystemOneAgent && (
                   <ChatInterface
                     key={conversationKey}
                     appId={Number.parseInt(appId!)}

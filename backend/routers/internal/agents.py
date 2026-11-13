@@ -407,6 +407,14 @@ async def create_or_update_agent(
         'vision_service_id': agent_data.vision_service_id,
         'vision_system_prompt': agent_data.vision_system_prompt,
         'text_system_prompt': agent_data.text_system_prompt,
+        # System One-specific fields
+        'system_one_service_id': agent_data.system_one_service_id,
+        'questions': (
+            [q.model_dump(mode='json') for q in agent_data.questions]
+            if agent_data.questions is not None else None
+        ),
+        'summarization_service_id': agent_data.summarization_service_id,
+        'max_state_chars': agent_data.max_state_chars,
         # RAG retrieval config (step_008)
         'rag_k': agent_data.rag_k,
         'rag_search_type': agent_data.rag_search_type,
@@ -460,10 +468,12 @@ async def create_or_update_agent(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     
-    # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting)
-    agent_service.update_agent_tools(db, created_agent_id, agent_data.tool_ids, {})
-    agent_service.update_agent_mcps(db, created_agent_id, agent_data.mcp_config_ids, {})
-    agent_service.update_agent_skills(db, created_agent_id, agent_data.skill_ids, {})
+    # Update tools, MCPs, and skills (always call to handle empty arrays for unselecting).
+    # A System One agent has no LLM to use them: whatever was sent is dropped, not stored.
+    no_llm = agent_data.type == 'system_one_agent'
+    agent_service.update_agent_tools(db, created_agent_id, [] if no_llm else agent_data.tool_ids, {})
+    agent_service.update_agent_mcps(db, created_agent_id, [] if no_llm else agent_data.mcp_config_ids, {})
+    agent_service.update_agent_skills(db, created_agent_id, [] if no_llm else agent_data.skill_ids, {})
     if middleware_ids is not None:
         agent_service.update_agent_middlewares(db, created_agent_id, middleware_ids)
 

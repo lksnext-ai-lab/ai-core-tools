@@ -3,6 +3,8 @@ import asyncio
 from dataclasses import dataclass
 import ast
 import contextvars
+import base64
+import mimetypes
 import functools
 import json
 import posixpath
@@ -19,9 +21,11 @@ from sqlalchemy.orm import Session
 
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
+from models.system_one_agent import SystemOneAgent
 from services.agent_execution_context import AgentExecutionContext
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
+from schemas.system_one_schemas import SystemOneResult
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
     convert_image_to_base64,
@@ -34,6 +38,8 @@ from tools.ocrAgentTools import (
 from tools.aiServiceTools import get_llm
 from tools.outputParserTools import create_model_from_json_schema
 from services.agent_service import AgentService
+from services.system_one_evaluator import SystemOneEvaluator
+from tools import system_one_client
 from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
@@ -819,6 +825,15 @@ class GraphResume:
         return cls(Command(resume={"decisions": decisions}), approval.interrupt_id)
 
 
+_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.svg')
+
+
+def _is_image_upload(file: UploadFile) -> bool:
+    """An uploaded image, by declared content type or by extension."""
+    name = (file.filename or '').lower()
+    return (file.content_type or '').lower().startswith('image/') or name.endswith(_IMAGE_EXTENSIONS)
+
+
 class AgentExecutionService:
     """Unified service for agent execution - used by both public and internal APIs"""
     
@@ -1114,6 +1129,11 @@ class AgentExecutionService:
         agent = self.agent_service.get_agent(db, agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
+        if agent.type == 'system_one_agent':
+            raise HTTPException(
+                status_code=400,
+                detail="System One agents evaluate a text, they are not chatted with: use the evaluate endpoint",
+            )
 
         # 2. Access to this agent (app/tenant ownership, API key scope, etc.) is
         # verified by the caller (router) before this service is ever invoked —
@@ -1736,6 +1756,75 @@ class AgentExecutionService:
             logger.error(f"Error executing OCR agent: {str(e)}")
             raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
     
+    async def execute_agent_system_one(
+        self,
+        agent_id: int,
+        text: str,
+        files: Optional[List[UploadFile]],
+        user_context: Dict,
+        db: Session,
+        app_id: Optional[int] = None,
+    ) -> SystemOneResult:
+        """Evaluate a text (plus the text of attachments) with a System One agent.
+
+        Used by the playground and the public API. ``app_id`` is the app the caller is authorized for:
+        an agent of another app is a 404. There is no conversation or memory: every call is independent.
+        Images are sent only to providers that take them (else rejected), as are attachments whose text cannot be read
+        (silently skipping them would evaluate a partial input without telling the caller).
+        """
+        agent = self.agent_service.get_agent(db, agent_id, agent_type='system_one_agent')
+        if not agent or not isinstance(agent, SystemOneAgent) or (app_id is not None and agent.app_id != app_id):
+            raise HTTPException(status_code=404, detail="System One agent not found")
+        # Access is enforced by the routers (role / API key + the app check above). _validate_agent_access is a
+        # stub that only logs the whole user_context, which on the public API contains the raw API key.
+
+        files = files or []
+        image_files = [f for f in files if _is_image_upload(f)]
+        files = [f for f in files if f not in image_files]
+        # One snapshot for both the image check and the evaluation (it raises 409 for a missing/retired service).
+        snapshot = SystemOneEvaluator.snapshot(agent)
+        images: List[str] = []
+        if image_files:
+            endpoint = snapshot.endpoint
+            if not system_one_client.supports_images(endpoint.provider, endpoint.model):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"This System One service evaluates text only: images are not supported "
+                           f"({', '.join(f.filename for f in image_files)})",
+                )
+            for f in image_files:
+                mime = (f.content_type or "").lower()
+                mime = mime if mime.startswith("image/") else (mimetypes.guess_type(f.filename or "")[0] or "image/png")
+                mime = "image/jpeg" if mime == "image/jpg" else mime
+                if mime not in system_one_client.IMAGE_MIME_TYPES:
+                    raise HTTPException(status_code=400, detail=f"Only PNG and JPEG images are supported ({f.filename})")
+                images.append(f"data:{mime};base64,{base64.b64encode(await f.read()).decode()}")
+        # One file at a time: a failure is told apart by file, not by name (two uploads can share one).
+        processed, unreadable = [], []
+        for f in files:
+            result = await self._process_files_for_agent([f], agent)
+            processed.extend(result)
+            if not result:
+                unreadable.append(f.filename)
+        if unreadable:
+            raise HTTPException(status_code=400, detail=f"Could not read text from: {', '.join(unreadable)}")
+        # Read fine but nothing in it (a scanned PDF has no text layer): say so, or the rest of the input would be
+        # evaluated alone and the caller would believe the file had been read. Only here, where the caller attached the
+        # files on purpose; a tool call keeps ignoring an empty attachment of its parent's turn.
+        empty = [p["filename"] for p in processed if not (p.get("content") or "").strip()]
+        if empty:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No extractable text in: {', '.join(empty)}",
+            )
+
+        # The evaluation can wait for a slot (up to 20 s) and for the server: do it without holding a pooled database
+        # connection, or a burst of requests pins the whole pool and their own authentication cannot get one.
+        db.commit()      # nothing is pending (only reads so far); this hands the connection back to the pool
+        result = await SystemOneEvaluator().evaluate(snapshot, text or "", processed, user_context, images=images)
+        self._update_request_count(agent, db)
+        return result
+
     async def reset_agent_conversation(
         self, 
         agent_id: int,
