@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Any, Optional, Set, Tuple
 from sqlalchemy.orm import Session
-from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
+from models.agent import AGENT_KIND_INTERNAL_CHAT, Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
@@ -313,9 +313,24 @@ class AgentService:
         
         return AgentRepository.get_output_parser_info(db, agent.output_parser_id)
 
-    def get_agent(self, db: Session, agent_id: int, agent_type: str = 'basic') -> Union[Agent, OCRAgent]:
-        """Get agent by ID and type"""
-        return AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type)
+    def get_agent(
+        self, db: Session, agent_id: int, agent_type: str = 'basic', include_internal: bool = False
+    ) -> Union[Agent, OCRAgent]:
+        """Get agent by ID and type.
+
+        The hidden internal chat agent is treated as not found unless ``include_internal`` is True
+        (reserved for the execution choke point).
+        """
+        return AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type, include_internal=include_internal)
+
+    @staticmethod
+    def _ensure_not_internal(agent) -> None:
+        """Raise ``ValueError("Agent not found")`` if ``agent`` is the hidden internal chat agent.
+
+        Same message as a missing agent so the internal agent is indistinguishable from one that does not exist.
+        """
+        if agent is not None and agent.kind == AGENT_KIND_INTERNAL_CHAT:
+            raise ValueError("Agent not found")
 
     def get_available_chat_filter_fields(
         self, db: Session, tool_ids: List[int], own_silo_id: Optional[int] = None
@@ -569,7 +584,13 @@ class AgentService:
         if agent_id == 0:
             agent_id = None
 
-        agent = AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type) if agent_id else None
+        # include_internal=True so an internal agent id is detected (and rejected) instead of
+        # silently falling through to the "new agent" branch.
+        agent = (
+            AgentRepository.get_agent_by_id_and_type(db, agent_id, agent_type, include_internal=True)
+            if agent_id else None
+        )
+        self._ensure_not_internal(agent)
         previous_name = agent.name if agent else None
 
         # Defense in depth: never let an update move an existing agent into a different
@@ -926,6 +947,7 @@ class AgentService:
         agent = AgentRepository.get_by_id(db, agent_id)
         if not agent:
             return
+        self._ensure_not_internal(agent)
         
         # Get existing tool associations
         existing_tools = {assoc.tool_id: assoc for assoc in AgentRepository.get_agent_tool_associations(db, agent_id)}
@@ -961,6 +983,7 @@ class AgentService:
         agent = AgentRepository.get_by_id(db, agent_id)
         if not agent:
             return
+        self._ensure_not_internal(agent)
         
         # Convert mcp_ids to list if it's not already
         if isinstance(mcp_ids, str):
@@ -1010,6 +1033,7 @@ class AgentService:
         agent = AgentRepository.get_by_id(db, agent_id)
         if not agent:
             return
+        self._ensure_not_internal(agent)
 
         # Convert skill_ids to list if it's not already
         if isinstance(skill_ids, str):
@@ -1089,6 +1113,8 @@ class AgentService:
 
     def update_agent_middlewares(self, db: Session, agent_id: int, ordered_ids: list):
         """Replace the agent's middleware chain; list position is the execution order."""
+        # db.get hits the identity map: no extra round-trip when the caller already loaded the row.
+        self._ensure_not_internal(db.get(Agent, agent_id))
         existing = {
             assoc.middleware_id: assoc
             for assoc in db.query(AgentMiddleware).filter(AgentMiddleware.agent_id == agent_id).all()

@@ -335,6 +335,7 @@ async def export_agent(
     - include_mcp_configs: Bundle all MCP configurations
     - include_agent_tools: Bundle all agent tool (other agents) configurations
     """
+    _get_agent_or_404(db, agent_id, app_id)
     try:
         export_service = AgentExportService(db)
         export_data = export_service.export_agent(

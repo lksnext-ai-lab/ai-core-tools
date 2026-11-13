@@ -1,6 +1,6 @@
 """FreezeService: apply/remove is_frozen flags when a user's tier changes."""
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import and_, func
 
 from models.app import App
 from models.agent import Agent
@@ -62,7 +62,7 @@ class FreezeService:
         for app in apps:
             agents = (
                 db.query(Agent)
-                .filter(Agent.app_id == app.app_id)
+                .filter(and_(Agent.app_id == app.app_id, Agent.visible_clause()))
                 .order_by(Agent.create_date.desc())
                 .all()
             )
@@ -141,12 +141,11 @@ class FreezeService:
             }
             model_cls = model_map.get(resource_type)
             if model_cls:
-                resources = (
-                    db.query(model_cls)
-                    .filter(model_cls.app_id == app_id)
-                    .order_by(model_cls.create_date.desc())
-                    .all()
-                )
+                condition = model_cls.app_id == app_id
+                if model_cls is Agent:
+                    # The hidden internal chat agent is never frozen (FR-13.2).
+                    condition = and_(condition, Agent.visible_clause())
+                resources = db.query(model_cls).filter(condition).order_by(model_cls.create_date.desc()).all()
                 _freeze_resources(resources, limit)
 
         db.flush()

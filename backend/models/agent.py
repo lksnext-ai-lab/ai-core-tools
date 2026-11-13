@@ -178,6 +178,16 @@ class Agent(Base):
     def is_internal_chat(self) -> bool:
         return self.kind == AGENT_KIND_INTERNAL_CHAT
 
+    @classmethod
+    def visible_clause(cls):
+        """SQL clause for user-visible agents (excludes the hidden internal chat agent). Single definition."""
+        return cls.kind == AGENT_KIND_STANDARD
+
+    @classmethod
+    def internal_chat_clause(cls):
+        """SQL clause matching only the hidden internal chat agent."""
+        return cls.kind == AGENT_KIND_INTERNAL_CHAT
+
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
 

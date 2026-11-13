@@ -136,7 +136,7 @@ class AgentImportService:
         """
         return (
             self.session.query(Agent)
-            .filter(Agent.name == name, Agent.app_id == app_id)
+            .filter(Agent.name == name, Agent.app_id == app_id, Agent.visible_clause())
             .first()
         )
 
@@ -782,6 +782,7 @@ class AgentImportService:
                     .filter(
                         Agent.name == tool_import_result.component_name,
                         Agent.app_id == app_id,
+                        Agent.visible_clause(),
                     )
                     .first()
                 )
@@ -1090,6 +1091,7 @@ class AgentImportService:
                     .filter(
                         Agent.name == tool_ref.tool_agent_name,
                         Agent.app_id == app_id,
+                        Agent.visible_clause(),
                     )
                     .first()
                 )

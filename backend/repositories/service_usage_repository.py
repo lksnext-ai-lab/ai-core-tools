@@ -135,7 +135,7 @@ class ServiceUsageRepository:
         stmt = (
             select(AgentMiddleware.agent_id, AgentMiddleware.middleware_id)
             .join(Agent, Agent.agent_id == AgentMiddleware.agent_id)
-            .where(Agent.app_id == app_id)
+            .where(Agent.app_id == app_id, Agent.visible_clause())
         )
         if agent_ids is not None:
             stmt = stmt.where(AgentMiddleware.agent_id.in_(list(agent_ids)))
@@ -162,7 +162,7 @@ class ServiceUsageRepository:
             )
             .select_from(Agent)
             .outerjoin(ocr, ocr.c.agent_id == Agent.agent_id)
-            .where(Agent.app_id == app_id)
+            .where(Agent.app_id == app_id, Agent.visible_clause())
         )
         if ids is not None:
             stmt = stmt.where(Agent.agent_id.in_(ids))
@@ -260,7 +260,7 @@ class ServiceUsageQueries:
             .select_from(Agent)
             .join(App, App.app_id == Agent.app_id)
             .outerjoin(ocr, ocr.c.agent_id == Agent.agent_id)
-            .where(condition)
+            .where(condition, Agent.visible_clause())
             .order_by(Agent.agent_id)
         )
         return [UsageAgentRow(*r) for r in db.execute(ServiceUsageQueries._scope(stmt, Agent, app_id))]
@@ -292,7 +292,7 @@ class ServiceUsageQueries:
 
     @staticmethod
     def _tasks(db: Session, agent_condition, app_id: Optional[int]) -> List[UsageTaskRow]:
-        agent_ids = ServiceUsageQueries._scope(select(Agent.agent_id).where(agent_condition), Agent, app_id)
+        agent_ids = ServiceUsageQueries._scope(select(Agent.agent_id).where(agent_condition, Agent.visible_clause()), Agent, app_id)
         stmt = (
             select(ScheduledTask.id, ScheduledTask.name, ScheduledTask.agent_id, ScheduledTask.app_id,
                    App.name.label("app_name"))
@@ -405,7 +405,7 @@ class ServiceUsageQueries:
         stmt = (
             select(AgentMiddleware.middleware_id, AgentMiddleware.agent_id)
             .join(Agent, Agent.agent_id == AgentMiddleware.agent_id)
-            .where(Agent.app_id == app_id, AgentMiddleware.middleware_id.in_(list(middleware_ids)))
+            .where(Agent.app_id == app_id, Agent.visible_clause(), AgentMiddleware.middleware_id.in_(list(middleware_ids)))
             .order_by(AgentMiddleware.agent_id)
         )
         for middleware_id, agent_id in db.execute(stmt):
@@ -418,7 +418,9 @@ class ServiceUsageQueries:
     def count_agents_on_ai_service(db: Session, app_id: int, service_id: int) -> int:
         """Agents of the app whose text model (``Agent.service_id``) is this service."""
         return db.execute(
-            select(func.count()).select_from(Agent).where(Agent.app_id == app_id, Agent.service_id == service_id)
+            select(func.count()).select_from(Agent).where(
+                Agent.app_id == app_id, Agent.service_id == service_id, Agent.visible_clause()
+            )
         ).scalar_one()
 
     @staticmethod
@@ -429,7 +431,7 @@ class ServiceUsageQueries:
         """
         stmt = (
             update(Agent)
-            .where(Agent.app_id == app_id, Agent.service_id == source_id)
+            .where(Agent.app_id == app_id, Agent.service_id == source_id, Agent.visible_clause())
             .values(service_id=target_id)
             .returning(Agent.agent_id)
             .execution_options(synchronize_session=False)
@@ -443,7 +445,7 @@ class ServiceUsageQueries:
         """Repoint direct agent sandbox references and the app default in one transaction."""
         move_agents = (
             update(Agent)
-            .where(Agent.app_id == app_id, Agent.sandbox_service_id == source_id)
+            .where(Agent.app_id == app_id, Agent.sandbox_service_id == source_id, Agent.visible_clause())
             .values(sandbox_service_id=target_id)
             .returning(Agent.agent_id)
             .execution_options(synchronize_session=False)
