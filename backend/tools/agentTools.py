@@ -9,7 +9,7 @@ from tools.aiServiceTools import get_llm, get_output_parser
 from utils.service_lifecycle import ServiceRetiredError
 from tools.ai.fileTools import fetch_file_in_base64
 from tools.ai.workspaceTools import create_download_url_tool
-from typing import Any, Optional, Dict, List, Tuple, Type
+from typing import Any, Optional, Dict, List, Sequence, Tuple, Type
 from pydantic import BaseModel, Field
 import types as _types
 from services.silo_service import SiloService
@@ -20,6 +20,8 @@ from services.agent_cache_service import CheckpointerCacheService
 from langchain_core.documents import Document
 from langchain_core.tools import StructuredTool
 from services.agent_metrics_collector import METRICS_SUB_AGENT_ID_KEY, METRICS_TOOL_TYPE_KEY
+import copy
+from dataclasses import dataclass
 import json
 import asyncio
 import uuid
@@ -38,6 +40,7 @@ from tools.skill_tools import (
     generate_skills_system_prompt_section,
     resolve_agent_skills,
     resolve_prompt_skills,
+    resolve_skills,
     snapshot_skills,
 )
 from tools.chat_filter_scope import build_chat_filter_prompt_block
@@ -47,6 +50,11 @@ from tools.sandbox import (
     resolve_provider,
 )
 from tools.sandbox.factory import SandboxProviderUnavailableError, SandboxServiceRetiredError
+from services.internal_chat.resolved_config import (
+    InternalChatSessionError,
+    McpConnectionSpec,
+    ResolvedChatConfig,
+)
 
 logger = get_logger(__name__)
 
@@ -118,25 +126,16 @@ def _merge_mcp_auth_headers(
         logger.info(f"Added auth headers to MCP server: {server_name}")
 
 
-def _redact_mcp_connections(connections: Dict[str, Any]) -> Dict[str, Any]:
-    redacted = {}
-    sensitive_headers = {"authorization", "x-api-key", "api-key"}
+def _summarize_mcp_connections(connections: Dict[str, Any]) -> Dict[str, Any]:
+    """Loggable view of MCP connections: server name -> transport only.
 
-    for server_name, server_config in connections.items():
-        if not isinstance(server_config, dict):
-            redacted[server_name] = server_config
-            continue
-
-        safe_config = dict(server_config)
-        headers = safe_config.get("headers")
-        if isinstance(headers, dict):
-            safe_config["headers"] = {
-                key: "<redacted>" if str(key).lower() in sensitive_headers else value
-                for key, value in headers.items()
-            }
-        redacted[server_name] = safe_config
-
-    return redacted
+    Never includes headers, env, args or URLs (they may carry credentials, including in
+    the query string).
+    """
+    return {
+        name: (cfg.get("transport") if isinstance(cfg, dict) else None)
+        for name, cfg in connections.items()
+    }
 
 
 def _tool_name_for_language(language: str) -> str:
@@ -153,89 +152,131 @@ def _sandbox_id_for_log(sandbox_handle: Any) -> str:
     return getattr(sandbox_handle, "sandbox_id", "<unknown>")
 
 
+def _specs_from_agent(agent: Agent) -> List[McpConnectionSpec]:
+    """Build connection specs from ``agent.mcp_associations`` (the non-override path)."""
+    specs: List[McpConnectionSpec] = []
+    for mcp_assoc in agent.mcp_associations:
+        mcp_config = mcp_assoc.mcp
+        try:
+            connection_config = mcp_config.to_connection_dict()
+        except ValueError as e:
+            logger.error(f"Error configuring MCP {mcp_config.name}: {e}")
+            continue
+        if not connection_config:
+            continue
+        specs.append(
+            McpConnectionSpec(
+                config_id=mcp_config.config_id,
+                name=mcp_config.name,
+                connections=connection_config,
+                ssl_verify=mcp_config.ssl_verify if mcp_config.ssl_verify is not None else True,
+            )
+        )
+    return specs
+
+
+def _connections_from_specs(
+    specs: Sequence[McpConnectionSpec],
+    user_context: Optional[Dict] = None,
+) -> Dict[str, Any]:
+    """Merge connection specs into one ``MultiServerMCPClient`` connections dict.
+
+    Each spec's ``connections`` is deep-copied before auth headers / SSL settings are
+    applied, so the (possibly frozen and shared) spec is never mutated.
+    """
+    auth_headers = None
+    if user_context:
+        auth_token = get_user_token_from_context(user_context)
+        if auth_token:
+            auth_headers = prepare_mcp_headers(auth_token)
+
+    connections: Dict[str, Any] = {}
+    for spec in specs:
+        connection_config = copy.deepcopy(dict(spec.connections))
+        if not connection_config:
+            continue
+        clashes = sorted(set(connection_config) & set(connections))
+        if clashes:
+            logger.warning(
+                "MCP server name(s) %s defined by more than one config; the last one wins",
+                clashes,
+            )
+        if auth_headers:
+            # Preserve provider credentials already configured on the connection.
+            for server_name, server_config in connection_config.items():
+                if isinstance(server_config, dict):
+                    _merge_mcp_auth_headers(server_name, server_config, auth_headers)
+        if not spec.ssl_verify:
+            inject_ssl_config(connection_config, ssl_verify=False)
+        connections.update(connection_config)
+    return connections
+
+
 class MCPClientManager:
+    """Factory of per-execution ``MultiServerMCPClient`` instances.
+
+    Stateless on purpose (the singleton shell is kept for call-site compatibility): the
+    flexible chat builds clients for concurrent turns of different users, so nothing
+    about a client may be stored on the class or the instance.
+    """
+
     _instance = None
-    _client = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(MCPClientManager, cls).__new__(cls)
         return cls._instance
 
-    async def get_client(self, agent: Agent = None, user_context: Optional[Dict] = None):
-        """Get or create an MCP client for the given agent with authentication support.
-        
+    async def get_client(
+        self,
+        agent: Agent = None,
+        user_context: Optional[Dict] = None,
+        connections_override: Optional[Sequence[McpConnectionSpec]] = None,
+    ):
+        """Create an MCP client with authentication support.
+
         Args:
-            agent: The agent to create the client for
+            agent: The agent whose ``mcp_associations`` supply the connections
             user_context: Optional user context containing authentication tokens
-            
+            connections_override: When not ``None``, these specs are used instead of the
+                agent's associations (an empty sequence means "no MCP").
+
         Returns:
             MultiServerMCPClient or None
         """
-        # Always create a new client for each agent execution to avoid ClosedResourceError
-        # Don't use singleton pattern as the client lifecycle is tied to the agent execution
-        if agent is not None:
-            connections = {}
-            for mcp_assoc in agent.mcp_associations:
-                mcp_config = mcp_assoc.mcp
-                try:
-                    # Get the config from the database
-                    connection_config = mcp_config.to_connection_dict()
-                    if connection_config:
-                        # Add authentication headers if user context is provided
-                        if user_context:
-                            auth_token = get_user_token_from_context(user_context)
-                            if auth_token:
-                                # Prepare headers for MCP server authentication
-                                headers = prepare_mcp_headers(auth_token)
+        # Always create a new client for each agent execution to avoid ClosedResourceError.
+        if connections_override is not None:
+            specs: Sequence[McpConnectionSpec] = connections_override
+        elif agent is not None:
+            specs = _specs_from_agent(agent)
+        else:
+            return None
 
-                                # Add headers to each connection in the config,
-                                # preserving provider credentials already configured.
-                                for server_name, server_config in connection_config.items():
-                                    if isinstance(server_config, dict):
-                                        _merge_mcp_auth_headers(server_name, server_config, headers)
+        if connections_override is not None and not specs:
+            # Normal for the flexible chat: no MCP selected.
+            return None
 
-                        connections.update(connection_config)
-                except ValueError as e:
-                    logger.error(f"Error configuring MCP {mcp_config.name}: {e}")
-                    continue
-                
-            if connections:
-                # Inject SSL configuration for connections that need it
-                # Check each MCP config's ssl_verify setting
-                for mcp_assoc in agent.mcp_associations:
-                    mcp_cfg = mcp_assoc.mcp
-                    ssl_verify = mcp_cfg.ssl_verify if mcp_cfg.ssl_verify is not None else True
-                    if not ssl_verify:
-                        cfg_dict = mcp_cfg.to_connection_dict()
-                        for server_name in cfg_dict:
-                            if server_name in connections:
-                                inject_ssl_config({server_name: connections[server_name]}, ssl_verify=False)
-                
-                logger.info(
-                    "Creating new MCP client with connections: %s",
-                    _redact_mcp_connections(connections),
-                )
-                # Create a new client each time - don't reuse the singleton
-                # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
-                client = MultiServerMCPClient(connections=connections)
-                return client
-            else:
-                logger.warning("No valid MCP configurations found for agent")
-                return None
-                
+        connections = _connections_from_specs(specs, user_context)
+        if connections:
+            logger.info(
+                "Creating new MCP client with connections: %s",
+                _summarize_mcp_connections(connections),
+            )
+            # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
+            return MultiServerMCPClient(connections=connections)
+        logger.warning("No valid MCP configurations found for agent")
         return None
 
     async def close(self):
-        # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient doesn't need manual cleanup
-        # The client is managed internally by the library
-        if self._client is not None:
-            self._client = None
+        """No-op, kept for compatibility: clients are per-execution and the library
+        manages their resources internally, so there is no state to release here."""
+        return None
 
 
 async def _resolve_skills_for_prompt(
     agent: Agent,
     *,
+    skills: Optional[Sequence[Any]] = None,
     user_message: Optional[str] = None,
     llm: Optional[Any] = None,
 ) -> Tuple[List[Any], Optional[str]]:
@@ -264,21 +305,122 @@ async def _resolve_skills_for_prompt(
       - ``skills_section`` is the (possibly router-narrowed) rendered
         ``<available_skills>`` block to append to the system prompt, or ``None`` if the
         agent has no enabled skills.
-    """
-    if not hasattr(agent, "skill_associations") or not agent.skill_associations:
-        return [], None
 
-    resolved_skills = resolve_agent_skills(agent.skill_associations)
+    ``skills`` (flexible chat): when not ``None`` it replaces ``agent.skill_associations``
+    as the skill source (still run through ``resolve_skills``); an empty sequence means
+    "no skills".
+    """
+    if skills is not None:
+        if not skills:
+            return [], None
+        resolved_skills = resolve_skills(skills)
+    else:
+        if not hasattr(agent, "skill_associations") or not agent.skill_associations:
+            return [], None
+        resolved_skills = resolve_agent_skills(agent.skill_associations)
     skill_snapshots = snapshot_skills(resolved_skills)
-    prompt_skills = await resolve_prompt_skills(
-        resolved_skills, agent=agent, user_message=user_message, llm=llm,
-        selector=_select_prompt_skills,
-    )
+    if skills is not None:
+        # Flexible chat: the skill router (an agent-level setting) is never applied.
+        prompt_skills = resolved_skills
+    else:
+        prompt_skills = await resolve_prompt_skills(
+            resolved_skills, agent=agent, user_message=user_message, llm=llm,
+            selector=_select_prompt_skills,
+        )
     prompt_skill_snapshots = (
         skill_snapshots if prompt_skills is resolved_skills else snapshot_skills(prompt_skills)
     )
     skills_section = generate_skills_system_prompt_section(prompt_skill_snapshots)
     return skill_snapshots, skills_section
+
+
+@dataclass(frozen=True, slots=True)
+class _EffectiveAgentSurface:
+    """What ``create_agent`` actually uses this turn, resolved once.
+
+    Without ``turn_config`` every field mirrors the agent (legacy behaviour). With it, the
+    per-turn selection replaces them and everything the flexible chat does not expose
+    (tool associations, server tools, output parser, code interpreter, agent middlewares,
+    chat filters, skill router) is switched off. ``create_agent`` reads only from here.
+    """
+
+    is_chat: bool
+    ai_service_override: Any  # passed to get_llm; None => agent's own service
+    ai_service: Any  # effective service (provider lookup for server tools)
+    system_prompt: str
+    skills: Optional[Sequence[Any]]  # None => agent.skill_associations
+    silo_override: Any  # passed to the retriever builder; None => agent.silo
+    has_retriever_silo: bool
+    mcp_override: Optional[Sequence[McpConnectionSpec]]  # None => agent.mcp_associations
+    use_output_parser: bool
+    code_interpreter_enabled: bool
+    server_tools: Sequence[str]
+    tool_associations: Sequence[Any]
+    exposed_chat_filters: frozenset
+    ignore_agent_middlewares: bool
+
+
+def _effective_surface(
+    agent: Agent, turn_config: Optional[ResolvedChatConfig]
+) -> _EffectiveAgentSurface:
+    if turn_config is None:
+        return _EffectiveAgentSurface(
+            is_chat=False,
+            ai_service_override=None,
+            ai_service=agent.ai_service,
+            system_prompt=agent.system_prompt,
+            skills=None,
+            silo_override=None,
+            has_retriever_silo=agent.silo_id is not None,
+            mcp_override=None,
+            use_output_parser=True,
+            code_interpreter_enabled=agent.enable_code_interpreter,
+            server_tools=getattr(agent, "server_tools", None) or [],
+            tool_associations=agent.tool_associations,
+            exposed_chat_filters=frozenset(getattr(agent, "exposed_chat_filters", None) or []),
+            ignore_agent_middlewares=False,
+        )
+
+    if not agent.is_internal_chat:
+        raise InternalChatSessionError("turn_config can only be used with the internal chat agent")
+    if turn_config.app_id != agent.app_id:
+        raise InternalChatSessionError("turn_config belongs to a different App than the agent")
+
+    if agent.has_memory is not True:
+        # Chat history/summarization depend on the checkpointer: never degrade silently.
+        raise InternalChatSessionError("The internal chat agent must have memory enabled")
+
+    # The hidden agent must carry no agent-level configuration that would be shared by all
+    # users; it is ignored here, and flagged loudly if someone put something there.
+    # rag_k / rag_search_type / rag_max_retrieval_calls are intentionally read from the
+    # hidden agent: they hold the platform defaults for the chat.
+    for attr in ("middleware_associations", "exposed_chat_filters", "rag_fixed_filters",
+                 "rag_score_threshold"):
+        if getattr(agent, attr, None):
+            logger.error(
+                "Internal chat agent %s has unexpected %s; it is ignored for chat turns "
+                "(rag_fixed_filters is the exception: it is still read by RAG precedence)",
+                agent.agent_id, attr,
+            )
+    if getattr(agent, "skill_router_enabled", False):
+        logger.error("Internal chat agent %s has skill_router_enabled; ignored", agent.agent_id)
+
+    return _EffectiveAgentSurface(
+        is_chat=True,
+        ai_service_override=turn_config.ai_service,
+        ai_service=turn_config.ai_service,
+        system_prompt=turn_config.system_prompt,
+        skills=turn_config.skills,
+        silo_override=turn_config.silo,
+        has_retriever_silo=turn_config.silo is not None,
+        mcp_override=turn_config.mcp_connections,
+        use_output_parser=False,
+        code_interpreter_enabled=False,
+        server_tools=(),
+        tool_associations=(),
+        exposed_chat_filters=frozenset(),
+        ignore_agent_middlewares=True,
+    )
 
 
 async def create_agent(
@@ -294,6 +436,7 @@ async def create_agent(
     attached_files: Optional[List[Dict]] = None,
     temp_silo_ids: Optional[List[int]] = None,
     user_message: Optional[str] = None,
+    turn_config: Optional[ResolvedChatConfig] = None,
 ):
     """Create a new agent instance with cached checkpointer if memory is enabled.
 
@@ -313,16 +456,35 @@ async def create_agent(
             ``agent.skill_router_enabled`` is True (step_024's opt-in skill router,
             used to pre-select at most 2 skills to describe in the prompt) — otherwise
             never read, so passing/omitting it has no effect on today's default path.
+        turn_config: Flexible-chat per-turn override (``ResolvedChatConfig``). When set, the
+            LLM, system prompt, skills, retriever silo and MCP connections come from it
+            instead of the (shared, hidden) agent; the agent's tool associations, server
+            tools, output parser and code interpreter are ignored; ``session_id`` is
+            mandatory (``InternalChatSessionError`` otherwise — never the ``"default"``
+            session). The ORM ``agent`` is never mutated. ``None`` keeps the legacy path.
+
+    Caching rule (AD-5 #7): the LLM, graph, tools and skill snapshots are built on every
+    call and nothing is cached per ``agent_id`` today. Any future per-agent cache MUST
+    include ``turn_config`` in its key or skip agents with ``agent.is_internal_chat``,
+    otherwise one user's selection would be served to another.
     """
-    llm = get_llm(agent)
+    if turn_config is not None and not session_id:
+        raise InternalChatSessionError(
+            "create_agent with turn_config requires a conversation session_id"
+        )
+
+    surface = _effective_surface(agent, turn_config)
+
+    llm = get_llm(agent, ai_service_override=surface.ai_service_override)
     if llm is None:
         raise ValueError("No LLM found for agent")
 
-    output_parser = get_output_parser(agent)
+    # Flexible chat: free text answers, no structured output parser.
+    output_parser = get_output_parser(agent) if surface.use_output_parser else None
     format_instructions = ""
     pydantic_model = None
 
-    if agent.output_parser_id is not None:
+    if surface.use_output_parser and agent.output_parser_id is not None:
         try:
             pydantic_model = get_parser_model_by_id(agent.output_parser_id)
             format_instructions = output_parser.get_format_instructions()
@@ -333,7 +495,8 @@ async def create_agent(
     # Handle checkpointer management for memory-enabled agents
     checkpointer = None
     if agent.has_memory:
-        # Use the session_id if provided, otherwise use "default"
+        # Use the session_id if provided, otherwise use "default" (never for turn_config:
+        # rejected above, so the shared "default" session cannot be reached).
         cache_session_id = session_id if session_id else "default"
         # Create the async PostgreSQL checkpointer in the current event loop
         # This ensures the checkpointer uses the same event loop as ainvoke()
@@ -346,14 +509,17 @@ async def create_agent(
     # dropped right here, before it ever reaches a sub-agent (Gate 2 applies a
     # second, silo-scoped whitelist per sub-agent in IACTTool.create). It also
     # drives the <active_chat_filters> block appended to the system prompt below.
-    exposed_fields = set(getattr(agent, "exposed_chat_filters", None) or [])
+    exposed_fields = set(surface.exposed_chat_filters)
     orchestrator_caller_filter = {
         k: v for k, v in (search_params or {}).get("filter", {}).items() if k in exposed_fields
     }
 
+    # Flexible chat never gets a code interpreter (the hidden agent has it disabled and
+    # a per-turn override must not be able to turn it on).
+    code_interpreter_enabled = surface.code_interpreter_enabled
     ci_provider_for_prompt = None
     ci_languages: list[str] = []
-    if agent.enable_code_interpreter and working_dir:
+    if code_interpreter_enabled and working_dir:
         try:
             ci_provider_for_prompt = sandbox_provider or resolve_provider(agent)
             ci_languages = ci_provider_for_prompt.get_supported_languages()
@@ -369,7 +535,7 @@ async def create_agent(
 
     # Build system prompt with optional skills section and format instructions
     # In LangChain v1, system_prompt is a static string passed to create_agent
-    system_prompt_content = agent.system_prompt
+    system_prompt_content = surface.system_prompt
     # Inject current date to avoid need for a tool call
     current_date = datetime.now().strftime("%Y-%m-%d")
     system_prompt_content += f"\n\nToday's date is {current_date}."
@@ -387,7 +553,10 @@ async def create_agent(
     # `IACTTool.create` / `IACTOCRTool.create` below so a sub-agent can never drift onto
     # an unresolved/unsnapshotted/unrouted skills section again.
     skill_snapshots, skills_section = await _resolve_skills_for_prompt(
-        agent, user_message=user_message, llm=llm,
+        agent,
+        skills=surface.skills,
+        user_message=user_message,
+        llm=llm,
     )
     if skills_section:
         system_prompt_content = system_prompt_content + "\n" + skills_section
@@ -407,7 +576,7 @@ async def create_agent(
             + "</workspace>"
         )
 
-    if agent.enable_code_interpreter and working_dir and ci_provider_for_prompt is not None:
+    if code_interpreter_enabled and working_dir and ci_provider_for_prompt is not None:
         _ci_languages = ci_languages
         _tool_names = ", ".join(f"`{_tool_name_for_language(lang)}`" for lang in _ci_languages)
         system_prompt_content = (
@@ -435,7 +604,9 @@ async def create_agent(
     # Make the user's chat-filter selection explicit to the agent, so an orchestrator
     # can route on it instead of fanning out to every sub-agent. Advisory only —
     # every sub-agent tool is still built and callable.
-    filter_block = build_chat_filter_prompt_block(agent, orchestrator_caller_filter)
+    filter_block = (
+        "" if surface.is_chat else build_chat_filter_prompt_block(agent, orchestrator_caller_filter)
+    )
     if filter_block:
         system_prompt_content = system_prompt_content + "\n\n" + filter_block
 
@@ -448,7 +619,11 @@ async def create_agent(
         )
 
     from tools.middleware.factory import build_agent_middlewares
-    middleware = build_agent_middlewares(agent, llm)
+    middleware = (
+        build_agent_middlewares(agent, llm, ignore_agent_middlewares=True)
+        if surface.ignore_agent_middlewares
+        else build_agent_middlewares(agent, llm)
+    )
 
     tools = []
 
@@ -461,9 +636,9 @@ async def create_agent(
         "MistralAI":  {},
         "Custom":     {},
     }
-    provider_name = agent.ai_service.provider if agent.ai_service else None
+    provider_name = surface.ai_service.provider if surface.ai_service else None
     provider_map = _SERVER_TOOL_FORMATS.get(provider_name, {})
-    for tool_name in (getattr(agent, 'server_tools', None) or []):
+    for tool_name in surface.server_tools:
         tool_def = provider_map.get(tool_name)
         if tool_def:
             tools.append(tool_def)
@@ -471,7 +646,7 @@ async def create_agent(
         else:
             logger.warning("Server-side tool '%s' not supported by provider %s — skipped", tool_name, provider_name)
 
-    for tool in agent.tool_associations:
+    for tool in surface.tool_associations:
         sub_agent = tool.tool
         tools.append(await discover_tool(
             sub_agent,
@@ -490,13 +665,14 @@ async def create_agent(
     if working_dir:
         tools.append(create_download_url_tool(working_dir))
 
-    if agent.silo_id is not None:
+    if surface.has_retriever_silo:
         # Resolve precedence (caller > agent RAG config > system) AND build the tool
         # off the event loop: both precedence resolution (lazy-loads
         # silo.metadata_definition) and construction (distinct-value sampling) do
         # synchronous DB work.
         retriever_tool = await asyncio.to_thread(
-            _resolve_and_build_retriever_tool, agent, search_params
+            _resolve_and_build_retriever_tool, agent, search_params,
+            surface.silo_override,
         )
         if retriever_tool is not None:
             tools.append(retriever_tool)
@@ -594,7 +770,7 @@ async def create_agent(
             + "</uploaded_files_instructions>"
         )
 
-    if agent.enable_code_interpreter and working_dir:
+    if code_interpreter_enabled and working_dir:
         os.makedirs(working_dir, exist_ok=True)
         if sandbox_provider is None:
             try:
@@ -664,7 +840,11 @@ async def create_agent(
     mcp_client = None
     try:
         logger.info("Starting MCP tools loading...")
-        mcp_client = await MCPClientManager().get_client(agent, user_context)
+        mcp_client = await MCPClientManager().get_client(
+            agent,
+            user_context,
+            connections_override=surface.mcp_override,
+        )
         if mcp_client:
             mcp_tools = await asyncio.wait_for(
                 mcp_client.get_tools(), timeout=MCP_TOOLS_TIMEOUT
@@ -743,7 +923,7 @@ async def create_agent(
     # Add logging for the created agent
     logger.info(f"Created agent with {len(tools)} tools")
     logger.info(f"Memory enabled: {agent.has_memory}")
-    logger.info(f"Output parser: {agent.output_parser_id is not None}")
+    logger.info(f"Output parser: {surface.use_output_parser and agent.output_parser_id is not None}")
 
     return agent_chain, mcp_client
 
@@ -782,8 +962,10 @@ def _load_recursion_limit() -> int:
 AICT_AGENT_RECURSION_LIMIT: int = _load_recursion_limit()
 
 
-def _resolve_and_build_retriever_tool(agent, caller_search_params):
+def _resolve_and_build_retriever_tool(agent, caller_search_params, silo=None):
     """Resolve RAG precedence then build the dynamic retriever tool for *agent*.
+
+    The effective silo is ``silo`` when given (flexible chat, per turn), else ``agent.silo``.
 
     Runs synchronous DB work — precedence resolution lazy-loads
     ``silo.metadata_definition`` and ``get_retriever_tool`` samples distinct values.
@@ -797,27 +979,38 @@ def _resolve_and_build_retriever_tool(agent, caller_search_params):
     # create_agent) but this specific subagent's silo might not declare that field at
     # all. validate_clauses discards anything this silo's metadata_definition doesn't
     # know about, so a filter never gets applied to a nonexistent metadata key.
+    effective_silo = silo if silo is not None else agent.silo
     raw_filter = (caller_search_params or {}).get("filter") or {}
-    if raw_filter and agent.silo is not None:
-        backend_ops = ops_for_backend(getattr(agent.silo, "vector_db_type", None))
+    if raw_filter and effective_silo is not None:
+        backend_ops = ops_for_backend(getattr(effective_silo, "vector_db_type", None))
         clauses = [c for c in (flat_filter_clause(k, v) for k, v in raw_filter.items()) if c is not None]
-        valid = validate_clauses(clauses, getattr(agent.silo, "metadata_definition", None), backend_ops)
+        valid = validate_clauses(clauses, getattr(effective_silo, "metadata_definition", None), backend_ops)
         scoped_filter = {c.field: c.value for c in valid}
         caller_search_params = {**caller_search_params, "filter": scoped_filter} if scoped_filter else None
 
-    resolved_sp, resolved_pinned = resolve_search_params(agent, caller_search_params)
+    resolved_sp, resolved_pinned = resolve_search_params(agent, caller_search_params, silo=effective_silo)
     return get_retriever_tool(
-        agent.silo,
+        effective_silo,
         resolved_sp,
         getattr(agent, "rag_max_retrieval_calls", None),
         resolved_pinned,
     )
 
 
-def compute_thread_id(agent, session_id=None) -> str:
+def compute_thread_id(agent, session_id=None, *, require_session: bool = False) -> str:
     """Checkpointer thread_id for this agent/session — the single formula every
-    caller (chat, streaming, HITL resume) must agree on to find the same checkpoint."""
-    if getattr(agent, "has_memory", False) and session_id:
+    caller (chat, streaming, HITL resume) must agree on to find the same checkpoint.
+
+    With ``require_session=True`` (internal chat) a missing ``session_id`` raises
+    ``InternalChatSessionError`` instead of falling back to the agent-wide
+    ``thread_{agent_id}`` thread, which would be shared by every user/conversation.
+    """
+    if require_session and not session_id:
+        raise InternalChatSessionError(
+            "A conversation session is required to compute the checkpointer thread"
+        )
+    if require_session or (getattr(agent, "has_memory", False) and session_id):
+        # require_session (internal chat): always per-conversation, whatever has_memory says.
         return f"thread_{agent.agent_id}_{session_id}"
     return f"thread_{agent.agent_id}"
 

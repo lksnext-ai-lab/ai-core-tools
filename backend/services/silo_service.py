@@ -200,7 +200,9 @@ def _is_meaningful_chunk(text: str) -> bool:
     return True
 
 
-def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> tuple[dict, dict]:
+def resolve_search_params(
+    agent: Any, caller_search_params: Optional[dict], *, silo: Any = None
+) -> tuple[dict, dict]:
     """Materialize RAG precedence: caller > agent > system.
 
     Returns ``(search_params, pinned_filter)`` where:
@@ -223,7 +225,8 @@ def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> t
             site (e.g. the public API chat endpoint).
     """
     caller: dict = caller_search_params or {}
-    silo = getattr(agent, "silo", None)
+    # ``silo`` overrides ``agent.silo`` (flexible chat: per-turn silo, never set on the ORM agent).
+    silo = silo if silo is not None else getattr(agent, "silo", None)
 
     # ---- Tuning params (caller > agent > server_default) ----
     resolved: dict = {}

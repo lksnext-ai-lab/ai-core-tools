@@ -105,7 +105,9 @@ _BUILDERS: dict[MiddlewareType, Callable[[Any, Any, Any], List[Any]]] = {
 }
 
 
-def build_agent_middlewares(agent, llm, include_human_approval: bool = True) -> List[Any]:
+def build_agent_middlewares(
+    agent, llm, include_human_approval: bool = True, ignore_agent_middlewares: bool = False
+) -> List[Any]:
     """Return the ordered middleware list for ``create_agent``.
 
     Summarization always goes first (it trims history before any other hook sees it);
@@ -114,10 +116,13 @@ def build_agent_middlewares(agent, llm, include_human_approval: bool = True) -> 
 
     ``include_human_approval=False`` is for runs that cannot pause (an agent used as a
     tool): the caller must then withhold the gated tools (see ``tools_needing_approval``).
+
+    ``ignore_agent_middlewares=True`` (flexible chat) skips the agent's configured
+    middleware rows entirely and builds only the default summarization.
     """
     configured: list[tuple[MiddlewareType, Any]] = []
     seen: set[MiddlewareType] = set()
-    for assoc in getattr(agent, "middleware_associations", None) or []:
+    for assoc in ([] if ignore_agent_middlewares else getattr(agent, "middleware_associations", None) or []):
         mw = assoc.middleware
         if mw is None or mw.middleware_type in seen:
             continue
