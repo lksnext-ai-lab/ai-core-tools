@@ -12,6 +12,7 @@ class ConversationSource(enum.Enum):
     API = "api"
     SCHEDULED_TASK = "scheduled_task"
     A2A = "a2a"
+    INTERNAL_CHAT = "internal_chat"
 
 
 class Conversation(Base):
