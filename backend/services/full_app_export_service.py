@@ -25,7 +25,6 @@ from services.mcp_config_export_service import MCPConfigExportService
 from services.silo_export_service import SiloExportService
 from services.repository_export_service import RepositoryExportService
 from services.domain_export_service import DomainExportService
-from models.agent import AGENT_KIND_STANDARD
 from services.agent_export_service import AgentExportService
 from services.middleware_export_service import MiddlewareExportService
 from repositories.app_repository import AppRepository
@@ -361,7 +360,7 @@ class FullAppExportService(BaseExportService):
             List of agent export schemas
         """
         # The hidden internal chat agent is never part of an export (FR-13.4).
-        agents = [a for a in self.app_repo.get_agents_by_app_id(app_id) if a.kind == AGENT_KIND_STANDARD]
+        agents = [a for a in self.app_repo.get_agents_by_app_id(app_id) if not a.is_internal_chat]
         logger.info(f"Found {len(agents)} agents for app {app_id}")
         
         # Filter out agents without AI service (data inconsistency)

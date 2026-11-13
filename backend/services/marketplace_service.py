@@ -131,6 +131,7 @@ class MarketplaceService:
             .filter(
                 Agent.is_tool == False,  # noqa: E712
                 Agent.marketplace_visibility != MarketplaceVisibility.UNPUBLISHED,
+                Agent.visible_clause(),
             )
         )
 
@@ -202,7 +203,7 @@ class MarketplaceService:
                 joinedload(Agent.marketplace_profile),
                 joinedload(Agent.app),
             )
-            .filter(Agent.agent_id == agent_id)
+            .filter(Agent.agent_id == agent_id, Agent.visible_clause())
             .first()
         )
 
@@ -257,7 +258,7 @@ class MarketplaceService:
         agent = (
             db.query(Agent)
             .options(joinedload(Agent.marketplace_profile))
-            .filter(Agent.agent_id == agent_id, Agent.app_id == app_id)
+            .filter(Agent.agent_id == agent_id, Agent.app_id == app_id, Agent.visible_clause())
             .first()
         )
         if not agent:
@@ -302,7 +303,7 @@ class MarketplaceService:
         agent = (
             db.query(Agent)
             .options(joinedload(Agent.marketplace_profile))
-            .filter(Agent.agent_id == agent_id, Agent.app_id == app_id)
+            .filter(Agent.agent_id == agent_id, Agent.app_id == app_id, Agent.visible_clause())
             .first()
         )
         if not agent:
@@ -389,6 +390,7 @@ class MarketplaceService:
             .filter(
                 AgentMarketplaceProfile.agent_id == agent_id,
                 Agent.app_id == app_id,
+                Agent.visible_clause(),
             )
             .first()
         )
@@ -439,6 +441,7 @@ class MarketplaceService:
             .filter(
                 Conversation.user_id == user_id,
                 Conversation.source == ConversationSource.MARKETPLACE,
+                Agent.visible_clause(),
             )
         )
 
@@ -496,7 +499,7 @@ class MarketplaceService:
         agent = (
             db.query(Agent)
             .options(joinedload(Agent.app))
-            .filter(Agent.agent_id == agent_id)
+            .filter(Agent.agent_id == agent_id, Agent.visible_clause())
             .first()
         )
         if not agent:
@@ -570,6 +573,7 @@ class MarketplaceService:
             .filter(
                 AgentMarketplaceProfile.agent_id == agent_id,
                 Agent.marketplace_visibility != MarketplaceVisibility.UNPUBLISHED,
+                Agent.visible_clause(),
             )
             .first()
         )

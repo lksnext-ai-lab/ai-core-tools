@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Any, Optional, Set, Tuple
 from sqlalchemy.orm import Session
-from models.agent import AGENT_KIND_INTERNAL_CHAT, Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
+from models.agent import Agent, DEFAULT_AGENT_TEMPERATURE, DEFAULT_MEMORY_SUMMARIZE_THRESHOLD, DEFAULT_PROMPT_TEMPLATE
 from models.ocr_agent import OCRAgent
 from schemas.agent_schemas import AgentListItemSchema, AgentDetailSchema
 from repositories.agent_repository import AgentRepository
@@ -329,7 +329,7 @@ class AgentService:
 
         Same message as a missing agent so the internal agent is indistinguishable from one that does not exist.
         """
-        if agent is not None and agent.kind == AGENT_KIND_INTERNAL_CHAT:
+        if agent is not None and agent.is_internal_chat:
             raise ValueError("Agent not found")
 
     def get_available_chat_filter_fields(

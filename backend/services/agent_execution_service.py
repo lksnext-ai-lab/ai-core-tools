@@ -12,7 +12,7 @@ import uuid
 from contextlib import nullcontext
 from datetime import datetime
 from time import monotonic
-from typing import List, Dict, Any, Optional, Callable
+from typing import TYPE_CHECKING, List, Dict, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
@@ -46,10 +46,31 @@ from models.hitl_approval import ApprovalChannel, ApprovalStatus, HITLApproval
 from services import hitl_approval_service as approvals
 from repositories.hitl_approval_repository import HITLApprovalRepository
 
+if TYPE_CHECKING:
+    from services.internal_chat.resolved_config import ResolvedChatConfig
+
 logger = get_logger(__name__)
 
 _IMAGE_FILE_TYPES = {"image"}
 _AGENT_NOT_FOUND = "Agent not found"
+
+
+class AgentUnavailableError(HTTPException):
+    """404 raised when the agent is missing or may not run this turn (same wire format as before)."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=404, detail=_AGENT_NOT_FOUND)
+
+
+def finish_if_agent_unavailable(db, approval_id: str, exc: BaseException) -> bool:
+    """Terminally cancel a claimed approval whose resume failed because the agent is unavailable.
+
+    Releasing it would make the expiry sweep retry a permanent failure forever. Returns True if handled.
+    """
+    if not isinstance(exc, AgentUnavailableError):
+        return False
+    approvals.finish(db, approval_id, ApprovalStatus.CANCELLED, reason="agent_unavailable", error=str(exc.detail))
+    return True
 _CONTENT_IN_RAG_NOTE = (
     "[Content indexed in this conversation's knowledge base; "
     "relevant passages are retrieved automatically.]"
@@ -987,6 +1008,8 @@ class AgentExecutionService:
                     db, approval_id, resume.final_status,
                     reason=resume.reason, decisions=resume.decisions, decided_by=resume.decided_by,
                 )
+            elif finish_if_agent_unavailable(db, approval_id, exc):
+                pass
             else:
                 # Still answerable if the run failed before consuming the pause; a pause that
                 # was consumed is detected as stale on the next attempt.
@@ -1100,6 +1123,7 @@ class AgentExecutionService:
         user_context: Dict = None,
         conversation_id: int = None,
         db: Session = None,
+        turn_config: Optional["ResolvedChatConfig"] = None,
     ) -> AgentExecutionContext:
         """Run all setup steps for one agent chat turn.
 
@@ -1107,13 +1131,28 @@ class AgentExecutionService:
         enhanced message, and resolves the working directory.  Does NOT invoke
         the LangGraph chain — that is the caller's responsibility.
 
+        Execution choke point for the hidden internal chat agent: every channel passes through
+        here, so the agent is loaded with ``include_internal=True`` and then rejected (same 404 as
+        a missing agent) unless the turn carries a ``turn_config`` (only the Chat does), and a
+        ``turn_config`` on a standard agent is rejected too. ``turn_config`` is not used further
+        in this method yet. A ``turn_config`` without ``conversation_id`` is a 400 (the Chat never
+        auto-creates conversations here). Callers that step_006 must update to
+        pass it: ``execute_agent_chat_with_file_refs`` (and its ``_impl``) and
+        ``AgentStreamingService.stream_agent_events``.
+
         Returns:
             A fully populated :class:`AgentExecutionContext`.
         """
         # 1. Fetch agent (lightweight — no relationships)
-        agent = self.agent_service.get_agent(db, agent_id)
+        agent = self.agent_service.get_agent(db, agent_id, include_internal=True)
         if not agent:
-            raise HTTPException(status_code=404, detail=_AGENT_NOT_FOUND)
+            raise AgentUnavailableError()
+        if agent.is_internal_chat != (turn_config is not None):
+            raise AgentUnavailableError()
+        if turn_config is not None and not conversation_id:
+            # The Chat creates its conversations explicitly (source=INTERNAL_CHAT); never auto-create
+            # one with the default source. Raised before any side effect.
+            raise HTTPException(status_code=400, detail="conversation_id is required for a chat turn")
 
         # 2. Access to this agent (app/tenant ownership, API key scope, etc.) is
         # verified by the caller (router) before this service is ever invoked —
@@ -1184,6 +1223,7 @@ class AgentExecutionService:
                 conversation_id=conversation_id,
                 user_context=user_context,
                 agent_id=agent_id,
+                include_internal_chat=turn_config is not None,
             )
             if not conversation:
                 raise HTTPException(

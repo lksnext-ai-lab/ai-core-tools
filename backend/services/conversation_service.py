@@ -133,16 +133,22 @@ class ConversationService:
         db: Session,
         conversation_id: int,
         user_context: Dict,
-        agent_id: int = None
+        agent_id: int = None,
+        include_internal_chat: bool = False,
     ) -> Optional[Conversation]:
         """
         Get a conversation by ID with user validation
+
+        App Chat conversations (``source == INTERNAL_CHAT`` or owned by the hidden internal chat agent)
+        are "not found" unless ``include_internal_chat`` is True (only the App Chat endpoints and the
+        execution choke point pass it).
 
         Args:
             db: Database session
             conversation_id: ID of the conversation
             user_context: User context for validation
             agent_id: Optional agent ID to validate the conversation belongs to this agent
+            include_internal_chat: also return App Chat conversations
 
         Returns:
             Conversation object or None if not found/unauthorized
@@ -150,6 +156,8 @@ class ConversationService:
         query = db.query(Conversation).filter(
             Conversation.conversation_id == conversation_id
         )
+        if not include_internal_chat:
+            query = ConversationService._exclude_internal_chat(query)
         if agent_id is not None:
             query = query.filter(Conversation.agent_id == agent_id)
         conversation = query.first()
@@ -163,6 +171,14 @@ class ConversationService:
             return None
         
         return conversation
+
+    @staticmethod
+    def _exclude_internal_chat(query):
+        """Restrict a Conversation query to non-App-Chat rows (by source and by owning agent)."""
+        return query.join(Agent, Agent.agent_id == Conversation.agent_id).filter(
+            Conversation.source != ConversationSource.INTERNAL_CHAT,
+            Agent.visible_clause(),
+        )
 
     @staticmethod
     def get_marketplace_conversation(
@@ -189,7 +205,8 @@ class ConversationService:
         agent_id: int,
         user_context: AuthContext|dict,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        include_internal_chat: bool = False,
     ) -> tuple[List[Conversation], int]:
         """
         List conversations for a user with a specific agent
@@ -206,6 +223,9 @@ class ConversationService:
         """
         # Build query with user filtering
         query = db.query(Conversation).filter(Conversation.agent_id == agent_id)
+        if not include_internal_chat:
+            # Listing by the hidden internal chat agent id yields nothing (same as a missing agent).
+            query = ConversationService._exclude_internal_chat(query)
         
         # Filter by user - handle both AuthContext and dict
         if isinstance(user_context, AuthContext):
@@ -243,7 +263,8 @@ class ConversationService:
         db: Session,
         conversation_id: int,
         user_context: Dict,
-        update_data: ConversationUpdate
+        update_data: ConversationUpdate,
+        include_internal_chat: bool = False,
     ) -> Optional[Conversation]:
         """
         Update a conversation
@@ -257,7 +278,9 @@ class ConversationService:
         Returns:
             Updated Conversation object or None if not found/unauthorized
         """
-        conversation = ConversationService.get_conversation(db, conversation_id, user_context)
+        conversation = ConversationService.get_conversation(
+            db, conversation_id, user_context, include_internal_chat=include_internal_chat
+        )
         
         if not conversation:
             return None
@@ -353,7 +376,8 @@ class ConversationService:
     async def delete_conversation(
         db: Session,
         conversation_id: int,
-        user_context: Dict
+        user_context: Dict,
+        include_internal_chat: bool = False,
     ) -> bool:
         """
         Delete a conversation and its associated chat history
@@ -366,7 +390,9 @@ class ConversationService:
         Returns:
             True if deleted successfully, False otherwise
         """
-        conversation = ConversationService.get_conversation(db, conversation_id, user_context)
+        conversation = ConversationService.get_conversation(
+            db, conversation_id, user_context, include_internal_chat=include_internal_chat
+        )
         
         if not conversation:
             return False
@@ -385,7 +411,8 @@ class ConversationService:
     async def get_conversation_history(
         db: Session,
         conversation_id: int,
-        user_context: Dict
+        user_context: Dict,
+        include_internal_chat: bool = False,
     ) -> Optional[List[Dict]]:
         """
         Get the message history for a conversation
@@ -398,7 +425,9 @@ class ConversationService:
         Returns:
             List of messages or None if not found/unauthorized
         """
-        conversation = ConversationService.get_conversation(db, conversation_id, user_context)
+        conversation = ConversationService.get_conversation(
+            db, conversation_id, user_context, include_internal_chat=include_internal_chat
+        )
         
         if not conversation:
             return None
@@ -489,13 +518,17 @@ class ConversationService:
         return resolved_history
     
     @staticmethod
-    async def get_pending_approval(db: Session, conversation_id: int, user_context: Dict) -> Optional[Dict]:
+    async def get_pending_approval(
+        db: Session, conversation_id: int, user_context: Dict, include_internal_chat: bool = False
+    ) -> Optional[Dict]:
         """The human-in-the-loop approval this conversation is waiting for, if any.
 
         Lets the chat UI restore the approval card after a reload (an approval past its
         deadline is returned with ``status="expired"`` until the server resolves it).
         """
-        conversation = ConversationService.get_conversation(db, conversation_id, user_context)
+        conversation = ConversationService.get_conversation(
+            db, conversation_id, user_context, include_internal_chat=include_internal_chat
+        )
         if not conversation:
             return None
         from services import hitl_approval_service as approvals

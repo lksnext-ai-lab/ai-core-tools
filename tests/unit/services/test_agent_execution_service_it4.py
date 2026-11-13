@@ -58,6 +58,7 @@ class _FakeProvider:
 
 def _make_agent(enable_code_interpreter: bool = True, has_memory: bool = False):
     agent = MagicMock()
+    agent.is_internal_chat = False  # a bare MagicMock attribute would be truthy
     agent.agent_id = 7
     agent.name = "TestAgent"
     agent.type = "agent"

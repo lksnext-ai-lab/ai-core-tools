@@ -648,6 +648,9 @@ async def create_agent(
 
     for tool in surface.tool_associations:
         sub_agent = tool.tool
+        if sub_agent.is_internal_chat:
+            logger.error("Skipping internal chat agent %s used as a tool (must never happen)", sub_agent.agent_id)
+            continue
         tools.append(await discover_tool(
             sub_agent,
             user_context=user_context,
@@ -1367,6 +1370,9 @@ class IACTTool(BaseTool):
         # Add nested tool agents recursively
         for tool in agent.tool_associations:
             sub_agent = tool.tool
+            if sub_agent.is_internal_chat:
+                logger.error("Skipping internal chat agent %s used as a tool (must never happen)", sub_agent.agent_id)
+                continue
             tools.append(await discover_tool(
                 sub_agent, user_context=user_context, attached_files=attached_files,
                 user_message=user_message, caller_filter=caller_filter,
@@ -1903,6 +1909,9 @@ class IACTOCRTool(BaseTool):
         # Nested tool agents — only recurse into non-OCR agents, because
         for t in agent.tool_associations:
             sub_agent = t.tool
+            if sub_agent.is_internal_chat:
+                logger.error("Skipping internal chat agent %s used as a tool (must never happen)", sub_agent.agent_id)
+                continue
             nested = await discover_tool(
                 sub_agent, user_context=user_context, attached_files=attached_files,
                 user_message=user_message, caller_filter=caller_filter,

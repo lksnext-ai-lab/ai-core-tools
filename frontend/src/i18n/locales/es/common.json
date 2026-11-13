@@ -3599,6 +3599,7 @@
       "lastSeen": "{{count}} · último {{date}}",
       "latestFailures": "Fallos recientes",
       "agentFallback": "Agente n.º {{id}}",
+      "appChat": "Chat",
       "appFallback": "Aplicación n.º {{id}}"
     },
     "tools": {

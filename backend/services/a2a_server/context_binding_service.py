@@ -120,6 +120,12 @@ def _load_scoped_agent(db: Session, *, app_id: int, agent_id: int) -> Agent:
     returned row (`agent.app_id`), never off its own parameter, for every
     subsequent link/Conversation operation."""
     agent = db.get(Agent, agent_id)
+    if agent is not None and agent.app_id == app_id and agent.is_internal_chat:
+        logger.warning(
+            "a2a.context_binding.agent_not_visible agent_id=%s requested_app_id=%s",
+            agent_id, app_id,
+        )
+        raise A2AContextBindingError("agent not found for the given app")
     if agent is None or agent.app_id != app_id:
         logger.warning(
             "a2a.context_binding.agent_app_mismatch agent_id=%s requested_app_id=%s",

@@ -1352,6 +1352,7 @@ async def update_marketplace_visibility(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Update an agent's marketplace visibility (unpublished/private/public)."""
+    _get_agent_or_404(db, agent_id, app_id)
     try:
         agent = MarketplaceService.update_marketplace_visibility(
             db=db,
@@ -1376,6 +1377,7 @@ async def get_marketplace_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Get the marketplace profile for an agent (EDITOR+ management view)."""
+    _get_agent_or_404(db, agent_id, app_id)
     profile = MarketplaceService.get_marketplace_profile(db, agent_id, app_id)
     if not profile:
         raise HTTPException(
@@ -1398,6 +1400,7 @@ async def update_marketplace_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Create or update the marketplace profile for an agent."""
+    _get_agent_or_404(db, agent_id, app_id)
     try:
         profile = MarketplaceService.create_or_update_marketplace_profile(
             db=db,

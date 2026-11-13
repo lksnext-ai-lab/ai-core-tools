@@ -41,7 +41,12 @@ from tools.streaming_utils import (
     SSE_TOKEN,
     SSE_HITL_INTERRUPT,
 )
-from services.agent_execution_service import AgentExecutionService, RunPausedForApproval, pii_blocked_message
+from services.agent_execution_service import (
+    finish_if_agent_unavailable,
+    AgentExecutionService,
+    RunPausedForApproval,
+    pii_blocked_message,
+)
 from services import hitl_approval_service as approvals
 from models.hitl_approval import ApprovalChannel
 from tools.middleware.factory import human_in_the_loop_config, redacts_output
@@ -694,6 +699,9 @@ class AgentStreamingService:
                 exc.status_code,
                 exc.detail if exc.status_code < 500 else "<redacted>",
             )
+            if not resume_settled and effective_db is not None:
+                # Permanent (agent deleted / not runnable): finish instead of releasing to PENDING.
+                resume_settled = finish_if_agent_unavailable(effective_db, resume.approval.id, exc)
             metrics_status, metrics_error_code = "ERROR", "HTTPException"
             metrics_error_message = (
                 str(exc.detail)[:2000] if exc.status_code < 500 else "Internal error"

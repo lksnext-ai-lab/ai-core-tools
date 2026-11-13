@@ -45,7 +45,7 @@ export function ErrorsPanel({ errors, showApp = false }: Props) {
                 <li key={`${r.started_at}-${i}`} className="py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium text-fg dark:text-fg-dark">
-                      {r.agent_name ?? t('metricsDashboard.errors.agentFallback', { id: r.agent_id })}
+                      {r.agent_name ?? (r.agent_id === null ? t('metricsDashboard.errors.appChat') : t('metricsDashboard.errors.agentFallback', { id: r.agent_id }))}
                       {showApp && <span className="font-normal text-fg-secondary dark:text-fg-secondary-dark"> · {r.app_name ?? t('metricsDashboard.errors.appFallback', { id: r.app_id })}</span>}
                     </span>
                     <span className="whitespace-nowrap text-xs ext-fg-secondary dark:text-fg-secondary-dark">{formatDateTime(r.started_at)}</span>

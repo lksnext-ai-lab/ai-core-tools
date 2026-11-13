@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
@@ -35,6 +35,16 @@ class AgentRepository:
         Apply to every listing / lookup that must never expose the internal chat agent.
         """
         return Agent.visible_clause()
+
+    @staticmethod
+    def get_internal_chat_ids(db: Session, agent_ids: List[int]) -> Set[int]:
+        """Return the subset of ``agent_ids`` that are hidden internal chat agents."""
+        if not agent_ids:
+            return set()
+        rows = db.query(Agent.agent_id).filter(
+            Agent.agent_id.in_(list(agent_ids)), Agent.internal_chat_clause()
+        ).all()
+        return {agent_id for (agent_id,) in rows}
 
     @staticmethod
     def get_by_id(db: Session, agent_id: int) -> Optional[Agent]:

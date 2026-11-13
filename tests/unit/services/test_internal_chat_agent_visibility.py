@@ -41,6 +41,7 @@ def captured_sql():
 def _agent(kind: str, **kw) -> MagicMock:
     agent = MagicMock()
     agent.kind = kind
+    agent.is_internal_chat = kind == AGENT_KIND_INTERNAL_CHAT
     agent.app_id = kw.get("app_id", 1)
     return agent
 
