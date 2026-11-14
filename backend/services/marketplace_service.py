@@ -407,9 +407,11 @@ class MarketplaceService:
         """
         Retrieve the conversation starters for a specific agent.
         """
+        # The hidden internal chat agent answers like a missing agent (FR-13).
         profile = (
             db.query(AgentMarketplaceProfile)
-            .filter(AgentMarketplaceProfile.agent_id == agent_id)
+            .join(Agent, Agent.agent_id == AgentMarketplaceProfile.agent_id)
+            .filter(AgentMarketplaceProfile.agent_id == agent_id, Agent.visible_clause())
             .first()
         )
         if not profile:
@@ -654,9 +656,11 @@ class MarketplaceService:
         user_id: int,
     ) -> UserRatingResponseSchema:
         """Return the current user's star rating for the given agent, or None."""
+        # The hidden internal chat agent answers like a missing agent (FR-13).
         profile = (
             db.query(AgentMarketplaceProfile)
-            .filter(AgentMarketplaceProfile.agent_id == agent_id)
+            .join(Agent, Agent.agent_id == AgentMarketplaceProfile.agent_id)
+            .filter(AgentMarketplaceProfile.agent_id == agent_id, Agent.visible_clause())
             .first()
         )
         if not profile:
