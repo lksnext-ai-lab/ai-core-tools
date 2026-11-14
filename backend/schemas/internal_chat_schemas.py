@@ -1,10 +1,11 @@
 """Schemas of the flexible per-App Chat (spec ``app-flexible-chat``, AD-4 / AD-8).
 
-Step 7 only needs the selection, the per-turn snapshot (``ChatTurnInfo``) and the options payload;
-the request/response schemas of the HTTP endpoints are added by the router step.
+Selection, per-turn snapshot (``ChatTurnInfo``) and options payload come first; the request/response
+schemas of the HTTP endpoints (conversations, messages, defaults) follow. Responses never carry the
+``session_id`` or the internal ``agent_id``: both stay server-side.
 """
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -97,3 +98,114 @@ class ChatOptionsResponse(BaseModel):
     default_selection: Optional[ChatSelection] = None
     default_warnings: list[ChatSelectionWarning] = Field(default_factory=list)
     has_usable_model: bool
+
+
+MAX_TITLE_LENGTH = 255  # Conversation.title is String(255)
+
+
+class ChatConversationCreate(BaseModel):
+    """Create a Chat conversation; without ``selection`` the user's default (or the App default) is used."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, max_length=MAX_TITLE_LENGTH)
+    selection: Optional[ChatSelection] = None
+
+
+class ChatConversationRename(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=MAX_TITLE_LENGTH)
+
+
+class ChatConversationResponse(BaseModel):
+    """One Chat conversation of the caller. ``selection`` is only filled by the create endpoint."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    conversation_id: int
+    title: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    last_message: Optional[str] = None
+    message_count: int = 0
+    selection: Optional[ChatSelection] = None
+
+
+class ChatConversationListResponse(BaseModel):
+    conversations: list[ChatConversationResponse]
+    total: int
+
+
+class ChatHistoryMessage(BaseModel):
+    """A message of the history; assistant messages carry the ``turn`` snapshot (null when unknown)."""
+
+    role: str
+    content: str
+    message_id: Optional[str] = None
+    turn: Optional[ChatTurnInfo] = None
+
+
+class ChatConversationDetailResponse(ChatConversationResponse):
+    """A conversation with its history (as kept by the checkpointer, already summarized when long)."""
+
+    messages: list[ChatHistoryMessage] = Field(default_factory=list)
+    current_selection: Optional[ChatSelection] = None
+    warnings: list[ChatSelectionWarning] = Field(default_factory=list)
+    # Approval the conversation is paused on (only visible to its requester); the Chat itself rejects pauses.
+    pending_approval: Optional[dict[str, Any]] = None
+
+
+class ChatMessageResponse(BaseModel):
+    """Answer of the synchronous ``POST /chat/messages``."""
+
+    response: str | dict[str, Any]
+    conversation_id: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    # None when the completion hook skipped or failed (the answer is still valid).
+    turn: Optional[ChatTurnInfo] = None
+
+
+class ChatFileUploadResponse(BaseModel):
+    """Same keys as the playground upload response."""
+
+    success: bool
+    file_id: str
+    filename: str
+    file_type: Optional[str] = None
+    vectorized: bool
+    file_size_bytes: Optional[int] = None
+    file_size_display: Optional[str] = None
+    processing_status: Optional[str] = None
+    content_preview: Optional[str] = None
+    has_extractable_content: Optional[bool] = None
+    mime_type: Optional[str] = None
+
+
+class ChatFileInfo(BaseModel):
+    """One attached file, as ``FileReference.to_dict()`` reports it."""
+
+    file_id: str
+    filename: str
+    file_type: Optional[str] = None
+    content: Optional[str] = None
+    file_path: Optional[str] = None
+    uploaded_at: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    file_size_display: Optional[str] = None
+    processing_status: Optional[str] = None
+    content_preview: Optional[str] = None
+    has_extractable_content: Optional[bool] = None
+    mime_type: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class ChatFileListResponse(BaseModel):
+    files: list[ChatFileInfo]
+    total_size_bytes: int
+    total_size_display: str
+
+
+class ChatFileDownloadResponse(BaseModel):
+    download_url: str
+    filename: str

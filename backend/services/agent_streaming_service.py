@@ -357,6 +357,9 @@ class AgentStreamingService:
                 "has_memory": ctx.agent.has_memory,
             }
             if chat_turn:
+                # The Chat runs on a hidden shared agent: its ids, name and the thread's session id stay server-side.
+                for internal_key in ("session_id", "agent_id", "agent_name"):
+                    metadata_data.pop(internal_key)
                 metadata_data["turn_config"] = turn_config.to_client_summary()
             yield AgentStreamEvent("metadata", metadata_data)
 

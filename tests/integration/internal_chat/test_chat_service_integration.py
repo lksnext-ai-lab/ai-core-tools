@@ -442,18 +442,22 @@ async def test_reset_bumps_generation_wipes_turns_and_cleans_files_and_media(db,
     from unittest.mock import MagicMock
 
     release = MagicMock()
-    removed = AsyncMock(return_value=0)
+    removed = AsyncMock(return_value=True)
     event.listen(db.get_bind(), "before_cursor_execute", capture)
     try:
         with patch.object(ConversationService, "delete_thread_history", new=AsyncMock()) as thread, \
              patch.object(ConversationService, "release_conversation_resources", new=release), \
-             patch("services.file_management_service.FileManagementService.remove_all_attached_files", new=removed):
+             patch("services.file_management_service.FileManagementService.list_attached_files",
+                   new=AsyncMock(return_value=[{"file_id": "f-old"}])) as listed, \
+             patch("services.file_management_service.FileManagementService.remove_file", new=removed):
             await alice.reset_conversation(app_id, cid)
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", capture)
     assert thread.await_args.args == (p.agent_id, old_sid)  # the OLD thread, after the commit
     release.assert_called_once()
-    assert removed.await_args.args[0] == p.agent_id and removed.await_args.args[2] == str(cid)
+    assert listed.await_args.args[0] == p.agent_id and listed.await_args.args[2] == str(cid)
+    assert removed.await_args.args == ("f-old", p.agent_id, {"user_id": world["alice"].user_id, "oauth": True,
+                                                              "app_id": app_id}, str(cid))
     assert any("FOR UPDATE" in st and "chat_conversation_state" in st for st in statements)
     assert db.query(ConversationTurn).filter_by(conversation_id=cid).count() == 0
     db.expire_all()

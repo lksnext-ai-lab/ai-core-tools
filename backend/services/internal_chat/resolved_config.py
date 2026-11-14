@@ -24,6 +24,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from schemas.internal_chat_schemas import ChatSelectionWarning
+
 
 class InternalChatSessionError(RuntimeError):
     """Raised when an internal-chat turn has no conversation session.
@@ -75,6 +77,8 @@ class ResolvedChatConfig:
     mcp_config_ids: tuple[int, ...]
     mcp_config_names: tuple[str, ...]
     system_prompt: str
+    # Selected MCP configs skipped for this turn (unusable connection config): ids only, for the SSE metadata.
+    skipped_mcp_config_ids: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         # Fail loudly: a missing service or a non-tuple would otherwise make downstream
@@ -96,12 +100,17 @@ class ResolvedChatConfig:
 
     def to_client_summary(self) -> dict:
         """Ids and display names only, for the SSE ``metadata`` event."""
-        return {
+        summary = {
             "ai_service": {"id": self.ai_service_id, "name": self.ai_service_name},
             "silo": {"id": self.silo_id, "name": self.silo_name} if self.silo_id is not None else None,
             "skills": [{"id": i, "name": n} for i, n in zip(self.skill_ids, self.skill_names)],
             "mcp_configs": [{"id": i, "name": n} for i, n in zip(self.mcp_config_ids, self.mcp_config_names)],
         }
+        # Always present (empty when nothing was skipped); same shape as ``ChatTurnInfo.warnings``.
+        summary["warnings"] = [
+            ChatSelectionWarning(kind="mcp_config", id=i).model_dump() for i in self.skipped_mcp_config_ids
+        ]
+        return summary
 
     def to_selection_dict(self) -> dict:
         """Selection in the persisted/client shape (``ChatSelection`` fields)."""

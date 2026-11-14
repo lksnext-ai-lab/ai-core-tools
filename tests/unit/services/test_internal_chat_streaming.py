@@ -120,6 +120,10 @@ async def test_chat_turn_event_contract():
     assert _types(events)[0] == "metadata" and _types(events)[-1] == "done"
     meta, done = events[0].data, events[-1].data
     assert meta["turn_config"] == cfg.to_client_summary()
+    assert meta["turn_config"]["warnings"] == []  # always present
+    # the hidden shared agent's ids / name and the thread's session id never reach the client
+    assert not {"session_id", "agent_id", "agent_name"} & set(meta)
+    assert meta["conversation_id"] == 297 and "has_memory" in meta
     assert done["assistant_message_id"] == "run-1" and done["turn"] == {"turn_index": 1}
     assert create.call_args.kwargs["turn_config"] is cfg
     assert rec["ai_service_override"] == cfg.metrics_service()
@@ -133,6 +137,7 @@ async def test_chat_turn_event_contract():
 async def test_standard_turn_has_no_chat_keys():
     events, es, rec, create, _, _ = await _run(_ctx(), _chain(CHUNKS))
     assert "turn_config" not in events[0].data
+    assert {"session_id", "agent_id", "agent_name"} <= set(events[0].data)  # the playground keeps them
     assert "assistant_message_id" not in events[-1].data and "turn" not in events[-1].data
     assert rec["ai_service_override"] is None
     assert es._finalize_turn.call_args.kwargs == {}

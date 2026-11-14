@@ -42,6 +42,7 @@ from .folders import folders_router
 from .mcp_servers import mcp_servers_router
 from .skills import skills_router
 from .middlewares import middlewares_router
+from .internal_chat import internal_chat_router
 
 from utils.logger import get_logger
 
@@ -498,6 +499,7 @@ apps_router.include_router(folders_router, prefix="/{app_id}/repositories/{repos
 apps_router.include_router(mcp_servers_router, prefix="/{app_id}/mcp-servers", tags=["MCP Servers"])
 apps_router.include_router(skills_router, prefix="/{app_id}/skills", tags=["Skills"])
 apps_router.include_router(middlewares_router, prefix="/{app_id}/middlewares", tags=["Middlewares"])
+apps_router.include_router(internal_chat_router, prefix="/{app_id}/chat", tags=["App Chat"])
 
 def get_services(db: Session) -> Tuple[AppService, AppCollaborationService]:
     """Return initialised AppService and AppCollaborationService."""

@@ -20,7 +20,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -46,6 +46,7 @@ from schemas.internal_chat_schemas import (
     ChatTurnInfo,
 )
 from services.agent_execution_context import TurnCompleted, TurnCompletedHook
+from services.chat_attachment_service import ChatAttachmentService
 from services.conversation_service import ConversationService
 from services.internal_chat.errors import ChatResourceNotFoundError
 from services.internal_chat.resolved_config import ResolvedChatConfig
@@ -66,6 +67,7 @@ _ALLOWED_CONTEXT_KEYS = ("user_id", "email", "oauth", "token")
 
 # Bounds of every transaction that takes the conversation-state lock (hook, reset): the code runs on a
 # synchronous session, so an unbounded lock wait would also freeze the event loop.
+DOWNLOAD_LINK_TTL_SECONDS = 300  # Chat download links are short-lived
 HOOK_LOCK_TIMEOUT_MS = 3000
 HOOK_STATEMENT_TIMEOUT_MS = 8000
 
@@ -81,6 +83,8 @@ class PreparedChatTurn:
     user_context: Dict[str, Any]
     # Selected resources skipped for this turn (an unusable MCP config): the turn runs without them.
     warnings: Tuple[ChatSelectionWarning, ...] = ()
+    # True when ``prepare_turn`` created the conversation (no ``conversation_id`` was given).
+    created: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,16 @@ class _TurnGuard:
     generation: int  # chat_conversation_state.generation when the turn started
     selection: Dict[str, Any]  # what the user asked for (persisted as state / default)
     warnings: Tuple[ChatSelectionWarning, ...] = ()
+
+
+@dataclass(frozen=True)
+class AttachmentScope:
+    """Server-side scope of one conversation's attachments (nothing here comes from the client)."""
+
+    agent_id: int
+    conversation_id: int
+    session_id: str
+    context: Dict[str, Any]
 
 
 @dataclass
@@ -384,6 +398,8 @@ class InternalChatService:
         except Exception:
             self.db.rollback()
             raise
+        # Attachments (per-user session folder + ``conversations/{id}/`` working dir); best effort, row already gone.
+        ChatAttachmentService.delete_storage(agent_id, self._attachment_context(app_id), conversation_id)
         await ConversationService.delete_thread_history(agent_id, session_id)
 
     async def reset_conversation(self, app_id: int, conversation_id: int) -> None:
@@ -400,7 +416,9 @@ class InternalChatService:
         2. After the commit the old thread is unreferenced: delete it (best effort). A failure is logged (ids
            only) and does not fail the reset; the user-visible state is already correct and a turn still bound to
            the old thread drops it itself when it completes.
-        3. Best effort: attachments, then temp media / sandbox of the old session.
+        3. Best effort: ONLY the attachments that existed before step 1 (a snapshot of their ids taken before the
+           locked transaction), then temp media / sandbox of the old session. A file the user uploads right after
+           the reset (new session) is never touched.
 
         Known limit: a stale turn (started before the reset) has already run the shared
         ``increment_message_count``, so right after the reset ``message_count`` / ``last_message`` may still show
@@ -411,6 +429,10 @@ class InternalChatService:
         """
         conversation = self._load_conversation(app_id, conversation_id)
         agent_id = conversation.agent_id
+        # Snapshot BEFORE the locked transaction (it may await; the transaction below must not): the cleanup
+        # after the commit removes exactly these ids, so a file uploaded after the commit survives.
+        attachment_context = self._attachment_context(app_id)
+        stale_file_ids = await self._attached_file_ids(agent_id, attachment_context, conversation_id)
         try:
             set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
             locked = ChatConversationStateRepository.lock(self.db, conversation_id)
@@ -435,15 +457,102 @@ class InternalChatService:
                 conversation_id, agent_id, old_session_id,
             )
 
-        from services.file_management_service import FileManagementService
-
-        await FileManagementService().remove_all_attached_files(
-            agent_id, {"user_id": self._user_id, "app_id": app_id}, str(conversation_id)
-        )
+        await ChatAttachmentService.remove_many(stale_file_ids, agent_id, attachment_context, conversation_id)
         conversation = self.db.get(Conversation, conversation_id)
         if conversation is not None:
             ConversationService.release_conversation_resources(self.db, conversation, session_id=old_session_id)
             self.db.commit()
+
+    # ------------------------------------------------------------------ attachments
+
+    def _attachment_context(self, app_id: int) -> Dict[str, Any]:
+        """Scope of the stored attachments (file session key = agent + user + App + conversation)."""
+        return {"user_id": self._user_id, "oauth": True, "app_id": app_id}
+
+    @staticmethod
+    async def _attached_file_ids(agent_id: int, context: Dict[str, Any], conversation_id: int) -> List[str]:
+        """Ids of the files currently attached to the conversation (best effort: a failure means none)."""
+        try:
+            return await ChatAttachmentService.list_file_ids(agent_id, context, conversation_id)
+        except Exception:
+            logger.error("Chat: could not list attachments (conversation_id=%s agent_id=%s)", conversation_id, agent_id)
+            return []
+
+    def _attachment_scope(self, app_id: int, conversation_id: int) -> AttachmentScope:
+        """Validate the conversation and read its CURRENT session id from the database (a reset rotates it)."""
+        conversation = self._load_conversation(app_id, conversation_id)
+        binding = ChatConversationStateRepository.get_binding(self.db, conversation_id)
+        if binding is None:
+            raise ChatResourceNotFoundError()
+        return AttachmentScope(
+            agent_id=conversation.agent_id,
+            conversation_id=conversation_id,
+            session_id=binding[1],
+            context=self._attachment_context(app_id),
+        )
+
+    async def upload_attachment(self, app_id: int, conversation_id: int, file: UploadFile) -> Dict[str, Any]:
+        """Attach ``file`` to the caller's conversation (stored per conversation, indexed into its temp silo)."""
+        self._guard_new_activity(app_id)  # a frozen App takes no new chat activity (list/delete/download stay open)
+        scope = self._attachment_scope(app_id, conversation_id)
+        return await ChatAttachmentService.upload(
+            self.db,
+            file,
+            agent_id=scope.agent_id,
+            app_id=app_id,
+            user_context=scope.context,
+            conversation_id=scope.conversation_id,
+            has_memory=True,  # the internal chat agent always keeps memory
+            resolve_session_id=lambda: scope.session_id,
+        )
+
+    async def list_attachments(self, app_id: int, conversation_id: int) -> Dict[str, Any]:
+        scope = self._attachment_scope(app_id, conversation_id)
+        return await ChatAttachmentService.list_files(scope.agent_id, scope.context, scope.conversation_id)
+
+    async def remove_attachment(self, app_id: int, conversation_id: int, file_id: str) -> None:
+        """Remove one file of this conversation; any id that is not one of its files is "not found"."""
+        scope = self._attachment_scope(app_id, conversation_id)
+        if not await ChatAttachmentService.remove(file_id, scope.agent_id, scope.context, scope.conversation_id):
+            raise ChatResourceNotFoundError()
+
+    async def attachment_download(
+        self, app_id: int, conversation_id: int, file_id: str, request_base_url: str
+    ) -> Dict[str, str]:
+        """Signed download link of one file of this conversation (never searched outside the conversation)."""
+        scope = self._attachment_scope(app_id, conversation_id)
+        found = await ChatAttachmentService.find(
+            file_id, scope.agent_id, scope.context, [str(scope.conversation_id)]
+        )
+        email = self._user_context.get("email")
+        download = (
+            ChatAttachmentService.build_expiring_download(found, email, request_base_url, DOWNLOAD_LINK_TTL_SECONDS)
+            if found and email
+            else None
+        )
+        if download is None:
+            raise ChatResourceNotFoundError()
+        return download
+
+    # ------------------------------------------------------------------ defaults
+
+    def get_defaults(self, app_id: int) -> Optional[ChatSelection]:
+        """The user's sanitized default selection, else the App default (None when no usable model)."""
+        self._guard_new_activity(app_id)
+        selection, _ = self._default_selection(app_id)
+        return selection
+
+    def set_defaults(self, app_id: int, selection: ChatSelection) -> ChatSelection:
+        """Pin the caller's own default selection (validated like a turn's; only the caller's row is written)."""
+        self._guard_new_activity(app_id)
+        requested = ChatSelectionResolver.resolve_full(self.db, app_id, selection).requested
+        try:
+            ChatUserDefaultRepository.upsert(self.db, self._user_id, app_id, requested.model_dump())
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return requested
 
     # ------------------------------------------------------------------ turns
 
@@ -512,7 +621,28 @@ class InternalChatService:
             on_turn_completed=hook,
             user_context=self.build_turn_user_context(app_id),
             warnings=resolved.skipped,
+            created=conversation_id is None,
         )
+
+    async def discard_created_conversation(self, app_id: int, prepared: PreparedChatTurn) -> None:
+        """Best effort: delete the conversation ``prepared`` created when its first turn failed before answering.
+
+        Only a conversation created by that very request (``prepared.created``) and still empty (no messages, no
+        persisted turn) is removed, through the normal delete path (state rows, storage and thread go too). It never
+        raises, so it cannot mask the error the caller is about to re-raise.
+        """
+        if not prepared.created:
+            return
+        conversation_id = prepared.conversation.conversation_id
+        try:
+            self.db.rollback()  # the failed turn may have left the session in an aborted transaction
+            conversation = self._load_conversation(app_id, conversation_id)
+            if conversation.message_count or ConversationTurnRepository.list_for_conversation(self.db, conversation_id):
+                return
+            await self.delete_conversation(app_id, conversation_id)
+            logger.info("Chat: discarded the empty conversation %s of a failed first turn", conversation_id)
+        except Exception:
+            logger.warning("Chat: could not discard the empty conversation %s of a failed first turn", conversation_id)
 
     async def on_turn_completed(self, event: TurnCompleted, guard: _TurnGuard) -> Optional[dict]:
         """Persist the completed turn (``TurnCompletedHook`` body): runs in a SAVEPOINT; never commits.

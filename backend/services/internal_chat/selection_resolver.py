@@ -173,6 +173,7 @@ class ChatSelectionResolver:
             mcp_config_ids=tuple(s.config_id for s in mcp_specs),
             mcp_config_names=tuple(s.name for s in mcp_specs),
             system_prompt=get_internal_chat_system_prompt(),
+            skipped_mcp_config_ids=tuple(skipped_ids),
         )
         requested = ChatSelection(
             ai_service_id=service.service_id,

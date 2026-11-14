@@ -1091,7 +1091,7 @@ class FileManagementService:
     ) -> int:
         """Remove every attached file of a session (optionally one conversation's); returns how many were listed.
 
-        Shared by the playground reset and the App Chat reset. A failure on one file is logged and does not
+        Used by the playground reset (the App Chat reset removes only a snapshot of ids, see ``InternalChatService``). A failure on one file is logged and does not
         stop the others.
         """
         attached_files = await self.list_attached_files(agent_id, user_context, conversation_id)
