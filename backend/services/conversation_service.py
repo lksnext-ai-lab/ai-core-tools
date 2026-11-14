@@ -6,7 +6,7 @@ import re
 from typing import List, Optional, Dict
 from numpy import isin
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc
+from sqlalchemy import and_, or_, desc, update
 from datetime import datetime
 
 from models.conversation import Conversation, ConversationSource
@@ -14,6 +14,7 @@ from repositories.conversation_repository import ConversationRepository
 from models.agent import Agent
 from schemas.conversation_schemas import ConversationCreate, ConversationUpdate
 from services.agent_cache_service import CheckpointerCacheService
+from utils.error_handlers import ValidationError
 from utils.logger import get_logger
 from utils.security import hash_api_key
 from lks_idprovider import AuthContext
@@ -73,6 +74,8 @@ class ConversationService:
         title: Optional[str] = None,
         source: ConversationSource = ConversationSource.PLAYGROUND,
         scheduled_task_id: Optional[int] = None,
+        auto_title: bool = True,
+        commit: bool = True,
     ) -> Conversation:
         """
         Create a new conversation for a user and agent
@@ -82,10 +85,26 @@ class ConversationService:
             agent_id: ID of the agent
             user_context: User context (user_id or api_key)
             title: Optional title for the conversation
+            source: Origin of the conversation. ``INTERNAL_CHAT`` is tied one-to-one to the hidden
+                internal chat agent: it is only valid for that agent, and that agent only accepts it.
+            auto_title: generate a timestamp title when ``title`` is empty (the App Chat passes
+                False and keeps ``title=None`` so the UI can derive it)
+            commit: when False the row is only flushed and refreshed, so the caller can create other rows
+                in the same transaction and commit (or roll back) once
             
         Returns:
             Created Conversation object
+
+        Raises:
+            ValidationError: ``source`` and agent kind disagree (App Chat source on a normal agent, or a
+                normal source on the internal chat agent)
         """
+        from repositories.agent_repository import AgentRepository
+
+        is_internal_agent = bool(AgentRepository.get_internal_chat_ids(db, [agent_id]))
+        if is_internal_agent != (source == ConversationSource.INTERNAL_CHAT):
+            raise ValidationError("Conversation source does not match the agent kind")
+
         # Generate unique conversation UUID
         conversation_uuid = str(uuid.uuid4())
         session_id = f"conv_{agent_id}_{conversation_uuid}"
@@ -106,7 +125,7 @@ class ConversationService:
             api_key_hash = hash_api_key(api_key)
         
         # Generate auto-title if not provided
-        if not title:
+        if not title and auto_title:
             title = f"Conversación {datetime.utcnow().strftime('%d/%m/%Y %H:%M')}"
         
         # Create conversation
@@ -122,7 +141,10 @@ class ConversationService:
         )
         
         db.add(conversation)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         db.refresh(conversation)
         
         logger.info(f"Created conversation {conversation.conversation_id} for agent {agent_id}")
@@ -302,17 +324,24 @@ class ConversationService:
         return conversation
     
     @staticmethod
-    def release_conversation_resources(db: Session, conversation: Conversation) -> None:
-        """Drop a conversation's temp media (silo + repo + vectors) and its sandbox. Best effort."""
+    def release_conversation_resources(
+        db: Session, conversation: Conversation, session_id: Optional[str] = None
+    ) -> None:
+        """Drop a conversation's temp media (silo + repo + vectors) and its sandbox. Best effort.
+
+        ``session_id`` overrides ``conversation.session_id`` for the temp-media lookup (the App Chat reset
+        rotates the session id and must clean up the previous one).
+        """
         conversation_id = conversation.conversation_id
+        session_id = session_id or conversation.session_id
         try:
             from services.playground_media_service import PlaygroundMediaService
             PlaygroundMediaService.cleanup(
-                conversation.agent.app_id, conversation.agent_id, conversation.session_id, db
+                conversation.agent.app_id, conversation.agent_id, session_id, db
             )
             logger.info(
                 f"Cleaned up playground media for conversation {conversation_id} "
-                f"(agent {conversation.agent_id}, session {conversation.session_id})"
+                f"(agent {conversation.agent_id}, session {session_id})"
             )
         except Exception as e:
             logger.error(f"Error cleaning up playground media during delete: {e}")
@@ -433,7 +462,21 @@ class ConversationService:
         
         if not conversation:
             return None
-        
+        return await ConversationService.history_of_conversation(
+            conversation, user_context, include_message_ids=include_message_ids
+        )
+
+    @staticmethod
+    async def history_of_conversation(
+        conversation: Conversation,
+        user_context: Dict,
+        include_message_ids: bool = False,
+    ) -> List[Dict]:
+        """Message history of an already loaded (and access-checked) conversation.
+
+        Same output as ``get_conversation_history``; lets a caller that holds the row avoid loading it again.
+        """
+        conversation_id = conversation.conversation_id
         # Scheduled runs and interactive runs can arrive with either the
         # canonical conversation session id or its UUID suffix, depending on
         # which session-management path created the LangGraph checkpoint.
@@ -536,6 +579,11 @@ class ConversationService:
         )
         if not conversation:
             return None
+        return ConversationService.pending_approval_of_conversation(db, conversation, user_context)
+
+    @staticmethod
+    def pending_approval_of_conversation(db: Session, conversation: Conversation, user_context: Dict) -> Optional[Dict]:
+        """``get_pending_approval`` for an already loaded (and access-checked) conversation."""
         from services import hitl_approval_service as approvals
 
         approval = approvals.get_pending_for_conversation(db, conversation.conversation_id)
@@ -609,18 +657,18 @@ class ConversationService:
             last_message: Optional last message preview
             increment_by: Number to increment message count by (default 1, use 2 for user+agent)
         """
-        conversation = db.query(Conversation).filter(
-            Conversation.conversation_id == conversation_id
-        ).first()
-        
-        if conversation:
-            conversation.message_count += increment_by
-            conversation.updated_at = datetime.utcnow()
-            
-            if last_message:
-                # Store preview (first 200 characters)
-                conversation.last_message = last_message[:200]
-            
+        # Atomic in SQL: a Python read-modify-write loses increments of concurrent turns.
+        values = {
+            "message_count": Conversation.message_count + increment_by,
+            "updated_at": datetime.utcnow(),
+        }
+        if last_message:
+            # Store preview (first 200 characters)
+            values["last_message"] = last_message[:200]
+        result = db.execute(
+            update(Conversation).where(Conversation.conversation_id == conversation_id).values(**values)
+        )
+        if result.rowcount:
             db.commit()
     
     @staticmethod

@@ -3,6 +3,12 @@ from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
 
+# Temporary per-conversation repositories created for chat attachments (playground media). Their silos
+# are internal and never user-selectable. Single definition shared by the media service and the Chat.
+TEMP_REPO_PREFIX = "_playground_"
+PLAYGROUND_MEDIA_REPO_TYPE = "playground_media"
+
+
 class Repository(Base):
     __tablename__ = 'Repository'
     repository_id = Column(Integer, primary_key=True)

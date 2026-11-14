@@ -26,6 +26,8 @@ class TurnCompleted:
     assistant_message_id: Optional[str]
     user_context: Optional[Dict[str, Any]]
     turn_config: "ResolvedChatConfig"
+    # Id of the agent_execution_event row of this run (metrics), when known.
+    execution_event_id: Optional[str] = None
 
 
 # Async hook called once per completed chat turn; returns a JSON-ready dict (exposed as
@@ -38,6 +40,7 @@ class TurnOutcome:
     """Out-parameter of ``_execute_agent_async`` (the sync path returns only the text)."""
 
     assistant_message_id: Optional[str] = None
+    execution_event_id: Optional[str] = None
 
 
 def is_chat_turn(ctx: Any) -> bool:

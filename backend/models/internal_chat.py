@@ -68,6 +68,9 @@ class ChatConversationState(Base):
     )
     app_id = Column(Integer, ForeignKey('App.app_id', ondelete='CASCADE'), nullable=False)
     selection = Column(JSON, nullable=False)
+    # Bumped by every reset of the conversation (under FOR UPDATE on this row). A turn that
+    # captured an older value when it started must not persist anything when it completes.
+    generation = Column(Integer, nullable=False, default=0, server_default='0')
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (Index('ix_chat_conversation_state_app_id', 'app_id'),)

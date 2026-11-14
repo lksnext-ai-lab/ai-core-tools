@@ -1011,6 +1011,7 @@ class AgentExecutionService:
                 ctx, response, db,
                 assistant_message_id=turn_outcome.assistant_message_id,
                 on_turn_completed=on_turn_completed,
+                execution_event_id=turn_outcome.execution_event_id,
             )
             result["status"] = "completed"
             return result
@@ -1598,6 +1599,7 @@ class AgentExecutionService:
         db: Session,
         assistant_message_id: Optional[str] = None,
         on_turn_completed: Optional[TurnCompletedHook] = None,
+        execution_event_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Run all post-processing steps for one agent chat turn.
 
@@ -1820,7 +1822,7 @@ class AgentExecutionService:
         if ctx.is_chat_turn:
             result["assistant_message_id"] = assistant_message_id
             result["turn"] = await self._run_turn_completed_hook(
-                ctx, db, assistant_message_id, on_turn_completed
+                ctx, db, assistant_message_id, on_turn_completed, execution_event_id
             )
         return result
 
@@ -1830,6 +1832,7 @@ class AgentExecutionService:
         db: Optional[Session],
         assistant_message_id: Optional[str],
         hook: Optional[TurnCompletedHook],
+        execution_event_id: Optional[str] = None,
     ) -> Optional[dict]:
         """Run the chat completion hook in a SAVEPOINT; never fails the (already answered) turn."""
         if hook is None:
@@ -1839,6 +1842,8 @@ class AgentExecutionService:
             assistant_message_id=assistant_message_id,
             user_context=ctx.user_context,
             turn_config=ctx.turn_config,
+            # Streaming keeps the event id in the context; the sync path reports it via TurnOutcome.
+            execution_event_id=execution_event_id or (ctx.user_context or {}).get("current_event_id"),
         )
         try:
             if db is not None:
@@ -2057,24 +2062,8 @@ class AgentExecutionService:
 
             # Clear all attached files for this user/agent session
             from services.file_management_service import FileManagementService
-            file_service = FileManagementService()
-            
-            # Get all attached files for this session
-            attached_files = await file_service.list_attached_files(agent_id, user_context)
-            
-            # Remove each file
-            for file_data in attached_files:
-                try:
-                    await file_service.remove_file(
-                        file_id=file_data['file_id'],
-                        agent_id=agent_id,
-                        user_context=user_context
-                    )
-                    logger.info(f"Removed file {file_data['filename']} during conversation reset")
-                except Exception as e:
-                    logger.error(f"Error removing file {file_data['file_id']} during reset: {str(e)}")
-            
-            logger.info(f"Conversation reset for agent {agent_id} - cleared {len(attached_files)} files")
+            removed = await FileManagementService().remove_all_attached_files(agent_id, user_context)
+            logger.info(f"Conversation reset for agent {agent_id} - cleared {removed} files")
 
             # Tear down the conversation: playground temp media (silo + repo +
             # vectors), the LangGraph checkpointer (keyed by the real session_id),
@@ -2678,6 +2667,8 @@ class AgentExecutionService:
         # executions to this one. Copy so the caller's dict is not mutated.
         event_id = str(uuid.uuid4())
         user_context = {**(user_context or {}), 'current_event_id': event_id}
+        if turn_outcome is not None:
+            turn_outcome.execution_event_id = event_id
         # NOTE: a retired parent LLM raises from create_agent below, before the metrics block
         # that records SERVICE_RETIRED, so that case is not recorded here (the streaming path is).
         try:

@@ -140,6 +140,8 @@ def test_ichat001_upgrade_constraints_downgrade_upgrade(ephemeral_db):
         for table in NEW_TABLES:
             assert inspector.has_table(table), f"{table} missing after upgrade"
         assert "uq_agent_internal_chat_per_app" in {i["name"] for i in inspector.get_indexes("Agent")}
+        generation = next(c for c in inspector.get_columns("chat_conversation_state") if c["name"] == "generation")
+        assert generation["nullable"] is False
         assert conn.execute(
             text('SELECT kind FROM "Agent" WHERE agent_id = :i'), {"i": legacy_agent_id}
         ).scalar_one() == "standard"

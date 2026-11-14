@@ -17,7 +17,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import UploadFile, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from models.repository import Repository
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, TEMP_REPO_PREFIX, Repository
 from models.media import Media
 from models.agent import Agent
 from services.repository_service import RepositoryService
@@ -28,7 +28,6 @@ from utils.service_lifecycle import ServiceRetiredError
 
 logger = logging.getLogger(__name__)
 
-TEMP_REPO_PREFIX = "_playground_"
 
 # File types that should be vectorized instead of injected into context
 VECTORIZABLE_FILE_TYPES = {"pdf", "text"}
@@ -226,7 +225,7 @@ class PlaygroundMediaService:
 
         repo = Repository(
             name=_temp_repo_name(agent_id, session_id),
-            type="playground_media",
+            type=PLAYGROUND_MEDIA_REPO_TYPE,
             status="active",
             app_id=app_id,
         )

@@ -91,3 +91,34 @@ def test_internal_chat_conversation_hidden_by_default_returned_with_flag(db, fak
         db, internal.agent_id, user_ctx, include_internal_chat=True
     )
     assert total == 2 and {c.conversation_id for c in listed} == {chat.conversation_id, odd.conversation_id}
+
+
+class TestIncrementMessageCount:
+    """``increment_message_count`` is an atomic UPDATE shared by every channel, not only the Chat."""
+
+    def test_increments_and_stores_a_200_char_preview(self, db, agents, fake_user):
+        standard, _, _ = agents
+        conv = _conv(db, standard, "count", user_id=fake_user.user_id)
+
+        ConversationService.increment_message_count(db, conv.conversation_id, last_message="x" * 250, increment_by=2)
+        ConversationService.increment_message_count(db, conv.conversation_id)
+
+        db.refresh(conv)
+        assert conv.message_count == 3
+        assert conv.last_message == "x" * 200  # the second call has no preview and keeps the first one
+
+    def test_does_not_overwrite_a_count_changed_elsewhere(self, db, agents, fake_user):
+        """The loaded instance is stale on purpose: the UPDATE must add to the stored value, not to the cached one."""
+        standard, _, _ = agents
+        conv = _conv(db, standard, "stale", user_id=fake_user.user_id)
+        db.query(Conversation).filter(Conversation.conversation_id == conv.conversation_id).update(
+            {"message_count": 10}, synchronize_session=False
+        )
+
+        ConversationService.increment_message_count(db, conv.conversation_id, increment_by=2)
+
+        db.refresh(conv)
+        assert conv.message_count == 12
+
+    def test_missing_conversation_is_a_no_op(self, db):
+        ConversationService.increment_message_count(db, 999_999_999, last_message="hi")

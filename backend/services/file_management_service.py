@@ -1083,6 +1083,31 @@ class FileManagementService:
         if not removed:
             logger.warning("Could not remove attachment %s after a failed upload", sanitize_for_log(file_id))
 
+    async def remove_all_attached_files(
+        self,
+        agent_id: int,
+        user_context: Optional[Dict] = None,
+        conversation_id: Optional[str] = None,
+    ) -> int:
+        """Remove every attached file of a session (optionally one conversation's); returns how many were listed.
+
+        Shared by the playground reset and the App Chat reset. A failure on one file is logged and does not
+        stop the others.
+        """
+        attached_files = await self.list_attached_files(agent_id, user_context, conversation_id)
+        for file_data in attached_files:
+            try:
+                await self.remove_file(
+                    file_id=file_data['file_id'],
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=conversation_id,
+                )
+                logger.info(f"Removed file {file_data['filename']} during conversation reset")
+            except Exception as e:
+                logger.error(f"Error removing file {file_data['file_id']} during reset: {str(e)}")
+        return len(attached_files)
+
     async def remove_files(
         self,
         file_ids: List[str],

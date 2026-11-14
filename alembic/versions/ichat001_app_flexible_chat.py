@@ -151,6 +151,7 @@ def upgrade():
         ),
         sa.Column("app_id", sa.Integer(), sa.ForeignKey("App.app_id", ondelete="CASCADE"), nullable=False),
         sa.Column("selection", sa.JSON(), nullable=False),
+        sa.Column("generation", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
     )
     op.create_index("ix_chat_conversation_state_app_id", "chat_conversation_state", ["app_id"])
