@@ -198,6 +198,7 @@ async def test_streaming_keeps_checkpoint_when_hitl_interrupt_is_pending():
 
     with (
         patch("services.agent_streaming_service.human_in_the_loop_config", return_value=MagicMock()),
+        patch("tools.middleware.factory.human_in_the_loop_config", return_value=MagicMock()),
         patch("services.agent_streaming_service.create_agent", create_agent),
         patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
         patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="hello")),
@@ -360,6 +361,7 @@ async def _run_hitl(chain, *, approvals_overrides=None, **kwargs):
     kwargs.setdefault("message", "hi")
     with (
         patch("services.agent_streaming_service.human_in_the_loop_config", return_value=MagicMock()),
+        patch("tools.middleware.factory.human_in_the_loop_config", return_value=MagicMock()),
         patch("services.agent_streaming_service.create_agent", AsyncMock(return_value=(chain, None, None))),
         patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
         patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="hi")),

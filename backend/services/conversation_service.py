@@ -413,6 +413,7 @@ class ConversationService:
         conversation_id: int,
         user_context: Dict,
         include_internal_chat: bool = False,
+        include_message_ids: bool = False,
     ) -> Optional[List[Dict]]:
         """
         Get the message history for a conversation
@@ -421,6 +422,7 @@ class ConversationService:
             db: Database session
             conversation_id: ID of the conversation
             user_context: User context for validation
+            include_message_ids: add ``message_id`` to each message (App chat turn pairing)
             
         Returns:
             List of messages or None if not found/unauthorized
@@ -437,9 +439,11 @@ class ConversationService:
         # which session-management path created the LangGraph checkpoint.
         # Read the canonical key first and use the suffix as a compatibility
         # fallback so an existing scheduled conversation is never shown empty.
+        id_kwargs = {"include_message_ids": True} if include_message_ids else {}
         history = await CheckpointerCacheService.get_conversation_history_async(
             agent_id=conversation.agent_id,
-            session_id=conversation.session_id
+            session_id=conversation.session_id,
+            **id_kwargs,
         )
         if not history and conversation.session_id.startswith(f"conv_{conversation.agent_id}_"):
             session_suffix = conversation.session_id.replace(
@@ -448,6 +452,7 @@ class ConversationService:
             history = await CheckpointerCacheService.get_conversation_history_async(
                 agent_id=conversation.agent_id,
                 session_id=session_suffix,
+                **id_kwargs,
             )
         
         if not history:

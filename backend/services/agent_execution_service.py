@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import ast
 import contextvars
 import functools
+import inspect
 import json
 import posixpath
 import shutil
@@ -19,9 +20,17 @@ from sqlalchemy.orm import Session
 
 from models.agent import Agent
 from models.ocr_agent import OCRAgent
-from services.agent_execution_context import AgentExecutionContext
+from services.agent_execution_context import (
+    AgentExecutionContext,
+    TurnCompleted,
+    TurnCompletedHook,
+    TurnOutcome,
+    is_chat_turn,
+    tracing_kwargs,
+)
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
+from services.internal_chat.resolved_config import InternalChatSessionError
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
     convert_image_to_base64,
@@ -761,6 +770,38 @@ def _ensure_remote_workspace_layout(provider: Any, handle: Any) -> None:
         logger.debug("Could not create remote workspace layout: %s", exc, exc_info=True)
 
 
+# Max time the chat completion hook may run (must stay below the streaming finalize grace).
+HOOK_TIMEOUT_S = 10.0
+
+
+def last_ai_message_id(state: Any, *, current_turn_only: bool = False) -> Optional[str]:
+    """Id of the message that is the turn's final answer, from a graph state/result dict.
+
+    The one place deciding which message is "final" (sync, streaming run-local capture and the
+    streaming checkpoint fallback all use it). Preference: the last AIMessage that has content and
+    no pending ``tool_calls``. If there is none (the turn ended on tool calls/tool messages, or
+    the answer is only a ``structured_response``) it falls back to the last AIMessage that has an
+    id, and returns None when no AIMessage has one. ``structured_response`` itself has no id.
+
+    ``current_turn_only`` (full thread states/results): only messages after the last HumanMessage
+    are considered, so an empty final message can never resolve to an answer of an earlier turn.
+    """
+    messages = state.get("messages") if isinstance(state, dict) else None
+    if current_turn_only and messages:
+        for index in range(len(messages) - 1, -1, -1):
+            if getattr(messages[index], "type", None) == "human":
+                messages = messages[index + 1:]
+                break
+    ai_messages = [m for m in (messages or []) if getattr(m, "type", None) == "ai"]
+    for msg in reversed(ai_messages):
+        if getattr(msg, "content", None) and not getattr(msg, "tool_calls", None) and getattr(msg, "id", None):
+            return str(msg.id)
+    for msg in reversed(ai_messages):
+        if getattr(msg, "id", None):
+            return str(msg.id)
+    return None
+
+
 def _quota_user_id(user_context: Optional[Dict]) -> Any:
     """User charged for system-LLM usage: scheduled tasks bill their creator (billing_user_id)."""
     if not user_context:
@@ -806,6 +847,9 @@ def _may_be_paused(ctx: AgentExecutionContext) -> bool:
     """Only conversations of agents with human approval can be waiting for one."""
     from tools.middleware.factory import human_in_the_loop_config
 
+    if is_chat_turn(ctx):
+        # create_agent ignores the agent's middlewares for a chat turn: nothing can be paused.
+        return False
     return ctx.conversation is not None and human_in_the_loop_config(ctx.fresh_agent) is not None
 
 
@@ -863,6 +907,8 @@ class AgentExecutionService:
         channel: ApprovalChannel = ApprovalChannel.INTERNAL_SYNC,
         resume_approval: Optional[HITLApproval] = None,
         resume_decisions: Optional[List[Dict[str, Any]]] = None,
+        turn_config: Optional["ResolvedChatConfig"] = None,
+        on_turn_completed: Optional[TurnCompletedHook] = None,
     ) -> Dict[str, Any]:
         """Execute agent chat with persistent file references.
 
@@ -874,14 +920,27 @@ class AgentExecutionService:
         the pause on the spot (so the conversation is not left paused) and get an
         ``ApprovalNotSupportedError`` as HTTP 409.
 
+        ``turn_config`` (flexible App chat only) is the frozen per-request configuration; it makes
+        the turn run on the hidden internal chat agent with the turn's own model/silo/skills/MCP
+        and requires ``conversation_id``. ``on_turn_completed`` is an async hook
+        ``(TurnCompleted) -> dict | None`` called once the turn completed (see
+        :meth:`_finalize_turn`). Neither can be combined with a resume. Without ``turn_config``
+        nothing changes.
+
         Returns:
-            Dict containing agent response and metadata.
+            Dict containing agent response and metadata (chat turns also carry
+            ``assistant_message_id``).
         """
+        if turn_config is not None and (resume_approval is not None or resume_decisions is not None):
+            # Programming error: resume paths never carry a turn config (chat turns cannot pause).
+            raise ValueError("turn_config cannot be combined with an approval resume")
+        if turn_config is not None and channel != ApprovalChannel.INTERNAL_CHAT:
+            raise ValueError("a chat turn must use ApprovalChannel.INTERNAL_CHAT")
         # Set + reset (no yield here): a nested run (agent-as-tool) must not overwrite the outer context.
         with service_call_context(**agent_turn_context_kwargs(channel, user_context, agent_id)):
             return await self._execute_agent_chat_with_file_refs_impl(
                 agent_id, message, file_references, search_params, user_context, conversation_id,
-                db, channel, resume_approval, resume_decisions,
+                db, channel, resume_approval, resume_decisions, turn_config, on_turn_completed,
             )
 
     async def _execute_agent_chat_with_file_refs_impl(
@@ -896,6 +955,8 @@ class AgentExecutionService:
         channel: ApprovalChannel = ApprovalChannel.INTERNAL_SYNC,
         resume_approval: Optional[HITLApproval] = None,
         resume_decisions: Optional[List[Dict[str, Any]]] = None,
+        turn_config: Optional["ResolvedChatConfig"] = None,
+        on_turn_completed: Optional[TurnCompletedHook] = None,
     ) -> Dict[str, Any]:
         """Body of :meth:`execute_agent_chat_with_file_refs` (runs inside the call context)."""
         ctx = None
@@ -909,6 +970,7 @@ class AgentExecutionService:
                 user_context=user_context,
                 conversation_id=conversation_id,
                 db=db,
+                turn_config=turn_config,
             )
             if resume_approval is None and _may_be_paused(ctx) and db is not None:
                 expired = approvals.check_conversation_free(db, ctx.conversation.conversation_id)
@@ -923,6 +985,7 @@ class AgentExecutionService:
                 db.commit()
 
             temp_silo_ids = self._resolve_temp_silo_ids(ctx, agent_id, db)
+            turn_outcome = TurnOutcome()
             try:
                 response = await self._execute_agent_async(
                     ctx.fresh_agent,
@@ -938,11 +1001,17 @@ class AgentExecutionService:
                     sandbox_session_key=ctx.sandbox_session_key,
                     temp_silo_ids=temp_silo_ids or None,
                     resume=GraphResume.for_approval(resume_approval, resume_decisions),
+                    turn_config=ctx.turn_config,
+                    turn_outcome=turn_outcome,
                 )
             except RunPausedForApproval as paused:
                 return await self._handle_pause(ctx, paused, db, channel)
 
-            result = await self._finalize_turn(ctx, response, db)
+            result = await self._finalize_turn(
+                ctx, response, db,
+                assistant_message_id=turn_outcome.assistant_message_id,
+                on_turn_completed=on_turn_completed,
+            )
             result["status"] = "completed"
             return result
 
@@ -953,8 +1022,16 @@ class AgentExecutionService:
         except ServiceRetiredError:
             # Already logged once by ensure_service_active; mapped to 409 at the edge.
             raise
+        except InternalChatSessionError as e:
+            # Caller/invariant bug (chat turn without a conversation session): fail the turn,
+            # never fall back to a shared thread.
+            logger.error("Internal chat turn has no conversation session: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail="Chat session is not available")
         except Exception as e:
             logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
+            if turn_config is not None:
+                # The text can echo MCP URLs or provider bodies; it stays in the server log.
+                raise HTTPException(status_code=500, detail="Agent execution failed")
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
         finally:
             if ctx is not None and sandbox_turn_active:
@@ -1050,7 +1127,9 @@ class AgentExecutionService:
         conversation_id = ctx.conversation.conversation_id if ctx.conversation else None
         if conversation_id is None or db is None:
             raise HTTPException(status_code=500, detail="Agent execution failed")
-        answerable = approvals.is_interactive(channel) and (requester.user_id is not None or requester.api_key_hash)
+        answerable = not is_chat_turn(ctx) and approvals.is_interactive(channel) and (
+            requester.user_id is not None or requester.api_key_hash
+        )
         approval = await approvals.open_approval(
             db,
             agent_chain=paused.agent_chain,
@@ -1134,11 +1213,14 @@ class AgentExecutionService:
         Execution choke point for the hidden internal chat agent: every channel passes through
         here, so the agent is loaded with ``include_internal=True`` and then rejected (same 404 as
         a missing agent) unless the turn carries a ``turn_config`` (only the Chat does), and a
-        ``turn_config`` on a standard agent is rejected too. ``turn_config`` is not used further
-        in this method yet. A ``turn_config`` without ``conversation_id`` is a 400 (the Chat never
-        auto-creates conversations here). Callers that step_006 must update to
-        pass it: ``execute_agent_chat_with_file_refs`` (and its ``_impl``) and
-        ``AgentStreamingService.stream_agent_events``.
+        ``turn_config`` on a standard agent is rejected too. A ``turn_config`` without
+        ``conversation_id`` is a 400 (the Chat never auto-creates conversations here).
+
+        With ``turn_config`` the checkpointer thread's session id is the conversation's own
+        ``session_id`` (deterministic, DB-backed) — never the in-memory
+        ``SessionManagementService`` lookup, which returns ``None`` after 24 h and would fall back
+        to a thread shared by every conversation. The sandbox block is skipped and ``turn_config``
+        is stored on the returned context.
 
         Returns:
             A fully populated :class:`AgentExecutionContext`.
@@ -1148,6 +1230,12 @@ class AgentExecutionService:
         if not agent:
             raise AgentUnavailableError()
         if agent.is_internal_chat != (turn_config is not None):
+            raise AgentUnavailableError()
+        if turn_config is not None and (
+            turn_config.app_id != agent.app_id
+            or (user_context or {}).get("app_id") not in (None, agent.app_id)
+        ):
+            # Cross-tenant guard before any side effect: same 404 as a missing agent.
             raise AgentUnavailableError()
         if turn_config is not None and not conversation_id:
             # The Chat creates its conversations explicitly (source=INTERNAL_CHAT); never auto-create
@@ -1230,7 +1318,12 @@ class AgentExecutionService:
                     status_code=404, detail="Conversation not found or access denied"
                 )
 
-        if agent.has_memory:
+        if turn_config is not None:
+            # Chat turn: the conversation always exists here (conversation_id is mandatory and was
+            # validated above). Its session_id is the only source of the thread.
+            if not getattr(conversation, "session_id", None):
+                raise InternalChatSessionError("The chat conversation has no session_id")
+        elif agent.has_memory:
             if conversation is None:
                 conversation = ConversationService.create_conversation(
                     db=db,
@@ -1262,7 +1355,10 @@ class AgentExecutionService:
         )
         enhanced_message, image_files = self._prepare_message_with_files(message, message_files)
 
-        session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
+        if turn_config is not None:
+            session_id_for_cache = conversation.session_id
+        else:
+            session_id_for_cache = session.id if (fresh_agent.has_memory and session) else None
         effective_conv_id = conversation_id or (
             conversation.conversation_id if conversation else None
         )
@@ -1325,7 +1421,7 @@ class AgentExecutionService:
         sandbox_session_key = None
         pre_existing_remote_files: set = set()
 
-        if getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
+        if turn_config is None and getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
             from tools.sandbox.factory import (
                 resolve_provider_and_service_id,
                 SandboxProviderUnavailableError,
@@ -1413,6 +1509,7 @@ class AgentExecutionService:
             processed_files=processed_files,
             search_params=search_params,
             user_context=user_context,
+            turn_config=turn_config,
         )
 
     def _sandbox_turn_expected_seconds(self) -> int:
@@ -1499,16 +1596,30 @@ class AgentExecutionService:
         ctx: AgentExecutionContext,
         raw_response: Any,
         db: Session,
+        assistant_message_id: Optional[str] = None,
+        on_turn_completed: Optional[TurnCompletedHook] = None,
     ) -> Dict[str, Any]:
         """Run all post-processing steps for one agent chat turn.
 
         1. Sync output files written to the working dir.
         2. Inject file:// markers into the response text.
         3. Parse the response with the agent's output parser.
-        4. Update the agent request count.
+        4. Update the agent request count (never for the internal chat agent: that row is
+           shared by every user of the App and must not be written during a chat turn).
         5. Touch the session to keep it alive.
-        6. Record system LLM usage (SaaS mode).
+        6. Record system LLM usage (SaaS mode); a chat turn bills the turn's own AI service.
         7. Increment the conversation message count.
+        8. Chat turns only: add ``assistant_message_id`` to the result and run the
+           ``on_turn_completed`` hook (see below).
+
+        Completion hook contract (chat turns): ``await hook(TurnCompleted(...))`` runs exactly
+        once per completed turn, after the conversation counters were committed (step 7), in the
+        request session, inside a SAVEPOINT. It returns a JSON-ready dict (stored as
+        ``result["turn"]``) or None. On success ``_finalize_turn`` releases the savepoint and
+        commits the hook's writes itself (the hook must not commit). On failure (or
+        cancellation) only the savepoint is rolled back, so earlier uncommitted turn writes are
+        kept; a failure is logged, ``turn`` is None and the response is not failed. A non-JSON
+        ``turn`` is dropped with a WARNING. The hook may read only ids/names from ``turn_config``.
 
         Args:
             ctx: The context produced by :meth:`_prepare_turn`.
@@ -1622,18 +1733,24 @@ class AgentExecutionService:
         # 3. Parse response
         parsed_response = parse_agent_response(response, ctx.agent)
 
-        # 4. Update request count
-        self._update_request_count(ctx.agent, db)
+        # 4. Update request count (UPDATE on the shared Agent row: skipped for the internal agent)
+        # Question about the shared Agent row (not the turn): never UPDATE the internal agent's row.
+        if not ctx.agent.is_internal_chat:
+            self._update_request_count(ctx.agent, db)
 
         # 5. Touch session
         if ctx.session:
             await self.session_service.touch_session(ctx.session.id)
 
         # 6. Record system LLM usage (SaaS mode — no-op for own-key services)
-        ai_svc = ctx.fresh_agent.ai_service
+        if ctx.is_chat_turn:
+            # Plain snapshot: ctx.turn_config.ai_service is expired and may have been deleted.
+            uses_system_llm = ctx.turn_config.ai_service_is_system
+        else:
+            ai_svc = ctx.fresh_agent.ai_service
+            uses_system_llm = ai_svc is not None and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
         if (
-            ai_svc is not None
-            and getattr(ai_svc, 'app_id', 'NOT_NULL') is None
+            uses_system_llm
             and db
             and _quota_user_id(ctx.user_context)
         ):
@@ -1681,7 +1798,7 @@ class AgentExecutionService:
                 increment_by=2,
             )
 
-        return {
+        result = {
             "response": parsed_response,
             "agent_id": ctx.agent_id,
             "conversation_id": (
@@ -1698,6 +1815,65 @@ class AgentExecutionService:
             "effective_conv_id": ctx.effective_conv_id,
             "files_data": files_data,
         }
+
+        # 8. Chat turns: expose the final AIMessage id and let the Chat service persist the turn.
+        if ctx.is_chat_turn:
+            result["assistant_message_id"] = assistant_message_id
+            result["turn"] = await self._run_turn_completed_hook(
+                ctx, db, assistant_message_id, on_turn_completed
+            )
+        return result
+
+    @staticmethod
+    async def _run_turn_completed_hook(
+        ctx: AgentExecutionContext,
+        db: Optional[Session],
+        assistant_message_id: Optional[str],
+        hook: Optional[TurnCompletedHook],
+    ) -> Optional[dict]:
+        """Run the chat completion hook in a SAVEPOINT; never fails the (already answered) turn."""
+        if hook is None:
+            return None
+        event = TurnCompleted(
+            conversation_id=ctx.effective_conv_id,
+            assistant_message_id=assistant_message_id,
+            user_context=ctx.user_context,
+            turn_config=ctx.turn_config,
+        )
+        try:
+            if db is not None:
+                # Make sure everything the turn wrote so far (usage increment, counters) is
+                # committed BEFORE the hook's savepoint, whatever increment_message_count did.
+                # Inside the try: a failed COMMIT must also be rolled back, or the request
+                # session is left unusable for the cleanup that follows.
+                try:
+                    db.commit()
+                    # The context manager rolls back only the savepoint on any exception,
+                    # including CancelledError (re-raised below), so a cancelled hook holds no lock.
+                    with db.begin_nested():
+                        async with asyncio.timeout(HOOK_TIMEOUT_S):
+                            turn = await hook(event)
+                    db.commit()
+                except BaseException:
+                    db.rollback()  # end the transaction the failed/cancelled hook left open
+                    raise
+            else:
+                async with asyncio.timeout(HOOK_TIMEOUT_S):
+                    turn = await hook(event)
+        except Exception:
+            logger.error("on_turn_completed hook failed for conversation %s", ctx.effective_conv_id, exc_info=True)
+            return None
+        if turn is None:
+            return None
+        try:
+            json.dumps(turn)
+        except (TypeError, ValueError):
+            logger.warning(
+                "on_turn_completed returned a non-JSON-serializable value for conversation %s; dropped",
+                ctx.effective_conv_id,
+            )
+            return None
+        return turn
 
     async def execute_agent_ocr(
         self, 
@@ -2473,11 +2649,19 @@ class AgentExecutionService:
         processed_files: List[Dict] = None,
         temp_silo_ids: Optional[List[int]] = None,
         resume: "GraphResume | None" = None,
+        turn_config: Optional["ResolvedChatConfig"] = None,
+        turn_outcome: Optional[TurnOutcome] = None,
     ) -> Any:
         """Execute agent in FastAPI's event loop using shared checkpointer pool.
 
         ``resume`` answers a paused approval instead of sending ``message``; the thread
         must still be paused on that approval's interrupt.
+
+        ``turn_config`` (internal chat agent only) is passed to ``create_agent`` and decides the
+        model recorded in metrics and the LangSmith metadata. It requires ``session_id_for_cache``
+        (``InternalChatSessionError`` otherwise, never a shared-thread fallback). When
+        ``turn_outcome`` is given it receives ``assistant_message_id`` (see ``last_ai_message_id``) (``add_messages`` assigns ids, so it equals the id
+        stored in the checkpoint).
 
         Returns:
             str for plain text responses, dict/Pydantic model for structured output (v1).
@@ -2510,13 +2694,16 @@ class AgentExecutionService:
                 attached_files=processed_files,
                 temp_silo_ids=temp_silo_ids,
                 user_message=message,
+                turn_config=turn_config,
             )
 
             # Prepare configuration
             config = prepare_agent_config(fresh_agent)
 
             # Add session-specific configuration if memory is enabled
-            config["configurable"]["thread_id"] = compute_thread_id(fresh_agent, session_id_for_cache)
+            config["configurable"]["thread_id"] = compute_thread_id(
+                fresh_agent, session_id_for_cache, require_session=turn_config is not None
+            )
             if fresh_agent.has_memory and session_id_for_cache:
                 logger.info(f"Using session-aware thread_id: {config['configurable']['thread_id']}")
 
@@ -2535,6 +2722,7 @@ class AgentExecutionService:
                     user_context=user_context,
                     conversation_id=None,
                     session_id=session_id_for_cache,
+                    **tracing_kwargs(turn_config),
                 )
                 apply_tracing_to_config(config, tracer, overrides)
                 logger.info(
@@ -2592,7 +2780,11 @@ class AgentExecutionService:
                     image_files=image_files or [],
                     message=message,
                     collector=metrics_collector,
+                    ai_service_override=turn_config.metrics_service() if turn_config is not None else None,
                 )
+
+            if turn_outcome is not None and turn_config is not None:
+                turn_outcome.assistant_message_id = last_ai_message_id(result, current_turn_only=True)
 
             # LangChain v1: structured output is in 'structured_response' key
             # when create_agent is called with response_format=pydantic_model

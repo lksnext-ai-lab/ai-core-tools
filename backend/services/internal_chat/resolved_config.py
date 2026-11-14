@@ -35,6 +35,15 @@ class InternalChatSessionError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class MetricsServiceInfo:
+    """Plain-data stand-in for an AIService in the metrics payload (no ORM access)."""
+
+    service_id: int
+    provider: str | None
+    description: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class McpConnectionSpec:
     """One MCP config resolved for a turn (``connections`` is a private deep copy)."""
 
@@ -50,6 +59,12 @@ class ResolvedChatConfig:
     ai_service: Any = field(repr=False, compare=False)  # AIService ORM, loaded and validated
     ai_service_id: int
     ai_service_name: str
+    # Plain snapshots of the AIService attributes read AFTER the LLM run (quota, metrics). Post-run
+    # code must never touch ``ai_service``: it is expired by the pre-run commit and a service
+    # deleted mid-turn would raise ``ObjectDeletedError`` on a turn that already completed.
+    ai_service_is_system: bool  # AIService.app_id IS NULL (platform-owned => counts against quota)
+    ai_service_provider: str | None
+    ai_service_model: str | None  # AIService.description (the configured model name)
     silo: Any | None = field(repr=False, compare=False)  # Silo ORM with embedding_service loaded, or None
     silo_id: int | None
     silo_name: str | None
@@ -70,6 +85,23 @@ class ResolvedChatConfig:
             raise TypeError("ResolvedChatConfig.skills must be a tuple")
         if not isinstance(self.mcp_connections, tuple):
             raise TypeError("ResolvedChatConfig.mcp_connections must be a tuple")
+
+    def metrics_service(self) -> MetricsServiceInfo:
+        """The turn's AI service as plain data, safe to read after the run / session."""
+        return MetricsServiceInfo(
+            service_id=self.ai_service_id,
+            provider=self.ai_service_provider,
+            description=self.ai_service_model,
+        )
+
+    def to_client_summary(self) -> dict:
+        """Ids and display names only, for the SSE ``metadata`` event."""
+        return {
+            "ai_service": {"id": self.ai_service_id, "name": self.ai_service_name},
+            "silo": {"id": self.silo_id, "name": self.silo_name} if self.silo_id is not None else None,
+            "skills": [{"id": i, "name": n} for i, n in zip(self.skill_ids, self.skill_names)],
+            "mcp_configs": [{"id": i, "name": n} for i, n in zip(self.mcp_config_ids, self.mcp_config_names)],
+        }
 
     def to_selection_dict(self) -> dict:
         """Selection in the persisted/client shape (``ChatSelection`` fields)."""

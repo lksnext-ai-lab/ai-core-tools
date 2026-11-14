@@ -19,8 +19,10 @@ import contextlib
 import json
 import uuid
 from datetime import datetime
-from typing import AsyncGenerator, Dict, List, Any
+from typing import TYPE_CHECKING, AsyncGenerator, Dict, List, Any
 
+import anyio
+import anyio.lowlevel
 import psycopg.errors
 from fastapi import HTTPException
 from langchain.agents.middleware import PIIDetectionError
@@ -41,10 +43,13 @@ from tools.streaming_utils import (
     SSE_TOKEN,
     SSE_HITL_INTERRUPT,
 )
+from services.agent_execution_context import TurnCompletedHook, is_chat_turn, tracing_kwargs
 from services.agent_execution_service import (
     finish_if_agent_unavailable,
     AgentExecutionService,
     RunPausedForApproval,
+    _may_be_paused,
+    last_ai_message_id,
     pii_blocked_message,
 )
 from services import hitl_approval_service as approvals
@@ -59,9 +64,15 @@ from services.agent_cache_service import (
 from utils.logger import get_logger
 from utils.service_lifecycle import ServiceRetiredError, agent_turn_context_kwargs, set_service_call_context
 
+if TYPE_CHECKING:
+    from services.internal_chat.resolved_config import ResolvedChatConfig
+
 logger = get_logger(__name__)
 
 _AGENT_EXECUTION_FAILED = "Agent execution failed"
+
+# Max time a chat turn's finalize + completion hook may keep running after the client left.
+FINALIZE_GRACE_S = 30.0
 
 
 class _AgentStreamSerializationError(RuntimeError):
@@ -112,6 +123,25 @@ async def _final_answer_text(agent_chain, config) -> str:
     return ""
 
 
+async def _final_answer_message_id(agent_chain, config) -> "str | None":
+    """Fallback: id of the final AI message at the thread head of the checkpoint, or None.
+
+    Only used when this run's own stream produced no AI message (see ``run_ai_messages`` in
+    ``stream_agent_events``): the thread head can already belong to a concurrent turn of the same
+    conversation. ``checkpoint_id`` is dropped from a config copy because after a rollback retry
+    it pins an older checkpoint. Which message is "final" is decided by ``last_ai_message_id``.
+    """
+    try:
+        head_config = {**config, "configurable": {
+            k: v for k, v in config.get("configurable", {}).items() if k != "checkpoint_id"
+        }}
+        state = await agent_chain.aget_state(head_config)
+        return last_ai_message_id(state.values or {}, current_turn_only=True)
+    except Exception as exc:
+        logger.warning("Could not read the final AI message id from the checkpoint: %s", exc)
+        return None
+
+
 class AgentStreamingService:
     """Service for streaming agent responses via Server-Sent Events."""
 
@@ -134,6 +164,8 @@ class AgentStreamingService:
         db: Session | None = None,
         channel: ApprovalChannel = ApprovalChannel.PLAYGROUND,
         resume: "approvals.ResumeRequest | None" = None,
+        turn_config: "ResolvedChatConfig | None" = None,
+        on_turn_completed: "TurnCompletedHook | None" = None,
     ) -> AsyncGenerator[AgentStreamEvent, None]:
         """Run one agent chat turn and yield typed stream events.
 
@@ -222,11 +254,24 @@ class AgentStreamingService:
                 is used.
             channel: Where the turn comes from; decides whether a human-approval
                 pause can be answered (see ``hitl_approval_service.is_interactive``).
-            resume: Claimed approval to answer instead of sending ``message``.
+            resume: Claimed approval to answer instead of sending ``message``. Never combined
+                with ``turn_config`` (Chat turns cannot pause for approval).
+            turn_config: Frozen per-request ``ResolvedChatConfig`` of the flexible App chat.
+                Runs the turn on the hidden internal agent with the turn's model/silo/skills/MCP;
+                needs ``conversation_id``. The ``metadata`` event then carries ``turn_config``
+                (ids/names) and ``done`` carries ``assistant_message_id`` and, if the hook set it,
+                ``turn``. ``None`` keeps the exact legacy behaviour and event payloads.
+            on_turn_completed: Chat-only hook ``(ctx, result)`` called by ``_finalize_turn`` after
+                a completed turn (never on error / pause / cancellation).
 
         Yields:
             :class:`~tools.streaming_utils.AgentStreamEvent` instances.
         """
+        if turn_config is not None and resume is not None:
+            # Programming error: resume paths never carry a turn config (chat turns cannot pause).
+            raise ValueError("turn_config cannot be combined with an approval resume")
+        if turn_config is not None and channel != ApprovalChannel.INTERNAL_CHAT:
+            raise ValueError("a chat turn must use ApprovalChannel.INTERNAL_CHAT")
         effective_db = db or self.db
         mcp_client = None
         ctx = None
@@ -268,12 +313,16 @@ class AgentStreamingService:
                 user_context=user_context,
                 conversation_id=conversation_id,
                 db=effective_db,
+                turn_config=turn_config,
             )
+            # Same rule as the sync path. (Bare test doubles may lack the property; hence the helper.)
+            chat_turn = is_chat_turn(ctx)
+            # A Chat turn ignores the agent's middlewares (create_agent drops them), so neither
+            # human-in-the-loop nor output redaction applies, whatever the shared row says.
             if (
                 resume is None
                 and effective_db is not None
-                and ctx.conversation is not None
-                and human_in_the_loop_config(ctx.fresh_agent) is not None
+                and _may_be_paused(ctx)
             ):
                 try:
                     expired = approvals.check_conversation_free(effective_db, ctx.conversation.conversation_id)
@@ -296,20 +345,20 @@ class AgentStreamingService:
             # ----------------------------------------------------------------
             # 2. Emit early metadata event so the client has conversation_id
             # ----------------------------------------------------------------
-            yield AgentStreamEvent(
-                "metadata",
-                {
-                    "conversation_id": ctx.effective_conv_id,
-                    "session_id": (
-                        getattr(ctx.conversation, "session_id", None)
-                        if getattr(ctx, "conversation", None)
-                        else None
-                    ),
-                    "agent_id": agent_id,
-                    "agent_name": ctx.agent.name,
-                    "has_memory": ctx.agent.has_memory,
-                },
-            )
+            metadata_data = {
+                "conversation_id": ctx.effective_conv_id,
+                "session_id": (
+                    getattr(ctx.conversation, "session_id", None)
+                    if getattr(ctx, "conversation", None)
+                    else None
+                ),
+                "agent_id": agent_id,
+                "agent_name": ctx.agent.name,
+                "has_memory": ctx.agent.has_memory,
+            }
+            if chat_turn:
+                metadata_data["turn_config"] = turn_config.to_client_summary()
+            yield AgentStreamEvent("metadata", metadata_data)
 
             # ----------------------------------------------------------------
             # 3a. Resolve this session's temporary playground silos (uploaded
@@ -355,12 +404,13 @@ class AgentStreamingService:
                     attached_files=ctx.processed_files,
                     temp_silo_ids=temp_silo_ids or None,
                     user_message=message,
+                    turn_config=turn_config,
                 )
                 agent_chain, mcp_client = create_agent_result[:2]
 
                 config = prepare_agent_config(ctx.fresh_agent)
                 config["configurable"]["thread_id"] = compute_thread_id(
-                    ctx.fresh_agent, ctx.session_id_for_cache
+                    ctx.fresh_agent, ctx.session_id_for_cache, require_session=chat_turn
                 )
 
                 if ctx.fresh_agent.has_memory and ctx.session_id_for_cache:
@@ -410,6 +460,7 @@ class AgentStreamingService:
                         user_context=ctx.user_context,
                         conversation_id=ctx.effective_conv_id,
                         session_id=ctx.session_id_for_cache,
+                        **tracing_kwargs(turn_config),
                     )
                     apply_tracing_to_config(config, tracer, overrides)
                     logger.info(
@@ -432,8 +483,10 @@ class AgentStreamingService:
                 structured_response = None
                 # PIIMiddleware(apply_to_output) redacts the AI message in after_model, i.e.
                 # after its tokens were streamed; hold tokens back so PII never reaches the UI.
-                buffer_output = redacts_output(ctx.fresh_agent)
-                hitl_enabled = human_in_the_loop_config(ctx.fresh_agent) is not None
+                # Neither applies to a chat turn (create_agent drops the agent's middlewares).
+                buffer_output = not chat_turn and redacts_output(ctx.fresh_agent)
+                hitl_enabled = not chat_turn and human_in_the_loop_config(ctx.fresh_agent) is not None
+                run_ai_messages: list = []  # AI messages THIS run produced (chat turns: final id)
 
                 try:
                     # ``aclosing`` guarantees the LangGraph astream generator
@@ -462,6 +515,13 @@ class AgentStreamingService:
                                     and "structured_response" in chunk["model"]
                                 ):
                                     structured_response = chunk["model"]["structured_response"]
+                                if chat_turn and isinstance(chunk, dict):
+                                    # Only the model node's own output: other nodes (e.g.
+                                    # summarization) re-emit preserved messages of earlier turns.
+                                    node_update = chunk.get("model")
+                                    new_messages = node_update.get("messages") if isinstance(node_update, dict) else None
+                                    if isinstance(new_messages, list):
+                                        run_ai_messages.extend(m for m in new_messages if isinstance(m, AIMessage))
 
                             events = map_stream_event(mode, chunk)
                             if events:
@@ -541,11 +601,12 @@ class AgentStreamingService:
                 )
                 resume_settled = True
 
-            pause = await _read_pause(agent_chain, config) if hitl_enabled else None
+            # A chat turn still looks: an interrupt must never be finalized as a completed turn.
+            pause = await _read_pause(agent_chain, config) if (hitl_enabled or chat_turn) else None
             if pause is not None:
                 # Paused by HumanInTheLoopMiddleware: nothing to finalize until someone answers.
                 requester = approvals.Requester.from_user_context(ctx.user_context)
-                answerable = approvals.is_interactive(channel) and (
+                answerable = not chat_turn and approvals.is_interactive(channel) and (
                     requester.user_id is not None or bool(requester.api_key_hash)
                 )
                 approval = await approvals.open_approval(
@@ -599,9 +660,21 @@ class AgentStreamingService:
             # 7. Post-processing phase — delegates to AgentExecutionService
             # ----------------------------------------------------------------
 
-            result = await self.execution_service._finalize_turn(
-                ctx, raw_response, effective_db
-            )
+            finalize_kwargs: dict = {}
+            if chat_turn:
+                assistant_message_id = last_ai_message_id({"messages": run_ai_messages})
+                if assistant_message_id is None:
+                    assistant_message_id = await _final_answer_message_id(agent_chain, config)
+                if assistant_message_id is None:
+                    logger.warning(
+                        "Chat turn finished without a readable assistant message id (conversation %s)",
+                        ctx.effective_conv_id,
+                    )
+                finalize_kwargs = {
+                    "assistant_message_id": assistant_message_id,
+                    "on_turn_completed": on_turn_completed,
+                }
+            result = await self._finalize(ctx, raw_response, effective_db, chat_turn, finalize_kwargs)
 
             # ----------------------------------------------------------------
             # 8. Emit done event
@@ -612,6 +685,9 @@ class AgentStreamingService:
                 "files": result["files_data"],
                 "status": "completed",
             }
+            if chat_turn:
+                done_data["assistant_message_id"] = result.get("assistant_message_id")
+                done_data["turn"] = result.get("turn")
             # Validate up front rather than let format_sse_event's json.dumps
             # raise inside the SSE bridge: a failure there would surface
             # through contextlib.aclosing's teardown of this generator and
@@ -758,6 +834,7 @@ class AgentStreamingService:
                         int((first_token_at - started_at).total_seconds() * 1000)
                         if first_token_at is not None else None
                     ),
+                    ai_service_override=turn_config.metrics_service() if turn_config is not None else None,
                 )
 
     async def stream_agent_chat(
@@ -771,6 +848,8 @@ class AgentStreamingService:
         db: Session | None = None,
         channel: ApprovalChannel = ApprovalChannel.PLAYGROUND,
         resume: "approvals.ResumeRequest | None" = None,
+        turn_config: "ResolvedChatConfig | None" = None,
+        on_turn_completed: "TurnCompletedHook | None" = None,
     ) -> AsyncGenerator[str, None]:
         """Stream an agent chat turn as SSE events.
 
@@ -801,6 +880,8 @@ class AgentStreamingService:
                 is used.
             channel: Where the turn comes from (see :meth:`stream_agent_events`).
             resume: Claimed approval to answer instead of sending ``message``.
+            turn_config / on_turn_completed: Flexible-chat override and hook (see
+                :meth:`stream_agent_events`).
 
         Yields:
             SSE-formatted strings (``"data: {...}\\n\\n"``).
@@ -816,6 +897,8 @@ class AgentStreamingService:
                 db=db,
                 channel=channel,
                 resume=resume,
+                turn_config=turn_config,
+                on_turn_completed=on_turn_completed,
             )
         ) as events:
             async for ev in events:
@@ -824,3 +907,31 @@ class AgentStreamingService:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    async def _finalize(self, ctx, raw_response, db, chat_turn: bool, finalize_kwargs: dict) -> dict:
+        """Run ``_finalize_turn``; for a chat turn, to completion even if the consumer goes away.
+
+        A disconnected client would otherwise leave the answer in the checkpoint with no turn
+        bookkeeping. Starlette's ``StreamingResponse`` runs inside an anyio task group and, on
+        disconnect, cancels it by re-delivering the cancellation on every event-loop turn, so an
+        ``asyncio.shield`` + wait cannot survive it (the router would close the DB session under
+        the still-running work). Instead the work runs inside a *shielded anyio cancel scope*
+        with a deadline (``FINALIZE_GRACE_S``): outer cancellation is held back until it finishes
+        (the request session is closed by the router only afterwards) and is delivered at the
+        next checkpoint. If the deadline is hit, the work is cancelled, an ERROR is logged and
+        the turn is reported as failed (not finalized). Standard turns await directly (as before).
+        """
+        if not chat_turn:
+            return await self.execution_service._finalize_turn(ctx, raw_response, db, **finalize_kwargs)
+        with anyio.CancelScope(shield=True) as scope:
+            scope.deadline = anyio.current_time() + FINALIZE_GRACE_S
+            result = await self.execution_service._finalize_turn(ctx, raw_response, db, **finalize_kwargs)
+        if scope.cancelled_caught:
+            logger.error(
+                "Chat turn finalization exceeded %ss for conversation %s; turn not finalized",
+                FINALIZE_GRACE_S, getattr(ctx, "effective_conv_id", None),
+            )
+            raise TimeoutError("Chat turn finalization timed out")
+        # Surface a pending outer cancellation (client gone) now that the bookkeeping is done.
+        await anyio.lowlevel.checkpoint()
+        return result

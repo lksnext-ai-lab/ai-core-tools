@@ -63,6 +63,7 @@ def _config(tag, *, silo=True):
         app_id=1,
         ai_service=SimpleNamespace(name=f"svc-{tag}", provider="OpenAI"),
         ai_service_id=1, ai_service_name=f"svc-{tag}",
+        ai_service_is_system=False, ai_service_provider="OpenAI", ai_service_model=f"model-{tag}",
         silo=SimpleNamespace(silo_id=ord(tag), name=f"silo-{tag}", metadata_definition=None,
                              vector_db_type="PGVECTOR") if silo else None,
         silo_id=ord(tag) if silo else None, silo_name=f"silo-{tag}" if silo else None,

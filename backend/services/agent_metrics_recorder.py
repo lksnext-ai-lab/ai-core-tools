@@ -22,11 +22,15 @@ _pending_writes: set[asyncio.Task] = set()
 def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
                            finished_at, duration_ms, status, error_code,
                            error_message, result, image_files, message,
-                           collector=None, time_to_first_token_ms=None) -> None:
+                           collector=None, time_to_first_token_ms=None,
+                           ai_service_override=None) -> None:
     """Build the metrics payload and persist it in the background. Never raises.
 
     ``collector`` (an AgentMetricsCollector attached to the run) is the source of
     token usage and tool calls; without it they are derived from ``result``.
+    ``ai_service_override`` (flexible chat: the turn's AI service) replaces the agent's own
+    service for model/provider/``ai_service_id``. The payload is built synchronously here, so the
+    ORM object is read inside the request session; only plain data reaches the background task.
     """
     try:
         loop = asyncio.get_running_loop()
@@ -50,6 +54,7 @@ def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
             message=message,
             collector=collector,
             time_to_first_token_ms=time_to_first_token_ms,
+            ai_service_override=ai_service_override,
         )
         task = loop.create_task(persist_metrics_payload(payload))
         _pending_writes.add(task)
@@ -111,8 +116,13 @@ def _usage_from_messages(messages: list) -> tuple[Optional[int], Optional[int], 
 def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
                           finished_at, duration_ms, status, error_code,
                           error_message, result, image_files, message,
-                          collector=None, time_to_first_token_ms=None) -> dict[str, Any]:
-    """Build the {"event": ..., "tool_calls": [...]} payload from the execution context."""
+                          collector=None, time_to_first_token_ms=None,
+                          ai_service_override=None) -> dict[str, Any]:
+    """Build the {"event": ..., "tool_calls": [...]} payload from the execution context.
+
+    With ``ai_service_override`` (the AIService of a chat turn) model/provider/``ai_service_id``
+    come from it instead of ``fresh_agent`` (whose own service is NULL for the internal agent).
+    """
     ctx = user_context or {}
     caller_type = _detect_caller_type(ctx)
     messages = _turn_messages(result)
@@ -132,7 +142,12 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
             response_chars = len(content)
             break
 
-    ai_service = getattr(fresh_agent, "ai_service", None)
+    if ai_service_override is not None:
+        ai_service = ai_service_override
+        ai_service_id = getattr(ai_service_override, "service_id", None)
+    else:
+        ai_service = getattr(fresh_agent, "ai_service", None)
+        ai_service_id = getattr(fresh_agent, 'service_id', None)
     event_payload = {
         "event_id": event_id,
         "app_id": getattr(fresh_agent, 'app_id', None),
@@ -152,7 +167,7 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
         # The provider-reported model wins; AIService.description holds the configured model name.
         "model_name": model or getattr(ai_service, 'description', None),
         "provider": getattr(ai_service, 'provider', None),
-        "ai_service_id": _int_or_none(getattr(fresh_agent, 'service_id', None)),
+        "ai_service_id": _int_or_none(ai_service_id),
         "llm_calls": llm_calls,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,

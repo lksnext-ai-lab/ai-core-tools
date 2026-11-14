@@ -21,6 +21,7 @@ def _agent(kind: str) -> MagicMock:
     agent.kind = kind
     agent.is_internal_chat = kind == AGENT_KIND_INTERNAL_CHAT
     agent.is_frozen = False
+    agent.app_id = 1
     return agent
 
 
@@ -36,6 +37,12 @@ def _service(agent) -> AgentExecutionService:
 
     service.agent_service.get_agent.side_effect = _get_agent
     return service
+
+
+def _cfg(app_id=1):
+    """Minimal stand-in for a ResolvedChatConfig: only app_id is read before the conversation lookup."""
+    from types import SimpleNamespace
+    return SimpleNamespace(app_id=app_id)
 
 
 class _Reached(Exception):
@@ -64,7 +71,7 @@ class TestPrepareTurnChokePoint:
         service = _service(_agent(AGENT_KIND_STANDARD))
         with pytest.raises(HTTPException) as exc:
             asyncio.run(service._prepare_turn(
-                agent_id=1, message="hi", db=MagicMock(), conversation_id=3, turn_config=object()
+                agent_id=1, message="hi", db=MagicMock(), conversation_id=3, turn_config=_cfg()
             ))
         assert exc.value.status_code == 404
         assert exc.value.detail == "Agent not found"
@@ -83,7 +90,7 @@ class TestPrepareTurnChokePoint:
             with pytest.raises(_Reached):
                 asyncio.run(service._prepare_turn(
                     agent_id=1, message="hi", db=MagicMock(), conversation_id=3,
-                    user_context={"user_id": 1}, turn_config=object(),
+                    user_context={"user_id": 1}, turn_config=_cfg(),
                 ))
         assert conv_svc.get_conversation.call_args.kwargs["include_internal_chat"] is True
 
@@ -102,7 +109,7 @@ class TestPrepareTurnChokePoint:
         with patch("services.conversation_service.ConversationService") as conv_svc:
             with pytest.raises(HTTPException) as exc:
                 asyncio.run(service._prepare_turn(
-                    agent_id=1, message="hi", db=MagicMock(), user_context={"user_id": 1}, turn_config=object(),
+                    agent_id=1, message="hi", db=MagicMock(), user_context={"user_id": 1}, turn_config=_cfg(),
                 ))
         assert exc.value.status_code == 400
         conv_svc.create_conversation.assert_not_called()
