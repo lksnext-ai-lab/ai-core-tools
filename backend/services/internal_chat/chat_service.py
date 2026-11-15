@@ -716,7 +716,11 @@ class InternalChatService:
         ChatConversationStateRepository.upsert(self.db, conversation_id, app_id, copy.deepcopy(guard.selection))
         if self._user_id is not None:
             ChatUserDefaultRepository.upsert(self.db, self._user_id, app_id, copy.deepcopy(guard.selection))
-        return build_turn_info(row, warnings=guard.warnings).model_dump(mode="json")
+        # Selected MCP servers whose tools failed to load while the agent was built (reported by tool building).
+        unavailable = tuple(
+            ChatSelectionWarning(kind="mcp_config", id=i) for i in config.diagnostics.mcp_unavailable_ids
+        )
+        return build_turn_info(row, warnings=guard.warnings + unavailable).model_dump(mode="json")
 
     @staticmethod
     def _drop_thread(guard: _TurnGuard) -> None:

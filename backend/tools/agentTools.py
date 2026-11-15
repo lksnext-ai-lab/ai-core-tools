@@ -360,6 +360,12 @@ class _EffectiveAgentSurface:
     ignore_agent_middlewares: bool
 
 
+def _report_chat_mcp_unavailable(turn_config: Optional[ResolvedChatConfig]) -> None:
+    """Flexible chat only: tell the turn which selected MCP configs lost their tools (the load is all-or-nothing)."""
+    if turn_config is not None and turn_config.mcp_config_ids:
+        turn_config.diagnostics.report_mcp_unavailable(turn_config.mcp_config_ids)
+
+
 def _effective_surface(
     agent: Agent, turn_config: Optional[ResolvedChatConfig]
 ) -> _EffectiveAgentSurface:
@@ -841,6 +847,9 @@ async def create_agent(
             )
 
     mcp_client = None
+    if turn_config is not None:
+        # create_agent may be retried within one turn: only the LAST attempt's MCP outcome counts.
+        turn_config.diagnostics.reset()
     try:
         logger.info("Starting MCP tools loading...")
         mcp_client = await MCPClientManager().get_client(
@@ -863,6 +872,7 @@ async def create_agent(
             f"MCP tools loading timed out after {MCP_TOOLS_TIMEOUT}s — "
             "agent will continue without MCP tools"
         )
+        _report_chat_mcp_unavailable(turn_config)
         mcp_client = None
     except Exception as e:
         root_cause = _extract_mcp_root_causes(e) if isinstance(e, BaseExceptionGroup) else str(e)
@@ -870,6 +880,7 @@ async def create_agent(
             f"MCP tools unavailable (agent will continue without them): {root_cause}"
         )
         logger.debug("Full MCP tools loading error:", exc_info=True)
+        _report_chat_mcp_unavailable(turn_config)
         mcp_client = None
 
     # Add skill loader / file reader tools if agent has skills. Providers are built lazily

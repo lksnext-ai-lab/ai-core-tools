@@ -35,7 +35,7 @@ def world(db):
     app = AppFactory(owner=owner)
     ai = AIServiceFactory(app=app, description="gpt-x")
     db.flush()
-    return {"app": app, "ai": ai, "user": owner, "headers": headers_for(owner),
+    return {"app": app, "app_id": app.app_id, "ai": ai, "user": owner, "headers": headers_for(owner),
             "viewer": member_headers(db, app, CollaborationRole.VIEWER)}
 
 
@@ -64,12 +64,12 @@ def completed(conversation_id):
 
 
 def internal_agent_id(db, world):
-    return db.query(Agent).filter(Agent.app_id == world["app"].app_id, Agent.kind == "internal_chat").one().agent_id
+    return db.query(Agent).filter(Agent.app_id == world["app_id"], Agent.kind == "internal_chat").one().agent_id
 
 
 def conversations(db, world):
     return db.query(Conversation).join(Agent, Agent.agent_id == Conversation.agent_id).filter(
-        Agent.app_id == world["app"].app_id
+        Agent.app_id == world["app_id"]
     ).count()
 
 
@@ -127,7 +127,7 @@ def test_first_turn_that_cannot_run_creates_nothing(client, db, world):
             assert response.status_code == 404 and response.json()["detail"] == "Resource not found"
     assert not execute.called and not stream.called
     assert conversations(db, world) == 0
-    assert db.query(Agent).filter(Agent.app_id == world["app"].app_id, Agent.kind == "internal_chat").count() == 0
+    assert db.query(Agent).filter(Agent.app_id == world["app_id"], Agent.kind == "internal_chat").count() == 0
 
 
 def test_malformed_references_or_search_params_are_422_and_create_nothing(client, db, world):
@@ -259,3 +259,64 @@ def test_a_failed_turn_never_discards_an_existing_conversation(client, db, world
             client.post(url(world, "/messages"), headers=world["headers"], data=form(world, conversation_id=cid))
     assert conversations(db, world) == 1
     assert client.get(url(world, f"/conversations/{cid}"), headers=world["headers"]).status_code == 200
+
+
+def _stream_of(*events):
+    def fake_stream(self, **kwargs):
+        async def gen():
+            for event in events:
+                yield f"data: {json.dumps(event)}\n\n"
+        return gen()
+    return fake_stream
+
+
+def test_stream_error_without_an_answer_discards_the_conversation_this_request_created(client, db, world):
+    fake = _stream_of({"type": "metadata", "data": {}}, {"type": "error", "data": {"message": "x"}})
+    with patch.object(AgentStreamingService, "stream_agent_chat", fake), \
+            patch.object(ConversationService, "delete_thread_history", new=AsyncMock()):
+        response = client.post(url(world, "/stream"), headers=world["headers"], data=form(world))
+    assert response.status_code == 200 and '"type": "error"' in response.text
+    assert conversations(db, world) == 0
+
+
+def test_stream_that_completed_a_turn_keeps_the_conversation(client, db, world):
+    """A stream that reached ``done`` (even if the client then goes away) never discards anything."""
+    fake = _stream_of({"type": "metadata", "data": {}}, {"type": "done", "data": {"turn": None}},
+                      {"type": "error", "data": {"message": "late"}})
+    with patch.object(AgentStreamingService, "stream_agent_chat", fake):
+        client.post(url(world, "/stream"), headers=world["headers"], data=form(world))
+    assert conversations(db, world) == 1
+
+
+def test_stream_error_never_discards_an_existing_conversation(client, db, world):
+    cid = create(client, world)
+    fake = _stream_of({"type": "error", "data": {"message": "x"}})
+    with patch.object(AgentStreamingService, "stream_agent_chat", fake):
+        client.post(url(world, "/stream"), headers=world["headers"], data=form(world, conversation_id=cid))
+    assert conversations(db, world) == 1
+
+
+async def test_hanging_up_on_the_first_error_event_still_discards_the_conversation(db, world):
+    """The error chunk is held back until the discard ran, so a client that closes on it leaves nothing behind."""
+    from types import SimpleNamespace
+
+    from routers.internal.internal_chat import chat_stream
+
+    fake = _stream_of({"type": "metadata", "data": {}}, {"type": "error", "data": {"message": "x"}})
+    auth = SimpleNamespace(identity=SimpleNamespace(id=str(world["user"].user_id), email=world["user"].email))
+    app_id = world["app_id"]
+    with patch.object(AgentStreamingService, "stream_agent_chat", fake), \
+            patch.object(ConversationService, "delete_thread_history", new=AsyncMock()):
+        response = await chat_stream(
+            app_id=app_id, request=SimpleNamespace(headers={}), message="hi", selection=form(world)["selection"],
+            auth_context=auth, role=None, db=db, _=None,
+        )
+        iterator = response.body_iterator
+        received = []
+        async for chunk in iterator:
+            received.append(chunk)
+            if '"type": "error"' in chunk:
+                break  # the client hangs up on the first error event
+        await iterator.aclose()
+    assert any('"type": "error"' in c for c in received)
+    assert conversations(db, {"app_id": app_id}) == 0

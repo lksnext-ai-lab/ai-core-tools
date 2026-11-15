@@ -55,6 +55,30 @@ class McpConnectionSpec:
     ssl_verify: bool
 
 
+class TurnDiagnostics:
+    """Per-turn carrier for what only becomes known while the agent is built (one instance per ``ResolvedChatConfig``).
+
+    ``ResolvedChatConfig`` is frozen, so tool building cannot add to it; instead it reports here, and the completion
+    hook of the same turn reads it. The object is created with the config (one per request, never shared between
+    turns or users) and holds ids only.
+    """
+
+    __slots__ = ("mcp_unavailable_ids",)
+
+    def __init__(self) -> None:
+        self.mcp_unavailable_ids: list[int] = []
+
+    def reset(self) -> None:
+        """Forget earlier reports (a retried agent build starts its MCP load afresh)."""
+        self.mcp_unavailable_ids.clear()
+
+    def report_mcp_unavailable(self, config_ids: tuple[int, ...] | list[int]) -> None:
+        """The selected MCP configs whose tools could not be loaded for this turn (connect failure / timeout)."""
+        for config_id in config_ids:
+            if config_id not in self.mcp_unavailable_ids:
+                self.mcp_unavailable_ids.append(config_id)
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedChatConfig:
     app_id: int
@@ -79,6 +103,8 @@ class ResolvedChatConfig:
     system_prompt: str
     # Selected MCP configs skipped for this turn (unusable connection config): ids only, for the SSE metadata.
     skipped_mcp_config_ids: tuple[int, ...] = ()
+    # Mutable per-turn carrier (not part of equality / repr): see ``TurnDiagnostics``.
+    diagnostics: TurnDiagnostics = field(default_factory=TurnDiagnostics, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         # Fail loudly: a missing service or a non-tuple would otherwise make downstream

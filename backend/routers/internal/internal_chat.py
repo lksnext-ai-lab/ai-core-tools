@@ -127,6 +127,17 @@ def _parse_search_params(value: Optional[str]) -> Optional[dict]:
     return parsed
 
 
+def _sse_event_type(chunk: str) -> Optional[str]:
+    """``type`` of one SSE chunk (``data: {"type": ...}``); None for heartbeats and anything else."""
+    if not chunk.startswith("data: "):
+        return None
+    try:
+        payload = json.loads(chunk[len("data: "):])
+    except ValueError:
+        return None
+    return payload.get("type") if isinstance(payload, dict) else None
+
+
 def _parse_selection(raw: str) -> ChatSelection:
     """``selection`` form field -> ``ChatSelection`` (422 on bad JSON or shape; the input is never echoed)."""
     try:
@@ -337,9 +348,30 @@ async def chat_stream(
         raise
 
     async def generator() -> AsyncGenerator[str, None]:
+        completed = False
+        pending_error: Optional[str] = None  # an ``error`` chunk is held back until the discard has run
         try:
             async for chunk in guard_agent_stream(base_generator):
+                event_type = _sse_event_type(chunk)
+                if event_type is None and chunk.startswith(":"):
+                    yield chunk  # heartbeat: flows unchanged, the held error (if any) keeps waiting
+                    continue
+                if pending_error is not None:
+                    held, pending_error = pending_error, None
+                    yield held  # something follows the error: it was not the end of the turn
+                if event_type == "error":
+                    pending_error = chunk
+                    continue
+                completed = completed or event_type == "done"
                 yield chunk
+            # The stream ended by itself on an error event with no answer: the first turn of a conversation this
+            # request created failed. Drop the empty conversation (it re-checks that it is still empty) BEFORE the
+            # error is delivered, so a client that hangs up on the first ``error`` event cannot leave it behind. A
+            # client disconnect or cancellation never reaches this point (the turn may still be persisting).
+            if pending_error is not None:
+                if not completed:
+                    await service.discard_created_conversation(app_id, prepared)
+                yield pending_error
         finally:
             # Release the request DB session: get_db teardown runs too late for a StreamingResponse.
             db.close()

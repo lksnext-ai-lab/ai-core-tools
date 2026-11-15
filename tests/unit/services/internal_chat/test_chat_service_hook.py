@@ -13,12 +13,16 @@ from services.internal_chat import selection_resolver as sr
 from services.internal_chat.errors import ChatResourceNotFoundError
 
 
+from services.internal_chat.resolved_config import TurnDiagnostics
+
+
 def _config(**kw):
     base = dict(
         app_id=3, ai_service_id=1, ai_service_name="GPT", ai_service_model="gpt-x", silo_id=4, silo_name="KB",
         skill_ids=(5,), skill_names=("sk",), mcp_config_ids=(6,), mcp_config_names=("mc",),
     )
     base.update(kw)
+    base.setdefault("diagnostics", TurnDiagnostics())
     cfg = SimpleNamespace(**base)
     cfg.to_selection_dict = lambda: {
         "ai_service_id": cfg.ai_service_id, "silo_id": cfg.silo_id,

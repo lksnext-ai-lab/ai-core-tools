@@ -507,3 +507,29 @@ async def test_mcp_spec_unchanged_with_token_and_insecure_ssl():
     assert "Authorization" in captured["c"]["s"]["headers"]
     assert "httpx_client_factory" in captured["c"]["s"]
     assert dict(spec.connections) == original
+
+
+@pytest.mark.asyncio
+async def test_mcp_failure_is_reported_and_a_successful_retry_clears_it():
+    """create_agent can run twice in one turn: only the last attempt's MCP outcome may stay in the diagnostics."""
+    cfg = _config("A")
+    agent = _agent()
+    broken = {"on": True}
+
+    async def get_tools(self):
+        if broken["on"]:
+            raise ConnectionError("mcp down")
+        return [_tool("mcp_ok")]
+
+    with _Harness():
+        fake_client = agentTools.MultiServerMCPClient  # the harness' fake class
+        original = fake_client.get_tools
+        fake_client.get_tools = get_tools
+        try:
+            await create_agent(agent, session_id="conv_7_a", turn_config=cfg)
+            assert cfg.diagnostics.mcp_unavailable_ids == [ord("A")]
+            broken["on"] = False
+            await create_agent(agent, session_id="conv_7_a", turn_config=cfg)  # the retry connects
+            assert cfg.diagnostics.mcp_unavailable_ids == []
+        finally:
+            fake_client.get_tools = original
