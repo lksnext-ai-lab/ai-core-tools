@@ -65,6 +65,7 @@
       "about": "Acerca de",
       "dashboard": "Panel",
       "agents": "Agentes",
+      "chat": "Chat",
       "scheduledTasks": "Tareas programadas",
       "dataSources": "Fuentes de datos",
       "silos": "Silos",
@@ -4509,10 +4510,94 @@
     "deleteFailed": "Error al eliminar conversación",
     "renameFailed": "Error al actualizar título"
   },
+  "alert": {
+    "dismiss": "Descartar"
+  },
   "appChat": {
+    "page": {
+      "title": "Chat",
+      "subtitle": "Elige el modelo, la fuente, las skills y las herramientas de cada mensaje",
+      "conversations": "Conversaciones",
+      "loading": "Cargando el chat...",
+      "loadErrorTitle": "No se pudo abrir el chat",
+      "optionsLoadFailed": "No se pudieron cargar las opciones del chat. Inténtalo de nuevo.",
+      "retry": "Reintentar",
+      "assistantName": "el asistente"
+    },
+    "selection": {
+      "groupLabel": "Ajustes del próximo mensaje",
+      "model": "Modelo",
+      "modelPlaceholder": "Selecciona un modelo",
+      "modelRetired": "Este modelo ha llegado a su fin de servicio",
+      "noModels": "No hay modelos disponibles",
+      "source": "Fuente",
+      "sourceNone": "Ninguna",
+      "unnamedSource": "Fuente n.º {{id}}",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "nonePlural": "Ninguna",
+      "nSelected_one": "{{count}} seleccionada",
+      "nSelected_other": "{{count}} seleccionadas",
+      "added": "{{name}} seleccionada",
+      "removed": "{{name}} quitada",
+      "results_one": "{{count}} resultado",
+      "results_other": "{{count}} resultados",
+      "search": "Buscar",
+      "noResults": "Sin resultados"
+    },
+    "sourceTypes": {
+      "repository": "Repositorios",
+      "domain": "Dominios web",
+      "sharepoint": "SharePoint",
+      "silo": "Silos"
+    },
+    "siloDisabled": {
+      "embedding_service_retired": "Su servicio de embeddings está retirado"
+    },
+    "skillGroups": {
+      "app": "Skills de la App",
+      "system": "Skills del sistema"
+    },
+    "meta": {
+      "source": "Fuente",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "deleted": "(eliminado)",
+      "toggle": "Detalles de {{model}}"
+    },
+    "blocked": {
+      "loading": "Cargando los ajustes del chat...",
+      "noUsableModel": "El envío está desactivado: esta App no tiene ningún modelo disponible para el chat.",
+      "noSelection": "El envío está desactivado: selecciona primero un modelo.",
+      "modelRetired": "El envío está desactivado: el modelo seleccionado ya no está disponible. Elige otro modelo."
+    },
+    "empty": {
+      "title": "No hay ningún modelo disponible para el chat",
+      "messageAdmin": "Esta App no tiene ningún servicio de IA activo apto para el chat. Configura uno para empezar a chatear.",
+      "messageMember": "Esta App no tiene ningún servicio de IA activo apto para el chat. Pide a un administrador de la App que configure uno.",
+      "configureLink": "Configurar servicios de IA"
+    },
+    "notices": {
+      "conversationNotFound": "Esa conversación no está disponible. Se ha abierto una nueva.",
+      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo y vuelve a enviar tu mensaje."
+    },
+    "warnings": {
+      "title": "Parte de tu selección no se ha usado",
+      "ai_service": "El modelo anterior ya no está disponible; se ha seleccionado otro.",
+      "ai_serviceNamed": "El modelo \"{{name}}\" ya no está disponible; se ha seleccionado otro.",
+      "silo": "La fuente anterior ya no está disponible y se ha quitado de la selección.",
+      "siloNamed": "La fuente \"{{name}}\" ya no está disponible y se ha quitado de la selección.",
+      "skill": "Una skill ya no está disponible y se ha quitado de la selección.",
+      "skillNamed": "La skill \"{{name}}\" ya no está disponible y se ha quitado de la selección.",
+      "mcp_config": "No se pudo usar una configuración MCP (no disponible o eliminada); el mensaje se respondió sin ella.",
+      "mcp_configNamed": "No se pudo usar la configuración MCP \"{{name}}\" (no disponible o eliminada); el mensaje se respondió sin ella."
+    },
     "transportErrors": {
       "noSelection": "Selecciona un modelo antes de enviar un mensaje.",
-      "noConversation": "Esta conversación no está disponible."
+      "noConversation": "Esta conversación no está disponible.",
+      "forbidden": "Ahora mismo no puedes enviar mensajes en esta App. Puede estar congelada o tu acceso puede haber cambiado.",
+      "notFound": "La conversación o alguno de los elementos seleccionados ya no está disponible.",
+      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo e inténtalo de nuevo."
     }
   }
 }

@@ -34,6 +34,8 @@ interface ConversationSidebarProps {
   readonly onConversationSelect: (conversationId: number) => void;
   readonly onNewConversation: () => void;
   readonly onReloadRequest?: () => void;
+  /** Change it to refetch the list in place: no loading spinner once data is shown, so scroll, focus and an in-progress rename survive. */
+  readonly refreshToken?: number;
   readonly open: boolean;
   readonly onClose: () => void;
 }
@@ -103,6 +105,7 @@ export default function ConversationSidebar({
   onConversationSelect,
   onNewConversation,
   onReloadRequest: _onReloadRequest,
+  refreshToken,
   open,
   onClose,
 }: ConversationSidebarProps) {
@@ -110,13 +113,14 @@ export default function ConversationSidebar({
   const confirm = useConfirm();
   const [conversations, setConversations] = useState<readonly SidebarConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingConvId, setEditingConvId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
 
   useEffect(() => {
     void loadConversations();
-  }, [agentId]);
+  }, [agentId, refreshToken]);
 
   function requireAgentId(): number {
     if (agentId === undefined) {
@@ -127,12 +131,13 @@ export default function ConversationSidebar({
 
   async function loadConversations() {
     try {
-      setLoading(true);
+      if (!loadedOnce) setLoading(true);
       setError(null);
       const response = loadConversationsProp
         ? await loadConversationsProp()
         : await apiService.listConversations(requireAgentId());
       setConversations(response.conversations || []);
+      setLoadedOnce(true);
     } catch (err) {
       console.error('Error loading conversations:', err);
       setError(t('conversationSidebar.loadError'));

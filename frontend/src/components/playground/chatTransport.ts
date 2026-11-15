@@ -168,7 +168,15 @@ export function createAgentPlaygroundTransport(appId: number, agentId: number): 
 // App Chat
 // ---------------------------------------------------------------------------
 
-export type ChatTransportErrorCode = 'noSelection' | 'noConversation';
+export type ChatTransportErrorCode =
+  | 'noSelection'
+  | 'noConversation'
+  /** 403: no access to the App, or the App is frozen (the backend does not tell them apart). */
+  | 'forbidden'
+  /** 404: the conversation or a selected resource is not available. */
+  | 'notFound'
+  /** 409 `SERVICE_RETIRED`: the selected model reached end of service. */
+  | 'serviceRetired';
 
 /**
  * Failure raised by the App Chat transport itself (not by the backend). It carries a code, never display
@@ -196,6 +204,27 @@ export interface ChatTurnEvent {
 export interface AppChatTransportOptions {
   /** Called for the `metadata` and `done` events of every turn. */
   readonly onTurnEvent?: (event: ChatTurnEvent) => void;
+  /** Called when a turn is rejected by the backend with a status the UI explains (403, 404, 409 retired). */
+  readonly onTransportError?: (code: ChatTransportErrorCode) => void;
+  /**
+   * Identifies the UI context a turn belongs to (e.g. the open conversation view). It is read when the turn
+   * starts and again for every observer call; if it changed in between, the observers are skipped, so a
+   * stream that outlives its view cannot write into the next one.
+   */
+  readonly getContextToken?: () => unknown;
+}
+
+/**
+ * Maps the HTTP rejection of a turn (raised by `api.ts` as an `ApiError`, recognised by shape so this module
+ * stays free of the class) to a `ChatTransportError`; anything else is returned unchanged.
+ */
+export function mapTurnError(error: unknown): unknown {
+  if (typeof error !== 'object' || error === null || (error as { name?: unknown }).name !== 'ApiError') return error;
+  const { status, errorCode } = error as { status?: number; errorCode?: string };
+  if (status === 409 && errorCode === 'SERVICE_RETIRED') return new ChatTransportError('serviceRetired');
+  if (status === 403) return new ChatTransportError('forbidden');
+  if (status === 404) return new ChatTransportError('notFound');
+  return error;
 }
 
 function observeTurnEvents(
@@ -256,17 +285,30 @@ export function createAppChatTransport(
       if (!selection) {
         throw new ChatTransportError('noSelection');
       }
-      await apiService.streamAppChatMessage(
-        appId,
-        {
-          message,
-          selection,
-          conversationId: streamOptions.conversationId,
-          files: streamOptions.files,
-          searchParams: streamOptions.searchParams,
-        },
-        { onEvent: observeTurnEvents(streamOptions.onEvent, options.onTurnEvent), signal: streamOptions.signal },
-      );
+      const token = options.getContextToken?.();
+      const isCurrent = () => options.getContextToken?.() === token;
+      const onTurnEvent = options.onTurnEvent
+        ? (event: ChatTurnEvent) => {
+            if (isCurrent()) options.onTurnEvent?.(event);
+          }
+        : undefined;
+      try {
+        await apiService.streamAppChatMessage(
+          appId,
+          {
+            message,
+            selection,
+            conversationId: streamOptions.conversationId,
+            files: streamOptions.files,
+            searchParams: streamOptions.searchParams,
+          },
+          { onEvent: observeTurnEvents(streamOptions.onEvent, onTurnEvent), signal: streamOptions.signal },
+        );
+      } catch (error) {
+        const mapped = mapTurnError(error);
+        if (mapped instanceof ChatTransportError && isCurrent()) options.onTransportError?.(mapped.code);
+        throw mapped;
+      }
     },
 
     async loadHistory(conversationId) {

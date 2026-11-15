@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
@@ -62,6 +62,16 @@ interface ChatInterfaceBaseProps {
   toolbarStart?: React.ReactNode;
   /** Extra content rendered under each agent message (e.g. the App Chat's per-turn badge). */
   renderMessageMeta?: (message: ChatMessageModel) => React.ReactNode;
+  /** Translated reason why sending is blocked (e.g. no model selected). Disables sending and is shown under the composer. */
+  sendBlockedReason?: string;
+  /** Moves focus to the composer whenever this number changes (and on mount when it is above 0). */
+  focusComposerSignal?: number;
+  /**
+   * Chat only: called when a turn started by an instance that has since been replaced (the user moved to
+   * another conversation) finishes. The turn still completes and is stored server-side, but no other parent
+   * callback runs for it.
+   */
+  onDetachedTurnFinished?: () => void;
 }
 
 /**
@@ -78,6 +88,9 @@ function ChatInterface({
   agentId,
   transport: transportProp,
   renderMessageMeta,
+  sendBlockedReason,
+  focusComposerSignal,
+  onDetachedTurnFinished,
   agentName,
   conversationId,
   onConversationCreated,
@@ -129,9 +142,28 @@ function ChatInterface({
   const userScrolledUpRef = useRef(false);
   const lastScrollTopRef = useRef(0);
   const filterPanelId = `metadata-filters-${agentId ?? 'chat'}`;
+  const sendBlockedReasonId = useId();
+  /** Id of a conversation this component just created by sending its first turn (see the history effect). */
+  const createdBySendRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  /**
+   * False once a Chat instance was replaced: its in-flight turn must not call parent callbacks (they would
+   * navigate the user away from the conversation they moved to). The playground is deliberately unchanged.
+   */
+  const isAlive = () => agentMedia || mountedRef.current;
   const hasMetadataFilters = !!metadataFields && metadataFields.length > 0;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (focusComposerSignal) textareaRef.current?.focus();
+  }, [focusComposerSignal]);
 
   const playgroundStream = useCallback(
     (message: string, opts: StreamFnOptions) => transport.streamMessage(message, opts),
@@ -228,6 +260,13 @@ function ChatInterface({
   }, [conversationId]);
 
   useEffect(() => {
+    // The Chat creates its conversation with the first turn: what is on screen is already that turn, so
+    // reloading would blank the chat. (The playground keeps reloading: its session id comes from the reload.)
+    if (!agentMedia && currentConversationId !== null && createdBySendRef.current === currentConversationId) {
+      createdBySendRef.current = null;
+      return;
+    }
+    let cancelled = false;
     const loadConversationHistory = async () => {
       try {
         setIsLoadingHistory(true);
@@ -235,6 +274,8 @@ function ChatInterface({
         setPendingApproval(null);
 
         const response = await transport.loadHistory(currentConversationId);
+        // A slow answer of a previous conversation must not overwrite the current one.
+        if (cancelled) return;
 
         if (currentConversationId) {
           if (agentMedia && response.sessionId) {
@@ -259,18 +300,21 @@ function ChatInterface({
           setMessages([]);
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading conversation history:', error);
         setMessages([]);
       } finally {
-        setIsLoadingHistory(false);
+        if (!cancelled) setIsLoadingHistory(false);
       }
     };
 
     const loadPersistentFiles = async () => {
       try {
         const response = await transport.listFiles(currentConversationId);
+        if (cancelled) return;
         setPersistentFiles(response.files || []);
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading persistent files:', error);
         setPersistentFiles([]);
       }
@@ -287,6 +331,9 @@ function ChatInterface({
     } else {
       setPlaygroundMedia([]);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [appId, transport, currentConversationId, currentSessionId, historyReloadKey]);
 
   useApprovalExpiryWatch(
@@ -498,7 +545,10 @@ function ChatInterface({
   }, [pendingApproval, settleAwaitingTools]);
 
   const describeSendError = (error: unknown): string => {
+    // The streaming hook wraps whatever the transport threw; the original stays in `cause`.
+    const cause = error instanceof Error ? error.cause : undefined;
     if (error instanceof ChatTransportError) return t(`appChat.transportErrors.${error.code}`);
+    if (cause instanceof ChatTransportError) return t(`appChat.transportErrors.${cause.code}`);
     return error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed');
   };
 
@@ -534,9 +584,15 @@ function ChatInterface({
         searchParams,
       });
 
+      if (!isAlive()) {
+        onDetachedTurnFinished?.();
+        return;
+      }
+
       commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null, result.turn, result.turnConfig);
 
       if (result.conversationId && !currentConversationId) {
+        createdBySendRef.current = result.conversationId;
         setCurrentConversationId(result.conversationId);
         onConversationCreated?.(result.conversationId);
       }
@@ -549,6 +605,7 @@ function ChatInterface({
 
       textareaRef.current?.focus();
     } catch (error) {
+      if (!isAlive()) return;
       setHoldStreamingContent(false);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -608,6 +665,7 @@ function ChatInterface({
     if (!targetConversationId) {
       try {
         const convResponse = await transport.createConversation();
+        if (!isAlive()) return;
         targetConversationId = convResponse.conversationId;
         setCurrentConversationId(targetConversationId);
         if (agentMedia && convResponse.sessionId) {
@@ -798,7 +856,7 @@ function ChatInterface({
     (m) => m.status !== 'ready' && m.status !== 'error'
   );
   const canSend =
-    !isStreaming && !hasMediaProcessing && !approvalBlocksInput
+    !isStreaming && !hasMediaProcessing && !approvalBlocksInput && !sendBlockedReason
     && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   // ─── Video timestamp parsing ──────────────────────────────────────────────────
@@ -937,7 +995,7 @@ function ChatInterface({
         {/* Chat card */}
         <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
           {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
-          <div className="flex items-center gap-2 px-6 pt-3 pb-1">
+          <div className="flex flex-wrap items-center gap-2 px-6 pt-3 pb-1">
             {toolbarStart}
             <ButtonApp
               className="ml-auto"
@@ -1296,6 +1354,8 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                aria-label={t('agentPlayground.chat.messagePlaceholder', { agent: agentName })}
+                aria-describedby={sendBlockedReason ? sendBlockedReasonId : undefined}
                 placeholder={approvalBlocksInput
                   ? t('agentPlayground.chat.answerApprovalToContinue')
                   : t('agentPlayground.chat.messagePlaceholder', { agent: agentName })}
@@ -1329,6 +1389,7 @@ function ChatInterface({
                   type="button"
                   onClick={handleSendMessage}
                   disabled={!canSend}
+                  aria-describedby={sendBlockedReason ? sendBlockedReasonId : undefined}
                   className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
                              bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
                              hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
@@ -1341,9 +1402,19 @@ function ChatInterface({
             </div>
 
             {/* Hint text */}
-            <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
-              {t('agentPlayground.chat.sendKeyboardHint')}
+            {/* Persistent polite region: present even when empty so a change of reason is announced. */}
+            <p
+              id={sendBlockedReasonId}
+              role="status"
+              className={sendBlockedReason ? 'text-[12px] text-bronze dark:text-bronze-dark mt-[9px] text-center' : 'sr-only'}
+            >
+              {sendBlockedReason ?? ''}
             </p>
+            {!sendBlockedReason && (
+              <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
+                {t('agentPlayground.chat.sendKeyboardHint')}
+              </p>
+            )}
           </div>
         </div>
 

@@ -8,7 +8,7 @@ const ts = require('typescript');
 function compile(relativePath, modules, extraGlobals = {}) {
   const source = fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
   const compiled = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
   vm.runInNewContext(compiled.replaceAll('import.meta', '({ env: {} })'), {
@@ -332,4 +332,65 @@ test('a throwing onTurnEvent handler does not abort the stream', async () => {
   }
   assert.deepEqual(forwarded, ['metadata', 'token', 'done']);
   assert.equal(logged.length, 2);
+});
+
+// ---------------------------------------------------------------- turn errors (step 15)
+
+function apiError(status, errorCode) {
+  const error = new Error('boom');
+  error.name = 'ApiError';
+  error.status = status;
+  error.errorCode = errorCode;
+  return error;
+}
+
+test('mapTurnError explains 403, 404 and a retired model; everything else passes through', () => {
+  const { mod } = loadTransport();
+  assert.equal(mod.mapTurnError(apiError(409, 'SERVICE_RETIRED')).code, 'serviceRetired');
+  assert.equal(mod.mapTurnError(apiError(403)).code, 'forbidden');
+  assert.equal(mod.mapTurnError(apiError(404)).code, 'notFound');
+  const other = apiError(409, 'OTHER');
+  assert.equal(mod.mapTurnError(other), other);
+  const plain = new Error('x');
+  assert.equal(mod.mapTurnError(plain), plain);
+});
+
+test('app chat transport reports a rejected turn through onTransportError and throws the coded error', async () => {
+  const { mod } = loadTransport({
+    streamAppChatMessage: async () => { throw apiError(409, 'SERVICE_RETIRED'); },
+  });
+  const seen = [];
+  const t = mod.createAppChatTransport(3, () => selectionA, { onTransportError: (code) => seen.push(code) });
+  await assert.rejects(
+    t.streamMessage('hi', { onEvent() {} }),
+    (error) => error.name === 'ChatTransportError' && error.code === 'serviceRetired',
+  );
+  assert.deepEqual(seen, ['serviceRetired']);
+});
+
+test('turn observers are skipped when the context token changed while the stream was running (M2)', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const { mod } = loadTransport({
+    streamAppChatMessage: async (_app, _req, opts) => {
+      opts.onEvent({ type: 'metadata', data: { conversation_id: 1, turn_config: { warnings: [{ kind: 'skill', id: 1 }] } } });
+      await gate;
+      opts.onEvent({ type: 'metadata', data: { conversation_id: 1, turn_config: { warnings: [{ kind: 'skill', id: 2 }] } } });
+      throw apiError(403);
+    },
+  });
+  let token = 'view-1';
+  const events = [];
+  const errors = [];
+  const t = mod.createAppChatTransport(3, () => selectionA, {
+    onTurnEvent: (e) => events.push(e.warnings[0].id),
+    onTransportError: (c) => errors.push(c),
+    getContextToken: () => token,
+  });
+  const pending = t.streamMessage('hi', { onEvent() {} });
+  token = 'view-2';
+  release();
+  await assert.rejects(pending);
+  assert.deepEqual(JSON.parse(JSON.stringify(events)), [1].slice(0, 1));
+  assert.equal(errors.length, 0);
 });

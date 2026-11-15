@@ -58,8 +58,8 @@ interface StreamResult {
 export class StreamingChatError extends Error {
   readonly elapsedMs: number;
 
-  constructor(message: string, elapsedMs: number) {
-    super(message);
+  constructor(message: string, elapsedMs: number, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
     this.name = 'StreamingChatError';
     this.elapsedMs = elapsedMs;
   }
@@ -521,7 +521,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
         } else {
           const errMsg = err instanceof Error ? err.message : 'Streaming failed';
           setStreamError(errMsg);
-          throw new StreamingChatError(errMsg, getElapsedMs());
+          throw new StreamingChatError(errMsg, getElapsedMs(), err);
         }
       } finally {
         elapsedMs = getElapsedMs();

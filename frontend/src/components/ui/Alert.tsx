@@ -1,5 +1,6 @@
 
 import React, { type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 
 interface AlertProps {
@@ -10,6 +11,8 @@ interface AlertProps {
   className?: string;
   /** Announce politely (role=status) even for error/warning types. Default: false. */
   polite?: boolean;
+  /** Text of the dismiss button. Default: the translated `alert.dismiss`. */
+  dismissLabel?: string;
 }
 
 const alertStyles = {
@@ -56,8 +59,10 @@ const Alert: React.FC<AlertProps> = ({
   message,
   onDismiss,
   className = '',
-  polite = false
+  polite = false,
+  dismissLabel,
 }) => {
+  const { t } = useTranslation('common');
   const styles = alertStyles[type];
   const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
   const assertive = !polite && (type === 'error' || type === 'warning');
@@ -84,7 +89,7 @@ const Alert: React.FC<AlertProps> = ({
               onClick={onDismiss}
               className={`mt-2 text-sm ${styles.buttonColor} underline`}
             >
-              Dismiss
+              {dismissLabel ?? t('alert.dismiss')}
             </button>
           )}
         </div>

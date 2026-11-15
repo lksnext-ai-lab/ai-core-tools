@@ -40,6 +40,7 @@ import DomainsPage from '../pages/DomainsPage';
 import DomainFormPage from '../pages/DomainFormPage';
 import DomainDetailPage from '../pages/DomainDetailPage';
 import AgentPlaygroundPage from '../pages/AgentPlaygroundPage';
+import AppChatPage from '../pages/AppChatPage';
 import AboutPage from '../pages/AboutPage';
 import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
@@ -281,6 +282,8 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       <AgentFormPage />
                   </EditorLayoutRoute>
                 } />
+                <Route path="/apps/:appId/chat" element={<ProtectedLayoutRoute {...commonLayoutProps}><AppChatPage /></ProtectedLayoutRoute>} />
+                <Route path="/apps/:appId/chat/:conversationId" element={<ProtectedLayoutRoute {...commonLayoutProps}><AppChatPage /></ProtectedLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks" element={<ProtectedLayoutRoute {...commonLayoutProps}><ScheduledTasksPage /></ProtectedLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/new" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />
                 <Route path="/apps/:appId/scheduled-tasks/:taskId/edit" element={<EditorLayoutRoute {...commonLayoutProps}><ScheduledTaskFormPage /></EditorLayoutRoute>} />

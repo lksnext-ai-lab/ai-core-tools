@@ -65,6 +65,7 @@
       "about": "About",
       "dashboard": "Dashboard",
       "agents": "Agents",
+      "chat": "Chat",
       "scheduledTasks": "Scheduled Tasks",
       "dataSources": "Data sources",
       "silos": "Silos",
@@ -4509,10 +4510,94 @@
     "deleteFailed": "Failed to delete conversation",
     "renameFailed": "Failed to update the title"
   },
+  "alert": {
+    "dismiss": "Dismiss"
+  },
   "appChat": {
+    "page": {
+      "title": "Chat",
+      "subtitle": "Pick the model, source, skills and tools for each message",
+      "conversations": "Conversations",
+      "loading": "Loading chat...",
+      "loadErrorTitle": "Could not open the chat",
+      "optionsLoadFailed": "The chat options could not be loaded. Try again.",
+      "retry": "Try again",
+      "assistantName": "the assistant"
+    },
+    "selection": {
+      "groupLabel": "Settings for the next message",
+      "model": "Model",
+      "modelPlaceholder": "Select a model",
+      "modelRetired": "This model has reached end of service",
+      "noModels": "No models available",
+      "source": "Source",
+      "sourceNone": "None",
+      "unnamedSource": "Source #{{id}}",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "nonePlural": "None",
+      "nSelected_one": "{{count}} selected",
+      "nSelected_other": "{{count}} selected",
+      "added": "{{name}} selected",
+      "removed": "{{name}} removed",
+      "results_one": "{{count}} result",
+      "results_other": "{{count}} results",
+      "search": "Search",
+      "noResults": "No results"
+    },
+    "sourceTypes": {
+      "repository": "Repositories",
+      "domain": "Web domains",
+      "sharepoint": "SharePoint",
+      "silo": "Silos"
+    },
+    "siloDisabled": {
+      "embedding_service_retired": "Its embedding service is retired"
+    },
+    "skillGroups": {
+      "app": "App skills",
+      "system": "System skills"
+    },
+    "meta": {
+      "source": "Source",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "deleted": "(deleted)",
+      "toggle": "Details of {{model}}"
+    },
+    "blocked": {
+      "loading": "Loading the chat settings...",
+      "noUsableModel": "Sending is disabled: this App has no model available for chat.",
+      "noSelection": "Sending is disabled: select a model first.",
+      "modelRetired": "Sending is disabled: the selected model is no longer available. Choose another model."
+    },
+    "empty": {
+      "title": "No model available for chat",
+      "messageAdmin": "This App has no active AI service that can be used for chat. Configure one to start chatting.",
+      "messageMember": "This App has no active AI service that can be used for chat. Ask an App administrator to configure one.",
+      "configureLink": "Configure AI services"
+    },
+    "notices": {
+      "conversationNotFound": "That conversation is not available. A new one is open.",
+      "serviceRetired": "The selected model has reached end of service. Choose another model and send your message again."
+    },
+    "warnings": {
+      "title": "Part of your selection was not used",
+      "ai_service": "The previous model is no longer available; another one was selected.",
+      "ai_serviceNamed": "The model \"{{name}}\" is no longer available; another one was selected.",
+      "silo": "The previous source is no longer available and was removed from the selection.",
+      "siloNamed": "The source \"{{name}}\" is no longer available and was removed from the selection.",
+      "skill": "A skill is no longer available and was removed from the selection.",
+      "skillNamed": "The skill \"{{name}}\" is no longer available and was removed from the selection.",
+      "mcp_config": "An MCP configuration could not be used (unavailable or removed); the message was answered without it.",
+      "mcp_configNamed": "The MCP configuration \"{{name}}\" could not be used (unavailable or removed); the message was answered without it."
+    },
     "transportErrors": {
       "noSelection": "Select a model before sending a message.",
-      "noConversation": "This conversation is not available."
+      "noConversation": "This conversation is not available.",
+      "forbidden": "You cannot send messages in this App right now. It may be frozen, or your access may have changed.",
+      "notFound": "The conversation or one of the selected items is no longer available.",
+      "serviceRetired": "The selected model has reached end of service. Choose another model and try again."
     }
   }
 }
