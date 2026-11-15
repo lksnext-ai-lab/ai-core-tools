@@ -3,6 +3,19 @@ import { authService } from './auth';
 import { getCsrfToken } from './cookies';
 import type { HitlCancelResult, HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
 import type {
+  ChatActionResult,
+  ChatConversation,
+  ChatConversationCreateRequest,
+  ChatConversationDetail,
+  ChatConversationList,
+  ChatFileDownload,
+  ChatFileList,
+  ChatFileUploadResult,
+  ChatOptions,
+  ChatSelection,
+  ChatStreamRequest,
+} from '../types/appChat';
+import type {
   ExistingSandboxService,
   ExistingService,
   MoveAgentsResult,
@@ -15,7 +28,13 @@ import type {
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
   /** Raw `detail` from the JSON error body (e.g. FastAPI's 422 validation array), when present. */
-  constructor(message: string, readonly status: number, readonly detail?: unknown) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly detail?: unknown,
+    /** Machine-readable `error_code` of the JSON error body (e.g. `SERVICE_RETIRED`), when present. */
+    readonly errorCode?: string,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -753,6 +772,7 @@ class ApiService {
   private async handleResponseError(response: Response): Promise<never> {
     let message = `API Error: ${response.status} ${response.statusText}`;
     let detail: unknown;
+    let errorCode: string | undefined;
 
     try {
       const errorData: unknown = await response.json();
@@ -763,6 +783,12 @@ class ApiService {
       if (errorData && typeof errorData === 'object' && 'detail' in (errorData as Record<string, unknown>)) {
         detail = (errorData as Record<string, unknown>)['detail'];
       }
+      const rawCode = errorData && typeof errorData === 'object'
+        ? (errorData as Record<string, unknown>)['error_code']
+        : undefined;
+      if (typeof rawCode === 'string') {
+        errorCode = rawCode;
+      }
     } catch (error) {
       console.debug('Failed to parse error response JSON:', error);
       if (response.status === 403) {
@@ -770,7 +796,7 @@ class ApiService {
       }
     }
 
-    throw new ApiError(message, response.status, detail);
+    throw new ApiError(message, response.status, detail, errorCode);
   }
 
   async request<T = unknown>(
@@ -2864,6 +2890,109 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'DELETE',
     });
+  }
+
+  // ─── App Chat (`/internal/apps/{appId}/chat`) ────────────────────────────────
+
+  async getAppChatOptions(appId: number): Promise<ChatOptions> {
+    return this.request(`/internal/apps/${appId}/chat/options`);
+  }
+
+  /** The caller's default selection; null when the App has no usable model. */
+  async getAppChatDefaults(appId: number): Promise<ChatSelection | null> {
+    return this.request(`/internal/apps/${appId}/chat/defaults`);
+  }
+
+  async listAppChatConversations(appId: number, limit = 50, offset = 0): Promise<ChatConversationList> {
+    return this.request(`/internal/apps/${appId}/chat/conversations?limit=${limit}&offset=${offset}`);
+  }
+
+  async createAppChatConversation(
+    appId: number,
+    data: ChatConversationCreateRequest = {},
+  ): Promise<ChatConversation> {
+    return this.request(`/internal/apps/${appId}/chat/conversations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAppChatConversation(appId: number, conversationId: number): Promise<ChatConversationDetail> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}`);
+  }
+
+  async renameAppChatConversation(appId: number, conversationId: number, title: string): Promise<ChatConversation> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  async deleteAppChatConversation(appId: number, conversationId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async resetAppChatConversation(appId: number, conversationId: number): Promise<ChatActionResult> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}/reset`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Send one Chat turn and consume its SSE response (same mechanism as the playground stream).
+   * Without `conversationId` the backend creates the conversation and reports it in the `metadata` event.
+   * 403/404/409/422 are real HTTP errors raised before the stream starts (`ApiError`, with `errorCode`).
+   */
+  async streamAppChatMessage(
+    appId: number,
+    request: ChatStreamRequest,
+    options: { onEvent: (event: StreamEvent) => void; signal?: AbortSignal },
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('message', request.message);
+    formData.append('selection', JSON.stringify(request.selection));
+    if (request.conversationId) {
+      formData.append('conversation_id', request.conversationId.toString());
+    }
+    request.files?.forEach((file) => formData.append('files', file));
+    if (request.fileReferences && request.fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(request.fileReferences));
+    }
+    if (request.searchParams) {
+      formData.append('search_params', JSON.stringify(request.searchParams));
+    }
+
+    await this.postSSE(`/internal/apps/${appId}/chat/stream`, formData, options.onEvent, options.signal);
+  }
+
+  async uploadAppChatFile(appId: number, conversationId: number, file: File): Promise<ChatFileUploadResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}/files`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async listAppChatFiles(appId: number, conversationId: number): Promise<ChatFileList> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}/files`);
+  }
+
+  /** Unlike the playground, an unknown file id is a 404 (not `success: false`). */
+  async removeAppChatFile(appId: number, conversationId: number, fileId: string): Promise<ChatActionResult> {
+    return this.request(
+      `/internal/apps/${appId}/chat/conversations/${conversationId}/files/${encodeURIComponent(fileId)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  /** Signed link that expires after 5 minutes: request it on click, never cache it. */
+  async getAppChatFileDownload(appId: number, conversationId: number, fileId: string): Promise<ChatFileDownload> {
+    return this.request(
+      `/internal/apps/${appId}/chat/conversations/${conversationId}/files/${encodeURIComponent(fileId)}/download`,
+    );
   }
 
   async getMarketplaceCatalog(

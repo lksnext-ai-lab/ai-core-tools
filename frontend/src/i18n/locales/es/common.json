@@ -4489,5 +4489,30 @@
       "jsonObjectRequired": "Los argumentos deben ser un objeto JSON.",
       "editedArgumentsRequired": "Esta herramienta solo acepta argumentos editados."
     }
+  },
+  "conversationSidebar": {
+    "new": "Nueva",
+    "closeLabel": "Cerrar conversaciones",
+    "refresh": "Actualizar",
+    "loading": "Cargando conversaciones...",
+    "loadError": "Error al cargar conversaciones",
+    "empty": "No hay conversaciones aún",
+    "emptyHint": "Crea una nueva para empezar",
+    "untitled": "Nueva conversación",
+    "messageCount_one": "{{count}} mensaje",
+    "messageCount_other": "{{count}} mensajes",
+    "justNow": "Ahora",
+    "minutesAgo": "Hace {{value}}m",
+    "hoursAgo": "Hace {{value}}h",
+    "daysAgo": "Hace {{value}}d",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar esta conversación? Esta acción no se puede deshacer.",
+    "deleteFailed": "Error al eliminar conversación",
+    "renameFailed": "Error al actualizar título"
+  },
+  "appChat": {
+    "transportErrors": {
+      "noSelection": "Selecciona un modelo antes de enviar un mensaje.",
+      "noConversation": "Esta conversación no está disponible."
+    }
   }
 }

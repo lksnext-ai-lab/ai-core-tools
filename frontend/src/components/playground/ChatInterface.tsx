@@ -20,36 +20,15 @@ import VideoPlayer from './VideoPlayer';
 import HitlApprovalCard from './HitlApprovalCard';
 import { useApprovalExpiryWatch } from '../../hooks/useApprovalExpiryWatch';
 import type { HitlDecision } from '../../types/streaming';
+import type { ChatTurnConfig, ChatTurnInfo } from '../../types/appChat';
 import type { VideoTimestamp } from './VideoPlayer';
 import { LoadingState } from '../ui/LoadingState';
 import ButtonApp from '../ui/ButtonApp';
 import { SegmentedTabs } from '../ui/SegmentedTabs';
+import { ChatTransportError, createAgentPlaygroundTransport } from './chatTransport';
+import type { ChatMessageModel, ChatTransport, TransportFile } from './chatTransport';
 
-interface Message {
-  id: string;
-  type: 'user' | 'agent' | 'error';
-  content: string;
-  timestamp: Date;
-  files?: string[];
-  elapsedMs?: number;
-}
-
-/** Shape returned by the API for each history message. */
-interface RawHistoryMessage {
-  role: string;
-  content: string;
-}
-
-/** Shape returned by the API for each attached/persistent file. */
-interface RawAttachedFile {
-  file_id: string;
-  filename: string;
-  file_type?: string;
-  processing_status?: string;
-  file_size_display?: string;
-  has_extractable_content?: boolean;
-  content_preview?: string;
-}
+type Message = ChatMessageModel;
 
 /**
  * Legacy "Filter by Metadata" panel sends its filter as the entire search_params
@@ -70,9 +49,8 @@ function buildSearchParams(
   };
 }
 
-interface ChatInterfaceProps {
+interface ChatInterfaceBaseProps {
   appId: number;
-  agentId: number;
   agentName: string;
   conversationId?: number | null;
   onConversationCreated?: (conversationId: number) => void;
@@ -82,11 +60,24 @@ interface ChatInterfaceProps {
   vectorDbType?: string;
   /** Extra controls rendered at the start of the chat toolbar (left of "Reset"). */
   toolbarStart?: React.ReactNode;
+  /** Extra content rendered under each agent message (e.g. the App Chat's per-turn badge). */
+  renderMessageMeta?: (message: ChatMessageModel) => React.ReactNode;
 }
+
+/**
+ * Without `transport` the component talks to the agent playground and needs `agentId`.
+ * A custom transport (e.g. the App Chat's) must be memoized by the caller.
+ */
+type ChatInterfaceProps = ChatInterfaceBaseProps & (
+  | { agentId: number; transport?: undefined }
+  | { agentId?: number; transport: ChatTransport }
+);
 
 function ChatInterface({
   appId,
   agentId,
+  transport: transportProp,
+  renderMessageMeta,
   agentName,
   conversationId,
   onConversationCreated,
@@ -100,7 +91,12 @@ function ChatInterface({
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [persistentFiles, setPersistentFiles] = useState<RawAttachedFile[]>([]);
+  const transport = useMemo(
+    () => transportProp ?? createAgentPlaygroundTransport(appId, agentId as number),
+    [transportProp, appId, agentId],
+  );
+  const { agentMedia, exposedFilters, approvals } = transport.capabilities;
+  const [persistentFiles, setPersistentFiles] = useState<readonly TransportFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<'info' | 'filters'>('info');
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(
@@ -132,22 +128,14 @@ function ChatInterface({
    *  during streaming so the wheel/touch input is respected. Resets on send or on reaching bottom. */
   const userScrolledUpRef = useRef(false);
   const lastScrollTopRef = useRef(0);
-  const filterPanelId = `metadata-filters-${agentId}`;
+  const filterPanelId = `metadata-filters-${agentId ?? 'chat'}`;
   const hasMetadataFilters = !!metadataFields && metadataFields.length > 0;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const playgroundStream = useCallback(
-    (message: string, opts: StreamFnOptions) => {
-      if (opts.resume) {
-        return apiService.decideApprovalStream(opts.resume.approvalId, opts.resume.decisions, {
-          onEvent: opts.onEvent,
-          signal: opts.signal,
-        });
-      }
-      return apiService.chatWithAgentStream(appId, agentId, message, opts);
-    },
-    [appId, agentId],
+    (message: string, opts: StreamFnOptions) => transport.streamMessage(message, opts),
+    [transport],
   );
 
   const {
@@ -159,7 +147,7 @@ function ChatInterface({
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
   // While a person can still answer, a new message would discard the paused turn.
   const approvalBlocksInput =
-    pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
+    approvals && pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
 
   // Hold streaming content visible briefly after isStreaming flips to false,
   // so the transition to the final committed message is seamless.
@@ -246,44 +234,29 @@ function ChatInterface({
         setMessages([]);
         setPendingApproval(null);
 
-        if (currentConversationId) {
-          const response = await apiService.getConversationWithHistory(currentConversationId);
+        const response = await transport.loadHistory(currentConversationId);
 
-          if (response.session_id) {
-            setCurrentSessionId(response.session_id);
+        if (currentConversationId) {
+          if (agentMedia && response.sessionId) {
+            setCurrentSessionId(response.sessionId);
           }
           // Restore an approval the conversation is still waiting for (e.g. after a reload).
-          setPendingApproval(response.pending_approval ?? null);
+          if (approvals) setPendingApproval(response.pendingApproval ?? null);
+        }
 
-          if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map(
-              (msg: RawHistoryMessage, index: number) => ({
-                id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent',
-                content: msg.content,
-                timestamp: new Date(),
-              })
-            );
-            setMessages(loadedMessages);
-          } else {
-            setMessages([]);
-          }
+        if (response.messages.length > 0) {
+          const loadedMessages: Message[] = response.messages.map(
+            (msg, index: number) => ({
+              id: `history-${index}`,
+              type: msg.role === 'user' ? 'user' : 'agent',
+              content: msg.content,
+              timestamp: new Date(),
+              ...(msg.turn ? { turn: msg.turn } : {}),
+            })
+          );
+          setMessages(loadedMessages);
         } else {
-          const response = await apiService.getConversationHistory(appId, agentId);
-
-          if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map(
-              (msg: RawHistoryMessage, index: number) => ({
-                id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent',
-                content: msg.content,
-                timestamp: new Date(),
-              })
-            );
-            setMessages(loadedMessages);
-          } else {
-            setMessages([]);
-          }
+          setMessages([]);
         }
       } catch (error) {
         console.error('Error loading conversation history:', error);
@@ -295,7 +268,7 @@ function ChatInterface({
 
     const loadPersistentFiles = async () => {
       try {
-        const response = await apiService.listAttachedFiles(appId, agentId, currentConversationId);
+        const response = await transport.listFiles(currentConversationId);
         setPersistentFiles(response.files || []);
       } catch (error) {
         console.error('Error loading persistent files:', error);
@@ -307,22 +280,22 @@ function ChatInterface({
     void loadPersistentFiles();
 
     // Load playground media if session exists
-    if (currentSessionId) {
-      apiService.listPlaygroundMedia(appId, agentId, currentSessionId)
+    if (agentMedia && transport.media && currentSessionId) {
+      transport.media.list(currentSessionId)
         .then((media) => setPlaygroundMedia(Array.isArray(media) ? media : []))
         .catch(() => setPlaygroundMedia([]));
     } else {
       setPlaygroundMedia([]);
     }
-  }, [appId, agentId, currentConversationId, currentSessionId, historyReloadKey]);
+  }, [appId, transport, currentConversationId, currentSessionId, historyReloadKey]);
 
   useApprovalExpiryWatch(
-    currentConversationId ? expiredApprovalId : null,
+    approvals && currentConversationId ? expiredApprovalId : null,
     useCallback(async () => {
       if (!currentConversationId) return null;
-      const response = await apiService.getConversationWithHistory(currentConversationId);
-      return response.pending_approval?.approval_id ?? null;
-    }, [currentConversationId]),
+      const response = await transport.loadHistory(currentConversationId);
+      return response.pendingApproval?.approval_id ?? null;
+    }, [currentConversationId, transport]),
     useCallback(() => {
       setExpiredApprovalId(null);
       setHistoryReloadKey((k) => k + 1);
@@ -341,7 +314,7 @@ function ChatInterface({
   }, [playgroundMedia]);
 
   useEffect(() => {
-    if (!currentSessionId || !hasProcessingMediaForPolling) {
+    if (!agentMedia || !transport.media || !currentSessionId || !hasProcessingMediaForPolling) {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
@@ -353,6 +326,8 @@ function ChatInterface({
       return;
     }
 
+    const mediaApi = transport.media;
+
     // Cap total polling so a media item stuck in a processing state (e.g. a
     // dead background task) does not poll forever: 3s interval × 200 = 10 min.
     const MAX_POLLS = 200;
@@ -362,7 +337,7 @@ function ChatInterface({
     pollingRef.current = setInterval(async () => {
       polls += 1;
       try {
-        const media = await apiService.listPlaygroundMedia(appId, agentId, currentSessionId);
+        const media = await mediaApi.list(currentSessionId);
         const list = Array.isArray(media) ? media : [];
         playgroundMediaRef.current = list;
         setPlaygroundMedia(list);
@@ -392,7 +367,7 @@ function ChatInterface({
         pollingRef.current = null;
       }
     };
-  }, [appId, agentId, currentSessionId, hasProcessingMediaForPolling]);
+  }, [appId, transport, currentSessionId, hasProcessingMediaForPolling]);
 
   useEffect(() => {
     if ((!metadataFields || metadataFields.length === 0) && filterMetadata !== undefined) {
@@ -407,8 +382,12 @@ function ChatInterface({
     let isMounted = true;
 
     const loadChatFilters = async () => {
+      if (!exposedFilters || !transport.filters) {
+        setChatFilters([]);
+        return;
+      }
       try {
-        const response = await apiService.getAgentChatFilters(appId, agentId);
+        const response = await transport.filters.list();
         if (isMounted) setChatFilters(response.filters || []);
       } catch (error) {
         console.error('Error loading chat filters:', error);
@@ -422,20 +401,15 @@ function ChatInterface({
     return () => {
       isMounted = false;
     };
-  }, [appId, agentId]);
+  }, [transport]);
 
   const searchChatFilterValues = useCallback(
     async (fieldName: string, query: string) => {
-      const response = await apiService.searchAgentChatFilterValues(
-        appId,
-        agentId,
-        fieldName,
-        query,
-        SEARCH_RESULT_LIMIT,
-      );
+      if (!transport.filters) return [];
+      const response = await transport.filters.searchValues(fieldName, query, SEARCH_RESULT_LIMIT);
       return response.values;
     },
-    [appId, agentId],
+    [transport],
   );
 
   // ─── Message sending ─────────────────────────────────────────────────────────
@@ -445,6 +419,8 @@ function ChatInterface({
     rawResponse: string | Record<string, unknown>,
     elapsedMs: number,
     awaitingApproval: boolean,
+    turn?: ChatTurnInfo | null,
+    turnConfig?: ChatTurnConfig | null,
   ) => {
     const responseContent: string =
       typeof rawResponse === 'object' ? JSON.stringify(rawResponse, null, 2) : rawResponse || '';
@@ -460,6 +436,8 @@ function ChatInterface({
       content: responseContent,
       timestamp: new Date(),
       elapsedMs,
+      ...(turn ? { turn } : {}),
+      ...(turnConfig ? { turnConfig } : {}),
     };
     // Commit the message and release the streaming hold in the same batch
     setMessages((prev) => [...prev, agentMsg]);
@@ -519,6 +497,11 @@ function ChatInterface({
     setExpiredApprovalId(pendingApproval.approval_id);
   }, [pendingApproval, settleAwaitingTools]);
 
+  const describeSendError = (error: unknown): string => {
+    if (error instanceof ChatTransportError) return t(`appChat.transportErrors.${error.code}`);
+    return error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed');
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && persistentFiles.length === 0) return;
     // The server resolves an expired approval within this turn; reloading the history
@@ -551,13 +534,13 @@ function ChatInterface({
         searchParams,
       });
 
-      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null, result.turn, result.turnConfig);
 
       if (result.conversationId && !currentConversationId) {
         setCurrentConversationId(result.conversationId);
         onConversationCreated?.(result.conversationId);
       }
-      if (result.sessionId && !currentSessionId) {
+      if (agentMedia && result.sessionId && !currentSessionId) {
         setCurrentSessionId(result.sessionId);
       }
 
@@ -570,7 +553,7 @@ function ChatInterface({
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed'),
+        content: describeSendError(error),
         timestamp: new Date(),
         elapsedMs: error instanceof StreamingChatError ? error.elapsedMs : responseElapsedMs,
       };
@@ -592,7 +575,7 @@ function ChatInterface({
 
   const handleResetConversation = async () => {
     try {
-      await apiService.resetAgentConversation(appId, agentId, currentConversationId);
+      await transport.resetConversation(currentConversationId);
       setMessages([]);
       setPersistentFiles([]);
       setPlaygroundMedia([]);
@@ -624,11 +607,11 @@ function ChatInterface({
 
     if (!targetConversationId) {
       try {
-        const convResponse = await apiService.createConversation(agentId);
-        targetConversationId = convResponse.conversation_id;
+        const convResponse = await transport.createConversation();
+        targetConversationId = convResponse.conversationId;
         setCurrentConversationId(targetConversationId);
-        if (convResponse.session_id) {
-          setCurrentSessionId(convResponse.session_id);
+        if (agentMedia && convResponse.sessionId) {
+          setCurrentSessionId(convResponse.sessionId);
         }
         if (onConversationCreated && targetConversationId) {
           onConversationCreated(targetConversationId);
@@ -642,14 +625,14 @@ function ChatInterface({
 
     for (const file of newFiles) {
       try {
-        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId);
+        await transport.uploadFile(targetConversationId, file);
       } catch (error) {
         console.error(`Error uploading file ${file.name}:`, error);
       }
     }
 
     try {
-      const response = await apiService.listAttachedFiles(appId, agentId, targetConversationId);
+      const response = await transport.listFiles(targetConversationId);
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error('Error reloading persistent files:', error);
@@ -675,7 +658,7 @@ function ChatInterface({
   const refreshFileList = async (convId: number | null) => {
     if (!convId) return;
     try {
-      const filesResponse = await apiService.listAttachedFiles(appId, agentId, convId);
+      const filesResponse = await transport.listFiles(convId);
       setPersistentFiles(filesResponse.files || []);
     } catch {
       // Non-critical
@@ -686,8 +669,8 @@ function ChatInterface({
 
   const resolveFileUrl = useCallback(
     (fileId: string): Promise<string> =>
-      apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId),
-    [appId, agentId, currentConversationId]
+      transport.getFileDownloadUrl(currentConversationId, fileId),
+    [transport, currentConversationId]
   );
 
   const handleDownloadFile = async (fileId: string) => {
@@ -714,12 +697,8 @@ function ChatInterface({
       return;
     }
     try {
-      await apiService.removeAttachedFile(appId, agentId, fileId, currentConversationId);
-      const response = await apiService.listAttachedFiles(
-        appId,
-        agentId,
-        currentConversationId
-      );
+      await transport.removeFile(currentConversationId, fileId);
+      const response = await transport.listFiles(currentConversationId);
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error(`Error removing file ${fileId}:`, error);
@@ -733,10 +712,10 @@ function ChatInterface({
     let convId = currentConversationId;
     if (!convId) {
       try {
-        const convResponse = await apiService.createConversation(agentId);
-        convId = convResponse.conversation_id;
+        const convResponse = await transport.createConversation();
+        convId = convResponse.conversationId;
         setCurrentConversationId(convId);
-        setCurrentSessionId(convResponse.session_id ?? null);
+        setCurrentSessionId(convResponse.sessionId ?? null);
         if (onConversationCreated && convId) {
           onConversationCreated(convId);
         }
@@ -751,10 +730,11 @@ function ChatInterface({
 
   const handleMediaUploadComplete = async () => {
     // Refresh playground media list after upload
-    if (!currentSessionId) return;
+    if (!currentSessionId || !transport.media) return;
+    const mediaApi = transport.media;
 
     const fetchMedia = async () => {
-      const media = await apiService.listPlaygroundMedia(appId, agentId, currentSessionId);
+      const media = await mediaApi.list(currentSessionId);
       return Array.isArray(media) ? media : [];
     };
 
@@ -772,9 +752,9 @@ function ChatInterface({
   };
 
   const handleDeletePlaygroundMedia = async () => {
-    if (!currentSessionId) return;
+    if (!currentSessionId || !transport.media) return;
     try {
-      await apiService.deletePlaygroundMedia(appId, agentId, currentSessionId);
+      await transport.media.remove(currentSessionId);
       setPlaygroundMedia([]);
     } catch (error) {
       console.error('Error deleting playground media:', error);
@@ -940,17 +920,13 @@ function ChatInterface({
   const readyMediaIdsKey = readyVideoMedias.map((m) => m.media_id).join(',');
 
   const videoStreamUrls = useMemo<Record<number, string>>(() => {
-    if (!currentSessionId) return {};
+    const mediaApi = transport.media;
+    if (!currentSessionId || !mediaApi) return {};
     return readyVideoMedias.reduce<Record<number, string>>((map, media) => {
-      map[media.media_id] = apiService.getPlaygroundMediaStreamUrl(
-        appId,
-        agentId,
-        media.media_id,
-        currentSessionId,
-      );
+      map[media.media_id] = mediaApi.streamUrl(media.media_id, currentSessionId);
       return map;
     }, {});
-  }, [readyMediaIdsKey, currentSessionId, appId, agentId]);
+  }, [readyMediaIdsKey, currentSessionId, transport]);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -1161,6 +1137,7 @@ function ChatInterface({
                               </span>
                             )}
                           </div>
+                          {renderMessageMeta?.(message)}
                         </div>
                       </div>
                     </div>
@@ -1179,7 +1156,7 @@ function ChatInterface({
                     thinkingMessage={thinkingMessage}
                   />
                 )}
-                {pendingApproval && !isStreaming && (
+                {approvals && pendingApproval && !isStreaming && (
                   <HitlApprovalCard
                     approval={pendingApproval}
                     disabled={approvalBusy}
@@ -1283,6 +1260,7 @@ function ChatInterface({
               </div>
 
               {/* Media attach button */}
+              {agentMedia && (
               <button
                 type="button"
                 onClick={handleMediaButtonClick}
@@ -1309,6 +1287,7 @@ function ChatInterface({
                   />
                 </svg>
               </button>
+              )}
 
               {/* Textarea */}
               <textarea
@@ -1427,7 +1406,7 @@ function ChatInterface({
       </div>
 
       {/* Media Upload Modal */}
-      {mediaConversationId && currentSessionId && (
+      {agentMedia && agentId !== undefined && mediaConversationId && currentSessionId && (
         <MediaUploadModal
           isOpen={showMediaUploadModal}
           onClose={() => setShowMediaUploadModal(false)}

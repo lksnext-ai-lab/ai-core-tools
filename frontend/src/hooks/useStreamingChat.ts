@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StreamEvent, ActiveTool, HitlPendingApproval, HitlResume } from '../types/streaming';
 import { getStreamingMessage } from '../i18n/streaming';
 import { randomId } from '../utils/randomId';
+import type { ChatTurnConfig, ChatTurnInfo } from '../types/appChat';
 
 function isCodeTool(toolName: string): boolean {
   return toolName === 'code_interpreter' || toolName.endsWith('_repl');
@@ -49,6 +50,9 @@ interface StreamResult {
   elapsedMs: number;
   /** Set when the turn paused for human approval (nothing to commit yet). */
   pendingApproval: HitlPendingApproval | null;
+  /** App Chat only: effective configuration of the turn (`done.turn`) and the `metadata` summary. */
+  turn?: ChatTurnInfo | null;
+  turnConfig?: ChatTurnConfig | null;
 }
 
 export class StreamingChatError extends Error {
@@ -300,6 +304,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
       let approval: HitlPendingApproval | null = null;
       let errorMessage: string | null = null;
       let receivedDone = false;
+      let turn: ChatTurnInfo | null = null;
+      let turnConfig: ChatTurnConfig | null = null;
 
       const getElapsedMs = (): number => {
         const startedAt = streamStartedAtRef.current;
@@ -459,6 +465,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                 if (metaSessionId) {
                   sessionId = metaSessionId;
                 }
+                turnConfig = (event.data as { turn_config?: ChatTurnConfig }).turn_config ?? turnConfig;
                 break;
               }
 
@@ -467,8 +474,10 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
                   response?: string | Record<string, unknown>;
                   files?: Array<{ file_id: string; filename: string; file_type: string }>;
                   conversation_id?: number;
+                  turn?: ChatTurnInfo | null;
                 };
                 receivedDone = true;
+                turn = doneData.turn ?? null;
                 finalResponse = doneData.response ?? contentRef.current;
                 finalFiles = doneData.files ?? [];
                 if (doneData.conversation_id) {
@@ -541,6 +550,8 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
         files: finalFiles,
         elapsedMs,
         pendingApproval: approval,
+        turn,
+        turnConfig,
       };
     },
     [],
