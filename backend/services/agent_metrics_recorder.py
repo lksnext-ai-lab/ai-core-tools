@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from utils.logger import get_logger
+from utils.turn_failure_log import SafeText
 
 logger = get_logger(__name__)
 
@@ -113,6 +114,15 @@ def _usage_from_messages(messages: list) -> tuple[Optional[int], Optional[int], 
     return inp, out, total, len(ai_messages), model
 
 
+CHAT_CALLER_TYPE = "INTERNAL_CHAT"  # == chat_service.CALLER_TYPE_INTERNAL_CHAT
+# Codes whose text is built by our own code (never from provider/tool output).
+_SAFE_CHAT_ERROR_CODES = {"TIMEOUT", "CancelledError", "Cancelled", "SERVICE_RETIRED"}
+
+
+def _is_safe_chat_error(error_code: Optional[str]) -> bool:
+    return bool(error_code) and (error_code in _SAFE_CHAT_ERROR_CODES or error_code.startswith("approval_"))
+
+
 def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
                           finished_at, duration_ms, status, error_code,
                           error_message, result, image_files, message,
@@ -128,6 +138,15 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
     messages = _turn_messages(result)
 
     tool_calls = list(collector.tool_calls) if collector is not None else []
+    if caller_type == CHAT_CALLER_TYPE:
+        # The Chat's stored text must never carry content of a user's turn (a provider or tool error can echo
+        # it, and app admins read these columns): only text built from class names / ids survives.
+        if error_message and not isinstance(error_message, SafeText) and not _is_safe_chat_error(error_code):
+            error_message = f"{error_code or 'Error'} (details withheld)"
+        tool_calls = [
+            {**tc, "error_message": "Tool error (details withheld)"} if tc.get("error_message") else tc
+            for tc in tool_calls
+        ]
     if collector is not None and collector.llm_calls > 0:
         input_tokens, output_tokens, total_tokens = collector.token_usage()
         llm_calls, model = collector.llm_calls, collector.model_name

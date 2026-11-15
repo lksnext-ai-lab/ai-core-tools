@@ -47,6 +47,7 @@ from services.file_management_service import FileManagementService
 from services.session_management_service import SessionManagementService
 from repositories.agent_execution_repository import AgentExecutionRepository
 from utils.logger import get_logger
+from utils.turn_failure_log import chat_failure_summary, log_turn_failure
 from utils.service_lifecycle import ServiceRetiredError, agent_turn_context_kwargs, service_call_context
 from utils.config import get_app_config
 from utils.async_files import write_bytes, write_temp_file
@@ -1029,7 +1030,10 @@ class AgentExecutionService:
             logger.error("Internal chat turn has no conversation session: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail="Chat session is not available")
         except Exception as e:
-            logger.error(f"Error executing agent chat: {str(e)}", exc_info=True)
+            log_turn_failure(
+                logger, "Error executing agent chat", e, chat_turn=turn_config is not None,
+                agent_id=agent_id, conversation_id=ctx.effective_conv_id if ctx is not None else conversation_id,
+            )
             if turn_config is not None:
                 # The text can echo MCP URLs or provider bodies; it stays in the server log.
                 raise HTTPException(status_code=500, detail="Agent execution failed")
@@ -1179,20 +1183,102 @@ class AgentExecutionService:
         config = {**paused.config, "configurable": dict(paused.config.get("configurable", {}))}
         config["configurable"].pop("checkpoint_id", None)
         decisions = approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE)
-        async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
-            # The agent may ask for another approved tool after a rejection; bound the loop.
-            for _ in range(3):
-                await paused.agent_chain.ainvoke(Command(resume={"decisions": decisions}), config=config)
-                pause = await approvals.read_pause(paused.agent_chain, config)
-                if pause is None:
-                    break
-                decisions = [
-                    {"type": "reject", "message": approvals.NOT_INTERACTIVE_MESSAGE} for _ in pause.action_requests
+        approval_id = approval.id
+        final_decisions = approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE)  # read before any rollback
+        failed = True
+        try:
+            async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
+                # The agent may ask for another approved tool after a rejection; bound the loop.
+                for _ in range(3):
+                    await paused.agent_chain.ainvoke(Command(resume={"decisions": decisions}), config=config)
+                    pause = await approvals.read_pause(paused.agent_chain, config)
+                    if pause is None:
+                        break
+                    decisions = [
+                        {"type": "reject", "message": approvals.NOT_INTERACTIVE_MESSAGE}
+                        for _ in pause.action_requests
+                    ]
+            failed = False
+        finally:
+            # Always end CANCELLED/channel_not_interactive, also when the resume raised or was cancelled:
+            # a row left DECIDING would be re-pended by the expiry sweeper while the thread is still paused.
+            try:
+                if failed:
+                    await self._close_unanswered_tool_calls(
+                        paused.agent_chain, config, gated_ids={a.get("action_id") for a in (approval.actions or [])},
+                    )
+                    db.rollback()  # the failed resume may have left the session in an aborted transaction
+                    from repositories.internal_chat_repository import set_local_timeouts
+                    from services.internal_chat.chat_service import HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS
+
+                    # Bounds lock waits and statement time once connected (ended by finish's commit); it does not
+                    # bound connecting to an unreachable DB.
+                    set_local_timeouts(db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
+                approvals.finish(
+                    db, approval_id, ApprovalStatus.CANCELLED, reason="channel_not_interactive",
+                    decisions=final_decisions,
+                )
+            except Exception as close_exc:
+                if not failed:
+                    raise
+                # Never mask the original error; the sweeper recovers a stuck row.
+                logger.error(
+                    "Could not close the rejected approval %s (%s)", approval_id, type(close_exc).__name__
+                )
+                try:
+                    db.rollback()  # do not leave an open/aborted transaction carrying the local timeouts
+                except Exception:  # noqa: BLE001
+                    pass
+
+    @staticmethod
+    async def _close_unanswered_tool_calls(
+        agent_chain: Any, config: Dict[str, Any], gated_ids: Optional[set] = None
+    ) -> None:
+        """Best effort: answer the thread's unanswered tool calls.
+
+        Calls of the approval's gated actions (``gated_ids``) get the rejection text; any other unanswered call
+        (an ungated tool that may have started) gets a neutral "did not complete" text, never a claim it did not run.
+
+        When the rejection resume fails before the rejection is recorded, the thread keeps an AI message whose
+        tool calls have no tool message; providers other than OpenAI would then fail every later turn. Bounded,
+        never raises (the caller is propagating the original error).
+        """
+        from langchain_core.messages import ToolMessage
+
+        try:
+            async with asyncio.timeout(10):
+                state = await agent_chain.aget_state(config)
+                messages = list((getattr(state, "values", None) or {}).get("messages", []))
+                last_ai_index = next(
+                    (i for i in range(len(messages) - 1, -1, -1) if getattr(messages[i], "type", None) == "ai"), None
+                )
+                if last_ai_index is None:
+                    return
+                answered = {
+                    getattr(m, "tool_call_id", None) for m in messages[last_ai_index + 1:]
+                    if getattr(m, "type", None) == "tool"
+                }
+                missing = [
+                    call for call in (getattr(messages[last_ai_index], "tool_calls", None) or [])
+                    if call.get("id") not in answered
                 ]
-        approvals.finish(
-            db, approval.id, ApprovalStatus.CANCELLED, reason="channel_not_interactive",
-            decisions=approvals.reject_all(approval, approvals.NOT_INTERACTIVE_MESSAGE),
-        )
+                if not missing:
+                    return
+                await agent_chain.aupdate_state(
+                    config,
+                    {"messages": [
+                        ToolMessage(
+                            content=(
+                                approvals.NOT_INTERACTIVE_MESSAGE if call["id"] in (gated_ids or ())
+                                else "The tool call did not complete."
+                            ),
+                            tool_call_id=call["id"], name=call.get("name"), status="error",
+                        )
+                        for call in missing
+                    ]},
+                )
+        except BaseException as exc:  # noqa: BLE001 - includes the timeout; the original error must propagate
+            logger.warning("Could not close the unanswered tool calls of a rejected pause (%s)", type(exc).__name__)
 
     async def _prepare_turn(
         self,
@@ -1865,8 +1951,12 @@ class AgentExecutionService:
             else:
                 async with asyncio.timeout(HOOK_TIMEOUT_S):
                     turn = await hook(event)
-        except Exception:
-            logger.error("on_turn_completed hook failed for conversation %s", ctx.effective_conv_id, exc_info=True)
+        except Exception as exc:
+            # Only a chat turn has a hook; a DB error text can carry the persisted message.
+            log_turn_failure(
+                logger, "on_turn_completed hook failed", exc, chat_turn=True,
+                agent_id=ctx.agent_id, conversation_id=ctx.effective_conv_id,
+            )
             return None
         if turn is None:
             return None
@@ -2753,7 +2843,9 @@ class AgentExecutionService:
                 status, error_code, error_message = "ERROR", "SERVICE_RETIRED", exc.message
                 raise
             except Exception as exc:
-                status, error_code, error_message = "ERROR", type(exc).__name__, str(exc)[:2000]
+                status, error_code = "ERROR", type(exc).__name__
+                # A Chat turn stores only the class chain + log correlation id (the text can echo the message).
+                error_message = chat_failure_summary(exc) if turn_config is not None else str(exc)[:2000]
                 raise
             finally:
                 finished_at = datetime.utcnow()

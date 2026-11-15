@@ -62,6 +62,7 @@ from services.agent_cache_service import (
     is_missing_tool_output_error,
 )
 from utils.logger import get_logger
+from utils.turn_failure_log import chat_failure_summary, log_turn_failure
 from utils.service_lifecycle import ServiceRetiredError, agent_turn_context_kwargs, set_service_call_context
 
 if TYPE_CHECKING:
@@ -570,7 +571,9 @@ class AgentStreamingService:
                             )
                             metrics_status = "ERROR"
                             metrics_error_code = type(stream_exc).__name__
-                            metrics_error_message = str(stream_exc)[:2000]
+                            metrics_error_message = (
+                                chat_failure_summary(stream_exc) if turn_config is not None else str(stream_exc)[:2000]
+                            )
                             terminal_event_yielded = True
                             yield AgentStreamEvent(
                                 "error",
@@ -760,12 +763,19 @@ class AgentStreamingService:
                 extra={"error_code": "SERVICE_RETIRED", "error_kind": "service_retired", "detail": exc.message},
             )
         except _AgentStreamSerializationError as exc:
-            logger.exception(
-                "Non-serializable event payload in streaming agent chat: %s",
-                str(exc),
-            )
+            if turn_config is not None:
+                # The text can embed the offending payload (reply content).
+                log_turn_failure(
+                    logger, "Non-serializable event payload in streaming agent chat", exc, chat_turn=True,
+                    agent_id=agent_id, conversation_id=ctx.effective_conv_id if ctx is not None else conversation_id,
+                )
+            else:
+                logger.exception(
+                    "Non-serializable event payload in streaming agent chat: %s",
+                    str(exc),
+                )
             metrics_status, metrics_error_code = "ERROR", "SerializationError"
-            metrics_error_message = str(exc)[:2000]
+            metrics_error_message = chat_failure_summary(exc) if turn_config is not None else str(exc)[:2000]
             terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
@@ -797,9 +807,12 @@ class AgentStreamingService:
                 },
             )
         except Exception as exc:
-            logger.error("Error in streaming agent chat: %s", str(exc), exc_info=True)
+            log_turn_failure(
+                logger, "Error in streaming agent chat", exc, chat_turn=turn_config is not None,
+                agent_id=agent_id, conversation_id=ctx.effective_conv_id if ctx is not None else conversation_id,
+            )
             metrics_status, metrics_error_code = "ERROR", type(exc).__name__
-            metrics_error_message = str(exc)[:2000]
+            metrics_error_message = chat_failure_summary(exc) if turn_config is not None else str(exc)[:2000]
             terminal_event_yielded = True
             yield AgentStreamEvent(
                 "error",
