@@ -121,7 +121,7 @@ function ChatSelectionBarComponent({ options, selection, dispatch, disabled = fa
         options={modelOptions}
         value={selection ? String(selection.ai_service_id) : null}
         onChange={onModel}
-        placeholder={t('appChat.selection.modelPlaceholder')}
+        placeholder={disabled && !selection ? t('appChat.page.loading') : t('appChat.selection.modelPlaceholder')}
         emptyLabel={t('appChat.selection.noModels')}
         disabled={disabled}
       />

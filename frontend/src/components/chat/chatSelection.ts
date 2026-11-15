@@ -143,10 +143,19 @@ export function decideNewChatDefaults(
 
 export type SendBlockReason = 'noUsableModel' | 'noSelection' | 'modelRetired' | 'loading';
 
-/** Why the composer cannot send, or null when it can. */
-export function sendBlockReason(options: ChatOptions | null, selection: ChatSelection | null): SendBlockReason | null {
+/**
+ * Why the composer cannot send, or null when it can. `selectionReady` is false while the selection is still being
+ * resolved (conversation switch, deep link, defaults refetch after "New"): the selectors are locked then, so the
+ * reason is "loading", not "select a model".
+ */
+export function sendBlockReason(
+  options: ChatOptions | null,
+  selection: ChatSelection | null,
+  selectionReady = true,
+): SendBlockReason | null {
   if (!options) return 'loading';
   if (!options.has_usable_model || options.ai_services.length === 0) return 'noUsableModel';
+  if (!selectionReady) return 'loading';
   if (!selection) return 'noSelection';
   // E.g. after a 409 SERVICE_RETIRED: the model stays selected until the user picks another one.
   if (!isSelectableModel(options, selection.ai_service_id)) return 'modelRetired';

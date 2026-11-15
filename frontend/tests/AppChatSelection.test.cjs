@@ -103,6 +103,13 @@ test('sendBlockReason covers loading, empty options and no selection', () => {
   assert.equal(m.sendBlockReason(makeOptions(), sel()), null);
 });
 
+test('sendBlockReason: a selection still being resolved is "loading", but an empty App stays "noUsableModel"', () => {
+  assert.equal(m.sendBlockReason(makeOptions(), sel(), false), 'loading');
+  assert.equal(m.sendBlockReason(makeOptions(), null, false), 'loading');
+  assert.equal(m.sendBlockReason(makeOptions({ has_usable_model: false }), null, false), 'noUsableModel');
+  assert.equal(m.sendBlockReason(makeOptions(), null, true), 'noSelection');
+});
+
 test('describeWarnings names known resources, dedupes and falls back to the generic message', () => {
   const out = m.describeWarnings(
     [{ kind: 'mcp_config', id: 30 }, { kind: 'mcp_config', id: 30 }, { kind: 'skill', id: 77 }],

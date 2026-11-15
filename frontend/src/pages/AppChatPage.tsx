@@ -283,7 +283,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   const selectionReady =
     resolvedRoute === routeConversationId ||
     (routeConversationId !== null && createdConversationRef.current === routeConversationId);
-  const blockReason = sendBlockReason(options, selectionReady ? selection : null);
+  const blockReason = sendBlockReason(options, selection, selectionReady);
   const sendBlockedReason = blockReason ? t(`appChat.blocked.${blockReason}`) : undefined;
   const warningMessages = useMemo(
     () => describeWarnings(dedupeWarnings([...loadWarnings, ...turnWarnings]), options),
