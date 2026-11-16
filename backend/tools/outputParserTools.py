@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Type, Dict, Any, List, Optional, get_origin, get_args
+from typing import Type, Dict, Any, List, Optional, Literal, get_origin, get_args
 from sqlalchemy.orm import Session
 from utils.schema_utils import sanitize_identifier
 from db.database import SessionLocal
@@ -90,7 +90,24 @@ def create_dynamic_pydantic_model(model_name: str,
         **{field_key: field_val[1] for field_key, field_val in model_fields.items()}
     })
 
-def get_type_from_string(type_str: str, list_item_type: str = None, list_item_parser_id: int = None, parser_id: int = None):
+def get_enum_values(enum_id: int) -> list[str]:
+    session = SessionLocal()
+    try:
+        enum = session.query(OutputParser).filter(
+            OutputParser.parser_id == enum_id,
+            OutputParser.is_enum.is_(True),
+        ).first()
+        if not enum:
+            raise ValueError(f"No se encontró el enum con ID {enum_id}")
+        values = [field.get('name', '') for field in (enum.fields or []) if field.get('name')]
+        if not values:
+            raise ValueError(f"El enum {enum_id} no tiene valores definidos")
+        return values
+    finally:
+        session.close()
+
+
+def get_type_from_string(type_str: str, list_item_type: str = None, list_item_parser_id: int = None, parser_id: int = None, enum_id: int = None, list_item_enum_id: int = None):
     """
     Convierte una cadena de tipo en su equivalente Python/Pydantic.
     
@@ -113,12 +130,16 @@ def get_type_from_string(type_str: str, list_item_type: str = None, list_item_pa
         if parser_id is None:
             raise ValueError("Se requiere parser_id para campos de tipo parser")
         return get_parser_model_by_id(parser_id)
+    elif type_str == 'enum':
+        return Literal.__getitem__(tuple(get_enum_values(enum_id)))
     elif type_str == 'list':
         if list_item_type == 'parser':
             if list_item_parser_id is None:
                 raise ValueError("Se requiere list_item_parser_id para listas de tipo parser")
             parser_model = get_parser_model_by_id(list_item_parser_id)
             return List[parser_model]
+        if list_item_type == 'enum':
+            return List[Literal.__getitem__(tuple(get_enum_values(list_item_enum_id)))]
         return List[basic_types.get(list_item_type, str)]
     
     return basic_types.get(type_str, str)
@@ -149,7 +170,9 @@ def create_model_from_json_schema(schema_data: List[Dict[str, Any]], model_name:
                     field['type'],
                     field.get('list_item_type'),
                     field.get('list_item_parser_id'),
-                    int(field.get('parser_id')) if field.get('parser_id') else None
+                    int(field.get('parser_id')) if field.get('parser_id') else None,
+                    int(field.get('enum_id')) if field.get('enum_id') else None,
+                    int(field.get('list_item_enum_id')) if field.get('list_item_enum_id') else None,
                 )
             field_types.append(tipo)
             field_descriptions.append(field['description'])

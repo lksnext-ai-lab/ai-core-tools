@@ -23,12 +23,22 @@ class OutputParserRepository:
     
     def get_available_parsers_for_app(self, db: Session, app_id: int, exclude_parser_id: Optional[int] = None) -> List[OutputParser]:
         """Get available parsers for references (excluding specified parser to prevent self-reference)"""
-        query = db.query(OutputParser).filter(OutputParser.app_id == app_id)
+        query = db.query(OutputParser).filter(
+            OutputParser.app_id == app_id,
+            OutputParser.is_enum.is_(False),
+        )
         
         if exclude_parser_id is not None:
             query = query.filter(OutputParser.parser_id != exclude_parser_id)
             
         return query.all()
+
+    def get_available_enums_for_app(self, db: Session, app_id: int) -> List[OutputParser]:
+        """Get enum definitions available for field references."""
+        return db.query(OutputParser).filter(
+            OutputParser.app_id == app_id,
+            OutputParser.is_enum.is_(True),
+        ).all()
     
     def create(self, db: Session, parser: OutputParser) -> OutputParser:
         """Create a new output parser"""
