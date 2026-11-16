@@ -626,7 +626,11 @@ async def create_agent(
 
     from tools.middleware.factory import build_agent_middlewares
     middleware = (
-        build_agent_middlewares(agent, llm, ignore_agent_middlewares=True)
+        build_agent_middlewares(
+            agent, llm, ignore_agent_middlewares=True, chat_turn=True,
+            # Frozen snapshot of the turn (never the ORM service, which expires after the pre-run commit).
+            service_id=turn_config.ai_service_id, model_name=turn_config.ai_service_model,
+        )
         if surface.ignore_agent_middlewares
         else build_agent_middlewares(agent, llm)
     )
