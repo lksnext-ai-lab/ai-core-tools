@@ -50,6 +50,7 @@ from schemas.internal_chat_schemas import ChatSelection
 from tests.integration.internal_chat._chat_support import (
     NOT_FOUND,
     FakeChatModel,
+    ThreadProbe,
     base,
     detail,
     ok_turn,
@@ -650,49 +651,6 @@ class TestSharedAgentIsImmutable:
 # ------------------------------------------------------------------ AC-23: threads
 
 
-CHECKPOINT_TABLES = ("checkpoints", "checkpoint_blobs", "checkpoint_writes")
-
-
-class ThreadProbe:
-    """Row counts of LangGraph threads, relative to what the DB held when the test started.
-
-    The LangGraph tables are not in ``Base.metadata``: they survive ``drop_all`` and agent ids restart at 1, so the
-    DB can hold ``thread_1_conv_1_<uuid>`` rows, or fixed-name leftovers (``thread_1``, ``thread_1_default``), of
-    earlier runs. A thread counts as "this test's" when it is new or its total row count changed, so a turn that also
-    wrote into a leftover thread is still seen.
-    """
-
-    def __init__(self, engine):
-        self.engine = engine
-        self.baseline = self.counts()
-
-    def counts(self) -> dict[str, int]:
-        found: dict[str, int] = {}
-        with self.engine.connect() as conn:
-            for table in CHECKPOINT_TABLES:
-                for thread_id, n in conn.execute(text(f"SELECT thread_id, count(*) FROM {table} GROUP BY thread_id")):
-                    found[thread_id] = found.get(thread_id, 0) + n
-        return found
-
-    def rows(self, thread_id: str) -> int:
-        """Rows of one thread over the three checkpoint tables (all must be gone after a delete or reset)."""
-        return self.counts().get(thread_id, 0)
-
-    def of_agent(self, agent_id: int) -> set[str]:
-        """Threads of ``agent_id`` written by this test: ``thread_<id>`` and ``thread_<id>_*`` (not agents 10-19)."""
-        prefix = f"thread_{agent_id}_"
-        return {
-            t for t, n in self.counts().items()
-            if (t == f"thread_{agent_id}" or t.startswith(prefix)) and self.baseline.get(t) != n
-        }
-
-    def assert_agent_wide_thread_untouched(self, agent_id: int) -> None:
-        """No row was added to the agent-wide thread (the one a missing session id would fall back to)."""
-        now = self.counts()
-        for name in (f"thread_{agent_id}", f"thread_{agent_id}_default"):
-            assert now.get(name, 0) == self.baseline.get(name, 0), f"{name} was written by a Chat turn"
-
-
 @pytest.fixture(autouse=True)
 def threads(test_engine):
     return ThreadProbe(test_engine)
@@ -1171,6 +1129,8 @@ class TestHumanApprovals:
         db.expire_all()
         assert db.get(HITLApproval, row.id).status == "cancelled" and len(self._approvals(db, team["app_id"])) == 1
         assert detail(client, team, cid, who="author")["pending_approval"] is None
+        state = db.get(ChatConversationState, cid)
+        assert (state.busy_token, state.busy_until) == (None, None), "the rejected turn gave the conversation back"
         again = ok_turn(client, team, "next", selection(team["ai_a"]), conversation_id=cid, who="author")
         assert again["response"] == "answer after the tool was refused"
 
@@ -1179,9 +1139,6 @@ class TestHumanApprovals:
         self, client, db, team, fakes, gated, monkeypatch, path
     ):
         """The resume that rejects the pause raises: the row must not stay DECIDING (the sweeper would re-pend it)."""
-        import asyncio
-
-        from services import hitl_expiry_worker
 
         fail = {"on": True}
 
@@ -1306,7 +1263,6 @@ class TestHumanApprovals:
         self, client, db, team, fakes, gated, monkeypatch
     ):
         """A backdated DECIDING row on a still-paused thread: Chat is cancelled, any other channel is re-pended."""
-        import asyncio
         from datetime import timezone
 
         from services import hitl_expiry_worker
@@ -1390,57 +1346,6 @@ class TestAttribution:
 
 
 # ------------------------------------------------------------------ NFR-11: log hygiene
-
-# Loggers whose DEBUG output is driver/transport noise rather than the app's own: left at their level.
-QUIET_LOGGERS = ("sqlalchemy", "httpx", "httpcore", "asyncio", "psycopg", "urllib3", "multipart")
-
-
-@pytest.fixture
-def debug_records(monkeypatch):
-    """Every record emitted by any logger while the test runs, at DEBUG.
-
-    ``caplog`` alone sees nothing: the app's loggers have their own INFO level and handlers (``utils.logger``). So
-    ``Logger.handle`` is wrapped to collect records (loggers created during the request included) and
-    ``Logger.setLevel`` is forced to DEBUG for app loggers set up during the test; the loggers that already exist
-    are lowered for the duration and restored afterwards.
-    """
-    records: dict[int, logging.LogRecord] = {}
-    original_handle = logging.Logger.handle
-    original_set_level = logging.Logger.setLevel
-
-    def quiet(name: str) -> bool:
-        return name.split(".")[0] in QUIET_LOGGERS
-
-    def handle(self, record):
-        if not quiet(self.name):
-            records[id(record)] = record
-        return original_handle(self, record)
-
-    requested: dict[int, int] = {}  # level each logger asked for (loggers created during the test keep DEBUG otherwise)
-
-    def set_level(self, level):
-        requested[id(self)] = level
-        return original_set_level(self, level if quiet(self.name) else logging.DEBUG)
-
-    loggers = [logging.getLogger()] + [
-        lg for lg in logging.root.manager.loggerDict.values() if isinstance(lg, logging.Logger)
-    ]
-    saved = [(lg, lg.level) for lg in loggers]
-    monkeypatch.setattr(logging.Logger, "handle", handle)
-    monkeypatch.setattr(logging.Logger, "setLevel", set_level)
-    for lg in loggers:
-        if not quiet(lg.name):
-            original_set_level(lg, logging.DEBUG)
-    try:
-        yield records
-    finally:
-        known = {id(lg) for lg, _ in saved}
-        for lg, level in saved:
-            original_set_level(lg, level)
-        for lg in logging.root.manager.loggerDict.values():
-            if isinstance(lg, logging.Logger) and id(lg) not in known:  # created during the test
-                original_set_level(lg, requested.get(id(lg), logging.NOTSET))
-
 
 class RaisingModel(FakeChatModel):
     """A provider error that echoes the prompt back, as real provider 4xx bodies do."""

@@ -1,7 +1,19 @@
 """Fixtures shared by the Chat integration tests (defined in ``_chat_support``)."""
 import pytest
 
-from tests.integration.internal_chat._chat_support import fakes, world  # noqa: F401
+from tests.integration.internal_chat._chat_support import (  # noqa: F401  (fixtures)
+    debug_records,
+    fakes,
+    purge_leftovers_of_killed_runs,
+    worker_session_on_test_db,
+    world,
+)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _remove_leftovers_of_killed_runs(test_engine):
+    """A run killed in the middle of a concurrency test leaves its committed ``cc-...`` world behind: remove it."""
+    purge_leftovers_of_killed_runs(test_engine)
 
 
 @pytest.fixture(autouse=True)

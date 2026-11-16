@@ -143,10 +143,13 @@ def test_malformed_references_or_search_params_are_422_and_create_nothing(client
 
 def test_stream_passes_the_prepared_turn_and_cleans_up(client, world):
     cid = create(client, world)
+    ai_id = world["ai"].service_id  # the stream's release expires and its close detaches the session's objects
     seen = {}
 
     def fake_stream(self, **kwargs):
         seen.update(kwargs)
+        # the turn's claim is released (and the session objects expired) when the stream ends: read it now
+        seen["ai_service_id"] = kwargs["turn_config"].ai_service_id
 
         async def events():
             yield 'event: metadata\ndata: {"conversation_id": %d}\n\n' % kwargs["conversation_id"]
@@ -162,7 +165,7 @@ def test_stream_passes_the_prepared_turn_and_cleans_up(client, world):
     assert response.headers["x-accel-buffering"] == "no" and response.headers["cache-control"] == "no-cache"
     assert "event: metadata" in response.text and "event: done" in response.text
     assert seen["conversation_id"] == cid and seen["channel"] == ApprovalChannel.INTERNAL_CHAT
-    assert seen["turn_config"].ai_service_id == world["ai"].service_id and callable(seen["on_turn_completed"])
+    assert seen["ai_service_id"] == ai_id and callable(seen["on_turn_completed"])
     assert seen["user_context"]["caller_type_override"] == "INTERNAL_CHAT"
     assert isinstance(seen["agent_id"], int)
     cleanup.assert_awaited_once()  # the stream's finally ran

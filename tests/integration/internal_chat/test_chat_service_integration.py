@@ -544,7 +544,7 @@ def test_playground_media_silos_are_not_selectable(db, world):
     app_id = world["app"].app_id
     visible = Silo(name="visible", app_id=app_id, embedding_service_id=world["emb"].service_id)
     by_type = Silo(name="temp-by-type", app_id=app_id, embedding_service_id=world["emb"].service_id)
-    by_prefix = Silo(name="temp-by-prefix", app_id=app_id, embedding_service_id=world["emb"].service_id)
+    by_prefix = Silo(name="by-name-only", app_id=app_id, embedding_service_id=world["emb"].service_id)
     db.add_all([visible, by_type, by_prefix])
     db.flush()
     db.add_all([
@@ -553,7 +553,8 @@ def test_playground_media_silos_are_not_selectable(db, world):
     ])
     db.flush()
     names = {o.name for o in svc(db, world["alice"]).get_options(app_id).silos}
-    assert names == {"visible"}
+    # One definition of "temp": the typed marker only. A repository merely NAMED ``_playground_...`` is a user's.
+    assert names == {"visible", "by-name-only"}
     with pytest.raises(ChatResourceNotFoundError):
         svc(db, world["alice"]).prepare_turn(
             app_id, ChatSelection(ai_service_id=world["ai"].service_id, silo_id=by_type.silo_id)
@@ -586,11 +587,20 @@ def test_skill_validation_query_cost_does_not_grow_with_the_app(db, world):
     db.flush()
     alice, ai = svc(db, world["alice"]), world["ai"].service_id
     sel = ChatSelection(ai_service_id=ai, skill_ids=[chosen.skill_id])
-    cid = alice.prepare_turn(app_id, sel).conversation.conversation_id  # warm-up: creates agent + conversation
-    base = _count_queries(db, lambda: alice.prepare_turn(app_id, sel, cid))
+    warm = alice.prepare_turn(app_id, sel)  # warm-up: creates agent + conversation
+    cid = warm.conversation.conversation_id
+    alice.release_turn(warm.claim)  # one turn at a time per conversation: give it back before the next prepare
+
+    def prepare_and_release():
+        alice.release_turn(alice.prepare_turn(app_id, sel, cid).claim)
+
+    prepare_and_release()  # the release expires the session's objects: reload them outside the measurement
+    prepare_and_release()
+    base = _count_queries(db, prepare_and_release)
     db.add_all([Skill(name=f"ic-bulk-{i}", content="x" * 50, app_id=app_id) for i in range(20)])
     db.flush()
-    assert _count_queries(db, lambda: alice.prepare_turn(app_id, sel, cid)) == base
+    prepare_and_release()  # (see above) the first call after a flush reloads expired state
+    assert _count_queries(db, prepare_and_release) == base
 
 
 def test_set_local_timeouts_do_not_leak_past_the_transaction(test_engine):
@@ -893,6 +903,7 @@ async def test_prepared_turn_is_bound_to_one_thread_even_if_a_reset_follows(db, 
     sel = ChatSelection(ai_service_id=world["ai"].service_id)
     first = alice.prepare_turn(app_id, sel)
     cid = first.conversation.conversation_id
+    alice.release_turn(first.claim)  # one turn at a time per conversation
     bound = alice.prepare_turn(app_id, sel, cid)
     old_sid = bound.conversation.session_id  # what the execution stack will read from the pinned row
     fake = _FakeThreads()
