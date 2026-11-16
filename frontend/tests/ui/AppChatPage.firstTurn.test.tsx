@@ -100,7 +100,7 @@ describe('AppChatPage first turn of a new conversation', () => {
     const alert = title.closest('[role="alert"]') as HTMLElement;
     expect(within(alert).getByText(tr('appChat.warnings.mcp_configNamed', { name: 'Tickets' }))).toBeInTheDocument();
 
-    await user.click(within(alert).getByRole('button', { name: tr('alert.dismiss') }));
+    await user.click(within(alert).getByRole('button', { name: tr('alert.dismissNamed', { name: tr('appChat.warnings.title') }) }));
     expect(screen.queryByText(tr('appChat.warnings.title'))).not.toBeInTheDocument();
     expect(composer()).toHaveFocus();
   });

@@ -13,6 +13,8 @@ interface AlertProps {
   polite?: boolean;
   /** Text of the dismiss button. Default: the translated `alert.dismiss`. */
   dismissLabel?: string;
+  /** Accessible name of the dismiss button when several alerts are on screen (keeps the visible text). */
+  dismissAriaLabel?: string;
 }
 
 const alertStyles = {
@@ -61,6 +63,7 @@ const Alert: React.FC<AlertProps> = ({
   className = '',
   polite = false,
   dismissLabel,
+  dismissAriaLabel,
 }) => {
   const { t } = useTranslation('common');
   const styles = alertStyles[type];
@@ -87,6 +90,7 @@ const Alert: React.FC<AlertProps> = ({
             <button
               type="button"
               onClick={onDismiss}
+              aria-label={dismissAriaLabel}
               className={`mt-2 text-sm ${styles.buttonColor} underline`}
             >
               {dismissLabel ?? t('alert.dismiss')}

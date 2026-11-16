@@ -182,3 +182,15 @@ test('defaults after "New" apply only while the request is current, on the new c
   assert.deepEqual(d(3, 4, true, false), { resolve: false, applySelection: false }, 'a newer request superseded it');
   assert.deepEqual(d(3, 3, false, false), { resolve: false, applySelection: false }, 'user moved to another conversation');
 });
+
+test('attachmentIndexingNotice: only an explicit enabled=false raises it; a missing field means enabled', () => {
+  const withIndexing = (attachment_indexing) => makeOptions({ attachment_indexing });
+  assert.equal(m.attachmentIndexingNotice(null), null);
+  assert.equal(m.attachmentIndexingNotice(makeOptions()), null);
+  assert.equal(m.attachmentIndexingNotice(withIndexing(null)), null);
+  assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: true, reason: null })), null);
+  assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: 'no_default_embedding_service' })), 'noDefault');
+  assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: 'embedding_service_retired' })), 'retired');
+  assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: null })), 'unavailable');
+  assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: 'something_new' })), 'unavailable');
+});

@@ -306,6 +306,7 @@
     "slugSaved": "El slug se ha guardado correctamente",
     "slugUpdateFailed": "No se pudo actualizar el slug",
     "langsmithApiKey": "Clave de API de LangSmith",
+    "langsmithOwnerOnly": "Solo el propietario de la App puede cambiar la clave de API de LangSmith.",
     "keepCurrentKeyPlaceholder": "Déjalo vacío para conservar la clave actual",
     "enterLangsmithKeyPlaceholder": "Introduce la clave de API de LangSmith",
     "langsmithHelpBeforeKey": "Tu clave de API de LangSmith para supervisión y trazas. Déjala vacía para usar la variable global",
@@ -330,6 +331,11 @@
     "inheritSystemDefault": "Heredar valor predeterminado del sistema",
     "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
     "sandboxServicesSettings": "Configuración → Servicios sandbox",
+    "embeddingService": "Servicio de embeddings por defecto",
+    "noDefaultEmbeddingService": "Ninguno (los archivos adjuntos no se indexan)",
+    "embeddingServiceHelpBeforeSettings": "Se usa para indexar los archivos adjuntos en el Chat de la App y que el modelo pueda buscar en ellos. Déjalo vacío para enviar los archivos adjuntos completos al modelo. Gestiona los servicios disponibles en",
+    "embeddingServicesSettings": "Servicios de embeddings (en Configuración)",
+    "embeddingServicesLoadFailed": "No se pudieron cargar los servicios de embeddings, así que la lista puede estar incompleta. Recarga la página para intentarlo de nuevo.",
     "saveErrorTitle": "Error al guardar la configuración",
     "settingsSaved": "La configuración se ha guardado correctamente",
     "saveChanges": "Guardar cambios",
@@ -4511,7 +4517,8 @@
     "renameFailed": "Error al actualizar título"
   },
   "alert": {
-    "dismiss": "Descartar"
+    "dismiss": "Descartar",
+    "dismissNamed": "Descartar: {{name}}"
   },
   "appChat": {
     "page": {
@@ -4579,7 +4586,8 @@
     },
     "notices": {
       "conversationNotFound": "Esa conversación no está disponible. Se ha abierto una nueva.",
-      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo y vuelve a enviar tu mensaje."
+      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo y vuelve a enviar tu mensaje.",
+      "label": "Aviso"
     },
     "warnings": {
       "title": "Parte de tu selección no se ha usado",
@@ -4592,12 +4600,21 @@
       "mcp_config": "No se pudo usar una configuración MCP (no disponible o eliminada); el mensaje se respondió sin ella.",
       "mcp_configNamed": "No se pudo usar la configuración MCP \"{{name}}\" (no disponible o eliminada); el mensaje se respondió sin ella."
     },
+    "attachmentIndexing": {
+      "title": "Los archivos adjuntos no se indexarán",
+      "noDefault": "Esta App no tiene un servicio de embeddings por defecto, así que los archivos adjuntos en el Chat se envían completos al modelo en lugar de indexarse. Hay que definir un servicio de embeddings a nivel de App.",
+      "retired": "El servicio de embeddings por defecto de esta App ha llegado a su fin de servicio, así que los archivos adjuntos en el Chat se envían completos al modelo en lugar de indexarse. Elige otro servicio de embeddings a nivel de App.",
+      "configureLink": "Abrir la configuración de la App",
+      "askAdmin": "Pide a un administrador o propietario de esta App que lo configure.",
+      "unavailable": "Los archivos adjuntos en el Chat no se pueden indexar ahora, así que se envían completos al modelo en lugar de indexarse."
+    },
     "transportErrors": {
       "noSelection": "Selecciona un modelo antes de enviar un mensaje.",
       "noConversation": "Esta conversación no está disponible.",
       "forbidden": "Ahora mismo no puedes enviar mensajes en esta App. Puede estar congelada o tu acceso puede haber cambiado.",
       "notFound": "La conversación o alguno de los elementos seleccionados ya no está disponible.",
-      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo e inténtalo de nuevo."
+      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo e inténtalo de nuevo.",
+      "conversationBusy": "Esta conversación sigue respondiendo a un mensaje anterior. Espera a que termine e inténtalo de nuevo. Tu mensaje se ha conservado en el cuadro de texto."
     }
   }
 }

@@ -347,6 +347,10 @@ function apiError(status, errorCode) {
 test('mapTurnError explains 403, 404 and a retired model; everything else passes through', () => {
   const { mod } = loadTransport();
   assert.equal(mod.mapTurnError(apiError(409, 'SERVICE_RETIRED')).code, 'serviceRetired');
+  assert.equal(mod.mapTurnError(apiError(409, 'CONVERSATION_BUSY')).code, 'conversationBusy');
+  assert.notEqual(mod.mapTurnError(apiError(409, 'CONVERSATION_BUSY')).code, 'serviceRetired');
+  const otherConflict = apiError(409, 'SOMETHING_ELSE');
+  assert.equal(mod.mapTurnError(otherConflict), otherConflict);
   assert.equal(mod.mapTurnError(apiError(403)).code, 'forbidden');
   assert.equal(mod.mapTurnError(apiError(404)).code, 'notFound');
   const other = apiError(409, 'OTHER');

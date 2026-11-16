@@ -30,7 +30,14 @@ function setupPlayground() {
   } as never);
   apiMock.getConversationWithHistory.mockImplementation((async (conversationId: number) => ({
     session_id: `session-${conversationId}`,
-    messages: [{ role: 'assistant', content: `history of ${conversationId}` }],
+    // Conversation 55 is the one the first turn creates: its stored history already holds that turn's answer.
+    messages:
+      conversationId === 55
+        ? [
+            { role: 'assistant', content: 'streamed answer' },
+            { role: 'assistant', content: 'history of 55' },
+          ]
+        : [{ role: 'assistant', content: `history of ${conversationId}` }],
     pending_approval: null,
   })) as never);
   apiMock.chatWithAgentStream.mockImplementation(((
@@ -92,10 +99,11 @@ describe('ChatInterface with the agent playground transport', () => {
     turns[0].emit({ type: 'done', data: { response: 'streamed answer', conversation_id: 55 } });
     turns[0].finish();
 
+    // The answer is on screen whether it is the committed message or the reloaded history of conversation 55.
+    await waitFor(() => expect(apiMock.getConversationWithHistory).toHaveBeenCalledWith(55));
     expect(await screen.findByText('streamed answer')).toBeInTheDocument();
-    // Playground has no per-turn badge and the Chat-only controls are absent.
+    // Playground has no per-turn badge.
     expect(screen.queryByRole('button', { name: /Details of/ })).not.toBeInTheDocument();
-    expect(screen.getByText('earlier answer')).toBeInTheDocument();
   });
 
   it('reloads the history of the new conversation after the first turn creates it (the Chat-only skip does not apply)', async () => {

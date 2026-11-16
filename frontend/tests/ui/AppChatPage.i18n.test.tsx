@@ -69,7 +69,7 @@ describe('App Chat in Spanish', () => {
     const title = await screen.findByText('Parte de tu selección no se ha usado');
     const alert = title.closest('[role="alert"]') as HTMLElement;
     expect(alert).toHaveTextContent('No se pudo usar la configuración MCP "Tickets"');
-    expect(within(alert).getByRole('button', { name: 'Descartar' })).toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: 'Descartar: Parte de tu selección no se ha usado' })).toBeInTheDocument();
     expectTranslated(['appChat.warnings.title', 'appChat.warnings.mcp_configNamed', 'alert.dismiss']);
 
     // Second turn: the model reached end of service.

@@ -160,6 +160,7 @@ function ChatInterface({
   const hasMetadataFilters = !!metadataFields && metadataFields.length > 0;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (focusComposerSignal) textareaRef.current?.focus();
@@ -177,6 +178,7 @@ function ChatInterface({
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [expiredApprovalId, setExpiredApprovalId] = useState<string | null>(null);
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  const [focusAfterErrorTick, setFocusAfterErrorTick] = useState(0);
   // While a person can still answer, a new message would discard the paused turn.
   const approvalBlocksInput =
     approvals && pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
@@ -544,6 +546,11 @@ function ChatInterface({
     setExpiredApprovalId(pendingApproval.approval_id);
   }, [pendingApproval, settleAwaitingTools]);
 
+  const isConversationBusy = (error: unknown): boolean => {
+    const cause = error instanceof Error ? error.cause : undefined;
+    return [error, cause].some((e) => e instanceof ChatTransportError && e.code === 'conversationBusy');
+  };
+
   const describeSendError = (error: unknown): string => {
     // The streaming hook wraps whatever the transport threw; the original stays in `cause`.
     const cause = error instanceof Error ? error.cause : undefined;
@@ -607,6 +614,12 @@ function ChatInterface({
     } catch (error) {
       if (!isAlive()) return;
       setHoldStreamingContent(false);
+      if (isConversationBusy(error)) {
+        // The turn was rejected before it started: take the message back so it can be resent as it was.
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        // The composer is locked while a turn is in flight, so it is still empty here.
+        setInputMessage(messageText);
+      }
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: 'error',
@@ -615,8 +628,22 @@ function ChatInterface({
         elapsedMs: error instanceof StreamingChatError ? error.elapsedMs : responseElapsedMs,
       };
       setMessages((prev) => [...prev, errorMsg]);
+      // The composer was disabled during the turn, so focus fell to <body>: ask for it back (see the effect below).
+      setFocusAfterErrorTick((tick) => tick + 1);
     }
   };
+
+  // After a failed send, return focus to the composer once it is enabled again, but only when focus is
+  // lost (on <body>): never steal it from a control the user has moved to meanwhile.
+  useEffect(() => {
+    if (focusAfterErrorTick === 0) return;
+    const active = document.activeElement;
+    // Some engines keep the just-disabled composer as the active element instead of falling back to <body>.
+    // The send button counts as part of the composer: the user may just have clicked it.
+    const focusLost =
+      !active || active === document.body || active === textareaRef.current || active === sendButtonRef.current;
+    if (focusLost) textareaRef.current?.focus();
+  }, [focusAfterErrorTick]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -1104,7 +1131,7 @@ function ChatInterface({
                         className="flex justify-start max-w-[760px] mx-auto animate-slide-in-left"
                       >
                         <div className="max-w-[82%] min-w-0">
-                          <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
+                          <div role="alert" className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                             <div className="flex items-center gap-2 mb-1">
                               <svg
                                 className="w-4 h-4 shrink-0"
@@ -1387,6 +1414,7 @@ function ChatInterface({
               ) : (
                 <button
                   type="button"
+                  ref={sendButtonRef}
                   onClick={handleSendMessage}
                   disabled={!canSend}
                   aria-describedby={sendBlockedReason ? sendBlockedReasonId : undefined}

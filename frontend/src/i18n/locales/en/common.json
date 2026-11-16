@@ -306,6 +306,7 @@
     "slugSaved": "Slug saved successfully",
     "slugUpdateFailed": "Failed to update slug",
     "langsmithApiKey": "LangSmith API Key",
+    "langsmithOwnerOnly": "Only the App owner can change the LangSmith API key.",
     "keepCurrentKeyPlaceholder": "Leave empty to keep current key",
     "enterLangsmithKeyPlaceholder": "Enter LangSmith API key",
     "langsmithHelpBeforeKey": "Your LangSmith API key for monitoring and tracing. Leave empty to use the global",
@@ -330,6 +331,11 @@
     "inheritSystemDefault": "Inherit system default",
     "sandboxServiceHelpBeforeSettings": "Default Sandbox Service used when agents in this app run the Code Interpreter capability. Leave at \"Inherit\" to use the system default. Manage available services under",
     "sandboxServicesSettings": "Settings → Sandbox Services",
+    "embeddingService": "Default embedding service",
+    "noDefaultEmbeddingService": "None (attached files are not indexed)",
+    "embeddingServiceHelpBeforeSettings": "Used to index the files attached in the App Chat so the model can search them. Leave empty to send attached files whole to the model. Manage available services under",
+    "embeddingServicesSettings": "Embedding Services (in Settings)",
+    "embeddingServicesLoadFailed": "The embedding services could not be loaded, so the list may be incomplete. Reload the page to try again.",
     "saveErrorTitle": "Error Saving Settings",
     "settingsSaved": "Settings saved successfully",
     "saveChanges": "Save Changes",
@@ -4511,7 +4517,8 @@
     "renameFailed": "Failed to update the title"
   },
   "alert": {
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "dismissNamed": "Dismiss: {{name}}"
   },
   "appChat": {
     "page": {
@@ -4579,7 +4586,8 @@
     },
     "notices": {
       "conversationNotFound": "That conversation is not available. A new one is open.",
-      "serviceRetired": "The selected model has reached end of service. Choose another model and send your message again."
+      "serviceRetired": "The selected model has reached end of service. Choose another model and send your message again.",
+      "label": "Notice"
     },
     "warnings": {
       "title": "Part of your selection was not used",
@@ -4592,12 +4600,21 @@
       "mcp_config": "An MCP configuration could not be used (unavailable or removed); the message was answered without it.",
       "mcp_configNamed": "The MCP configuration \"{{name}}\" could not be used (unavailable or removed); the message was answered without it."
     },
+    "attachmentIndexing": {
+      "title": "Attached files will not be indexed",
+      "noDefault": "This App has no default embedding service, so files attached in the Chat are sent whole to the model instead of being indexed. An embedding service must be defined at App level.",
+      "retired": "The default embedding service of this App has reached end of service, so files attached in the Chat are sent whole to the model instead of being indexed. Choose another embedding service at App level.",
+      "configureLink": "Open App settings",
+      "askAdmin": "Ask an administrator or owner of this App to set it up.",
+      "unavailable": "Files attached in the Chat cannot be indexed right now, so they are sent whole to the model instead of being indexed."
+    },
     "transportErrors": {
       "noSelection": "Select a model before sending a message.",
       "noConversation": "This conversation is not available.",
       "forbidden": "You cannot send messages in this App right now. It may be frozen, or your access may have changed.",
       "notFound": "The conversation or one of the selected items is no longer available.",
-      "serviceRetired": "The selected model has reached end of service. Choose another model and try again."
+      "serviceRetired": "The selected model has reached end of service. Choose another model and try again.",
+      "conversationBusy": "This conversation is still answering a previous message. Wait for it to finish and try again. Your message was kept in the box."
     }
   }
 }

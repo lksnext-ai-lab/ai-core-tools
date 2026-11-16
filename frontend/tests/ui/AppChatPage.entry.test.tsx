@@ -139,7 +139,7 @@ describe('AppChatPage opening a conversation by URL', () => {
     const notice = (await screen.findByText(tr('appChat.notices.conversationNotFound'))).closest(
       '[role="alert"]',
     ) as HTMLElement;
-    await user.click(within(notice).getByRole('button', { name: tr('alert.dismiss') }));
+    await user.click(within(notice).getByRole('button', { name: tr('alert.dismissNamed', { name: tr('appChat.notices.label') }) }));
     expect(screen.queryByText(tr('appChat.notices.conversationNotFound'))).not.toBeInTheDocument();
     expect(composer()).toHaveFocus();
   });

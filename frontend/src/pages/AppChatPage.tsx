@@ -12,6 +12,7 @@ import { TurnMetaBadge } from '../components/chat/TurnMetaBadge';
 import {
   chatPath,
   decideNewChatDefaults,
+  attachmentIndexingNotice,
   dedupeWarnings,
   describeWarnings,
   parseConversationId,
@@ -42,7 +43,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   const navigate = useNavigate();
   const { conversationId: conversationParam } = useParams();
   const routeConversationId = parseConversationId(conversationParam);
-  const { hasMinRole } = useAppRole(String(appId));
+  const { hasMinRole, loading: roleLoading } = useAppRole(String(appId));
 
   const [options, setOptions] = useState<ChatOptions | null>(null);
   const [optionsFailed, setOptionsFailed] = useState(false);
@@ -53,6 +54,9 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   const [turnWarnings, setTurnWarnings] = useState<readonly ChatSelectionWarning[]>(NO_WARNINGS);
   const [notice, setNotice] = useState<'conversationNotFound' | 'serviceRetired' | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Dismissing the attachment-indexing notice lasts for this visit only (component state), so it comes back on
+  // the next visit while the condition holds. The dismissed kind is stored, so a different notice still shows.
+  const [dismissedIndexingNotice, setDismissedIndexingNotice] = useState<string | null>(null);
   const [sidebarToken, setSidebarToken] = useState(0);
   // Remount ChatInterface only when the user moves to another conversation, never when the page itself
   // creates one (the route then catches up with the id the chat already holds). `focus` asks the new
@@ -350,6 +354,13 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
     setNotice(null);
     focusComposer();
   };
+  const currentIndexingNotice = attachmentIndexingNotice(options);
+  const indexingNotice = currentIndexingNotice === dismissedIndexingNotice ? null : currentIndexingNotice;
+  const canConfigureApp = hasMinRole(AppRole.ADMINISTRATOR);
+  const dismissIndexingNotice = () => {
+    setDismissedIndexingNotice(currentIndexingNotice);
+    focusComposer();
+  };
   const dismissWarnings = () => {
     setLoadWarnings(NO_WARNINGS);
     setTurnWarnings(NO_WARNINGS);
@@ -366,8 +377,9 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
           title={t('appChat.empty.title')}
           message={
             <>
-              {t(hasMinRole(AppRole.ADMINISTRATOR) ? 'appChat.empty.messageAdmin' : 'appChat.empty.messageMember')}
-              {hasMinRole(AppRole.ADMINISTRATOR) && (
+              {/* The wording depends on the role: say nothing until it is known, so it never flashes. */}
+              {!roleLoading && t(hasMinRole(AppRole.ADMINISTRATOR) ? 'appChat.empty.messageAdmin' : 'appChat.empty.messageMember')}
+              {!roleLoading && hasMinRole(AppRole.ADMINISTRATOR) && (
                 <span className="mt-3 block">
                   <ButtonLink
                     label={t('appChat.empty.configureLink')}
@@ -381,11 +393,37 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
           }
         />
       )}
+      {indexingNotice && (
+        <Alert
+          type="info"
+          title={t('appChat.attachmentIndexing.title')}
+          message={
+            <>
+              {t(`appChat.attachmentIndexing.${indexingNotice}`)}{' '}
+              {roleLoading ? null : canConfigureApp ? (
+                <span className="mt-3 block">
+                  <ButtonLink
+                    label={t('appChat.attachmentIndexing.configureLink')}
+                    to={`/apps/${appId}/settings`}
+                    variant="secondary"
+                    size="compact"
+                  />
+                </span>
+              ) : (
+                t('appChat.attachmentIndexing.askAdmin')
+              )}
+            </>
+          }
+          onDismiss={dismissIndexingNotice}
+          dismissAriaLabel={t('alert.dismissNamed', { name: t('appChat.attachmentIndexing.title') })}
+        />
+      )}
       {notice && (
         <Alert
           type={notice === 'serviceRetired' ? 'error' : 'warning'}
           message={t(`appChat.notices.${notice}`)}
           onDismiss={dismissNotice}
+          dismissAriaLabel={t('alert.dismissNamed', { name: t('appChat.notices.label') })}
         />
       )}
       {warningMessages.length > 0 && (
@@ -403,6 +441,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
             </ul>
           }
           onDismiss={dismissWarnings}
+          dismissAriaLabel={t('alert.dismissNamed', { name: t('appChat.warnings.title') })}
         />
       )}
 

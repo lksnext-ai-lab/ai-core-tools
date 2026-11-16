@@ -102,6 +102,14 @@ export interface ChatMcpConfigOption {
   readonly name: string;
 }
 
+/** Whether files attached in the Chat are indexed (needs the App's default embedding service). Absent on older backends = enabled. */
+export type ChatAttachmentIndexingReason = 'no_default_embedding_service' | 'embedding_service_retired';
+
+export interface ChatAttachmentIndexing {
+  readonly enabled: boolean;
+  readonly reason: ChatAttachmentIndexingReason | null;
+}
+
 export interface ChatOptions {
   readonly ai_services: readonly ChatAIServiceOption[];
   readonly silos: readonly ChatSiloOption[];
@@ -110,6 +118,7 @@ export interface ChatOptions {
   readonly default_selection?: ChatSelection | null;
   readonly default_warnings: readonly ChatSelectionWarning[];
   readonly has_usable_model: boolean;
+  readonly attachment_indexing?: ChatAttachmentIndexing | null;
 }
 
 // ---------------------------------------------------------------------------

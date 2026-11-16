@@ -176,7 +176,9 @@ export type ChatTransportErrorCode =
   /** 404: the conversation or a selected resource is not available. */
   | 'notFound'
   /** 409 `SERVICE_RETIRED`: the selected model reached end of service. */
-  | 'serviceRetired';
+  | 'serviceRetired'
+  /** 409 `CONVERSATION_BUSY`: the conversation is still answering a previous message. */
+  | 'conversationBusy';
 
 /**
  * Failure raised by the App Chat transport itself (not by the backend). It carries a code, never display
@@ -222,6 +224,7 @@ export function mapTurnError(error: unknown): unknown {
   if (typeof error !== 'object' || error === null || (error as { name?: unknown }).name !== 'ApiError') return error;
   const { status, errorCode } = error as { status?: number; errorCode?: string };
   if (status === 409 && errorCode === 'SERVICE_RETIRED') return new ChatTransportError('serviceRetired');
+  if (status === 409 && errorCode === 'CONVERSATION_BUSY') return new ChatTransportError('conversationBusy');
   if (status === 403) return new ChatTransportError('forbidden');
   if (status === 404) return new ChatTransportError('notFound');
   return error;

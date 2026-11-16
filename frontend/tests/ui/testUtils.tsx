@@ -130,3 +130,6 @@ export function composerDescription(): string {
   if (!id) return '';
   return document.getElementById(id)?.textContent ?? '';
 }
+
+/** Name of the dismiss button of the indexing notice (stacked alerts carry their own name after "Dismiss"). */
+export const dismissName = tr('alert.dismissNamed', { name: tr('appChat.attachmentIndexing.title') });

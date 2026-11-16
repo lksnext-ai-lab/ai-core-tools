@@ -178,6 +178,20 @@ export function resolveNewConversationSelection(
 }
 
 // ---------------------------------------------------------------------------
+// Attachment indexing notice
+// ---------------------------------------------------------------------------
+
+/** Suffix of `appChat.attachmentIndexing.<kind>`; null when indexing works (or the backend does not report it). */
+export function attachmentIndexingNotice(options: ChatOptions | null): 'noDefault' | 'retired' | 'unavailable' | null {
+  const indexing = options?.attachment_indexing;
+  if (!indexing || indexing.enabled !== false) return null;
+  if (indexing.reason === 'embedding_service_retired') return 'retired';
+  if (indexing.reason === 'no_default_embedding_service') return 'noDefault';
+  // Unknown reason: do not claim a cause that may be false.
+  return 'unavailable';
+}
+
+// ---------------------------------------------------------------------------
 // Warnings
 // ---------------------------------------------------------------------------
 
