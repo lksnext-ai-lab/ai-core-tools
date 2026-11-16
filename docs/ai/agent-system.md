@@ -471,6 +471,7 @@ When the quota is exceeded, the endpoint returns:
 - [LLM Integration](llm-integration.md) — AI service configuration
 - [RAG & Vector Stores](rag-vector-stores.md) — Silo and retrieval
 - [MCP Integration](mcp-integration.md) — MCP servers and tools
+- [App Chat](app-chat.md) — Hidden internal agent (`Agent.kind = 'internal_chat'`) and per-turn configuration
 - [Backend Architecture](../architecture/backend.md) — Agent execution service
 - [Database Schema](../architecture/database.md) — Agent model
 - [File Processing](../reference/file-processing.md) — File handling details

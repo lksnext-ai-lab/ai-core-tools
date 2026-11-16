@@ -37,6 +37,7 @@
 - [Scheduled Task Output Providers RFC](ai/rfc-scheduled-task-output-providers.md) — Extensible delivery, Teams channels, retries, permissions, and retention
 - [Teams Channel Attachments — Future Design](ai/rfc-teams-channel-attachments.md) — Deferred native attachments, SharePoint uploads, Graph authorization, and recovery
 - [MCP Integration](ai/mcp-integration.md) — Model Context Protocol servers, handlers, and configuration
+- [App Chat](ai/app-chat.md) — Per-App Chat: hidden internal agent, per-turn model/source/skills/MCP selection, API, isolation, privacy, migration `ichat001`
 - [A2A Integration](ai/a2a-integration.md) — Agent2Agent protocol JSON-RPC server, visibility, task lifecycle, and deployment runbook
 
 ### API Reference
@@ -54,6 +55,7 @@
 - [Platform Chatbot](guides/platform-chatbot.md) — Configure a global AI assistant widget backed by any agent; includes knowledge base files and prompt template for a platform guide agent
 - [Human approval in the public API](guides/human-approval.md) — Answer agents' tool-approval requests from your application: pending results, decisions by id, expiry and error codes
 - [Skills](guides/skills.md) — Skill packages (SKILL.md frontmatter contract), zip import/export, system skills, sandbox activation, the opt-in skill router, and Claude Code plugin import
+- [Chat in an App](guides/chat-bot/app-chat.md) — User guide to the App Chat: picking model, source, skills and MCP per message, files, privacy, warnings, hiding the menu entry
 - [Git Workflow & Release Process](guides/git-workflow.md) — GitFlow branching model, release workflow, hotfix process, versioning convention, and commit rules
 - [SharePoint Sync](guides/sharepoint-sync.md) — Index SharePoint and OneDrive drives into silos via Microsoft Graph delta queries; Azure setup and sync behaviour
 - [Agent Metrics](guides/agent-metrics.md) — Platform, app and agent dashboards: executions, errors, latency, time to first token, tokens, tools and channels; how runs are captured and counted

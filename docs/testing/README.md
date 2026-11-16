@@ -94,6 +94,32 @@ Example: testing that `POST /internal/auth/login` returns session cookies is an 
 
 **Pros:** Catches bugs that unit tests miss (wrong SQL, missing foreign keys, auth issues).
 
+### Frontend tests (`frontend/tests/`)
+
+The frontend has two harnesses:
+
+| Harness | Location | Runner | Use for |
+|---------|----------|--------|---------|
+| Pure logic | `frontend/tests/*.test.cjs` | `node --test` | Functions and modules without a DOM |
+| Render tests | `frontend/tests/ui/**/*.test.{ts,tsx}` | Vitest + Testing Library (jsdom; config in `frontend/vitest.config.ts`) | Components and pages (for example the App Chat) |
+
+```bash
+cd frontend
+npm test            # node --test + type check (test:types) + Vitest
+npm run test:ui     # Vitest render tests only
+```
+
+### Chat tests and LangGraph checkpoints
+
+Backend tests of the App Chat live in `tests/integration/internal_chat/`, with the shared fakes (LLM, retriever, MCP client, metrics write) and world fixture in `_chat_support.py`. The LangGraph checkpoint tables are not part of `Base.metadata`, so they **survive the test schema drop**: assert on threads relative to a baseline taken at the start of the test, never on absolute counts. Some Chat test files deserve a note:
+
+- `test_chat_isolation_concurrency.py` overlaps real turns through `httpx.AsyncClient` + `ASGITransport` with one database session per request (`get_db` is not overridden, so its data is committed and purged by the test) and a fake model that parks calls on per-turn gates, so the overlap is deterministic.
+- `test_chat_model_switch.py` switches provider, AI service and model between turns of one conversation (history adaptation, summarization on a smaller window, images, tools, retired models, failures, the answer stamp). Everything runs for real except the LLM boundary, which is `_provider_sim.py`: subclasses of the real LangChain model classes that validate each request with the provider's own installed converter and answer with the message shapes the real adapters produce. **No real provider API is called**: the tests prove the installed converter takes the history and tool calls stay paired, not that Anthropic signatures, OpenAI Responses item pairing or token accounting would be accepted by the real service. Capability and context-window rejections are hand-written rules.
+- `tests/unit/tools/middleware/test_history_normalizer.py` (own vs foreign messages, interrupted tool calls, nothing stored is modified) and `test_summary_input_bound.py` (summary input threshold and target, explicit `trim_tokens`, retry only on transient errors) cover the same two mechanisms offline; they reuse `_provider_sim.py`.
+- `test_chat_temp_silo_visibility.py` contains a route-enumeration guard: a new route that takes a silo or repository id must pass it, because conversation temp silos have to answer 404 like a missing one.
+
+See [App Chat](../ai/app-chat.md#testing).
+
 ---
 
 ## Running Specific Tests

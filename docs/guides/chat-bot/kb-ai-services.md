@@ -72,7 +72,7 @@ The status badge appears in the services lists. Agents, silos, repositories, sch
 
 ### Finding and moving what depends on a service
 
-Use **Used by** on a service to list the agents (with the role the service plays), silos, repositories, middlewares and scheduled tasks that use it. For sandbox services it also lists the Apps using it as their default.
+Use **Used by** on a service to list the agents (with the role the service plays), silos, repositories, middlewares and scheduled tasks that use it. For sandbox services it also lists the Apps using it as their default sandbox, and for embedding services the Apps using it as their **Default embedding service** (the one the App Chat indexes attached files with). Such an App default also shows end-of-service warnings. A retired default is never used: Chat attachments are then sent whole and members see a notice. See [Chat in an App](app-chat.md).
 
 For AI services, **Move agents** (Administrator and above) points all agents that use the service as their main LLM at another service in one step. If the number of agents changed since you opened the dialog, nothing is moved and you are asked to review again.
 

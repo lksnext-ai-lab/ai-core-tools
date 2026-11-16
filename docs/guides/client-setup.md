@@ -226,6 +226,14 @@ navigation: {
 }
 ```
 
+**Hide the App Chat entry**:
+```typescript
+navigation: {
+  remove: ['/apps/:appId/chat']
+}
+```
+This removes the menu entry only; the route stays reachable by URL and the backend endpoints stay available to App members. See [App Chat](../ai/app-chat.md#hide-the-menu-entry-client-projects).
+
 **Reorder sections**:
 ```typescript
 navigationProps: {

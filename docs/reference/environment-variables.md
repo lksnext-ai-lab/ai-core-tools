@@ -196,6 +196,14 @@ LANGSMITH_PROJECT=mattin-ai-production
 
 **Per-app tracing**: Each app can store its own LangSmith API key (`App.langsmith_api_key`). This takes priority over the global env vars. Test connectivity via `POST /internal/apps/{id}/langsmith/test`.
 
+### Embedding Requests
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` | No | `120` | Client-side timeout (seconds) of embedding calls; retries are unchanged. Applies to OpenAI, MistralAI, Custom/HuggingFace, Ollama and AWS Bedrock embedding services. Azure AI and Google (AI Studio, Vertex AI) clients have no timeout parameter, so it does not apply to them |
+
+See [App Chat](../ai/app-chat.md#attachment-indexing).
+
 ### Application Settings
 
 | Variable | Required | Default | Description |

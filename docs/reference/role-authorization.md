@@ -374,11 +374,13 @@ function AgentList({ appId }) {
 |-----------|----------|----------|
 | View agents | viewer | `GET /internal/agents` |
 | Execute agent | viewer | `POST /internal/agents/{id}/chat` |
+| Use the App Chat (own conversations only) | viewer | `/internal/apps/{id}/chat/...` |
 | Create agent | editor | `POST /internal/agents` |
 | Update agent | editor | `PUT /internal/agents/{id}` |
 | Delete agent | editor | `DELETE /internal/agents/{id}` |
 | Invite collaborator | administrator | `POST /internal/collaboration/apps/{id}/invite` |
-| Manage app settings | administrator | `PUT /internal/apps/{id}` |
+| Manage app settings (including the default embedding service) | administrator | `PUT /internal/apps/{id}` |
+| Change or clear the app's LangSmith API key | owner | `PUT /internal/apps/{id}` (403 for administrators; omitting the key keeps it) |
 | Generate API key | owner | `POST /internal/api_keys` |
 | Delete app | owner | `DELETE /internal/apps/{id}` |
 | Admin operations | omniadmin | `GET /internal/admin/users` |

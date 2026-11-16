@@ -42,6 +42,8 @@ npm run dev                     # Dev server (port 5173)
 npm run build:lib               # Build reusable library package
 npm run build:lib:watch         # Watch mode for library development
 npm run lint
+npm test                        # node --test + type check + Vitest render tests (frontend/tests/ui)
+npm run test:ui                 # Vitest + Testing Library only
 ```
 
 ### Testing
@@ -317,6 +319,9 @@ A2A_ENABLED=true                # Kill switch: false -> every /a2a/* route 404s
 A2A_PUBLIC_BASE_URL=             # Base for absolute card/RPC URLs; falls back to FRONTEND_URL, then Host header
 A2A_MAX_REQUEST_MB=32            # SendMessage/SendStreamingMessage body cap
 A2A_TASK_RETENTION_DAYS=30       # How long terminal tasks/events/links are kept
+
+# Embedding clients — optional, default shown
+# AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS=120   # Client-side timeout (OpenAI, MistralAI, HuggingFace, Ollama, Bedrock; not Azure AI/Google)
 ```
 
 ### Frontend `.env`
@@ -348,6 +353,7 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - **Human approvals** (`services/hitl_approval_service.py`): every human-in-the-loop pause gets a `hitl_approval` row (owner, actions by `action_id` = tool call id, `expires_at`). Only the requester (same user / same API key) can answer, once (row compare-and-set); answers go through `/internal/approvals/{id}/…` and `/public/v1/app/{app}/approvals/{id}/decisions`. Unanswered approvals are rejected — never approved — by `services/hitl_expiry_worker.py`; non-interactive channels (MCP, scheduled, OpenAI-compatible, platform chatbot) reject the pause on the spot. Changing an agent's approval rules cancels its pending approvals
 - **Service end-of-service**: AI, embedding and sandbox services have optional `end_of_service_at` (00:00 UTC) + `deprecation_notice` (<=1000 chars; migration `svceos001`). Status active/deprecated/retired is computed at read time (`utils/service_lifecycle.py`; window = setting `service_end_of_service_warning_days`, default 30, env `AICT_SYSTEM_SERVICE_END_OF_SERVICE_WARNING_DAYS`, 0 = no deprecated phase). Retired services are blocked where LLM/transcription/video/embedding clients are built (`ensure_service_active`): HTTP 409 `SERVICE_RETIRED`, SSE `service_retired`, MCP `isError`, A2A failed task, scheduled runs failed without retry. Test connection, delete and cleanup are never blocked; retired services can't be newly selected. Omitted lifecycle field on update keeps its value, explicit null clears it. "Used by" endpoints + `POST /internal/apps/{id}/ai-services/{id}/move-agents` (`expected_count` mismatch -> 409, nothing changes). Internal API only exposes `lifecycle_warnings`. Known limits: silo chunk-neighbour view blocked on retired silos; sandbox export/import is 501. Docs: `docs/guides/chat-bot/kb-ai-services.md`
 - **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes (self-managed and SaaS alike)
+- **App Chat**: a "Chat" menu entry per App (min role VIEWER) where the user picks AI service, silo, skills and MCP configs per message (`/internal/apps/{app_id}/chat`, `backend/services/internal_chat/`, `routers/internal/internal_chat.py`). It runs on a hidden internal agent per App (`Agent.kind='internal_chat'`, created on first use, never exposed in lists, export, marketplace, MCP, A2A or the public API, 404 on every other surface) that is never modified: each turn builds a frozen `ResolvedChatConfig`. Everything is per user (conversations, files, defaults, threads; no one else can read them). No per-agent approval/PII rules; chat failures log/record only class names + a correlation id. One turn at a time per conversation (a second one gets 409 `CONVERSATION_BUSY`). Attachments are indexed into a hidden per-conversation temp silo with `App.default_embedding_service_id`, else sent whole; temp silos are hidden from every silo/repository/output-parser list and 404 by id. Administrators can now update App settings, except the LangSmith key (owner only). Tables `conversation_turn`/`chat_user_default`/`chat_conversation_state`, migrations `ichat001`/`ichat002` (the `ichat001` downgrade deletes Chat data). Hide the entry with `navigation: { remove: ['/apps/:appId/chat'] }` in `clientConfig.ts` (menu only). Playground/public file and chat endpoints now 404 on a `conversation_id` that is not the caller's. Docs: `docs/ai/app-chat.md`, `docs/guides/chat-bot/app-chat.md`
 
 ## Anti-Patterns
 
