@@ -48,6 +48,14 @@ def is_chat_turn(ctx: Any) -> bool:
     return getattr(ctx, "turn_config", None) is not None
 
 
+def notify_before_model(turn_config: Optional["ResolvedChatConfig"]) -> None:
+    """Chat turns: tell the Chat service the model is about to run (it renews the busy marker). No-op otherwise."""
+    diagnostics = getattr(turn_config, "diagnostics", None)
+    run = getattr(diagnostics, "run_before_model", None)
+    if callable(run):
+        run()
+
+
 def tracing_kwargs(turn_config: Optional["ResolvedChatConfig"]) -> Dict[str, Any]:
     """Extra ``build_tracing_config`` kwargs for a chat turn (empty for every other turn)."""
     if turn_config is None:

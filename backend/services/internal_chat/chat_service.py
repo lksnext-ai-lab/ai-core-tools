@@ -17,10 +17,12 @@ completion hook runs inside a SAVEPOINT of that session and relies on it to comm
 """
 import copy
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -37,6 +39,7 @@ from repositories.internal_chat_repository import (
 from schemas.conversation_schemas import ConversationUpdate
 from schemas.internal_chat_schemas import (
     ChatAIServiceOption,
+    ChatAttachmentIndexing,
     ChatMcpConfigOption,
     ChatOptionsResponse,
     ChatSelection,
@@ -46,14 +49,15 @@ from schemas.internal_chat_schemas import (
     ChatTurnInfo,
 )
 from services.agent_execution_context import TurnCompleted, TurnCompletedHook
-from services.chat_attachment_service import ChatAttachmentService
+from services.chat_attachment_service import ATTACHMENT_INDEXING_TIMEOUT_SECONDS, ChatAttachmentService
 from services.conversation_service import ConversationService
-from services.internal_chat.errors import ChatResourceNotFoundError
+from services.internal_chat.errors import ChatConversationBusyError, ChatResourceNotFoundError
 from services.internal_chat.resolved_config import ResolvedChatConfig
 from services.internal_chat.selection_resolver import ChatSelectionResolver
 from services.internal_chat.system_prompt import get_internal_chat_system_prompt
 from services.internal_chat.turn_info import build_turn_info, match_turns_to_messages, snapshot_ids
 from services.service_lifecycle_service import ServiceLifecycleService
+from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
 from utils.logger import get_logger
 from utils.service_lifecycle import is_retired
 
@@ -70,6 +74,19 @@ _ALLOWED_CONTEXT_KEYS = ("user_id", "email", "oauth", "token")
 DOWNLOAD_LINK_TTL_SECONDS = 300  # Chat download links are short-lived
 HOOK_LOCK_TIMEOUT_MS = 3000
 HOOK_STATEMENT_TIMEOUT_MS = 8000
+# A turn in flight owns its conversation for at most the agent run timeout plus a margin; a crashed turn
+# blocks only that conversation, until the marker expires (database clock).
+BUSY_MARKER_TTL_SECONDS = AGENT_RUN_TIMEOUT_SECONDS + 60
+_LOCK_NOT_AVAILABLE = "55P03"  # PostgreSQL SQLSTATE lock_not_available (the local lock_timeout expired)
+
+
+@dataclass
+class TurnClaim:
+    """This turn's claim on its conversation (``busy_token``); every exit releases exactly this one."""
+
+    conversation_id: int
+    token: uuid.UUID
+    released: bool = False  # True only once the release was COMMITTED (a failed attempt can be retried)
 
 
 @dataclass(frozen=True)
@@ -77,6 +94,7 @@ class PreparedChatTurn:
     """Everything the router passes to the execution / streaming service for one turn."""
 
     agent_id: int
+    conversation_id: int  # plain value: ``conversation`` (ORM) expires on every commit
     conversation: Conversation
     turn_config: ResolvedChatConfig
     on_turn_completed: TurnCompletedHook
@@ -85,6 +103,8 @@ class PreparedChatTurn:
     warnings: Tuple[ChatSelectionWarning, ...] = ()
     # True when ``prepare_turn`` created the conversation (no ``conversation_id`` was given).
     created: bool = False
+    # The busy-marker claim of this turn (None only for hand-built test doubles).
+    claim: Optional[TurnClaim] = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +117,7 @@ class _TurnGuard:
     generation: int  # chat_conversation_state.generation when the turn started
     selection: Dict[str, Any]  # what the user asked for (persisted as state / default)
     warnings: Tuple[ChatSelectionWarning, ...] = ()
+    busy_token: Optional[uuid.UUID] = None  # released in the hook's own transaction on success
 
 
 @dataclass(frozen=True)
@@ -251,6 +272,7 @@ class InternalChatService:
         ]
 
         default, warnings = self._default_selection(app_id, all_ai_services)
+        _, indexing = self._attachment_indexing(app_id)
         return ChatOptionsResponse(
             ai_services=ai_services,
             silos=silos,
@@ -259,7 +281,20 @@ class InternalChatService:
             default_selection=default,
             default_warnings=warnings,
             has_usable_model=bool(ai_services),
+            attachment_indexing=indexing,
         )
+
+    def _attachment_indexing(self, app_id: int) -> Tuple[Optional[int], ChatAttachmentIndexing]:
+        """``(embedding service id to index with or None, state for the UI)`` from the App's default.
+
+        Enabled while the default exists and is active or deprecated; a retired default is never used.
+        """
+        service = ChatOptionsRepository.app_default_embedding_service(self.db, app_id)
+        if service is None:
+            return None, ChatAttachmentIndexing(enabled=False, reason="no_default_embedding_service")
+        if is_retired(service):
+            return None, ChatAttachmentIndexing(enabled=False, reason="embedding_service_retired")
+        return service.service_id, ChatAttachmentIndexing(enabled=True)
 
     # ------------------------------------------------------------------ conversations
 
@@ -495,6 +530,7 @@ class InternalChatService:
         """Attach ``file`` to the caller's conversation (stored per conversation, indexed into its temp silo)."""
         self._guard_new_activity(app_id)  # a frozen App takes no new chat activity (list/delete/download stay open)
         scope = self._attachment_scope(app_id, conversation_id)
+        embedding_service_id, _ = self._attachment_indexing(app_id)
         return await ChatAttachmentService.upload(
             self.db,
             file,
@@ -504,6 +540,9 @@ class InternalChatService:
             conversation_id=scope.conversation_id,
             has_memory=True,  # the internal chat agent always keeps memory
             resolve_session_id=lambda: scope.session_id,
+            embedding_service_id=embedding_service_id,
+            degrade_when_retired=True,
+            index_timeout_seconds=ATTACHMENT_INDEXING_TIMEOUT_SECONDS,
         )
 
     async def list_attachments(self, app_id: int, conversation_id: int) -> Dict[str, Any]:
@@ -574,31 +613,51 @@ class InternalChatService:
         conversation: Optional[Conversation] = None
         generation = 0
         bound_session_id: Optional[str] = None
-        if conversation_id is not None:
-            conversation = self._load_conversation(app_id, conversation_id)
-            # generation and session_id in ONE statement: the turn is bound to exactly one thread. The loaded
-            # row is pinned to that value, so the execution stack (which re-reads the conversation through the
-            # same session) uses the thread this guard is about.
-            binding = ChatConversationStateRepository.get_binding(self.db, conversation_id)
-            if binding is None:
-                raise ChatResourceNotFoundError()
-            generation, bound_session_id = binding
-            set_committed_value(conversation, "session_id", bound_session_id)
+        claim: Optional[TurnClaim] = None
+        created_id: Optional[int] = None  # the conversation THIS request created (None when it was given)
+        try:
+            if conversation_id is not None:
+                conversation = self._load_conversation(app_id, conversation_id)
+                # One turn at a time per conversation: claim BEFORE any other work, so a second concurrent turn
+                # is refused (409) without having touched anything.
+                claim = self._claim_conversation(conversation_id)
+                # generation and session_id in ONE statement: the turn is bound to exactly one thread. The loaded
+                # row is pinned to that value, so the execution stack (which re-reads the conversation through the
+                # same session) uses the thread this guard is about.
+                binding = ChatConversationStateRepository.get_binding(self.db, conversation_id)
+                if binding is None:
+                    raise ChatResourceNotFoundError()
+                generation, bound_session_id = binding
+                set_committed_value(conversation, "session_id", bound_session_id)
 
-        resolved = ChatSelectionResolver.resolve_full(self.db, app_id, selection)
-        if conversation is None:
-            conversation = self._create_conversation_row(app_id, None, resolved.requested.model_dump())
             resolved = ChatSelectionResolver.resolve_full(self.db, app_id, selection)
-        turn_config = resolved.config
+            if conversation is None:
+                conversation = self._create_conversation_row(app_id, None, resolved.requested.model_dump())
+                created_id = conversation.conversation_id
+                # New id, state row created in the same transaction: nobody else can hold it yet.
+                claim = self._claim_conversation(created_id)
+                resolved = ChatSelectionResolver.resolve_full(self.db, app_id, selection)
+            turn_config = resolved.config
 
-        guard = _TurnGuard(
-            conversation_id=conversation.conversation_id,
-            agent_id=conversation.agent_id,
-            session_id=bound_session_id or conversation.session_id,
-            generation=generation,
-            selection=resolved.requested.model_dump(),
-            warnings=resolved.skipped,
-        )
+            guard = _TurnGuard(
+                conversation_id=conversation.conversation_id,
+                agent_id=conversation.agent_id,
+                session_id=bound_session_id or conversation.session_id,
+                generation=generation,
+                selection=resolved.requested.model_dump(),
+                warnings=resolved.skipped,
+                busy_token=claim.token if claim is not None else None,
+            )
+        except BaseException:
+            # Validation / retired service / not found AFTER the claim: give the conversation back (sync).
+            self.release_turn(claim)
+            if created_id is not None:
+                self._drop_created_conversation(created_id)  # nobody has seen it: never leave an empty one behind
+            raise
+
+        # Right before the model runs the execution / streaming services call this: the marker then lasts a full
+        # run from that moment, however long the preparation took. Never raises.
+        turn_config.diagnostics.before_model = lambda: self.renew_turn(claim)
 
         async def hook(event: TurnCompleted) -> Optional[dict]:
             return await self.on_turn_completed(event, guard)
@@ -616,13 +675,127 @@ class InternalChatService:
         )
         return PreparedChatTurn(
             agent_id=guard.agent_id,
+            conversation_id=guard.conversation_id,
             conversation=conversation,
             turn_config=turn_config,
             on_turn_completed=hook,
             user_context=self.build_turn_user_context(app_id),
             warnings=resolved.skipped,
             created=conversation_id is None,
+            claim=claim,
         )
+
+    def _claim_conversation(self, conversation_id: int) -> TurnClaim:
+        """Claim the conversation for one turn (committed at once, so other requests see it).
+
+        Raises:
+            ChatConversationBusyError: an unexpired claim exists, or another transaction holds the state row (the
+                local lock timeout expired: that is "somebody else is working on it" too, not a server error).
+            ChatResourceNotFoundError: the conversation (state row) is gone.
+        """
+        token = uuid.uuid4()
+        try:
+            set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
+            claimed = ChatConversationStateRepository.claim_busy(
+                self.db, conversation_id, token, BUSY_MARKER_TTL_SECONDS
+            )
+            if claimed:
+                self.db.commit()
+                return TurnClaim(conversation_id=conversation_id, token=token)
+            exists = ChatConversationStateRepository.exists(self.db, conversation_id)
+            self.db.rollback()
+        except OperationalError as exc:
+            self.db.rollback()
+            if getattr(exc.orig, "pgcode", None) == _LOCK_NOT_AVAILABLE:
+                raise ChatConversationBusyError() from None
+            raise
+        except BaseException:
+            self.db.rollback()
+            raise
+        if not exists:
+            raise ChatResourceNotFoundError()
+        raise ChatConversationBusyError()
+
+    def renew_turn(self, claim: Optional[TurnClaim]) -> None:
+        """Push the claim's expiry a full TTL ahead (right before the model runs). Synchronous, bounded by the local
+        timeouts, never raises: if it fails the marker simply keeps the expiry it had."""
+        if claim is None or claim.released:
+            return
+        previous_expire = self.db.expire_on_commit
+        try:
+            set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
+            ChatConversationStateRepository.renew_busy(
+                self.db, claim.conversation_id, claim.token, BUSY_MARKER_TTL_SECONDS
+            )
+            # Keep the objects the turn has already loaded as they are: expiring them here would make a conversation
+            # deleted while the model runs fail the finishing steps with ``ObjectDeletedError`` (they read it again).
+            self.db.expire_on_commit = False
+            self.db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Chat: could not renew the busy marker of conversation %s (%s)",
+                claim.conversation_id, type(exc).__name__,
+            )
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            self.db.expire_on_commit = previous_expire
+
+    def release_turn(self, claim: Optional[TurnClaim]) -> None:
+        """Release this turn's claim. Synchronous on purpose (no ``await``: a cancelled task's ``finally`` may be
+        re-cancelled at the first await), bounded by the local lock/statement timeouts, idempotent, and it never
+        raises, so it cannot mask the original error or cancellation. A claim already taken over (expiry), cleared
+        (reset) or deleted with its conversation matches nothing. ``claim.released`` is set only after the commit, so
+        a failed attempt can be retried by the safety net of the caller."""
+        if claim is None or claim.released:
+            return
+        try:
+            self.db.rollback()  # the failed/cancelled turn may have left an open or aborted transaction
+            set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
+            ChatConversationStateRepository.release_busy(self.db, claim.conversation_id, claim.token)
+            self.db.commit()
+            claim.released = True
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Chat: could not release the busy marker of conversation %s (%s); it expires by itself",
+                claim.conversation_id, type(exc).__name__,
+            )
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+
+    @contextmanager
+    def turn_scope(self, prepared: PreparedChatTurn) -> Iterator[None]:
+        """The single owner of a prepared turn's claim for the synchronous endpoint: leaving the block, however it
+        ends, releases it (a no-op when the completion hook already did)."""
+        try:
+            yield
+        finally:
+            self.release_turn(prepared.claim)
+
+    def _drop_created_conversation(self, conversation_id: int) -> None:
+        """Delete a conversation this request just created and never used (its turn failed before it started).
+
+        Synchronous and best effort (it never raises): the row only, because nothing was stored yet (no files, no
+        thread, no temp silo); the state row goes by FK cascade.
+        """
+        try:
+            self.db.rollback()
+            conversation = self.db.get(Conversation, conversation_id)
+            if conversation is not None and not conversation.message_count:
+                self.db.delete(conversation)
+                self.db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Chat: could not drop the unused conversation %s (%s)", conversation_id, type(exc).__name__
+            )
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
 
     async def discard_created_conversation(self, app_id: int, prepared: PreparedChatTurn) -> None:
         """Best effort: delete the conversation ``prepared`` created when its first turn failed before answering.
@@ -633,7 +806,7 @@ class InternalChatService:
         """
         if not prepared.created:
             return
-        conversation_id = prepared.conversation.conversation_id
+        conversation_id = prepared.conversation_id
         try:
             self.db.rollback()  # the failed turn may have left the session in an aborted transaction
             conversation = self._load_conversation(app_id, conversation_id)
@@ -680,6 +853,10 @@ class InternalChatService:
         generation, app_id, current_session_id = locked
         if app_id != config.app_id:
             raise RuntimeError("chat turn app does not match the conversation's App")
+        if guard.busy_token is not None:
+            # Release in the same transaction as the turn row: no window where the turn is stored but the
+            # conversation is still "busy". (A reset already cleared it: this matches nothing.)
+            ChatConversationStateRepository.release_busy(self.db, conversation_id, guard.busy_token)
         if generation != guard.generation:
             logger.info("Chat turn completed after conversation %s was reset; nothing persisted", conversation_id)
             # A reset rotates the session id, so this turn's thread is no longer referenced by the conversation

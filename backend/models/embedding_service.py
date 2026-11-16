@@ -20,7 +20,7 @@ class EmbeddingService(ServiceLifecycleMixin, ServiceHealthMixin, BaseService):
 
     provider = Column(String(45), nullable=False)
     app_id = Column(Integer, ForeignKey('App.app_id'), nullable=True)  # NULL = system/platform service
-    app = relationship('App', back_populates='embedding_services')
+    app = relationship('App', back_populates='embedding_services', foreign_keys=[app_id])
 
 
 track_service_health(EmbeddingService)

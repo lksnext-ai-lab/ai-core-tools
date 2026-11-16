@@ -87,7 +87,7 @@ class SiloImportService:
         """
         return (
             self.session.query(Silo)
-            .filter(Silo.name == name, Silo.app_id == app_id)
+            .filter(Silo.name == name, Silo.app_id == app_id, SiloRepository.visible_clause())
             .first()
         )
 

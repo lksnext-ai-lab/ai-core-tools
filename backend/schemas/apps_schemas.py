@@ -1,6 +1,8 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Literal, Optional, Dict, Any
+from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
+
+from schemas.service_lifecycle_schemas import ServiceLifecycleWarningSchema
 
 class AgentRateLimitUsageSchema(BaseModel):
     agent_id: int
@@ -56,6 +58,9 @@ class AppDetailSchema(BaseModel):
     onboarding_dismissed: bool = False
     is_frozen: bool = False
     default_sandbox_service_id: Optional[int] = None  # None = inherit system default
+    default_embedding_service_id: Optional[int] = None  # None = Chat attachments are not indexed
+    # Deprecated / retired services behind the App's defaults (GET only).
+    lifecycle_warnings: List[ServiceLifecycleWarningSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -87,6 +92,9 @@ class UpdateAppSchema(BaseModel):
     agent_cors_origins: Optional[str] = None
     enable_openai_api: bool = False
     default_sandbox_service_id: Optional[int] = None  # None = inherit system default
+    # Omitted keeps the current value; an explicit null clears it (``model_fields_set``). Deliberately unlike
+    # ``default_sandbox_service_id`` above, where omitting it resets it to the system default.
+    default_embedding_service_id: Optional[int] = None
 
     @field_validator("langsmith_api_key", mode="before")
     @classmethod

@@ -90,6 +90,13 @@ class ChatMcpConfigOption(BaseModel):
     name: str
 
 
+class ChatAttachmentIndexing(BaseModel):
+    """Whether Chat attachments are indexed (RAG) or sent in the prompt; ``reason`` explains a disabled state."""
+
+    enabled: bool
+    reason: Optional[Literal["no_default_embedding_service", "embedding_service_retired"]] = None
+
+
 class ChatOptionsResponse(BaseModel):
     ai_services: list[ChatAIServiceOption]
     silos: list[ChatSiloOption]
@@ -98,6 +105,9 @@ class ChatOptionsResponse(BaseModel):
     default_selection: Optional[ChatSelection] = None
     default_warnings: list[ChatSelectionWarning] = Field(default_factory=list)
     has_usable_model: bool
+    attachment_indexing: ChatAttachmentIndexing = Field(
+        default_factory=lambda: ChatAttachmentIndexing(enabled=False, reason="no_default_embedding_service")
+    )
 
 
 MAX_TITLE_LENGTH = 255  # Conversation.title is String(255)

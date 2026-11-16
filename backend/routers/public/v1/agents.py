@@ -19,6 +19,7 @@ from .auth import get_api_key_auth, validate_api_key_for_app, validate_agent_own
 
 from models.ai_service import AIService
 from models.silo import Silo
+from repositories.silo_repository import SiloRepository
 from models.output_parser import OutputParser
 
 from utils.logger import get_logger
@@ -55,6 +56,7 @@ def _validate_referenced_resources(db: Session, agent_dict: dict, app_id: int):
         silo = db.query(Silo).filter(
             Silo.silo_id == silo_id,
             Silo.app_id == app_id,
+            SiloRepository.visible_clause(),  # never the hidden temp silo of a conversation
         ).first()
         if not silo:
             raise HTTPException(

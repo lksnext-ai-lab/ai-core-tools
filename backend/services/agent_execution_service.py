@@ -26,6 +26,7 @@ from services.agent_execution_context import (
     TurnCompletedHook,
     TurnOutcome,
     is_chat_turn,
+    notify_before_model,
     tracing_kwargs,
 )
 from services.agent_metrics_collector import AgentMetricsCollector
@@ -1436,7 +1437,7 @@ class AgentExecutionService:
             raise HTTPException(status_code=404, detail="Agent not found in database")
 
         # 8. Build enhanced message + separate image files.
-        await self._index_turn_uploads(fresh_agent, conversation, processed_files, db)
+        await self._index_turn_uploads(fresh_agent, conversation, processed_files, db, turn_config=turn_config)
         message_files = self._select_message_files(
             fresh_agent, conversation, processed_files, db
         )
@@ -2522,8 +2523,14 @@ class AgentExecutionService:
         conversation: Any,
         processed_files: List[Dict],
         db: Optional[Session],
+        turn_config: Optional["ResolvedChatConfig"] = None,
     ) -> None:
         """Vectorize documents uploaded with this request into the conversation's temp silo.
+
+        Chat turns (``turn_config`` given) index in a worker thread on a session of its own, bounded by the Chat's
+        attachment timeout and the per-embedding-service cap; a file that could not be indexed in time simply stays in
+        the prompt. The busy marker is renewed after this step (right before the model), so slow indexing cannot
+        outlive it. Other channels keep the original behaviour.
 
         Public API calls upload and chat in one request, so nothing indexed the
         file beforehand. Only memory-enabled agents keep a temp silo: later
@@ -2545,6 +2552,19 @@ class AgentExecutionService:
                 and is_vectorizable_file(file_data.get("type"), file_data.get("filename"))
                 and file_data.get("content")
             ):
+                continue
+            if turn_config is not None:
+                from services.chat_attachment_service import ChatAttachmentService
+
+                try:
+                    await ChatAttachmentService.vectorize_in_worker(
+                        app_id=agent.app_id, agent_id=agent.agent_id, session_id=session_id,
+                        file_id=file_data["file_id"], filename=file_data["filename"],
+                        file_path=file_data.get("file_path"), content=file_data["content"],
+                        embedding_service_id=None,
+                    )
+                except Exception as e:  # noqa: BLE001  (a retired service too: the file stays in the prompt)
+                    logger.warning("Vectorization of a chat turn file failed (%s)", type(e).__name__)
                 continue
             try:
                 await loop.run_in_executor(
@@ -2823,6 +2843,7 @@ class AgentExecutionService:
                         raise approvals.ApprovalStaleError(
                             "This approval request no longer matches the conversation; it was not applied."
                         )
+                notify_before_model(turn_config)  # Chat: the busy marker is renewed for the whole run
                 async with asyncio.timeout(AGENT_RUN_TIMEOUT_SECONDS):
                     result = await self._ainvoke_with_checkpoint_recovery(
                         agent_chain, message_payload, config, fresh_agent, session_id_for_cache,

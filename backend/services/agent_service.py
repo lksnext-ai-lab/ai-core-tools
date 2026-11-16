@@ -333,7 +333,8 @@ class AgentService:
             raise ValueError("Agent not found")
 
     def get_available_chat_filter_fields(
-        self, db: Session, tool_ids: List[int], own_silo_id: Optional[int] = None
+        self, db: Session, tool_ids: List[int], own_silo_id: Optional[int] = None,
+        app_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Get the union of metadata filter fields available for chat-time exposure.
 
@@ -352,6 +353,8 @@ class AgentService:
             tool_ids: Candidate subagent agent_ids (may include non-tool agents;
                 any without a silo are skipped).
             own_silo_id: The orchestrator's own silo_id, if any.
+            app_id: When given (the HTTP endpoint), only agents and silos of this App count: ids of another App and
+                the hidden temp silo of a conversation are ignored.
 
         Returns:
             List of ``{"name": str, "type": str, "description": Optional[str]}``
@@ -362,10 +365,21 @@ class AgentService:
             silo_ids.add(own_silo_id)
 
         if tool_ids:
-            rows = db.query(Agent.agent_id, Agent.silo_id).filter(Agent.agent_id.in_(tool_ids)).all()
-            for _, silo_id in rows:
+            query = db.query(Agent.agent_id, Agent.silo_id).filter(Agent.agent_id.in_(tool_ids))
+            if app_id is not None:
+                query = query.filter(Agent.app_id == app_id)
+            for _, silo_id in query.all():
                 if silo_id:
                     silo_ids.add(silo_id)
+
+        if app_id is not None and silo_ids:
+            from models.silo import Silo
+            from repositories.silo_repository import SiloRepository
+            silo_ids = {
+                sid for (sid,) in db.query(Silo.silo_id).filter(
+                    Silo.silo_id.in_(silo_ids), Silo.app_id == app_id, SiloRepository.visible_clause()
+                ).all()
+            }
 
         fields_by_name: Dict[str, Dict[str, Any]] = {}
         for silo_id in silo_ids:
@@ -763,13 +777,14 @@ class AgentService:
         silo_id = data.get('silo_id') or None
         if silo_id:
             from repositories.silo_repository import SiloRepository
-            silo = SiloRepository.get_by_id(silo_id, db)
+            # One query: the hidden temp silo of a conversation is not selectable (same error as a missing silo).
+            silo = SiloRepository.get_visible_by_id(silo_id, db)
             self._validate_owned_resource(silo, app_id, 'silo_id', allow_system=False)
 
         output_parser_id = data.get('output_parser_id') or None
         if output_parser_id:
             from repositories.output_parser_repository import OutputParserRepository
-            parser = OutputParserRepository().get_by_id(db, output_parser_id)
+            parser = OutputParserRepository().get_by_id_and_app_id(db, output_parser_id, app_id)
             self._validate_owned_resource(parser, app_id, 'output_parser_id', allow_system=False)
 
         # AI-service-backed fields (vision/transcription/video): system-wide services allowed.

@@ -5,10 +5,11 @@ transaction, and the turn-completion hook runs inside a SAVEPOINT that must not 
 inside) -- the single exception is :meth:`InternalChatAgentRepository.get_or_create`, which commits
 by design (AD-2) so the race loser re-reads the winner's row.
 """
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import and_, exists, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
@@ -23,9 +24,11 @@ from models.ai_service import AIService
 from models.app import App
 from models.conversation import Conversation
 from models.domain import Domain
+from models.embedding_service import EmbeddingService
 from models.internal_chat import ChatConversationState, ChatUserDefault, ConversationTurn
 from models.mcp_config import MCPConfig
 from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, TEMP_REPO_PREFIX, Repository
+from repositories.silo_repository import SiloRepository
 from models.sharepoint_source import SharePointSource
 from models.silo import Silo
 from models.skill import Skill
@@ -111,6 +114,34 @@ class InternalChatAgentRepository:
         if agent_id is None:
             raise RuntimeError("internal chat agent missing after get-or-create")
         return agent_id
+
+
+    @staticmethod
+    def list_orphan_temp_repository_ids(db: Session, older_than: datetime, limit: int) -> List[int]:
+        """Ids of chat temp repositories whose conversation (agent + session) no longer exists.
+
+        Only repositories of the hidden internal-chat agent qualify. ``older_than`` is compared with
+        ``Repository.create_date``, which ``RepositoryService.create_repository`` writes with ``datetime.now()``
+        (server LOCAL naive time): callers must pass a threshold computed with the same clock, not UTC.
+        """
+        live = exists().where(
+            Conversation.agent_id == Agent.agent_id,
+            Repository.name == func.concat(TEMP_REPO_PREFIX, Agent.agent_id, "_", Conversation.session_id),
+        )
+        return list(
+            db.execute(
+                select(Repository.repository_id)
+                .join(Agent, and_(Agent.app_id == Repository.app_id, Agent.kind == "internal_chat"))
+                .where(
+                    Repository.type == PLAYGROUND_MEDIA_REPO_TYPE,
+                    Repository.name.startswith(func.concat(TEMP_REPO_PREFIX, Agent.agent_id, "_")),
+                    Repository.create_date < older_than,
+                    ~live,
+                )
+                .order_by(Repository.repository_id)
+                .limit(limit)
+            ).scalars().all()
+        )
 
 
 class ConversationTurnRepository:
@@ -230,12 +261,75 @@ class ChatConversationStateRepository:
 
     @staticmethod
     def bump_generation(db: Session, conversation_id: int) -> None:
-        """Increment the generation (call under ``lock``); invalidates the in-flight turns of the conversation."""
+        """Increment the generation (call under ``lock``); invalidates the in-flight turns of the conversation.
+
+        Also clears the busy marker: a reset always wins, and the stale turn's release then matches nothing.
+        """
         db.execute(
             update(ChatConversationState)
             .where(ChatConversationState.conversation_id == conversation_id)
-            .values(generation=ChatConversationState.generation + 1, updated_at=datetime.utcnow())
+            .values(
+                generation=ChatConversationState.generation + 1,
+                busy_token=None,
+                busy_until=None,
+                updated_at=datetime.utcnow(),
+            )
         )
+
+    @staticmethod
+    def claim_busy(db: Session, conversation_id: int, token: uuid.UUID, ttl_seconds: int) -> bool:
+        """Compare-and-set the "turn in flight" marker; False when an unexpired marker (or no row) exists.
+
+        Uses the database clock (``clock_timestamp``): replicas with skewed clocks agree, and the value is
+        correct inside a long transaction. The caller commits.
+        """
+        result = db.execute(
+            update(ChatConversationState)
+            .where(
+                ChatConversationState.conversation_id == conversation_id,
+                or_(
+                    ChatConversationState.busy_until.is_(None),
+                    ChatConversationState.busy_until < func.clock_timestamp(),
+                ),
+            )
+            .values(busy_token=token, busy_until=func.clock_timestamp() + timedelta(seconds=ttl_seconds))
+        )
+        return result.rowcount == 1
+
+    @staticmethod
+    def renew_busy(db: Session, conversation_id: int, token: uuid.UUID, ttl_seconds: int) -> bool:
+        """Push this claim's expiry to ``now + ttl`` (database clock); False when it is no longer this claim's.
+
+        Called right before the model runs so the time spent preparing the turn (files, indexing, MCP loading) does
+        not eat the TTL. The caller commits.
+        """
+        result = db.execute(
+            update(ChatConversationState)
+            .where(
+                ChatConversationState.conversation_id == conversation_id,
+                ChatConversationState.busy_token == token,
+            )
+            .values(busy_until=func.clock_timestamp() + timedelta(seconds=ttl_seconds))
+        )
+        return result.rowcount == 1
+
+    @staticmethod
+    def release_busy(db: Session, conversation_id: int, token: uuid.UUID) -> None:
+        """Clear the marker only if it is still this claim's (a no-op otherwise). The caller commits."""
+        db.execute(
+            update(ChatConversationState)
+            .where(
+                ChatConversationState.conversation_id == conversation_id,
+                ChatConversationState.busy_token == token,
+            )
+            .values(busy_token=None, busy_until=None)
+        )
+
+    @staticmethod
+    def exists(db: Session, conversation_id: int) -> bool:
+        return db.execute(
+            select(ChatConversationState.conversation_id).where(ChatConversationState.conversation_id == conversation_id)
+        ).first() is not None
 
     @staticmethod
     def ensure(db: Session, conversation_id: int, app_id: int, selection: Dict[str, Any]) -> None:
@@ -271,6 +365,15 @@ class ChatOptionsRepository:
         return db.execute(select(App.is_frozen).where(App.app_id == app_id)).scalar_one_or_none()
 
     @staticmethod
+    def app_default_embedding_service(db: Session, app_id: int) -> Optional[EmbeddingService]:
+        """The App's default embedding service (Chat attachment indexing), or None. One query."""
+        return db.execute(
+            select(EmbeddingService)
+            .join(App, App.default_embedding_service_id == EmbeddingService.service_id)
+            .where(App.app_id == app_id)
+        ).scalar_one_or_none()
+
+    @staticmethod
     def _ai_service_scope(app_id: int):
         return or_(AIService.app_id == app_id, AIService.app_id.is_(None))
 
@@ -301,10 +404,6 @@ class ChatOptionsRepository:
         Excludes frozen silos (tier downgrade), silos without an embedding service (cannot be searched) and the
         temporary silos of chat attachments. One query.
         """
-        temp = select(Repository.silo_id).where(
-            Repository.app_id == app_id,
-            or_(Repository.type == PLAYGROUND_MEDIA_REPO_TYPE, Repository.name.startswith(TEMP_REPO_PREFIX, autoescape=True)),
-        )
         stmt = (
             select(Silo)
             .options(joinedload(Silo.embedding_service))
@@ -312,7 +411,7 @@ class ChatOptionsRepository:
                 Silo.app_id == app_id,
                 Silo.is_frozen.is_(False),
                 Silo.embedding_service_id.is_not(None),
-                Silo.silo_id.not_in(temp),
+                SiloRepository.visible_clause(),  # the one definition of "temp"
             )
             .order_by(Silo.silo_id)
         )

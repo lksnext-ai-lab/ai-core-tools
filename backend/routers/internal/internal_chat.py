@@ -12,8 +12,9 @@ Turns (``/stream`` and ``/messages``) call ``prepare_turn`` BEFORE any response 
 real HTTP errors. Without ``conversation_id`` a turn creates the conversation (its id comes back in the ``metadata`` event / the sync
 response); a given id must be one of the caller's.
 """
+import contextlib
 import json
-from typing import Annotated, Any, AsyncGenerator, Callable, Coroutine, List, Optional
+from typing import Annotated, Any, AsyncGenerator, Awaitable, Callable, Coroutine, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -57,6 +58,26 @@ MAX_PAGE_SIZE = 100
 INVALID_SELECTION_MESSAGE = "Invalid selection"
 
 
+class _ClaimReleasingStreamingResponse(StreamingResponse):
+    """``StreamingResponse`` that always runs ``on_finish`` when the response ends, started or not.
+
+    A generator that never started (the client left before the first chunk, the server failed on response start)
+    never runs its own ``finally``, so the busy marker of the turn would stay set for the whole TTL. The ASGI call
+    is the one place that always runs, so the release is also tied to it. ``on_finish`` must be idempotent (the
+    generator's ``finally`` calls it too) and releases the claim synchronously before anything else.
+    """
+
+    def __init__(self, *args: Any, on_finish: Callable[[], Awaitable[None]], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._on_finish = on_finish
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self._on_finish()
+
+
 class _ChatRoute(APIRoute):
     """Map the application errors the Chat services raise to HTTP, once, for every route of this router."""
 
@@ -70,7 +91,9 @@ class _ChatRoute(APIRoute):
                 # Same body shape as the global ``ServiceRetiredError`` handler in ``main.py``
                 # (``detail`` + ``error_code``), so clients parse every Chat error alike.
                 return JSONResponse(
-                    status_code=exc.status_code, content={"detail": exc.message, "error_code": exc.error_code}
+                    status_code=exc.status_code,
+                    content={"detail": exc.message, "error_code": exc.error_code},
+                    headers=getattr(exc, "headers", None),  # e.g. Retry-After of CONVERSATION_BUSY
                 )
 
         return mapped
@@ -294,7 +317,7 @@ async def reset_conversation(app_id: int, conversation_id: int, auth_context: Au
         200: {"content": {"text/event-stream": {}}, "description": "SSE: metadata, token, tool_*, done, error"},
         403: {"description": "No access to the App, or the App is frozen"},
         404: {"description": "Conversation or selected resource not found"},
-        409: {"description": "A service used by the turn was retired"},
+        409: {"description": "A service used by the turn was retired, or CONVERSATION_BUSY (Retry-After)"},
         422: {"description": "Invalid selection, file_references or search_params"},
     },
 )
@@ -317,11 +340,30 @@ async def chat_stream(
     parsed_search_params = _parse_search_params(search_params)
     service = _service(db, auth_context, app_id, request)
     prepared = service.prepare_turn(app_id, chat_selection, conversation_id)
-    turn_conversation_id = prepared.conversation.conversation_id  # read once: the ORM object expires on commit
+    turn_conversation_id = prepared.conversation_id  # plain value (the ORM conversation expires on commit)
 
-    fms = FileManagementService()
+    # From here on the turn owns a claim on its conversation. ``finish`` is its ONLY release point: the failure path
+    # below, the generator's ``finally`` and the response wrapper all call it, whichever runs first wins.
+    fms: Optional[FileManagementService] = None
     file_refs: list = []
+    finished = False
+
+    async def finish(close_session: bool = True) -> None:
+        nonlocal finished
+        # FIRST statement, synchronous (a cancelled / aclose()d task must not await before it): give the
+        # conversation back, whatever ended the turn. Idempotent; it also retries a release that failed before.
+        service.release_turn(prepared.claim)
+        if finished:
+            return
+        finished = True
+        # Release the request DB session: get_db teardown runs too late for a StreamingResponse.
+        if close_session:
+            db.close()
+        if fms is not None:
+            await fms.cleanup_ephemeral_refs(file_refs)
+
     try:
+        fms = FileManagementService()
         file_refs = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,
@@ -343,7 +385,8 @@ async def chat_stream(
             on_turn_completed=prepared.on_turn_completed,
         )
     except BaseException:
-        await fms.cleanup_ephemeral_refs(file_refs)
+        # No response will exist: release, clean up (the session stays open for the discard; ``get_db`` closes it).
+        await finish(close_session=False)
         await service.discard_created_conversation(app_id, prepared)
         raise
 
@@ -351,19 +394,29 @@ async def chat_stream(
         completed = False
         pending_error: Optional[str] = None  # an ``error`` chunk is held back until the discard has run
         try:
-            async for chunk in guard_agent_stream(base_generator):
-                event_type = _sse_event_type(chunk)
-                if event_type is None and chunk.startswith(":"):
-                    yield chunk  # heartbeat: flows unchanged, the held error (if any) keeps waiting
-                    continue
-                if pending_error is not None:
-                    held, pending_error = pending_error, None
-                    yield held  # something follows the error: it was not the end of the turn
-                if event_type == "error":
-                    pending_error = chunk
-                    continue
-                completed = completed or event_type == "done"
-                yield chunk
+            # ``aclosing`` stops the guard's producer task (the running turn) deterministically when the client
+            # goes away, BEFORE the claim is released below, so a turn admitted right after cannot race the old
+            # turn's last checkpoint write. If that await is itself cancelled again, the ``finally`` still releases.
+            # Known residual window (documented, not closed): when the disconnect arrives as a level-triggered anyio
+            # cancellation, the awaits of this cleanup re-raise at once, so ``guarded.aclose()`` has already called
+            # ``producer.cancel()`` (synchronously, before its first await) but the producer may still be unwinding
+            # for a few event-loop iterations when the claim is released. Awaiting it under ``anyio.CancelScope(
+            # shield=True)`` would close it, at the price of a bounded stall inside a cancelled request; a turn
+            # admitted in that instant can race only the cancelled turn's last checkpoint write.
+            async with contextlib.aclosing(guard_agent_stream(base_generator)) as guarded:
+                async for chunk in guarded:
+                    event_type = _sse_event_type(chunk)
+                    if event_type is None and chunk.startswith(":"):
+                        yield chunk  # heartbeat: flows unchanged, the held error (if any) keeps waiting
+                        continue
+                    if pending_error is not None:
+                        held, pending_error = pending_error, None
+                        yield held  # something follows the error: it was not the end of the turn
+                    if event_type == "error":
+                        pending_error = chunk
+                        continue
+                    completed = completed or event_type == "done"
+                    yield chunk
             # The stream ended by itself on an error event with no answer: the first turn of a conversation this
             # request created failed. Drop the empty conversation (it re-checks that it is still empty) BEFORE the
             # error is delivered, so a client that hangs up on the first ``error`` event cannot leave it behind. A
@@ -373,18 +426,17 @@ async def chat_stream(
                     await service.discard_created_conversation(app_id, prepared)
                 yield pending_error
         finally:
-            # Release the request DB session: get_db teardown runs too late for a StreamingResponse.
-            db.close()
-            await fms.cleanup_ephemeral_refs(file_refs)
+            await finish()
 
     logger.info(
         "Chat stream app_id=%s conversation_id=%s user_id=%s", app_id, turn_conversation_id,
         prepared.user_context.get("user_id"),
     )
-    return StreamingResponse(
+    return _ClaimReleasingStreamingResponse(
         generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        on_finish=finish,
     )
 
 
@@ -395,7 +447,7 @@ async def chat_stream(
     responses={
         403: {"description": "No access to the App, or the App is frozen"},
         404: {"description": "Conversation or selected resource not found"},
-        409: {"description": "A service used by the turn was retired"},
+        409: {"description": "A service used by the turn was retired, or CONVERSATION_BUSY (Retry-After)"},
         422: {"description": "Invalid selection, file_references or search_params"},
         500: {"description": "Internal server error"},
     },
@@ -419,38 +471,46 @@ async def chat_message(
     parsed_search_params = _parse_search_params(search_params)
     service = _service(db, auth_context, app_id, request)
     prepared = service.prepare_turn(app_id, chat_selection, conversation_id)
-    turn_conversation_id = prepared.conversation.conversation_id  # read once: the ORM object expires on commit
+    turn_conversation_id = prepared.conversation_id  # plain value (the ORM conversation expires on commit)
 
-    fms = FileManagementService()
-    file_refs: list = []
-    try:
-        file_refs = await fms.resolve_chat_files(
-            files=files,
-            file_reference_ids=parsed_file_references,
-            agent_id=prepared.agent_id,
-            user_context=prepared.user_context,
-            conversation_id=turn_conversation_id,
-            has_memory=True,
-        )
-        result = await AgentExecutionService().execute_agent_chat_with_file_refs(
-            agent_id=prepared.agent_id,
-            message=message,
-            file_references=file_refs,
-            search_params=parsed_search_params,
-            user_context=prepared.user_context,
-            conversation_id=turn_conversation_id,
-            db=db,
-            channel=ApprovalChannel.INTERNAL_CHAT,
-            turn_config=prepared.turn_config,
-            on_turn_completed=prepared.on_turn_completed,
-        )
-    except BaseException:
-        await fms.cleanup_ephemeral_refs(file_refs)
-        file_refs = []
-        await service.discard_created_conversation(app_id, prepared)
-        raise
-    finally:
-        await fms.cleanup_ephemeral_refs(file_refs)
+    # ``turn_scope`` is the single owner of the claim: whatever ends this block releases it.
+    with service.turn_scope(prepared):
+        fms: Optional[FileManagementService] = None
+        file_refs: list = []
+        try:
+            fms = FileManagementService()
+            file_refs = await fms.resolve_chat_files(
+                files=files,
+                file_reference_ids=parsed_file_references,
+                agent_id=prepared.agent_id,
+                user_context=prepared.user_context,
+                conversation_id=turn_conversation_id,
+                has_memory=True,
+            )
+            result = await AgentExecutionService().execute_agent_chat_with_file_refs(
+                agent_id=prepared.agent_id,
+                message=message,
+                file_references=file_refs,
+                search_params=parsed_search_params,
+                user_context=prepared.user_context,
+                conversation_id=turn_conversation_id,
+                db=db,
+                channel=ApprovalChannel.INTERNAL_CHAT,
+                turn_config=prepared.turn_config,
+                on_turn_completed=prepared.on_turn_completed,
+            )
+            # Plain data (ids and names) read BEFORE the claim is released: the release commits and expires the
+            # session's ORM objects.
+            turn_config_summary = prepared.turn_config.to_client_summary()
+        except BaseException:
+            if fms is not None:
+                await fms.cleanup_ephemeral_refs(file_refs)
+            file_refs = []
+            await service.discard_created_conversation(app_id, prepared)
+            raise
+        finally:
+            if fms is not None:
+                await fms.cleanup_ephemeral_refs(file_refs)
 
     logger.info(
         "Chat message app_id=%s conversation_id=%s user_id=%s", app_id, turn_conversation_id,
@@ -461,7 +521,7 @@ async def chat_message(
         conversation_id=turn_conversation_id,
         metadata={
             "files_processed": (result.get("metadata") or {}).get("files_processed", 0),
-            "turn_config": prepared.turn_config.to_client_summary(),
+            "turn_config": turn_config_summary,
         },
         turn=result.get("turn"),
     )

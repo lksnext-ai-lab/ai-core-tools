@@ -552,7 +552,7 @@ async def get_available_chat_filter_fields(
     agent itself need not exist yet (e.g. this endpoint is also called while
     still creating a new agent, using the "new agent" sentinel agent_id=0).
     """
-    fields = agent_service.get_available_chat_filter_fields(db, tool_ids, silo_id)
+    fields = agent_service.get_available_chat_filter_fields(db, tool_ids, silo_id, app_id=app_id)
     return {"fields": fields}
 
 

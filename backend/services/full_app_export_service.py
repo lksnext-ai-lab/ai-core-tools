@@ -207,7 +207,7 @@ class FullAppExportService(BaseExportService):
         Returns:
             List of output parser export schemas
         """
-        parsers = self.app_repo.get_output_parsers_by_app_id(app_id)
+        parsers = self.app_repo.get_output_parsers_by_app_id(app_id, visible_only=True)
         logger.info(f"Found {len(parsers)} output parsers for app {app_id}")
         exported = []
         for parser in parsers:
@@ -259,7 +259,7 @@ class FullAppExportService(BaseExportService):
         Returns:
             List of silo export schemas
         """
-        silos = self.app_repo.get_silos_by_app_id(app_id)
+        silos = self.app_repo.get_silos_by_app_id(app_id, visible_only=True)
         logger.info(f"Found {len(silos)} silos for app {app_id}")
         exported = []
         for silo in silos:
@@ -286,7 +286,7 @@ class FullAppExportService(BaseExportService):
             List of repository export schemas
         """
         repositories = self.app_repo.get_repositories_by_app_id(
-            app_id
+            app_id, visible_only=True
         )
         logger.info(
             f"Found {len(repositories)} repositories "

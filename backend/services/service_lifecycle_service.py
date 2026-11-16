@@ -67,6 +67,7 @@ class LifecycleContext:
     agent_middlewares: Dict[int, List[int]] = field(default_factory=dict)
     agent_refs: Dict[int, AgentRefs] = field(default_factory=dict)
     app_default_sandbox_service_id: Optional[int] = None
+    app_default_embedding_service_id: Optional[int] = None
 
 
 class ServiceLifecycleService:
@@ -161,6 +162,7 @@ class ServiceLifecycleService:
                 SERVICE_KIND_SANDBOX: ServiceUsageRepository.sandbox_service_snapshots(db, app_id),
             },
             app_default_sandbox_service_id=ServiceUsageRepository.app_default_sandbox_service_id(db, app_id),
+            app_default_embedding_service_id=ServiceUsageRepository.app_default_embedding_service_id(db, app_id),
             silos=ServiceUsageRepository.silo_refs(db, app_id),
             middlewares=middlewares,
             agent_middlewares=(
@@ -246,6 +248,15 @@ class ServiceLifecycleService:
                 entries.append(entry(
                     ctx, SERVICE_KIND_SANDBOX, ctx.app_default_sandbox_service_id, "sandbox", "app default"))
         return ServiceLifecycleService._finish(entries)
+
+    @staticmethod
+    def warnings_for_app(ctx: LifecycleContext) -> List[ServiceLifecycleWarningSchema]:
+        """Warnings for the App-level defaults (the embedding service the Chat indexes attachments with)."""
+        return ServiceLifecycleService._finish([
+            ServiceLifecycleService._entry(
+                ctx, SERVICE_KIND_EMBEDDING, ctx.app_default_embedding_service_id, "embedding", "app default"
+            )
+        ])
 
     @staticmethod
     def warnings_for_silo(silo_id: Optional[int], ctx: LifecycleContext) -> List[ServiceLifecycleWarningSchema]:
@@ -352,6 +363,10 @@ class ServiceLifecycleService:
             agents, silos = q.embedding_agents(db, service_id, app_id), q.embedding_silos(db, service_id, app_id)
             repos, tasks = q.embedding_repositories(db, service_id, app_id), q.embedding_tasks(db, service_id, app_id)
             embedding_silo_ids = {s.silo_id for s in silos}
+            apps_default = [
+                ServiceUsageAppSchema(app_id=a.app_id, app_name=a.app_name)
+                for a in q.embedding_apps(db, service_id, app_id)
+            ]
 
         admin = app_id is None
 

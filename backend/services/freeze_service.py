@@ -8,6 +8,7 @@ from models.silo import Silo
 from models.skill import Skill
 from models.mcp_server import MCPServer
 from models.app_collaborator import AppCollaborator, CollaborationRole
+from repositories.silo_repository import SiloRepository
 from repositories.tier_config_repository import TierConfigRepository
 from repositories.subscription_repository import SubscriptionRepository
 from utils.logger import get_logger
@@ -70,7 +71,7 @@ class FreezeService:
 
             silos = (
                 db.query(Silo)
-                .filter(Silo.app_id == app.app_id)
+                .filter(Silo.app_id == app.app_id, SiloRepository.visible_clause())  # temp silos: never frozen
                 .order_by(Silo.create_date.desc())
                 .all()
             )
@@ -145,6 +146,8 @@ class FreezeService:
                 if model_cls is Agent:
                     # The hidden internal chat agent is never frozen (FR-13.2).
                     condition = and_(condition, Agent.visible_clause())
+                elif model_cls is Silo:
+                    condition = and_(condition, SiloRepository.visible_clause())  # temp silos: never frozen
                 resources = db.query(model_cls).filter(condition).order_by(model_cls.create_date.desc()).all()
                 _freeze_resources(resources, limit)
 

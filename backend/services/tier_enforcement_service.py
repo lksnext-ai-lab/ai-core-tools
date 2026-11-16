@@ -100,6 +100,10 @@ class TierEnforcementService:
         if resource_type == "agents":
             # FR-13.2: the hidden internal chat agent never counts against the tenant's agent quota.
             condition = and_(condition, Agent.visible_clause())
+        elif resource_type == "silos":
+            # The hidden temp silos of conversations (Chat / playground attachments) never count against the quota.
+            from repositories.silo_repository import SiloRepository
+            condition = and_(condition, SiloRepository.visible_clause())
         current_count = db.query(func.count(model_cls.__mapper__.primary_key[0])).filter(condition).scalar() or 0
 
         if current_count >= limit:

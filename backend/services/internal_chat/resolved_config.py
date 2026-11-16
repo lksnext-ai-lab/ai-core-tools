@@ -22,7 +22,7 @@ imported by ``tools.agentTools``).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from schemas.internal_chat_schemas import ChatSelectionWarning
 
@@ -63,10 +63,18 @@ class TurnDiagnostics:
     turns or users) and holds ids only.
     """
 
-    __slots__ = ("mcp_unavailable_ids",)
+    __slots__ = ("mcp_unavailable_ids", "before_model")
 
     def __init__(self) -> None:
         self.mcp_unavailable_ids: list[int] = []
+        # Set by the Chat service: called (synchronously, never raising) right before the model runs.
+        self.before_model: Callable[[], None] | None = None
+
+    def run_before_model(self) -> None:
+        """Run the ``before_model`` hook, if any (the execution / streaming services call this)."""
+        hook = self.before_model
+        if hook is not None:
+            hook()
 
     def reset(self) -> None:
         """Forget earlier reports (a retried agent build starts its MCP load afresh)."""

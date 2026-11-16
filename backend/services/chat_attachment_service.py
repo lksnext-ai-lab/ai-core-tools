@@ -6,12 +6,17 @@ validate ownership; this module only performs the upload (+ vectorization), list
 steps on top of ``FileManagementService`` and ``PlaygroundMediaService``. Responses keep the exact shape the
 playground has always returned.
 """
+import asyncio
 import os
-from typing import Any, Callable, Dict, List, Optional
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from db.database import SessionLocal
 from services.file_management_service import FileManagementService, FileReference
 from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 from utils.logger import get_logger
@@ -19,6 +24,53 @@ from utils.security import build_expiring_static_url, generate_signature
 from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
+
+# Worker threads of the Chat's attachment indexing. Dedicated and small on purpose: a provider that never answers can
+# park these threads (a thread cannot be killed), and that must not starve the default executor other code uses.
+_INDEXING_WORKERS = 4
+_indexing_executor: Optional[ThreadPoolExecutor] = None
+# Upper bound of the embedding work of one attachment (upload or file sent with a turn); on expiry the file is simply
+# not indexed and travels in the prompt instead.
+ATTACHMENT_INDEXING_TIMEOUT_SECONDS = 60
+# At most this many indexing jobs run at once per embedding service: one App's hung provider cannot take every worker
+# thread. Jobs beyond the cap are not indexed at once (rather than queued: a queued job would eat the same 60 s
+# budget and still end up not indexed, while blocking a worker slot others could use).
+MAX_INDEXING_JOBS_PER_SERVICE = 2
+_service_slots: Dict[int, threading.BoundedSemaphore] = {}
+_service_slots_lock = threading.Lock()
+
+
+def _slots_for(service_id: int) -> threading.BoundedSemaphore:
+    with _service_slots_lock:
+        return _service_slots.setdefault(service_id, threading.BoundedSemaphore(MAX_INDEXING_JOBS_PER_SERVICE))
+
+
+def shutdown_indexing_executor() -> None:
+    """App lifespan shutdown: do not wait for (possibly hung) provider calls, drop what was queued."""
+    global _indexing_executor
+    executor, _indexing_executor = _indexing_executor, None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _get_indexing_executor() -> ThreadPoolExecutor:
+    global _indexing_executor
+    if _indexing_executor is None:
+        _indexing_executor = ThreadPoolExecutor(max_workers=_INDEXING_WORKERS, thread_name_prefix="chat-indexing")
+    return _indexing_executor
+
+
+@contextmanager
+def open_indexing_session() -> Iterator[Session]:
+    """A DB session of its own for one indexing job (never the request's session, which is not thread-safe)."""
+    session = SessionLocal()
+    try:
+        yield session
+    except BaseException:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 class ChatAttachmentService:
@@ -71,6 +123,9 @@ class ChatAttachmentService:
         conversation_id: Optional[int],
         has_memory: bool,
         resolve_session_id: Callable[[], Optional[str]],
+        embedding_service_id: Optional[int] = None,
+        degrade_when_retired: bool = False,
+        index_timeout_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Store ``file`` and, for a persistent vectorizable one, index it into the conversation's temp silo.
 
@@ -78,6 +133,18 @@ class ChatAttachmentService:
         conversation after the caller validated its ownership (user + agent + App), so a caller cannot inject
         document content into another conversation's silo (IDOR). A retired embedding service discards the file
         and re-raises; any other indexing failure is logged and leaves ``vectorized`` false.
+
+        ``embedding_service_id`` (the Chat passes the App's active default) is the service a NEW temp silo is
+        created with; a conversation whose temp silo already exists keeps indexing with the service that silo was
+        created with, so a collection never mixes embedding models. With ``degrade_when_retired`` (the Chat, together
+        with ``index_timeout_seconds``) a retired service does not fail the upload: the file is kept and simply not
+        indexed (it goes in the prompt).
+
+        With ``index_timeout_seconds`` (the Chat) the indexing runs in a worker thread, on a database session opened
+        inside that thread, and is abandoned after the timeout: embedding clients have no timeout of their own and
+        run synchronously, so inline they would freeze every request of the worker. A timeout or any provider error
+        leaves ``vectorized`` false (the file stays and travels in the prompt); only the exception class is logged
+        (messages can carry document text). Without it (the playground, unchanged) the indexing runs inline.
 
         Returns:
             The upload response payload (``success``, ``file_id``, ``vectorized``, ...).
@@ -99,7 +166,16 @@ class ChatAttachmentService:
             and file_ref.content
         ):
             session_id = resolve_session_id()
-            if session_id:
+            if session_id and index_timeout_seconds is not None:
+                vectorized = await ChatAttachmentService._vectorize_in_worker(
+                    file_ref, app_id=app_id, agent_id=agent_id, session_id=session_id,
+                    embedding_service_id=embedding_service_id, timeout=index_timeout_seconds,
+                    degrade_when_retired=degrade_when_retired,
+                    on_retired=lambda: file_service.discard_uploaded_file(
+                        file_ref.file_id, agent_id, user_context, conversation_id
+                    ),
+                )
+            elif session_id:
                 try:
                     vectorized = PlaygroundMediaService.vectorize_uploaded_file(
                         app_id=app_id,
@@ -110,9 +186,12 @@ class ChatAttachmentService:
                         file_path=file_ref.file_path,
                         content=file_ref.content,
                         db=db,
+                        embedding_service_id=embedding_service_id,
                     )
                 except ServiceRetiredError:
-                    await file_service.discard_uploaded_file(file_ref.file_id, agent_id, user_context, conversation_id)
+                    await file_service.discard_uploaded_file(
+                        file_ref.file_id, agent_id, user_context, conversation_id
+                    )
                     raise
                 except Exception as vec_err:
                     logger.warning(f"File vectorization at upload failed: {vec_err}")
@@ -131,6 +210,80 @@ class ChatAttachmentService:
             "has_extractable_content": file_ref.has_extractable_content,
             "mime_type": file_ref.mime_type,
         }
+
+    @staticmethod
+    async def vectorize_in_worker(
+        *,
+        app_id: int,
+        agent_id: int,
+        session_id: str,
+        file_id: str,
+        filename: str,
+        file_path: Optional[str],
+        content: str,
+        embedding_service_id: Optional[int],
+        timeout: float = ATTACHMENT_INDEXING_TIMEOUT_SECONDS,
+    ) -> bool:
+        """Index one file in a worker thread (own session, plain values only) within ``timeout``; False on failure.
+
+        Never touches the caller's session. Retired service, provider error, timeout and "too many jobs for this
+        embedding service" all end in False (the file travels in the prompt); only exception classes are logged.
+        A timed-out job cannot be killed: it is abandoned and keeps its per-service slot until it returns.
+        """
+        def job() -> bool:
+            with open_indexing_session() as worker_db:
+                repo = PlaygroundMediaService.get_temp_repository(app_id, agent_id, session_id, worker_db)
+                key = (repo.silo.embedding_service_id if repo is not None and repo.silo is not None else None) \
+                    or embedding_service_id or 0
+                slots = _slots_for(key)
+                if not slots.acquire(blocking=False):
+                    logger.warning("Chat attachment not indexed: too many indexing jobs for embedding service %s", key)
+                    return False
+                try:
+                    return PlaygroundMediaService.vectorize_uploaded_file(
+                        app_id=app_id, agent_id=agent_id, session_id=session_id, file_id=file_id, filename=filename,
+                        file_path=file_path, content=content, db=worker_db, embedding_service_id=embedding_service_id,
+                    )
+                finally:
+                    slots.release()
+
+        loop = asyncio.get_running_loop()
+        try:
+            return bool(await asyncio.wait_for(loop.run_in_executor(_get_indexing_executor(), job), timeout))
+        except ServiceRetiredError:
+            logger.warning("Chat attachment not indexed: its embedding service is retired")
+            raise
+        except asyncio.TimeoutError:
+            logger.warning("Chat attachment not indexed: the embedding provider did not answer in %ss", timeout)
+            return False
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Chat attachment not indexed: indexing failed (%s)", type(exc).__name__)
+            return False
+
+    @staticmethod
+    async def _vectorize_in_worker(
+        file_ref: Any,
+        *,
+        app_id: int,
+        agent_id: int,
+        session_id: str,
+        embedding_service_id: Optional[int],
+        timeout: float,
+        degrade_when_retired: bool,
+        on_retired: Callable[[], Any],
+    ) -> bool:
+        """``vectorize_in_worker`` for an upload: a retired service degrades (Chat) or discards the file and raises."""
+        try:
+            return await ChatAttachmentService.vectorize_in_worker(
+                app_id=app_id, agent_id=agent_id, session_id=session_id, file_id=file_ref.file_id,
+                filename=file_ref.filename, file_path=file_ref.file_path, content=file_ref.content,
+                embedding_service_id=embedding_service_id, timeout=timeout,
+            )
+        except ServiceRetiredError:
+            if degrade_when_retired:
+                return False  # the failed transaction was the worker session's; the request's was not involved
+            await on_retired()
+            raise
 
     @staticmethod
     async def list_files(

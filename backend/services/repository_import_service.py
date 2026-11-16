@@ -6,8 +6,9 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from models.repository import Repository
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, Repository
 from models.silo import Silo
+from repositories.silo_repository import SiloRepository
 from models.embedding_service import EmbeddingService
 from models.output_parser import OutputParser
 from schemas.export_schemas import RepositoryExportFileSchema
@@ -28,6 +29,13 @@ REPO_BASE_FOLDER = os.path.abspath(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _importable_type(repo_type: Optional[str]) -> str:
+    """Repository type from an import file; the reserved temp type of conversation attachments is never importable."""
+    if not repo_type or repo_type == PLAYGROUND_MEDIA_REPO_TYPE:
+        return "UPLOAD"
+    return repo_type
 
 
 class RepositoryImportService:
@@ -99,6 +107,7 @@ class RepositoryImportService:
                         Silo.name
                         == export_data.repository.silo_name,
                         Silo.app_id == app_id,
+                        SiloRepository.visible_clause(),
                     )
                     .first()
                 )
@@ -210,7 +219,7 @@ class RepositoryImportService:
                 # Update existing repository
                 if silo_id:
                     existing.silo_id = silo_id
-                existing.type = export_data.repository.type
+                existing.type = _importable_type(export_data.repository.type)
 
                 self.session.add(existing)
                 self.session.commit()
@@ -235,7 +244,7 @@ class RepositoryImportService:
         # Create new repository
         new_repo = Repository(
             name=final_name,
-            type=export_data.repository.type or "UPLOAD",
+            type=_importable_type(export_data.repository.type),
             status="active",
             app_id=app_id,
             silo_id=silo_id,
@@ -312,6 +321,7 @@ class RepositoryImportService:
             .filter(
                 Silo.name == silo_name,
                 Silo.app_id == app_id,
+                SiloRepository.visible_clause(),
             )
             .first()
         )

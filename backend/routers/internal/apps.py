@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from db.database import get_db
 
 from services.app_service import AppService
+from services.service_lifecycle_service import ServiceLifecycleService
 from services.app_collaboration_service import AppCollaborationService
 
 from schemas.apps_schemas import (
@@ -662,6 +663,10 @@ async def get_app(
         enable_openai_api=app.enable_openai_api,
         onboarding_dismissed=app.onboarding_dismissed or False,
         default_sandbox_service_id=app.default_sandbox_service_id,
+        default_embedding_service_id=app.default_embedding_service_id,
+        lifecycle_warnings=ServiceLifecycleService.warnings_for_app(
+            ServiceLifecycleService.build_context(db, app_id)
+        ) if app.default_embedding_service_id is not None else [],
         **counts
     )
 
@@ -731,6 +736,7 @@ async def create_app(
         max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
         agent_cors_origins=app.agent_cors_origins,
         default_sandbox_service_id=app.default_sandbox_service_id,
+        default_embedding_service_id=app.default_embedding_service_id,
     )
 
 
@@ -745,24 +751,28 @@ async def update_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("administrator"))],
 ):
-    user_id = int(auth_context.identity.id)
-    app_service, collaboration_service = get_services(db)
+    # ``require_min_role("administrator")`` above is the whole permission rule: administrators and the owner can
+    # update the App's settings. Ownership, delete and collaborator management keep their own owner-only checks.
+    app_service, _ = get_services(db)
     app = app_service.get_app(app_id)
     if not app:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=APP_NOT_FOUND_MSG
         )
-    
-    if not collaboration_service.can_user_manage_app(user_id, app_id):
+
+    # The LangSmith key is a credential: only the OWNER role may change it (``App.owner_id`` or an accepted
+    # collaborator whose role is OWNER; the role dependency's own answer, omniadmins get no app-level bypass).
+    # Omitted, masked (what GET returns, sent back unchanged) and equal values keep the stored key for everybody;
+    # a different value or an explicit clear from a non-owner is refused before anything is written.
+    langsmith_key = app_data.langsmith_api_key
+    if "langsmith_api_key" not in app_data.model_fields_set or is_masked_key(langsmith_key):
+        langsmith_key = app.langsmith_api_key
+    if role != AppRole.OWNER and (langsmith_key or "") != (app.langsmith_api_key or ""):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only app owners can update apps"
+            detail="Only the app owner can change the LangSmith API key",
         )
-    
-    langsmith_key = app_data.langsmith_api_key
-    if is_masked_key(langsmith_key):
-        langsmith_key = app.langsmith_api_key
 
     langsmith_key_rotated = (langsmith_key or "") != (app.langsmith_api_key or "")
 
@@ -770,6 +780,11 @@ async def update_app(
         app_service.validate_default_sandbox_service(
             app_id, app_data.default_sandbox_service_id, app.default_sandbox_service_id
         )
+        set_embedding_default = "default_embedding_service_id" in app_data.model_fields_set
+        if set_embedding_default:
+            app_service.validate_default_embedding_service(
+                app_id, app_data.default_embedding_service_id, app.default_embedding_service_id
+            )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
@@ -783,6 +798,8 @@ async def update_app(
         'enable_openai_api': app_data.enable_openai_api,
         'default_sandbox_service_id': app_data.default_sandbox_service_id,
     }
+    if set_embedding_default:
+        update_dict['default_embedding_service_id'] = app_data.default_embedding_service_id
 
     updated_app = app_service.create_or_update_app(update_dict)
 
@@ -798,7 +815,7 @@ async def update_app(
         app_id=updated_app.app_id,
         name=updated_app.name,
         langsmith_api_key=mask_api_key(updated_app.langsmith_api_key),
-        user_role="owner",
+        user_role=getattr(role, "value", str(role)),
         created_at=updated_app.create_date,
         owner_id=updated_app.owner_id,
         owner_email=owner_email,
@@ -808,6 +825,7 @@ async def update_app(
         agent_cors_origins=updated_app.agent_cors_origins,
         enable_openai_api=updated_app.enable_openai_api,
         default_sandbox_service_id=updated_app.default_sandbox_service_id,
+        default_embedding_service_id=updated_app.default_embedding_service_id,
     )
 
 

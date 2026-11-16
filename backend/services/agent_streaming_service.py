@@ -43,7 +43,7 @@ from tools.streaming_utils import (
     SSE_TOKEN,
     SSE_HITL_INTERRUPT,
 )
-from services.agent_execution_context import TurnCompletedHook, is_chat_turn, tracing_kwargs
+from services.agent_execution_context import TurnCompletedHook, is_chat_turn, notify_before_model, tracing_kwargs
 from services.agent_execution_service import (
     finish_if_agent_unavailable,
     AgentExecutionService,
@@ -480,6 +480,7 @@ class AgentStreamingService:
                 # stream: astream uses the async checkpointer, not this session, so
                 # holding it across LLM I/O would exhaust the pool. ctx objects expire
                 # but stay attached, so _finalize_turn reloads them on demand.
+                notify_before_model(turn_config)  # Chat: renew the busy marker (committed just below)
                 if effective_db is not None:
                     effective_db.commit()
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Index, text
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -11,6 +11,11 @@ PLAYGROUND_MEDIA_REPO_TYPE = "playground_media"
 
 class Repository(Base):
     __tablename__ = 'Repository'
+    __table_args__ = (
+        # The "is this silo a hidden conversation temp silo?" lookup (SiloRepository.visible_clause / is_temp_silo):
+        # partial, so it only holds the temp repositories (one per conversation) and serves index-only scans.
+        Index('ix_Repository_silo_id_temp', 'silo_id', postgresql_where=text("type = 'playground_media'")),
+    )
     repository_id = Column(Integer, primary_key=True)
     name = Column(String(255))
     create_date = Column(DateTime, default=datetime.now)

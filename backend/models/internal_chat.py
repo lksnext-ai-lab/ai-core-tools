@@ -71,6 +71,11 @@ class ChatConversationState(Base):
     # Bumped by every reset of the conversation (under FOR UPDATE on this row). A turn that
     # captured an older value when it started must not persist anything when it completes.
     generation = Column(Integer, nullable=False, default=0, server_default='0')
+    # Compare-and-set "turn in flight" marker: a turn claims the row by setting a fresh
+    # busy_token and busy_until (expiry, so a crashed turn cannot block forever); a second
+    # turn finding an unexpired marker is rejected with 409. Rows are addressed by PK: no index.
+    busy_token = Column(UUID(as_uuid=True), nullable=True)
+    busy_until = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     __table_args__ = (Index('ix_chat_conversation_state_app_id', 'app_id'),)

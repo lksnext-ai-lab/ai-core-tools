@@ -197,6 +197,7 @@ class AgentImportService:
                 .filter(
                     Silo.name == export_data.agent.silo_name,
                     Silo.app_id == app_id,
+                    SiloRepository.visible_clause(),
                 )
                 .first()
             )
@@ -438,6 +439,7 @@ class AgentImportService:
             .filter(
                 Silo.name == name,
                 Silo.app_id == app_id,
+                SiloRepository.visible_clause(),
             )
             .first()
             is not None
@@ -624,6 +626,7 @@ class AgentImportService:
                     .filter(
                         Silo.name == silo_import_result.component_name,
                         Silo.app_id == app_id,
+                        SiloRepository.visible_clause(),
                     )
                     .first()
                 )
@@ -636,7 +639,7 @@ class AgentImportService:
         elif selected_silo_id:
             # User selected existing silo
             silo = SiloRepository.get_by_id(selected_silo_id, self.session)
-            if silo and silo.app_id == app_id:
+            if silo and silo.app_id == app_id and not SiloRepository.is_temp_silo(selected_silo_id, self.session):
                 silo_id = selected_silo_id
             else:
                 warnings.append(
@@ -649,6 +652,7 @@ class AgentImportService:
                 .filter(
                     Silo.name == export_data.agent.silo_name,
                     Silo.app_id == app_id,
+                    SiloRepository.visible_clause(),
                 )
                 .first()
             )
