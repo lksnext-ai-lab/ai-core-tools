@@ -21,11 +21,17 @@ from schemas.admin_schemas import (
     SetPlatformRoleRequest,
     SystemStatsResponse,
     TransferOwnerRequest,
+    UserDetailAPIKey,
+    UserDetailCollaboration,
+    UserDetailIdentity,
+    UserDetailOwnedApp,
     UserDetailResponse,
+    UserDetailUsage,
     UserListResponse,
 )
 from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
 from services.marketplace_quota_service import MarketplaceQuotaService
+from services.admin_user_detail_service import AdminUserDetailService
 from schemas.service_lifecycle_schemas import ServiceUsageSchema
 from services.service_lifecycle_service import ServiceLifecycleService
 from services.system_settings_service import SystemSettingsService
@@ -104,27 +110,65 @@ async def get_user(
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Get detailed user information"""
-    try:
-        user = UserService.get_user_by_id_with_relations(db, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
-        
-        return UserDetailResponse(
+    """Get explicitly selected user, app, collaboration, API-key, and usage metadata."""
+    detail = await run_in_threadpool(
+        AdminUserDetailService.get_user_detail,
+        db,
+        user_id,
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
+
+    user = detail.user
+    return UserDetailResponse(
+        identity=UserDetailIdentity(
             user_id=user.user_id,
             email=user.email,
             name=user.name,
-            created_at=user.created_at.isoformat(),
-            owned_apps_count=len(user.owned_apps) if user.owned_apps else 0,
-            api_keys_count=len(user.api_keys) if user.api_keys else 0,
+            created_at=user.create_date,
             is_active=user.is_active,
-            platform_role=user.platform_role or 'editor',
-            is_omniadmin=is_omniadmin(user.email),
+            auth_method=user.auth_method,
+            email_verified=user.email_verified,
+            platform_role=user.platform_role,
+            is_omniadmin=detail.is_omniadmin,
+        ),
+        owned_apps=[
+            UserDetailOwnedApp(
+                app_id=app.app_id,
+                name=app.name,
+                is_frozen=app.is_frozen,
+            )
+            for app in detail.owned_apps
+        ],
+        collaborations=[
+            UserDetailCollaboration(
+                app_id=collaboration.app_id,
+                app_name=collaboration.app_name,
+                role=collaboration.role.value,
+                status=collaboration.status.value,
+                invited_at=collaboration.invited_at,
+                accepted_at=collaboration.accepted_at,
+                is_frozen=collaboration.is_frozen,
+            )
+            for collaboration in detail.collaborations
+        ],
+        api_keys=[
+            UserDetailAPIKey(
+                key_id=api_key.key_id,
+                name=api_key.name,
+                app_id=api_key.app_id,
+                app_name=api_key.app_name,
+                is_active=api_key.is_active,
+                created_at=api_key.created_at,
+                last_used_at=api_key.last_used_at,
+            )
+            for api_key in detail.api_keys
+        ],
+        usage=UserDetailUsage(
+            call_count=detail.call_count,
+            billing_period_start=detail.billing_period_start,
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
+    )
 
 
 @router.delete(

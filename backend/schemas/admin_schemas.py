@@ -1,6 +1,7 @@
+from datetime import date, datetime
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserListResponse(BaseModel):
@@ -11,16 +12,71 @@ class UserListResponse(BaseModel):
     total_pages: int
 
 
-class UserDetailResponse(BaseModel):
+class UserDetailIdentity(BaseModel):
     user_id: int
-    email: str
+    email: Optional[str] = None
     name: Optional[str] = None
-    created_at: str
-    owned_apps_count: int
-    api_keys_count: int
+    created_at: Optional[datetime] = None
     is_active: bool
-    platform_role: str = 'editor'
+    auth_method: Optional[str] = None
+    email_verified: bool
+    platform_role: Optional[str] = None
     is_omniadmin: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserDetailOwnedApp(BaseModel):
+    app_id: int
+    name: Optional[str] = None
+    is_frozen: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserDetailCollaboration(BaseModel):
+    app_id: int
+    app_name: Optional[str] = None
+    role: str
+    status: str
+    invited_at: datetime
+    accepted_at: Optional[datetime] = None
+    is_frozen: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserDetailAPIKey(BaseModel):
+    key_id: int
+    name: str
+    app_id: int
+    app_name: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserDetailUsage(BaseModel):
+    """System LLM calls recorded for the user during the billing period."""
+
+    call_count: int = Field(
+        description="System LLM calls recorded for this user during this billing period."
+    )
+    billing_period_start: date
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserDetailResponse(BaseModel):
+    identity: UserDetailIdentity
+    owned_apps: List[UserDetailOwnedApp]
+    collaborations: List[UserDetailCollaboration]
+    api_keys: List[UserDetailAPIKey]
+    usage: UserDetailUsage
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SetPlatformRoleRequest(BaseModel):

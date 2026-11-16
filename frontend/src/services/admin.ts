@@ -25,6 +25,60 @@ export interface User {
   readonly platform_role?: 'viewer' | 'editor' | 'admin';
 }
 
+export interface UserDetailIdentity {
+  readonly user_id: number;
+  readonly email: string | null;
+  readonly name: string | null;
+  readonly created_at: string | null;
+  readonly is_active: boolean;
+  readonly auth_method: string | null;
+  readonly email_verified: boolean;
+  readonly platform_role: string | null;
+  readonly is_omniadmin: boolean;
+}
+
+export interface UserDetailOwnedApp {
+  readonly app_id: number;
+  readonly name: string | null;
+  readonly is_frozen: boolean;
+}
+
+export interface UserDetailCollaboration {
+  readonly app_id: number;
+  readonly app_name: string | null;
+  readonly role: string;
+  readonly status: string;
+  readonly invited_at: string;
+  readonly accepted_at: string | null;
+  readonly is_frozen: boolean;
+}
+
+/** Secret-free API-key metadata returned by the admin user-detail endpoint. */
+export interface UserDetailApiKey {
+  readonly key_id: number;
+  readonly name: string;
+  readonly app_id: number;
+  readonly app_name: string | null;
+  readonly is_active: boolean;
+  readonly created_at: string;
+  readonly last_used_at: string | null;
+}
+
+export interface UserDetailUsage {
+  /** System LLM calls recorded for the user during this billing period. */
+  readonly call_count: number;
+  readonly billing_period_start: string;
+}
+
+/** Expanded response from GET /internal/admin/users/{user_id}. */
+export interface UserDetail {
+  readonly identity: UserDetailIdentity;
+  readonly owned_apps: UserDetailOwnedApp[];
+  readonly collaborations: UserDetailCollaboration[];
+  readonly api_keys: UserDetailApiKey[];
+  readonly usage: UserDetailUsage;
+}
+
 export interface UserListResponse {
   readonly users: User[];
   readonly total: number;
@@ -100,7 +154,7 @@ class AdminService {
     return await apiService.request(`${this.baseUrl}/users?${params}`);
   }
 
-  async getUser(userId: number): Promise<User> {
+  async getUser(userId: number): Promise<UserDetail> {
     return await apiService.request(`${this.baseUrl}/users/${userId}`);
   }
 
