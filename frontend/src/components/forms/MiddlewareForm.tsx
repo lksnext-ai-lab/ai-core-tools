@@ -515,7 +515,7 @@ function MiddlewareForm({ middleware, appId, onSubmit, onCancel, onDirtyChange }
             </div>
             <div>
               <FormField id="mw-trim" type="number" label={t('middlewareForm.summarization.maxTokens')} min={500} step={500}
-                value={config.trim_tokens ?? ''} placeholder={t('middlewareForm.summarization.noLimit')} ariaDescribedBy="mw-sum-help"
+                value={config.trim_tokens ?? ''} placeholder={t('middlewareForm.summarization.autoLimit')} ariaDescribedBy="mw-sum-help"
                 onChange={(e) => patch({ trim_tokens: optionalNumberValue(e.target.value) })} disabled={isSubmitting}
                 error={fieldErrors.trim_tokens} />
             </div>

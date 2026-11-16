@@ -632,7 +632,7 @@
       "automatic": "Automático",
       "keepMessages": "Mensajes recientes que se conservarán",
       "maxTokens": "Máximo de tokens que se resumirán",
-      "noLimit": "Sin límite",
+      "autoLimit": "Automático (ventana de contexto del modelo)",
       "help": "Deja el umbral vacío para resumir al alcanzar el 85 % de la ventana de contexto del modelo (hasta 150.000 tokens). Deja vacío el último campo para resumir todo el historial anterior. Los agentes con memoria que no tengan un middleware de resumen usarán estos mismos valores predeterminados."
     },
     "pii": {

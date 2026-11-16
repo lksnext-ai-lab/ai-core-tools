@@ -632,7 +632,7 @@
       "automatic": "Automatic",
       "keepMessages": "Recent messages to keep",
       "maxTokens": "Max tokens to summarize",
-      "noLimit": "No limit",
+      "autoLimit": "Automatic (model context window)",
       "help": "Leave the trigger empty to summarize at 85% of the model's context window (at most 150,000 tokens), and the last field empty to summarize the whole older history. Agents with memory and no summarization middleware use these same defaults."
     },
     "pii": {
