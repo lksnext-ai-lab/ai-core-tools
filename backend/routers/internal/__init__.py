@@ -20,6 +20,8 @@ from .marketplace_scheduled_tasks import router as marketplace_scheduled_tasks_r
 from .sharepoint import router as sharepoint_router
 from .metrics import router as metrics_router
 from .approvals import approvals_router
+from .scim_connections import router as scim_connections_router
+from .scim_group_rules import router as scim_group_rules_router
 
 # CSRF double-submit is internal-only; public/v1 and mcp/v1 use API-key auth.
 internal_router = APIRouter(dependencies=[Depends(enforce_csrf)])
@@ -35,12 +37,20 @@ internal_router.include_router(
     dependencies=[Depends(require_editor_for_writes)],
 )
 internal_router.include_router(admin_router, prefix="/admin")
+internal_router.include_router(
+    scim_connections_router,
+    prefix="/admin/scim-connections",
+)
 internal_router.include_router(version_router, prefix="/version")
 internal_router.include_router(apps_usage_router, prefix="/usage-stats")
 internal_router.include_router(conversations_router)
 internal_router.include_router(approvals_router, prefix="/approvals")
 internal_router.include_router(auth_router, prefix="/auth")
 internal_router.include_router(user_router)
+internal_router.include_router(
+    scim_group_rules_router,
+    prefix="/apps/{app_id}/scim-group-rules",
+)
 internal_router.include_router(marketplace_scheduled_tasks_router)
 internal_router.include_router(marketplace_router)
 internal_router.include_router(config_router)

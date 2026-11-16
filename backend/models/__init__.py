@@ -40,6 +40,7 @@ from .refresh_token import RefreshToken
 from .scheduled_task import ScheduledTask, ScheduledTaskRun
 from .a2a_context_link import A2AContextLink
 from .output_delivery import OutputArtifact, OutputDestination, ScheduledTaskOutputBinding, OutputDelivery, OutputDeliveryAttempt
+from .oidc_identity_link import OIDCIdentityLink
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -64,4 +65,5 @@ __all__ = [
     'AgentExecutionEvent',
     'AgentToolCall',
     'A2AContextLink',
+    'OIDCIdentityLink',
 ]

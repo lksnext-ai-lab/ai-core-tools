@@ -56,6 +56,7 @@ from routers.internal import internal_router
 from routers.public.v1 import public_v1_router
 from routers.mcp import mcp_router
 from routers.a2a_server import a2a_router
+from routers.scim import router as scim_router
 from utils.provider import initialize_provider, shutdown_provider, get_provider
 from lks_idprovider_fastapi.dependencies import get_default_provider
 
@@ -405,6 +406,7 @@ async def _service_retired_handler(_request: Request, exc: ServiceRetiredError) 
 app.include_router(internal_router, prefix="/internal")
 app.include_router(public_v1_router, prefix="/public/v1")
 app.include_router(mcp_router, prefix="/mcp/v1", tags=["MCP"])
+app.include_router(scim_router, prefix="/scim/v2")
 # A2A (step_017, AD-14): mounted at root -- its routes carry their own
 # absolute paths (/a2a/v1/... and the root /.well-known/agent-card.json).
 app.include_router(a2a_router)

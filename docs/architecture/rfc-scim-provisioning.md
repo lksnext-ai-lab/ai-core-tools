@@ -4,9 +4,14 @@
 
 ## Overview
 
-This document proposes a provider-neutral SCIM 2.0 service for provisioning users and groups into Mattin AI, while keeping interactive login through OIDC separate. The first interoperability profile to validate is Microsoft Entra; other SCIM 2.0 clients, including Keycloak with an outbound SCIM extension, should use the same API. This is a proposed design; SCIM provisioning is not implemented yet.
+This document describes the provider-neutral SCIM 2.0 service for provisioning users and groups into Mattin AI, while keeping interactive login through OIDC separate. Microsoft Entra and Keycloak outbound SCIM clients use the same connection-scoped API. For the concrete Keycloak setup, see the [Keycloak outbound SCIM guide](../guides/scim-keycloak.md).
 
 ## Status and scope
+
+The provider-neutral SCIM user and group API, static bearer connections, OIDC
+identity links, and Keycloak outbound interoperability profile are implemented.
+The operational setup and validation procedure is maintained in the
+[Keycloak outbound SCIM guide](../guides/scim-keycloak.md).
 
 ### Initial scope
 
@@ -39,7 +44,7 @@ This document proposes a provider-neutral SCIM 2.0 service for provisioning user
 3. **Every independently provisioned external directory has a `ProvisioningConnection`.** The connection is the isolation boundary for external users, groups, credentials, and policies. One connection may serve several Mattin apps; each app is associated with at most one connection in release one.
 4. **Identity matching uses the connection and the stable external identifier supplied by that source.** Email, username, and provider-specific aliases remain profile/login attributes, not identity keys.
 5. **JIT is permitted.** An OIDC login can create a basic Mattin account before SCIM runs. The account receives no group- or manager-derived app permissions until the corresponding SCIM data and policies exist.
-6. **No automatic cross-connection account linking.** Each external identity maps to a separate local `User`. The existing global `User.email` uniqueness constraint remains; a collision is rejected for administrative resolution rather than linking or merging accounts.
+6. **Connection and externalId remain canonical.** SCIM may use an email as a one-time bootstrap reconciliation hint when exactly one unlinked local `User` has that email. It must not link a user that already has an external identity from another connection (or a conflicting identity in the same connection); ambiguous and conflicting mappings remain `409` responses. No accounts are merged, and groups and authorization are unaffected.
 7. **Only users and groups in the source system's configured SCIM scope are synchronized.** The source administrator selects the users/groups to provision; enabling SCIM does not import the whole directory by itself.
 8. **Group permissions are explicit and managed by an authorized user.** The app owner (or an accepted app administrator) can map groups from their connected source to apps they manage. A manager may manage access only if Mattin explicitly grants that capability; manager-derived `VIEWER` access alone does not grant policy-management rights.
 9. **Manager permissions are direct-report only, connection-scoped, and read-only.** The policy grants `VIEWER` on apps owned by direct reports in the same connection.
@@ -67,7 +72,7 @@ This document proposes a provider-neutral SCIM 2.0 service for provisioning user
 5. **The source SCIM client** later sends the resource with the identifier mapped to the same external identity.
 6. **Mattin's SCIM service** finds the existing identity under the same connection and updates its linked `User`, memberships, and optional manager reference without creating a duplicate account.
 
-If OIDC and SCIM use different identifiers, issuers, or source systems, Mattin must not auto-link accounts by email alone. Linking requires an explicit trusted mapping or an administrator reconciliation flow.
+If OIDC and SCIM use different identifiers, issuers, or source systems, SCIM may bootstrap-link only an otherwise unlinked local user when the email matches exactly one account. Existing external identities still require the stable connection-scoped mapping; explicit OIDC identity links remain available for reviewed overrides.
 
 ### Group permission change
 
@@ -91,9 +96,12 @@ The models below are proposed. `User`, `App`, and `AppCollaborator` remain the e
 
 Do not add provider-specific profile columns such as `department`, `job_title`, `office_location`, or `user_type` to `User`. Keep externally provisioned attributes on `UserExternalIdentity`, which represents the identity and profile synchronized from a particular source connection.
 
-Keep the current global uniqueness constraint on `User.email`, reflecting the expectation that work email addresses are unique. OIDC and SCIM must resolve identities by connection and stable external identifier, never by email. In the exceptional case that a new identity's email is already used by another Mattin user, reject provisioning/login with an actionable conflict; do not auto-link or merge the accounts.
+Keep the current global uniqueness constraint on `User.email`, reflecting the expectation that work email addresses are unique. Connection plus stable external identifier is the canonical SCIM identity. During SCIM provisioning only, an email may bootstrap-link exactly one local user that has no external identity; an ambiguous email or an email belonging to a user already linked to another identity remains an actionable conflict. Do not merge accounts.
 
-Each external identity maps to its own local `User`; identities from different provisioning connections are never automatically linked. If the same email is present in two connections, the global uniqueness constraint prevents creating both accounts until an administrator resolves the collision.
+Each external identity maps to one local `User`; identities from different
+provisioning connections are never automatically linked to a user that already
+has an external identity. A unique email match may bootstrap-link an otherwise
+unlinked local user, while an ambiguous or already-linked match is rejected.
 
 ### New `ProvisioningConnection` model
 
@@ -256,13 +264,20 @@ The current OIDC configuration is Entra-specific: it has one `ENTRA_TENANT_ID` s
 3. **Mattin** resolves the associated provisioning connection using its configured OIDC-to-SCIM identity mapping and looks up `UserExternalIdentity` by `(connection_id, external_id)`.
 4. If found, **Mattin** uses its linked local `User` and checks active status.
 5. If not found and JIT is enabled, **Mattin** creates a separate local `User` and its `UserExternalIdentity` in one transaction using the verified claims.
-6. If another connection has a user with the same email, **Mattin does not auto-link or merge accounts**. The global email uniqueness constraint prevents creating a second local user; Mattin rejects the attempt for administrator resolution. This is an exceptional conflict, not the expected onboarding path.
+6. If another connection has a user with the same email, SCIM may reuse that
+local user only when it has no external identity. A user already linked to
+another connection or external ID is a mapping conflict; Mattin does not merge
+accounts.
 
 SCIM matches by `(connection_id, externalId)`. OIDC may resolve that same identity only when the configured mapping proves that the verified issuer/subject corresponds to the SCIM external identifier. A SCIM create/update first searches by `externalId`; on a match it updates the linked user, including an email change if the new email is not already in use. It must not create another local user merely because the username or email changed.
 
 ### Existing-account migration
 
-Before enabling SCIM, developers and deployment administrators inventory existing OIDC-created `User` records and determine which connection owns each account. Existing users are linked to external identities only through a verified stable identifier or an explicit reviewed reconciliation. A matching email alone is not sufficient proof to merge identities.
+Before enabling SCIM, developers and deployment administrators inventory existing
+OIDC-created `User` records and determine which connection owns each account. An
+exact email match can bootstrap-link only an unlinked local user; existing
+identities still require a verified stable identifier or an explicit reviewed
+reconciliation. No identities are merged.
 
 ### Deactivation behavior
 
@@ -346,7 +361,7 @@ The authentication endpoint, when OAuth mode is selected, and the SCIM resource 
 #### User create, update, and login
 
 - For SCIM user creation or lookup, **Mattin** matches by `(connection_id, external_id)`. On first creation, the service creates the local `User` and its `UserExternalIdentity` together; on subsequent updates, it updates those linked records rather than creating another account.
-- The service checks the global uniqueness of `User.email`. A rare email conflict fails the transaction and returns an actionable conflict; it never links the identity to the user who already has that email. If the email changes and is unused, the service updates it on the already matched user.
+- The service checks the global uniqueness of `User.email`. When no SCIM identity exists yet, an exact email match may bootstrap-link one otherwise unlinked local `User`; an ambiguous match or a user already linked to an external identity remains an actionable conflict. If the email changes and is unused, the service updates it on the already matched user.
 - For OIDC login, **the identity provider** validates the sign-in token and **Mattin** resolves a provisioning connection only through its configured issuer/claim mapping. If there is no SCIM-created identity and JIT is enabled, Mattin creates the local user and external identity in one transaction. Login must not fall back to email-only identity linking.
 - The current `get_current_user_oidc` flow enriches the authentication context by looking up or creating a local user by email. The initial Entra OIDC profile must replace that lookup with the configured tenant/object-ID resolution above, while still enriching the authenticated context with Mattin's local `User.user_id` for existing authorization dependencies.
 
@@ -377,7 +392,11 @@ The existing implementation places OIDC account enrichment in `routers/internal/
 
 **Developers** add `ProvisioningConnection`, `UserExternalIdentity` (including `department`), `ExternalGroup`, `ExternalGroupMembership`, and `GroupAppAccessRule`; replace global OIDC email resolution with configured issuer/claim mapping and external-ID resolution while retaining the global email uniqueness constraint; implement safe collision handling and OIDC/SCIM linking; and add Alembic upgrade/downgrade for the new tables. No provider or connection FK is added to `App`.
 
-**Exit gate:** OIDC-first and SCIM-first tests converge on exactly one local user when an explicit identity mapping exists; an email collision across connections is rejected without creating or linking a user; one connection cannot see or affect another connection's identity, group, app policy, or credential.
+**Exit gate:** OIDC-first and SCIM-first tests converge on exactly one local user
+when the stable mapping exists or when a unique email safely bootstraps an
+unlinked account; ambiguous and already-linked email collisions are rejected;
+one connection cannot see or affect another connection's identity, group, app
+policy, or credential.
 
 ### Phase 2 — SCIM user endpoints
 
@@ -410,16 +429,18 @@ Validate Entra and Keycloak as separate client profiles before describing both a
 
 - SCIM `POST` retries do not create duplicate users, groups, or memberships.
 - User queries find resources by the configured matching attributes and return SCIM `ListResponse` with correct pagination.
-- OIDC-first and SCIM-first ordering links the same external identity to one local user only when an explicit trusted mapping is configured.
+- OIDC-first and SCIM-first ordering links the same external identity through an explicit mapping or, for SCIM provisioning only, a unique email bootstrap match to an otherwise unlinked local user.
 - Email or username changes do not create a new account or detach the external identity.
-- A different external ID using an existing email is not silently linked.
-- The same email in two provisioning connections triggers a safe, actionable conflict; Mattin does not create a duplicate user or link the identities.
+- A different external ID using an existing email may be linked only during SCIM provisioning when the email identifies exactly one local user with no external identity; OIDC login never uses email-only linking.
+- The same email in two provisioning connections reuses an unlinked local user
+  only for the first safe bootstrap match; a user already linked to an external
+  identity produces a safe, actionable conflict.
 - A credential for one connection cannot read, change, or delete users/groups belonging to another connection.
 - A user cannot create or change a group access rule using a group from a connection different from their own linked identity.
 - Apps have no provider or connection FK; group-policy management is authorized through the app owner/administrator and that user's linked identity.
 - Manager lookup and inherited access cannot cross provisioning connections.
 - OIDC rejects unconfigured issuers and never links identities through email alone.
-- Email alone never links an OIDC or SCIM identity to a local account.
+- SCIM email bootstrap never links an OIDC identity during login, never crosses an existing external identity, and rejects ambiguous matches.
 - `active=false` blocks access; reactivation restores eligible access without recreating the user.
 - Group add/remove and group deprovision update effective access correctly and idempotently.
 - A group rule grants only the configured role on the configured app.
