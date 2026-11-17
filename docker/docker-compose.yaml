@@ -207,6 +207,23 @@ services:
       SANDBOX_IDLE_TIMEOUT_S: ${SANDBOX_IDLE_TIMEOUT_S:-120}
       SANDBOX_REAPER_INTERVAL_S: ${SANDBOX_REAPER_INTERVAL_S:-30}
       SANDBOX_MAX_EXECUTIONS_PER_TURN: ${SANDBOX_MAX_EXECUTIONS_PER_TURN:-5}
+      # Max output files pulled from a sandbox per turn (0 = unlimited).
+      SANDBOX_PULL_MAX_FILES: ${SANDBOX_PULL_MAX_FILES:-20}
+      # Max size of one pulled output file in bytes (0 = unlimited).
+      SANDBOX_PULL_MAX_FILE_BYTES: ${SANDBOX_PULL_MAX_FILE_BYTES:-52428800}
+      # Max total bytes pulled per turn (0 = unlimited).
+      SANDBOX_PULL_MAX_TOTAL_BYTES: ${SANDBOX_PULL_MAX_TOTAL_BYTES:-104857600}
+      # Overall time budget of one turn's output pull, seconds.
+      SANDBOX_PULL_TIME_BUDGET_S: ${SANDBOX_PULL_TIME_BUDGET_S:-20}
+      # Output pulls allowed to run at once, process-wide.
+      SANDBOX_PULL_MAX_CONCURRENT: ${SANDBOX_PULL_MAX_CONCURRENT:-2}
+      # Live sandbox sessions per user, App Chat only (0 = unlimited).
+      SANDBOX_MAX_SESSIONS_PER_USER: ${SANDBOX_MAX_SESSIONS_PER_USER:-3}
+      # Live sandbox sessions per App, App Chat only (0 = unlimited).
+      SANDBOX_MAX_SESSIONS_PER_APP: ${SANDBOX_MAX_SESSIONS_PER_APP:-10}
+      # App Chat only: ceiling of one Bash call, seconds.
+      SANDBOX_CHAT_BASH_MAX_TIMEOUT_S: ${SANDBOX_CHAT_BASH_MAX_TIMEOUT_S:-60}
+      SANDBOX_EVICT_MIN_IDLE_S: ${SANDBOX_EVICT_MIN_IDLE_S:-60}
       OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE: ${OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE:-4}
       OPENSANDBOX_SUPPORTED_LANGUAGES: ${OPENSANDBOX_SUPPORTED_LANGUAGES:-python,bash}
     volumes:
@@ -278,21 +295,58 @@ services:
   # is enough in any environment, no need to build locally. `build:` below
   # stays only as a local-dev override (`--build`).
   #
-  # Network topology (security-relevant — see sandbox.toml [docker] comment):
-  # This service is dual-homed on purpose:
-  #   - mattin-network: lets `backend` reach opensandbox:8080 to create/manage
-  #     sandboxes.
-  #   - sandbox-workloads: the network spawned sandbox containers run on
-  #     (sandbox.toml [docker].network_mode). The opensandbox server needs to
-  #     be reachable from that network too because it proxies exec/file
-  #     operations into the sandbox containers (use_server_proxy=true in
-  #     backend/tools/sandbox/opensandbox_provider.py).
-  # Spawned sandbox containers themselves are NOT attached to mattin-network,
-  # so LLM-run code inside a sandbox has no route to backend, postgres,
-  # qdrant, caddy, or frontend — only to the opensandbox server on
-  # sandbox-workloads, plus whatever the Docker socket mount lets the
-  # *server* do (not the sandbox itself).
+  # SECURITY — read before changing anything here (see also sandbox.toml).
+  # Spawned sandbox containers run untrusted (LLM-generated) code. Topology:
+  #   - mattin-network: where `backend` reaches the control-plane API
+  #     (opensandbox:8080). The API listens ONLY on this address
+  #     (docker/opensandbox/entrypoint.py) and requires OPENSANDBOX_API_KEY.
+  #   - sandbox-workloads: the network the spawned sandboxes run on. The server
+  #     is attached to it only so it can proxy exec/file calls INTO the
+  #     sandboxes (use_server_proxy=true in opensandbox_provider.py); it does
+  #     not listen there, so code in a sandbox cannot call the control plane
+  #     (list/create/delete sandboxes, nor the API-key-exempt
+  #     /sandboxes/{id}/proxy route that reaches other sandboxes' exec daemons).
+  #   - EGRESS (default: ALLOWED, so skills can `pip install`). In the default
+  #     mode sandbox code can reach: the internet; the Docker host through the
+  #     bridge gateway IP (every host service listening on 0.0.0.0; published
+  #     container ports such as 5432/5433 included); the LAN / RFC1918 ranges;
+  #     and the exec daemon (:44772, unauthenticated) of every other sandbox on
+  #     the same network. It still cannot reach the control-plane API.
+  #     Mitigations, in order: (1) hardened mode, deny egress and host access:
+  #       docker compose -f docker-compose.yaml -f docker-compose.sandbox-hardened.yaml \
+  #         --profile opensandbox up -d     (Docker Engine >= 28; breaks pip install)
+  #     (2) host firewall (DOCKER-USER) rules, see docker/README.md; (3) one
+  #     OpenSandbox server per trust boundary (own SANDBOX_NETWORK_NAME).
+  #   - Sandbox-to-sandbox exec-daemon access is NOT closed in any mode (the
+  #     server needs the same L2 path; icc=false would cut it). Closing it needs
+  #     an upstream per-sandbox exec-daemon token (execd supports
+  #     X-EXECD-ACCESS-TOKEN, opensandbox-server 0.1.11 never sets it).
+  #     Accepted risk: users whose code runs on the same server can read and
+  #     tamper with each other's sandboxes.
+  #   - NEVER publish port 8080 of this service on the host: a host published
+  #     port is reachable from sandboxes through the gateway in the default mode.
+  #   - The Docker socket is mounted here (root-equivalent on the host), so the
+  #     control plane must stay unreachable from sandboxes: that is what the
+  #     points above guarantee.
+  # The service REFUSES TO START without OPENSANDBOX_API_KEY: the preflight
+  # service makes `docker compose --profile opensandbox up` fail with a clear
+  # message and entrypoint.py re-checks. OPENSANDBOX_INSECURE_SERVER=YES is a
+  # dev-only override, off by default.
   # ---------------------------------------------------------------------------
+  opensandbox-preflight:
+    image: ghcr.io/lksnext-ai-lab/mattinai-opensandbox-server:${IMAGE_TAG:-develop}
+    entrypoint: ["/usr/local/bin/opensandbox-entrypoint", "--check"]
+    environment:
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+      OPENSANDBOX_INSECURE_SERVER: ${OPENSANDBOX_INSECURE_SERVER:-}
+      OPENSANDBOX_ALLOW_INSECURE_DEV: ${OPENSANDBOX_ALLOW_INSECURE_DEV:-}
+      OPENSANDBOX_LOG_LEVEL: ${OPENSANDBOX_LOG_LEVEL:-INFO}
+      SANDBOX_NETWORK_NAME: ${SANDBOX_NETWORK_NAME:-docker_sandbox-workloads}
+    network_mode: none
+    restart: "no"
+    profiles:
+      - opensandbox
+
   opensandbox:
     image: ghcr.io/lksnext-ai-lab/mattinai-opensandbox-server:${IMAGE_TAG:-develop}
     build:
@@ -304,9 +358,19 @@ services:
     environment:
       SANDBOX_CONFIG_PATH: /etc/opensandbox/sandbox.toml
       DOCKER_HOST: unix:///var/run/docker.sock
-      # The OpenSandbox server has no API key in the checked-in local config.
-      # It is only reachable on the internal Compose network.
-      OPENSANDBOX_INSECURE_SERVER: ${OPENSANDBOX_INSECURE_SERVER:-YES}
+      # Required: entrypoint.py refuses to start with an empty key.
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:-}
+      # Dev-only, OFF by default: YES tolerates an empty OPENSANDBOX_API_KEY.
+      OPENSANDBOX_INSECURE_SERVER: ${OPENSANDBOX_INSECURE_SERVER:-}
+      # Also required to run without a key (see entrypoint.py); dev only.
+      OPENSANDBOX_ALLOW_INSECURE_DEV: ${OPENSANDBOX_ALLOW_INSECURE_DEV:-}
+      OPENSANDBOX_LOG_LEVEL: ${OPENSANDBOX_LOG_LEVEL:-INFO}
+      # Rendered into sandbox.toml [docker].network_mode; must equal the
+      # `name:` of the sandbox-workloads network below.
+      SANDBOX_NETWORK_NAME: ${SANDBOX_NETWORK_NAME:-docker_sandbox-workloads}
+    depends_on:
+      opensandbox-preflight:
+        condition: service_completed_successfully
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./opensandbox/sandbox.toml:/etc/opensandbox/sandbox.toml:ro
@@ -316,6 +380,12 @@ services:
     networks:
       - mattin-network
       - sandbox-workloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://$$(cat /run/opensandbox/bind_host):8080/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
     profiles:
       - opensandbox
@@ -414,20 +484,22 @@ networks:
     driver: bridge
   # Isolated network for spawned OpenSandbox sandbox containers (the ones that
   # actually run LLM-generated code). It carries no route to backend,
-  # postgres, qdrant, caddy, or frontend — only opensandbox itself is
-  # dual-homed onto it (see opensandbox service comment above), so the
-  # server-proxy exec/file path keeps working while code running inside a
-  # sandbox can't reach app or data services on mattin-network.
-  # Referenced from docker/opensandbox/sandbox.toml as
-  # "docker_sandbox-workloads" ("docker" is this Compose project's default
-  # name, i.e. this directory's basename; see that file's [docker] comment).
+  # postgres, qdrant, caddy, or frontend. Only opensandbox itself is
+  # dual-homed onto it (see opensandbox service comment above) so its
+  # server-proxy exec/file path works; the server does NOT listen on this
+  # network (entrypoint.py binds the API to its mattin-network address), so
+  # sandbox code cannot reach the control plane.
+  # The network name is rendered into sandbox.toml [docker].network_mode by
+  # entrypoint.py from SANDBOX_NETWORK_NAME, so a second stack only needs its
+  # own SANDBOX_NETWORK_NAME (no copy of sandbox.toml any more).
   sandbox-workloads:
-    # docker/opensandbox/sandbox.toml hardcodea este nombre en network_mode.
-    # Fijarlo aquí lo desacopla del project name (que ahora varía por entorno).
-    # Para levantar el perfil opensandbox en más de un stack a la vez, dale a
-    # cada uno su SANDBOX_NETWORK_NAME y su copia de sandbox.toml.
     name: ${SANDBOX_NETWORK_NAME:-docker_sandbox-workloads}
     driver: bridge
+    # Default: plain bridge with NAT egress (works on any Docker Engine).
+    # Hardened opt-in (no internet, no host/LAN access): add the override file
+    #   -f docker-compose.yaml -f docker-compose.sandbox-hardened.yaml
+    # (or COMPOSE_FILE in .env). It needs Docker Engine >= 28 and the network
+    # must be recreated when switching modes. See docker/README.md.
 
 volumes:
   postgres-data:
