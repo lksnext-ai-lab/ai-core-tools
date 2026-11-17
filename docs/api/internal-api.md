@@ -86,7 +86,7 @@ async def create_agent(
 | GET | `/` | List user's apps | user |
 | POST | `/` | Create new app | user |
 | GET | `/{app_id}` | Get app details | viewer |
-| PUT | `/{app_id}` | Update app settings (the LangSmith key can only be changed by the owner: 403 otherwise; omitting it keeps the stored key; `default_embedding_service_id` omitted = unchanged, `null` = clear) | administrator |
+| PUT | `/{app_id}` | Update app settings (the LangSmith key can only be changed by the owner: 403 otherwise; omitting it keeps the stored key; `default_embedding_service_id` omitted = unchanged, `null` = clear; `chat_code_interpreter_enabled` boolean, omitted = unchanged, `null` = 422) | administrator |
 | DELETE | `/{app_id}` | Delete app | owner |
 | GET | `/{app_id}/usage` | Get app usage stats | viewer |
 | POST | `/{app_id}/export` | Export full app configuration | viewer |
@@ -489,7 +489,7 @@ Streaming chat sends an SSE `error` event with `code: "service_retired"`. Test c
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/options` | Models, sources, skills and MCP configs the caller can pick, the caller's default, and `attachment_indexing {enabled, reason}` |
+| GET | `/options` | Models, sources, skills and MCP configs the caller can pick, the caller's default, `attachment_indexing {enabled, reason}` and `code_interpreter {enabled, reason}` |
 | GET / PUT | `/defaults` | The caller's default selection |
 | GET / POST | `/conversations` | List / create the caller's conversations |
 | GET / PATCH / DELETE | `/conversations/{id}` | History with per-message turn snapshot / rename / delete |

@@ -50,6 +50,7 @@ Mattin AI uses **PostgreSQL 16+** with the **pgvector extension** for vector sim
 | `agent_cors_origins` | String(1000) | Allowed CORS origins |
 | `langsmith_api_key` | String(255) | LangSmith API key for tracing (only the owner can change it) |
 | `default_embedding_service_id` | Integer (FK → embedding_service, SET NULL) | Embedding service the App Chat indexes attachments with; NULL = attachments are sent whole (`ichat002`) |
+| `chat_code_interpreter_enabled` | Boolean (NOT NULL, default `false`) | App Chat code interpreter opt-in; when true the Chat runs code in a sandbox (App default sandbox service, else the system default). Changed by administrators and above (`ichat003`) |
 | `create_date` | DateTime | App creation timestamp |
 
 **Relationships**:
@@ -454,7 +455,7 @@ Provides common fields and methods for AIService and EmbeddingService.
 
 ### App Chat tables
 
-Added by migration `ichat001`. Details and delete rules: [App Chat](../ai/app-chat.md#defaults-and-conversation-state).
+Added by migration `ichat001` (`ichat002` adds the columns noted below and `ichat002`/`ichat003` add columns to the `App` table above). Details and delete rules: [App Chat](../ai/app-chat.md#defaults-and-conversation-state); code interpreter: [App Chat](../ai/app-chat.md#code-interpreter).
 
 **`conversation_turn`** — snapshot of the configuration of each assistant message.
 

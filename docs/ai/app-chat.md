@@ -19,9 +19,9 @@ Technically it is a *hidden internal agent per App* plus a *per-request configur
 | API | `/internal/apps/{app_id}/chat/...` (internal API only) |
 | Router | `backend/routers/internal/internal_chat.py` |
 | Service | `backend/services/internal_chat/` (`chat_service.py`, `selection_resolver.py`, `resolved_config.py`) |
-| Migrations | `ichat001`, `ichat002` |
+| Migrations | `ichat001`, `ichat002`, `ichat003` |
 | Metrics channel | `INTERNAL_CHAT` |
-| Env vars | none for the Chat itself; `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` (embedding client timeout, see [Operations](#operations)) |
+| Env vars | none for the Chat itself; `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` (embedding client timeout) and the `SANDBOX_*` variables of the [code interpreter](#code-interpreter), see [Operations](#operations) |
 
 ## The hidden internal agent
 
@@ -29,9 +29,9 @@ Technically it is a *hidden internal agent per App* plus a *per-request configur
 
 - is invisible in agent lists, agent forms (as a tool candidate), export/import, the marketplace, MCP servers, A2A and the public API (including the OpenAI-compatible endpoints);
 - answers **404** on every non-Chat surface (agent detail/update/delete, `/chat/{id}/...`, `/files/{id}/...`, OCR, the generic `/internal/conversations` router, public API), indistinguishable from a missing agent;
-- is protected at database level by constraints: it cannot be a tool, A2A-enabled, published to the marketplace or have the code interpreter enabled (`ck_agent_internal_chat_unexposed`), must belong to an App, and there is at most one per App (`uq_agent_internal_chat_per_app`).
+- is protected at database level by constraints: it cannot be a tool, A2A-enabled, published to the marketplace or have `enable_code_interpreter` set (`ck_agent_internal_chat_unexposed`, unchanged), must belong to an App, and there is at most one per App (`uq_agent_internal_chat_per_app`). The Chat's code interpreter does not go through that flag: the agent keeps `enable_code_interpreter = false` and the interpreter is enabled only by the turn config (see [Code interpreter](#code-interpreter)).
 
-What a Chat turn does **not** use from the agent: tool associations, server tools, output parser, code interpreter, agent middlewares (so no per-agent PII rules and no human-approval rules), chat filters and the skill router. Memory is always on (LangGraph PostgreSQL checkpointer); history is summarized by the default `SummarizationMiddleware`, built with the turn's own model, and adapted to that model on every call (see [Switching models between turns](#switching-models-between-turns)).
+What a Chat turn does **not** use from the agent: tool associations, server tools, output parser, the agent's own code interpreter flag and sandbox service, agent middlewares (so no per-agent PII rules and no human-approval rules), chat filters and the skill router. Memory is always on (LangGraph PostgreSQL checkpointer); history is summarized by the default `SummarizationMiddleware`, built with the turn's own model, and adapted to that model on every call (see [Switching models between turns](#switching-models-between-turns)).
 
 ## Per-turn selection
 
@@ -107,6 +107,101 @@ Summarization is built with the turn's model, so after a switch to a model with 
 - A configured trigger larger than the summary model's window logs a warning.
 - The summary call is retried only on transient errors: HTTP 4xx other than 408 and 429 (for example a context overflow) are tried once; cancellation is never retried.
 
+## Code interpreter
+
+The Chat can run code (the sandbox REPL tools and the `Bash` and file builtin tools such as `Read`, `Write` and `Edit`) in a sandbox, so selected skills with bundled scripts can run them. It is **off by default** and is an App-level opt-in. It uses the same sandbox providers (OpenSandbox, Daytona, E2B) as agents; see [Sandbox provider RFC](rfc-sandbox-providers.md).
+
+### Opt-in switch
+
+| Aspect | Value |
+|--------|-------|
+| Column | `App.chat_code_interpreter_enabled` (Boolean, NOT NULL, server default `false`), migration `ichat003` |
+| API | `chat_code_interpreter_enabled` in the App read (`GET /internal/apps/{id}`, `viewer`) and update (`PUT`, `administrator`) payloads |
+| Update semantics | Omitted keeps the stored value; an explicit `null` is a 422 (it is a boolean, not nullable) |
+| Who changes it | Administrators and above, in the App settings (checkbox "Allow running code in the Chat", next to the default sandbox service). Below administrator the settings page shows it read-only |
+
+The hidden agent is not touched: it keeps `enable_code_interpreter = false` and the database CHECK is unchanged. Enablement comes only from the turn config (`ResolvedChatConfig.sandbox_enabled`, read by `_effective_surface` in `backend/tools/agentTools.py`).
+
+### Which sandbox service a turn uses
+
+One function decides it for both `GET /options` and the turn, `ChatSelectionResolver.code_interpreter_service` (`selection_resolver.py`), so the UI state and the behaviour cannot diverge:
+
+| Switch | App default sandbox service | Result |
+|--------|-----------------------------|--------|
+| off | any | No code interpreter (`disabled_in_app_settings`) |
+| on | set, active or deprecated | That service |
+| on | set, retired | No code interpreter (`sandbox_service_retired`), **no fallback** to the system default |
+| on | set, but its provider is not registered or not in `SANDBOX_ALLOWED_PROVIDERS`, or its row cannot be read | No code interpreter (`sandbox_provider_unavailable`) |
+| on | not set | The **system default**: `SANDBOX_DEFAULT_PROVIDER` with the environment credentials and no service id, as for agents. Provider not registered or not allowed: `sandbox_provider_unavailable` |
+
+A database error while reading the App's sandbox settings means no code interpreter (`sandbox_provider_unavailable`), never the system default. The turn never fails because of it: it runs without the interpreter. The hidden agent's relationships are never consulted; the service is loaded by id.
+
+`GET /options` carries `code_interpreter: {enabled, reason}`, with `reason` one of `disabled_in_app_settings`, `sandbox_service_retired`, `sandbox_provider_unavailable` (`null` when enabled).
+
+The options can say `enabled: true` while a turn still runs without code. With the system default the platform cannot know whether the sandbox host is running (for example the `opensandbox` compose profile is not up): the provider object builds, the first tool call fails to create the sandbox, the tool returns a generic error and the answer is kept. The truth for a turn is `turn_config.code_interpreter` (boolean, `POST /messages` -> `metadata.turn_config`, `/stream` -> `metadata` event): `false` when the turn degraded while it was prepared and, on `/messages`, also when the first tool call could not create the sandbox. On `/stream` the `metadata` event is sent before the run, so a sandbox that cannot be created at the first tool call is not visible there.
+
+What the Chat page shows (`codeInterpreterNotice` in `frontend/src/components/chat/chatSelection.ts`): for `disabled_in_app_settings` a notice only while at least one skill is selected (only skills carry scripts); for `sandbox_service_retired` and `sandbox_provider_unavailable` always. The text says that skills with scripts load but their scripts will not run.
+
+### Sandbox scope and who can use it
+
+- **One sandbox per conversation**, key `conv_{agent_id}_{conversation_id}`, the platform never shares a sandbox key between conversations or users (for OpenSandbox, see accepted risk 1 below). The key is asserted in `_prepare_turn` (`InternalChatSessionError` otherwise).
+- Open to **every member of the App, Viewers included**. There is no approval before code runs: the Chat cannot ask (see [Behaviours and limits](#behaviours-and-limits)).
+- Created lazily at the first tool call of a turn. Destroyed when the conversation is **reset**, **deleted** or the **user is deleted** (`internal_chat/user_cleanup.py`).
+- Skills with bundled scripts always load in the Chat; their scripts run only when the interpreter is on.
+- A cached sandbox keeps the service it was created with until it expires or the conversation is reset, except that a change of the App default (App default <-> system default, or another provider) is detected on the next turn and the old sandbox is destroyed and recreated.
+
+### Limits (Chat only)
+
+The session limits and eviction are Chat only (agents keep their previous capacity behaviour) and are counted per process (`backend/services/sandbox_session_service.py`); the Bash cap and background-shell refusal are Chat only (`backend/tools/sandbox/chat_guard.py`). The execution budget is per turn and also applies to agents (REPL executions only; in the Chat it is shared with `Bash`).
+
+| Limit | Setting (default) | Behaviour |
+|-------|-------------------|-----------|
+| Live sandboxes per user | `SANDBOX_MAX_SESSIONS_PER_USER` (3) | `0` = unlimited |
+| Live sandboxes per App | `SANDBOX_MAX_SESSIONS_PER_APP` (10) | `0` = unlimited |
+| Eviction | `SANDBOX_EVICT_MIN_IDLE_S` (60) | Over a limit, only the **requester's own** sessions with no active use, no lease and idle for at least this long are evicted (least recently used first). Otherwise the requester gets a capacity error and must wait. Another user's sandbox is never evicted, so a user can be left without a sandbox while others hold the App's 10: by design |
+| Turn lease | - | A Chat turn holds a lease on its sandbox from its first use until the turn ends, so it is neither evicted nor reaped mid-turn |
+| Executions per turn | `SANDBOX_MAX_EXECUTIONS_PER_TURN` (5) | Per turn. One budget shared by the REPL and `Bash` in the Chat (REPL only for agents); `0` refuses every execution; beyond the budget the tool answers `[Execution budget exceeded: N executions per turn]`. `Write`/`Edit` do not count |
+| Bash timeout | `SANDBOX_CHAT_BASH_MAX_TIMEOUT_S` (60) | Ceiling of one `Bash` call |
+| Background shells | - | `run_in_background` is refused with a message |
+| Idle timeout | `SANDBOX_IDLE_TIMEOUT_S` (120) | An idle sandbox is destroyed together with `work/` and any installed packages. Only `output/` files already pulled to local storage survive. A recreated sandbox receives only the current turn's uploads |
+
+Only `SANDBOX_MAX_SESSIONS_PER_USER` and `SANDBOX_MAX_SESSIONS_PER_APP` (and the pull concurrency below) are **per backend process**, not global across workers (the default deployment runs 2 workers). The execution budget and the output-file caps are per turn.
+
+### Output files
+
+Files the code writes under `output/` are pulled from the sandbox into the turn's local output folder and delivered with the answer. This code is shared by **all agents and the Chat** (`backend/services/sandbox_output_pull.py`):
+
+| Limit | Setting (default) |
+|-------|-------------------|
+| Files per turn | `SANDBOX_PULL_MAX_FILES` (20) |
+| Size of one file | `SANDBOX_PULL_MAX_FILE_BYTES` (50 MB) |
+| Total size per turn | `SANDBOX_PULL_MAX_TOTAL_BYTES` (100 MB) |
+| Time budget of the whole pull | `SANDBOX_PULL_TIME_BUDGET_S` (20 s; `0` = no budget) |
+| Pulls at once, per process | `SANDBOX_PULL_MAX_CONCURRENT` (2; a pull that finds every slot busy is skipped at once, not queued) |
+
+`0` means "no cap" for the three count/size settings. Do **not** set both size caps to `0`: the pull then reverts to an unbounded read of each file. With at least one size cap set, every read is bounded (the provider stops after cap + 1 bytes) and the size reported by `stat` inside the sandbox is only a pre-filter.
+
+Other rules: hidden files and unsafe names (absolute paths, control characters, longer than 200 bytes) are skipped, symlinks and non-regular files are skipped, colliding base names become `x-2.txt`, `x-3.txt`. A slow, failing or oversized pull never fails the turn and the answer text is never changed.
+
+Skipped files are reported, as a count:
+
+- **Chat:** a turn warning `{"kind": "sandbox_output", "id": <count>}` in `turn.warnings` (the `id` is a **count**, not a resource id; it is the number of skipped files when any file was skipped, and 1 only when nothing was skipped but the pull itself failed or ran out of time). The Chat page shows it translated (`appChat.warnings.sandbox_output`).
+- **Agents:** `metadata.outputs_skipped` (integer, only when > 0): the `usage` object of `POST /public/v1/chat/{agent_id}/call`, and `outputs_skipped` in the `data` of the SSE `done` event of `/call/stream`. See [Public API](../api/public-api.md#response-fields).
+
+An **E2B** sandbox needs the private streaming client of the pinned E2B SDK (`files._envd_api.stream`) for the bounded read. If the installed SDK does not have it, the provider refuses and no output files are delivered from E2B sandboxes (fails closed, counted as skipped).
+
+### Accepted risks
+
+Read these before turning the switch on for an App. They are deliberate and tracked, not closed:
+
+1. **Sandboxes of a self-hosted OpenSandbox server are not isolated from each other.** Code run by one member can reach other members' sandboxes on the same server, across Apps (the exec daemon of each sandbox has no authentication). Whether E2B and Daytona isolate sandboxes from each other has not been verified by this project. See `docker/README.md`, section "OpenSandbox: exposición y mitigaciones".
+2. **Outbound network is on by default** with OpenSandbox: internet, services published on the Docker host and the LAN are reachable from sandbox code, unless the hardened override `docker-compose.sandbox-hardened.yaml` is used (no egress; Docker Engine >= 28; `pip install` stops working).
+3. **With no App default sandbox service, the system default sandbox provider is used**: its credentials are used and its usage is charged to the platform (for a self-hosted OpenSandbox, the host's capacity), and its network access applies, for any App whose administrator turns the switch on.
+4. **The Chat cannot ask for approval before running code.**
+5. **Memory and disk exhaustion by a member (accepted as a known risk for this release; tracked as follow-up).** A member can still exhaust backend memory through two paths: a sandbox with a huge number of files makes the output listing be parsed whole, and a command that prints without end accumulates its stdout in memory until it ends. Both exist for agents too; the Chat exposes them to every member of an App that opted in. No disk quota is configured in `docker/opensandbox/sandbox.toml` for OpenSandbox containers, so a member can also fill the Docker host's disk.
+
+The session limits (above) are per process and do not add up across workers.
+
 ## API
 
 Base: `/internal/apps/{app_id}/chat`. Auth is the normal internal session; every route requires at least `viewer`.
@@ -115,7 +210,7 @@ Base: `/internal/apps/{app_id}/chat`. Auth is the normal internal session; every
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/options` | `ai_services`, `silos` (with `source_type`: `repository`, `domain`, `sharepoint`, `silo`), `skills`, `mcp_configs`, `default_selection`, `default_warnings`, `has_usable_model`, `attachment_indexing` (`{enabled, reason}`; `reason` is `null`, `"no_default_embedding_service"` or `"embedding_service_retired"`, see [Attachment indexing](#attachment-indexing)) |
+| GET | `/options` | `ai_services`, `silos` (with `source_type`: `repository`, `domain`, `sharepoint`, `silo`), `skills`, `mcp_configs`, `default_selection`, `default_warnings`, `has_usable_model`, `attachment_indexing` (`{enabled, reason}`; `reason` is `null`, `"no_default_embedding_service"` or `"embedding_service_retired"`, see [Attachment indexing](#attachment-indexing)), `code_interpreter` (`{enabled, reason}`; `reason` is `null`, `"disabled_in_app_settings"`, `"sandbox_service_retired"` or `"sandbox_provider_unavailable"`, see [Code interpreter](#code-interpreter)) |
 | GET | `/defaults` | The caller's default selection, or `null` if the App has no usable model |
 | PUT | `/defaults` | Pin the caller's default (validated like a turn) |
 
@@ -134,7 +229,7 @@ Retired AI services are not offered; silos whose embedding service is retired ar
 
 `GET /conversations` never creates the internal agent. A conversation can also be created implicitly by sending a first turn without `conversation_id`.
 
-Reset rotates the conversation's `session_id` (new LangGraph thread) and bumps `generation` in one transaction, then removes the old thread, the turn rows, the attachments that existed before the reset, and temporary media. A turn that was running during a reset or delete persists nothing and drops its own thread.
+Reset rotates the conversation's `session_id` (new LangGraph thread) and bumps `generation` in one transaction, then removes the old thread, the turn rows, the attachments that existed before the reset, and temporary media. Reset and delete also destroy the conversation's code interpreter sandbox (on a dedicated executor, bounded to 10 s by the module constant `SANDBOX_DESTROY_TIMEOUT_S` in `chat_service.py`, not an environment variable; if the provider does not confirm on reset, the persisted sandbox state is kept so the reaper can still find it). A turn that was running during a reset or delete persists nothing and drops its own thread.
 
 ### Turns
 
@@ -164,10 +259,10 @@ Repository methods: `claim_busy`, `renew_busy`, `release_busy` in `backend/repos
 
 | Event | Content |
 |-------|---------|
-| `metadata` | First event. `conversation_id`, `has_memory`, and `turn_config`: `{ai_service: {id, name}, silo: {id, name} \| null, skills: [{id, name}], mcp_configs: [{id, name}], warnings: [{kind, id}]}`. `warnings` lists selected MCP configs skipped for this turn. The internal agent's id, name and the thread's `session_id` are never sent |
+| `metadata` | First event. `conversation_id`, `has_memory`, and `turn_config`: `{ai_service: {id, name}, silo: {id, name} \| null, skills: [{id, name}], mcp_configs: [{id, name}], warnings: [{kind, id}]}`. `warnings` lists selected MCP configs skipped for this turn. `code_interpreter` (boolean) means "configured and not degraded while the turn was being prepared" (the event is built before the run; see [Code interpreter](#code-interpreter)). The internal agent's id, name and the thread's `session_id` are never sent |
 | `token` | `{content}` text chunk |
 | `tool_start`, `tool_end` | Tool activity |
-| `done` | `{response, conversation_id, files, status: "completed", assistant_message_id, turn}`. `turn` is the `ChatTurnInfo` snapshot (`turn_index`, `ai_service_*`, `silo_*`, `skills`, `mcp_configs`, `created_at`, `warnings`) or `null` if it could not be persisted (the answer is still valid). `turn.warnings` also reports selected MCP configs whose tools failed to load |
+| `done` | `{response, conversation_id, files, status: "completed", assistant_message_id, turn}`. `turn` is the `ChatTurnInfo` snapshot (`turn_index`, `ai_service_*`, `silo_*`, `skills`, `mcp_configs`, `created_at`, `warnings`) or `null` if it could not be persisted (the answer is still valid). `turn.warnings` also reports selected MCP configs whose tools failed to load, and `{kind: "sandbox_output", id: <count>}` when output files of the code could not be delivered (`id` is a count of files) |
 | `error` | `{message}`; for a retired service `{message, code: "service_retired"}` |
 
 If the first turn of a conversation created by that very request fails before answering, the empty conversation is removed before the `error` event is delivered.
@@ -216,7 +311,7 @@ Details (`backend/services/chat_attachment_service.py`, `chat_service.py`):
 
 A frozen App (tier downgrade) keeps existing conversations listable, readable, renamable and deletable, and file list/delete/download work; it takes no new activity.
 
-## Isolation guarantees
+## Isolation guarantees (database and API level; see the Code interpreter section for the sandbox caveat)
 
 - Conversations, files, turns, defaults and LangGraph threads are per user. Another member, administrator, owner or omniadmin of the App cannot read, list, rename, reset, delete or send to someone else's Chat conversation: it is a 404 indistinguishable from a missing one. This includes an omniadmin who is a collaborator of the App. An omniadmin who is not a collaborator gets the App's 403, like any other non-member.
 - The `app_id` of every row written comes from the conversation's internal agent, never from request input. Only an allow-listed subset of the caller's context (`user_id`, `email`, `oauth`, `token`) reaches a turn, so API-key, billing, scheduled-task or channel overrides can never leak in.
@@ -236,6 +331,7 @@ For Chat turns, failure handling keeps message content out of the turn failure l
 ## Behaviours and limits
 
 - **No approvals, no PII rules.** Per-agent human-approval and PII rules of normal agents do not apply in the Chat. Tools that would need approval (for example from an MCP server) cannot run: the Chat cannot answer approvals, so the pause is rejected on the spot, the tool is not executed and the conversation is not left paused (`hitl_approval` ends `cancelled` / `channel_not_interactive`). The expiry worker applies the same rule to a Chat pause it finds stuck after a crash.
+- **Code runs without approval.** When the App has the [code interpreter](#code-interpreter) on, the model runs code in the sandbox with no human approval step; the Chat has no way to ask.
 - **MCP token forwarding.** The caller's token is forwarded to the selected URL-based MCP servers, exactly as in the playground.
 - **MCP is all-or-nothing.** If one selected server cannot be reached, none of the selected MCP tools load and the turn warns for all selected MCP configs.
 - **Stale resources.** Resources removed or retired since they were selected are dropped with a warning (stored selections) or rejected (404 / 409) when sent explicitly in a turn.
@@ -264,6 +360,18 @@ For Chat turns, failure handling keeps message content out of the turn failure l
 - Azure AI and Google (AI Studio and Vertex AI) embedding clients have no client-side timeout (see `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS`); the Chat still gives up after 60 s, but the abandoned call keeps its indexing slot until it returns.
 - Playground, public API and marketplace uploads still index inline, with no time limit (unchanged).
 
+### Known limits and follow-ups (code interpreter)
+
+- **Reset or delete while a turn is running** is only safe at service level (a stale turn does not write state back or resurrect the entry). The sandbox key has no generation, so a sandbox created lazily by a pre-reset turn after the reset can reappear under the same key. Not proven at HTTP level.
+- **Delete and reset destroy only sandboxes held by the same backend process** (`SandboxSessionService.destroy` pops its in-memory registry). With several workers (the default deployment runs 2), a sandbox held by another worker expires by the provider's TTL (`SANDBOX_SESSION_TTL_H`).
+- The idle reaper is in-memory and per worker.
+- **Detached subprocesses** started by code survive until the idle timeout.
+- There is **no Chat rate limit** beyond one turn per conversation, 5 executions per turn and 3 sandboxes per user.
+- There is also a process-wide cap of 50 live sandboxes, shared by agents and the Chat; it is not configurable through an environment variable.
+- The OpenSandbox create path logs only through `describe_exc` (class name only on a Chat turn), but `OpenSandboxProvider.destroy_sandbox_id` logs the raw exception, with a traceback, at DEBUG level when the kill by id fails, also on Chat turns.
+- A hung output pull keeps its sandbox lease and one of the pull slots until the provider read returns.
+- **Nothing was verified against a real sandbox provider.** The tests use in-memory fake providers; the E2B private streaming client and the stop behaviour of OpenSandbox and Daytona streamed reads are only proven against fakes of the SDK shapes.
+
 ## Behaviour change outside the Chat
 
 - Playground and public API file/chat endpoints now answer **404 `Conversation not found`** when given a `conversation_id` that is not the caller's for that agent (same user, or same API key). The check applies to agents with memory; for agents without memory the id is only a grouping label for ephemeral files. Previously a foreign id was accepted. Helper: `ChatAttachmentService.require_owned_conversation`.
@@ -271,13 +379,15 @@ For Chat turns, failure handling keeps message content out of the turn failure l
 
 ## App settings permissions
 
-Administrators and above can now update the App settings (`PUT /internal/apps/{id}`; previously only the owner could save). The **LangSmith API key stays owner-only**: an administrator who tries to change or clear it gets 403, and the settings page shows the field read-only for them. A settings update that omits the key (or sends back the masked value) now **keeps** the stored key; clearing it requires sending it empty explicitly, as the owner. Deleting the App, transferring ownership and managing collaborators are unchanged. See [Role Authorization](../reference/role-authorization.md).
+Administrators and above can now update the App settings (`PUT /internal/apps/{id}`; previously only the owner could save). The **LangSmith API key stays owner-only**: an administrator who tries to change or clear it gets 403, and the settings page shows the field read-only for them. A settings update that omits the key (or sends back the masked value) now **keeps** the stored key; clearing it requires sending it empty explicitly, as the owner. The **code interpreter switch** (`chat_code_interpreter_enabled`) follows the general rule: administrators and the owner can change it (see [Code interpreter](#code-interpreter)). Deleting the App, transferring ownership and managing collaborators are unchanged. See [Role Authorization](../reference/role-authorization.md).
 
 ## Operations
 
-### Migrations `ichat001` and `ichat002`
+### Migrations `ichat001`, `ichat002` and `ichat003`
 
-Both are additive. `ichat001` revises `chatfiltmerge003`; `ichat002` revises `ichat001` and is the current head.
+All three are additive. `ichat001` revises `chatfiltmerge003`; `ichat002` revises `ichat001`; `ichat003` revises `ichat002` and is the current head.
+
+**`ichat003`**: `App.chat_code_interpreter_enabled` (Boolean, NOT NULL, server default `false`). Existing Apps get `false`: no App runs code in the Chat until an administrator turns it on. Its downgrade drops the column, so the stored opt-ins are lost.
 
 **`ichat002`**: `chat_conversation_state.busy_token` and `busy_until` (nullable), `App.default_embedding_service_id` (nullable, FK `App_default_embedding_service_id_fkey` to `embedding_service`, `ON DELETE SET NULL`) and the partial index `ix_Repository_silo_id_temp` on `Repository(silo_id)` where `type = 'playground_media'`. No backfill: existing Apps have no default embedding service, so their Chat attachments are sent whole until an administrator sets one.
 
@@ -291,14 +401,15 @@ Rollout: deploy the backend before the frontend library; the menu entry appears 
 
 ### Rolling back
 
-Run the downgrade **before** rolling back the image; an older build does not know the new enum values or `Agent.kind`. Removing both Chat migrations takes two steps back from `ichat002`:
+Run the downgrade **before** rolling back the image; an older build does not know the new enum values or `Agent.kind`. Removing the three Chat migrations takes three steps back from `ichat003`:
 
 ```bash
+alembic downgrade ichat002           # reverts ichat003
 alembic downgrade ichat001           # reverts ichat002
 alembic downgrade chatfiltmerge003   # reverts ichat001
 ```
 
-(`alembic downgrade chatfiltmerge003` alone runs both in order.) Downgrading `ichat002` drops the busy markers (transient) and the Apps' default embedding service (configuration, lost: set it again after upgrading). The `ichat001` downgrade is destructive by design: it drops the three tables, deletes all Chat conversations and the internal agents (with their approvals and execution events), relabels remaining `agent_execution_event` rows from `INTERNAL_CHAT` to `INTERNAL_PLAYGROUND`, and recreates both enum types without the label. It rewrites `Conversation` and `agent_execution_event` under `ACCESS EXCLUSIVE` locks: use a maintenance window. It does not purge LangGraph checkpoint rows, uploaded files, or the temporary silos, `playground_media` repositories and vectors of the deleted conversations; they stay behind, are not reachable from the UI and are not removed by the orphan sweep (it needs the internal agent, which the downgrade deletes). Remove them by hand if needed.
+(`alembic downgrade chatfiltmerge003` alone runs all three in order.) Downgrading `ichat003` drops the code interpreter opt-in of every App. Downgrading `ichat002` drops the busy markers (transient) and the Apps' default embedding service (configuration, lost: set it again after upgrading). The `ichat001` downgrade is destructive by design: it drops the three tables, deletes all Chat conversations and the internal agents (with their approvals and execution events), relabels remaining `agent_execution_event` rows from `INTERNAL_CHAT` to `INTERNAL_PLAYGROUND`, and recreates both enum types without the label. It rewrites `Conversation` and `agent_execution_event` under `ACCESS EXCLUSIVE` locks: use a maintenance window. It does not purge LangGraph checkpoint rows, uploaded files, or the temporary silos, `playground_media` repositories and vectors of the deleted conversations; they stay behind, are not reachable from the UI and are not removed by the orphan sweep (it needs the internal agent, which the downgrade deletes). Remove them by hand if needed.
 
 ### Attachment folders from older builds
 
@@ -314,13 +425,18 @@ One-off cleanup (optional): inspect `data/tmp/conversations/*` of deployments th
 - Logs: one INFO line per turn (`internal_chat.turn app_id=... conversation_id=... user_id=... ai_service_id=... silo_id=... skill_ids=... mcp_config_ids=...`). IDs only.
 - Failures: search the log for the `correlation_id` shown in the metrics error message.
 
-### Environment variable
+### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` | `120` | Client-side timeout of embedding calls (read when the client is built; retries are not changed). Applied to OpenAI, MistralAI, Custom/HuggingFace, Ollama and AWS Bedrock embedding clients. **Not** applied to Azure AI and Google (AI Studio and Vertex AI), whose clients expose no timeout. Source: `backend/tools/embeddingTools.py` |
+| `SANDBOX_MAX_SESSIONS_PER_USER`, `SANDBOX_MAX_SESSIONS_PER_APP`, `SANDBOX_EVICT_MIN_IDLE_S`, `SANDBOX_CHAT_BASH_MAX_TIMEOUT_S` | `3`, `10`, `60`, `60` | **Chat only** limits, see [Limits](#limits-chat-only). The two session limits are per backend process |
+| `SANDBOX_MAX_EXECUTIONS_PER_TURN` | `5` | Per turn. Applies to agents (REPL executions) and to the Chat (REPL and `Bash` share it); `0` refuses every execution |
+| `SANDBOX_PULL_MAX_FILES`, `SANDBOX_PULL_MAX_FILE_BYTES`, `SANDBOX_PULL_MAX_TOTAL_BYTES`, `SANDBOX_PULL_TIME_BUDGET_S`, `SANDBOX_PULL_MAX_CONCURRENT` | `20`, `52428800`, `104857600`, `20`, `2` | Output file delivery (agents and Chat), see [Output files](#output-files) |
 
-Related, already existing: `AICT_AGENT_RUN_TIMEOUT_SECONDS` (default 600) sets the busy-marker expiry (`+ 60 s`).
+Full list with the OpenSandbox server variables (`OPENSANDBOX_API_KEY` is mandatory for the `opensandbox` compose profile): [Environment Variables](../reference/environment-variables.md#sandbox-providers). Operations of the sandbox host: `docker/README.md`. Without the `opensandbox` profile running, a Chat on the system default provider still offers the code tools (the provider is only checked for being registered and allowed): the first call returns a generic error and the answer is written without code. `turn_config.code_interpreter` is then `false` on `/messages` (and `true` on the early `metadata` event of `/stream`).
+
+Related, already existing: `AICT_AGENT_RUN_TIMEOUT_SECONDS` (default 600) sets the busy-marker expiry (`+ 60 s`) and the expected duration of a sandbox turn lease.
 
 ## Hide the menu entry (client projects)
 
@@ -341,6 +457,8 @@ This removes the **menu entry only**. The routes `/apps/:appId/chat` and `/apps/
 - Concurrency: `test_chat_isolation_concurrency.py` runs overlapping turns through `httpx.AsyncClient` + `ASGITransport` with one session per request (`get_db` not overridden, data committed and purged afterwards) and a fake model that parks every call on per-turn gates, so overlap is deterministic and asserted, not timed.
 - Model switch: `test_chat_model_switch.py` switches provider, service and model between turns of one conversation (summarization, small windows, images, tools, retired models, failure paths, the stamp). It runs the router, services, real checkpointer, real `SummarizationMiddleware`, the real normaliser and PostgreSQL; only the LLM boundary is replaced by `_provider_sim.py`, subclasses of the real LangChain model classes that validate the request with each provider's own installed converter and answer with the message shapes the real adapters produce. **No real provider API is called**: "accepted" means the installed converter takes the messages and tool calls are paired, not that the API would. Capability, context-window and error rejections are hand-written rules. Unit tests: `tests/unit/tools/middleware/test_history_normalizer.py` and `test_summary_input_bound.py`.
 - Temp silo visibility: `test_chat_temp_silo_visibility.py` includes a **route-enumeration guard**. A new route that takes a silo or repository id must pass it (hidden temp silos answer 404 like a missing one).
+- Code interpreter: `test_chat_code_interpreter.py` (router, service, resolver, execution/streaming, session service, skill loader and PostgreSQL are real; only the LLM and the sandbox **provider class** are in-memory fakes). Unit files: `test_sandbox_output_pull.py`, `test_sandbox_session_limits.py`, `test_sandbox_bounded_read.py`, `test_chat_turn_sandbox_lease.py`, `test_outputs_skipped_metadata.py`, `test_resolved_config_code_interpreter.py`. The App switch API is covered by the integration file `tests/integration/routers/internal/test_app_chat_code_interpreter_switch.py`. **No real sandbox provider is called.** Details per file: [Testing Guide](../testing/README.md#chat-tests-and-langgraph-checkpoints).
+- Query budget: `test_chat_query_budget.py` counts the SQL statements of the listing/options endpoints and of a whole turn (no N+1, absolute ceiling).
 - Frontend: Vitest + Testing Library render tests in `frontend/tests/ui` (`npm run test:ui`).
 
 See [Testing Guide](../testing/README.md).

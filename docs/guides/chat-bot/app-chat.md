@@ -58,6 +58,19 @@ Images that an answer shows from the conversation's files are fetched when the m
 
 Images are sent to the model you selected. The Chat does not check whether that model understands images, so pick a model with vision when you attach one. Once an image is attached to a conversation it is sent again with every later message, so if you switch to a model without vision, those messages fail. Continue in a new conversation (or use a model with vision).
 
+## Running code
+
+If an administrator has turned on **Allow running code in the Chat** in the App settings, the model can run code in a private sandbox to answer you, and skills that include scripts can run them. Nothing changes in how you use the Chat: the code runs when the model decides it needs to, and files it creates appear with the answer like any other file.
+
+- **One sandbox per conversation.** It is created the first time the model runs code, belongs to that conversation only (the platform never shares it; with a self-hosted OpenSandbox server, however, other members' code can reach it, see [For administrators](#for-administrators)), and is removed when you reset or delete the conversation or your user is deleted.
+- **It does not last.** An idle sandbox is removed after about two minutes. Working files and any packages installed in it are lost; only result files already pulled into the message's output folder stay. A new sandbox only gets the files you attached in the current message, so attach them again if the model needs them.
+- **Limits per message.** The model can run code at most 5 times per message (the Python tool and shell commands share this count), a shell command is cut off after 60 seconds and shell commands cannot run in the background. A skill whose instructions need a longer shell step cannot finish it in the Chat; use an agent for those.
+- **Limits per person.** You can have 3 live sandboxes at once and the App 10. If you are over the limit the Chat first removes your own sandbox that has been idle the longest (idle for at least a minute). If none qualifies, the code tool returns a capacity error: wait a moment and send the message again. Other members' sandboxes are never removed to make room for yours, so when the App's 10 are in use by others you may have to wait.
+- **Result files.** At most 20 files per message, 50 MB each and 100 MB in total, delivered within about 20 seconds. Files that do not fit are skipped and the Chat shows "N files created by the code could not be delivered (size, number or time limit)". The answer text is not changed.
+- **No approval.** Code runs without asking you: the Chat cannot ask for approval.
+
+If the App does not allow it, skills with scripts still load but their scripts do not run, and the Chat page shows a notice once you select a skill. If instead the App's sandbox service has reached end of service, or its provider is not allowed on this installation, the notice is shown whether or not a skill is selected.
+
 ## Managing conversations
 
 - The **Conversations** list shows yours, newest first. **New** starts another conversation; the **Rename conversation** and **Delete conversation** buttons on each entry rename or delete it (deleting asks for confirmation).
@@ -68,11 +81,12 @@ Images are sent to the model you selected. The Chat does not check whether that 
 
 ## Privacy
 
-- **Your conversations are private to you.** Other members of the App, including administrators, owners and platform administrators, cannot read your Chat conversations or files.
+- **Your conversations are private to you.** Other members of the App, including administrators, owners and platform administrators, cannot read your Chat conversations or files through the platform. One exception to know about: if the App allows running code and uses a self-hosted OpenSandbox server, other members' code can reach your sandbox (see [For administrators](#for-administrators)).
 - Chat conversations never appear in the Agents list, in the Marketplace, in exports, or through the public API, MCP or A2A.
 - When something fails, the platform's logs and the metrics dashboard record only the kind of error and an identifier, not what you wrote or the provider's error text.
 - If your App has **LangSmith** tracing enabled, your Chat messages are sent to the App's LangSmith project, like those of any agent. Only the App owner can change the LangSmith key, so the owner controls where that goes.
 - If the App has a **Default embedding service**, the files you attach are sent to that embedding provider (it can be a platform-wide service) and their text chunks are stored in the App's vector database until the conversation is reset or deleted.
+- If the App allows [running code](#running-code), the code the model writes and the files you attach in that message run in a sandbox of the App's sandbox provider (or the platform's system default one).
 - When you select an **MCP** server that connects by URL, your sign-in token is sent to it so it can identify you, as in the Playground. Only select servers you trust.
 
 ## Warnings and messages
@@ -87,16 +101,26 @@ Images are sent to the model you selected. The Chat does not check whether that 
 | "This conversation is still answering a previous message. Wait for it to finish and try again. Your message was kept in the box." | Another message of the same conversation is still being answered (another tab, or a retry). Wait and send again. If it never finishes after a server restart, it frees itself after about 11 minutes |
 | "Attached files will not be indexed" | The App has no usable default embedding service; files are sent whole. See [Files](#files) |
 | "Sending is disabled: ..." | There is no usable model, or none selected. Select one |
+| "Code cannot be run in this chat" | Skills with scripts load, but their scripts will not run: running code is turned off for the App (shown only once a skill is selected), its sandbox service has reached end of service, or its provider is not allowed on this installation. See [Running code](#running-code) |
+| "N files created by the code could not be delivered (size, number or time limit)" | Some result files were over the limits and were skipped. The answer itself is complete |
 
 ## What the Chat does not do
 
 - **No approvals.** Agents in the Agents area can be set to ask a human before using certain tools, and to filter personal data. These rules do not apply in the Chat. If a tool would require approval (for example from an MCP server), the Chat cannot ask you: the tool is **not run** and the model is told it was refused. Use an agent for those workflows.
-- No structured output, code interpreter or agent tools: those belong to agents.
+- No structured output or agent tools: those belong to agents. Running code is available only when the App's administrator allows it (see [Running code](#running-code)).
 
 ## For administrators
 
 - The Chat needs at least one active AI service in the App (or a system one). Add a source, skills or MCP configs in the App to make them selectable.
 - **Default embedding service.** In the App settings, set **Default embedding service** (next to the default sandbox) so Chat attachments are indexed and retrieved by relevance instead of being sent whole. Without it, or if the chosen service is retired, attachments are sent whole and members see a notice. Everyone's attachments then go to that embedding provider and are stored in the App's vector database until the conversation is reset or deleted. The service shows up in its **Used by** view and in end-of-service warnings. A conversation keeps the service its temporary knowledge base was created with, even if you change the default later.
+- **Allow running code in the Chat** (App settings, off by default; administrators and the owner can change it, other roles see it read-only). Turning it on lets **every member of the App, Viewers included**, run code in a sandbox from the Chat. It uses the App's **default sandbox service**. If the App has none, it uses the **platform's system default** sandbox provider. A default sandbox service that has reached end of service switches the feature off for the Chat, with no fallback to the system default. Read these before turning it on:
+  - With a self-hosted **OpenSandbox** server, sandboxes are **not isolated from each other**: code run by one member can reach other members' sandboxes on the same server, even across Apps. Whether E2B and Daytona isolate sandboxes from each other has not been verified by this project.
+  - Outbound network from the sandboxes is on by default with the bundled OpenSandbox setup (internet, services on the Docker host, the local network) unless the platform operator uses the hardened override (no network; `pip install` stops working).
+  - With no App default sandbox service, the system default sandbox provider's credentials are used and its usage is charged to the platform (for a self-hosted OpenSandbox: the host's capacity), for any App whose administrator turns this on.
+  - The Chat **cannot ask for approval** before running code.
+  - A member can still exhaust the backend's memory (a sandbox with a huge number of files, or a command that prints without end) or fill the sandbox host's disk. This is a known, accepted risk, tracked as a follow-up.
+  - The limits on live sandboxes (3 per user, 10 per App) are counted per backend process, not across all workers. The 5 executions per message and the result-file limits apply per message.
+  - If the system default is not running (for example the OpenSandbox profile is not started), the Chat does not show a warning: the model still gets the code tools, the first call returns an error and the answer is written without code. The App's default sandbox service shows up in **Used by** and in end-of-service warnings. See [Knowledge Base AI Services](kb-ai-services.md#service-end-of-service).
 - **App settings permissions.** Administrators and the owner can save the App settings. Only the owner can change or clear the LangSmith key (it is read-only for administrators). Deleting the App, transferring ownership and managing collaborators are unchanged.
 - Temporary knowledge bases of conversations do not appear in the silo, repository or output-parser lists and do not count against the plan's silo limit.
 - Models, sources and skills appear in the selector according to what exists in the App. A frozen App (after a plan downgrade) accepts no new Chat messages or uploads; existing conversations can still be read and deleted.
@@ -108,7 +132,9 @@ Images are sent to the model you selected. The Chat does not check whether that 
 - Rare case: if the server stops while it is rejecting a tool approval, a conversation that uses a provider other than OpenAI may fail on every message until you **Reset** it.
 - There is no warning before sending images to a model without vision, and once an image is attached it goes with every later message of that conversation, so switching to a model without vision makes those messages fail.
 - A model that cannot call tools fails every message in the Chat.
-- If the most recent messages alone are larger than a small model's context window, the message still fails. Models whose size the platform does not know (for example Ollama and Azure AI models) are treated as having a large window even if their real one is smaller.
+- Code in the Chat was only tested with simulated sandbox providers, not against a real OpenSandbox, Daytona or E2B.
+- Resetting or deleting a conversation destroys its sandbox only when the same server process holds it; with several workers, other sandboxes expire on their own (the provider's time limit).
+- If the most recent messages alone are larger than a small model's context window, the message still fails. Models whose size the platform does not know (for example Ollama and Azure AI models) are assumed to have a window of about 37,600 tokens, with summarization starting at 32,000, even if their real window is smaller.
 - When a long conversation is summarized and the answer then fails, the older messages are already replaced by the summary.
 - With a platform base URL configured, images are sent as links, which an Ollama ("Custom") model probably cannot read.
 - In the history, your own message that had an image can show a raw `[IMAGE:...]` marker instead of the picture.
