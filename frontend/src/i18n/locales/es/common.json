@@ -329,7 +329,9 @@
     "enableOpenAiApiHelp": "Permite que aplicaciones externas interactúen con tus agentes usando el formato de API de OpenAI. Al habilitarla, tus agentes serán compatibles con herramientas y clientes que esperan endpoints de API compatibles con OpenAI.",
     "sandboxService": "Servicio sandbox del intérprete de código",
     "inheritSystemDefault": "Heredar valor predeterminado del sistema",
-    "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
+    "chatCodeInterpreter": "Permitir ejecutar código en el Chat",
+    "chatCodeInterpreterHelp": "Todos los miembros de esta App, incluidos los lectores, podrán ejecutar código en un sandbox desde el Chat, usando el servicio de sandbox por defecto de la App, o el del sistema si no hay ninguno seleccionado (se aplican su coste y su acceso a la red). El Chat no puede pedir aprobación antes de ejecutar código. Con un servidor OpenSandbox autoalojado, los sandboxes no están aislados entre sí: el código que ejecuta un miembro puede alcanzar los sandboxes de otros miembros en el mismo servidor.",
+    "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código, y el Chat de la App cuando se permite ejecutar código en el Chat. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
     "sandboxServicesSettings": "Configuración → Servicios sandbox",
     "embeddingService": "Servicio de embeddings por defecto",
     "noDefaultEmbeddingService": "Ninguno (los archivos adjuntos no se indexan)",
@@ -4598,7 +4600,9 @@
       "skill": "Una skill ya no está disponible y se ha quitado de la selección.",
       "skillNamed": "La skill \"{{name}}\" ya no está disponible y se ha quitado de la selección.",
       "mcp_config": "No se pudo usar una configuración MCP (no disponible o eliminada); el mensaje se respondió sin ella.",
-      "mcp_configNamed": "No se pudo usar la configuración MCP \"{{name}}\" (no disponible o eliminada); el mensaje se respondió sin ella."
+      "mcp_configNamed": "No se pudo usar la configuración MCP \"{{name}}\" (no disponible o eliminada); el mensaje se respondió sin ella.",
+      "sandbox_output_one": "No se ha podido entregar {{count}} fichero creado por el código (límite de tamaño, número o tiempo).",
+      "sandbox_output_other": "No se han podido entregar {{count}} ficheros creados por el código (límite de tamaño, número o tiempo)."
     },
     "attachmentIndexing": {
       "title": "Los archivos adjuntos no se indexarán",
@@ -4607,6 +4611,13 @@
       "configureLink": "Abrir la configuración de la App",
       "askAdmin": "Pide a un administrador o propietario de esta App que lo configure.",
       "unavailable": "Los archivos adjuntos en el Chat no se pueden indexar ahora, así que se envían completos al modelo en lugar de indexarse."
+    },
+    "codeInterpreter": {
+      "title": "En este chat no se puede ejecutar código",
+      "disabled": "Las skills que incluyen scripts se cargarán, pero sus scripts no se ejecutarán, porque ejecutar código en el Chat está desactivado para esta App.",
+      "retired": "Las skills que incluyen scripts se cargarán, pero sus scripts no se ejecutarán, porque el servicio de sandbox por defecto de esta App ha llegado a su fin de servicio. Elige otro servicio de sandbox a nivel de App.",
+      "providerUnavailable": "Las skills que incluyen scripts se cargarán, pero sus scripts no se ejecutarán, porque el servicio de sandbox que se aplica a esta App (el predeterminado de la App o el del sistema) usa un proveedor que esta instalación no permite. Contacta con el administrador de la plataforma.",
+      "unavailable": "Las skills que incluyen scripts se cargarán, pero sus scripts no se pueden ejecutar en este chat ahora mismo."
     },
     "transportErrors": {
       "noSelection": "Selecciona un modelo antes de enviar un mensaje.",

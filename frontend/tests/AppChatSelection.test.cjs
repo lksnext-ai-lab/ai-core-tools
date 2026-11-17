@@ -121,6 +121,32 @@ test('describeWarnings names known resources, dedupes and falls back to the gene
   assert.equal(m.describeWarnings([{ kind: 'silo', id: 1 }], null)[0].key, 'silo');
 });
 
+test('sandbox_output warnings carry a count: one per turn with the largest count, never a name', () => {
+  const warnings = [{ kind: 'sandbox_output', id: 2 }, { kind: 'skill', id: 20 }, { kind: 'sandbox_output', id: 5 }, { kind: 'sandbox_output', id: 3 }];
+  assert.deepEqual(JSON.parse(JSON.stringify(m.dedupeWarnings(warnings))), [
+    { kind: 'sandbox_output', id: 5 },
+    { kind: 'skill', id: 20 },
+  ]);
+  const out = m.describeWarnings(warnings, makeOptions());
+  assert.deepEqual(JSON.parse(JSON.stringify(out[0])), { key: 'sandbox_output', values: { count: 5 } });
+  assert.ok(m.WARNING_KINDS.includes('sandbox_output'));
+});
+
+test('describeWarnings ignores a kind from a newer backend instead of showing a raw key', () => {
+  const out = m.describeWarnings([{ kind: 'brand_new', id: 1 }, { kind: 'silo', id: 1 }], null);
+  assert.deepEqual(JSON.parse(JSON.stringify(out)), [{ key: 'silo', values: {} }]);
+  assert.equal(m.describeWarnings([{ kind: 'brand_new', id: 1 }], null).length, 0);
+});
+
+test('sandbox_output has plural forms in en and es', () => {
+  for (const language of ['en', 'es']) {
+    const w = require(`../src/i18n/locales/${language}/common.json`).appChat.warnings;
+    assert.match(w.sandbox_output_one, /\{\{count\}\}/);
+    assert.match(w.sandbox_output_other, /\{\{count\}\}/);
+    assert.notEqual(w.sandbox_output_one, w.sandbox_output_other);
+  }
+});
+
 const fallback = (id) => `Source #${id}`;
 
 test('buildTurnMeta marks deleted resources from history and uses names from metadata while streaming', () => {
@@ -193,4 +219,54 @@ test('attachmentIndexingNotice: only an explicit enabled=false raises it; a miss
   assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: 'embedding_service_retired' })), 'retired');
   assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: null })), 'unavailable');
   assert.equal(m.attachmentIndexingNotice(withIndexing({ enabled: false, reason: 'something_new' })), 'unavailable');
+});
+
+test('codeInterpreterNotice: not-set-up reasons need a selected skill; retired, provider and unknown always show', () => {
+  const withBlock = (code_interpreter) => makeOptions({ code_interpreter });
+  const none = { ai_service_id: 1, silo_id: null, skill_ids: [], mcp_config_ids: [] };
+  const some = { ...none, skill_ids: [20] };
+  const reason = (r) => withBlock({ enabled: false, reason: r });
+
+  // Nothing to say: no options, no block, enabled.
+  for (const sel of [null, none, some]) {
+    assert.equal(m.codeInterpreterNotice(null, sel), null);
+    assert.equal(m.codeInterpreterNotice(makeOptions(), sel), null);
+    assert.equal(m.codeInterpreterNotice(withBlock(null), sel), null);
+    assert.equal(m.codeInterpreterNotice(withBlock({ enabled: true, reason: null }), sel), null);
+  }
+  // Not set up: only with a skill selected.
+  for (const [r, kind] of [['disabled_in_app_settings', 'disabled']]) {
+    assert.equal(m.codeInterpreterNotice(reason(r), none), null, r);
+    assert.equal(m.codeInterpreterNotice(reason(r), null), null, r);
+    assert.equal(m.codeInterpreterNotice(reason(r), some), kind, r);
+  }
+  // Was working, stopped: always.
+  for (const [r, kind] of [
+    ['sandbox_service_retired', 'retired'],
+    ['sandbox_provider_unavailable', 'providerUnavailable'],
+    [null, 'unavailable'],
+    ['something_new', 'unavailable'],
+    ['no_default_sandbox_service', 'unavailable'], // retired reason from an older backend
+  ]) {
+    assert.equal(m.codeInterpreterNotice(reason(r), none), kind, String(r));
+    assert.equal(m.codeInterpreterNotice(reason(r), some), kind, String(r));
+  }
+});
+
+test('codeInterpreter notice and settings keys exist in en and es, and reused keys are not duplicated', () => {
+  const kinds = ['title', 'disabled', 'retired', 'providerUnavailable', 'unavailable'];
+  const texts = {};
+  for (const language of ['en', 'es']) {
+    const common = require(`../src/i18n/locales/${language}/common.json`);
+    const appChat = common.appChat;
+    for (const kind of kinds) assert.equal(typeof appChat.codeInterpreter[kind], 'string', `${language}.${kind}`);
+    assert.deepEqual(Object.keys(appChat.codeInterpreter).sort(), [...kinds].sort());
+    assert.equal(typeof appChat.attachmentIndexing.configureLink, 'string');
+    assert.equal(typeof appChat.attachmentIndexing.askAdmin, 'string');
+    for (const key of ['chatCodeInterpreter', 'chatCodeInterpreterHelp']) {
+      assert.equal(typeof common.appSettingsPage[key], 'string', `${language}.${key}`);
+    }
+    texts[language] = appChat.codeInterpreter;
+  }
+  for (const kind of kinds) assert.notEqual(texts.en[kind], texts.es[kind], kind);
 });

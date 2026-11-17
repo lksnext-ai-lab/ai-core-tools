@@ -5,7 +5,8 @@
 
 export type ChatSiloSourceType = 'repository' | 'domain' | 'sharepoint' | 'silo';
 
-export type ChatWarningKind = 'ai_service' | 'silo' | 'skill' | 'mcp_config';
+/** `sandbox_output` is a turn warning whose `id` is a COUNT (files the code created that could not be delivered). */
+export type ChatWarningKind = 'ai_service' | 'silo' | 'skill' | 'mcp_config' | 'sandbox_output';
 
 /** What the user picks for one turn. */
 export interface ChatSelection {
@@ -63,6 +64,8 @@ export interface ChatTurnConfig {
   readonly skills: readonly ChatTurnConfigNamedRef[];
   readonly mcp_configs: readonly ChatTurnConfigNamedRef[];
   readonly warnings: readonly ChatSelectionWarning[];
+  /** Whether the turn could run code; absent on older backends. No UI for it. */
+  readonly code_interpreter?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +113,17 @@ export interface ChatAttachmentIndexing {
   readonly reason: ChatAttachmentIndexingReason | null;
 }
 
+/** Whether the Chat can run skill scripts (needs the App's default sandbox service). Absent on older backends = show nothing. */
+export type ChatCodeInterpreterReason =
+  | 'disabled_in_app_settings'
+  | 'sandbox_service_retired'
+  | 'sandbox_provider_unavailable';
+
+export interface ChatCodeInterpreter {
+  readonly enabled: boolean;
+  readonly reason: ChatCodeInterpreterReason | null;
+}
+
 export interface ChatOptions {
   readonly ai_services: readonly ChatAIServiceOption[];
   readonly silos: readonly ChatSiloOption[];
@@ -119,6 +133,7 @@ export interface ChatOptions {
   readonly default_warnings: readonly ChatSelectionWarning[];
   readonly has_usable_model: boolean;
   readonly attachment_indexing?: ChatAttachmentIndexing | null;
+  readonly code_interpreter?: ChatCodeInterpreter | null;
 }
 
 // ---------------------------------------------------------------------------

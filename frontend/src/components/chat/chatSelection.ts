@@ -53,6 +53,13 @@ export function dedupeWarnings(warnings: readonly ChatSelectionWarning[]): ChatS
   const seen = new Set<string>();
   const result: ChatSelectionWarning[] = [];
   for (const warning of warnings) {
+    if (warning.kind === 'sandbox_output') {
+      // `id` is a count: one warning per turn, with the largest count.
+      const index = result.findIndex((w) => w.kind === 'sandbox_output');
+      if (index === -1) result.push(warning);
+      else if (warning.id > result[index].id) result[index] = warning;
+      continue;
+    }
     const key = `${warning.kind}:${warning.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -192,13 +199,44 @@ export function attachmentIndexingNotice(options: ChatOptions | null): 'noDefaul
 }
 
 // ---------------------------------------------------------------------------
+// Code interpreter notice
+// ---------------------------------------------------------------------------
+
+export type CodeInterpreterNoticeKind = 'disabled' | 'retired' | 'providerUnavailable' | 'unavailable';
+
+/**
+ * Suffix of `appChat.codeInterpreter.<kind>`; null when nothing should be said.
+ * "Not set up" (switch off) matters only once the selection has a skill, since only skills carry scripts. Reasons where an administrator had it working (retired, provider) and unknown
+ * ones always show. A missing block (older backend) shows nothing.
+ */
+export function codeInterpreterNotice(
+  options: ChatOptions | null,
+  selection: ChatSelection | null,
+): CodeInterpreterNoticeKind | null {
+  const interpreter = options?.code_interpreter;
+  if (!interpreter || interpreter.enabled !== false) return null;
+  const hasSkills = (selection?.skill_ids.length ?? 0) > 0;
+  switch (interpreter.reason) {
+    case 'disabled_in_app_settings':
+      return hasSkills ? 'disabled' : null;
+    case 'sandbox_service_retired':
+      return 'retired';
+    case 'sandbox_provider_unavailable':
+      return 'providerUnavailable';
+    default:
+      // Unknown reason: do not claim a cause that may be false.
+      return 'unavailable';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Warnings
 // ---------------------------------------------------------------------------
 
 export interface WarningMessage {
   /** Suffix of the i18n key `appChat.warnings.<key>`. */
   readonly key: string;
-  readonly values: { readonly name?: string };
+  readonly values: { readonly name?: string; readonly count?: number };
 }
 
 function lookupName(options: ChatOptions | null, warning: ChatSelectionWarning): string | undefined {
@@ -212,6 +250,8 @@ function lookupName(options: ChatOptions | null, warning: ChatSelectionWarning):
       return options.skills.find((s) => s.skill_id === warning.id)?.name;
     case 'mcp_config':
       return options.mcp_configs.find((c) => c.config_id === warning.id)?.name;
+    case 'sandbox_output':
+      return undefined;
   }
 }
 
@@ -220,13 +260,17 @@ export function describeWarnings(
   warnings: readonly ChatSelectionWarning[],
   options: ChatOptions | null,
 ): WarningMessage[] {
-  return dedupeWarnings(warnings).map((warning) => {
+  return dedupeWarnings(warnings)
+    // A kind from a newer backend has no translation: say nothing rather than show a raw key.
+    .filter((warning) => WARNING_KINDS.includes(warning.kind))
+    .map((warning) => {
+    if (warning.kind === 'sandbox_output') return { key: 'sandbox_output', values: { count: warning.id } };
     const name = lookupName(options, warning);
     return name ? { key: `${warning.kind}Named`, values: { name } } : { key: warning.kind, values: {} };
   });
 }
 
-export const WARNING_KINDS: readonly ChatWarningKind[] = ['ai_service', 'silo', 'skill', 'mcp_config'];
+export const WARNING_KINDS: readonly ChatWarningKind[] = ['ai_service', 'silo', 'skill', 'mcp_config', 'sandbox_output'];
 
 // ---------------------------------------------------------------------------
 // Per-message meta

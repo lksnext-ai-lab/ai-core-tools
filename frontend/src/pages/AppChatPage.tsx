@@ -13,6 +13,7 @@ import {
   chatPath,
   decideNewChatDefaults,
   attachmentIndexingNotice,
+  codeInterpreterNotice,
   dedupeWarnings,
   describeWarnings,
   parseConversationId,
@@ -57,6 +58,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   // Dismissing the attachment-indexing notice lasts for this visit only (component state), so it comes back on
   // the next visit while the condition holds. The dismissed kind is stored, so a different notice still shows.
   const [dismissedIndexingNotice, setDismissedIndexingNotice] = useState<string | null>(null);
+  const [dismissedCodeNotice, setDismissedCodeNotice] = useState<string | null>(null);
   const [sidebarToken, setSidebarToken] = useState(0);
   // Remount ChatInterface only when the user moves to another conversation, never when the page itself
   // creates one (the route then catches up with the id the chat already holds). `focus` asks the new
@@ -356,6 +358,12 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   };
   const currentIndexingNotice = attachmentIndexingNotice(options);
   const indexingNotice = currentIndexingNotice === dismissedIndexingNotice ? null : currentIndexingNotice;
+  const currentCodeNotice = codeInterpreterNotice(options, selection);
+  const codeNotice = currentCodeNotice === dismissedCodeNotice ? null : currentCodeNotice;
+  const dismissCodeNotice = () => {
+    setDismissedCodeNotice(currentCodeNotice);
+    focusComposer();
+  };
   const canConfigureApp = hasMinRole(AppRole.ADMINISTRATOR);
   const dismissIndexingNotice = () => {
     setDismissedIndexingNotice(currentIndexingNotice);
@@ -416,6 +424,32 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
           }
           onDismiss={dismissIndexingNotice}
           dismissAriaLabel={t('alert.dismissNamed', { name: t('appChat.attachmentIndexing.title') })}
+        />
+      )}
+      {codeNotice && (
+        <Alert
+          type="info"
+          title={t('appChat.codeInterpreter.title')}
+          message={
+            <>
+              {t(`appChat.codeInterpreter.${codeNotice}`)}{' '}
+              {/* The administrator of the platform fixes these; neither a link nor "ask an admin" helps. */}
+              {codeNotice === 'providerUnavailable' || codeNotice === 'unavailable' || roleLoading ? null : canConfigureApp ? (
+                <span className="mt-3 block">
+                  <ButtonLink
+                    label={t('appChat.attachmentIndexing.configureLink')}
+                    to={`/apps/${appId}/settings`}
+                    variant="secondary"
+                    size="compact"
+                  />
+                </span>
+              ) : (
+                t('appChat.attachmentIndexing.askAdmin')
+              )}
+            </>
+          }
+          onDismiss={dismissCodeNotice}
+          dismissAriaLabel={t('alert.dismissNamed', { name: t('appChat.codeInterpreter.title') })}
         />
       )}
       {notice && (

@@ -329,7 +329,9 @@
     "enableOpenAiApiHelp": "Allow external applications to interact with your agents using the OpenAI API format. When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.",
     "sandboxService": "Code Interpreter Sandbox Service",
     "inheritSystemDefault": "Inherit system default",
-    "sandboxServiceHelpBeforeSettings": "Default Sandbox Service used when agents in this app run the Code Interpreter capability. Leave at \"Inherit\" to use the system default. Manage available services under",
+    "chatCodeInterpreter": "Allow running code in the Chat",
+    "chatCodeInterpreterHelp": "Every member of this App, viewers included, will be able to run code in a sandbox from the Chat, using the default sandbox service of the App, or the system default when none is selected (its cost and network access apply). The Chat cannot ask for approval before running code. With a self-hosted OpenSandbox server, sandboxes are not isolated from each other: code run by one member can reach other members' sandboxes on the same server.",
+    "sandboxServiceHelpBeforeSettings": "Default Sandbox Service used when agents in this app run the Code Interpreter capability, and by the App Chat when running code in the Chat is allowed. Leave at \"Inherit\" to use the system default. Manage available services under",
     "sandboxServicesSettings": "Settings → Sandbox Services",
     "embeddingService": "Default embedding service",
     "noDefaultEmbeddingService": "None (attached files are not indexed)",
@@ -4598,7 +4600,9 @@
       "skill": "A skill is no longer available and was removed from the selection.",
       "skillNamed": "The skill \"{{name}}\" is no longer available and was removed from the selection.",
       "mcp_config": "An MCP configuration could not be used (unavailable or removed); the message was answered without it.",
-      "mcp_configNamed": "The MCP configuration \"{{name}}\" could not be used (unavailable or removed); the message was answered without it."
+      "mcp_configNamed": "The MCP configuration \"{{name}}\" could not be used (unavailable or removed); the message was answered without it.",
+      "sandbox_output_one": "{{count}} file created by the code could not be delivered (size, number or time limit).",
+      "sandbox_output_other": "{{count}} files created by the code could not be delivered (size, number or time limit)."
     },
     "attachmentIndexing": {
       "title": "Attached files will not be indexed",
@@ -4607,6 +4611,13 @@
       "configureLink": "Open App settings",
       "askAdmin": "Ask an administrator or owner of this App to set it up.",
       "unavailable": "Files attached in the Chat cannot be indexed right now, so they are sent whole to the model instead of being indexed."
+    },
+    "codeInterpreter": {
+      "title": "Code cannot be run in this chat",
+      "disabled": "Skills that include scripts will load, but their scripts will not run, because running code in the Chat is turned off for this App.",
+      "retired": "Skills that include scripts will load, but their scripts will not run, because the default sandbox service of this App has reached end of service. Choose another sandbox service at App level.",
+      "providerUnavailable": "Skills that include scripts will load, but their scripts will not run, because the sandbox service that applies to this App (its default, or the system default) uses a provider that this installation does not allow. Contact the platform administrator.",
+      "unavailable": "Skills that include scripts will load, but their scripts cannot be run in this chat right now."
     },
     "transportErrors": {
       "noSelection": "Select a model before sending a message.",

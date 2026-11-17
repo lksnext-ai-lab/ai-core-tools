@@ -49,6 +49,7 @@ function AppSettingsPage() {
     agent_cors_origins: '',
     enable_openai_api: false,
     default_sandbox_service_id: null as number | null,  // null = inherit system default
+    chat_code_interpreter_enabled: false,
     default_embedding_service_id: null as number | null,  // null = none (Chat attachments are not indexed)
   });
   const [loading, setLoading] = useState(true);
@@ -119,6 +120,7 @@ function AppSettingsPage() {
         agent_cors_origins: app.agent_cors_origins || '',
         enable_openai_api: app.enable_openai_api || false,
         default_sandbox_service_id: app.default_sandbox_service_id ?? null,
+        chat_code_interpreter_enabled: app.chat_code_interpreter_enabled ?? false,
         default_embedding_service_id: app.default_embedding_service_id ?? null,
       });
       setSavedSandboxServiceId(app.default_sandbox_service_id ?? null);
@@ -183,6 +185,7 @@ function AppSettingsPage() {
         agent_cors_origins: formData.agent_cors_origins,
         enable_openai_api: formData.enable_openai_api,
         default_sandbox_service_id: formData.default_sandbox_service_id,
+        chat_code_interpreter_enabled: formData.chat_code_interpreter_enabled,
         default_embedding_service_id: formData.default_embedding_service_id,
       });
       setSavedSandboxServiceId(formData.default_sandbox_service_id);
@@ -484,6 +487,18 @@ function AppSettingsPage() {
                     )}
                   />
                   <ServiceOptionStatus selectId="default_sandbox_service_id" options={sandboxServices} selectedId={formData.default_sandbox_service_id} />
+                </div>
+
+                {/* Code interpreter in the App Chat (uses the default sandbox service above) */}
+                <div>
+                  <FormCheckbox
+                    label={t('appSettingsPage.chatCodeInterpreter')}
+                    id="chat_code_interpreter_enabled"
+                    checked={formData.chat_code_interpreter_enabled}
+                    onChange={handleChange}
+                    disabled={!canEdit}
+                    helpText={t('appSettingsPage.chatCodeInterpreterHelp')}
+                  />
                 </div>
 
                 {/* Default embedding service (indexes files attached in the App Chat) */}
