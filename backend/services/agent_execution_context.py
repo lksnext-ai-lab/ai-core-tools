@@ -94,6 +94,8 @@ class AgentExecutionContext:
     sandbox_provider: Optional[Any] = None         # SandboxProvider instance
     sandbox_session_key: Optional[str] = None      # Key used with SandboxSessionService
     pre_existing_remote_files: set = field(default_factory=set)  # Snapshot before turn for remote pull diff
+    outputs_pulled: bool = False  # the sandbox output pull already ran for this turn (it runs once, before finalize)
+    outputs_undelivered: int = 0  # files the pull could not deliver (limits / time / errors); counts only
 
     # Original inputs (needed by finalize for metadata)
     processed_files: List[Dict[str, Any]] = field(default_factory=list)

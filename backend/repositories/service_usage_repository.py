@@ -103,6 +103,25 @@ class ServiceUsageRepository:
         return db.execute(select(App.default_sandbox_service_id).where(App.app_id == app_id)).scalar_one_or_none()
 
     @staticmethod
+    def app_default_sandbox_in_use(db: Session, app_id: int) -> bool:
+        """Whether the App default sandbox service is used: the Chat switch is on, or an agent that has the code
+        interpreter on has no sandbox service of its own (it inherits the App default). One query."""
+        agent_uses = (
+            select(Agent.agent_id)
+            .where(
+                Agent.app_id == app_id,
+                Agent.enable_code_interpreter.is_(True),
+                Agent.sandbox_service_id.is_(None),
+            )
+            .exists()
+        )
+        return bool(
+            db.execute(
+                select(or_(App.chat_code_interpreter_enabled.is_(True), agent_uses)).where(App.app_id == app_id)
+            ).scalar_one_or_none()
+        )
+
+    @staticmethod
     def app_default_embedding_service_id(db: Session, app_id: int) -> Optional[int]:
         """The app's ``default_embedding_service_id`` (Chat attachment indexing). One query."""
         return db.execute(select(App.default_embedding_service_id).where(App.app_id == app_id)).scalar_one_or_none()

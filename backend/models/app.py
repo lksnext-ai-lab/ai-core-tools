@@ -88,3 +88,9 @@ class App(Base):
                         nullable=True)
     default_embedding_service = relationship('EmbeddingService',
                         foreign_keys=[default_embedding_service_id])
+
+    # Opt-in for the App Chat code interpreter: the Chat only gets one when this is true. It then uses the App
+    # default sandbox service or, when the App has none, the system default (like agents); a retired App default
+    # disables it (no fallback to the system default).
+    chat_code_interpreter_enabled = Column(Boolean, nullable=False, default=False,
+                        server_default='false')

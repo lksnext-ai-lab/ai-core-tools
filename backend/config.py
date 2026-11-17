@@ -108,6 +108,25 @@ SANDBOX_MAX_OUTPUT_CHARS = int(os.getenv('SANDBOX_MAX_OUTPUT_CHARS', '20000'))
 # Maximum number of REPL executions per agent turn (budget guard).
 SANDBOX_MAX_EXECUTIONS_PER_TURN = int(os.getenv('SANDBOX_MAX_EXECUTIONS_PER_TURN', '5'))
 
+# --- App Chat code interpreter / sandbox output delivery ------------------------------------------------
+# Output files pulled from a sandbox into the turn's local output folder (all agents; 0 = unlimited for the
+# three size/count caps).
+SANDBOX_PULL_MAX_FILES = max(0, int(os.getenv('SANDBOX_PULL_MAX_FILES', '20')))
+SANDBOX_PULL_MAX_FILE_BYTES = max(0, int(os.getenv('SANDBOX_PULL_MAX_FILE_BYTES', str(50 * 1024 * 1024))))
+SANDBOX_PULL_MAX_TOTAL_BYTES = max(0, int(os.getenv('SANDBOX_PULL_MAX_TOTAL_BYTES', str(100 * 1024 * 1024))))
+# Overall time budget of one turn's pull, and how many pulls may run in worker threads at once (process-wide).
+SANDBOX_PULL_TIME_BUDGET_S = max(0.0, float(os.getenv('SANDBOX_PULL_TIME_BUDGET_S', '20')))  # 0 = no time budget
+SANDBOX_PULL_MAX_CONCURRENT = max(0, int(os.getenv('SANDBOX_PULL_MAX_CONCURRENT', '2')))
+# Live sandbox sessions per user / per App (0 = unlimited). The global cap SANDBOX_MAX_CONCURRENT_SESSIONS is unchanged.
+SANDBOX_MAX_SESSIONS_PER_USER = max(0, int(os.getenv('SANDBOX_MAX_SESSIONS_PER_USER', '3')))
+SANDBOX_MAX_SESSIONS_PER_APP = max(0, int(os.getenv('SANDBOX_MAX_SESSIONS_PER_APP', '10')))
+# Minimum idle time (seconds) before a Chat session of the SAME user may be evicted to make room under the
+# per-user / per-App limits (a session between two tool calls of a running turn is never idle). 0 = no minimum.
+SANDBOX_EVICT_MIN_IDLE_S = max(0, int(os.getenv('SANDBOX_EVICT_MIN_IDLE_S', '60')))
+# App Chat only: ceiling of one Bash call (seconds). The Chat also shares one execution budget between the REPL
+# tools and Bash, and has no background shells.
+SANDBOX_CHAT_BASH_MAX_TIMEOUT_S = max(1, int(os.getenv('SANDBOX_CHAT_BASH_MAX_TIMEOUT_S', '60')))
+
 # Maximum number of OpenSandbox code contexts created per language in one
 # sandbox. Values above 1 allow parallel tool executions without sharing a busy
 # interpreter session.

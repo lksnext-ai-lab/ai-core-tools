@@ -73,6 +73,7 @@ async def _run(ctx, chain, *, turn_config=None, hook=None, hitl=False, redact=Fa
         return result
 
     es._finalize_turn = AsyncMock(side_effect=finalize or _finalize)
+    es._pull_outputs = AsyncMock()
     svc.execution_service = es
     recorded = {}
     create = create_agent or AsyncMock(return_value=(chain, None))
@@ -245,7 +246,7 @@ async def test_finalize_survives_anyio_cancellation_redelivered_every_loop_turn(
         return {"ok": True}
 
     svc = AgentStreamingService()
-    svc.execution_service = MagicMock(_finalize_turn=AsyncMock(side_effect=finalize_turn))
+    svc.execution_service = MagicMock(_finalize_turn=AsyncMock(side_effect=finalize_turn), _pull_outputs=AsyncMock())
 
     async def consumer():
         try:
@@ -269,7 +270,7 @@ async def test_finalize_deadline_marks_turn_not_finalized():
         await asyncio.sleep(5)
 
     svc = mod.AgentStreamingService()
-    svc.execution_service = MagicMock(_finalize_turn=AsyncMock(side_effect=hang))
+    svc.execution_service = MagicMock(_finalize_turn=AsyncMock(side_effect=hang), _pull_outputs=AsyncMock())
     with patch.object(mod, "FINALIZE_GRACE_S", 0.05):
         with pytest.raises(TimeoutError):
             await svc._finalize(MagicMock(), "r", MagicMock(), True, {})

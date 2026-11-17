@@ -50,6 +50,7 @@ from tools.sandbox import (
     resolve_provider,
 )
 from tools.sandbox.factory import SandboxProviderUnavailableError, SandboxServiceRetiredError
+from tools.sandbox.chat_guard import ChatSandboxLimits
 from services.internal_chat.resolved_config import (
     InternalChatSessionError,
     McpConnectionSpec,
@@ -421,7 +422,9 @@ def _effective_surface(
         has_retriever_silo=turn_config.silo is not None,
         mcp_override=turn_config.mcp_connections,
         use_output_parser=False,
-        code_interpreter_enabled=False,
+        # Only the turn config (App switch + App default / system default, resolved per turn) enables it; the hidden agent's own flag
+        # stays False and its relationships are never consulted (see create_agent).
+        code_interpreter_enabled=turn_config.sandbox_enabled,
         server_tools=(),
         tool_associations=(),
         exposed_chat_filters=frozenset(),
@@ -520,14 +523,19 @@ async def create_agent(
         k: v for k, v in (search_params or {}).get("filter", {}).items() if k in exposed_fields
     }
 
-    # Flexible chat never gets a code interpreter (the hidden agent has it disabled and
-    # a per-turn override must not be able to turn it on).
+    # Flexible chat: enabled only by the turn config (App default sandbox service); the provider is the
+    # turn's own (``sandbox_provider``) or none. ``resolve_provider(agent)`` would reintroduce the env
+    # default for the shared hidden agent, so it is never used on a chat turn.
     code_interpreter_enabled = surface.code_interpreter_enabled
     ci_provider_for_prompt = None
     ci_languages: list[str] = []
     if code_interpreter_enabled and working_dir:
         try:
-            ci_provider_for_prompt = sandbox_provider or resolve_provider(agent)
+            ci_provider_for_prompt = sandbox_provider or (
+                None if surface.is_chat else resolve_provider(agent)
+            )
+            if ci_provider_for_prompt is None:
+                raise SandboxProviderUnavailableError("no sandbox provider prepared for this chat turn")
             ci_languages = ci_provider_for_prompt.get_supported_languages()
         except SandboxProviderUnavailableError as exc:
             if isinstance(exc, SandboxServiceRetiredError):
@@ -785,7 +793,7 @@ async def create_agent(
 
     if code_interpreter_enabled and working_dir:
         os.makedirs(working_dir, exist_ok=True)
-        if sandbox_provider is None:
+        if sandbox_provider is None and not surface.is_chat:  # chat: the turn's provider or nothing
             try:
                 sandbox_provider = ci_provider_for_prompt or resolve_provider(agent)
             except SandboxProviderUnavailableError as exc:
@@ -799,6 +807,9 @@ async def create_agent(
                         exc,
                     )
                 sandbox_provider = None
+        if surface.is_chat and sandbox_handle is None:
+            # Chat sessions are created lazily by the prepared handle only: no eager fallback sandbox.
+            sandbox_provider = None
         if sandbox_provider is not None and sandbox_handle is None:
             logger.warning(
                 "Code interpreter tool requested without prepared sandbox handle; "
@@ -826,11 +837,14 @@ async def create_agent(
                     sandbox_session_service = _sss
                 except Exception:
                     sandbox_session_service = None
+            # Chat only: ONE execution budget for REPL + Bash, capped Bash, no background shells, class-name logs.
+            chat_limits = ChatSandboxLimits() if surface.is_chat else None
             repl_tools = create_sandbox_repl_tools(
                 sandbox_handle,
                 sandbox_provider,
                 session_key=sandbox_session_key,
                 session_service=sandbox_session_service,
+                chat_limits=chat_limits,
             )
             tools.extend(repl_tools)
             builtin_tools = create_sandbox_builtin_tools(
@@ -838,6 +852,7 @@ async def create_agent(
                 sandbox_provider,
                 session_key=sandbox_session_key,
                 session_service=sandbox_session_service,
+                chat_limits=chat_limits,
             )
             tools.extend(builtin_tools)
             logger.info(

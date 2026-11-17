@@ -15,6 +15,7 @@ fails for any reason raises the same ``ChatResourceNotFoundError``.
 ``db`` MUST be the same Session handed to ``AgentExecutionService`` / ``AgentStreamingService``: the
 completion hook runs inside a SAVEPOINT of that session and relies on it to commit.
 """
+import asyncio
 import copy
 import uuid
 from contextlib import contextmanager
@@ -40,6 +41,7 @@ from schemas.conversation_schemas import ConversationUpdate
 from schemas.internal_chat_schemas import (
     ChatAIServiceOption,
     ChatAttachmentIndexing,
+    ChatCodeInterpreter,
     ChatMcpConfigOption,
     ChatOptionsResponse,
     ChatSelection,
@@ -58,6 +60,19 @@ from services.internal_chat.system_prompt import get_internal_chat_system_prompt
 from services.internal_chat.turn_info import build_turn_info, match_turns_to_messages, snapshot_ids
 from services.service_lifecycle_service import ServiceLifecycleService
 from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
+
+SANDBOX_DESTROY_TIMEOUT_S = 10.0  # bound of the off-loop sandbox destroy on conversation delete / reset
+_destroy_pool = None
+
+
+def _destroy_executor():
+    """Small dedicated executor for sandbox destroys (never the default one, which tool threads can saturate)."""
+    global _destroy_pool
+    if _destroy_pool is None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _destroy_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sandbox_destroy")
+    return _destroy_pool
 from utils.logger import get_logger
 from utils.service_lifecycle import is_retired
 
@@ -273,6 +288,7 @@ class InternalChatService:
 
         default, warnings = self._default_selection(app_id, all_ai_services)
         _, indexing = self._attachment_indexing(app_id)
+        code_interpreter = self._code_interpreter_state(app_id)
         return ChatOptionsResponse(
             ai_services=ai_services,
             silos=silos,
@@ -282,6 +298,7 @@ class InternalChatService:
             default_warnings=warnings,
             has_usable_model=bool(ai_services),
             attachment_indexing=indexing,
+            code_interpreter=code_interpreter,
         )
 
     def _attachment_indexing(self, app_id: int) -> Tuple[Optional[int], ChatAttachmentIndexing]:
@@ -295,6 +312,11 @@ class InternalChatService:
         if is_retired(service):
             return None, ChatAttachmentIndexing(enabled=False, reason="embedding_service_retired")
         return service.service_id, ChatAttachmentIndexing(enabled=True)
+
+    def _code_interpreter_state(self, app_id: int) -> ChatCodeInterpreter:
+        """State for the UI, from the same single decision the turn uses (``code_interpreter_service``)."""
+        service, reason = ChatSelectionResolver.code_interpreter_service(self.db, app_id)
+        return ChatCodeInterpreter(enabled=service is not None, reason=reason)
 
     # ------------------------------------------------------------------ conversations
 
@@ -414,6 +436,32 @@ class InternalChatService:
             raise ChatResourceNotFoundError()
         return updated
 
+    @staticmethod
+    async def _destroy_sandbox_bounded(agent_id: int, conversation_id: int) -> bool:
+        """Destroy the conversation's sandbox on a dedicated small executor, with a time bound; never raises.
+
+        The provider call is blocking: it must neither stall the event loop nor fail the delete / reset, and it must
+        not queue behind the default executor (which the synchronous sandbox tools can saturate). On timeout the
+        registry entry is dropped WITHOUT calling the provider on the loop. Returns True when the destroy was
+        confirmed (or there was nothing to destroy); False when it was not: the caller then keeps the persisted
+        sandbox state so the DB reaper can still find and destroy the remote sandbox.
+        """
+        from services.sandbox_session_service import SandboxSessionService, sandbox_session_service
+
+        key = SandboxSessionService.session_key(agent_id, conversation_id)
+        loop = asyncio.get_running_loop()
+        try:
+            return bool(await asyncio.wait_for(
+                loop.run_in_executor(_destroy_executor(), sandbox_session_service.destroy_confirmed, key),
+                SANDBOX_DESTROY_TIMEOUT_S,
+            ))
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:  # noqa: BLE001
+            sandbox_session_service.evict(key)  # registry only: no provider call on the loop
+            logger.warning("Chat: sandbox destroy did not finish (key=%s, %s)", key, type(exc).__name__)
+            return False
+
     async def delete_conversation(self, app_id: int, conversation_id: int) -> None:
         """Delete one of the caller's Chat conversations.
 
@@ -425,6 +473,7 @@ class InternalChatService:
         """
         conversation = self._load_conversation(app_id, conversation_id)
         agent_id, session_id = conversation.agent_id, conversation.session_id
+        await self._destroy_sandbox_bounded(agent_id, conversation_id)  # the row is deleted next: nothing to keep
         ConversationService.release_conversation_resources(self.db, conversation)
         try:
             set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
@@ -495,7 +544,10 @@ class InternalChatService:
         await ChatAttachmentService.remove_many(stale_file_ids, agent_id, attachment_context, conversation_id)
         conversation = self.db.get(Conversation, conversation_id)
         if conversation is not None:
-            ConversationService.release_conversation_resources(self.db, conversation, session_id=old_session_id)
+            confirmed = await self._destroy_sandbox_bounded(agent_id, conversation_id)
+            ConversationService.release_conversation_resources(
+                self.db, conversation, session_id=old_session_id, clear_sandbox_state=confirmed
+            )
             self.db.commit()
 
     # ------------------------------------------------------------------ attachments
@@ -897,7 +949,9 @@ class InternalChatService:
         unavailable = tuple(
             ChatSelectionWarning(kind="mcp_config", id=i) for i in config.diagnostics.mcp_unavailable_ids
         )
-        return build_turn_info(row, warnings=guard.warnings + unavailable).model_dump(mode="json")
+        skipped = config.diagnostics.outputs_skipped
+        outputs = (ChatSelectionWarning(kind="sandbox_output", id=skipped),) if skipped > 0 else ()
+        return build_turn_info(row, warnings=guard.warnings + unavailable + outputs).model_dump(mode="json")
 
     @staticmethod
     def _drop_thread(guard: _TurnGuard) -> None:

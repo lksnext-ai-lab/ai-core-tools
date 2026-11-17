@@ -50,6 +50,13 @@ class ResolvedSelection:
     skipped: Tuple[ChatSelectionWarning, ...]
 
 
+@dataclass(frozen=True)
+class ChatSandboxChoice:
+    """Where the Chat's sandbox comes from: an App default service, or (``service=None``) the system default."""
+
+    service: Any = None
+
+
 @dataclass
 class _Loaded:
     """What the App actually has out of a selection (nothing here trusts the request)."""
@@ -132,6 +139,41 @@ class ChatSelectionResolver:
         return tuple(specs), skipped
 
     @staticmethod
+    def code_interpreter_service(db: Session, app_id: int) -> Tuple[Optional[ChatSandboxChoice], Optional[str]]:
+        """The one decision: ``(choice, None)`` when the Chat has a code interpreter, else ``(None, reason)``.
+
+        * switch off: ``disabled_in_app_settings`` (whatever the App default is);
+        * App default set: that service (loaded by id, never through the hidden agent's relationships). Retired:
+          ``sandbox_service_retired`` and NO fallback to the system default (as for agents); provider not
+          registered / not allowed: ``sandbox_provider_unavailable``;
+        * no App default: the system default (``SANDBOX_DEFAULT_PROVIDER``, env credentials), exactly like agents
+          ("inherit system default"); not registered / not allowed: ``sandbox_provider_unavailable``.
+
+        A database / relationship error never turns into "use the system default": it means no code interpreter
+        (class-name-only warning). Never raises: the turn simply runs without code interpreter.
+        """
+        from tools.sandbox.factory import provider_is_available, system_default_is_available  # lazy: registry
+
+        try:
+            enabled, default_id, service = ChatOptionsRepository.app_chat_sandbox(db, app_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Chat code interpreter: App sandbox settings unreadable (%s)", type(exc).__name__)
+            return None, "sandbox_provider_unavailable"
+        if not enabled:
+            return None, "disabled_in_app_settings"
+        if default_id is None:
+            if not system_default_is_available():
+                return None, "sandbox_provider_unavailable"
+            return ChatSandboxChoice(service=None), None
+        if service is None:  # a default is set but its row cannot be read: never the system default
+            return None, "sandbox_provider_unavailable"
+        if is_retired(service):
+            return None, "sandbox_service_retired"
+        if not provider_is_available(service):
+            return None, "sandbox_provider_unavailable"
+        return ChatSandboxChoice(service=service), None
+
+    @staticmethod
     def resolve(db: Session, app_id: int, selection: ChatSelection) -> ResolvedChatConfig:
         """``resolve_full(...).config`` (see there for the errors)."""
         return ChatSelectionResolver.resolve_full(db, app_id, selection).config
@@ -155,6 +197,8 @@ class ChatSelectionResolver:
                 ensure_service_active(silo.embedding_service, SERVICE_KIND_EMBEDDING)
 
         mcp_specs, skipped_ids = ChatSelectionResolver._build_mcp_specs(loaded.mcp_configs)
+        choice, _ = ChatSelectionResolver.code_interpreter_service(db, app_id)
+        sandbox_service = choice.service if choice is not None else None
         config = ResolvedChatConfig(
             app_id=app_id,
             ai_service=service,
@@ -174,6 +218,11 @@ class ChatSelectionResolver:
             mcp_config_names=tuple(s.name for s in mcp_specs),
             system_prompt=get_internal_chat_system_prompt(),
             skipped_mcp_config_ids=tuple(skipped_ids),
+            sandbox_enabled=choice is not None,
+            sandbox_service=sandbox_service,
+            sandbox_service_id=sandbox_service.service_id if sandbox_service is not None else None,
+            sandbox_service_name=sandbox_service.name if sandbox_service is not None else None,
+            sandbox_provider=(sandbox_service.provider or "").strip().lower() if sandbox_service is not None else None,
         )
         requested = ChatSelection(
             ai_service_id=service.service_id,

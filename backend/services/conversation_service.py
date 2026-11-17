@@ -325,7 +325,8 @@ class ConversationService:
     
     @staticmethod
     def release_conversation_resources(
-        db: Session, conversation: Conversation, session_id: Optional[str] = None
+        db: Session, conversation: Conversation, session_id: Optional[str] = None,
+        clear_sandbox_state: bool = True,
     ) -> None:
         """Drop a conversation's temp media (silo + repo + vectors) and its sandbox. Best effort.
 
@@ -351,8 +352,9 @@ class ConversationService:
             from services.sandbox_session_service import sandbox_session_service, SandboxSessionService
             sandbox_key = SandboxSessionService.session_key(conversation.agent_id, conversation_id)
             sandbox_session_service.destroy(sandbox_key)
-            conversation.sandbox_session_id = None
-            conversation.sandbox_state = None
+            if clear_sandbox_state:  # False: an unconfirmed remote destroy must stay findable by the DB reaper
+                conversation.sandbox_session_id = None
+                conversation.sandbox_state = None
         except Exception as e:
             logger.error(f"Error destroying sandbox on conversation delete: {e}")
 

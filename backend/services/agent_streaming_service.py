@@ -692,6 +692,9 @@ class AgentStreamingService:
                 "files": result["files_data"],
                 "status": "completed",
             }
+            skipped_outputs = (result.get("metadata") or {}).get("outputs_skipped")
+            if skipped_outputs:  # agents only (absent for the Chat, which uses a turn warning)
+                done_data["outputs_skipped"] = skipped_outputs
             if chat_turn:
                 done_data["assistant_message_id"] = result.get("assistant_message_id")
                 done_data["turn"] = result.get("turn")
@@ -827,8 +830,10 @@ class AgentStreamingService:
                 # consumed the pause the approval is answerable again; otherwise the next
                 # attempt finds it stale.
                 approvals.release(effective_db, resume.approval.id, metrics_error_message or "Run did not finish")
-            if ctx is not None and sandbox_turn_active:
-                self.execution_service._end_sandbox_turn(ctx, db=effective_db)
+            if ctx is not None:
+                if sandbox_turn_active:
+                    self.execution_service._end_sandbox_turn(ctx, db=effective_db)
+                self.execution_service._release_turn_lease(ctx)
             if mcp_client:
                 logger.info("MCP client will be cleaned up automatically")
             if ctx is not None:
@@ -940,6 +945,10 @@ class AgentStreamingService:
         """
         if not chat_turn:
             return await self.execution_service._finalize_turn(ctx, raw_response, db, **finalize_kwargs)
+        # The sandbox output pull has its own (shielded) time budget and never raises: a slow or failing pull
+        # must not eat the finalize grace window nor turn a completed answer into a failed turn.
+        with anyio.CancelScope(shield=True):
+            await self.execution_service._pull_outputs(ctx)
         with anyio.CancelScope(shield=True) as scope:
             scope.deadline = anyio.current_time() + FINALIZE_GRACE_S
             result = await self.execution_service._finalize_turn(ctx, raw_response, db, **finalize_kwargs)

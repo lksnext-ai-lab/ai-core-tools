@@ -27,6 +27,7 @@ from models.domain import Domain
 from models.embedding_service import EmbeddingService
 from models.internal_chat import ChatConversationState, ChatUserDefault, ConversationTurn
 from models.mcp_config import MCPConfig
+from models.sandbox_service import SandboxService
 from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, TEMP_REPO_PREFIX, Repository
 from repositories.silo_repository import SiloRepository
 from models.sharepoint_source import SharePointSource
@@ -372,6 +373,28 @@ class ChatOptionsRepository:
             .join(App, App.default_embedding_service_id == EmbeddingService.service_id)
             .where(App.app_id == app_id)
         ).scalar_one_or_none()
+
+    @staticmethod
+    def app_chat_sandbox(db: Session, app_id: int) -> Tuple[bool, Optional[int], Optional[SandboxService]]:
+        """``(Chat switch, default_sandbox_service_id, that service or None)``. One query.
+
+        The id is returned next to the row so "an App default is set" is never confused with "no default": a set id
+        whose row cannot be read must not be treated as the system default.
+        """
+        row = db.execute(
+            select(App.chat_code_interpreter_enabled, App.default_sandbox_service_id, SandboxService)
+            .select_from(App)
+            .outerjoin(SandboxService, App.default_sandbox_service_id == SandboxService.service_id)
+            .where(App.app_id == app_id)
+        ).one_or_none()
+        if row is None:
+            return False, None, None
+        return bool(row[0]), row[1], row[2]
+
+    @staticmethod
+    def sandbox_service_by_id(db: Session, service_id: int) -> Optional[SandboxService]:
+        """A sandbox service by id (the turn re-reads the one it resolved, never a stale ORM object), or None."""
+        return db.get(SandboxService, service_id)
 
     @staticmethod
     def _ai_service_scope(app_id: int):

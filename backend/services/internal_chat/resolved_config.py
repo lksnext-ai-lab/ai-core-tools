@@ -63,18 +63,26 @@ class TurnDiagnostics:
     turns or users) and holds ids only.
     """
 
-    __slots__ = ("mcp_unavailable_ids", "before_model")
+    __slots__ = ("mcp_unavailable_ids", "before_model", "sandbox_degraded", "outputs_skipped")
 
     def __init__(self) -> None:
         self.mcp_unavailable_ids: list[int] = []
         # Set by the Chat service: called (synchronously, never raising) right before the model runs.
         self.before_model: Callable[[], None] | None = None
+        # Set by ``_prepare_turn`` when the turn was configured with a code interpreter but could not get one.
+        self.sandbox_degraded: bool = False
+        # Output files the sandbox pull skipped (size / count / time limits, errors); 0 = nothing skipped.
+        self.outputs_skipped: int = 0
 
     def run_before_model(self) -> None:
         """Run the ``before_model`` hook, if any (the execution / streaming services call this)."""
         hook = self.before_model
         if hook is not None:
             hook()
+
+    def report_outputs_skipped(self, count: int) -> None:
+        """Output files not delivered this turn (counts only, never names)."""
+        self.outputs_skipped = max(self.outputs_skipped, int(count))
 
     def reset(self) -> None:
         """Forget earlier reports (a retried agent build starts its MCP load afresh)."""
@@ -111,6 +119,14 @@ class ResolvedChatConfig:
     system_prompt: str
     # Selected MCP configs skipped for this turn (unusable connection config): ids only, for the SSE metadata.
     skipped_mcp_config_ids: tuple[int, ...] = ()
+    # Code interpreter: ``sandbox_enabled`` = the App switch is on and a usable source was resolved (the App default
+    # service, or - ``sandbox_service_id is None`` - the system default like agents). Otherwise the turn runs without
+    # code interpreter. The ORM object is only valid within the resolving Session; id / name / provider are snapshots.
+    sandbox_enabled: bool = False
+    sandbox_service: Any | None = field(default=None, repr=False, compare=False)
+    sandbox_service_id: int | None = None
+    sandbox_service_name: str | None = None
+    sandbox_provider: str | None = None
     # Mutable per-turn carrier (not part of equality / repr): see ``TurnDiagnostics``.
     diagnostics: TurnDiagnostics = field(default_factory=TurnDiagnostics, repr=False, compare=False)
 
@@ -123,6 +139,10 @@ class ResolvedChatConfig:
             raise TypeError("ResolvedChatConfig.skills must be a tuple")
         if not isinstance(self.mcp_connections, tuple):
             raise TypeError("ResolvedChatConfig.mcp_connections must be a tuple")
+
+    def code_interpreter_active(self) -> bool:
+        """True when the turn really had a code interpreter (configured AND ``_prepare_turn`` did not degrade)."""
+        return self.sandbox_enabled and not self.diagnostics.sandbox_degraded
 
     def metrics_service(self) -> MetricsServiceInfo:
         """The turn's AI service as plain data, safe to read after the run / session."""
@@ -140,6 +160,8 @@ class ResolvedChatConfig:
             "skills": [{"id": i, "name": n} for i, n in zip(self.skill_ids, self.skill_names)],
             "mcp_configs": [{"id": i, "name": n} for i, n in zip(self.mcp_config_ids, self.mcp_config_names)],
         }
+        # Whether the turn had a code interpreter (ids/names only, no provider credentials).
+        summary["code_interpreter"] = self.code_interpreter_active()
         # Always present (empty when nothing was skipped); same shape as ``ChatTurnInfo.warnings``.
         summary["warnings"] = [
             ChatSelectionWarning(kind="mcp_config", id=i).model_dump() for i in self.skipped_mcp_config_ids
@@ -167,4 +189,7 @@ class ResolvedChatConfig:
             "chat_skill_names": list(self.skill_names),
             "chat_mcp_config_ids": list(self.mcp_config_ids),
             "chat_mcp_config_names": list(self.mcp_config_names),
+            "chat_code_interpreter": self.code_interpreter_active(),
+            "chat_sandbox_service_id": self.sandbox_service_id,
+            "chat_sandbox_provider": self.sandbox_provider,
         }

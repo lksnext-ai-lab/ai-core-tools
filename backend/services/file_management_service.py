@@ -11,6 +11,7 @@ from fastapi import UploadFile, HTTPException
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
 from utils.log_safety import sanitize_for_log
+from tools.sandbox.chat_guard import describe_exc
 from utils.path_safety import UnsafePathError, resolve_within
 from utils.async_files import read_json, read_text, write_json, write_temp_file, write_text
 
@@ -1284,7 +1285,7 @@ class FileManagementService:
             return newly_registered
 
         except Exception as e:
-            logger.error("sync_output_files error: %s", e)
+            logger.error("sync_output_files error: %s", describe_exc(e))
             return []
 
     async def resolve_chat_files(

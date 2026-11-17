@@ -68,6 +68,8 @@ class LifecycleContext:
     agent_refs: Dict[int, AgentRefs] = field(default_factory=dict)
     app_default_sandbox_service_id: Optional[int] = None
     app_default_embedding_service_id: Optional[int] = None
+    # The App default sandbox service is in use (Chat switch on, or an agent inherits it).
+    app_default_sandbox_in_use: bool = False
 
 
 class ServiceLifecycleService:
@@ -163,6 +165,7 @@ class ServiceLifecycleService:
             },
             app_default_sandbox_service_id=ServiceUsageRepository.app_default_sandbox_service_id(db, app_id),
             app_default_embedding_service_id=ServiceUsageRepository.app_default_embedding_service_id(db, app_id),
+            app_default_sandbox_in_use=ServiceUsageRepository.app_default_sandbox_in_use(db, app_id),
             silos=ServiceUsageRepository.silo_refs(db, app_id),
             middlewares=middlewares,
             agent_middlewares=(
@@ -251,12 +254,18 @@ class ServiceLifecycleService:
 
     @staticmethod
     def warnings_for_app(ctx: LifecycleContext) -> List[ServiceLifecycleWarningSchema]:
-        """Warnings for the App-level defaults (the embedding service the Chat indexes attachments with)."""
-        return ServiceLifecycleService._finish([
+        """Warnings for the App-level defaults: the embedding service the Chat indexes attachments with, and the
+        default sandbox service (only while the Chat switch is on or an agent inherits it)."""
+        entries = [
             ServiceLifecycleService._entry(
                 ctx, SERVICE_KIND_EMBEDDING, ctx.app_default_embedding_service_id, "embedding", "app default"
             )
-        ])
+        ]
+        if ctx.app_default_sandbox_in_use:
+            entries.append(ServiceLifecycleService._entry(
+                ctx, SERVICE_KIND_SANDBOX, ctx.app_default_sandbox_service_id, "sandbox", "app default"
+            ))
+        return ServiceLifecycleService._finish(entries)
 
     @staticmethod
     def warnings_for_silo(silo_id: Optional[int], ctx: LifecycleContext) -> List[ServiceLifecycleWarningSchema]:

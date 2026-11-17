@@ -664,9 +664,10 @@ async def get_app(
         onboarding_dismissed=app.onboarding_dismissed or False,
         default_sandbox_service_id=app.default_sandbox_service_id,
         default_embedding_service_id=app.default_embedding_service_id,
+        chat_code_interpreter_enabled=bool(app.chat_code_interpreter_enabled),
         lifecycle_warnings=ServiceLifecycleService.warnings_for_app(
             ServiceLifecycleService.build_context(db, app_id)
-        ) if app.default_embedding_service_id is not None else [],
+        ) if (app.default_embedding_service_id is not None or app.default_sandbox_service_id is not None) else [],
         **counts
     )
 
@@ -737,6 +738,7 @@ async def create_app(
         agent_cors_origins=app.agent_cors_origins,
         default_sandbox_service_id=app.default_sandbox_service_id,
         default_embedding_service_id=app.default_embedding_service_id,
+        chat_code_interpreter_enabled=bool(app.chat_code_interpreter_enabled),
     )
 
 
@@ -800,6 +802,8 @@ async def update_app(
     }
     if set_embedding_default:
         update_dict['default_embedding_service_id'] = app_data.default_embedding_service_id
+    if "chat_code_interpreter_enabled" in app_data.model_fields_set:
+        update_dict['chat_code_interpreter_enabled'] = app_data.chat_code_interpreter_enabled
 
     updated_app = app_service.create_or_update_app(update_dict)
 
@@ -826,6 +830,7 @@ async def update_app(
         enable_openai_api=updated_app.enable_openai_api,
         default_sandbox_service_id=updated_app.default_sandbox_service_id,
         default_embedding_service_id=updated_app.default_embedding_service_id,
+        chat_code_interpreter_enabled=bool(updated_app.chat_code_interpreter_enabled),
     )
 
 

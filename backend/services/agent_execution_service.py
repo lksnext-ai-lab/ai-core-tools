@@ -53,6 +53,7 @@ from utils.service_lifecycle import ServiceRetiredError, agent_turn_context_kwar
 from utils.config import get_app_config
 from utils.async_files import write_bytes, write_temp_file
 from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
+from tools.sandbox.chat_guard import redacted_logs
 from models.hitl_approval import ApprovalChannel, ApprovalStatus, HITLApproval
 from services import hitl_approval_service as approvals
 from repositories.hitl_approval_repository import HITLApprovalRepository
@@ -121,7 +122,18 @@ class _LazySandboxHandle:
         tmp_base: str | None = None,
         sandbox_service_id: int | None = None,
         skills_loader: Callable[[Any], None] | None = None,
+        owner: tuple | None = None,
+        on_create_failed: Callable[[], None] | None = None,
+        chat: bool = False,
     ) -> None:
+        self._chat = chat
+        self._lease_lock = threading.Lock()  # guards the three lease fields only; never held across I/O
+        self._lease_state = "none"  # none | taking | held
+        self._turn_closed = False
+        # ``(app_id, user_id | None)`` for the per-user / per-App session limits of SandboxSessionService.
+        self._owner = owner
+        # Called (never raising) when the sandbox could not be created at first use (Chat: turn flag -> false).
+        self._on_create_failed = on_create_failed
         self.session_key = session_key
         self.working_dir = working_dir
         self.provider_name = getattr(provider, "PROVIDER_NAME", None) or getattr(
@@ -193,6 +205,65 @@ class _LazySandboxHandle:
     def is_materialized(self) -> bool:
         return self._handle is not None
 
+    # Marker used by the sandbox tools to recognise this proxy (a bare ``MagicMock`` also answers any attribute).
+    _is_lazy_sandbox_proxy = True
+
+    def _take_turn_lease(self) -> None:
+        """Chat: hold an active-use lease on the session from its first materialisation to the end of the turn.
+
+        Lazy handles never hold the outer turn lease, so without this a sandbox looks idle between two tool calls
+        of a running turn (and could be evicted by the owner limits or reaped). Released exactly once by
+        :meth:`release_turn_lease` (``_end_sandbox_turn``), on every exit path.
+
+        The lease state has its OWN lock (``_lease_lock``), never held across I/O, and is separate from the
+        proxy's ``_lock`` (held by ``get()`` during sandbox creation): the release path runs on the event loop and
+        must never wait for that. Once the turn has been released (``_turn_closed``) no lease is taken any more
+        (an abandoned tool thread recovering later would otherwise pin the session forever).
+        """
+        with self._lease_lock:
+            if self._turn_closed or self._lease_state != "none":
+                return
+            self._lease_state = "taking"
+        taken = False
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            # conversation=None: this can run on a tool thread; the persisted-state helpers use the key's id.
+            taken = bool(_sss.begin_use(
+                self.session_key,
+                conversation=None,
+                db=None,
+                expected_seconds=int(AGENT_RUN_TIMEOUT_SECONDS),
+                sandbox_service_id=self.sandbox_service_id,
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not take the sandbox turn lease (key=%s, %s)", self.session_key, type(exc).__name__)
+        with self._lease_lock:
+            closed = self._turn_closed
+            self._lease_state = "held" if (taken and not closed) else "none"
+        if taken and closed:
+            # The turn was released while we were taking it: nobody else will end this use.
+            try:
+                from services.sandbox_session_service import sandbox_session_service as _sss
+
+                _sss.end_use(self.session_key, conversation=None, db=None,
+                             sandbox_service_id=self.sandbox_service_id)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def release_turn_lease(self) -> bool:
+        """Close the turn: True exactly once if a lease is held (the caller then calls ``end_use``).
+
+        Takes only ``_lease_lock`` (never ``_lock``): safe on the event loop even while ``get()`` is creating a
+        sandbox on a tool thread. After this no new lease is ever taken.
+        """
+        with self._lease_lock:
+            self._turn_closed = True
+            held = self._lease_state == "held"
+            if held:
+                self._lease_state = "none"
+        return held
+
     def get_if_created(self) -> Any | None:
         return self._handle
 
@@ -211,6 +282,9 @@ class _LazySandboxHandle:
             self._handle = None
             self._remote_inputs_prepared = False
             self._remote_pre_existing_files = set()
+        with self._lease_lock:
+            if self._lease_state == "held":
+                self._lease_state = "none"  # the evicted entry took its lease with it; get() takes a new one (if open)
         try:
             from services.sandbox_session_service import sandbox_session_service as _sss
 
@@ -219,12 +293,16 @@ class _LazySandboxHandle:
             logger.debug(
                 "IT4: sandbox_session_service.evict failed for %s during invalidate()",
                 self.session_key,
-                exc_info=True,
+                exc_info=not self._chat,
             )
         # Deliberately NOT clearing _active_skill_registry / skill_reactivation_errors
         # here (step_020): that registry is what get() replays against the fresh
         # underlying handle the *next* time it materialises one — it must survive
         # exactly the recreation invalidate() sets up.
+
+    def _exc_text(self, exc: BaseException) -> str:
+        """Exception text for logs: class name only on a Chat turn (provider text can echo user data)."""
+        return type(exc).__name__ if self._chat else str(exc)
 
     def _record_active_skill(self, name: str, skill_id: int) -> None:
         """Record *name* (id=``skill_id``) as successfully activated this session.
@@ -267,14 +345,24 @@ class _LazySandboxHandle:
             if self._handle is None:
                 from services.sandbox_session_service import sandbox_session_service as _sss
 
-                self._handle = _sss.get_or_create(
-                    self.session_key,
-                    self._provider,
-                    self.working_dir,
-                    conversation=self._conversation,
-                    db=self._db,
-                    sandbox_service_id=self.sandbox_service_id,
-                )
+                try:
+                    self._handle = _sss.get_or_create(
+                        self.session_key,
+                        self._provider,
+                        self.working_dir,
+                        conversation=self._conversation,
+                        db=self._db,
+                        sandbox_service_id=self.sandbox_service_id,
+                        owner=self._owner,
+                    )
+                except Exception:
+                    hook = self._on_create_failed
+                    if hook is not None:
+                        try:
+                            hook()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    raise
                 if self._provider.requires_file_sync:
                     self._prepare_remote_workspace(_sss)
                 # step_020: re-activate any skills this proxy previously activated on an
@@ -333,8 +421,8 @@ class _LazySandboxHandle:
                             "session %s; invalidating so the next get() call recreates "
                             "it cleanly: %s",
                             self.session_key,
-                            exc,
-                            exc_info=True,
+                            self._exc_text(exc),
+                            exc_info=not self._chat,
                         )
                         self.invalidate()
                         raise
@@ -343,10 +431,12 @@ class _LazySandboxHandle:
                             "step_020: skills_loader raised while re-activating skills "
                             "for sandbox session %s: %s",
                             self.session_key,
-                            exc,
-                            exc_info=True,
+                            self._exc_text(exc),
+                            exc_info=not self._chat,
                         )
                         self._record_reactivation_failure("*", str(exc))
+            if self._chat and self._lease_state == "none" and not self._turn_closed and self._handle is not None:
+                self._take_turn_lease()
             return self._handle
 
     def _prepare_remote_workspace(self, sandbox_session_service: Any) -> None:
@@ -370,7 +460,7 @@ class _LazySandboxHandle:
                 logger.warning(
                     "IT4: could not snapshot remote files before turn (%s): %s",
                     self.session_key,
-                    snap_exc,
+                    self._exc_text(snap_exc),
                 )
 
             for pf in self._processed_files:
@@ -400,7 +490,7 @@ class _LazySandboxHandle:
                         "IT4: failed to push file '%s' into sandbox %s: %s",
                         filename,
                         self.session_key,
-                        push_exc,
+                        self._exc_text(push_exc),
                     )
         self._remote_inputs_prepared = True
 
@@ -687,6 +777,18 @@ def _reactivate_previous_skills(
                 )
                 lazy_handle._record_reactivation_failure(name, detail)
                 lazy_handle._forget_active_skill(name)
+
+
+def _sandbox_owner(user_context: Optional[Dict], turn_config: Any = None) -> tuple | None:
+    """``(app_id, user_id | None)`` of a CHAT sandbox session, for the per-user / per-App limits.
+
+    Only the App Chat is limited per owner. Agents (playground, public API, MCP, A2A, sub-agents, scheduled tasks)
+    keep exactly their previous capacity behaviour: only the global cap applies (``None`` = not limited).
+    """
+    if turn_config is None or not isinstance(getattr(turn_config, "app_id", None), int):
+        return None
+    user_id = (user_context or {}).get("user_id")
+    return (turn_config.app_id, user_id if isinstance(user_id, int) and not isinstance(user_id, bool) else None)
 
 
 def _safe_workspace_filename(filename: str) -> str:
@@ -1040,8 +1142,10 @@ class AgentExecutionService:
                 raise HTTPException(status_code=500, detail="Agent execution failed")
             raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
         finally:
-            if ctx is not None and sandbox_turn_active:
-                self._end_sandbox_turn(ctx, db=db)
+            if ctx is not None:
+                if sandbox_turn_active:
+                    self._end_sandbox_turn(ctx, db=db)
+                self._release_turn_lease(ctx)
 
     @staticmethod
     def _resolve_temp_silo_ids(ctx, agent_id: int, db: Optional[Session]) -> Optional[List[int]]:
@@ -1307,8 +1411,14 @@ class AgentExecutionService:
         With ``turn_config`` the checkpointer thread's session id is the conversation's own
         ``session_id`` (deterministic, DB-backed) — never the in-memory
         ``SessionManagementService`` lookup, which returns ``None`` after 24 h and would fall back
-        to a thread shared by every conversation. The sandbox block is skipped and ``turn_config``
-        is stored on the returned context.
+        to a thread shared by every conversation. ``turn_config`` is stored on the returned context.
+
+        Sandbox: a standard agent uses its own ``enable_code_interpreter`` and ``resolve_provider``. A Chat
+        turn has a code interpreter only when ``turn_config.sandbox_service`` (the App's default sandbox
+        service, chosen by the Chat) is set: the provider is built from exactly that service (never the hidden
+        agent's relationships, never the env default) and the session key is always
+        ``conv_{agent_id}_{conversation_id}`` (``InternalChatSessionError`` otherwise). A provider that became
+        unavailable or retired since the resolve degrades the turn to no code interpreter, like agents do.
 
         Returns:
             A fully populated :class:`AgentExecutionContext`.
@@ -1509,18 +1619,51 @@ class AgentExecutionService:
         sandbox_session_key = None
         pre_existing_remote_files: set = set()
 
-        if turn_config is None and getattr(fresh_agent, 'enable_code_interpreter', False) and working_dir:
+        chat_wants_sandbox = turn_config is not None and turn_config.sandbox_enabled
+        chat_sandbox_service = None
+        if chat_wants_sandbox and turn_config.sandbox_service_id is not None and working_dir:
+            # Re-read the service by id (the ORM object in the frozen config may be expired or deleted since the
+            # resolve): a vanished service degrades the turn, it never fails it.
+            try:
+                from repositories.internal_chat_repository import ChatOptionsRepository
+
+                chat_sandbox_service = ChatOptionsRepository.sandbox_service_by_id(db, turn_config.sandbox_service_id)
+            except Exception as exc:
+                logger.warning("Chat sandbox service could not be loaded (%s)", type(exc).__name__)
+            if chat_sandbox_service is None:
+                turn_config.diagnostics.sandbox_degraded = True
+        if (
+            (turn_config is None and getattr(fresh_agent, 'enable_code_interpreter', False))
+            or (chat_wants_sandbox and (chat_sandbox_service is not None or turn_config.sandbox_service_id is None))
+        ) and working_dir:
             from tools.sandbox.factory import (
+                provider_for_service,
                 resolve_provider_and_service_id,
                 SandboxProviderUnavailableError,
                 SandboxServiceRetiredError,
             )
             from services.sandbox_session_service import SandboxSessionService
 
+            if turn_config is not None and not effective_conv_id:
+                # Never ``thread_`` / ``anon_``: a Chat sandbox is per conversation, or there is none.
+                raise InternalChatSessionError("A chat turn with a code interpreter requires a conversation id")
+
             try:
-                resolved_sandbox_provider, resolved_sandbox_service_id = (
-                    resolve_provider_and_service_id(fresh_agent)
-                )
+                if turn_config is not None and turn_config.sandbox_service_id is None:
+                    # No App default: the system default, via the factory's own env resolution (as for agents).
+                    resolved_sandbox_provider, resolved_sandbox_service_id = resolve_provider_and_service_id(None)
+                elif turn_config is not None:
+                    # The App's default service resolved by the Chat: never a fallback to the system default.
+                    resolved_sandbox_provider, resolved_sandbox_service_id = provider_for_service(
+                        chat_sandbox_service,
+                        app_id=turn_config.app_id,
+                        resource_type="app_chat",
+                        resource_id=agent_id,
+                    )
+                else:
+                    resolved_sandbox_provider, resolved_sandbox_service_id = (
+                        resolve_provider_and_service_id(fresh_agent)
+                    )
             except SandboxProviderUnavailableError as exc:
                 # A misconfigured/unavailable sandbox provider must not hard-fail
                 # the whole chat turn — degrade gracefully by leaving the sandbox
@@ -1530,10 +1673,22 @@ class AgentExecutionService:
                 if isinstance(exc, SandboxServiceRetiredError):
                     # The resolution guard already logged the structured WARNING.
                     logger.debug("Sandbox provider unavailable for agent %s: sandbox service retired", agent_id)
+                elif turn_config is not None:
+                    logger.warning("Sandbox provider unavailable for the chat of agent %s (%s)", agent_id, type(exc).__name__)
                 else:
                     logger.warning("Sandbox provider unavailable for agent %s: %s", agent_id, exc)
                 resolved_sandbox_provider = None
                 resolved_sandbox_service_id = None
+                if turn_config is not None:
+                    turn_config.diagnostics.sandbox_degraded = True
+            except Exception as exc:
+                if turn_config is None:
+                    raise
+                # Chat: a service row that changed or vanished under us degrades the turn, never fails it.
+                logger.warning("Chat sandbox provider could not be built for agent %s (%s)", agent_id, type(exc).__name__)
+                resolved_sandbox_provider = None
+                resolved_sandbox_service_id = None
+                turn_config.diagnostics.sandbox_degraded = True
 
             if resolved_sandbox_provider is not None:
                 sandbox_session_key = SandboxSessionService.session_key(
@@ -1541,6 +1696,9 @@ class AgentExecutionService:
                     effective_conv_id,
                     session_id=None if effective_conv_id else identity_session_id,
                 )
+                if turn_config is not None and sandbox_session_key != f"conv_{agent_id}_{effective_conv_id}":
+                    # Defence in depth: the Chat key is ALWAYS per conversation.
+                    raise InternalChatSessionError("Unexpected sandbox session key for a chat turn")
 
                 # step_020: reuse step_019's DB-bound payload-provider factory (the same
                 # one tools/agentTools.py uses to wire create_skill_loader_tool) so the
@@ -1566,6 +1724,12 @@ class AgentExecutionService:
                     processed_files=processed_files,
                     tmp_base=tmp_base,
                     sandbox_service_id=resolved_sandbox_service_id,
+                    owner=_sandbox_owner(user_context, turn_config),
+                    chat=turn_config is not None,
+                    on_create_failed=(
+                        (lambda diag=turn_config.diagnostics: setattr(diag, "sandbox_degraded", True))
+                        if turn_config is not None else None
+                    ),
                 )
                 sandbox_handle._skills_loader = functools.partial(
                     _reactivate_previous_skills,
@@ -1640,12 +1804,17 @@ class AgentExecutionService:
                 )
             )
         except Exception as exc:
-            logger.warning(
-                "Could not mark sandbox turn active (key=%s): %s",
-                ctx.sandbox_session_key,
-                exc,
-                exc_info=True,
-            )
+            if ctx.is_chat_turn:  # Chat: class name + session key only
+                logger.warning(
+                    "Could not mark sandbox turn active (key=%s, %s)", ctx.sandbox_session_key, type(exc).__name__
+                )
+            else:
+                logger.warning(
+                    "Could not mark sandbox turn active (key=%s): %s",
+                    ctx.sandbox_session_key,
+                    exc,
+                    exc_info=True,
+                )
             return False
 
     def _end_sandbox_turn(
@@ -1678,6 +1847,86 @@ class AgentExecutionService:
                 exc,
                 exc_info=True,
             )
+
+    def _release_turn_lease(self, ctx: AgentExecutionContext) -> None:
+        """Release the Chat turn's sandbox lease taken at first materialisation (see ``_take_turn_lease``).
+
+        Idempotent and safe to call on every exit path (success, tool/model error, timeout, cancellation): it ends
+        the use exactly once, and does nothing where no lease was taken (never materialised, busy-rejected,
+        agents).
+        """
+        handle = ctx.sandbox_handle
+        if not isinstance(handle, _LazySandboxHandle) or not ctx.sandbox_session_key:
+            return
+        if not handle.release_turn_lease():
+            return
+        try:
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            _sss.end_use(ctx.sandbox_session_key, conversation=None, db=None,
+                         sandbox_service_id=getattr(handle, "sandbox_service_id", None))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not release the sandbox turn lease (key=%s, %s)",
+                           ctx.sandbox_session_key, type(exc).__name__)
+
+    async def _pull_outputs(self, ctx: AgentExecutionContext) -> None:
+        """Deliver the sandbox's new ``output/`` files to the local output dir (once per turn; never raises).
+
+        Bounded by the ``SANDBOX_PULL_*`` limits and time budget and run off the event loop, so a slow, failing
+        or oversized pull can neither stall the loop nor turn a completed answer into a failed turn: the answer
+        is kept and the files are skipped. A Chat turn reports the undelivered count as a turn warning; its logs
+        carry class names, the session key and counts only.
+        """
+        if ctx.outputs_pulled:
+            return
+        ctx.outputs_pulled = True
+        sandbox_handle = ctx.sandbox_handle
+        if isinstance(sandbox_handle, _LazySandboxHandle):
+            if sandbox_handle.is_materialized():
+                ctx.pre_existing_remote_files = sandbox_handle.pre_existing_remote_files
+                sandbox_handle = sandbox_handle.get_if_created()
+            else:
+                sandbox_handle = None
+
+        if sandbox_handle is None:
+            if ctx.sandbox_provider is not None:
+                logger.debug("IT4: sandbox was never materialised this turn; no remote pull")
+            return
+        provider = ctx.sandbox_provider
+        if provider is None or not ctx.working_dir or not provider.requires_file_sync:
+            return
+        chat = ctx.is_chat_turn
+        try:
+            from services.sandbox_output_pull import pull_outputs
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            output_dir = _ensure_local_workspace_layout(ctx.working_dir)["output"]
+            service_id = getattr(ctx.sandbox_handle, "sandbox_service_id", None)
+            session_key = ctx.sandbox_session_key
+
+            def lease():
+                # No ORM object crosses into the worker thread: the persisted-state helpers resolve the
+                # conversation from the ``conv_<agent>_<id>`` key.
+                return _sss.use(session_key, conversation=None, db=None, expected_seconds=30,
+                                sandbox_service_id=service_id)
+
+            outcome = await pull_outputs(
+                provider, sandbox_handle,
+                is_output_file=_is_remote_output_file, to_relative=_remote_workspace_relative,
+                pre_existing=set(ctx.pre_existing_remote_files), output_dir=output_dir, lease=lease,
+                chat=chat, log_key=str(session_key),
+            )
+        except Exception as exc:  # noqa: BLE001 - the answer must survive any pull problem
+            logger.warning("Sandbox output pull could not run (%s)", type(exc).__name__)
+            return
+        ctx.outputs_undelivered = outcome.undelivered
+        if outcome.undelivered or outcome.pulled:
+            logger.info(
+                "sandbox pull (key=%s): pulled=%d skipped=%d incomplete=%s",
+                ctx.sandbox_session_key, outcome.pulled, outcome.skipped, outcome.incomplete,
+            )
+        if outcome.undelivered and chat:
+            ctx.turn_config.diagnostics.report_outputs_skipped(outcome.undelivered)
 
     async def _finalize_turn(
         self,
@@ -1726,88 +1975,29 @@ class AgentExecutionService:
         response = raw_response
         files_data: List[Dict[str, Any]] = []
 
-        # 0 (IT-4). Pull new files from remote sandbox into working_dir BEFORE sync.
-        # Providers with requires_file_sync=False write directly to working_dir,
-        # so no pull is needed there.
+        # 0 (IT-4). Pull new files from the remote sandbox into the local output dir BEFORE sync (bounded, in a
+        # worker thread, never failing the answer). Streaming runs it before the finalize grace window; any
+        # other caller gets it here.
+        await self._pull_outputs(ctx)
         output_dir = (
             _ensure_local_workspace_layout(ctx.working_dir)["output"]
             if ctx.working_dir
             else None
         )
-        sandbox_handle = ctx.sandbox_handle
-        if isinstance(sandbox_handle, _LazySandboxHandle):
-            if sandbox_handle.is_materialized():
-                ctx.pre_existing_remote_files = sandbox_handle.pre_existing_remote_files
-                sandbox_handle = sandbox_handle.get_if_created()
-            else:
-                sandbox_handle = None
-
-        if (
-            sandbox_handle is not None
-            and ctx.sandbox_provider is not None
-            and ctx.working_dir
-            and output_dir
-            and ctx.sandbox_provider.requires_file_sync
-        ):
-            try:
-                from services.sandbox_session_service import sandbox_session_service as _sss
-
-                with _sss.use(
-                    ctx.sandbox_session_key,
-                    conversation=ctx.conversation,
-                    db=db,
-                    expected_seconds=30,
-                    sandbox_service_id=getattr(
-                        ctx.sandbox_handle, "sandbox_service_id", None
-                    ),
-                ):
-                    remote_files = ctx.sandbox_provider.list_files(sandbox_handle)
-                    logger.debug(
-                        "IT4: sandbox lists %d file(s) %s; output candidates=%s; pre-existing=%s",
-                        len(remote_files),
-                        [p for p in remote_files if not str(p).lstrip("/").startswith(".skills")][:40],
-                        [p for p in remote_files if _is_remote_output_file(p)],
-                        sorted(ctx.pre_existing_remote_files),
-                    )
-                    for remote_path in remote_files:
-                        if not _is_remote_output_file(remote_path):
-                            continue
-                        remote_rel = _remote_workspace_relative(remote_path)
-                        if remote_rel in ctx.pre_existing_remote_files:
-                            continue
-                        # Derive a safe local filename (last component, no hidden/traversal names)
-                        basename = posixpath.basename(remote_rel)
-                        if not basename or basename.startswith("."):
-                            logger.warning("IT4: skipping unsafe remote path '%s'", remote_path)
-                            continue
-                        try:
-                            file_bytes = ctx.sandbox_provider.read_file(sandbox_handle, remote_rel)
-                            dest = os.path.join(output_dir, basename)
-                            os.makedirs(output_dir, exist_ok=True)
-                            await write_bytes(dest, file_bytes)
-                            logger.debug("IT4: pulled '%s' → %s", remote_path, dest)
-                        except Exception as _pull_exc:
-                            logger.warning(
-                                "IT4: failed to pull remote file '%s': %s", remote_path, _pull_exc
-                            )
-            except Exception as _list_exc:
-                logger.warning("IT4: could not list remote files for pull: %s", _list_exc)
-
-        if sandbox_handle is None and ctx.sandbox_provider is not None:
-            logger.debug("IT4: sandbox was never materialised this turn; no remote pull")
 
         # 1 + 2. Sync output files and inject markers
         if output_dir:
             file_service = FileManagementService()
-            new_files = await file_service.sync_output_files(
-                working_dir=output_dir,
-                agent_id=ctx.agent_id,
-                user_context=ctx.user_context,
-                conversation_id=(
-                    str(ctx.effective_conv_id) if ctx.effective_conv_id else None
-                ),
-                exclude_filenames=ctx.pre_existing_files,
-            )
+            with redacted_logs(ctx.is_chat_turn):  # Chat: no file names / error text in sync errors
+                new_files = await file_service.sync_output_files(
+                    working_dir=output_dir,
+                    agent_id=ctx.agent_id,
+                    user_context=ctx.user_context,
+                    conversation_id=(
+                        str(ctx.effective_conv_id) if ctx.effective_conv_id else None
+                    ),
+                    exclude_filenames=ctx.pre_existing_files,
+                )
             if new_files:
                 response = _inject_file_markers(response, new_files)
                 files_data = [
@@ -1898,6 +2088,12 @@ class AgentExecutionService:
                 "agent_type": ctx.agent.type,
                 "files_processed": len(ctx.processed_files),
                 "has_memory": ctx.agent.has_memory,
+                # Only when > 0: sandbox output files that could not be delivered (limits / time / errors).
+                # The answer text is never touched; the Chat reports the same count as a turn warning instead.
+                **(
+                    {"outputs_skipped": ctx.outputs_undelivered}
+                    if ctx.outputs_undelivered and not ctx.is_chat_turn else {}
+                ),
             },
             # Fields used by the streaming path to emit the done event
             "parsed_response": parsed_response,

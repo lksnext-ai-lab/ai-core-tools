@@ -533,3 +533,104 @@ async def test_mcp_failure_is_reported_and_a_successful_retry_clears_it():
             assert cfg.diagnostics.mcp_unavailable_ids == []
         finally:
             fake_client.get_tools = original
+
+
+# --------------------------------------------------------------------------- code interpreter (App default sandbox)
+
+
+def _with_sandbox(cfg, sandbox=True):
+    import dataclasses
+
+    if not sandbox:
+        return cfg
+    return dataclasses.replace(
+        cfg,
+        sandbox_service=SimpleNamespace(service_id=5, name="sbx", provider="e2b"),
+        sandbox_enabled=True, sandbox_service_id=5, sandbox_service_name="sbx", sandbox_provider="e2b",
+    )
+
+
+def _provider():
+    provider = MagicMock()
+    provider.get_supported_languages.return_value = ["python", "bash"]
+    return provider
+
+
+def test_effective_surface_chat_code_interpreter_follows_the_turn_config():
+    on = agentTools._effective_surface(_agent(), _with_sandbox(_config("A")))
+    off = agentTools._effective_surface(_agent(enable_code_interpreter=True), _config("A"))
+    assert on.is_chat and on.code_interpreter_enabled is True
+    # The hidden agent's own flag never enables it; the turn config does.
+    assert off.code_interpreter_enabled is False
+    # Everything else the Chat does not expose stays off with the sandbox on.
+    assert on.server_tools == () and on.tool_associations == () and on.use_output_parser is False
+    assert agentTools._effective_surface(_agent(enable_code_interpreter=True), None).code_interpreter_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_with_sandbox_gets_code_interpreter_block_and_tools(tmp_path):
+    provider, handle = _provider(), MagicMock()
+    with _Harness() as h:
+        with patch("tools.agentTools.resolve_provider") as resolve, \
+             patch("tools.agentTools.create_sandbox_repl_tools", return_value=[_tool("python_repl")]) as repl, \
+             patch("tools.agentTools.create_sandbox_builtin_tools", return_value=[_tool("Bash")]) as builtin, \
+             patch("tools.agentTools.create_skill_loader_tool") as loader:
+            loader.return_value = _tool("load_skill")
+            await create_agent(
+                _agent(), session_id="conv_7_a", working_dir=str(tmp_path),
+                sandbox_provider=provider, sandbox_handle=handle, sandbox_session_key="conv_7_55",
+                turn_config=_with_sandbox(_config("A")),
+            )
+    resolve.assert_not_called()  # never resolved from the shared hidden agent
+    repl.assert_called_once()
+    builtin.assert_called_once()
+    assert repl.call_args.kwargs["session_key"] == "conv_7_55"
+    call = h.graph_calls[0]
+    assert "<code_interpreter>" in call["system_prompt"]
+    assert {"python_repl", "Bash"} <= set(_tool_names(call))
+    # load_skill receives the turn's handle/provider so it can materialise the skill in the sandbox.
+    assert loader.call_args.kwargs["sandbox_handle"] is handle
+    assert loader.call_args.kwargs["sandbox_provider"] is provider
+    assert loader.call_args.kwargs["payload_provider"] is None  # harness stub of build_skill_tool_providers
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_without_prepared_provider_never_resolves_from_the_agent(tmp_path):
+    """Sandbox configured on the turn but prepare degraded (provider None): no tools, no env fallback."""
+    with _Harness() as h:
+        with patch("tools.agentTools.resolve_provider") as resolve, \
+             patch("tools.agentTools.create_sandbox_repl_tools") as repl, \
+             patch("tools.agentTools.create_sandbox_builtin_tools") as builtin:
+            await create_agent(
+                _agent(enable_code_interpreter=True), session_id="conv_7_a", working_dir=str(tmp_path),
+                turn_config=_with_sandbox(_config("A")),
+            )
+    resolve.assert_not_called()
+    repl.assert_not_called()
+    builtin.assert_not_called()
+    assert "<code_interpreter>" not in h.graph_calls[0]["system_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_with_provider_but_no_handle_creates_no_fallback_sandbox(tmp_path):
+    provider = _provider()
+    with _Harness() as h:
+        with patch("tools.agentTools.resolve_provider") as resolve, \
+             patch("tools.agentTools.create_sandbox_repl_tools") as repl:
+            await create_agent(
+                _agent(), session_id="conv_7_a", working_dir=str(tmp_path),
+                sandbox_provider=provider, turn_config=_with_sandbox(_config("A")),
+            )
+    resolve.assert_not_called()
+    provider.create_sandbox.assert_not_called()
+    repl.assert_not_called()
+    assert h.graph_calls
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_without_sandbox_service_never_calls_resolve_provider(tmp_path):
+    with _Harness():
+        with patch("tools.agentTools.resolve_provider") as resolve:
+            await create_agent(_agent(enable_code_interpreter=True), session_id="conv_7_a",
+                               working_dir=str(tmp_path), turn_config=_config("A"))
+    resolve.assert_not_called()

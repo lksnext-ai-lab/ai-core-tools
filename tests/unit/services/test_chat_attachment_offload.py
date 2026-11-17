@@ -3,7 +3,6 @@ import asyncio
 import contextlib
 import io
 import threading
-import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -74,31 +73,33 @@ async def test_indexing_runs_in_a_worker_thread_with_a_fresh_session_not_the_req
 
 
 async def test_a_slow_embedding_does_not_block_the_loop_and_times_out_to_not_vectorized():
-    ticks = []
+    """No wall-clock assertions: the worker is held on an Event, the outcome is read while it is still held."""
+    ticks = 0
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
 
     async def ticker():
-        last = time.perf_counter()
+        nonlocal ticks
         while True:
-            await asyncio.sleep(0.02)
-            now = time.perf_counter()
-            ticks.append(now - last)
-            last = now
+            await asyncio.sleep(0)
+            ticks += 1
 
     def slow(**kwargs):
-        time.sleep(1.0)
+        started.set()
+        release.wait(5)
+        finished.set()
         return True
 
     task = asyncio.create_task(ticker())
-    started = time.perf_counter()
     with patch.object(module, "open_indexing_session", _session_factory([])), \
             patch.object(module.PlaygroundMediaService, "vectorize_uploaded_file", slow):
         result = await _upload(MagicMock(), timeout=0.3)
-    elapsed = time.perf_counter() - started
-    task.cancel()
-    assert result["vectorized"] is False and result["success"] is True and result["file_id"] == "f1"
-    assert elapsed < 0.9  # gave up at the timeout, did not wait for the provider
-    assert max(ticks) < 0.25  # the event loop kept running meanwhile
-    await asyncio.sleep(0.8)  # let the abandoned worker finish before the patches go away
+        # the outcome is known while the provider call is STILL running (release is unset)
+        assert await asyncio.to_thread(started.wait, 2) and not release.is_set() and not finished.is_set()
+        task.cancel()
+        assert result["vectorized"] is False and result["success"] is True and result["file_id"] == "f1"
+        assert ticks >= 3  # the event loop kept running while the worker was held
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 5)  # let the abandoned worker end before the patches go away
 
 
 async def test_a_provider_error_degrades_and_logs_only_the_class():
@@ -169,7 +170,10 @@ async def test_at_most_two_jobs_per_embedding_service_run_the_rest_degrade_at_on
             patch.object(module.PlaygroundMediaService, "get_temp_repository", return_value=None), \
             patch.object(module.PlaygroundMediaService, "vectorize_uploaded_file", hung):
         tasks = [asyncio.create_task(one(i)) for i in range(3)]
-        await asyncio.sleep(0.5)
+        for _ in range(500):  # wait for the condition (two started, one refused), never for a fixed time
+            if len(started) == 2 and sum(t.done() for t in tasks) == 1:
+                break
+            await asyncio.sleep(0.01)
         assert len(started) == 2  # the third was refused at once, it is not waiting in a queue
         refused = [t for t in tasks if t.done()]
         assert len(refused) == 1 and refused[0].result() is False

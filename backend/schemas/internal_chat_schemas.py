@@ -12,7 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 MAX_SELECTION_ITEMS = 50
 
 SiloSourceType = Literal["repository", "domain", "sharepoint", "silo"]
-WarningKind = Literal["ai_service", "silo", "skill", "mcp_config"]
+# ``sandbox_output``: ``id`` is the number of sandbox output files that could not be delivered this turn.
+WarningKind = Literal["ai_service", "silo", "skill", "mcp_config", "sandbox_output"]
 
 
 class ChatSelection(BaseModel):
@@ -97,6 +98,19 @@ class ChatAttachmentIndexing(BaseModel):
     reason: Optional[Literal["no_default_embedding_service", "embedding_service_retired"]] = None
 
 
+class ChatCodeInterpreter(BaseModel):
+    """Whether the Chat has a code interpreter (the App's default sandbox service); ``reason`` explains a disabled state."""
+
+    enabled: bool
+    reason: Optional[
+        Literal[
+            "disabled_in_app_settings",
+            "sandbox_service_retired",
+            "sandbox_provider_unavailable",
+        ]
+    ] = None
+
+
 class ChatOptionsResponse(BaseModel):
     ai_services: list[ChatAIServiceOption]
     silos: list[ChatSiloOption]
@@ -107,6 +121,9 @@ class ChatOptionsResponse(BaseModel):
     has_usable_model: bool
     attachment_indexing: ChatAttachmentIndexing = Field(
         default_factory=lambda: ChatAttachmentIndexing(enabled=False, reason="no_default_embedding_service")
+    )
+    code_interpreter: ChatCodeInterpreter = Field(
+        default_factory=lambda: ChatCodeInterpreter(enabled=False, reason="disabled_in_app_settings")
     )
 
 
