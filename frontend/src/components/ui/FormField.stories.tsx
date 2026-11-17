@@ -14,7 +14,7 @@ const meta = {
   argTypes: {
     type: {
       control: 'select',
-      options: ['text', 'email', 'password', 'number', 'url', 'tel', 'time', 'file'],
+      options: ['text', 'email', 'password', 'number', 'url', 'tel', 'time', 'date', 'file', 'checkbox'],
     },
   },
   decorators: [
@@ -45,7 +45,7 @@ export const Interactive: Story = {
         {...args}
         value={value}
         onChange={(event) => {
-          args.onChange(event);
+          args.onChange?.(event);
           setValue(event.target.value);
         }}
       />
@@ -98,8 +98,20 @@ export const Password: Story = {
     label: 'API key',
     type: 'password',
     value: 'sk-0000000000000000',
+    minLength: 8,
     placeholder: undefined,
     autoComplete: 'off',
+  },
+};
+
+export const DateInput: Story = {
+  args: {
+    id: 'end-of-service',
+    label: 'End of service',
+    type: 'date',
+    value: '2026-12-31',
+    placeholder: undefined,
+    helpText: 'From this date the service stops working.',
   },
 };
 
@@ -113,3 +125,51 @@ export const FileInput: Story = {
     helpText: 'JSON export of an agent.',
   },
 };
+
+export const FileInputWithError: Story = {
+  args: {
+    id: 'import-file-error',
+    label: 'Import file',
+    type: 'file',
+    accept: '.json',
+    placeholder: undefined,
+    error: 'The file must be a valid JSON export.',
+  },
+};
+
+export const FileInputDisabled: Story = {
+  args: {
+    id: 'import-file-disabled',
+    label: 'Import file',
+    type: 'file',
+    placeholder: undefined,
+    disabled: true,
+  },
+};
+
+export const CheckboxType: Story = {
+  args: {
+    id: 'include-service',
+    type: 'checkbox',
+    label: 'Include the AI service in the export',
+    value: undefined,
+    placeholder: undefined,
+    className: 'flex items-center gap-2',
+  },
+  render: function CheckboxField(args) {
+    const [checked, setChecked] = useState(false);
+
+    return (
+      <FormField
+        {...args}
+        checked={checked}
+        onChange={(event) => {
+          args.onChange?.(event);
+          setChecked(event.target.checked);
+        }}
+      />
+    );
+  },
+};
+
+

@@ -40,7 +40,7 @@ interface App {
   owner_id: number;
   owner_name?: string;
   owner_email?: string;
-  role: string;
+  user_role?: string;
   langsmith_configured: boolean;
   agent_rate_limit: number;
   agent_count: number;
@@ -219,7 +219,7 @@ function AppDashboard() {
   const rateLimitBadge = () => {
     if (currentApp.agent_rate_limit === 0) {
       return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--bg-sticky-verde)] text-[var(--text-sticky-verde)]">
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-success-bg dark:bg-success-bg-dark text-success dark:text-success-dark">
           <InfinityIcon className="w-3 h-3" />
           {t('appDashboard.noLimit')}
         </span>
@@ -236,7 +236,7 @@ function AppDashboard() {
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
         <Zap className="w-3 h-3" />
-        {currentApp.agent_rate_limit} req/min per agent
+        {t('appDashboard.requestsPerMinutePerAgent', { limit: currentApp.agent_rate_limit })}
       </span>
     );
   };
@@ -298,7 +298,7 @@ function AppDashboard() {
     (maximum, agent) => Math.max(maximum, agent.request_count ?? 0),
     0,
   );
-  const canEdit = EDITOR_ROLES.has(currentApp.role);
+  const canEdit = EDITOR_ROLES.has(currentApp.user_role ?? '');
 
   let rateLimitContent: React.ReactNode;
   if (currentApp.agent_rate_limit === 0) {
@@ -331,13 +331,13 @@ function AppDashboard() {
     rateLimitContent = (
       <div className="flex flex-col items-center gap-4">
         <Speedometer usageStats={rateLimitSummary} size="lg" showDetails />
-        <div className="w-full border-t border-gray-100 pt-2">
+        <div className="w-full border-t border-line dark:border-line-dark pt-2">
           <p className="mb-2 text-center text-xs text-fg-secondary dark:text-fg-secondary-dark">
             {t('appDashboard.highestAgentUsage', {
               name: highestUsageAgent?.name ?? t('appDashboard.unknownAgent'),
             })}
           </p>
-          <div className="flex justify-between gap-2 text-xs text-gray-500">
+          <div className="flex justify-between gap-2 text-xs text-fg-secondary dark:text-fg-secondary-dark">
             <span>{t('appDashboard.limitRequestsPerMinute', { limit: rateLimitSummary.limit })}</span>
             <span>{t('appDashboard.remaining', { count: rateLimitSummary.remaining })}</span>
           </div>
@@ -387,14 +387,14 @@ function AppDashboard() {
                 key={agent.agent_id}
                 to={`/apps/${appId}/agents`}
                 className="block group rounded-lg px-1 -mx-1 transition-colors"
-                aria-label={`Go to ${agent.name}`}
+                aria-label={t('appDashboard.goToAgent', { name: agent.name })}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-fg dark:text-fg-dark truncate" title={agent.name}>
                     {agent.name}
                   </span>
                   <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark shrink-0">
-                    {requestCount} total calls
+                    {t('appDashboard.totalCalls', { count: requestCount })}
                   </span>
                 </div>
                 <div
@@ -415,7 +415,7 @@ function AppDashboard() {
             to={`/apps/${appId}/agents`}
             className="mt-3 inline-flex items-center gap-0.5 text-xs text-fg dark:text-fg-dark font-medium"
           >
-            View all {agents.length} agents
+            {t('appDashboard.viewAllAgents', { count: agents.length })}
             <ChevronRight className="w-3 h-3" />
           </Link>
         )}
@@ -442,7 +442,7 @@ function AppDashboard() {
             {/* Info badges row */}
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {/* Collaborators */}
-              <span className="inline-flex items-center gap-1 rounded-full border border-color-border-card dark:border-btCard-border-dark bg-white dark:bg-canvas-alt-dark px-2.5 py-1 text-xs font-medium text-[var(--text-sticky-blanco)] dark:text-fg-secondary-dark">
+              <span className="inline-flex items-center gap-1 rounded-full border border-color-border-card dark:border-btCard-border-dark bg-white dark:bg-canvas-alt-dark px-2.5 py-1 text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark">
                 <Users className="w-3 h-3" />
                 {t('appDashboard.collaborators', { count: currentApp.collaborator_count })}
               </span>
@@ -566,7 +566,7 @@ function AppDashboard() {
           headerExtra={canEdit && (
             <button
               onClick={() => void dismissChecklist()}
-              className="text-gray-300 hover:text-gray-500 transition-colors rounded p-0.5"
+              className="text-fg-secondary hover:text-fg dark:text-fg-secondary-dark dark:hover:text-fg-dark transition-colors rounded p-0.5"
               aria-label={t('appDashboard.checklist.dismiss')}
             >
               <X className="w-4 h-4" />

@@ -296,7 +296,7 @@ function ServiceUsageModal({
     return (
       <section
         aria-labelledby={`${selectId}-move`}
-        className="mt-6 border-t border-gray-200 dark:border-slate-600 pt-4"
+        className="mt-6 border-t border-line dark:border-line-dark pt-4"
       >
         <h4 ref={moveHeadingRef} tabIndex={-1} id={`${selectId}-move`} className="text-sm font-semibold text-fg dark:text-fg-dark mb-1">
           {isAI ? S.moveTitle : S.moveSandboxTitle}

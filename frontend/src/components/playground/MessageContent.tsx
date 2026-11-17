@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import { useTranslation } from 'react-i18next';
 import remarkGfm from 'remark-gfm';
 import InlineFileImage from './InlineFileImage';
 import InlineFileDownload from './InlineFileDownload';
@@ -44,7 +45,7 @@ function isMarkdown(str: string): boolean {
   return markdownPatterns.some(pattern => pattern.test(str));
 }
 
-function formatJson(jsonStr: string): React.ReactNode {
+function formatJson(jsonStr: string, invalidJsonMessage: string): React.ReactNode {
   try {
     const parsed = JSON.parse(jsonStr);
     return (
@@ -55,11 +56,12 @@ function formatJson(jsonStr: string): React.ReactNode {
       </pre>
     );
   } catch {
-    return <span className="text-red-500">Invalid JSON</span>;
+    return <span className="text-red-500">{invalidJsonMessage}</span>;
   }
 }
 
 function MarkdownCode({ className, children, ...props }: any) {
+  const { t } = useTranslation('common');
   const match = /language-(\w+)/.exec(className || '');
   const isInline = !match;
   const [copied, setCopied] = useState(false);
@@ -80,7 +82,7 @@ function MarkdownCode({ className, children, ...props }: any) {
     <div className="relative group">
       <button
         onClick={handleCopy}
-        aria-label="Copy code"
+        aria-label={t('messageContent.copyCode')}
         className="absolute top-2 right-2 inline-flex cursor-pointer items-center justify-center gap-2 p-1.5 font-display font-normal tracking-[-0.02em] transition-colors rounded-md border border-ink bg-surface text-fg hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
         {copied ? (
@@ -94,7 +96,7 @@ function MarkdownCode({ className, children, ...props }: any) {
           </svg>
         )}
       </button>
-      <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 pr-12 rounded-lg overflow-x-auto">
+      <pre className="bg-ink text-ink-on p-4 pr-12 rounded-md overflow-x-auto dark:border dark:border-line-dark dark:bg-canvas-dark dark:text-fg-dark">
         <code className={className} {...props}>{children}</code>
       </pre>
     </div>
@@ -102,6 +104,7 @@ function MarkdownCode({ className, children, ...props }: any) {
 }
 
 function MarkdownImage({ src, alt }: any) {
+  const { t } = useTranslation('common');
   const resolveFileUrl = useContext(ResolveFileUrlContext);
   if (!src) return null;
   if (src?.startsWith('file://') && resolveFileUrl) {
@@ -115,9 +118,9 @@ function MarkdownImage({ src, alt }: any) {
   // Model output can be steered by prompt injection; auto-loading a third-party
   // image would leak data through its URL with zero clicks, so link to it instead.
   return (
-    <a href={src} className="text-blue-600 hover:text-blue-800 underline"
+    <a href={src} className="text-sm text-fg underline decoration-accent dark:text-fg-dark dark:decoration-accent-dark inline-block"
       target="_blank" rel="noopener noreferrer nofollow">
-      🖼 {alt || 'Imagen externa'}{urlHost(src) && ` (${urlHost(src)})`}
+      🖼 {alt || t('messageContent.externalImage')}{urlHost(src) && ` (${urlHost(src)})`}
     </a>
   );
 }
@@ -135,7 +138,7 @@ function MarkdownLink({ children, href, ...props }: any) {
     return <InlineFileDownload fileId={fileId} filename={filename} resolveUrl={resolveFileUrl} />;
   }
   return (
-    <a href={href} className="text-blue-600 hover:text-blue-800 underline"
+    <a href={href} className="text-fg underline decoration-accent dark:text-fg-dark dark:decoration-accent-dark"
       target="_blank" rel="noopener noreferrer" {...props}>
       {children}
     </a>
@@ -164,7 +167,7 @@ function MarkdownOl({ children, ...props }: any) {
 
 function MarkdownBlockquote({ children, ...props }: any) {
   return (
-    <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-700 mb-4" {...props}>
+    <blockquote className="border-l-4 border-accent dark:border-accent-dark pl-4 italic text-fg dark:text-fg-dark mb-4" {...props}>
       {children}
     </blockquote>
   );
@@ -172,18 +175,38 @@ function MarkdownBlockquote({ children, ...props }: any) {
 
 function MarkdownTable({ children, ...props }: any) {
   return (
-    <div className="overflow-x-auto mb-4 rounded-lg overflow-hidden">
-      <table className="min-w-full border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden" {...props}>{children}</table>
+    <div className="mb-4 bg-surface border border-line rounded-lg overflow-visible dark:bg-surface-dark dark:border-line-dark">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-line dark:divide-line-dark" {...props}>
+          {children}
+        </table>
+      </div>
     </div>
   );
 }
 
+function MarkdownTableHead({ children, ...props }: any) {
+  return <thead className="bg-tableCab dark:bg-tableCab-dark" {...props}>{children}</thead>;
+}
+
+function MarkdownTableBody({ children, ...props }: any) {
+  return (
+    <tbody className="bg-surface divide-y divide-line text-sm text-fg dark:bg-surface-dark dark:divide-line-dark dark:text-fg-dark" {...props}>
+      {children}
+    </tbody>
+  );
+}
+
+function MarkdownTableRow({ children, ...props }: any) {
+  return <tr className="hover:bg-surface-tint dark:hover:bg-surface-tint-dark" {...props}>{children}</tr>;
+}
+
 function MarkdownTh({ children, ...props }: any) {
-  return <th className="border border-gray-200 dark:border-gray-700 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold" {...props}>{children}</th>;
+  return <th className="px-6 py-3 text-left text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark" {...props}>{children}</th>;
 }
 
 function MarkdownTd({ children, ...props }: any) {
-  return <td className="border border-gray-200 dark:border-gray-700 px-4 py-2" {...props}>{children}</td>;
+  return <td className="px-6 py-4 whitespace-nowrap" {...props}>{children}</td>;
 }
 
 const markdownComponents: Record<string, React.ComponentType<any>> = {
@@ -197,11 +220,15 @@ const markdownComponents: Record<string, React.ComponentType<any>> = {
   ol: MarkdownOl,
   blockquote: MarkdownBlockquote,
   table: MarkdownTable,
+  thead: MarkdownTableHead,
+  tbody: MarkdownTableBody,
+  tr: MarkdownTableRow,
   th: MarkdownTh,
   td: MarkdownTd,
 };
 
 const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl }) => {
+  const { t } = useTranslation('common');
   const renderedContent = useMemo(() => {
     if (typeof content === 'object' && content !== null) {
       return (
@@ -217,7 +244,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
     const hasFileMarkers = stringContent.includes('](file://');
 
     if (isJson(stringContent)) {
-      return formatJson(stringContent);
+      return formatJson(stringContent, t('messageContent.invalidJson'));
     } else if (hasFileMarkers || isMarkdown(stringContent)) {
       return (
         <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>
@@ -233,7 +260,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
     } else {
       return <div className="whitespace-pre-wrap" style={{ overflowWrap: 'anywhere', wordBreak: 'normal' }}>{stringContent}</div>;
     }
-  }, [content, markdownComponents]);
+  }, [content, t, markdownComponents]);
 
   return (
     <ResolveFileUrlContext.Provider value={resolveFileUrl}>

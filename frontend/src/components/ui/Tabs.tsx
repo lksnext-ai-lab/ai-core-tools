@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Interface defining the structure of a tab item
@@ -51,6 +52,7 @@ export function Tabs({
   onChange,
   className = ''
 }: Readonly<TabsProps>): React.ReactElement {
+  const { t } = useTranslation('common');
   const tabListRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -111,7 +113,7 @@ export function Tabs({
         ref={tabListRef}
         role="tablist"
         className="flex flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        aria-label="Tab navigation"
+        aria-label={t('tabs.navigation')}
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeTab;
@@ -119,11 +121,11 @@ export function Tabs({
           const disabledReasonId = `${tab.id}-disabled-reason`;
           let tabStateClasses: string;
           if (isDisabled) {
-            tabStateClasses = 'cursor-not-allowed text-gray-400 dark:text-gray-600';
+            tabStateClasses = 'cursor-not-allowed text-fg-tertiary dark:text-fg-tertiary-dark';
           } else if (isActive) {
             tabStateClasses = 'text-fg-primary dark:text-fg-dark  border-b-2  border-fg text-fg dark:border-fg-dark';
           } else {
-            tabStateClasses = 'border-transparent text-fg-tertiary hover:text-fg-primary dark:text-fg-tertiary-dark dark:hover:text-fg-primary-dark';
+            tabStateClasses = 'border-transparent text-fg-secondary hover:text-fg-primary dark:text-fg-secondary-dark dark:hover:text-fg-primary-dark';
           }
 
           return (

@@ -157,13 +157,13 @@ export default function MarketplaceHomePage() {
               {t('marketplaceHome.discoverAgentsDescription')}
             </p>
           </div>
-          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-[var(--color-border-card-hover)] transition-colors duration-200" aria-hidden="true" />
+          <ArrowRight className="w-5 h-5 text-fg-tertiary dark:text-fg-tertiary-dark group-hover:text-fg-tertiary-hover dark:group-hover:text-fg-tertiary-hover transition-colors duration-200" aria-hidden="true" />
         </div>
       </button>
 
       {/* Recent conversations */}
       <section>
-        <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-[var(--text-subtitle)]">{t('marketplaceHome.recentConversations')}</h2>
+        <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-fg dark:text-fg-dark">{t('marketplaceHome.recentConversations')}</h2>
 
         {conversations.length === 0 ? (
           <CardApp className="p-10 flex items-center justify-center ">

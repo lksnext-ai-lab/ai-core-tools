@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
 
@@ -11,6 +11,12 @@ const meta = {
     layout: 'padded',
   },
   tags: ['autodocs'],
+  argTypes: {
+    variant: {
+      control: 'inline-radio',
+      options: ['checkbox', 'toggle'],
+    },
+  },
   args: {
     id: 'has-memory',
     label: 'Enable memory',
@@ -22,21 +28,23 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Interactive: Story = {
-  render: function InteractiveCheckbox(args) {
-    const [checked, setChecked] = useState(args.checked);
+function CheckboxDemo(args: ComponentProps<typeof FormCheckbox>) {
+  const [checked, setChecked] = useState(args.checked);
 
-    return (
-      <FormCheckbox
-        {...args}
-        checked={checked}
-        onChange={(event) => {
-          args.onChange(event);
-          setChecked(event.target.checked);
-        }}
-      />
-    );
-  },
+  return (
+    <FormCheckbox
+      {...args}
+      checked={checked}
+      onChange={(event) => {
+        args.onChange(event);
+        setChecked(event.target.checked);
+      }}
+    />
+  );
+}
+
+export const Interactive: Story = {
+  render: (args) => <CheckboxDemo {...args} />,
 };
 
 export const Checked: Story = {
@@ -53,6 +61,36 @@ export const WithHelpText: Story = {
 
 export const Disabled: Story = {
   args: {
+    checked: true,
+    disabled: true,
+  },
+};
+
+export const Toggle: Story = {
+  args: {
+    id: 'ssl-verify',
+    label: 'Verify SSL certificate',
+    variant: 'toggle',
+    checked: true,
+  },
+  render: (args) => <CheckboxDemo {...args} />,
+};
+
+export const ToggleWithHelpText: Story = {
+  args: {
+    id: 'ssl-verify-help',
+    label: 'Verify SSL certificate',
+    variant: 'toggle',
+    checked: true,
+    helpText: 'Disable only for servers that use self-signed certificates.',
+  },
+};
+
+export const ToggleDisabled: Story = {
+  args: {
+    id: 'ssl-verify-disabled',
+    label: 'Verify SSL certificate',
+    variant: 'toggle',
     checked: true,
     disabled: true,
   },

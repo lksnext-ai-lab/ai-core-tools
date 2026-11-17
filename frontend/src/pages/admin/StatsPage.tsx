@@ -152,7 +152,7 @@ function StatsPage() {
               <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.inactiveUsers')}</span>
               <span className="text-sm font-medium text-red-600">{stats.inactive_users}</span>
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-line dark:border-line-dark">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('systemStatsPage.totalUsers')}</span>
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{stats.total_users}</span>
@@ -179,7 +179,7 @@ function StatsPage() {
               <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.inactiveKeys')}</span>
               <span className="text-sm font-medium text-red-600">{stats.inactive_api_keys}</span>
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-line dark:border-line-dark">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('systemStatsPage.total')}</span>
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{stats.total_api_keys}</span>
@@ -204,7 +204,7 @@ function StatsPage() {
               <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.recentUsers30Days')}</span>
               <span className="text-sm font-medium text-green-600">{stats.recent_users.length}</span>
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-line dark:border-line-dark">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('systemStatsPage.activeUsers')}</span>
                 <span className="text-sm font-medium text-fg dark:text-fg-dark">
@@ -220,7 +220,7 @@ function StatsPage() {
       <div className="">
         <div className="py-4 ">
           <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">{t('systemStatsPage.recentUsers')}</h3>
-          <p className="text-sm text-gray-500 mt-1text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{t('systemStatsPage.recentUsersDescription')}</p>
+          <p className="text-sm mt-1text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{t('systemStatsPage.recentUsersDescription')}</p>
         </div>
         
         <Table

@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { configService } from '../core/ConfigService';
+import CardApp from '../components/ui/CardApp';
+import Alert from '../components/ui/Alert';
+import ButtonApp from '../components/ui/ButtonApp';
+import ButtonLink from '../components/ui/ButtonLink';
+import { FormField } from '../components/ui/FormField';
 
 const PasswordResetRequestPage: React.FC = () => {
+  const { t } = useTranslation('common');
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,45 +32,54 @@ const PasswordResetRequestPage: React.FC = () => {
 
   if (submitted) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-          <h2 className="text-xl font-semibold mb-2">Check your email</h2>
-          <p className="text-gray-600">
-            If an account with that email exists, we sent a password reset link.
-          </p>
-          <Link to="/login" className="mt-4 block text-blue-600 hover:underline">Back to login</Link>
+      <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
+        <div className="max-w-md w-full space-y-4">
+          <Alert
+            type="success"
+            title={t('passwordResetRequestPage.successTitle')}
+            message={t('passwordResetRequestPage.successMessage')}
+          />
+          <Link to="/login" className="block text-center text-sm text-bronze dark:text-bronze-dark hover:underline">
+            {t('setPasswordPage.backToSignIn')}
+          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
-        <h1 className="text-2xl font-bold mb-6">Reset password</h1>
+    <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
+      <CardApp className="p-8" titulo={t('passwordResetRequestPage.title')}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <button
+          <FormField
+            id="email"
+            label={t('login.emailLabel')}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+          <ButtonApp
+            label={isLoading
+              ? t('passwordResetRequestPage.sending')
+              : t('passwordResetRequestPage.submit')}
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 text-white rounded px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isLoading ? 'Sending...' : 'Send reset link'}
-          </button>
+            loading={isLoading}
+            variant="primary"
+            size="medium"
+            className="w-full"
+          />
         </form>
-        <p className="mt-4 text-sm text-gray-600">
-          <Link to="/login" className="text-blue-600 hover:underline">Back to login</Link>
-        </p>
-      </div>
+        <ButtonLink
+          label={t('setPasswordPage.backToSignIn')}
+          to="/login"
+          variant="secondary"
+          size="medium"
+          className="mt-4 w-full"
+        />
+      </CardApp>
     </div>
   );
 };

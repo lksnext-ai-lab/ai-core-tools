@@ -10,7 +10,7 @@ export default {
       // Mattin AI v3 design tokens (Claude Design "Mattin AI.dc.html").
       // DEFAULT = light theme; `dark` = value to pair with the `dark:` variant.
       colors: {
-        canvas: { DEFAULT: '#ffffff', alt: '#fbfaf8', dark: '#15130f', 'alt-dark': '#1b1911' },
+        canvas: { DEFAULT: '#ffffff', alt: '#fbfaf8', dark: '#15130f', 'alt-dark': '#1b1911'},
         surface: {
           DEFAULT: '#ffffff', tint: '#faf9f7', hover: '#f5f5f5', ash: '#efefef',
           dark: '#1f1d17', 'tint-dark': '#252217', 'hover-dark': '#2a271c',

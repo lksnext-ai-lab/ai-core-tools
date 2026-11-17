@@ -181,6 +181,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
       success: "text-success-dark dark:text-success",
       warning: "text-bronze-dark dark:text-bronze",
       info: "text-info-dark dark:text-info",
+      loading: "text-fg-dark dark:text-fg",
 
       icon: "text-current [&_svg]:stroke-current",
 
@@ -214,7 +215,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/password-reset" element={<PasswordResetPage />} />
                 <Route path="/set-password" element={<SetPasswordPage />} />
                 <Route path="/change-password" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute
+                    {...commonLayoutProps}
+                    mainProps={{
+                      className: "relative isolate flex flex-col before:content-[''] before:absolute before:inset-0 before:z-0 before:bg-ink/40 dark:before:bg-black/60 before:pointer-events-none [&>div]:relative [&>div]:z-10 [&>div]:flex-1 [&>div]:min-h-0 [&>div]:flex [&>div]:flex-col",
+                    }}
+                  >
                     <ChangePasswordPage />
                   </ProtectedLayoutRoute>
                 } />

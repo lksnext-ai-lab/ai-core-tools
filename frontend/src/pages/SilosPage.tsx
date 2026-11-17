@@ -6,6 +6,7 @@ import { Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'luc
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
+import { Badge } from '../components/ui/Badge';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
@@ -253,7 +254,6 @@ function SilosPage() {
       </div>
 
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
-
       {/* Silos List */}
       <Table
           data={silos}
@@ -270,7 +270,7 @@ function SilosPage() {
                       className="rounded-lg"/>
                   </div>
                   <div className="ml-4">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-fg dark:text-fg-dark">
                       {canEdit ? (
                         <Link
                           to={`/apps/${appId}/silos/${silo.silo_id}`}
@@ -296,11 +296,7 @@ function SilosPage() {
             },
             {
               header: t('silosPage.columns.type'),
-              render: (silo) => (
-                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                  {silo.type || t('silosPage.custom')}
-                </span>
-              )
+              render: (silo) => <Badge label={silo.type || t('silosPage.custom')} variant="default" />
             },
             {
               header: t('silosPage.columns.vectorDb'),
@@ -321,7 +317,6 @@ function SilosPage() {
             {
               header: t('silosPage.columns.actions'),
               sticky: 'right',
-              headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
               className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark',
               render: (silo) => (
                 <ActionDropdown

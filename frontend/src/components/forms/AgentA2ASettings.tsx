@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { TagInput } from '../ui/TagInput';
 import Alert from '../ui/Alert';
 import CardApp from '../ui/CardApp';
-import FormField, { FormTextArea } from '../ui/FormField';
+import FormField, { FormRadio, FormTextArea } from '../ui/FormField';
 import ButtonApp from '../ui/ButtonApp';
 
 export type A2ACardVisibility = 'public' | 'api_key';
@@ -30,6 +30,11 @@ export interface AgentA2ASettingsProps {
   readonly rpcUrl: string | null;
   readonly disabled: boolean;
   readonly fieldErrors?: AgentA2AFieldErrors;
+}
+
+interface CopyStatus {
+  readonly type: 'success' | 'error';
+  readonly message: string;
 }
 
 const MAX_NAME_LENGTH = 255;
@@ -106,7 +111,7 @@ export function AgentA2ASettings({
   fieldErrors,
 }: AgentA2ASettingsProps) {
   const { t } = useTranslation('common');
-  const [copyStatus, setCopyStatus] = useState('');
+  const [copyStatus, setCopyStatus] = useState<CopyStatus | null>(null);
   const enableId = useId();
   const enableHintId = useId();
   const enableErrorId = useId();
@@ -128,8 +133,14 @@ export function AgentA2ASettings({
   const handleCopy = useCallback((text: string, label: string) => {
     navigator.clipboard
       .writeText(text)
-      .then(() => setCopyStatus(t('agentA2ASettings.copySucceeded', { label })))
-      .catch(() => setCopyStatus(t('agentA2ASettings.copyFailed', { label })));
+      .then(() => setCopyStatus({
+        type: 'success',
+        message: t('agentA2ASettings.copySucceeded', { label }),
+      }))
+      .catch(() => setCopyStatus({
+        type: 'error',
+        message: t('agentA2ASettings.copyFailed', { label }),
+      }));
   }, [t]);
 
   const handleSkillTagsChange = useCallback(
@@ -190,10 +201,9 @@ export function AgentA2ASettings({
 
   return (
     <CardApp className="p-8 space-y-8">
-      {/* aria-live region announcing copy outcomes; always mounted so updates are caught */}
-      <p aria-live="polite" className="min-h-[1.25rem] text-sm text-green-700 dark:text-green-400">
-        {copyStatus}
-      </p>
+      {copyStatus && (
+        <Alert type={copyStatus.type} message={copyStatus.message} polite />
+      )}
 
       <div className="flex items-start gap-3">
         <FormField
@@ -215,38 +225,42 @@ export function AgentA2ASettings({
           </p>
           <FieldError id={enableErrorId} message={enableError} />
         </div>
-      </div>
+      </div> 
 
-      <fieldset disabled={disabled} aria-describedby={visibilityError ? visibilityErrorId : undefined}>
-        <legend className="text-sm font-medium text-fg dark:text-fg-dark mb-2">{t('agentA2ASettings.visibility')}</legend>
+      
+      <fieldset
+        disabled={disabled}
+        aria-describedby={visibilityError ? visibilityErrorId : undefined}
+      >
+        <legend className="text-sm font-medium text-fg dark:text-fg-dark mb-2">
+          {t('agentA2ASettings.visibility')}
+        </legend>
+
         <div className="space-y-2">
-          <FormField
+          <FormRadio
             id={`${visibilityErrorId}-public`}
-            type="radio"
             name="a2a_card_visibility"
             value="public"
             label={t('agentA2ASettings.publicVisibility')}
-            labelClassName="text-sm text-fg-secondary dark:text-fg-secondary-dark"
-            className="flex items-center gap-2"
             checked={value.a2a_card_visibility === 'public'}
             disabled={disabled}
             onChange={() => onChange({ a2a_card_visibility: 'public' })}
           />
-          <FormField
+
+          <FormRadio
             id={`${visibilityErrorId}-api-key`}
-            type="radio"
             name="a2a_card_visibility"
             value="api_key"
             label={t('agentA2ASettings.apiKeyVisibility')}
-            labelClassName="text-sm text-fg-secondary dark:text-fg-secondary-dark"
-            className="flex items-center gap-2"
             checked={value.a2a_card_visibility === 'api_key'}
             disabled={disabled}
             onChange={() => onChange({ a2a_card_visibility: 'api_key' })}
           />
         </div>
+
         <FieldError id={visibilityErrorId} message={visibilityError} />
       </fieldset>
+
 
       <div>
         <FormField
@@ -341,21 +355,20 @@ export function AgentA2ASettings({
               </button>
             </div>
           ))}
-          <button
+          <ButtonApp
+            variant="secondary"
+            label={t('agentA2ASettings.addExample')}
             type="button"
             ref={addExampleButtonRef}
             disabled={disabled || value.a2a_examples.length >= MAX_EXAMPLES}
             onClick={addExample}
-            className="px-4 py-2 rounded-md text-sm border border-ink bg-surface text-fg hover:bg-surface-hover dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark inline-flex cursor-pointer items-center justify-center gap-2 font-display font-normal tracking-[-0.02em] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-            {t('agentA2ASettings.addExample')}
-          </button>
+            icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+          />
         </div>
         <FieldError id={examplesErrorId} message={examplesError} />
       </div>
 
-      <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
+      <div className="space-y-4 border-t border-line dark:border-line-dark pt-6">
         <CopyableField
           id={cardUrlId}
           label={t('agentA2ASettings.cardUrl')}

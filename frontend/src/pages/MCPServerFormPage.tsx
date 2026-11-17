@@ -12,6 +12,8 @@ import Title from '../components/ui/Title';
 import { FormCheckbox, FormField, FormTextArea } from '../components/ui/FormField';
 import { CardApp } from '../components/ui/CardApp';
 import { ButtonCard } from '../components/ui/ButtonCard';
+import { Bot } from 'lucide-react';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
@@ -224,14 +226,16 @@ function MCPServerFormPage() {
             </span>
           
 
+            
+
           {toolAgents.length === 0 ? (
-            <div className="text-center py-8 bg-gray-50 rounded-lg">
-              <div className="text-4xl mb-2">o</div>
+            <CardApp className="text-center py-8 ">
+              <BackgroundImage icon={Bot} size={64} iconSize={32} className="mx-auto" />
               <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('mcpServerFormPage.emptyAgentsTitle')}</p>
               <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
                 {t('mcpServerFormPage.emptyAgentsDescription')}
               </p>
-            </div>
+            </CardApp>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {toolAgents.map((agent) => (

@@ -71,7 +71,7 @@ export function TagInput({
           <span
             key={tag}
             className={`inline-flex items-center gap-1 text-sm px-2.5 py-0.5 rounded-full ${
-              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]'
+              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark'
             }`}
           >
             {tag}
@@ -79,7 +79,7 @@ export function TagInput({
               <button
                 type="button"
                 onClick={() => removeTag(idx)}
-                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]"
+                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark"
                 aria-label={`Remove tag ${tag}`}
               >
                 <X className="w-3 h-3" />

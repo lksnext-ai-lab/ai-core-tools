@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, Tag, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug } from 'lucide-react';
+import { Check, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 import { useAppRole } from '../../hooks/useAppRole';
@@ -11,6 +11,7 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
 import { FormCheckbox, FormField, FormSelect } from '../../components/ui/FormField';
+import Title from '../../components/ui/Title';
 import { ServiceOptionStatus, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
 
@@ -236,16 +237,15 @@ function AppSettingsPage() {
     
       <div className="p-6">
         <div className="max-w-2xl">
-          {/* Header */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">{t('appSettingsPage.generalSettings')}</h2>
-            <p className="text-gray-600">{t('appSettingsPage.subtitle')}</p>
-            {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
-          </div>
-
+          <Title
+            variant="titSecundario"
+            titulo={t('appSettingsPage.generalSettings')}
+            subtitulo={t('appSettingsPage.subtitle')}
+          />
+          {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
           {/* Settings Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="bg-white shadow rounded-lg p-6">
+            <div >
               <div className="grid grid-cols-1 gap-6">
                 {/* App Name */}
                 <FormField
@@ -478,25 +478,17 @@ function AppSettingsPage() {
           {/* Info Sections */}
           <div className="mt-8 space-y-6">
             {/* App Slug Info */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Tag className="w-5 h-5 text-gray-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-gray-800">
-                    {t('appSettingsPage.aboutAppSlug')}
-                  </h3>
-                  <div className="mt-2 text-sm text-gray-700">
-                    <p>
-                      {t('appSettingsPage.aboutAppSlugDescription')}{' '}
-                      <code className="bg-gray-200 px-1 rounded text-xs">/mcp/v1/my-app/my-server</code>{' '}
-                      {t('appSettingsPage.aboutAppSlugSuffix')}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title={t('appSettingsPage.aboutAppSlug')}
+              message={(
+                <p>
+                  {t('appSettingsPage.aboutAppSlugDescription')}{' '}
+                  <code className="bg-gray-200 px-1 rounded text-xs">/mcp/v1/my-app/my-server</code>{' '}
+                  {t('appSettingsPage.aboutAppSlugSuffix')}
+                </p>
+              )}
+            />
 
             {/* Langsmith Info */}
             <Alert

@@ -25,24 +25,27 @@ function ServiceLifecycleInputs({
 }: Readonly<ServiceLifecycleInputsProps>) {
   return (
     <CardApp className="space-y-3 p-3">
-      <div className="space-y-2">
+      <div className="flex items-start gap-3">
         <FormField
           id="end_of_service_at"
           type="date"
           label={SERVICE_LIFECYCLE_STRINGS.endOfServiceLabel}
           value={date}
           onChange={(e) => onDateChange(e.target.value)}
+          className="min-w-0 flex-1"
           helpText={SERVICE_LIFECYCLE_STRINGS.endOfServiceHelp}
         />
-        <ButtonApp
-          label={SERVICE_LIFECYCLE_STRINGS.clearDate}
-          type="button"
-          onClick={() => onDateChange('')}
-          disabled={!date}
-          ariaLabel={SERVICE_LIFECYCLE_STRINGS.clearDateAria}
-          variant="muted"
-          size="medium"
-        />
+        <div className="mt-6 shrink-0">
+          <ButtonApp
+            label={SERVICE_LIFECYCLE_STRINGS.clearDate}
+            type="button"
+            onClick={() => onDateChange('')}
+            disabled={!date}
+            ariaLabel={SERVICE_LIFECYCLE_STRINGS.clearDateAria}
+            variant="muted"
+            size="medium"
+          />
+        </div>
       </div>
       {isDateInputRetiredNow(date) && (
         <Alert type="warning" polite message={SERVICE_LIFECYCLE_STRINGS.retireImmediately} />

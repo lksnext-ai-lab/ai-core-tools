@@ -1049,7 +1049,7 @@ function AgentFormPage() {
                             step="0.1"
                             value={formData.temperature}
                             onChange={(e) => handleInputChange('temperature', Number.parseFloat(e.target.value))}
-                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none accent-accent cursor-pointer"
+                            className="flex-1 h-2 bg-line dark:bg-line-dark rounded-lg appearance-none accent-accent cursor-pointer"
                           />
                           <span className="text-sm font-medium text-fg-tertiary dark:text-fg-tertiary-dark w-12">
                             {formData.temperature.toFixed(1)}

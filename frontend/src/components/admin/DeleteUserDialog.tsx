@@ -125,7 +125,7 @@ function DeleteUserDialog({
 
         {branch === 'choose' && (
           <div className="space-y-3">
-            <p className="text-sm font-medium text-gray-700 dark:text-slate-300">
+            <p className="text-sm font-medium text-fg dark:text-fg-dark">
               {t('deleteUserDialog.chooseOption')}
             </p>
 
@@ -205,7 +205,7 @@ function DeleteUserDialog({
             </div>
 
             {transferTarget && (
-              <p className="text-sm text-gray-600 dark:text-slate-400">
+              <p className="text-sm text-fg dark:text-fg-dark">
                 {t('deleteUserDialog.transferConfirmation', {
                   count: appCount,
                   app: appWord,
@@ -215,7 +215,7 @@ function DeleteUserDialog({
               </p>
             )}
 
-            <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
+            <div className="flex justify-end gap-3 border-t border-line dark:border-line-dark pt-4">
               <ButtonApp
                 label={t('deleteUserDialog.back')}
                 ariaLabel={t('deleteUserDialog.backToOptions')}
@@ -308,7 +308,7 @@ function DeleteUserDialog({
               )}
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
+            <div className="flex justify-end gap-3 border-t border-line dark:border-line-dark pt-4">
               <ButtonApp
                 label={t('deleteUserDialog.back')}
                 ariaLabel={t('deleteUserDialog.backToOptions')}

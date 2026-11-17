@@ -106,7 +106,7 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('userManagement.createUser')} size="medium">
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <p className="text-xs text-gray-500 dark:text-slate-400">{t('localUserModal.requiredFields')}</p>
+        <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('localUserModal.requiredFields')}</p>
         {/* Always in DOM — role=alert implies aria-live=assertive */}
         <div
           id="create-user-error"
@@ -123,7 +123,6 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
         <FormField
           ref={emailInputRef}
           label={t('localUserModal.email')}
-          labelClassName="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5"
           id="create-user-email"
           type="email"
           value={email}
@@ -139,7 +138,6 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
 
         <FormField
           label={t('localUserModal.fullName')}
-          labelClassName="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5"
           id="create-user-name"
           type="text"
           value={name}

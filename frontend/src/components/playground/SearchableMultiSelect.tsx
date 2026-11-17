@@ -1,5 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import { Check, ChevronDown } from 'lucide-react';
 
 interface SearchableMultiSelectProps {
   readonly id: string;
@@ -56,10 +58,10 @@ function computePopoverPosition(trigger: DOMRect): PopoverPosition {
     : { ...base, top: trigger.bottom + POPOVER_GAP_PX };
 }
 
-function summarize(value: readonly string[], anyLabel: string): string {
+function summarize(value: readonly string[], anyLabel: string, selectedLabel: (count: number) => string): string {
   if (value.length === 0) return anyLabel;
   if (value.length <= 2) return value.join(', ');
-  return `${value.length} selected`;
+  return selectedLabel(value.length);
 }
 
 /**
@@ -79,9 +81,11 @@ function SearchableMultiSelect({
   options,
   onChange,
   onSearch,
-  anyLabel = '— any —',
+  anyLabel,
   disabled = false,
 }: Readonly<SearchableMultiSelectProps>) {
+  const { t } = useTranslation('common');
+  const resolvedAnyLabel = anyLabel ?? t('searchableMultiSelect.any');
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -120,15 +124,15 @@ function SearchableMultiSelect({
   }, [options, value, trimmedQuery, remoteItems]);
 
   const hint = (() => {
-    if (isSearching) return 'Searching…';
+    if (isSearching) return t('searchableMultiSelect.searching');
     if (onSearch && !trimmedQuery) {
-      return `Showing first ${options.length} — type to search all values`;
+      return t('searchableMultiSelect.showingFirst', { count: options.length });
     }
     if (onSearch && remoteItems && remoteItems.length >= SEARCH_RESULT_LIMIT) {
-      return `Showing first ${SEARCH_RESULT_LIMIT} matches — keep typing to narrow down`;
+      return t('searchableMultiSelect.showingFirstMatches', { count: SEARCH_RESULT_LIMIT });
     }
     if (totalMatches > MAX_VISIBLE_OPTIONS) {
-      return `Showing ${MAX_VISIBLE_OPTIONS} of ${totalMatches} — type to narrow down`;
+      return t('searchableMultiSelect.showingOf', { shown: MAX_VISIBLE_OPTIONS, total: totalMatches });
     }
     return null;
   })();
@@ -269,24 +273,21 @@ function SearchableMultiSelect({
         aria-expanded={isOpen}
         aria-controls={isOpen ? listboxId : undefined}
         title={value.length > 0 ? value.join(', ') : undefined}
-        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                   bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                   disabled:opacity-50 disabled:cursor-not-allowed text-sm text-left transition-shadow
-                   flex items-center justify-between gap-2"
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-line-strong bg-surface px-3 py-2
+                   text-left text-sm text-fg focus:border-accent focus:outline-none
+                   disabled:cursor-not-allowed disabled:bg-surface-hover disabled:text-fg-tertiary
+                   dark:border-line-strong-dark dark:bg-surface-dark dark:text-fg-dark dark:focus:border-accent
+                   dark:disabled:bg-surface-hover-dark dark:disabled:text-fg-tertiary-dark"
       >
-        <span className="truncate">{summarize(value, anyLabel)}</span>
-        <svg
-          className={`w-4 h-4 shrink-0 text-gray-400 transition-transform duration-200 ${
+        <span className="truncate">
+          {summarize(value, resolvedAnyLabel, (count) => t('searchableMultiSelect.selectedCount', { count }))}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-fg-tertiary transition-transform dark:text-fg-tertiary-dark ${
             isOpen ? 'rotate-180' : ''
           }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
           aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {isOpen && position && createPortal(
@@ -298,8 +299,9 @@ function SearchableMultiSelect({
             top: position.top,
             bottom: position.bottom,
           }}
-          className="fixed z-50 border border-gray-300 dark:border-gray-600 rounded-lg
-                     bg-white dark:bg-gray-800 shadow-lg overflow-hidden"
+          className="fixed z-50 overflow-hidden rounded-lg border border-line bg-surface
+                     shadow-[0_14px_40px_rgba(32,28,20,0.14)]
+                     dark:border-line-dark dark:bg-surface-dark dark:shadow-[0_14px_40px_rgba(0,0,0,0.55)]"
         >
           <input
             ref={searchRef}
@@ -308,18 +310,18 @@ function SearchableMultiSelect({
             aria-expanded="true"
             aria-controls={listboxId}
             aria-activedescendant={items.length > 0 ? optionId(activeIndex) : undefined}
-            aria-label="Search values"
+            aria-label={t('searchableMultiSelect.searchValues')}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
               setActiveIndex(0);
             }}
             onKeyDown={handleSearchKeyDown}
-            placeholder="Search…"
+            placeholder={t('searchableMultiSelect.searchPlaceholder')}
             autoComplete="off"
-            className="w-full px-3 py-2 text-sm bg-transparent text-gray-800 dark:text-gray-100
-                       placeholder:text-gray-400 dark:placeholder:text-gray-500
-                       border-b border-gray-200 dark:border-gray-700 focus:outline-none"
+            className="w-full border-b border-line bg-transparent px-3 py-2 text-sm text-fg
+                       placeholder:text-fg-faint focus:outline-none
+                       dark:border-line-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark"
           />
           <ul
             id={listboxId}
@@ -329,8 +331,8 @@ function SearchableMultiSelect({
             className="overflow-y-auto py-1"
           >
             {items.length === 0 && !isSearching && (
-              <li className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                {searchFailed ? 'Search failed — try again' : 'No matches'}
+              <li className="px-3 py-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+                {searchFailed ? t('searchableMultiSelect.searchFailed') : t('searchableMultiSelect.noMatches')}
               </li>
             )}
             {items.map((item, index) => {
@@ -352,32 +354,28 @@ function SearchableMultiSelect({
                     }
                   }}
                   onMouseEnter={() => setActiveIndex(index)}
-                  className={`px-3 py-1.5 text-sm cursor-pointer flex items-center gap-2 ${
-                    isActive ? 'bg-indigo-50 dark:bg-indigo-500/20' : ''
+                  className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm ${
+                    isActive ? 'bg-surface-hover dark:bg-surface-hover-dark' : ''
                   } ${
                     isClearRow
-                      ? 'italic text-gray-500 dark:text-gray-400'
-                      : 'text-gray-800 dark:text-gray-100'
+                      ? 'italic text-fg-tertiary dark:text-fg-tertiary-dark'
+                      : 'text-fg dark:text-fg-dark'
                   } ${isSelected ? 'font-medium' : ''}`}
                 >
                   {!isClearRow && (
                     <span
                       aria-hidden="true"
-                      className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center ${
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                         isSelected
-                          ? 'bg-indigo-500 border-indigo-500 text-white'
-                          : 'border-gray-300 dark:border-gray-500'
+                          ? 'border-ink bg-ink text-ink-on dark:border-ink-dark dark:bg-ink-dark dark:text-ink-on-dark'
+                          : 'border-line-strong dark:border-line-strong-dark'
                       }`}
                     >
-                      {isSelected && (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
+                      {isSelected && <Check className="h-3 w-3" strokeWidth={3} />}
                     </span>
                   )}
                   <span className="truncate" title={isClearRow ? undefined : item}>
-                    {isClearRow ? 'Clear selection' : item}
+                    {isClearRow ? t('searchableMultiSelect.clearSelection') : item}
                   </span>
                 </li>
               );
@@ -385,7 +383,7 @@ function SearchableMultiSelect({
           </ul>
           {hint && (
             <p
-              className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700"
+              className="border-t border-line px-3 py-1.5 text-xs text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark"
               aria-live="polite"
             >
               {hint}

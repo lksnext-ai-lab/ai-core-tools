@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Alert from '../ui/Alert';
 import { Spinner } from '../ui/Spinner';
 import { ButtonApp } from '../ui/ButtonApp';
+import Badge from '../ui/Badge';
 import FormField, { FormSelect } from '../ui/FormField';
 import { apiService } from '../../services/api';
 
@@ -195,7 +196,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                   type="button"
                   onClick={clearSelection}
                   aria-label={t('collaborationForm.clearSelection')}
-                  className="absolute right-3 top-[calc(100%-1.1875rem)] -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-[calc(100%-1.1875rem)] -translate-y-1/2 text-border-line hover:text-border-line-dark"
                 >
                   ✕
                 </button>
@@ -203,7 +204,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
             </div>
 
             {showDropdown && (
-              <ul id="collab-user-listbox" role="listbox" className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
+              <ul id="collab-user-listbox" role="listbox" className="absolute z-10 mt-1 w-full bg-white border border-line dark:border-line-dark rounded-md max-h-52 overflow-y-auto">
                 {results.map((u, index) => (
                   <li
                     key={u.user_id}
@@ -217,25 +218,29 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
                       type="button"
                       onClick={() => selectUser(u)}
                       onMouseEnter={() => setHighlightedIndex(index)}
-                      className={`w-full text-left flex items-center justify-between gap-2 px-4 py-3 transition-colors ${
+                      className={`w-full text-left flex items-center justify-between gap-2 px-4 py-3   transition-colors ${
                         index === highlightedIndex
-                          ? "bg-surface-hover dark:bg-btCard-hover"
+                          ? "bg-surface-hover dark:bg-btCard-hover "
                           : "bg-surface dark:bg-surface-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark"
                       }`}
                     >
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{u.name || u.email}</div>
-                        {u.name && <div className="text-xs text-gray-500">{u.email}</div>}
+                        <div className="text-sm font-medium text-fg dark:text-fg-dark">{u.name || u.email}</div>
+                        {u.name && <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{u.email}</div>}
                       </div>
                       {u.is_omniadmin && (
-                        <span className="shrink-0 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                          {t('collaborationForm.protectedAdmin')}
-                        </span>
+                        <Badge
+                          label={t('collaborationForm.protectedAdmin')}
+                          variant="warning"
+                          className="shrink-0"
+                        />
                       )}
                       {!u.is_omniadmin && u.platform_role === 'viewer' && (
-                        <span className="shrink-0 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                          {t('collaborationForm.viewer')}
-                        </span>
+                        <Badge
+                          label={t('collaborationForm.viewer')}
+                          variant="default"
+                          className="shrink-0"
+                        />
                       )}
                     </button>
                   </li>
@@ -244,7 +249,7 @@ function CollaborationForm({ onSubmit, loading = false }: CollaborationFormProps
             )}
 
             {query.length >= 1 && !searching && results.length === 0 && !selectedUser && (
-              <p className="mt-1 text-sm text-gray-500">{t('collaborationForm.noUsersFound', { query })}</p>
+              <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('collaborationForm.noUsersFound', { query })}</p>
             )}
           </div>
         </div>

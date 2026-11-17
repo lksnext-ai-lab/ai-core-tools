@@ -182,7 +182,7 @@ const SystemEmbeddingServicesPage: React.FC = () => {
               })}
             </p>
             {impact.affected_silos.length < 20 && impact.affected_silos.length > 0 && (
-              <ul className="mt-2 text-xs text-gray-500 list-disc list-inside space-y-0.5 max-h-40 overflow-y-auto">
+              <ul className="mt-2 text-xs text-fg-secondary dark:text-fg-secondary-dark list-disc list-inside space-y-0.5 max-h-40 overflow-y-auto">
                 {impact.affected_silos.map((silo) => (
                   <li key={silo.silo_id}>
                     {silo.silo_name} ({silo.app_name})
