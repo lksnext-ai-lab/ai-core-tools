@@ -27,7 +27,7 @@ or its token is rotated.
 
 - Mattin is reachable from the Keycloak container or host.
 - The URL is served over HTTPS outside local development.
-- An administrator can call Mattin's internal API.
+- A Mattin administrator can use the admin UI or call Mattin's internal API.
 - The Keycloak outbound SCIM extension is installed and enabled.
 - The Keycloak realm to provision is known.
 
@@ -35,7 +35,88 @@ When Keycloak runs in Docker and Mattin runs on the host, a local development
 target commonly uses `host.docker.internal` instead of `localhost`. From
 Keycloak's point of view, `localhost` means the Keycloak container itself.
 
-## 1. Create the connection in Mattin
+## Local-test wizard in the Mattin admin UI
+
+Mattin provides a local-testing wizard on the **SCIM connections** admin page.
+It creates a Mattin SCIM connection, creates an outbound target in Keycloak,
+tests that target's connectivity, and lets an administrator preview and run
+reconciliation. This is a local-development convenience, not a production
+setup flow.
+
+### Enable the opt-in
+
+The wizard is disabled unless the backend operator explicitly sets:
+
+```text
+SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true
+```
+
+Restart the backend after changing the environment. The page reports when
+auto-setup is disabled; the wizard cannot configure the Keycloak target until
+the opt-in is enabled. Keep it disabled outside local testing.
+
+### Configure and test
+
+1. In Mattin's admin UI, open **SCIM connections** and create a connection by
+   entering the Keycloak realm and a connection name. Mattin generates the
+   SCIM bearer token. It is returned only once and held in the page's memory;
+   keep the page open until target setup is complete.
+2. Enter the Mattin SCIM base URL reachable **from Keycloak**, the Keycloak
+   Admin URL reachable **from Mattin**, the admin realm, a Keycloak admin
+   username and password, and a target name. Choose whether the target should
+   synchronize groups.
+3. Select **Create target and test connection**. Mattin obtains a temporary
+   Keycloak access token using the `admin-cli` password grant, creates the
+   outbound SCIM target using the connection's bearer token, then calls
+   Keycloak's target-test endpoint. The result reports the target and test
+   status, including whether PATCH and filters were reported as supported.
+4. In **Preview and run reconciliation**, select the active SCIM connection,
+   provide the Keycloak Admin URL, admin realm, and credentials, then select
+   **Run dry-run**. Review the counts for user and group creates, updates, and
+   removals. A blocked preview cannot be run for real.
+5. To apply an unblocked preview, select the confirmation checkbox, re-enter
+   the Keycloak admin password, and select **Confirm and run real
+   reconciliation**. Review the resulting summary. The password is cleared
+   from the page after each request; credentials are not stored by Mattin.
+   The backend requires a signed preview receipt tied to the connection and
+   Keycloak target; it expires after five minutes, so run a fresh dry-run if
+   it expires or the target changes.
+6. In **Existing SCIM connections**, select **Edit** to change the connection
+   name or directory ID. A Keycloak realm change requires temporary Keycloak
+   admin credentials; Mattin checks the old and new realms and rejects the
+   change if a target for the connection exists in either. The target is never
+   moved automatically. **Deactivate** stops the connection from accepting
+   SCIM requests; it can be reactivated later.
+
+The Keycloak admin username and password are sent to the Mattin backend for
+this request and used to obtain the temporary access token. Mattin does not
+persist those credentials or the raw SCIM bearer token. The created Keycloak
+target does contain the bearer token for subsequent SCIM requests, so protect
+it as a secret. Do not use this wizard with production credentials or services.
+If Keycloak rejects the login, check the admin realm, credentials, and that
+Direct Access Grants are enabled for `admin-cli`.
+
+Both URLs supplied to the wizard must be local HTTP(S) URLs: their hosts must
+be `localhost`, `host.docker.internal`, or a loopback IP address. URLs with
+embedded credentials, query strings, or fragments are rejected. The restriction
+applies separately to the Keycloak Admin URL (reachable from Mattin) and the
+Mattin SCIM URL (reachable from Keycloak). For a Docker-hosted Keycloak
+connecting to Mattin on the host, `host.docker.internal` is commonly used for
+the Mattin URL.
+
+Before reconciling, configure the outbound source scope in Keycloak and confirm
+that it contains only the users/groups you intend to provision. A dry-run
+previews the proposed changes; only the separately confirmed real run applies
+them. For automated setup or environments where the local-only wizard is
+unsuitable, use the manual/API procedures below.
+
+## Manual setup using the internal API and Keycloak Admin REST
+
+The following procedures remain available for manual setup and automation.
+They are not restricted to the wizard's local URL validation; protect
+credentials and use HTTPS outside local development.
+
+### 1. Create the connection in Mattin
 
 Use the authenticated internal API or the internal API documentation. The
 endpoint is:
@@ -88,7 +169,7 @@ POST /internal/admin/scim-connections/{connection_id}/rotate-token
 After rotation, the old token stops working and the new token must be updated
 in Keycloak.
 
-## 2. Configure the Keycloak outbound target
+### 2. Configure the Keycloak outbound target
 
 The target can be configured from the Keycloak outbound SCIM extension UI. The
 exact labels depend on the extension version, but the values are:
@@ -109,7 +190,7 @@ After changing a user, group, or target setting in the Keycloak UI, click
 **Save**. Changing the switch alone only changes the unsaved form state; it
 does not generate a SCIM operation.
 
-## 3. Configure the target through Keycloak Admin REST
+### 3. Configure the target through Keycloak Admin REST
 
 The UI is preferred for normal operation. Admin REST is useful for automation,
 repeatable local setup, or when the extension UI does not expose a setting.
@@ -151,7 +232,7 @@ Use the extension's OpenAPI/Admin REST representation for the exact create or
 update payload. The target's connectivity test should reach
 `ServiceProviderConfig`, `ResourceTypes`, and `Schemas` successfully.
 
-## 4. Validate the connection
+### 4. Validate the connection
 
 The Mattin SCIM discovery endpoints require the connection bearer token:
 
@@ -176,7 +257,11 @@ Invoke-RestMethod `
   -Headers $scimHeaders
 ```
 
-Then run a target test or reconciliation from Keycloak. Expected results are:
+The local-test wizard runs a target connectivity test after creating the
+target. Its reconciliation panel can preview and explicitly apply a
+reconciliation. For manual setup, test the target and explicitly start
+reconciliation from Keycloak when ready. Provisioning results to verify
+include:
 
 - a new Keycloak user appears in `GET /Users`;
 - an existing Mattin user with the same unique email is safely linked when it
@@ -190,7 +275,7 @@ The resource URL for a provisioned user uses Mattin's generated SCIM id:
 GET /scim/v2/{connection-key}/Users/{scim-id}
 ```
 
-## 5. Troubleshooting
+### 5. Troubleshooting
 
 | Symptom | Check |
 |---|---|

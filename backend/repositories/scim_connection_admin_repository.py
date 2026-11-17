@@ -25,6 +25,18 @@ class SCIMConnectionAdminRepository:
         return db.execute(statement).scalar_one_or_none()
 
     @staticmethod
+    def get_by_id_for_update(
+        db: Session, connection_id: int
+    ) -> Optional[ProvisioningConnection]:
+        """Lock one connection row while coordinating remote target changes."""
+        statement = (
+            select(ProvisioningConnection)
+            .where(ProvisioningConnection.id == connection_id)
+            .with_for_update()
+        )
+        return db.execute(statement).scalar_one_or_none()
+
+    @staticmethod
     def add(db: Session, connection: ProvisioningConnection) -> ProvisioningConnection:
         """Persist a new connection and refresh its generated fields."""
         db.add(connection)

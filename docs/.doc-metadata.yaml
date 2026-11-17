@@ -5,38 +5,25 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "fdb3943fab6dda87a21c93c70c3e0c6a7e08f9b2"
-last_synced_date: "2026-05-21T00:00:00+00:00"
+last_synced_commit: "726a635f337c7870bac2b55e125db2d401e89c49"
+last_synced_date: "2026-11-17T11:40:08+01:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
-    - "docs/reference/environment-variables.md"
-    - "docs/ai/agent-system.md"
+    - "docs/guides/scim-keycloak.md"
     - "docs/.doc-metadata.yaml"
   files_created: []
   files_deleted: []
-  commits_covered: 14
-  commit_range: "d40b51d..fdb3943"
+  commits_covered: null
+  commit_range: "fdb3943..726a635"
   notes: >
-    0.4.2 release documentation sync. Changes:
-    (1) environment-variables.md: Updated LangSmith section from legacy LANGCHAIN_*
-    variable names to the new LANGSMITH_* prefix (LANGSMITH_TRACING, LANGSMITH_API_KEY,
-    LANGSMITH_PROJECT, LANGSMITH_ENDPOINT) reflecting the centralised langsmith_config.py
-    module introduced for LangChain 1.x compatibility. Added per-app tracing note.
-    (2) agent-system.md: Corrected MemoryManagementService default constants
-    (MAX_MESSAGES=20, MAX_TOKENS=4000, SUMMARIZATION_THRESHOLD=20 — centralised in
-    DEFAULT_MEMORY_SUMMARIZE_THRESHOLD constant in models/agent.py). Added note that
-    MCP tools are loaded for both top-level agents and agents used as sub-tools.
-    (3) pyproject.toml version bumped from 0.4.1.dev0 → 0.4.1 on release/0.4.1 branch.
-    Documentation created: docs/guides/git-workflow.md (full GitFlow guide: branch naming, versioning
-    convention x.y.z.devN, release workflow, hotfix workflow, commit signing, remote config, GitHub CLI rules).
-    docs/guides/copilot-agents.md updated: @git-github section expanded with GitFlow capabilities and
-    link to new guide. docs/index.md updated: new guide added to Guides TOC.
-    (3) X-Server-Time-Ms response header on search. (4) Frontend playground: result inspection
-    with score bar/source badge/expand-collapse/copy/neighbors; faceted filter builder with
-    autocomplete; curator tools (multi-select bulk delete, delete-by-filter w/ dry-run guard,
-    reindex); API snippets (cURL/Python/JS/TS); latency badge; query history; A/B compare mode.
-    NOTE: user-avatar-upload plan (PR #110) execution marked completed but feature not confirmed
-    in develop (User model has no avatar_path). Skipped pending verification.
+    Focused SCIM Keycloak local-test wizard documentation update. The guide now
+    covers the admin UI flow, explicit local-autoconnect opt-in, local URL
+    restrictions, temporary Keycloak admin-cli credentials, and the distinction
+    between target creation/testing and reconciliation; existing manual/API
+    guidance is retained. The checkout's current HEAD was recorded, but the
+    commit history since the previous baseline was not available for enumeration
+    in this environment, so commits_covered is unknown and unrelated docs were
+    not audited.

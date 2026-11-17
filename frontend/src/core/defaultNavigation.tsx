@@ -26,6 +26,7 @@ import {
   Webhook,
   Target,
   Activity,
+  Link2,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -225,6 +226,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/admin/settings',
       name: 'Settings',
       icon: <Settings size={16} />,
+      section: 'admin',
+      adminOnly: true
+    },
+    {
+      path: '/admin/scim',
+      name: 'SCIM (local test)',
+      icon: <Link2 size={16} />,
       section: 'admin',
       adminOnly: true
     },

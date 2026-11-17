@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr
 
 
 class SCIMConnectionCreate(BaseModel):
@@ -12,6 +12,18 @@ class SCIMConnectionCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=255)
     auth_mode: Literal["static_bearer"] = "static_bearer"
     client_id: Optional[str] = Field(default=None, max_length=255)
+
+
+class SCIMConnectionUpdate(BaseModel):
+    """Fields editable by an administrator on an existing SCIM connection."""
+
+    expected_external_directory_id: str | None
+    external_directory_id: str = Field(min_length=1, max_length=255)
+    display_name: str = Field(min_length=1, max_length=255)
+    keycloak_admin_base_url: AnyHttpUrl | None = None
+    keycloak_admin_realm: str = Field(default="master", min_length=1, max_length=255)
+    keycloak_admin_username: SecretStr | None = None
+    keycloak_admin_password: SecretStr | None = None
 
 
 class SCIMConnectionListItem(BaseModel):

@@ -15,6 +15,7 @@ from schemas.scim_connection_schemas import (
     SCIMConnectionDetail,
     SCIMConnectionListItem,
     SCIMConnectionStatusResponse,
+    SCIMConnectionUpdate,
     OIDCIdentityLinkCreate,
     OIDCIdentityLinkResponse,
 )
@@ -26,6 +27,10 @@ class SCIMConnectionNotFoundError(Exception):
 
 class SCIMConnectionConflictError(Exception):
     """Raised when a connection violates a uniqueness constraint."""
+
+
+class SCIMConnectionUpdateConflictError(Exception):
+    """Raised when a SCIM connection update is stale or lacks required checks."""
 
 
 class SCIMIdentityLinkTargetNotFoundError(Exception):
@@ -73,6 +78,38 @@ class SCIMConnectionAdminService:
         connection = self.repository.get_by_id(db, connection_id)
         if connection is None:
             raise SCIMConnectionNotFoundError
+        return self._detail(connection)
+
+    def update_connection(
+        self,
+        db: Session,
+        connection_id: int,
+        payload: SCIMConnectionUpdate,
+        keycloak_realm_change_verified: bool = False,
+    ) -> SCIMConnectionDetail:
+        """Update a connection's display name and external directory identifier."""
+        connection = self.repository.get_by_id_for_update(db, connection_id)
+        if connection is None:
+            raise SCIMConnectionNotFoundError
+        if connection.external_directory_id != payload.expected_external_directory_id:
+            raise SCIMConnectionUpdateConflictError(
+                "The SCIM connection changed during this edit. Reload it and try again."
+            )
+        if (
+            connection.provider_type.lower() == "keycloak"
+            and connection.external_directory_id != payload.external_directory_id
+            and not keycloak_realm_change_verified
+        ):
+            raise SCIMConnectionUpdateConflictError(
+                "A Keycloak realm change must be checked against its existing targets first."
+            )
+        connection.display_name = payload.display_name
+        connection.external_directory_id = payload.external_directory_id
+        try:
+            self.repository.save(db, connection)
+        except IntegrityError as exc:
+            db.rollback()
+            raise SCIMConnectionConflictError from exc
         return self._detail(connection)
 
     def create_connection(

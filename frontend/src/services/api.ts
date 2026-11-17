@@ -20,6 +20,93 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+export interface SCIMConnection {
+  id: number;
+  provider_type: string;
+  external_directory_id: string | null;
+  connection_key: string;
+  display_name: string;
+  auth_mode: string;
+  client_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SCIMConnectionCredential extends SCIMConnection {
+  bearer_token: string;
+}
+
+export interface SCIMConnectionUpdate {
+  expected_external_directory_id: string | null;
+  display_name: string;
+  external_directory_id: string;
+  keycloak_admin_base_url?: string;
+  keycloak_admin_realm?: string;
+  keycloak_admin_username?: string;
+  keycloak_admin_password?: string;
+}
+
+export interface KeycloakLocalSetupStatus {
+  enabled: boolean;
+}
+
+export interface KeycloakTargetSetupRequest {
+  mattin_scim_base_url: string;
+  keycloak_admin_base_url: string;
+  keycloak_admin_realm: string;
+  keycloak_admin_username: string;
+  keycloak_admin_password: string;
+  bearer_token: string;
+  keycloak_realm: string;
+  target_name: string;
+  sync_groups: boolean;
+}
+
+export interface KeycloakTargetSetupResponse {
+  target_id: string;
+  target_name: string;
+  target_url: string;
+  test_ok: boolean;
+  test_status: number | null;
+  patch_supported: boolean;
+  filter_supported: boolean;
+}
+
+export interface KeycloakReconciliationRequest {
+  keycloak_admin_base_url: string;
+  keycloak_admin_realm: string;
+  keycloak_admin_username: string;
+  keycloak_admin_password: string;
+  confirm_real_reconcile?: boolean;
+  preview_token?: string;
+}
+
+export interface KeycloakReconciliationSummary {
+  target_id: string;
+  dry_run: boolean;
+  blocked: boolean;
+  local_users: number;
+  remote_users: number;
+  user_creates: number;
+  user_updates: number;
+  user_removals: number;
+  unmanaged_remote_users: number;
+  group_upserts: number;
+  group_removals: number;
+  started_at: number;
+  finished_at: number;
+  message: string | null;
+}
+
+export interface KeycloakReconciliationResponse {
+  target_id: string;
+  dry_run: boolean;
+  summary: KeycloakReconciliationSummary;
+  outbox: Record<string, number>;
+  preview_token?: string | null;
+}
 import type {
   MarketplaceCatalogParams,
   MarketplaceCatalogResponse,
@@ -828,6 +915,82 @@ class ApiService {
 
   async getApps(): Promise<App[]> {
     return this.request('/internal/apps/');
+  }
+
+  async getSCIMKeycloakLocalSetupStatus(): Promise<KeycloakLocalSetupStatus> {
+    return this.request('/internal/admin/scim-connections/keycloak-local-setup/status');
+  }
+
+  async getSCIMConnections(): Promise<SCIMConnection[]> {
+    return this.request('/internal/admin/scim-connections');
+  }
+
+  async updateSCIMConnection(
+    connectionId: number,
+    data: SCIMConnectionUpdate,
+  ): Promise<SCIMConnection> {
+    return this.request(`/internal/admin/scim-connections/${connectionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async setSCIMConnectionActive(
+    connectionId: number,
+    isActive: boolean,
+  ): Promise<SCIMConnection> {
+    return this.request(
+      `/internal/admin/scim-connections/${connectionId}/${isActive ? 'activate' : 'deactivate'}`,
+      { method: 'POST' },
+    );
+  }
+
+  async createSCIMConnection(data: {
+    provider_type: string;
+    external_directory_id: string;
+    display_name: string;
+    auth_mode: 'static_bearer';
+  }): Promise<SCIMConnectionCredential> {
+    return this.request('/internal/admin/scim-connections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async configureKeycloakSCIMTarget(
+    connectionId: number,
+    data: KeycloakTargetSetupRequest,
+  ): Promise<KeycloakTargetSetupResponse> {
+    return this.request(`/internal/admin/scim-connections/${connectionId}/keycloak-target`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async runSCIMKeycloakDryRun(
+    connectionId: number,
+    data: KeycloakReconciliationRequest,
+  ): Promise<KeycloakReconciliationResponse> {
+    return this.request(
+      `/internal/admin/scim-connections/${connectionId}/keycloak-reconciliation/dry-run`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async runSCIMKeycloakReconciliation(
+    connectionId: number,
+    data: KeycloakReconciliationRequest,
+  ): Promise<KeycloakReconciliationResponse> {
+    return this.request(
+      `/internal/admin/scim-connections/${connectionId}/keycloak-reconciliation/run`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    );
   }
 
   async getApp(appId: number): Promise<App> {

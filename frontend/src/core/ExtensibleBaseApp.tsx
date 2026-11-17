@@ -55,6 +55,7 @@ import UsersPage from '../pages/admin/UsersPage';
 import StatsPage from '../pages/admin/StatsPage';
 import AdminMetricsPage from '../pages/admin/AdminMetricsPage';
 import SystemSettingsPage from '../pages/admin/SystemSettingsPage';
+import SCIMConnectionsPage from '../pages/admin/SCIMConnectionsPage';
 import LoginPage from '../pages/LoginPage';
 import AuthSuccessPage from '../pages/AuthSuccessPage';
 import ProfilePage from '../pages/ProfilePage';
@@ -452,6 +453,12 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/admin/settings" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <SystemSettingsPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/scim" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SCIMConnectionsPage />
                   </AdminLayoutRoute>
                 } />
 
