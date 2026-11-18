@@ -270,3 +270,44 @@ test('codeInterpreter notice and settings keys exist in en and es, and reused ke
   }
   for (const kind of kinds) assert.notEqual(texts.en[kind], texts.es[kind], kind);
 });
+
+test('accessibility texts exist in en and es with the same placeholders, and the Spanish Chat wording is consistent', () => {
+  const keys = [
+    ['agentPlayground', 'chat', 'generatingFor'], ['agentPlayground', 'chat', 'statusAnswering'],
+    ['agentPlayground', 'chat', 'statusReady'], ['agentPlayground', 'chat', 'statusFailed'],
+    ['agentPlayground', 'chat', 'statusReset'], ['agentPlayground', 'chat', 'speakerYou'],
+    ['agentPlayground', 'chat', 'speakerAssistant'], ['agentPlayground', 'chat', 'messagesRegion'],
+    ['agentPlayground', 'chat', 'resetConfirmTitle'], ['agentPlayground', 'chat', 'resetConfirmMessage'],
+    ['agentPlayground', 'chat', 'resetFailed'], ['conversationSidebar', 'renameNamed'],
+    ['conversationSidebar', 'deleteNamed'], ['appSettingsPage', 'systemServiceOption'], ['confirm'],
+  ];
+  const locales = {
+    en: require('../src/i18n/locales/en/common.json'),
+    es: require('../src/i18n/locales/es/common.json'),
+  };
+  const placeholders = (text) => (text.match(/\{\{\w+\}\}/g) ?? []).sort().join();
+  for (const path of keys) {
+    const [en, es] = ['en', 'es'].map((l) => path.reduce((v, part) => v?.[part], locales[l]));
+    assert.equal(typeof en, 'string', `en.${path.join('.')}`);
+    assert.equal(typeof es, 'string', `es.${path.join('.')}`);
+    assert.equal(placeholders(en), placeholders(es), path.join('.'));
+  }
+  // One word for files across the Chat texts, and counts that do not depend on grammatical gender.
+  const chatEs = JSON.stringify(locales.es.appChat);
+  assert.doesNotMatch(chatEs, /fichero/i);
+  assert.doesNotMatch(JSON.stringify(locales.es.appChat.selection), /seleccionadas?\b|quitada\b/);
+});
+
+test('leaving an App and removing a collaborator warn that the member Chat data is deleted (en and es)', () => {
+  const en = require('../src/i18n/locales/en/common.json');
+  const es = require('../src/i18n/locales/es/common.json');
+  assert.match(en.appsPage.confirmLeaveMessage, /Your Chat conversations and files in this app will be deleted\.$/);
+  assert.match(en.collaborationPage.remove.namedMessage, /Their Chat conversations and files in this app will be deleted\.$/);
+  assert.match(en.collaborationPage.remove.message, /Their Chat conversations and files in this app will be deleted\.$/);
+  assert.match(es.appsPage.confirmLeaveMessage, /Se eliminarán tus conversaciones y archivos del Chat en esta aplicación\.$/);
+  assert.match(es.collaborationPage.remove.namedMessage, /Se eliminarán sus conversaciones y archivos del Chat en esta aplicación\.$/);
+  assert.match(es.collaborationPage.remove.message, /Se eliminarán sus conversaciones y archivos del Chat en esta aplicación\.$/);
+  // The named texts keep their interpolation.
+  assert.match(en.appsPage.confirmLeaveMessage, /\{\{name\}\}/);
+  assert.match(es.collaborationPage.remove.namedMessage, /\{\{name\}\}/);
+});

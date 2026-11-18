@@ -57,11 +57,14 @@ interface StreamResult {
 
 export class StreamingChatError extends Error {
   readonly elapsedMs: number;
+  /** Conversation the failed turn ran in (known once the `metadata` event arrived): it exists server-side. */
+  readonly conversationId: number | null;
 
-  constructor(message: string, elapsedMs: number, cause?: unknown) {
+  constructor(message: string, elapsedMs: number, cause?: unknown, conversationId: number | null = null) {
     super(message, cause === undefined ? undefined : { cause });
     this.name = 'StreamingChatError';
     this.elapsedMs = elapsedMs;
+    this.conversationId = conversationId;
   }
 }
 
@@ -521,7 +524,7 @@ export function useStreamingChat(streamFn: StreamFn): UseStreamingChatReturn {
         } else {
           const errMsg = err instanceof Error ? err.message : 'Streaming failed';
           setStreamError(errMsg);
-          throw new StreamingChatError(errMsg, getElapsedMs(), err);
+          throw new StreamingChatError(errMsg, getElapsedMs(), err, conversationId);
         }
       } finally {
         elapsedMs = getElapsedMs();

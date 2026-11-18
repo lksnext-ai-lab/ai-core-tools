@@ -47,6 +47,11 @@ function mount(language, props, api = {}, intl = Intl) {
         if (!(index in states)) states[index] = initial;
         return [states[index], (next) => { states[index] = typeof next === 'function' ? next(states[index]) : next; }];
       },
+      useRef(initial) {
+        const index = hookIndex++;
+        if (!(index in states)) states[index] = { current: initial };
+        return states[index];
+      },
       useEffect(callback, deps) {
         const index = hookIndex++;
         const previous = effects[index];
@@ -145,8 +150,11 @@ for (const language of ['en', 'es']) {
     assert.ok(content.includes(t('conversationSidebar.messageCount', { count: 1 })));
     const rename = elements(view).find((n) => n.props?.['data-action'] === 'rename');
     const del = elements(view).find((n) => n.props?.['data-action'] === 'delete');
-    assert.equal(rename.props['aria-label'], t('marketplaceHome.renameConversation'));
-    assert.equal(del.props['aria-label'], t('marketplaceHome.deleteConversation'));
+    // Every row's actions name their conversation, so a screen reader can tell them apart.
+    assert.equal(rename.props['aria-label'], t('conversationSidebar.renameNamed', { title: t('conversationSidebar.untitled') }));
+    assert.equal(del.props['aria-label'], t('conversationSidebar.deleteNamed', { title: t('conversationSidebar.untitled') }));
+    const labels = elements(view).filter((n) => n.props?.['data-action']).map((n) => n.props['aria-label']);
+    assert.equal(new Set(labels).size, labels.length, 'accessible names are unique');
     // Old dates use the active locale, not a hardcoded es-ES.
     const expectedDate = new Intl.DateTimeFormat(language, { day: 'numeric', month: 'short' }).format(new Date(old));
     assert.ok(content.includes(expectedDate), `expected ${expectedDate} in ${content}`);

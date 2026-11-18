@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Timer } from 'lucide-react';
 import type { ActiveTool } from '../../types/streaming';
 import { formatDuration } from '../../utils/duration';
@@ -25,6 +26,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
   activeTools = [],
   thinkingMessage,
 }) => {
+  const { t } = useTranslation('common');
   const hasContent = content.length > 0;
 
   return (
@@ -50,7 +52,7 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
                     />
                   ))}
                 </div>
-                <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+                <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
                   {thinkingMessage}
                 </span>
               </div>
@@ -59,12 +61,14 @@ const StreamingMessage: React.FC<StreamingMessageProps> = ({
         )}
 
         {isStreaming && elapsedMs !== undefined && (
+          // Visual only: a ticking counter must never be a live region. Progress is announced once by the
+          // chat's status region instead.
           <div
-            className="mt-1 ml-1 flex items-center gap-1.5 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark"
-            aria-live="polite"
+            className="mt-1 ml-1 flex items-center gap-1.5 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark"
+            aria-hidden="true"
           >
             <Timer className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Generating for {formatDuration(elapsedMs)}</span>
+            <span>{t('agentPlayground.chat.generatingFor', { duration: formatDuration(elapsedMs) })}</span>
           </div>
         )}
 

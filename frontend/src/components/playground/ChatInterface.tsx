@@ -4,6 +4,9 @@ import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
+import { formatClockTime, prefersReducedMotion } from '../../utils/clockTime';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import Alert from '../ui/Alert';
 import MessageContent from './MessageContent';
 import StreamingMessage from './StreamingMessage';
 import SearchFilters from './SearchFilters';
@@ -100,7 +103,8 @@ function ChatInterface({
   vectorDbType,
   toolbarStart,
 }: Readonly<ChatInterfaceProps>) {
-  const { t } = useTranslation('common');
+  const { t, i18n } = useTranslation('common');
+  const confirm = useConfirm();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -161,6 +165,10 @@ function ChatInterface({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendButtonRef = useRef<HTMLButtonElement>(null);
+  const stopButtonRef = useRef<HTMLButtonElement>(null);
+  /** Text of the single polite status region (turn started / finished / failed / reset). Never token text. */
+  const [statusMessage, setStatusMessage] = useState('');
+  const [resetFailed, setResetFailed] = useState(false);
 
   useEffect(() => {
     if (focusComposerSignal) textareaRef.current?.focus();
@@ -188,6 +196,21 @@ function ChatInterface({
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
   const showStreaming = isStreaming || holdStreamingContent;
 
+  /** Focus is "lost" when it sits on <body> or on a composer control that was just disabled or removed. */
+  const composerFocusLost = () => {
+    const active = document.activeElement;
+    return (
+      !active || active === document.body || active === textareaRef.current
+      || active === sendButtonRef.current || active === stopButtonRef.current
+    );
+  };
+
+  // The composer locks while a turn runs and the Send button becomes Stop: without this, focus falls to
+  // <body> and a keyboard user can no longer reach Stop. Only when focus was in the composer (or lost).
+  useEffect(() => {
+    if (isStreaming && composerFocusLost()) stopButtonRef.current?.focus();
+  }, [isStreaming]);
+
   // ─── Scroll helpers ──────────────────────────────────────────────────────────
 
   /** Scroll the messages container to its bottom. Uses scrollTo on the container
@@ -196,7 +219,8 @@ function ChatInterface({
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior });
+    // Reduced motion: never animate the scroll.
+    container.scrollTo({ top: container.scrollHeight, behavior: prefersReducedMotion() ? 'auto' : behavior });
   }, []);
 
   /** Reset the scroll-up lock — used when sending a new message or clicking the FAB. */
@@ -491,6 +515,7 @@ function ChatInterface({
     // Commit the message and release the streaming hold in the same batch
     setMessages((prev) => [...prev, agentMsg]);
     setHoldStreamingContent(false);
+    setStatusMessage(t('agentPlayground.chat.statusReady', { agent: agentName }));
   };
 
   const handleApprovalDecision = async (decisions: HitlDecision[]) => {
@@ -546,9 +571,12 @@ function ChatInterface({
     setExpiredApprovalId(pendingApproval.approval_id);
   }, [pendingApproval, settleAwaitingTools]);
 
-  const isConversationBusy = (error: unknown): boolean => {
+  /** The backend refused the message before starting a turn (busy conversation, too many files): nothing ran. */
+  const isRejectedBeforeStart = (error: unknown): boolean => {
     const cause = error instanceof Error ? error.cause : undefined;
-    return [error, cause].some((e) => e instanceof ChatTransportError && e.code === 'conversationBusy');
+    return [error, cause].some(
+      (e) => e instanceof ChatTransportError && (e.code === 'conversationBusy' || e.code === 'tooManyFiles'),
+    );
   };
 
   const describeSendError = (error: unknown): string => {
@@ -574,6 +602,7 @@ function ChatInterface({
     };
 
     setMessages((prev) => [...prev, userMsg]);
+    setStatusMessage(t('agentPlayground.chat.statusAnswering', { agent: agentName }));
     const messageText = inputMessage;
     setInputMessage('');
     // Force scroll to bottom so the user sees the streaming response
@@ -610,15 +639,26 @@ function ChatInterface({
       await refreshFileList(result.conversationId || currentConversationId);
       onMessageSent?.();
 
-      textareaRef.current?.focus();
+      // Focus goes back to the composer once it is enabled again (see the effect below), if it was lost.
+      setFocusAfterErrorTick((tick) => tick + 1);
     } catch (error) {
       if (!isAlive()) return;
       setHoldStreamingContent(false);
-      if (isConversationBusy(error)) {
-        // The turn was rejected before it started: take the message back so it can be resent as it was.
+      setStatusMessage(t('agentPlayground.chat.statusFailed'));
+      if (isRejectedBeforeStart(error)) {
+        // The turn was rejected before it started: take the message back so it can be resent as it was
+        // (attached files stay attached).
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         // The composer is locked while a turn is in flight, so it is still empty here.
         setInputMessage(messageText);
+      }
+      // The turn failed after the backend had created the conversation (e.g. the agent ran out of steps): it
+      // is kept server-side, so adopt it. The next message then continues it instead of starting another.
+      if (error instanceof StreamingChatError && error.conversationId && !currentConversationId) {
+        createdBySendRef.current = error.conversationId;
+        setCurrentConversationId(error.conversationId);
+        onConversationCreated?.(error.conversationId);
+        onMessageSent?.();
       }
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -633,16 +673,14 @@ function ChatInterface({
     }
   };
 
-  // After a failed send, return focus to the composer once it is enabled again, but only when focus is
-  // lost (on <body>): never steal it from a control the user has moved to meanwhile.
+  // After a turn ends, return focus to the composer once it is enabled again, but only when focus is
+  // lost (on <body>, or the Stop button that just disappeared): never steal it from a control the user
+  // has moved to meanwhile (a selector chip, the side panel...).
   useEffect(() => {
     if (focusAfterErrorTick === 0) return;
-    const active = document.activeElement;
-    // Some engines keep the just-disabled composer as the active element instead of falling back to <body>.
-    // The send button counts as part of the composer: the user may just have clicked it.
-    const focusLost =
-      !active || active === document.body || active === textareaRef.current || active === sendButtonRef.current;
-    if (focusLost) textareaRef.current?.focus();
+    // Some engines keep the just-disabled composer as the active element instead of falling back to <body>;
+    // the send and stop buttons count as part of the composer.
+    if (composerFocusLost()) textareaRef.current?.focus();
   }, [focusAfterErrorTick]);
 
   useEffect(() => {
@@ -658,6 +696,15 @@ function ChatInterface({
   // ─── Reset ───────────────────────────────────────────────────────────────────
 
   const handleResetConversation = async () => {
+    const ok = await confirm({
+      title: t('agentPlayground.chat.resetConfirmTitle'),
+      message: t('agentPlayground.chat.resetConfirmMessage'),
+      confirmLabel: t('agentPlayground.chat.reset'),
+      cancelLabel: t('cancel'),
+      variant: 'warning',
+    });
+    if (!ok) return;
+    setResetFailed(false);
     try {
       await transport.resetConversation(currentConversationId);
       setMessages([]);
@@ -669,9 +716,11 @@ function ChatInterface({
       setFiltersKey((prev) => prev + 1);
       setExposedFilterValues({});
       clearToolHistory();
+      setStatusMessage(t('agentPlayground.chat.statusReset'));
       onConversationReset?.();
     } catch (error) {
       console.error('Error resetting conversation:', error);
+      setResetFailed(true);
     }
   };
 
@@ -854,7 +903,8 @@ function ChatInterface({
   );
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // Enter that confirms an IME composition (CJK, etc.) must not send the message.
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (canSend) void handleSendMessage();
     }
@@ -1016,11 +1066,20 @@ function ChatInterface({
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4"
+      onKeyDown={(event) => {
+        // Esc stops a running turn. Layers that use Esc themselves (selector popover, modals) prevent default.
+        if (event.key === 'Escape' && isStreaming && !event.defaultPrevented) abortStream();
+      }}
+    >
+      {/* One polite status region for the whole chat: says once that a turn started / finished / failed.
+          Never carries streamed text. */}
+      <div role="status" className="sr-only">{statusMessage}</div>
       {/* Chat Interface + right column (info / filters) */}
       <div className="grid grid-cols-1 items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* Chat card */}
-        <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
+        <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col sm:h-[calc(100vh-20rem)] sm:min-h-[480px] overflow-hidden">
           {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
           <div className="flex flex-wrap items-center gap-2 px-6 pt-3 pb-1">
             {toolbarStart}
@@ -1034,12 +1093,28 @@ function ChatInterface({
             />
           </div>
 
-          {/* Messages container */}
+          {resetFailed && (
+            <div className="px-6 pb-2">
+              <Alert
+                type="error"
+                message={t('agentPlayground.chat.resetFailed')}
+                onDismiss={() => setResetFailed(false)}
+                dismissAriaLabel={t('alert.dismissNamed', { name: t('agentPlayground.chat.reset') })}
+              />
+            </div>
+          )}
+
+          {/* Messages container. Focusable so a keyboard user can scroll it; it is not a live region (the
+              status region above announces turns, tokens are never read out as they arrive). On narrow
+              screens it has a bounded height of its own instead of sharing a fixed-height card. */}
           <div
             ref={messagesContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-[26px] space-y-[22px]
+            role="region"
+            aria-label={t('agentPlayground.chat.messagesRegion')}
+            tabIndex={0}
+            className="flex-1 min-h-[16rem] max-h-[60vh] sm:min-h-0 sm:max-h-none overflow-y-auto overscroll-contain px-6 py-[26px] space-y-[22px]
                        bg-canvas dark:bg-canvas-dark
-                       scroll-smooth"
+                       scroll-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus dark:focus-visible:ring-focus-dark"
           >
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-full">
@@ -1077,9 +1152,12 @@ function ChatInterface({
                         key={message.id}
                         className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4"
                       >
-                        <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <div aria-hidden="true">
+                          <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        </div>
                         <div className="max-w-[82%] min-w-0">
                           <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
+                            <span className="sr-only">{t('agentPlayground.chat.speakerYou')}</span>
                             <MessageContent
                               content={message.content}
                               resolveFileUrl={resolveFileUrl}
@@ -1112,11 +1190,8 @@ function ChatInterface({
                             )}
                           </div>
                           <div className="text-right mt-1">
-                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                            <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                              {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                           </div>
                         </div>
@@ -1154,14 +1229,11 @@ function ChatInterface({
                             <p className="text-sm">{message.content}</p>
                           </div>
                           <div className="mt-1">
-                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                            <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                              {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
@@ -1181,9 +1253,12 @@ function ChatInterface({
                       className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
                       <div className="flex items-start gap-4 max-w-[82%] min-w-0">
-                        <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <div aria-hidden="true">
+                          <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
+                            <span className="sr-only">{t('agentPlayground.chat.speakerAssistant', { agent: agentName })}</span>
                             <MessageContent
                               content={stripTimestampLabels(message.content)}
                               resolveFileUrl={resolveFileUrl}
@@ -1209,14 +1284,11 @@ function ChatInterface({
                               );
                             })}
                           <div className="mt-1">
-                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                            <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                              {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
@@ -1304,7 +1376,7 @@ function ChatInterface({
                 />
               </div>
             )}
-            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark transition-colors duration-150">
+            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark focus-within:ring-2 focus-within:ring-focus dark:focus-within:ring-focus-dark transition-colors duration-150">
               {/* File attach button */}
               <div>
                 <input
@@ -1313,6 +1385,8 @@ function ChatInterface({
                   multiple
                   onChange={handleFileUpload}
                   className="hidden"
+                  aria-hidden="true"
+                  tabIndex={-1}
                   id="file-upload"
                   accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
                 />
@@ -1321,6 +1395,7 @@ function ChatInterface({
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
                   className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                              text-fg-tertiary dark:text-fg-tertiary-dark
                              disabled:opacity-40 disabled:cursor-not-allowed
                              transition-colors duration-150"
@@ -1351,6 +1426,7 @@ function ChatInterface({
                 onClick={handleMediaButtonClick}
                 disabled={isStreaming}
                 className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                            text-fg-tertiary dark:text-fg-tertiary-dark
                           disabled:opacity-40 disabled:cursor-not-allowed
                            transition-colors duration-150"
@@ -1389,7 +1465,7 @@ function ChatInterface({
                 disabled={isStreaming || approvalBlocksInput}
                 className="flex-1 py-[9px] bg-transparent border-none outline-none resize-none
                            text-[14.5px] text-fg dark:text-fg-dark
-                           placeholder:text-fg-tertiary dark:placeholder:text-fg-tertiary-dark
+                           placeholder:text-fg-secondary dark:placeholder:text-fg-secondary-dark
                            disabled:opacity-50
                            focus:outline-none focus:ring-0 focus:border-accent dark:focus:border-accent
                            max-h-40 input-login"
@@ -1401,8 +1477,10 @@ function ChatInterface({
               {isStreaming ? (
                 <button
                   type="button"
+                  ref={stopButtonRef}
                   onClick={abortStream}
                   className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                              bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark
                              text-error dark:text-error-dark
                              hover:border-error dark:hover:border-error-dark transition-colors duration-150"
@@ -1419,6 +1497,7 @@ function ChatInterface({
                   disabled={!canSend}
                   aria-describedby={sendBlockedReason ? sendBlockedReasonId : undefined}
                   className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                              bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
                              hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
                              transition-opacity duration-150"
@@ -1439,7 +1518,7 @@ function ChatInterface({
               {sendBlockedReason ?? ''}
             </p>
             {!sendBlockedReason && (
-              <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
+              <p className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark mt-[9px] text-center">
                 {t('agentPlayground.chat.sendKeyboardHint')}
               </p>
             )}

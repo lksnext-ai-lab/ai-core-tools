@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Handshake, Crown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '../contexts/UserContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
 import type { MarketplaceQuotaUsage } from '../types/marketplace';
@@ -25,6 +27,8 @@ interface PendingInvitation {
 }
 
 const ProfilePage: React.FC = () => {
+  const { t } = useTranslation('common');
+  const confirm = useConfirm();
   const { user, loading: userLoading } = useUser();
   const [collaborations, setCollaborations] = useState<App[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
@@ -81,9 +85,15 @@ const ProfilePage: React.FC = () => {
   }
 
   async function handleLeaveApp(appId: number, appName: string) {
-    if (!globalThis.confirm(`Are you sure you want to leave "${appName}"?`)) {
-      return;
-    }
+    // Same wording as the apps list, including what happens to the member's Chat data.
+    const confirmed = await confirm({
+      title: t('appsPage.confirmLeaveTitle'),
+      message: t('appsPage.confirmLeaveMessage', { name: appName }),
+      confirmLabel: t('appsPage.actions.leaveApp'),
+      cancelLabel: t('cancel'),
+      variant: 'warning',
+    });
+    if (!confirmed) return;
     try {
       await apiService.leaveApp(appId);
       setSuccess(`Left app "${appName}" successfully`);

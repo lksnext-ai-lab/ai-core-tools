@@ -1,5 +1,6 @@
 {
   "save": "Guardar",
+  "confirm": "Confirmar",
   "cancel": "Cancelar",
   "delete": "Eliminar",
   "edit": "Editar",
@@ -249,7 +250,7 @@
     "appExportedSuccessfully": "La aplicación \"{{name}}\" se ha exportado correctamente.",
     "appExportFailed": "No se pudo exportar la aplicación \"{{name}}\".",
     "confirmLeaveTitle": "¿Salir de la aplicación?",
-    "confirmLeaveMessage": "¿Seguro que quieres salir de \"{{name}}\"? Perderás el acceso a esta aplicación.",
+    "confirmLeaveMessage": "¿Seguro que quieres salir de \"{{name}}\"? Perderás el acceso a esta aplicación. Se eliminarán tus conversaciones y archivos del Chat en esta aplicación.",
     "appLeftSuccessfully": "Has salido de la aplicación \"{{name}}\".",
     "appLeaveFailed": "No se pudo salir de la aplicación \"{{name}}\".",
     "confirmDeleteTitle": "¿Eliminar aplicación?",
@@ -331,6 +332,7 @@
     "inheritSystemDefault": "Heredar valor predeterminado del sistema",
     "chatCodeInterpreter": "Permitir ejecutar código en el Chat",
     "chatCodeInterpreterHelp": "Todos los miembros de esta App, incluidos los lectores, podrán ejecutar código en un sandbox desde el Chat, usando el servicio de sandbox por defecto de la App, o el del sistema si no hay ninguno seleccionado (se aplican su coste y su acceso a la red). El Chat no puede pedir aprobación antes de ejecutar código. Con un servidor OpenSandbox autoalojado, los sandboxes no están aislados entre sí: el código que ejecuta un miembro puede alcanzar los sandboxes de otros miembros en el mismo servidor.",
+    "systemServiceOption": "[Sistema] {{name}}",
     "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código, y el Chat de la App cuando se permite ejecutar código en el Chat. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
     "sandboxServicesSettings": "Configuración → Servicios sandbox",
     "embeddingService": "Servicio de embeddings por defecto",
@@ -2193,8 +2195,8 @@
     },
     "remove": {
       "title": "¿Eliminar colaborador?",
-      "namedMessage": "¿Quieres quitar a {{name}} de esta aplicación? Perderá el acceso inmediatamente.",
-      "message": "¿Quieres eliminar a este colaborador? Perderá el acceso a esta aplicación."
+      "namedMessage": "¿Quieres quitar a {{name}} de esta aplicación? Perderá el acceso inmediatamente. Se eliminarán sus conversaciones y archivos del Chat en esta aplicación.",
+      "message": "¿Quieres eliminar a este colaborador? Perderá el acceso a esta aplicación. Se eliminarán sus conversaciones y archivos del Chat en esta aplicación."
     },
     "actions": {
       "remove": "Eliminar"
@@ -3955,6 +3957,17 @@
     "conversations": "Conversaciones",
     "chat": {
       "reset": "Reiniciar conversación",
+      "generatingFor": "Generando durante {{duration}}",
+      "statusAnswering": "{{agent}} está respondiendo…",
+      "statusReady": "{{agent}} ha respondido. La respuesta está lista.",
+      "statusFailed": "No se pudo completar la respuesta. Consulta el mensaje de error en la conversación.",
+      "statusReset": "Conversación reiniciada.",
+      "speakerYou": "Tú:",
+      "speakerAssistant": "{{agent}}:",
+      "messagesRegion": "Mensajes de la conversación",
+      "resetConfirmTitle": "Reiniciar conversación",
+      "resetConfirmMessage": "Se borrarán los mensajes y los archivos adjuntos de esta conversación. No se puede deshacer.",
+      "resetFailed": "No se pudo reiniciar la conversación. Inténtalo de nuevo.",
       "loadingConversation": "Cargando conversación...",
       "startChatting": "Empieza a conversar con {{agent}}",
       "starterPromptDescription": "Escribe un mensaje abajo para empezar",
@@ -4516,6 +4529,8 @@
     "daysAgo": "Hace {{value}}d",
     "confirmDeleteMessage": "¿Seguro que quieres eliminar esta conversación? Esta acción no se puede deshacer.",
     "deleteFailed": "Error al eliminar conversación",
+    "renameNamed": "Renombrar {{title}}",
+    "deleteNamed": "Eliminar {{title}}",
     "renameFailed": "Error al actualizar título"
   },
   "alert": {
@@ -4545,10 +4560,10 @@
       "skills": "Skills",
       "mcps": "MCP",
       "nonePlural": "Ninguna",
-      "nSelected_one": "{{count}} seleccionada",
-      "nSelected_other": "{{count}} seleccionadas",
-      "added": "{{name}} seleccionada",
-      "removed": "{{name}} quitada",
+      "nSelected_one": "{{count}} elemento",
+      "nSelected_other": "{{count}} elementos",
+      "added": "Se ha seleccionado {{name}}",
+      "removed": "Se ha quitado {{name}}",
       "results_one": "{{count}} resultado",
       "results_other": "{{count}} resultados",
       "search": "Buscar",
@@ -4601,8 +4616,8 @@
       "skillNamed": "La skill \"{{name}}\" ya no está disponible y se ha quitado de la selección.",
       "mcp_config": "No se pudo usar una configuración MCP (no disponible o eliminada); el mensaje se respondió sin ella.",
       "mcp_configNamed": "No se pudo usar la configuración MCP \"{{name}}\" (no disponible o eliminada); el mensaje se respondió sin ella.",
-      "sandbox_output_one": "No se ha podido entregar {{count}} fichero creado por el código (límite de tamaño, número o tiempo).",
-      "sandbox_output_other": "No se han podido entregar {{count}} ficheros creados por el código (límite de tamaño, número o tiempo)."
+      "sandbox_output_one": "No se ha podido entregar {{count}} archivo creado por el código (límite de tamaño, número o tiempo).",
+      "sandbox_output_other": "No se han podido entregar {{count}} archivos creados por el código (límite de tamaño, número o tiempo)."
     },
     "attachmentIndexing": {
       "title": "Los archivos adjuntos no se indexarán",
@@ -4625,7 +4640,9 @@
       "forbidden": "Ahora mismo no puedes enviar mensajes en esta App. Puede estar congelada o tu acceso puede haber cambiado.",
       "notFound": "La conversación o alguno de los elementos seleccionados ya no está disponible.",
       "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo e inténtalo de nuevo.",
-      "conversationBusy": "Esta conversación sigue respondiendo a un mensaje anterior. Espera a que termine e inténtalo de nuevo. Tu mensaje se ha conservado en el cuadro de texto."
+      "conversationBusy": "Esta conversación sigue respondiendo a un mensaje anterior. Espera a que termine e inténtalo de nuevo. Tu mensaje se ha conservado en el cuadro de texto.",
+      "stepLimitReached": "El asistente se quedó sin pasos antes de terminar. Tu conversación y los archivos creados hasta ahora se han conservado: escribe «continúa» para que siga.",
+      "tooManyFiles": "Demasiados archivos en un mensaje. Envía menos archivos cada vez."
     }
   }
 }

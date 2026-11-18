@@ -166,9 +166,9 @@ describe('AppChatPage conversations sidebar', () => {
     // Type the message first: once the rename input has the focus the keyboard no longer goes to the composer.
     await user.type(composer(), 'next question');
     await openConversationsPanel(user);
-    await screen.findByRole('button', { name: /Quarterly plan/ });
+    await screen.findByRole('button', { name: /^Quarterly plan/ });
     expect(apiMock.listAppChatConversations).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole('button', { name: tr('marketplaceHome.renameConversation') }));
+    await user.click(screen.getByRole('button', { name: tr('conversationSidebar.renameNamed', { title: 'Quarterly plan' }) }));
     const input = screen.getByRole('textbox', { name: tr('marketplaceHome.renameConversation') });
     await user.clear(input);
     await user.type(input, 'Quarterly pl');

@@ -191,7 +191,7 @@ describe('AppChatPage switching conversation while a first turn is streaming', (
 
     // The user opens another conversation from the list while the first turn is still running.
     await openConversationsPanel(user);
-    await user.click(await screen.findByRole('button', { name: /Other conversation/ }));
+    await user.click(await screen.findByRole('button', { name: /^Other conversation/ }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/apps/7/chat/5'));
     await waitFor(() => expect(chip('skills')).toHaveAccessibleName(/Translate/));
     expect(chip('model')).toHaveAccessibleName(/Alpha/);

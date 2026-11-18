@@ -7,7 +7,7 @@ import ChatInterface from '../components/playground/ChatInterface';
 import { OCRInterface } from '../components/playground/OCRInterface';
 import APIExamples from '../components/playground/APIExamples';
 import PromptModal from '../components/playground/PromptModal';
-import ConversationSidebar from '../components/playground/ConversationSidebar';
+import ConversationSidebar, { CONVERSATION_PANEL_ID } from '../components/playground/ConversationSidebar';
 import { LoadingState } from '../components/ui/LoadingState';
 import Alert from '../components/ui/Alert';
 import { ButtonApp, buttonAppSizeClasses, buttonAppVariantClasses } from '../components/ui/ButtonApp';
@@ -281,6 +281,7 @@ function AgentPlaygroundPage() {
                         type="button"
                         aria-haspopup="dialog"
                         aria-expanded={isConversationPanelOpen}
+                        aria-controls={isConversationPanelOpen ? CONVERSATION_PANEL_ID : undefined}
                         onClick={() => setIsConversationPanelOpen(true)}
                         className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
                                     ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}

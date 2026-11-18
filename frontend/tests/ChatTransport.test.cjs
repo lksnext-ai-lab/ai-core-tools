@@ -307,7 +307,18 @@ test('transport errors carry a code that maps to translated text in both locales
     const keys = require(`../src/i18n/locales/${language}/common.json`).appChat.transportErrors;
     assert.equal(typeof keys.noSelection, 'string');
     assert.equal(typeof keys.noConversation, 'string');
+    // Every code the transport can raise has a translated text.
+    for (const code of ['noSelection', 'noConversation', 'forbidden', 'notFound', 'serviceRetired', 'conversationBusy', 'stepLimitReached', 'tooManyFiles']) {
+      assert.equal(typeof keys[code], 'string', `${language}.${code}`);
+    }
   }
+  const en = require('../src/i18n/locales/en/common.json').appChat.transportErrors.stepLimitReached;
+  const es = require('../src/i18n/locales/es/common.json').appChat.transportErrors.stepLimitReached;
+  assert.match(en, /continue/);
+  assert.match(es, /continúa/);
+  assert.doesNotMatch(es, /fichero/);
+  assert.match(require('../src/i18n/locales/en/common.json').appChat.transportErrors.tooManyFiles, /fewer files/);
+  assert.match(require('../src/i18n/locales/es/common.json').appChat.transportErrors.tooManyFiles, /menos archivos/);
   const source = fs.readFileSync(path.join(__dirname, '../src/components/playground/chatTransport.ts'), 'utf8');
   assert.doesNotMatch(source, /new Error\(/, 'the transport throws coded errors, never display text');
 });
@@ -351,6 +362,11 @@ test('mapTurnError explains 403, 404 and a retired model; everything else passes
   assert.notEqual(mod.mapTurnError(apiError(409, 'CONVERSATION_BUSY')).code, 'serviceRetired');
   const otherConflict = apiError(409, 'SOMETHING_ELSE');
   assert.equal(mod.mapTurnError(otherConflict), otherConflict);
+  assert.equal(mod.mapTurnError(apiError(422, 'STEP_LIMIT_REACHED')).code, 'stepLimitReached');
+  assert.equal(mod.mapTurnError(apiError(422, 'TOO_MANY_FILES')).code, 'tooManyFiles');
+  // A plain 422 (invalid selection, too many files...) has no code the UI explains: it passes through.
+  const plain422 = apiError(422);
+  assert.equal(mod.mapTurnError(plain422), plain422);
   assert.equal(mod.mapTurnError(apiError(403)).code, 'forbidden');
   assert.equal(mod.mapTurnError(apiError(404)).code, 'notFound');
   const other = apiError(409, 'OTHER');
@@ -397,4 +413,40 @@ test('turn observers are skipped when the context token changed while the stream
   await assert.rejects(pending);
   assert.deepEqual(JSON.parse(JSON.stringify(events)), [1].slice(0, 1));
   assert.equal(errors.length, 0);
+});
+
+test('SSE error events with a known code become the same coded errors as their HTTP twins', async () => {
+  for (const [sseCode, expected] of [
+    ['step_limit_reached', 'stepLimitReached'],
+    ['conversation_busy', 'conversationBusy'],
+    ['service_retired', 'serviceRetired'],
+  ]) {
+    const { mod } = loadTransport({
+      streamAppChatMessage: async (_app, _req, opts) => {
+        opts.onEvent({ type: 'metadata', data: { conversation_id: 9 } });
+        opts.onEvent({ type: 'error', data: { message: 'fixed text', code: sseCode } });
+      },
+    });
+    const seen = [];
+    const forwarded = [];
+    const t = mod.createAppChatTransport(3, () => selectionA, { onTransportError: (code) => seen.push(code) });
+    await assert.rejects(
+      t.streamMessage('hi', { onEvent: (e) => forwarded.push(e.type) }),
+      (error) => error.name === 'ChatTransportError' && error.code === expected,
+      sseCode,
+    );
+    assert.deepEqual(seen, [expected]);
+    assert.deepEqual(forwarded, ['metadata', 'error'], 'the stream consumer still sees every event');
+  }
+});
+
+test('an SSE error without a known code is left to the generic handling (no coded error)', async () => {
+  const { mod } = loadTransport({
+    streamAppChatMessage: async (_app, _req, opts) => {
+      opts.onEvent({ type: 'error', data: { message: 'something else', code: 'unknown_thing' } });
+      opts.onEvent({ type: 'error', data: { message: 'no code at all' } });
+    },
+  });
+  const t = mod.createAppChatTransport(3, () => selectionA);
+  await t.streamMessage('hi', { onEvent() {} }); // resolves: the stream consumer decides what the event means
 });

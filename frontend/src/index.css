@@ -281,7 +281,8 @@
 
 /* Blinking cursor for streaming text */
 .pg-cursor::after {
-  content: '▍';
+  /* Empty alternative text after the slash: the cursor is decoration, not content to read out. */
+  content: '▍' / '';
   @apply animate-blink-cursor text-fg dark:text-fg-dark ml-0.5;
 }
 
@@ -334,4 +335,16 @@
   mask-composite: exclude;
   pointer-events: none;
   opacity: 0.6;
+}
+
+/* Respect the OS "reduce motion" setting: no slides, fades, blinking or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

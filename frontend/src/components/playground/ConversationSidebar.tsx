@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -39,6 +39,11 @@ interface ConversationSidebarProps {
   readonly open: boolean;
   readonly onClose: () => void;
 }
+
+/** DOM id of the panel; the control that opens it points to it with `aria-controls`. */
+export const CONVERSATION_PANEL_ID = 'conversation-sidebar-panel';
+
+type FocusRequest = { readonly kind: 'row' | 'rename'; readonly id: number } | { readonly kind: 'panel' };
 
 interface DateFormatters {
   readonly date: Intl.DateTimeFormat;
@@ -117,6 +122,20 @@ export default function ConversationSidebar({
   const [error, setError] = useState<string | null>(null);
   const [editingConvId, setEditingConvId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  // Where focus goes after a row action removed or replaced the focused control.
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  // Set once a rename was saved or cancelled, so the blur caused by the input unmounting does not save it again.
+  const renameSettledRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusRequest || typeof document === 'undefined') return;
+    const target = focusRequest.kind === 'panel'
+      ? document.getElementById(CONVERSATION_PANEL_ID)
+      : document.getElementById(`${focusRequest.kind === 'rename' ? 'conversation-rename' : 'conversation-select'}-${focusRequest.id}`);
+    target?.focus();
+    setFocusRequest(null);
+  }, [focusRequest]);
 
   useEffect(() => {
     void loadConversations();
@@ -153,6 +172,7 @@ export default function ConversationSidebar({
       title: t('marketplaceHome.deleteConversation'),
       message: t('conversationSidebar.confirmDeleteMessage'),
       confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
       variant: 'danger',
     });
 
@@ -162,14 +182,18 @@ export default function ConversationSidebar({
       await (deleteConversation
         ? deleteConversation(conversationId)
         : apiService.deleteConversation(conversationId));
+      // Focus moves to the row that takes its place (the next one, else the previous), else to the panel.
+      const index = conversations.findIndex((c) => c.conversation_id === conversationId);
+      const neighbour = conversations[index + 1] ?? conversations[index - 1];
       setConversations(conversations.filter(c => c.conversation_id !== conversationId));
+      setFocusRequest(neighbour ? { kind: 'row', id: neighbour.conversation_id } : { kind: 'panel' });
 
       if (currentConversationId === conversationId) {
         onNewConversation();
       }
     } catch (err) {
       console.error('Error deleting conversation:', err);
-      alert(t('conversationSidebar.deleteFailed'));
+      setActionError(t('conversationSidebar.deleteFailed'));
     }
   }
 
@@ -183,35 +207,47 @@ export default function ConversationSidebar({
       ));
     } catch (err) {
       console.error('Error updating conversation title:', err);
-      alert(t('conversationSidebar.renameFailed'));
+      setActionError(t('conversationSidebar.renameFailed'));
     }
   }
 
   function handleRenameStart(e: React.MouseEvent, conversation: SidebarConversation) {
     e.stopPropagation();
+    renameSettledRef.current = false;
     setEditingConvId(conversation.conversation_id);
     setEditingTitle(conversation.title || '');
   }
 
-  async function handleRenameSave(conversationId: number) {
+  /** `restoreFocus`: after Enter / Esc focus goes back to the row; after a blur the user already went elsewhere. */
+  async function handleRenameSave(conversationId: number, restoreFocus: boolean) {
+    if (renameSettledRef.current) return;
+    renameSettledRef.current = true;
     const trimmed = editingTitle.trim();
+    setEditingConvId(null);
+    if (restoreFocus) setFocusRequest({ kind: 'rename', id: conversationId });
     if (trimmed) {
       await handleEditTitle(conversationId, trimmed);
     }
+  }
+
+  function handleRenameCancel(conversationId: number) {
+    renameSettledRef.current = true;
     setEditingConvId(null);
+    setFocusRequest({ kind: 'rename', id: conversationId });
   }
 
   function handleRenameKeyDown(e: React.KeyboardEvent, conversationId: number) {
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
-      void handleRenameSave(conversationId);
+      void handleRenameSave(conversationId, true);
     } else if (e.key === 'Escape') {
-      setEditingConvId(null);
+      // Cancels without saving: the unmounting input must not save on blur.
+      handleRenameCancel(conversationId);
     }
   }
 
-  const renderContent = () => {
+  const renderBody = () => {
     if (loading) {
       return (
         <LoadingState variant="section" message={t('conversationSidebar.loading')} />
@@ -242,21 +278,22 @@ export default function ConversationSidebar({
     if (conversations.length === 0) {
       return (
         <div className="px-1.5 py-3">
-          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark">{t('conversationSidebar.empty')}</p>
-          <p className="mt-1 text-[12px] text-fg-tertiary dark:text-fg-tertiary-dark">{t('conversationSidebar.emptyHint')}</p>
+          <p className="text-[13px] text-fg-secondary dark:text-fg-secondary-dark">{t('conversationSidebar.empty')}</p>
+          <p className="mt-1 text-[12px] text-fg-secondary dark:text-fg-secondary-dark">{t('conversationSidebar.emptyHint')}</p>
         </div>
       );
     }
 
     return (
-      <div>
+      <ul className="list-none p-0">
         {conversations.map((conversation) => {
           const isActive = conversation.conversation_id === currentConversationId;
           const isEditing = editingConvId === conversation.conversation_id;
           const updatedAt = formatDate(conversation.updated_at, i18n.language, t);
+          const displayTitle = conversation.title || t('conversationSidebar.untitled');
 
           return (
-            <div
+            <li
               key={conversation.conversation_id}
               className={`group mb-0.5 flex items-start gap-2 rounded-md px-2.5 py-2.5 transition-colors duration-150 hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${
                 isActive ? 'bg-surface-hover dark:bg-surface-hover-dark' : ''
@@ -269,7 +306,7 @@ export default function ConversationSidebar({
                     type="text"
                     value={editingTitle}
                     onChange={(e) => setEditingTitle(e.target.value)}
-                    onBlur={() => handleRenameSave(conversation.conversation_id)}
+                    onBlur={() => void handleRenameSave(conversation.conversation_id, false)}
                     onKeyDown={(e) => handleRenameKeyDown(e, conversation.conversation_id)}
                     aria-label={t('marketplaceHome.renameConversation')}
                     className="w-full min-w-0 border-b border-bronze bg-transparent py-1 text-sm font-medium text-fg outline-none dark:text-fg-dark"
@@ -277,34 +314,35 @@ export default function ConversationSidebar({
                 ) : (
                   <button
                     type="button"
+                    id={`conversation-select-${conversation.conversation_id}`}
                     onClick={() => {
                       onClose();
                       onConversationSelect(conversation.conversation_id);
                     }}
-                    aria-current={isActive ? 'page' : undefined}
-                    className="w-full text-left"
+                    aria-current={isActive ? 'true' : undefined}
+                    className="w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark"
                   >
                     <span className="flex min-w-0 items-baseline justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg dark:text-fg-dark">
-                        {conversation.title || t('conversationSidebar.untitled')}
+                      <span title={displayTitle} className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg dark:text-fg-dark">
+                        {displayTitle}
                       </span>
                       <time
                         dateTime={conversation.updated_at}
-                        className="flex-none text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark"
+                        className="flex-none text-[11px] text-fg-secondary dark:text-fg-secondary-dark"
                       >
                         <span aria-hidden="true">{updatedAt.visible}</span>
                         <span className="sr-only">{updatedAt.spoken}</span>
                       </time>
                     </span>
                     {conversation.last_message && (
-                      <span className="mt-0.5 block max-w-full truncate text-[12px] text-fg-secondary dark:text-fg-secondary-dark">
+                      <span title={conversation.last_message} className="mt-0.5 block max-w-full truncate text-[12px] text-fg-secondary dark:text-fg-secondary-dark">
                         {conversation.last_message}
                       </span>
                     )}
                   </button>
                 )}
 
-                <div className="mt-[3px] text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
+                <div className="mt-[3px] text-[11px] text-fg-secondary dark:text-fg-secondary-dark">
                   {t('conversationSidebar.messageCount', { count: conversation.message_count })}
                 </div>
               </div>
@@ -314,10 +352,11 @@ export default function ConversationSidebar({
                   <button
                     type="button"
                     data-action="rename"
+                    id={`conversation-rename-${conversation.conversation_id}`}
                     onClick={(e) => handleRenameStart(e, conversation)}
-                    aria-label={t('marketplaceHome.renameConversation')}
-                    title={t('marketplaceHome.renameConversation')}
-                    className="flex h-8 w-8 items-center justify-center text-fg-tertiary opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-fg-secondary dark:text-fg-tertiary-dark dark:hover:text-fg-secondary-dark"
+                    aria-label={t('conversationSidebar.renameNamed', { title: displayTitle })}
+                    title={t('conversationSidebar.renameNamed', { title: displayTitle })}
+                    className="flex h-8 w-8 items-center justify-center rounded text-fg-secondary opacity-0 transition group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 hover:text-fg dark:text-fg-secondary-dark dark:hover:text-fg-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark"
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -325,20 +364,35 @@ export default function ConversationSidebar({
                     type="button"
                     data-action="delete"
                     onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
-                    aria-label={t('marketplaceHome.deleteConversation')}
-                    title={t('marketplaceHome.deleteConversation')}
-                    className="flex h-8 w-8 items-center justify-center text-fg-tertiary opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-error dark:text-fg-tertiary-dark dark:hover:text-error-dark"
+                    aria-label={t('conversationSidebar.deleteNamed', { title: displayTitle })}
+                    title={t('conversationSidebar.deleteNamed', { title: displayTitle })}
+                    className="flex h-8 w-8 items-center justify-center rounded text-fg-secondary opacity-0 transition group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 hover:text-error dark:text-fg-secondary-dark dark:hover:text-error-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
     );
   };
+
+  const renderContent = () => (
+    <>
+      {actionError && (
+        <Alert
+          type="error"
+          message={actionError}
+          onDismiss={() => setActionError(null)}
+          dismissAriaLabel={t('alert.dismissNamed', { name: t('agentPlayground.conversations') })}
+          className="mb-2"
+        />
+      )}
+      {renderBody()}
+    </>
+  );
 
   return (
     <SidePanel
@@ -346,6 +400,7 @@ export default function ConversationSidebar({
       onClose={onClose}
       side="right"
       title={t('agentPlayground.conversations')}
+      id={CONVERSATION_PANEL_ID}
       closeLabel={t('conversationSidebar.closeLabel')}
       widthClassName="w-[340px] max-w-full"
       headerActions={

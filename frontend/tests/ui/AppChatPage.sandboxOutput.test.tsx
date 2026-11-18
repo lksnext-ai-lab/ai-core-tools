@@ -37,13 +37,13 @@ describe('Chat warning: sandbox output not delivered', () => {
   it('is translated, singular and plural (es)', async () => {
     await i18n.changeLanguage('es');
     await sendWithWarnings([{ kind: 'sandbox_output', id: 1 }]);
-    expect(await screen.findByText('No se ha podido entregar 1 fichero creado por el código (límite de tamaño, número o tiempo).')).toBeInTheDocument();
+    expect(await screen.findByText('No se ha podido entregar 1 archivo creado por el código (límite de tamaño, número o tiempo).')).toBeInTheDocument();
   });
 
   it('is translated in the plural (es)', async () => {
     await i18n.changeLanguage('es');
     await sendWithWarnings([{ kind: 'sandbox_output', id: 3 }]);
-    expect(await screen.findByText('No se han podido entregar 3 ficheros creados por el código (límite de tamaño, número o tiempo).')).toBeInTheDocument();
+    expect(await screen.findByText('No se han podido entregar 3 archivos creados por el código (límite de tamaño, número o tiempo).')).toBeInTheDocument();
   });
 
   it('never shows a raw key for a warning kind it does not know', async () => {

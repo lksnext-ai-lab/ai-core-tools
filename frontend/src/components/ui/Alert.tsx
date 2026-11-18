@@ -74,7 +74,6 @@ const Alert: React.FC<AlertProps> = ({
     <div
       className={`${styles.container} border rounded-lg p-4 ${className}`}
       role={assertive ? 'alert' : 'status'}
-      aria-live={assertive ? 'assertive' : 'polite'}
     >
       <div className="flex">
         <span className={`${styles.iconColor} mr-3 shrink-0`} aria-hidden="true">{alertIcons[type]}</span>

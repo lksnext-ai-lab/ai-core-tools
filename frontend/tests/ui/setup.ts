@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
+import * as axeMatchers from 'vitest-axe/matchers';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { afterEach, expect, vi } from 'vitest';
 
 // Every test file talks to the in-memory `apiService` of `./apiMock`, never to the network.
 vi.mock('../../src/services/api', async (importOriginal) => {
@@ -12,6 +13,8 @@ vi.mock('../../src/services/api', async (importOriginal) => {
 // jsdom does not implement these; the chat uses them to keep the newest message in view.
 Element.prototype.scrollTo = () => {};
 Element.prototype.scrollIntoView = () => {};
+
+expect.extend(axeMatchers);
 
 afterEach(() => {
   cleanup();

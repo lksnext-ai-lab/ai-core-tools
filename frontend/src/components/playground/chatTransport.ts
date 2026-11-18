@@ -178,7 +178,11 @@ export type ChatTransportErrorCode =
   /** 409 `SERVICE_RETIRED`: the selected model reached end of service. */
   | 'serviceRetired'
   /** 409 `CONVERSATION_BUSY`: the conversation is still answering a previous message. */
-  | 'conversationBusy';
+  | 'conversationBusy'
+  /** 422 `STEP_LIMIT_REACHED` / SSE `step_limit_reached`: the agent ran out of steps; the conversation is kept. */
+  | 'stepLimitReached'
+  /** 422 `TOO_MANY_FILES`: one message carries more files than the per-message cap. */
+  | 'tooManyFiles';
 
 /**
  * Failure raised by the App Chat transport itself (not by the backend). It carries a code, never display
@@ -225,10 +229,19 @@ export function mapTurnError(error: unknown): unknown {
   const { status, errorCode } = error as { status?: number; errorCode?: string };
   if (status === 409 && errorCode === 'SERVICE_RETIRED') return new ChatTransportError('serviceRetired');
   if (status === 409 && errorCode === 'CONVERSATION_BUSY') return new ChatTransportError('conversationBusy');
+  if (status === 422 && errorCode === 'TOO_MANY_FILES') return new ChatTransportError('tooManyFiles');
+  if (status === 422 && errorCode === 'STEP_LIMIT_REACHED') return new ChatTransportError('stepLimitReached');
   if (status === 403) return new ChatTransportError('forbidden');
   if (status === 404) return new ChatTransportError('notFound');
   return error;
 }
+
+/** SSE `error` event codes the UI explains (the HTTP equivalents are in `mapTurnError`). */
+const STREAM_ERROR_CODES: Readonly<Record<string, ChatTransportErrorCode>> = {
+  service_retired: 'serviceRetired',
+  conversation_busy: 'conversationBusy',
+  step_limit_reached: 'stepLimitReached',
+};
 
 function observeTurnEvents(
   onEvent: (event: StreamEvent) => void,
@@ -295,6 +308,16 @@ export function createAppChatTransport(
             if (isCurrent()) options.onTurnEvent?.(event);
           }
         : undefined;
+      // The backend reports some failures as an SSE `error` event with a code, after the stream started.
+      let streamErrorCode: ChatTransportErrorCode | null = null;
+      const observed = observeTurnEvents(streamOptions.onEvent, onTurnEvent);
+      const onEvent = (event: StreamEvent): void => {
+        if (event.type === 'error') {
+          const code = (event.data as { code?: unknown }).code;
+          if (typeof code === 'string' && code in STREAM_ERROR_CODES) streamErrorCode = STREAM_ERROR_CODES[code];
+        }
+        observed(event);
+      };
       try {
         await apiService.streamAppChatMessage(
           appId,
@@ -305,8 +328,10 @@ export function createAppChatTransport(
             files: streamOptions.files,
             searchParams: streamOptions.searchParams,
           },
-          { onEvent: observeTurnEvents(streamOptions.onEvent, onTurnEvent), signal: streamOptions.signal },
+          { onEvent, signal: streamOptions.signal },
         );
+        // A coded SSE error becomes the same coded error as its HTTP twin, so the UI translates it.
+        if (streamErrorCode) throw new ChatTransportError(streamErrorCode);
       } catch (error) {
         const mapped = mapTurnError(error);
         if (mapped instanceof ChatTransportError && isCurrent()) options.onTransportError?.(mapped.code);

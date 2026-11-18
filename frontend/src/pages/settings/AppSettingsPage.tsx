@@ -475,7 +475,7 @@ function AppSettingsPage() {
                         value: service.service_id,
                         label: serviceOptionLabel(
                           service,
-                          `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`,
+                          `${service.is_system ? t('appSettingsPage.systemServiceOption', { name: service.name }) : service.name} (${service.provider})`,
                         ),
                       })),
                     ]}
@@ -519,7 +519,7 @@ function AppSettingsPage() {
                         value: service.service_id,
                         label: serviceOptionLabel(
                           service,
-                          `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`,
+                          `${service.is_system ? t('appSettingsPage.systemServiceOption', { name: service.name }) : service.name} (${service.provider})`,
                         ),
                       })),
                     ]}

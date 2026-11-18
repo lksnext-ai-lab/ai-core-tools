@@ -5,7 +5,7 @@ import { MessageSquare } from 'lucide-react';
 
 import { apiService } from '../services/api';
 import ChatInterface from '../components/playground/ChatInterface';
-import ConversationSidebar from '../components/playground/ConversationSidebar';
+import ConversationSidebar, { CONVERSATION_PANEL_ID } from '../components/playground/ConversationSidebar';
 import { createAppChatTransport, type ChatTransportErrorCode, type ChatTurnEvent } from '../components/playground/chatTransport';
 import { ChatSelectionBar } from '../components/chat/ChatSelectionBar';
 import { TurnMetaBadge } from '../components/chat/TurnMetaBadge';
@@ -303,6 +303,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
           type="button"
           aria-haspopup="dialog"
           aria-expanded={panelOpen}
+          aria-controls={panelOpen ? CONVERSATION_PANEL_ID : undefined}
           onClick={() => setPanelOpen(true)}
           className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
                       ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}
@@ -455,6 +456,9 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
       {notice && (
         <Alert
           type={notice === 'serviceRetired' ? 'error' : 'warning'}
+          // The failed turn already shows its own role=alert error in the conversation: announcing this one
+          // assertively too would read the same news twice.
+          polite={notice === 'serviceRetired'}
           message={t(`appChat.notices.${notice}`)}
           onDismiss={dismissNotice}
           dismissAriaLabel={t('alert.dismissNamed', { name: t('appChat.notices.label') })}
