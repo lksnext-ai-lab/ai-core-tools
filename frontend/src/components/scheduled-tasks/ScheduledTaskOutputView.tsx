@@ -6,7 +6,7 @@ import Alert from '../ui/Alert';
 import type { ScheduledTaskRun } from '../../services/api';
 import { RunFiles } from './RunFiles';
 import { RunOutput } from './RunOutput';
-import { CardApp } from '../..';
+import { CardApp } from '../ui/CardApp';
 
 export interface ScheduledTaskOutputSource {
   /** Loads the runs to show: one run, or every run of a continuous conversation (newest first). */

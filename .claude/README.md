@@ -94,6 +94,6 @@ Specs, plans, and status manifests live under `.claude/specs/<slug>/` and are **
 
 - Stack truth: LangChain ≥1.2 / LangGraph ≥1.0 (1.x), Pydantic v2, SQLAlchemy 2.x, FastAPI, React 19. Experts verify library APIs via Context7 / LangChain Docs before writing.
 - Backend layering: router → service → repository → model; RBAC `@require_min_role`; tenant isolation by `app_id`.
-- Frontend: all HTTP via `services/api.ts`; Tailwind + dark mode + WCAG 2.1; client customization via `clientConfig.ts`.
+- Frontend: all HTTP via `services/api.ts`; Tailwind + dark mode + WCAG 2.1.
 - Git: GPG-signed, Conventional Commits, GitFlow off `develop`; publishing actions always pause for confirmation.
 - `.github/` is off-limits to this system.

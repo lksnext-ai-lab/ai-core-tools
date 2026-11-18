@@ -1,4 +1,4 @@
-import type { ThemeConfig, NavigationConfig, ExtensibleNavigationConfig, ExtraRoute } from './types';
+import type { ThemeConfig, NavigationConfig } from './types';
 import type { AuthProps } from '../auth/AuthConfig';
 
 export interface OrganizationConfig {
@@ -7,12 +7,11 @@ export interface OrganizationConfig {
   logo?: string;
 }
 
-export interface LibraryConfig {
+export interface AppConfig {
   // Basic configuration
   name?: string;
   logo?: string;
   favicon?: string;
-  homePage?: React.ComponentType;
 
   /** Client organization shown as a chip in the header (display only, no logic). */
   organization?: OrganizationConfig;
@@ -57,14 +56,8 @@ export interface LibraryConfig {
     logoUrl?: string;
   };
   
-  // Navigation configuration (legacy - use navigation for new projects)
+  // Navigation configuration (defaults to defaultNavigation)
   navigationConfig?: NavigationConfig;
-  
-  // Extensible navigation configuration (preferred)
-  navigation?: ExtensibleNavigationConfig;
-  
-  // Routes configuration - add custom routes
-  routes?: ExtraRoute[];
   
   // Authentication configuration
   authProps?: AuthProps;

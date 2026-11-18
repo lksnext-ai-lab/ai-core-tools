@@ -19,7 +19,7 @@ import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Title } from '../../components/ui/Title';
-import { CardApp } from '../..';
+import { CardApp } from '../../components/ui/CardApp';
 
 interface Collaborator {
   id: number;

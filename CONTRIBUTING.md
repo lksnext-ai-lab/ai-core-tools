@@ -221,7 +221,6 @@ const userProfile = ({ userId }) => {
 - Business logic in routers — use services
 - Raw SQL queries — use SQLAlchemy ORM
 - Hardcoded secrets — use environment variables
-- Modifying the base library for client-specific features — use `clientConfig.ts`
 
 ## Commit Conventions
 

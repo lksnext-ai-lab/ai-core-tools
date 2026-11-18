@@ -234,7 +234,7 @@ Cookie: ...
 ### AuthContext
 
 ```typescript
-import { useAuth } from '@lksnext/ai-core-tools-base';
+import { useAuth } from '../auth/AuthContext';
 
 function MyComponent() {
   const { user, isAuthenticated, login, logout } = useAuth();
@@ -255,7 +255,8 @@ function MyComponent() {
 ### Protected Routes
 
 ```typescript
-import { ProtectedRoute, AdminRoute } from '@lksnext/ai-core-tools-base';
+import ProtectedRoute from '../components/ProtectedRoute';
+import AdminRoute from '../components/AdminRoute';
 
 <Routes>
   <Route path="/playground" element={

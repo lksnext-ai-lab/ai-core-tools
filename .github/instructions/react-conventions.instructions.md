@@ -1,31 +1,25 @@
 ---
-description: Project-specific conventions for the Mattin AI React frontend — Vite library bundle, ExtensibleBaseApp, centralized api.ts, per-client extension via clientConfig.ts, and constants sync with the backend.
+description: Project-specific conventions for the Mattin AI React frontend — AppRoot app shell, centralized api.ts, and constants sync with the backend.
 applyTo: "frontend/**"
 ---
 
 # Mattin AI Frontend Conventions
 
-These rules auto-apply whenever you edit any file under `frontend/`. Agents like `@react-expert` provide generic React 19 / TypeScript / Tailwind expertise; this file pins down the **Mattin-specific** paths, patterns and library/client extension model.
+These rules auto-apply whenever you edit any file under `frontend/`. Agents like `@react-expert` provide generic React 19 / TypeScript / Tailwind expertise; this file pins down the **Mattin-specific** paths and patterns.
 
-## Distribution Model: Library + Per-Client Apps
+## Distribution Model
 
-The frontend is built and **published as a reusable npm library** (`@lksnext/ai-core-tools-base`). Client deployments live in `clients/<name>/` and consume that library.
+The frontend is a single React SPA built with Vite and shipped as the `mattinai-frontend` Docker image. It is **not** published as an npm library and there are no per-client frontend projects.
 
-- **Base library** = `frontend/` — every page, component, context, theme, hook.
-- **Client project** = `clients/<name>/` — imports the library and customizes ONLY via `src/config/clientConfig.ts` (theme, branding, auth config, API URL, feature flags, custom routes).
-- **Never modify the base library to support a client-specific need** — extend via `clientConfig.ts` instead. If `clientConfig.ts` cannot express what the client needs, add the extension hook to the library API surface, not a hardcoded branch.
+## Entry Point: `AppRoot`
 
-When working on a client project: read `clients/<name>/src/config/clientConfig.ts` first to understand what is overridden.
-
-## Entry Point: `ExtensibleBaseApp`
-
-`frontend/src/core/ExtensibleBaseApp.tsx` is the library's root component. Every client imports and renders it with their `clientConfig`. New top-level structural changes go through this component.
+`frontend/src/core/AppRoot.tsx` is the root component (providers + router), mounted by `frontend/src/App.tsx` with an `AppConfig` (name, logo, theme, auth, API URL). New top-level structural changes go through this component.
 
 ## File Structure (real paths)
 
 ```
 frontend/src/
-├── core/                # ExtensibleBaseApp (library entry) and config primitives
+├── core/                # AppRoot (app shell) and config primitives
 ├── components/
 │   ├── ui/              # Generic, reusable UI elements
 │   ├── forms/           # Form components
@@ -134,8 +128,7 @@ Route protection uses `ProtectedRoute` / `AdminRoute` components — wrap routes
 cd frontend
 npm install
 npm run dev                # Dev server on port 5173
-npm run build:lib          # Build the publishable library bundle
-npm run build:lib:watch    # Watch mode for library development
+npm run build              # Type-check + production build
 npm run lint               # ESLint
 ```
 
@@ -154,8 +147,7 @@ npm run lint               # ESLint
 ## Anti-Patterns (project-specific)
 
 - ❌ Direct `fetch()` or `axios` calls from components — route through `services/api.ts`
-- ❌ Modifying the base library to support a single client — extend via `clientConfig.ts`
-- ❌ Hardcoded API URLs — they come from `clientConfig.ts`
+- ❌ Hardcoded API URLs — they come from `VITE_API_BASE_URL` / runtime config
 - ❌ Hardcoded user-facing strings when translations matter — use i18n keys
 - ❌ New icon library introduced ad-hoc — use the project's existing one
 - ❌ Forgetting the dark-mode variant on a new screen

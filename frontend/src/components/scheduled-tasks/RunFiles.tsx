@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import InlineFileDownload from '../playground/InlineFileDownload';
 import type { ScheduledTaskRun } from '../../services/api';
 import { formatDateTime } from './format';
-import { CardApp } from '../..';
+import { CardApp } from '../ui/CardApp';
 
 interface Props {
   runs: ScheduledTaskRun[];

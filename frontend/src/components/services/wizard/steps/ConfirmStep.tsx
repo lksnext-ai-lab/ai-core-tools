@@ -11,7 +11,7 @@ import type {
 import type { CredentialsState } from './CredentialsStep';
 import type { TestConnectionResult } from '../../serviceApi';
 import { ButtonApp } from '../../../ui/ButtonApp';
-import { CardApp } from '../../../..';
+import { CardApp } from '../../../ui/CardApp';
 
 interface ConfirmStepProps {
   readonly kind: ServiceKind;

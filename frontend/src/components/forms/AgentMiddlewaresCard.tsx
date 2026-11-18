@@ -4,7 +4,8 @@ import type { MiddlewareType } from '../../core/types';
 import { MIDDLEWARE_TYPE_INFO } from '../../constants/middlewares';
 import { Badge } from '../ui/Badge';
 import { ButtonCard } from '../ui/ButtonCard';
-import { ButtonApp, CardApp } from '../..';
+import { ButtonApp } from '../ui/ButtonApp';
+import { CardApp } from '../ui/CardApp';
 
 export interface AgentMiddlewareOption {
   middleware_id: number;
