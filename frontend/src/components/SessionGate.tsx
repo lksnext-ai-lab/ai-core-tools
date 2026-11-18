@@ -33,7 +33,7 @@ export function SessionGate({ children }: SessionGateProps) {
   if (!user && sessionError === 'unavailable') {
     const retry = () => {
       setRetrying(true);
-      refreshUser().finally(() => setRetrying(false));
+      void refreshUser().finally(() => setRetrying(false));
     };
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900">

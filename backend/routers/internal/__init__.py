@@ -15,9 +15,11 @@ from .marketplace import marketplace_router
 from .config import router as config_router
 from .platform_chatbot import platform_chatbot_router
 from .scheduled_tasks import router as scheduled_tasks_router
+from .output_providers import router as output_providers_router
 from .marketplace_scheduled_tasks import router as marketplace_scheduled_tasks_router
 from .sharepoint import router as sharepoint_router
 from .metrics import router as metrics_router
+from .approvals import approvals_router
 
 # CSRF double-submit is internal-only; public/v1 and mcp/v1 use API-key auth.
 internal_router = APIRouter(dependencies=[Depends(enforce_csrf)])
@@ -36,6 +38,7 @@ internal_router.include_router(admin_router, prefix="/admin")
 internal_router.include_router(version_router, prefix="/version")
 internal_router.include_router(apps_usage_router, prefix="/usage-stats")
 internal_router.include_router(conversations_router)
+internal_router.include_router(approvals_router, prefix="/approvals")
 internal_router.include_router(auth_router, prefix="/auth")
 internal_router.include_router(user_router)
 internal_router.include_router(marketplace_scheduled_tasks_router)
@@ -43,6 +46,7 @@ internal_router.include_router(marketplace_router)
 internal_router.include_router(config_router)
 internal_router.include_router(platform_chatbot_router, prefix="/platform-chatbot")
 internal_router.include_router(scheduled_tasks_router)
+internal_router.include_router(output_providers_router)
 internal_router.include_router(
     sharepoint_router,
     dependencies=[Depends(require_editor_for_writes)],

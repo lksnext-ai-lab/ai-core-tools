@@ -4,6 +4,7 @@ All tests are pure-Python — no database, no I/O, no LLM.
 """
 
 import logging
+from types import SimpleNamespace as types_ns
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,12 +13,14 @@ from pydantic import ValidationError
 from tools.vector_stores.metadata_filters import (
     MAX_ENUM_VALUES,
     MAX_EXAMPLE_VALUES,
+    MAX_FLAT_FILTER_IN_VALUES,
     PGVECTOR_OPS,
     QDRANT_OPS,
     SYSTEM_METADATA_FIELDS,
     MetadataFilterClause,
     build_filter_dict,
     convert_clause_types,
+    flat_filter_clause,
     merge_filters_and,
     ops_for_backend,
     sanitize_metadata_value,
@@ -651,3 +654,37 @@ class TestBuildFilterDict:
         clauses = [MetadataFilterClause(field="active", op="$eq", value="true")]
         result = build_filter_dict(clauses, md, "PGVECTOR")
         assert result == {"active": {"$eq": True}}
+
+
+class TestFlatFilterClause:
+    def test_scalar_becomes_eq(self):
+        clause = flat_filter_clause("machine_model", "X100")
+        assert (clause.field, clause.op, clause.value) == ("machine_model", "$eq", "X100")
+
+    def test_list_becomes_in(self):
+        clause = flat_filter_clause("machine_model", ["X100", "Z900"])
+        assert (clause.op, clause.value) == ("$in", ["X100", "Z900"])
+
+    def test_list_is_deduplicated_in_order(self):
+        clause = flat_filter_clause("machine_model", ["B", "A", "B"])
+        assert clause.value == ["B", "A"]
+
+    def test_list_is_capped(self):
+        clause = flat_filter_clause("machine_model", [f"M{i}" for i in range(500)])
+        assert len(clause.value) == MAX_FLAT_FILTER_IN_VALUES
+
+    def test_non_scalar_items_are_dropped(self):
+        clause = flat_filter_clause("machine_model", ["A", {"$ne": "B"}, ["C"]])
+        assert clause.value == ["A"]
+
+    def test_empty_or_unusable_list_returns_none(self):
+        assert flat_filter_clause("machine_model", []) is None
+        assert flat_filter_clause("machine_model", [{"x": 1}]) is None
+
+    def test_blank_field_returns_none(self):
+        assert flat_filter_clause("  ", "X100") is None
+
+    def test_in_clause_is_coerced_per_item_by_declared_type(self):
+        md = types_ns(fields=[{"name": "year", "type": "int"}])
+        typed = convert_clause_types([flat_filter_clause("year", ["2023", "2024"])], md)
+        assert typed[0].value == [2023, 2024]

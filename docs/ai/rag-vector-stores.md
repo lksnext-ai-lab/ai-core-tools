@@ -275,6 +275,16 @@ Supported embedding providers:
 - **HuggingFace**: `sentence-transformers/*` (e.g., `all-MiniLM-L6-v2`)
 - **Ollama**: Local models (e.g., `nomic-embed-text`)
 
+### Embedding Service Retirement
+
+An embedding service can have an `end_of_service_at` date and a `deprecation_notice` (see [Service End of Service](../guides/chat-bot/kb-ai-services.md#service-end-of-service)). Once the date is reached the service is **retired** and every entry point that builds an embeddings client for a silo fails with `409 SERVICE_RETIRED`: indexing (documents, repositories, domains, media), similarity search / retrieval (including agent retrievers), and silo playground queries. Background indexing items are marked failed with the message.
+
+Vectors are tied to the embedding model, so retirement opens a **re-index window**: before the date, create a new embedding service, create or re-point the silo, and re-index its content. Retired services cannot be newly selected on silos or repositories; an unchanged reference is kept.
+
+Not blocked: test connection, deleting documents, silos, repositories and apps, and counting documents on retired silos.
+
+Known limitation: the neighbouring-chunks view (`GET .../documents/neighbors`) is blocked on retired silos. Public silo API responses do not include `lifecycle_warnings` (internal API only).
+
 ## Retrieval
 
 ### Unified Retriever Interface

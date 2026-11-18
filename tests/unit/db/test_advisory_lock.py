@@ -97,9 +97,9 @@ class TestTryAdvisoryLock:
 
 class TestDeriveLockKey:
     def test_deterministic(self):
-        assert _derive_lock_key("mattin:system_skills_seed") == _derive_lock_key(
-            "mattin:system_skills_seed"
-        )
+        # Pinned: every worker process must derive the same Postgres advisory-lock id
+        # (no dependency on Python's per-process hash randomisation).
+        assert _derive_lock_key("mattin:system_skills_seed") == -3819139292246466531
 
     def test_different_keys_differ(self):
         assert _derive_lock_key("key-a") != _derive_lock_key("key-b")

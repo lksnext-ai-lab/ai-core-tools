@@ -87,7 +87,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _derive_lock_key(key: str) -> int:
+def derive_lock_key(key: str) -> int:
     """Deterministically derive a signed 64-bit Postgres advisory-lock key from a string.
 
     Uses blake2b with an 8-byte digest so the same string key always maps to the same
@@ -103,6 +103,10 @@ def _derive_lock_key(key: str) -> int:
     """
     digest = hashlib.blake2b(key.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, byteorder="big", signed=True)
+
+
+# Backwards-compatible alias for existing callers/tests that imported the private name.
+_derive_lock_key = derive_lock_key
 
 
 @contextmanager
@@ -145,7 +149,7 @@ def try_advisory_lock(db: Session, key: str) -> Iterator[bool]:
     if not isinstance(key, str):
         raise TypeError(f"try_advisory_lock: key must be a str, got {type(key).__name__!r}")
 
-    lock_key = _derive_lock_key(key)
+    lock_key = derive_lock_key(key)
     acquired = False
 
     try:

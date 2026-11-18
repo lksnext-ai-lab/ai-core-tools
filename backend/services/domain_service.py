@@ -7,6 +7,7 @@ from repositories.domain_repository import DomainRepository
 from repositories.embedding_service_repository import EmbeddingServiceRepository
 from repositories.silo_repository import SiloRepository
 from services.silo_service import SiloService
+from services.service_lifecycle_service import ServiceLifecycleService
 from services.output_parser_service import OutputParserService
 from utils.logger import get_logger
 from utils.error_handlers import (
@@ -101,9 +102,18 @@ class DomainService:
         try:
             app_services = EmbeddingServiceRepository.get_by_app_id(db, app_id)
             system_services = EmbeddingServiceRepository.get_system_services(db)
+            warning_days = ServiceLifecycleService.warning_days(db)
+
+            def _option(s, is_system: bool) -> dict:
+                return {
+                    "service_id": s.service_id,
+                    "name": s.name,
+                    "is_system": is_system,
+                    **ServiceLifecycleService.option_fields(s, warning_days),
+                }
+
             embedding_services = (
-                [{"service_id": s.service_id, "name": s.name, "is_system": False} for s in app_services]
-                + [{"service_id": s.service_id, "name": s.name, "is_system": True} for s in system_services]
+                [_option(s, False) for s in app_services] + [_option(s, True) for s in system_services]
             )
 
             logger.debug(f"Retrieved {len(embedding_services)} embedding services for app {app_id}")

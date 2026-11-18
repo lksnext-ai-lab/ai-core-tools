@@ -253,8 +253,12 @@ class QdrantStore(VectorStoreInterface):
             all matching points are removed regardless of collection size.
         """
         if isinstance(ids, list):
-            vector_store = self._get_vector_store(collection_name, embedding_service)
-            vector_store.delete(ids=ids)
+            # Raw client: building a QdrantVectorStore embeds a dummy text to validate the
+            # collection, which would call a retired/dead embedding provider just to delete.
+            from qdrant_client.models import PointIdsList
+
+            if ids:
+                self.client.delete(collection_name=collection_name, points_selector=PointIdsList(points=ids))
         else:
             # Native filter-based delete removes all matching points atomically
             # regardless of collection size (no scroll/page-size limit).
@@ -557,21 +561,29 @@ class QdrantStore(VectorStoreInterface):
         field: str,
         prefix: Optional[str] = None,
         limit: int = 100,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        contains: Optional[str] = None,
+        after: Optional[str] = None,
+        raise_errors: bool = False,
     ) -> List[str]:
         seen: set = set()
         offset = None
         batch_size = 200
+        scroll_filter = self._build_qdrant_filter(filter_metadata) if filter_metadata else None
 
         try:
-            while len(seen) < limit:
+            # Stopping early is only sound without a cursor: a page after ``after``
+            # needs every value of the scope to know which ones sort first.
+            while after is not None or len(seen) < limit:
                 results, next_offset = self.client.scroll(
                     collection_name=collection_name,
+                    scroll_filter=scroll_filter,
                     limit=batch_size,
                     offset=offset,
                     with_payload=True,
                     with_vectors=False,
                 )
-                self._collect_metadata_values(results, field, prefix, seen)
+                self._collect_metadata_values(results, field, prefix, seen, contains)
                 if next_offset is None or len(results) < batch_size:
                     break
                 offset = next_offset
@@ -580,11 +592,17 @@ class QdrantStore(VectorStoreInterface):
                 "Qdrant get_distinct_metadata_values for %s.%s failed; partial results: %s",
                 collection_name, field, exc,
             )
+            if raise_errors:
+                raise
 
+        if after is not None:
+            return sorted(v for v in seen if v > after)[:limit]
         return sorted(seen)[:limit]
 
     @staticmethod
-    def _collect_metadata_values(points, field: str, prefix: Optional[str], seen: set) -> None:
+    def _collect_metadata_values(
+        points, field: str, prefix: Optional[str], seen: set, contains: Optional[str] = None
+    ) -> None:
         """Collect matching metadata values from a batch of points into ``seen``."""
         for point in points:
             payload = point.payload or {}
@@ -594,6 +612,8 @@ class QdrantStore(VectorStoreInterface):
                 continue
             str_val = str(val)
             if prefix and not str_val.lower().startswith(prefix.lower()):
+                continue
+            if contains and contains.lower() not in str_val.lower():
                 continue
             seen.add(str_val)
 

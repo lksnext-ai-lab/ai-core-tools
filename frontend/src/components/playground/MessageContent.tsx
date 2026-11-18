@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import InlineFileImage from './InlineFileImage';
 import InlineFileDownload from './InlineFileDownload';
+import { markdownUrlTransform, isAutoLoadableImageUrl, urlHost } from '../../utils/markdownUrls';
 
 interface MessageContentProps {
   content: string | object;
@@ -68,6 +69,8 @@ function MarkdownCode({ className, children, ...props }: any) {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // ignore: nothing was copied, so no confirmation is shown
     });
   };
 
@@ -106,7 +109,17 @@ function MarkdownImage({ src, alt }: any) {
     const filename = alt || fileId;
     return <InlineFileImage fileId={fileId} filename={filename} resolveUrl={resolveFileUrl} />;
   }
-  return <img src={src} alt={alt} className="max-w-full rounded" />;
+  if (isAutoLoadableImageUrl(src)) {
+    return <img src={src} alt={alt} className="max-w-full rounded" />;
+  }
+  // Model output can be steered by prompt injection; auto-loading a third-party
+  // image would leak data through its URL with zero clicks, so link to it instead.
+  return (
+    <a href={src} className="text-blue-600 hover:text-blue-800 underline"
+      target="_blank" rel="noopener noreferrer nofollow">
+      🖼 {alt || 'Imagen externa'}{urlHost(src) && ` (${urlHost(src)})`}
+    </a>
+  );
 }
 
 function MarkdownLink({ children, href, ...props }: any) {
@@ -210,7 +223,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ content, resolveFileUrl
           <ReactMarkdown
             components={markdownComponents}
             remarkPlugins={[remarkGfm]}
-            urlTransform={(url) => url}
+            urlTransform={(url, key) => markdownUrlTransform(url, key, defaultUrlTransform)}
           >
             {stringContent}
           </ReactMarkdown>

@@ -7,19 +7,21 @@ applyTo: "**"
 
 These rules apply to **all git and GitHub CLI operations** in this repository, regardless of which agent is executing them.
 
-## Commit Signing (disabled)
+## Commit Signing (required)
 
-Commits are **not** GPG-signed — no signing key is configured in this environment. Use a plain `git commit` (no `-S`).
-
-```bash
-git commit -m "type(scope): description"
-```
-
-Verify after committing:
+All commits **must** be GPG-signed (see `CONTRIBUTING.md`):
 
 ```bash
-git log -1
+git commit -S -m "type(scope): description"
 ```
+
+Verify after committing (`G` = good signature):
+
+```bash
+git log -1 --format='%h %G? %s'
+```
+
+Never bypass signing (`--no-gpg-sign`, `-c commit.gpgsign=false`). If signing fails — no key configured, or the GPG passphrase is locked/the pinentry prompt was cancelled — **stop and ask the user** to unlock their key (e.g. `echo test | gpg --clearsign > /dev/null`) instead of committing unsigned.
 
 ## Pull Before Push
 

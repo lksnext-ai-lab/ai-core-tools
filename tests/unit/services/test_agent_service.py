@@ -275,7 +275,8 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_associations', return_value={
             'tool_ids': [],
             'mcp_ids': [],
-            'skill_ids': []
+            'skill_ids': [],
+            'middleware_ids': []
         })
         mocker.patch.object(service, '_get_silo_info', return_value=None)
         mocker.patch.object(service, '_get_output_parser_info', return_value=None)
@@ -318,7 +319,8 @@ class TestGetAgentDetail:
         mocker.patch.object(service, '_get_agent_associations', return_value={
             'tool_ids': [],
             'mcp_ids': [],
-            'skill_ids': []
+            'skill_ids': [],
+            'middleware_ids': []
         })
         mocker.patch.object(service, '_get_silo_info', return_value=None)
         mocker.patch.object(service, '_get_output_parser_info', return_value=None)
@@ -327,6 +329,423 @@ class TestGetAgentDetail:
         
         assert result.ai_services is not None
         assert len(result.ai_services) == 1
+
+
+# ---------------------------------------------------------------------------
+# get_available_chat_filter_fields
+# ---------------------------------------------------------------------------
+
+class TestGetAvailableChatFilterFields:
+    """Test AgentService.get_available_chat_filter_fields()"""
+
+    def test_unions_fields_across_candidate_silos(self, mocker):
+        """Fields from the own silo and every candidate tool's silo are unioned."""
+        db = MagicMock()
+        service = AgentService()
+
+        db.query.return_value.filter.return_value.all.return_value = [(2, 201)]
+
+        def fake_silo_info(_db, silo_id):
+            if silo_id == 100:  # own silo
+                return {"metadata_definition": {"fields": [{"name": "region", "type": "str"}]}}
+            if silo_id == 201:  # subagent silo
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+            return None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+
+        result = service.get_available_chat_filter_fields(db, tool_ids=[2], own_silo_id=100)
+
+        names = {f['name'] for f in result}
+        assert names == {'region', 'machine_model'}
+
+    def test_dedupes_field_name_across_silos_without_erroring(self, mocker):
+        """Two candidate silos declaring the same field name by different types
+        must be deduped into a single entry, not raise, and (per the current
+        implementation, which iterates a plain Python ``set`` of silo_ids —
+        NOT an ordered structure) the type kept is whichever silo is visited
+        first in that set's iteration order."""
+        db = MagicMock()
+        service = AgentService()
+
+        # tool_ids [2, 3] map to silo_ids 201 and 202 respectively.
+        db.query.return_value.filter.return_value.all.return_value = [(2, 201), (3, 202)]
+
+        def fake_silo_info(_db, silo_id):
+            if silo_id == 201:
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+            if silo_id == 202:
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "int"}]}}
+            return None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+
+        result = service.get_available_chat_filter_fields(db, tool_ids=[2, 3], own_silo_id=None)
+
+        # Deduped: exactly one "machine_model" entry, no exception raised.
+        matching = [f for f in result if f['name'] == 'machine_model']
+        assert len(matching) == 1
+        # CPython set iteration over small distinct ints is ascending in practice,
+        # so silo 201 (added first) is visited before 202 — asserting the actual
+        # observed behavior, not a documented contract.
+        assert matching[0]['type'] == 'str'
+
+    def test_broken_metadata_definition_for_one_silo_does_not_block_others(self, mocker):
+        """A silo lookup raising an exception contributes nothing but doesn't
+        prevent other candidate silos' fields from being included."""
+        db = MagicMock()
+        service = AgentService()
+
+        db.query.return_value.filter.return_value.all.return_value = [(2, 201), (3, 202)]
+
+        def fake_silo_info(_db, silo_id):
+            if silo_id == 201:
+                raise RuntimeError("boom")
+            if silo_id == 202:
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+            return None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+
+        result = service.get_available_chat_filter_fields(db, tool_ids=[2, 3], own_silo_id=None)
+
+        assert [f['name'] for f in result] == ['machine_model']
+
+    @pytest.mark.parametrize("silo_info", [
+        None,
+        {"metadata_definition": None},
+        {"metadata_definition": "not-a-dict"},
+        {"metadata_definition": {"fields": {"name": "not-a-list"}}},
+        {"metadata_definition": {"fields": ["not-a-dict", {"type": "str"}, {"name": ""}]}},
+    ])
+    def test_malformed_metadata_definition_contributes_no_fields(self, mocker, silo_info):
+        db = MagicMock()
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value=silo_info,
+        )
+
+        assert AgentService().get_available_chat_filter_fields(db, tool_ids=[], own_silo_id=100) == []
+
+    def test_returns_empty_list_with_no_candidates(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+
+        result = service.get_available_chat_filter_fields(db, tool_ids=[], own_silo_id=None)
+
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# get_chat_filter_values
+# ---------------------------------------------------------------------------
+
+class TestGetChatFilterValues:
+    """Test AgentService.get_chat_filter_values()"""
+
+    def _make_orchestrator_with_subagents(self, exposed_chat_filters, sub_silo_ids):
+        agent = MagicMock()
+        agent.exposed_chat_filters = exposed_chat_filters
+        agent.silo_id = None
+        associations = []
+        for silo_id in sub_silo_ids:
+            assoc = MagicMock()
+            assoc.tool = MagicMock(silo_id=silo_id)
+            associations.append(assoc)
+        agent.tool_associations = associations
+        return agent
+
+    def test_aggregates_values_only_from_silos_that_declare_the_field(self, mocker):
+        """Only the subagent silo declaring ``machine_model`` contributes values;
+        the other subagent's silo (which lacks the field) causes no error and no
+        garbage entry."""
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101, 102]
+        )
+
+        def fake_silo_info(_db, silo_id):
+            if silo_id == 101:
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+            if silo_id == 102:
+                return {"metadata_definition": {"fields": [{"name": "other_field", "type": "str"}]}}
+            return None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+        mock_get_values = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            return_value=["X100", "X200"],
+        )
+
+        result = service.get_chat_filter_values(db, agent)
+
+        assert result == [{"field_name": "machine_model", "values": ["X100", "X200"]}]
+        # Only the declaring silo (101) was ever queried for distinct values.
+        called_silo_ids = {call.args[0] for call in mock_get_values.call_args_list}
+        assert called_silo_ids == {101}
+
+    def test_never_raises_when_one_silos_lookup_fails(self, mocker):
+        """A distinct-values lookup failure for one silo is swallowed; aggregation
+        for the other declaring silo still completes."""
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101, 102]
+        )
+
+        def fake_silo_info(_db, silo_id):
+            # Both silos declare the field so both are queried for values.
+            return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+
+        def fake_get_values(silo_id, field, db_arg):
+            if silo_id == 101:
+                raise RuntimeError("vector store unreachable")
+            return ["X200"]
+
+        mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            side_effect=fake_get_values,
+        )
+
+        result = service.get_chat_filter_values(db, agent)
+
+        # Never raises; the surviving silo's values are still returned.
+        assert result == [{"field_name": "machine_model", "values": ["X200"]}]
+
+    def test_returns_empty_list_when_no_exposed_filters(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(exposed_chat_filters=[], sub_silo_ids=[101])
+
+        result = service.get_chat_filter_values(db, agent)
+
+        assert result == []
+
+    def test_field_omitted_when_no_silo_declares_it(self, mocker):
+        """A field in exposed_chat_filters with zero declaring silos is silently
+        omitted from the result, not an error."""
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "other_field", "type": "str"}]}},
+        )
+
+        result = service.get_chat_filter_values(db, agent)
+
+        assert result == []
+
+
+class TestGetChatFilterFieldValues:
+    """Test AgentService.get_chat_filter_field_values() — the public-API, single-field lookup."""
+
+    def _make_orchestrator_with_subagents(self, exposed_chat_filters, sub_silo_ids):
+        agent = MagicMock()
+        agent.exposed_chat_filters = exposed_chat_filters
+        agent.silo_id = None
+        associations = []
+        for silo_id in sub_silo_ids:
+            assoc = MagicMock()
+            assoc.tool = MagicMock(silo_id=silo_id)
+            associations.append(assoc)
+        agent.tool_associations = associations
+        return agent
+
+    def test_returns_none_when_field_not_exposed(self, mocker):
+        """A field name absent from exposed_chat_filters is rejected with None,
+        regardless of whether some silo actually declares it — this is the
+        security boundary, never leak unexposed internal field names."""
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+
+        result = service.get_chat_filter_field_values(db, agent, "some_other_field")
+
+        assert result is None
+
+    def test_returns_sorted_values_when_field_exposed_and_declared(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101, 102]
+        )
+
+        def fake_silo_info(_db, silo_id):
+            if silo_id == 101:
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+            return {"metadata_definition": {"fields": [{"name": "other_field", "type": "str"}]}}
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+        mock_get_values = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            return_value=["X200", "X100"],
+        )
+
+        result = service.get_chat_filter_field_values(db, agent, "machine_model")
+
+        assert result == ["X100", "X200"]
+        called_silo_ids = {call.args[0] for call in mock_get_values.call_args_list}
+        assert called_silo_ids == {101}
+
+    def test_returns_empty_list_when_exposed_but_no_silo_declares_it(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "other_field", "type": "str"}]}},
+        )
+
+        result = service.get_chat_filter_field_values(db, agent, "machine_model")
+
+        assert result == []
+
+    def test_never_raises_when_one_silos_lookup_fails(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101, 102]
+        )
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}},
+        )
+
+        def fake_get_values(silo_id, field, db_arg):
+            if silo_id == 101:
+                raise RuntimeError("vector store unreachable")
+            return ["X200"]
+
+        mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            side_effect=fake_get_values,
+        )
+
+        result = service.get_chat_filter_field_values(db, agent, "machine_model")
+
+        assert result == ["X200"]
+
+    def test_query_searches_live_and_caps_to_limit(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101, 102]
+        )
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}},
+        )
+        cached = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values'
+        )
+        search = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.search_values',
+            side_effect=lambda silo_id, field, query, limit, db_arg: (
+                ["Horno 3", "Horno 1"] if silo_id == 101 else ["Horno 2", "Horno 1"]
+            ),
+        )
+
+        result = service.get_chat_filter_field_values(
+            db, agent, "machine_model", query="horno", limit=3
+        )
+
+        assert result == ["Horno 1", "Horno 2", "Horno 3"]
+        cached.assert_not_called()
+        assert {call.args[2] for call in search.call_args_list} == {"horno"}
+
+    def test_query_on_unexposed_field_still_returns_none(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+        search = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.search_values'
+        )
+
+        assert service.get_chat_filter_field_values(db, agent, "secret", query="x") is None
+        search.assert_not_called()
+
+    def test_get_chat_filter_values_flags_has_more_only_when_truncated(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            return_value={"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}},
+        )
+        full = [f"M{i:03d}" for i in range(50)]
+        mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            return_value=full,
+        )
+
+        assert service.get_chat_filter_values(db, agent) == [
+            {"field_name": "machine_model", "values": full, "has_more": True}
+        ]
+
+    def test_get_chat_filter_values_still_works_after_refactor(self, mocker):
+        """Regression: extracting _collect_candidate_silo_ids must not change
+        get_chat_filter_values' existing behavior (own silo + subagents' silos)."""
+        db = MagicMock()
+        service = AgentService()
+        agent = self._make_orchestrator_with_subagents(
+            exposed_chat_filters=["machine_model"], sub_silo_ids=[101]
+        )
+        agent.silo_id = 999
+
+        def fake_silo_info(_db, silo_id):
+            if silo_id in (101, 999):
+                return {"metadata_definition": {"fields": [{"name": "machine_model", "type": "str"}]}}
+            return None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_silo_with_metadata_definition',
+            side_effect=fake_silo_info,
+        )
+        mock_get_values = mocker.patch(
+            'services.agent_service.MetadataValuesCacheService.get_distinct_values',
+            return_value=["X100"],
+        )
+
+        result = service.get_chat_filter_values(db, agent)
+
+        assert result == [{"field_name": "machine_model", "values": ["X100"]}]
+        called_silo_ids = {call.args[0] for call in mock_get_values.call_args_list}
+        assert called_silo_ids == {101, 999}
 
 
 # ---------------------------------------------------------------------------
@@ -403,8 +822,118 @@ class TestCreateOrUpdateAgent:
         mocker.patch('services.agent_service.AgentRepository.update', return_value=updated_agent)
         
         result = service.create_or_update_agent(db, agent_data, agent_type='agent')
-        
+
         assert result == 5  # Returns the agent ID
+
+    def test_rejects_exposed_chat_filters_referencing_unknown_field(self, mocker):
+        """An exposed_chat_filters entry absent from every candidate silo's
+        metadata fields is rejected with a ValueError, mirroring the existing
+        rag_fixed_filters unknown-field validation."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = {
+            'agent_id': 0,
+            'app_id': 1,
+            'name': 'Orchestrator',
+            'description': 'Test',
+            'system_prompt': '',
+            'prompt_template': None,
+            'status': None,
+            'service_id': None,
+            'silo_id': None,
+            'has_memory': False,
+            'output_parser_id': None,
+            'temperature': 0.7,
+            'is_tool': False,
+            'vision_service_id': None,
+            'vision_system_prompt': None,
+            'text_system_prompt': None,
+            'tool_ids': [2],
+            'exposed_chat_filters': ['bogus_field'],
+        }
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch.object(
+            service,
+            'get_available_chat_filter_fields',
+            return_value=[{'name': 'machine_model', 'type': 'str', 'description': None}],
+        )
+
+        with pytest.raises(ValueError, match='exposed_chat_filters references unknown metadata fields'):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_exposed_chat_filters_that_are_available(self, mocker):
+        """An exposed_chat_filters entry present in the available fields union is
+        accepted and the agent is persisted normally."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = {
+            'agent_id': 0,
+            'app_id': 1,
+            'name': 'Orchestrator',
+            'description': 'Test',
+            'system_prompt': '',
+            'prompt_template': None,
+            'status': None,
+            'service_id': None,
+            'silo_id': None,
+            'has_memory': False,
+            'output_parser_id': None,
+            'temperature': 0.7,
+            'is_tool': False,
+            'vision_service_id': None,
+            'vision_system_prompt': None,
+            'text_system_prompt': None,
+            'tool_ids': [2],
+            'exposed_chat_filters': ['machine_model'],
+        }
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch.object(
+            service,
+            'get_available_chat_filter_fields',
+            return_value=[{'name': 'machine_model', 'type': 'str', 'description': None}],
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 7
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+        assert result == 7
+
+    def test_rejects_rag_fixed_filters_on_agent_without_silo(self, mocker):
+        """rag_fixed_filters requires a silo; setting it without one is rejected.
+
+        Mirrors the existing validation pattern this test class follows for
+        exposed_chat_filters, confirming the two validations are independent.
+        """
+        db = MagicMock()
+        service = AgentService()
+        agent_data = {
+            'agent_id': 0,
+            'app_id': 1,
+            'name': 'No Silo Agent',
+            'description': 'Test',
+            'system_prompt': '',
+            'prompt_template': None,
+            'status': None,
+            'service_id': None,
+            'silo_id': None,
+            'has_memory': False,
+            'output_parser_id': None,
+            'temperature': 0.7,
+            'is_tool': False,
+            'vision_service_id': None,
+            'vision_system_prompt': None,
+            'text_system_prompt': None,
+            'rag_fixed_filters': [{'field': 'machine_model', 'op': '$eq', 'value': 'X100'}],
+        }
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+
+        with pytest.raises(ValueError, match='rag_fixed_filters can only be set on an agent that has a silo'):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +1006,7 @@ class TestSandboxServiceIdValidation:
 
         system_sandbox_service = MagicMock()
         system_sandbox_service.app_id = None  # system/platform-scoped
+        system_sandbox_service.end_of_service_at = None
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
@@ -499,6 +1029,7 @@ class TestSandboxServiceIdValidation:
 
         same_app_sandbox_service = MagicMock()
         same_app_sandbox_service.app_id = 1
+        same_app_sandbox_service.end_of_service_at = None
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
@@ -512,6 +1043,216 @@ class TestSandboxServiceIdValidation:
         result = service.create_or_update_agent(db, agent_data, agent_type='agent')
 
         assert result == 12
+
+
+# ---------------------------------------------------------------------------
+# Cross-tenant referenced-resource-id validation (IDOR fix, Fix A)
+# ---------------------------------------------------------------------------
+
+class TestReferencedResourceIdValidation:
+    """Test that create_or_update_agent rejects ids owned by a different app."""
+
+    def _base_agent_data(self, **overrides) -> dict:
+        data = {
+            'agent_id': 0,
+            'app_id': 1,
+            'name': 'Agent',
+            'description': 'Test',
+            'system_prompt': 'Test prompt',
+            'prompt_template': None,
+            'status': None,
+            'service_id': None,
+            'silo_id': None,
+            'output_parser_id': None,
+            'has_memory': False,
+            'temperature': 0.7,
+            'is_tool': False,
+            'vision_service_id': None,
+            'vision_system_prompt': None,
+            'text_system_prompt': None,
+        }
+        data.update(overrides)
+        return data
+
+    def test_rejects_service_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(service_id=5)
+
+        other_app_service = MagicMock()
+        other_app_service.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=other_app_service,
+        )
+
+        with pytest.raises(ValueError, match="service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_system_wide_service_id(self, mocker):
+        """A service_id with app_id=None (system-scoped AI service) is allowed for any app."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(service_id=5)
+
+        system_service = MagicMock()
+        system_service.app_id = None
+        system_service.end_of_service_at = None
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=system_service,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 20
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+        assert result == 20
+
+    def test_rejects_nonexistent_service_id(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(service_id=999)
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=None,
+        )
+
+        with pytest.raises(ValueError, match="service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_rejects_silo_id_from_a_different_app(self, mocker):
+        """silo_id has no system-wide exception: it must strictly match app_id."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(silo_id=7)
+
+        other_app_silo = MagicMock()
+        other_app_silo.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.silo_repository.SiloRepository.get_by_id',
+            return_value=other_app_silo,
+        )
+
+        with pytest.raises(ValueError, match="silo_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_silo_id_from_the_same_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(silo_id=7)
+
+        same_app_silo = MagicMock()
+        same_app_silo.app_id = 1
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.silo_repository.SiloRepository.get_by_id',
+            return_value=same_app_silo,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 21
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+        assert result == 21
+
+    def test_rejects_output_parser_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(output_parser_id=9)
+
+        other_app_parser = MagicMock()
+        other_app_parser.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.output_parser_repository.OutputParserRepository.get_by_id',
+            return_value=other_app_parser,
+        )
+
+        with pytest.raises(ValueError, match="output_parser_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_rejects_media_embedding_service_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(media_embedding_service_id=11)
+
+        other_app_embedding = MagicMock()
+        other_app_embedding.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.embedding_service_repository.EmbeddingServiceRepository.get_by_id',
+            return_value=other_app_embedding,
+        )
+
+        with pytest.raises(ValueError, match="media_embedding_service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_accepts_system_wide_media_embedding_service_id(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(media_embedding_service_id=11)
+
+        system_embedding = MagicMock()
+        system_embedding.app_id = None
+        system_embedding.end_of_service_at = None
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.embedding_service_repository.EmbeddingServiceRepository.get_by_id',
+            return_value=system_embedding,
+        )
+        created_agent = MagicMock()
+        created_agent.agent_id = 22
+        mocker.patch('services.agent_service.AgentRepository.create', return_value=created_agent)
+
+        result = service.create_or_update_agent(db, agent_data, agent_type='agent')
+        assert result == 22
+
+    def test_rejects_vision_service_id_from_a_different_app(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(vision_service_id=13)
+
+        other_app_service = MagicMock()
+        other_app_service.app_id = 2
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch(
+            'repositories.ai_service_repository.AIServiceRepository.get_by_id',
+            return_value=other_app_service,
+        )
+
+        with pytest.raises(ValueError, match="vision_service_id"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
+
+    def test_update_rejects_existing_agent_with_null_app_id(self, mocker):
+        """LOW fix: a NULL agent.app_id on the existing row is also a mismatch, not a bypass."""
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(agent_id=5, app_id=1)
+
+        existing_agent = make_agent(agent_id=5)
+        existing_agent.app_id = None
+
+        mocker.patch(
+            'services.agent_service.AgentRepository.get_agent_by_id_and_type',
+            return_value=existing_agent,
+        )
+
+        with pytest.raises(ValueError, match="does not belong to app"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
 
 
 # ---------------------------------------------------------------------------
@@ -554,8 +1295,26 @@ class TestUpdateAgentTools:
         mocker.patch('services.agent_service.AgentRepository.delete_agent_tool_association')
         
         service.update_agent_tools(db, agent_id=1, tool_ids=[])
-        
+
         # Should delete the old association
+
+    def test_scopes_valid_tool_lookup_to_the_agents_app(self, mocker):
+        """update_agent_tools must pass the agent's app_id down to the repository filter
+        (cross-tenant tool-agent attachment / IDOR guard)."""
+        db = MagicMock()
+        service = AgentService()
+        agent = make_agent(agent_id=1, app_id=7)
+
+        mocker.patch('services.agent_service.AgentRepository.get_by_id', return_value=agent)
+        mocker.patch('services.agent_service.AgentRepository.get_agent_tool_associations', return_value=[])
+        mock_get_valid = mocker.patch(
+            'services.agent_service.AgentRepository.get_valid_tool_ids', return_value=[2]
+        )
+        mocker.patch('services.agent_service.AgentRepository.create_agent_tool_association')
+
+        service.update_agent_tools(db, agent_id=1, tool_ids=[2, 99])
+
+        mock_get_valid.assert_called_once_with(db, [2, 99], 7)
 
 
 # ---------------------------------------------------------------------------
@@ -569,15 +1328,39 @@ class TestUpdateAgentMCPs:
         """Adding MCPs creates new associations."""
         db = MagicMock()
         service = AgentService()
-        agent = make_agent(agent_id=1)
-        
+        agent = make_agent(agent_id=1, app_id=1)
+
         mocker.patch('services.agent_service.AgentRepository.get_by_id', return_value=agent)
         mocker.patch('services.agent_service.AgentRepository.get_agent_mcp_associations', return_value=[])
-        mocker.patch('services.agent_service.AgentRepository.create_agent_mcp_association')
-        
+        mocker.patch(
+            'repositories.mcp_config_repository.MCPConfigRepository.get_valid_config_ids_for_app',
+            return_value=[2, 3],
+        )
+        mock_create = mocker.patch('services.agent_service.AgentRepository.create_agent_mcp_association')
+
         service.update_agent_mcps(db, agent_id=1, mcp_ids=[2, 3])
-        
-        # Should create associations
+
+        # Should create an association per valid MCP id
+        assert mock_create.call_count == 2
+
+    def test_drops_mcp_ids_from_a_different_app(self, mocker):
+        """MCP ids that don't belong to the agent's app are silently dropped (IDOR guard)."""
+        db = MagicMock()
+        service = AgentService()
+        agent = make_agent(agent_id=1, app_id=1)
+
+        mocker.patch('services.agent_service.AgentRepository.get_by_id', return_value=agent)
+        mocker.patch('services.agent_service.AgentRepository.get_agent_mcp_associations', return_value=[])
+        # Repository filter rejects every requested id (none belong to app 1).
+        mocker.patch(
+            'repositories.mcp_config_repository.MCPConfigRepository.get_valid_config_ids_for_app',
+            return_value=[],
+        )
+        mock_create = mocker.patch('services.agent_service.AgentRepository.create_agent_mcp_association')
+
+        service.update_agent_mcps(db, agent_id=1, mcp_ids=[99])
+
+        mock_create.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

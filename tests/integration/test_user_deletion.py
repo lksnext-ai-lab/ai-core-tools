@@ -25,7 +25,7 @@ from tests.factories import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def admin_headers(fake_user, db, monkeypatch):
     """Auth headers for fake_user promoted to OMNIADMIN via monkeypatch."""
     from utils.local_auth_tokens import mint_access_token

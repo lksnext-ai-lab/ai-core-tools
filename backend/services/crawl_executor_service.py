@@ -23,6 +23,13 @@ from services.crawl.discovery import discover_urls
 from services.crawl.http_fetcher import fetch, FetchResult
 from tools.scrapTools import extract_text_from_html
 from utils.logger import get_logger
+from utils.service_lifecycle import (
+    SERVICE_KIND_EMBEDDING,
+    ServiceRetiredError,
+    ensure_service_active,
+    service_call_context,
+    set_service_call_context,
+)
 
 logger = get_logger(__name__)
 
@@ -47,7 +54,8 @@ class CrawlExecutorService:
         """
         db = SessionLocal()
         try:
-            await CrawlExecutorService._run_job_internal(job_id, db)
+            with service_call_context(channel="domain_crawl", resource_type="domain"):
+                await CrawlExecutorService._run_job_internal(job_id, db)
         except Exception as e:
             logger.error(f"Unhandled error in CrawlExecutorService.run_job({job_id}): {e}", exc_info=True)
             # Try to mark job as FAILED
@@ -74,6 +82,24 @@ class CrawlExecutorService:
         if not domain:
             job.status = CrawlJobStatus.FAILED
             job.error_log = "Domain not found"
+            job.finished_at = datetime.utcnow()
+            CrawlJobRepository.update(job, db)
+            return
+
+        # Restored by the context manager in run_job.
+        set_service_call_context(
+            channel="domain_crawl", app_id=domain.app_id, resource_type="domain", resource_id=domain.domain_id
+        )
+
+        # Retirement is checked once per job, before any discovery or fetching.
+        try:
+            ensure_service_active(
+                domain.silo.embedding_service if domain.silo_id and domain.silo else None,
+                SERVICE_KIND_EMBEDDING,
+            )
+        except ServiceRetiredError as exc:
+            job.status = CrawlJobStatus.FAILED
+            job.error_log = exc.message
             job.finished_at = datetime.utcnow()
             CrawlJobRepository.update(job, db)
             return
@@ -252,9 +278,16 @@ class CrawlExecutorService:
                         job.skipped_count += 1
                     else:
                         # New or changed content — re-vectorize
+                        retired_error: Optional[ServiceRetiredError] = None
                         if domain and domain.silo_id and text:
                             try:
                                 from services.silo_service import SiloService
+                                # Check before delete_url: a retired embedding service must not cost the
+                                # URL its existing chunks (they cannot be re-created).
+                                ensure_service_active(
+                                    domain.silo.embedding_service if domain.silo else None,
+                                    SERVICE_KIND_EMBEDDING,
+                                )
                                 SiloService.delete_url(domain.silo_id, domain_url.url, db)
                                 SiloService.index_single_content(
                                     domain.silo_id,
@@ -262,17 +295,28 @@ class CrawlExecutorService:
                                     {"url": domain_url.url, "domain_id": domain.domain_id},
                                     db,
                                 )
+                            except ServiceRetiredError as e:
+                                # Already logged once (WARNING) by ensure_service_active.
+                                retired_error = e
                             except Exception as e:
                                 logger.warning(f"Re-vectorize failed for {domain_url.url}: {e}")
-                        domain_url.content_hash = new_hash
-                        domain_url.http_etag = result.etag
-                        domain_url.http_last_modified = result.last_modified
-                        domain_url.last_indexed_at = datetime.utcnow()
-                        domain_url.status = DomainUrlStatus.INDEXED
-                        domain_url.consecutive_skips = 0
-                        if policy.refresh_interval_hours:
-                            domain_url.next_crawl_at = datetime.utcnow() + timedelta(hours=policy.refresh_interval_hours)
-                        job.indexed_count += 1
+                        if retired_error is not None:
+                            # Falls through to the shared tail (rate limit, heartbeat).
+                            domain_url.status = DomainUrlStatus.FAILED
+                            domain_url.last_error = retired_error.message
+                            job.failed_count += 1
+                        else:
+                            domain_url.content_hash = new_hash
+                            domain_url.http_etag = result.etag
+                            domain_url.http_last_modified = result.last_modified
+                            domain_url.last_indexed_at = datetime.utcnow()
+                            domain_url.status = DomainUrlStatus.INDEXED
+                            domain_url.consecutive_skips = 0
+                            if policy.refresh_interval_hours:
+                                domain_url.next_crawl_at = datetime.utcnow() + timedelta(
+                                    hours=policy.refresh_interval_hours
+                                )
+                            job.indexed_count += 1
 
                 domain_url.updated_at = datetime.utcnow()
                 db.commit()

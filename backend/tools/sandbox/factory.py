@@ -27,9 +27,18 @@ on first use.
 from __future__ import annotations
 
 import os
+import sys
+from contextlib import nullcontext
 from typing import TYPE_CHECKING, Any
 
 from utils.logger import get_logger
+from utils.service_lifecycle import (
+    SERVICE_KIND_SANDBOX,
+    ServiceRetiredError,
+    ensure_service_active,
+    get_service_call_context,
+    service_call_context,
+)
 from .provider import SandboxProvider
 
 if TYPE_CHECKING:
@@ -41,6 +50,18 @@ logger = get_logger(__name__)
 
 class SandboxProviderUnavailableError(RuntimeError):
     """Raised when no usable sandbox provider can be resolved."""
+
+
+class SandboxServiceRetiredError(SandboxProviderUnavailableError):
+    """The resolved sandbox service is past its end of service.
+
+    A subclass of ``SandboxProviderUnavailableError`` so every caller keeps degrading (the turn
+    continues without code-interpreter tools). Carries the retirement message.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
 
 
 def _build_registry() -> dict[str, type[SandboxProvider]]:
@@ -127,7 +148,11 @@ def _resolve_sandbox_service(agent: "Agent | None") -> "SandboxService | None":
         if app is not None:
             return getattr(app, "default_sandbox_service", None)
     except Exception:
-        logger.debug("resolve_provider: SandboxService relationship not loaded", exc_info=True)
+        logger.warning(
+            "resolve_provider: SandboxService relationship not loaded (agent_id=%s, error=%s)",
+            getattr(agent, "agent_id", None),
+            type(sys.exc_info()[1]).__name__,
+        )
     return None
 
 
@@ -190,6 +215,7 @@ def resolve_provider_and_service_id(
         A ``(provider, sandbox_service_id)`` tuple.
 
     Raises:
+        SandboxServiceRetiredError: If the resolved ``SandboxService`` is retired.
         SandboxProviderUnavailableError: If the resolved provider name is not
             registered (unknown name, or the package/dependency required by
             that provider is not installed), or is registered but excluded
@@ -198,6 +224,19 @@ def resolve_provider_and_service_id(
     service = _resolve_sandbox_service(agent)
 
     if service is not None:
+        # get_service_call_context() returns {} when no context was set.
+        ctx = nullcontext() if get_service_call_context() else service_call_context(
+            channel="sandbox_resolution",
+            resource_type="agent",
+            resource_id=getattr(agent, "agent_id", None),
+            app_id=getattr(agent, "app_id", None),
+        )
+        try:
+            with ctx:
+                ensure_service_active(service, SERVICE_KIND_SANDBOX)
+        except ServiceRetiredError as exc:
+            # No fallback to the app or env default (D-10): the guard already logged the WARNING.
+            raise SandboxServiceRetiredError(exc.message) from exc
         provider_name = (service.provider or "").strip().lower()
         provider_class = _provider_class_for(provider_name)
         credentials = _credentials_from_service(service)

@@ -333,7 +333,7 @@ class TestPromptInjectionSanitization:
         # survives only with a zero-width joiner spliced in, never as the real,
         # structurally-meaningful closing sequence.
         assert "</skill_catalog>" not in bullet_line
-        assert "<​/skill_catalog>" in bullet_line  # neutralised, inert remnant
+        assert "<\u200b/skill_catalog>" in bullet_line  # neutralised, inert remnant
         assert "<system_override>" in bullet_line  # present, but inert — same bullet line
         # And the trusted "use load_skill" instruction (outside the wrapped block
         # entirely) is completely unaffected by any of this.
@@ -359,11 +359,11 @@ class TestPromptInjectionSanitization:
 
     def test_control_and_zero_width_chars_are_stripped_from_name_and_description(self):
         skill = make_skill(
-            1, "Evil​Name", description="hidden‮text and normal text",
+            1, "Evil\u200bName", description="hidden\u202etext and normal text",
         )
         section = generate_skills_system_prompt_section([make_assoc(skill)])
-        assert "​" not in section
-        assert "‮" not in section
+        assert "\u200b" not in section
+        assert "\u202e" not in section
 
     def test_description_is_truncated_to_shared_cap(self):
         from utils.prompt_safety import MAX_DESCRIPTION_CHARS

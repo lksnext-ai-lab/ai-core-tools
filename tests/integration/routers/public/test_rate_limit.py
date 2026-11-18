@@ -11,6 +11,7 @@ NOTE: These tests mock the agent execution (LLM call) so no real LLM
 import pytest
 from unittest.mock import patch, AsyncMock
 
+from models.agent import Agent
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,16 +76,11 @@ class TestApiKeyAuth:
 
 
 class TestRateLimit:
-    @pytest.mark.xfail(
-        reason="Rate limiting not yet enforced in chat endpoint", strict=False
-    )
     def test_rate_limit_blocks_after_limit_exceeded(
         self, client, fake_app, fake_agent, fake_api_key, db
     ):
         """
-        Set app rate limit to 3, make 3 requests -> 3rd should return 429.
-        The rate limiter consumes a token on each request (including the one
-        that triggers 429), so rate_limit=3 allows 2 successful requests.
+        Set app rate limit to 3, make 3 requests -> all succeed; the 4th returns 429.
         """
         fake_app.agent_rate_limit = 3
         db.flush()
@@ -106,12 +102,63 @@ class TestRateLimit:
             r1 = client.post(url, data=chat_payload("msg1"), headers=headers)
             r2 = client.post(url, data=chat_payload("msg2"), headers=headers)
             r3 = client.post(url, data=chat_payload("msg3"), headers=headers)
+            r4 = client.post(url, data=chat_payload("msg4"), headers=headers)
 
-        # First two should succeed (or fail for other reasons but not rate limit)
-        assert r1.status_code != 429
-        assert r2.status_code != 429
-        # Third should be rate-limited
-        assert r3.status_code == 429
+        assert [r.status_code for r in (r1, r2, r3)] == [200, 200, 200]
+        assert r4.status_code == 429
+
+    def test_limit_is_independent_per_agent_in_the_same_app(
+        self, client, fake_app, fake_agent, fake_ai_service, fake_api_key, db
+    ):
+        fake_app.agent_rate_limit = 1
+        other_agent = Agent(
+            name="Other test agent",
+            description="Second agent in the same app",
+            system_prompt="You are a helpful test assistant.",
+            app_id=fake_app.app_id,
+            service_id=fake_ai_service.service_id,
+            has_memory=False,
+            temperature=0.7,
+        )
+        db.add(other_agent)
+        db.flush()
+
+        headers = api_key_headers(fake_api_key.key)
+        mock_response = {
+            "response": "ok",
+            "agent_id": fake_agent.agent_id,
+            "metadata": {"agent_name": "Test", "agent_type": "agent",
+                         "files_processed": 0, "has_memory": False},
+        }
+
+        with patch(
+            "services.agent_execution_service.AgentExecutionService.execute_agent_chat_with_file_refs",
+            new=AsyncMock(return_value=mock_response),
+        ):
+            list_response = client.get(
+                f"/public/v1/app/{fake_app.app_id}/agents/",
+                headers=headers,
+            )
+            first_agent_call = client.post(
+                chat_url(fake_app.app_id, fake_agent.agent_id),
+                data=chat_payload("agent 1"),
+                headers=headers,
+            )
+            second_agent_call = client.post(
+                chat_url(fake_app.app_id, other_agent.agent_id),
+                data=chat_payload("agent 2"),
+                headers=headers,
+            )
+            repeated_first_agent_call = client.post(
+                chat_url(fake_app.app_id, fake_agent.agent_id),
+                data=chat_payload("agent 1 again"),
+                headers=headers,
+            )
+
+        assert list_response.status_code == 200
+        assert first_agent_call.status_code == 200
+        assert second_agent_call.status_code == 200
+        assert repeated_first_agent_call.status_code == 429
 
     def test_rate_limit_zero_means_unlimited(
         self, client, fake_app, fake_agent, fake_api_key, db
@@ -145,7 +192,7 @@ class TestRateLimit:
     def test_rate_limit_headers_present_in_response(
         self, client, fake_app, fake_agent, fake_api_key, db
     ):
-        """Responses should include X-RateLimit-* headers (if implemented)."""
+        """Responses include headers for the selected agent's rate-limit bucket."""
         fake_app.agent_rate_limit = 10
         db.flush()
 
@@ -165,10 +212,7 @@ class TestRateLimit:
         ):
             response = client.post(url, data=chat_payload(), headers=headers)
 
-        # Rate limit headers may or may not be present depending on implementation
-        # This test serves as documentation -- update assertions when headers are added
-        if response.status_code == 200:
-            # If rate limit headers are implemented, they should look like this:
-            # assert "X-RateLimit-Limit" in response.headers
-            # assert "X-RateLimit-Remaining" in response.headers
-            pass  # Currently no rate-limit headers in responses
+        assert response.status_code == 200
+        assert response.headers["X-RateLimit-Limit"] == "10"
+        assert response.headers["X-RateLimit-Remaining"] == "9"
+        assert "X-RateLimit-Reset" in response.headers

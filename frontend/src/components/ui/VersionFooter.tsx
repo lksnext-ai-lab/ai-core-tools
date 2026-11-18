@@ -27,7 +27,7 @@ const VersionFooter: React.FC<VersionFooterProps> = ({ className = '' }) => {
       }
     }
 
-    fetchVersion();
+    void fetchVersion();
   }, []);
 
   if (loading) {

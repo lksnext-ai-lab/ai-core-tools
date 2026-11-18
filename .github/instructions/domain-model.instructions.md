@@ -9,7 +9,7 @@ This describes **what Mattin AI does** from a product/domain perspective. It aut
 
 ## Core Concepts
 
-**App (Workspace)**: The central tenant unit. Every resource (agents, silos, repos, services, API keys) is scoped to an App. Each App has an `owner`, a URL-safe `slug`, configurable rate limits, CORS origins, and max file sizes.
+**App (Workspace)**: The central tenant unit. Every resource (agents, silos, repos, services, API keys) is scoped to an App. Each App has an `owner`, a URL-safe `slug`, a configurable per-agent rate limit, CORS origins, and max file sizes.
 
 **User**: A platform account (email, name). Owns multiple Apps and can collaborate on others. Authenticates via `AICT_LOGIN`: `FAKE` (email-only local dev), `LOCAL` (SaaS email + password with `UserCredential`), or `OIDC` (Azure Entra ID, production).
 
@@ -113,7 +113,7 @@ Three groups with different auth:
 | **Public v1** | `/public/v1` | `X-API-KEY` header | External programmatic access. Chat, file upload, repo/silo ops. |
 | **MCP** | `/mcp/v1` | `X-API-KEY` header | JSON-RPC 2.0 for Model Context Protocol. |
 
-**Public API controls:** per-app rate limiting (`App.agent_rate_limit`), CORS origin validation (`App.agent_cors_origins`), file size limits (`App.max_file_size_mb`).
+**Public API controls:** per-agent rate limiting (`App.agent_rate_limit`, with an independent budget for each agent), CORS origin validation (`App.agent_cors_origins`), file size limits (`App.max_file_size_mb`).
 
 ## Key User Workflows
 

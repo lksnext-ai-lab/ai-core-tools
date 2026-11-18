@@ -10,9 +10,17 @@ import json
 from db.database import get_db
 
 # Import services
-from services.ai_service_service import AIServiceService
+from services.ai_service_service import AIServiceInUseError, AIServiceService
 from services.ai_service_export_service import AIServiceExportService
 from services.ai_service_import_service import AIServiceImportService
+from services.service_lifecycle_service import ServiceLifecycleService
+from schemas.service_lifecycle_schemas import (
+    MoveAgentsRequestSchema,
+    MoveAgentsResponseSchema,
+    ServiceUsageSchema,
+)
+from utils.error_handlers import AppError
+from utils.service_lifecycle import SERVICE_KIND_AI
 from services.provider_models_service import (
     PROVIDER_ERROR_STATUS,
     ProviderModelsService,
@@ -199,7 +207,7 @@ async def import_ai_service(
         summary = import_service.import_ai_service(
             export_data,
             app_id,
-            getattr(auth_context, 'user_id', None),
+            int(auth_context.identity.id),
             conflict_mode,
             new_name
         )
@@ -258,6 +266,46 @@ async def get_ai_service(
         )
 
 
+@ai_services_router.get("/{service_id}/used-by",
+                        summary="List what depends on an AI service",
+                        tags=["AI Services"],
+                        response_model=ServiceUsageSchema)
+async def get_ai_service_used_by(
+    app_id: int,
+    service_id: int,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("viewer"))],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """Agents (by role), silos, repositories, middlewares and scheduled tasks of this app using the service."""
+    usage = ServiceLifecycleService.get_usage(db, SERVICE_KIND_AI, service_id, app_id)
+    if usage is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AI_SERVICE_NOT_FOUND_ERROR)
+    return usage
+
+
+@ai_services_router.post("/{service_id}/move-agents",
+                         summary="Move all agents from this AI service to another",
+                         tags=["AI Services"],
+                         response_model=MoveAgentsResponseSchema)
+async def move_agents_to_ai_service(
+    app_id: int,
+    service_id: int,
+    body: MoveAgentsRequestSchema,
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    role: Annotated[AppRole, Depends(require_min_role("administrator"))],
+    db: Annotated[Session, Depends(get_db)]
+):
+    """Atomically point every agent of the app using this service at the target service."""
+    try:
+        return ServiceLifecycleService.move_agents(
+            db, app_id, service_id, body.target_service_id, body.expected_count,
+            int(auth_context.identity.id),
+        )
+    except AppError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
 @ai_services_router.post("/{service_id}",
                          summary="Create or update AI service",
                          tags=["AI Services"],
@@ -275,7 +323,9 @@ async def create_or_update_ai_service(
     """
     
     try:
-        result = AIServiceService.create_or_update_ai_service(db, app_id, service_id, service_data)
+        result = AIServiceService.create_or_update_ai_service(
+            db, app_id, service_id, service_data, actor_id=int(auth_context.identity.id)
+        )
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -344,6 +394,8 @@ async def delete_ai_service(
             )
         
         return {"message": "AI service deleted successfully"}
+    except AIServiceInUseError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

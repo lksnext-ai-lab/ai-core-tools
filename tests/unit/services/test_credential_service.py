@@ -65,7 +65,7 @@ from services.auth.credential_service import (
 _SQLITE_URL = "sqlite:///:memory:"
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def engine():
     eng = create_engine(_SQLITE_URL, connect_args={"check_same_thread": False})
     import models  # noqa: F401 — registers all ORM models with Base.metadata
@@ -75,7 +75,7 @@ def engine():
     eng.dispose()
 
 
-@pytest.fixture()
+@pytest.fixture
 def db(engine):
     """Per-test session with rollback isolation (no FOR UPDATE needed on SQLite)."""
     connection = engine.connect()

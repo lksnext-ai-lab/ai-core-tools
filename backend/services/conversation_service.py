@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import ast
 import json
@@ -18,6 +19,9 @@ from utils.security import hash_api_key
 from lks_idprovider import AuthContext
 
 logger = get_logger(__name__)
+
+# Keeps background checkpoint deletions referenced until they finish.
+_background_cleanups: set = set()
 
 
 async def _resolve_image_placeholders(
@@ -301,6 +305,37 @@ class ConversationService:
             logger.error(f"Error destroying sandbox on conversation delete: {e}")
 
     @staticmethod
+    def release_agent_conversations(db: Session, agent_id: int) -> List[tuple]:
+        """Free the media and sandboxes of every conversation of an agent.
+
+        Returns their ``(agent_id, session_id)`` checkpointer threads; the rows themselves
+        go with the agent (``Conversation.agent_id`` is ON DELETE CASCADE).
+        """
+        conversations = db.query(Conversation).filter(Conversation.agent_id == agent_id).all()
+        for conversation in conversations:
+            ConversationService.release_conversation_resources(db, conversation)
+        return [(conversation.agent_id, conversation.session_id) for conversation in conversations]
+
+    @staticmethod
+    def delete_thread_histories_in_background(threads: List[tuple]) -> None:
+        """Delete the checkpoints of ``(agent_id, session_id)`` threads without blocking a sync caller."""
+        if not threads:
+            return
+
+        async def _delete_all() -> None:
+            for agent_id, session_id in threads:
+                await ConversationService.delete_thread_history(agent_id, session_id)
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_delete_all())
+            return
+        task = loop.create_task(_delete_all())
+        _background_cleanups.add(task)
+        task.add_done_callback(_background_cleanups.discard)
+
+    @staticmethod
     async def delete_conversation_history(conversation: Conversation) -> None:
         """Delete the conversation's LangGraph checkpoints. Best effort."""
         await ConversationService.delete_thread_history(conversation.agent_id, conversation.session_id)
@@ -454,6 +489,23 @@ class ConversationService:
         return resolved_history
     
     @staticmethod
+    async def get_pending_approval(db: Session, conversation_id: int, user_context: Dict) -> Optional[Dict]:
+        """The human-in-the-loop approval this conversation is waiting for, if any.
+
+        Lets the chat UI restore the approval card after a reload (an approval past its
+        deadline is returned with ``status="expired"`` until the server resolves it).
+        """
+        conversation = ConversationService.get_conversation(db, conversation_id, user_context)
+        if not conversation:
+            return None
+        from services import hitl_approval_service as approvals
+
+        approval = approvals.get_pending_for_conversation(db, conversation.conversation_id)
+        if approval is None or not approvals.Requester.from_user_context(user_context).owns(approval):
+            return None
+        return approvals.sse_payload(approval)
+
+    @staticmethod
     def _clean_attached_files_content(text: str) -> str:
         """
         Remove attached file content from message text.
@@ -545,6 +597,10 @@ class ConversationService:
         Returns:
             True if user has access, False otherwise
         """
+        # Server-side resolution of an expired approval: access to that one conversation only.
+        if isinstance(user_context, dict) and user_context.get('hitl_conversation_id') is not None:
+            return user_context['hitl_conversation_id'] == conversation.conversation_id
+
         # Scheduled-task executions own their conversations; users never do.
         if conversation.scheduled_task_id is not None:
             return (

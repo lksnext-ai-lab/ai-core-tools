@@ -5,6 +5,7 @@ Supports OpenAI Whisper API
 
 from openai import OpenAI
 import logging
+from utils.service_lifecycle import SERVICE_KIND_AI, ensure_service_active
 import os
 import tempfile
 from typing import Optional, Dict, Any, List
@@ -186,6 +187,7 @@ def get_transcription_from_service(ai_service, audio_path: str, language: Option
     Returns:
         Dictionary with transcription data
     """
+    ensure_service_active(ai_service, SERVICE_KIND_AI)
     if ai_service.provider == 'OpenAI':
         return transcribe_with_openai_whisper(
             audio_path,

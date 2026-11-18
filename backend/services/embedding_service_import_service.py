@@ -19,6 +19,8 @@ from repositories.embedding_service_repository import (
     EmbeddingServiceRepository,
 )
 import logging
+from services.service_lifecycle_service import ServiceLifecycleService
+from utils.service_lifecycle import SERVICE_KIND_EMBEDDING
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +93,7 @@ class EmbeddingServiceImportService:
         app_id: int,
         conflict_mode: ConflictMode = ConflictMode.FAIL,
         new_name: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> ImportSummarySchema:
         """Import Embedding Service.
 
@@ -138,6 +141,9 @@ class EmbeddingServiceImportService:
                 )  # model_name mapped to description
                 existing_service.endpoint = export_data.embedding_service.endpoint
                 existing_service.api_version = export_data.embedding_service.api_version
+                ServiceLifecycleService.apply_lifecycle_fields(
+                    existing_service, SERVICE_KIND_EMBEDDING, export_data.embedding_service, user_id
+                )
                 # Note: Keep existing api_key (user configured)
 
                 self.session.add(existing_service)
@@ -168,6 +174,8 @@ class EmbeddingServiceImportService:
             description=export_data.embedding_service.model_name,  # model_name mapped to description
             endpoint=export_data.embedding_service.endpoint,
             api_version=export_data.embedding_service.api_version,
+            end_of_service_at=export_data.embedding_service.end_of_service_at,
+            deprecation_notice=export_data.embedding_service.deprecation_notice,
         )
 
         self.session.add(new_service)

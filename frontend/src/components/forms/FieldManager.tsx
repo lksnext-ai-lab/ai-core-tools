@@ -1,3 +1,5 @@
+import { randomId } from '../../utils/randomId';
+
 interface FieldDefinition {
   name: string;
   type: string;
@@ -32,7 +34,7 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
     if (fields.length >= maxFields) return;
     
     const newField: FieldDefinition = {
-      _key: Math.random().toString(36).slice(2),
+      _key: randomId(),
       name: '',
       type: 'str',
       description: ''

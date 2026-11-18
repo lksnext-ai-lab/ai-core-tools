@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { authService, type CurrentUserPayload } from '../services/auth';
 import { OIDCContext } from '../auth/OIDCProvider';
 import { resolveCurrentUser } from '../auth/resolveCurrentUser';
+import { clearPlatformChatbotStorage } from '../utils/platformChatbotStorage';
 
 export interface User {
   user_id: number;
@@ -142,6 +143,8 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   const logout = useCallback(async () => {
     requestIdRef.current++;
+    // Local per-user data must not outlive the session on a shared browser.
+    clearPlatformChatbotStorage();
     if (oidcLogout) {
       await oidcLogout();
     } else {

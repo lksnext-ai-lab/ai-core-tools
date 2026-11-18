@@ -433,6 +433,46 @@ Content-Type: application/json
 | PUT | `/{service_id}` | Update embedding service | editor |
 | DELETE | `/{service_id}` | Delete embedding service | editor |
 
+### Service End of Service
+
+AI, embedding and sandbox services carry an optional planned end of service (see [Service End of Service](../guides/chat-bot/kb-ai-services.md#service-end-of-service)).
+
+**Fields** (returned by list/detail endpoints, accepted by create/update):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `end_of_service_at` | ISO-8601 datetime \| null | Stored as UTC. A date-only value from the UI means 00:00 UTC of that day |
+| `deprecation_notice` | string \| null | Max 1000 chars. Control, format and line-separator characters are replaced with spaces |
+| `lifecycle_status` | `active` \| `deprecated` \| `retired` | Read-only, computed at read time |
+
+On create/update, an omitted lifecycle field keeps its stored value; an explicit `null` clears it. Assigning a retired service to a field that did not already reference it is rejected with a 4xx error whose `detail` explains why; an unchanged reference is kept.
+
+**Endpoints**:
+
+| Method | Endpoint | Purpose | Min Role |
+|--------|----------|---------|----------|
+| GET | `/internal/apps/{app_id}/ai-services/{id}/used-by` | What uses the AI service | viewer |
+| GET | `/internal/apps/{app_id}/embedding-services/{id}/used-by` | What uses the embedding service | viewer |
+| GET | `/internal/apps/{app_id}/sandbox-services/{id}/used-by` | What uses the sandbox service | viewer |
+| POST | `/internal/apps/{app_id}/ai-services/{id}/move-agents` | Bulk move agents to another AI service | administrator |
+| GET | `/internal/admin/system-ai-services/{id}/used-by` | Same, system AI service | platform admin |
+| GET | `/internal/admin/system-embedding-services/{id}/used-by` | Same, system embedding service | platform admin |
+| GET | `/internal/admin/system-sandbox-services/{id}/used-by` | Same, system sandbox service | platform admin |
+
+`used-by` returns `{service_id, service_name, kind, is_system, lifecycle_status, end_of_service_at, deprecation_notice, agents[], silos[], repositories[], middlewares[], scheduled_tasks[], apps_using_as_default[]}`. `agents[].roles` lists how the service is used (`llm`, `ocr_vision`, `transcription`, `video`, `media_embedding`, `silo_embedding`, `sandbox`, `sandbox_app_default`); `apps_using_as_default` is only filled for sandbox services.
+
+`move-agents` body: `{"target_service_id": 7, "expected_count": 12}`. It moves only the agents' main LLM. If `expected_count` is given and differs from the number of agents actually moved, the response is `409` and nothing changes (checked atomically, rolled back). Response: `{"moved_agent_ids": [...], "count": 12}`.
+
+**Warnings**: agent, silo, repository and scheduled task responses include `lifecycle_warnings[]` (`service_id`, `service_name`, `kind`, `role`, `via`, `lifecycle_status`, `end_of_service_at`, `deprecation_notice`) for deprecated or retired services they depend on, directly or through a silo or middleware. For sandbox services `kind` is `sandbox` and `via` is `app default` when inherited from the App.
+
+**Retired service error** (`409`, also on the [public API](public-api.md)):
+
+```json
+{ "detail": "Service GPT-4 was retired on 2026-09-30. <notice>", "error_code": "SERVICE_RETIRED" }
+```
+
+Streaming chat sends an SSE `error` event with `code: "service_retired"`. Test connection is never blocked.
+
 ### Conversations
 
 **Base**: `/internal/conversations`

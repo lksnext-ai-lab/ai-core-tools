@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { ReactNode } from 'react';
 import { apiService } from '../services/api';
 import { useUser } from './UserContext';
+import { newSessionId, readHistory, resolveSessionId, writeHistory } from '../utils/platformChatbotStorage';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,30 +51,7 @@ export const usePlatformChatbot = (): PlatformChatbotContextType => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const SESSION_KEY = 'platform_chatbot_session_id';
 const MAX_MESSAGES = 100;
-
-function historyKey(sessionId: string): string {
-  return `platform_chatbot_history_${sessionId}`;
-}
-
-function readHistory(sessionId: string): ChatMessage[] {
-  if (!sessionId) return [];
-  try {
-    const raw = localStorage.getItem(historyKey(sessionId));
-    return raw ? (JSON.parse(raw) as ChatMessage[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeHistory(sessionId: string, messages: ChatMessage[]): void {
-  try {
-    localStorage.setItem(historyKey(sessionId), JSON.stringify(messages));
-  } catch {
-    // localStorage may be unavailable or full — fail silently
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -115,20 +93,13 @@ export const PlatformChatbotProvider: React.FC<PlatformChatbotProviderProps> = (
 
   // Initialize session ID once user is available
   useEffect(() => {
-    if (!user) return;
-
-    const stored = localStorage.getItem(SESSION_KEY);
-    const defaultId = `platform_chatbot_${user.user_id}`;
-    const resolved = stored || defaultId;
-
-    if (!stored) {
-      try {
-        localStorage.setItem(SESSION_KEY, resolved);
-      } catch {
-        // ignore
-      }
+    if (!user) {
+      setSessionId('');
+      setMessages([]);
+      return;
     }
 
+    const resolved = resolveSessionId(user.user_id);
     setSessionId(resolved);
     setMessages(readHistory(resolved));
   }, [user]);
@@ -150,13 +121,7 @@ export const PlatformChatbotProvider: React.FC<PlatformChatbotProviderProps> = (
 
   const startNewConversation = useCallback(() => {
     if (!user) return;
-    const newId = `platform_chatbot_${user.user_id}_${Date.now()}`;
-    try {
-      localStorage.setItem(SESSION_KEY, newId);
-    } catch {
-      // ignore
-    }
-    setSessionId(newId);
+    setSessionId(newSessionId(user.user_id));
     setMessages([]);
   }, [user]);
 

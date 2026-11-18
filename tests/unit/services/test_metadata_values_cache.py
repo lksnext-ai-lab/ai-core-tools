@@ -392,3 +392,35 @@ class TestSamplingLimit:
             result = MetadataValuesCacheService._fetch_from_vector_store(1, "doc_type", db)
 
         assert result is None
+
+
+class TestSearchValues:
+    def test_delegates_a_substring_search_to_the_silo_service(self):
+        db = MagicMock()
+        with patch("services.silo_service.SiloService.get_metadata_field_values", return_value=["ADITMAQ"]) as fetch:
+            result = MetadataValuesCacheService.search_values(7, "empresa", "adit", 20, db)
+
+        assert result == ["ADITMAQ"]
+        fetch.assert_called_once_with(silo_id=7, field="empresa", limit=20, db=db, contains="adit")
+
+    def test_is_never_cached(self):
+        with patch("services.silo_service.SiloService.get_metadata_field_values", return_value=["A"]) as fetch:
+            MetadataValuesCacheService.search_values(7, "empresa", "a", 20, MagicMock())
+            MetadataValuesCacheService.search_values(7, "empresa", "a", 20, MagicMock())
+
+        assert fetch.call_count == 2
+
+    def test_returns_empty_list_on_error(self):
+        with patch(
+            "services.silo_service.SiloService.get_metadata_field_values",
+            side_effect=RuntimeError("store down"),
+        ):
+            assert MetadataValuesCacheService.search_values(7, "empresa", "a", 20, MagicMock()) == []
+
+
+class TestIsTruncated:
+    def test_true_at_the_sampling_cap(self):
+        assert MetadataValuesCacheService.is_truncated(["v"] * _SAMPLING_LIMIT) is True
+
+    def test_false_below_the_sampling_cap(self):
+        assert MetadataValuesCacheService.is_truncated(["v"] * (_SAMPLING_LIMIT - 1)) is False

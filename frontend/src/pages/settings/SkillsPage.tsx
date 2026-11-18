@@ -59,7 +59,7 @@ function SkillsPage() {
 
   // Load skills from cache or API
   useEffect(() => {
-    loadSkills();
+    void loadSkills();
   }, [appId]);
 
   async function loadSkills() {

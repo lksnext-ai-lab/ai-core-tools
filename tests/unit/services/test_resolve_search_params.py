@@ -268,6 +268,25 @@ class TestFilterMerge:
         assert "year" in pf
         assert pf["year"] == {"$eq": 2024}
 
+    def test_caller_list_filter_becomes_in_clause(self):
+        """A list value in the caller flat filter means "any of" → {$in: [...]}."""
+        silo = _make_silo(
+            metadata_fields=[{"name": "machine_model", "description": "Model", "type": "str"}]
+        )
+        agent = _make_agent(rag_fixed_filters=None, silo=silo)
+
+        _, pf = resolve_search_params(agent, {"filter": {"machine_model": ["X100", "Z900"]}})
+
+        assert pf["machine_model"] == {"$in": ["X100", "Z900"]}
+
+    def test_caller_list_filter_is_type_coerced_per_item(self):
+        silo = _make_silo(metadata_fields=[{"name": "year", "description": "Year", "type": "int"}])
+        agent = _make_agent(rag_fixed_filters=None, silo=silo)
+
+        _, pf = resolve_search_params(agent, {"filter": {"year": ["2023", "2024"]}})
+
+        assert pf["year"] == {"$in": [2023, 2024]}
+
     def test_agent_fixed_filters_converted_to_backend_dict(self):
         """Agent rag_fixed_filters list is converted to a backend filter dict."""
         silo = _make_silo(

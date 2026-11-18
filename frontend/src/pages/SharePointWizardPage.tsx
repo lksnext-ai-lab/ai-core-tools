@@ -8,6 +8,8 @@ import Alert from '../components/ui/Alert';
 import { sharepointApi } from '../services/sharepoint';
 import { apiService } from '../services/api';
 import type { MicrosoftDrive } from '../types/sharepoint';
+import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 
 const WIZARD_STEPS: StepDefinition[] = [
   { id: 'connect', label: 'Connect' },
@@ -32,10 +34,7 @@ interface DriveSelection {
   drive_name: string;
 }
 
-interface EmbeddingService {
-  service_id: number;
-  name: string;
-}
+type EmbeddingService = ServiceOptionLike;
 
 function SharePointWizardPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -390,23 +389,26 @@ function SharePointWizardPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="sharepoint-embedding-service" className="block text-sm font-medium text-gray-700 mb-1">
                   Embedding Service
                 </label>
                 <select
+                  id="sharepoint-embedding-service"
                   value={embeddingServiceId ?? ''}
+                  aria-describedby={serviceStatusId(embeddingServices, embeddingServiceId, 'sharepoint-embedding-service')}
                   onChange={(e) =>
                     setEmbeddingServiceId(e.target.value ? Number(e.target.value) : undefined)
                   }
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">— Use default —</option>
-                  {embeddingServices.map((svc) => (
-                    <option key={svc.service_id} value={svc.service_id}>
-                      {svc.name}
-                    </option>
-                  ))}
+                  <ServiceSelectOptions options={embeddingServices} savedValue={undefined} />
                 </select>
+                <ServiceOptionStatus
+                  options={embeddingServices}
+                  selectedId={embeddingServiceId}
+                  selectId="sharepoint-embedding-service"
+                />
               </div>
 
               <div>

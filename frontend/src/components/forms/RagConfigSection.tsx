@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Target, Trash2 } from 'lucide-react';
 import type { MetadataOperator, SearchFilterMetadataField } from '../playground/SearchFilters';
+import { randomId } from '../../utils/randomId';
 
 export type RagSearchType = 'similarity' | 'mmr' | 'similarity_score_threshold';
 
@@ -122,7 +123,7 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
     onChange({
       rag_fixed_filters: [
         ...filters,
-        { _key: Math.random().toString(36).slice(2), field: fieldOptions[0] ?? '', op: '$eq', value: '' },
+        { _key: randomId(), field: fieldOptions[0] ?? '', op: '$eq', value: '' },
       ],
     });
   };

@@ -31,6 +31,7 @@ QDRANT_OPS: frozenset[str] = frozenset({"$eq", "$ne", "$gt", "$gte", "$lt", "$lt
 
 MAX_ENUM_VALUES: int = 25
 MAX_EXAMPLE_VALUES: int = 10
+MAX_FLAT_FILTER_IN_VALUES: int = 50
 
 # Fields written during indexation that are always filterable regardless of metadata_definition.
 SYSTEM_METADATA_FIELDS: frozenset[str] = frozenset({"page", "name", "url", "file_type"})
@@ -86,6 +87,28 @@ class MetadataFilterClause(BaseModel):
                 f"{sorted(all_ops)}"
             )
         return v
+
+
+def flat_filter_clause(field: str, value: Any) -> "MetadataFilterClause | None":
+    """Build the clause for one entry of a flat ``{field: value}`` caller filter.
+
+    A list/tuple means "any of" (``$in``): scalar items only, de-duplicated in
+    order and capped at ``MAX_FLAT_FILTER_IN_VALUES``.  Anything else is ``$eq``.
+    Returns ``None`` when a list has no usable items.  Never raises.
+    """
+    if isinstance(value, (list, tuple)):
+        items = [v for v in value if isinstance(v, (str, int, float, bool))]
+        unique = list(dict.fromkeys(items))[:MAX_FLAT_FILTER_IN_VALUES]
+        if not unique:
+            return None
+        try:
+            return MetadataFilterClause(field=field, op="$in", value=unique)
+        except ValueError:
+            return None
+    try:
+        return MetadataFilterClause(field=field, op="$eq", value=value)
+    except ValueError:
+        return None
 
 
 def ops_for_backend(vector_db_type: str) -> frozenset[str]:

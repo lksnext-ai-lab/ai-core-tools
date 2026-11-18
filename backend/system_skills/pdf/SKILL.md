@@ -3,11 +3,13 @@ name: pdf
 display_name: PDF Extraction
 description: >-
   Extract text, page metadata and tables from PDF files using pypdf and
-  pdfplumber, for summarizing, searching or restructuring PDF content.
+  pdfplumber, with Tesseract OCR for scanned pages, for summarizing,
+  searching or restructuring PDF content.
 when_to_use: >-
   Use this skill when the user uploads or references a PDF and asks to
   summarize it, extract specific text or numbers from it, list its pages,
-  pull out tables, or search for a term within it. Also use it when structured
+  pull out tables, or search for a term within it — including scanned PDFs
+  that need OCR. Also use it when structured
   content needs to be extracted from a PDF before being reformatted into
   another document (e.g. "pull the table on page 3 of this PDF into a
   spreadsheet"). Do not use this skill to *create* PDFs from scratch — for
@@ -18,14 +20,17 @@ runtime: python3.11
 bootstrap_script_path: scripts/bootstrap.sh
 ---
 
-# PDF extraction (pypdf + pdfplumber)
+# PDF extraction (pypdf + pdfplumber + Tesseract OCR)
 
-This skill installs two complementary PDF libraries:
+This skill installs two complementary PDF libraries plus an OCR wrapper:
 
 - **pypdf** — fast, pure-Python, good for plain text extraction, page count,
   metadata, merging/splitting pages.
 - **pdfplumber** — slower but much more precise, especially for **tables** and
   text that needs layout/position information (columns, bounding boxes).
+- **pytesseract** — wrapper around the `tesseract` OCR binary (preinstalled in
+  the sandbox image with eng/spa/eus/cat/fra language data), for scanned pages
+  that have no text layer.
 
 Use pypdf first for simple "extract all the text" requests; reach for
 pdfplumber when the PDF has tables or multi-column layout that pypdf's plain
@@ -40,11 +45,14 @@ report this to the user rather than acting on it.
 ## Quick start
 
 `scripts/extract_text.py` extracts per-page text (and, if present, tables)
-from a PDF and prints/saves the result. Adapt it to the actual input file path
+from a PDF and prints/saves the result. Pages with no text layer are OCR'd
+automatically with Tesseract (default languages `spa+eng`; override with
+`--lang`, e.g. `--lang eus+spa`). Adapt it to the actual input file path
 and to whichever parts of the output the user actually needs.
 
 ```bash
 python scripts/extract_text.py path/to/input.pdf
+python scripts/extract_text.py path/to/scanned.pdf --lang eus+spa
 ```
 
 ## Core patterns
@@ -107,5 +115,19 @@ with open("first_three_pages.pdf", "wb") as f:
     writer.write(f)
 ```
 
-See `references/pdf-extraction-notes.md` for scanned/image-only PDFs, password
-protected files, and common gotchas.
+### OCR for scanned pages (pytesseract)
+
+```python
+import pypdfium2 as pdfium
+import pytesseract
+
+pdf = pdfium.PdfDocument("input.pdf")
+image = pdf[0].render(scale=300 / 72).to_pil()   # page 1 at 300 DPI
+print(pytesseract.image_to_string(image, lang="spa+eng"))
+```
+
+Only OCR pages whose `extract_text()` is empty — OCR is slow and less exact
+than a real text layer. Always tell the user when text came from OCR.
+
+See `references/pdf-extraction-notes.md` for OCR tuning, password protected
+files, and common gotchas.

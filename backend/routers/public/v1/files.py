@@ -26,6 +26,7 @@ from services.playground_media_service import PlaygroundMediaService, is_vectori
 from utils.security import generate_signature
 
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,10 @@ files_router = APIRouter()
     summary="Attach file for chat",
     tags=["File Operations"],
     response_model=AttachFileResponseSchema,
-    responses={500: {"description": "Failed to attach file"}},
+    responses={
+        409: {"description": "A service used by this resource was retired"},
+        500: {"description": "Failed to attach file"},
+    },
 )
 async def attach_file(
     app_id: int,
@@ -124,6 +128,11 @@ async def attach_file(
                         content=extracted_content,
                         db=db,
                     )
+                except ServiceRetiredError:
+                    await file_service.discard_uploaded_file(
+                        file_ref.file_id, agent_id, user_context, effective_conversation_id
+                    )
+                    raise
                 except Exception as vec_err:
                     logger.warning(f"File vectorization at upload failed: {vec_err}")
 
@@ -144,7 +153,7 @@ async def attach_file(
             mime_type=file_ref.mime_type,
         )
 
-    except HTTPException:
+    except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
         logger.error(f"Error attaching file for agent {agent_id}: {str(e)}")

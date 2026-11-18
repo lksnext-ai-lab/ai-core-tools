@@ -1,6 +1,10 @@
 """Microsoft Graph API client for SharePoint drive operations."""
 from __future__ import annotations
 
+import asyncio
+import re
+from urllib.parse import quote, urlparse
+
 import httpx
 
 
@@ -32,6 +36,22 @@ class GraphDeltaExpiredError(Exception):
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
+# Entra tenant: a GUID or a domain such as contoso.onmicrosoft.com.
+_TENANT_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
+
+
+def _path_segment(value: str, name: str) -> str:
+    """Encode an id (site, drive, item) for use as ONE Graph URL path segment.
+
+    Values come from user-supplied configuration, so anything that could change
+    the request path (``/``, ``..``, ``?``, ``#``) is rejected instead of letting
+    it reach another Graph endpoint with the app's token.
+    """
+    if not value or value in (".", "..") or any(c in value for c in "/\\?#"):
+        raise GraphAccessError(400, f"Invalid {name}: {value!r}")
+    return quote(value, safe="!,-._~")
+
 
 class GraphClient:
     """Stateless Microsoft Graph API client. All methods are static/classmethod."""
@@ -43,7 +63,9 @@ class GraphClient:
         Returns the access_token string.
         Raises GraphAuthError on failure.
         """
-        url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        if not _TENANT_RE.match(tenant_id or ""):
+            raise GraphAuthError(f"Invalid tenant id: {tenant_id!r}")
+        url = f"https://login.microsoftonline.com/{quote(tenant_id, safe='.-')}/oauth2/v2.0/token"
         data = {
             "grant_type": "client_credentials",
             "client_id": client_id,
@@ -64,9 +86,11 @@ class GraphClient:
 
         Returns a list of dicts with keys: id, displayName, webUrl.
         """
-        url = f"{GRAPH_BASE}/sites?search={query}"
+        url = f"{GRAPH_BASE}/sites"
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+            response = await client.get(
+                url, params={"search": query}, headers={"Authorization": f"Bearer {token}"}
+            )
         response.raise_for_status()
         return response.json().get("value", [])
 
@@ -79,11 +103,12 @@ class GraphClient:
         Returns the site dict (id, displayName, webUrl).
         Raises GraphAccessError if the site cannot be resolved.
         """
-        from urllib.parse import urlparse
         parsed = urlparse(site_url if site_url.startswith("http") else f"https://{site_url}")
         hostname = parsed.netloc or parsed.path.split("/")[0]
         path = parsed.path.rstrip("/") or "/"
-        url = f"{GRAPH_BASE}/sites/{hostname}:{path}"
+        if not _HOSTNAME_RE.match(hostname) or ".." in path.split("/"):
+            raise GraphAccessError(400, f"Invalid SharePoint site URL: {site_url!r}")
+        url = f"{GRAPH_BASE}/sites/{hostname}:{quote(path, safe='/-._~!,()')}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         if response.status_code != 200:
@@ -99,7 +124,7 @@ class GraphClient:
 
         Returns a list of dicts with keys: id, name, driveType.
         """
-        url = f"{GRAPH_BASE}/sites/{site_id}/drives"
+        url = f"{GRAPH_BASE}/sites/{_path_segment(site_id, 'site id')}/drives"
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         response.raise_for_status()
@@ -112,7 +137,7 @@ class GraphClient:
         Returns the drive metadata dict.
         Raises GraphAccessError if the drive cannot be reached.
         """
-        url = f"{GRAPH_BASE}/drives/{drive_id}"
+        url = f"{GRAPH_BASE}/drives/{_path_segment(drive_id, 'drive id')}"
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         if response.status_code != 200:
@@ -144,7 +169,7 @@ class GraphClient:
                 "id,name,file,folder,lastModifiedDateTime,deleted,"
                 "webUrl,parentReference,size,mimeType"
             )
-            url: str = f"{GRAPH_BASE}/drives/{drive_id}/root/delta?$select={fields}"
+            url: str = f"{GRAPH_BASE}/drives/{_path_segment(drive_id, 'drive id')}/root/delta?$select={fields}"
         else:
             url = delta_token  # stored token IS the full delta URL
 
@@ -188,12 +213,19 @@ class GraphClient:
 
         Follows redirects (Graph returns a short-lived redirect to the file).
         """
-        url = f"{GRAPH_BASE}/drives/{drive_id}/items/{item_id}/content"
+        url = (
+            f"{GRAPH_BASE}/drives/{_path_segment(drive_id, 'drive id')}"
+            f"/items/{_path_segment(item_id, 'item id')}/content"
+        )
         headers = {"Authorization": f"Bearer {token}"}
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             async with client.stream("GET", url, headers=headers) as response:
                 response.raise_for_status()
-                with open(dest_path, "wb") as f:
+                # File I/O runs in a worker thread so a large download never blocks the loop.
+                f = await asyncio.to_thread(open, dest_path, "wb")
+                try:
                     async for chunk in response.aiter_bytes():
-                        f.write(chunk)
+                        await asyncio.to_thread(f.write, chunk)
+                finally:
+                    await asyncio.to_thread(f.close)

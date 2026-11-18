@@ -7,7 +7,7 @@ import asyncio
 import json
 import time
 
-from services.silo_service import SiloService
+from services.silo_service import SiloService, ResourceIndexingError
 from services.silo_export_service import SiloExportService
 from services.silo_import_service import SiloImportService
 from models.silo import Silo
@@ -26,6 +26,7 @@ from utils.vector_db_immutability import assert_vector_db_type_immutable, assert
 from db.database import get_db
 
 from utils.logger import get_logger
+from utils.service_lifecycle import ServiceRetiredError
 
 
 SILO_NOT_FOUND_MSG = "Silo not found"
@@ -350,7 +351,8 @@ async def export_silo(
 
 @silos_router.post("/{silo_id}/search",
                    summary="Search documents in silo",
-                   tags=["Silos", "Playground"])
+                   tags=["Silos", "Playground"],
+                   responses={409: {"description": "A service used by this resource was retired"}})
 async def search_silo_documents(
     app_id: int,
     silo_id: int,
@@ -373,8 +375,8 @@ async def search_silo_documents(
         
         t0 = time.perf_counter()
         result = SiloService.search_silo_documents_router(
-            silo_id,
-            search_query.query,
+            silo_id, 
+            search_query.query, 
             search_query.filter_metadata,
             search_query.limit,
             search_query.search_type,
@@ -399,6 +401,9 @@ async def search_silo_documents(
         response.headers["X-Server-Time-Ms"] = str(elapsed_ms)
         return result
         
+    except ServiceRetiredError:
+        # Already logged once by the lifecycle guard; mapped to 409 by the global handler.
+        raise
     except HTTPException:
         logger.error("HTTPException in search_silo_documents, re-raising")
         raise
@@ -507,6 +512,7 @@ async def count_silo_documents(
     "/{silo_id}/resources/{resource_id}/reindex",
     summary="Reindex a single repository resource into this silo",
     tags=["Silos"],
+    responses={409: {"description": "A service used by this resource was retired"}},
 )
 async def reindex_silo_resource(
     app_id: int,
@@ -535,8 +541,17 @@ async def reindex_silo_resource(
         # event loop so it does not stall other requests on this worker.
         await asyncio.to_thread(SiloService.reindex_resource, resource)
         return {"message": f"Resource {resource_id} reindexed successfully", "resource_id": resource_id}
+    except ServiceRetiredError:
+        # Mapped to 409 by the global handler; already logged once by the lifecycle guard.
+        raise
     except ValueError as e:
+        # Includes ResourceNotIndexableError (no text / no embedding service): previous chunks are kept.
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except ResourceIndexingError as e:
+        if isinstance(e.__cause__, ServiceRetiredError):
+            raise e.__cause__ from None
+        # User-facing reason, also stored on the resource (e.g. the embedding service rejected its key).
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except Exception as e:
         logger.error(f"Error reindexing resource {resource_id}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reindex resource")

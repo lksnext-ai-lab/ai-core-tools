@@ -40,7 +40,7 @@ from tools.sandbox.provider import SandboxHandle
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def real_agent_and_conversation(test_engine):
     """A really-committed Agent + Conversation, cleaned up via cascade delete.
 
@@ -123,9 +123,12 @@ def real_agent_and_conversation(test_engine):
 
     cleanup_db = SessionLocal()
     try:
+        # The agent goes first (its conversations cascade); App never nulls Agent.app_id.
+        from repositories.agent_repository import AgentRepository
+        AgentRepository.delete_by_id(cleanup_db, agent_id)
         app_row = cleanup_db.query(App).filter(App.app_id == app_id).first()
         if app_row:
-            cleanup_db.delete(app_row)  # cascades to Agent -> Conversation
+            cleanup_db.delete(app_row)
             cleanup_db.commit()
     finally:
         cleanup_db.close()
@@ -144,7 +147,7 @@ def _load_conversation_from_db(conversation_id: int):
         verify_db.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def opensandbox_provider():
     """OpenSandboxProvider with the SDK boundary mocked — no real server needed.
 
@@ -187,7 +190,7 @@ def opensandbox_provider():
             yield provider
 
 
-@pytest.fixture()
+@pytest.fixture
 def sandbox_session_service():
     """A fresh SandboxSessionService instance (not the global singleton)."""
     return SandboxSessionService()

@@ -41,7 +41,7 @@ The standard each reliability/production finding is held against. Concrete, stac
 | # | Standard | Conforming pattern |
 |---|---|---|
 | I1 | **Tenant data isolation.** | Every query filtered by `app_id`; vector collections `silo_{id}`; signed static URLs scoped; no cross-tenant bleed via caches or the checkpointer. |
-| I2 | **Resource isolation / no noisy neighbor.** | Per-app rate limits (`App.agent_rate_limit`) and tier quotas (`TierConfig`) enforced on `/public/v1` and `/mcp/v1`; per-request timeouts; max payload/file size (`App.max_file_size_mb`). |
+| I2 | **Resource isolation / no noisy neighbor.** | Per-agent rate limits (`App.agent_rate_limit`, with an independent budget for each agent) and tier quotas (`TierConfig`) enforced on `/public/v1` and `/mcp/v1`; per-request timeouts; max payload/file size (`App.max_file_size_mb`). |
 | I3 | **Fault isolation.** | One tenant/agent/provider failure is contained — it does not degrade other tenants or take down the process. |
 | I4 | **Network isolation.** | Only Caddy publishes port 80; backend/DB/Qdrant stay on the internal network; CORS restricted to `App.agent_cors_origins` (never `*` in prod); secrets never sent to clients. |
 | I5 | **Runtime isolation / statelessness.** | App is stateless for horizontal scaling — no in-process mutable global that breaks across replicas; shared state lives in PostgreSQL/cache. |

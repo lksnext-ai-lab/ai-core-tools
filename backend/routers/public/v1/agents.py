@@ -9,6 +9,7 @@ from schemas.agent_schemas import (
     PublicAgentDetailSchema,
     PublicAgentsResponseSchema,
     PublicAgentResponseSchema,
+    PublicChatFilterFieldSchema,
     CreateAgentRequestSchema,
     CreateOCRAgentRequestSchema,
     UpdateAgentRequestSchema,
@@ -329,3 +330,40 @@ async def delete_agent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to delete agent",
         )
+
+
+# ==================== CHAT-TIME FILTER METADATA ====================
+
+
+@agents_router.get(
+    "/{agent_id}/chat-filters/{field_name}",
+    summary="Get distinct values for one chat-time filter field",
+    tags=["Agents"],
+    response_model=PublicChatFilterFieldSchema,
+)
+async def get_chat_filter_field_values(
+    app_id: int,
+    agent_id: int,
+    field_name: str,
+    api_key: Annotated[str, Depends(get_api_key_auth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Get the distinct values for a single metadata filter field the agent
+    designer exposed via exposed_chat_filters, aggregated across the agent's
+    own silo and all its subagents' silos. 404 if field_name is not one of
+    this agent's exposed filters. Use the returned values to build
+    search_params.filter before calling /call or /call/stream.
+    """
+    validate_api_key_for_app(app_id, api_key, db)
+    agent = validate_agent_ownership(db, agent_id, app_id)
+
+    agent_service = AgentService()
+    values = agent_service.get_chat_filter_field_values(db, agent, field_name)
+    if values is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Filter '{field_name}' not found for this agent",
+        )
+
+    return PublicChatFilterFieldSchema(field_name=field_name, values=values)

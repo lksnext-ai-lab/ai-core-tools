@@ -12,6 +12,10 @@ logger = get_logger(__name__)
 
 _provider_instance: Optional[EntraIDProvider] = None
 
+# Clock skew tolerated on exp/nbf/iat. 300 s matches Microsoft.IdentityModel's
+# default ClockSkew and is the maximum EntraIDConfig accepts.
+DEFAULT_LEEWAY_SECONDS = 300
+
 
 def get_entra_config() -> EntraIDConfig:
     """Build EntraIDConfig from environment variables.
@@ -51,7 +55,7 @@ def get_entra_config() -> EntraIDConfig:
         == "true",
         validate_issuer=os.getenv("ENTRA_VALIDATE_ISSUER", "true").lower()
         == "true",
-        leeway=int(os.getenv("ENTRA_LEEWAY", "0")),
+        leeway=int(os.getenv("ENTRA_LEEWAY", str(DEFAULT_LEEWAY_SECONDS))),
         api_version=os.getenv("ENTRA_API_VERSION", "v1.0"),
     )
 

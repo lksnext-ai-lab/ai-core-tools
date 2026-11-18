@@ -392,7 +392,7 @@ class SkillService:
         SkillService._validate_package_fields(skill_data)
         new_name, is_create = SkillService._normalize_target_name(existing, skill_data)
 
-        if is_create or new_name != existing.name:
+        if existing is None or new_name != existing.name:  # existing is None <=> is_create
             # Serialise per app so concurrent creates/renames cannot both pass the duplicate/quota checks.
             SkillRepository.lock_app_skills(db, app_id)
             clash = SkillRepository.get_by_name_and_app_id(db, new_name, app_id)

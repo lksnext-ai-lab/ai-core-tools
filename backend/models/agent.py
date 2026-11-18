@@ -1,9 +1,13 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, text
+from sqlalchemy import (
+    Column, Integer, String, Text, Boolean, ForeignKey, Table, DateTime, Float, Enum, JSON, text,
+    CheckConstraint, Index,
+)
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
+from models.middleware import AgentMiddleware
 
 
 class MarketplaceVisibility(enum.Enum):
@@ -65,6 +69,7 @@ class Agent(Base):
     type = Column(String(45), nullable=False, default='agent')
     status = Column(String(45))
     request_count = Column(Integer, default=0)
+    last_used_date = Column(DateTime, nullable=True)
     is_tool = Column(Boolean, default=False)
     service_id = Column(Integer,
                         ForeignKey('AIService.service_id', ondelete='SET NULL'),
@@ -91,6 +96,7 @@ class Agent(Base):
     rag_search_type = Column(String(45), default='similarity', nullable=False, server_default='similarity')
     rag_score_threshold = Column(Float, nullable=True)  # only used when rag_search_type='similarity_score_threshold'
     rag_fixed_filters = Column(JSON, nullable=True)     # list of {field, op, value} filter clauses applied on every retrieval
+    exposed_chat_filters = Column(JSON, default=list, nullable=False, server_default='[]')  # list of metadata field names the designer exposes as end-user chat-time dropdown filters
     rag_max_retrieval_calls = Column(Integer, nullable=True)  # NULL = legacy unbounded behaviour
 
     # Memory management via LangChain SummarizationMiddleware (when has_memory=True)
@@ -135,6 +141,20 @@ class Agent(Base):
         default=MarketplaceVisibility.UNPUBLISHED
     )
 
+    # A2A (Agent2Agent protocol) exposure (step_007; FR-3).
+    a2a_enabled = Column(Boolean, nullable=False, default=False, server_default='false')
+    a2a_card_visibility = Column(String(16), nullable=False, default='public', server_default='public')
+    a2a_name_override = Column(String(255), nullable=True)
+    a2a_description_override = Column(Text, nullable=True)
+    a2a_skill_tags = Column(JSON, nullable=False, default=list, server_default='[]')
+    a2a_examples = Column(JSON, nullable=False, default=list, server_default='[]')
+
+    __table_args__ = (
+        CheckConstraint("a2a_card_visibility IN ('public','api_key')", name='ck_agent_a2a_card_visibility'),
+        # Partial index: the A2A catalog/discovery query filters on app_id WHERE a2a_enabled.
+        Index('ix_agent_a2a_enabled_app', 'app_id', postgresql_where=text('a2a_enabled')),
+    )
+
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])
 
@@ -167,6 +187,14 @@ class Agent(Base):
     skill_associations = relationship('AgentSkill',
                                      primaryjoin=(agent_id == AgentSkill.agent_id),
                                      back_populates='agent')
+
+    # Middleware relationship
+    middleware_associations = relationship('AgentMiddleware',
+                                          primaryjoin=(agent_id == AgentMiddleware.agent_id),
+                                          back_populates='agent',
+                                          order_by=AgentMiddleware.order,
+                                          cascade='all, delete-orphan',
+                                          passive_deletes=True)
 
     # Marketplace profile (1:1)
     marketplace_profile = relationship(

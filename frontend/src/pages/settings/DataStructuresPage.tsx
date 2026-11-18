@@ -42,7 +42,7 @@ function DataStructuresPage() {
 
   // Load data structures from cache or API
   useEffect(() => {
-    loadDataStructures();
+    void loadDataStructures();
   }, [appId]);
 
   async function loadDataStructures() {

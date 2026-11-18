@@ -55,7 +55,7 @@ function CollaborationPage() {
     const loadData = async () => {
       await loadCollaborators(); // This will also load owner info
     };
-    loadData();
+    void loadData();
   }, [appId]);
 
   // Combine owner and collaborators whenever they change

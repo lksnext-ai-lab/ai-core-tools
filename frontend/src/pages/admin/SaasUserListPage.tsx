@@ -40,7 +40,7 @@ const SaasUserListPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchUsers();
+    void fetchUsers();
   }, [fetchUsers]);
 
   const handleTierOverride = async (userId: number, tier: string) => {

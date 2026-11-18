@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarClock, LoaderCircle, Pencil, PlayCircle } from 'luci
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { apiService, type Agent, type ScheduledTask, type ScheduledTaskRun } from '../services/api';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { ScheduledTaskResults } from '../components/scheduled-tasks/ScheduledTaskResults';
 import { conversationModeLabel, describeSchedule, formatDateTime } from '../components/scheduled-tasks/format';
 
@@ -73,6 +74,7 @@ export default function ScheduledTaskDetailPage() {
   const base = `/apps/${appId}/scheduled-tasks/${task.id}`;
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      <ServiceLifecycleAlert warnings={task.lifecycle_warnings} variant="full" />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <Link className="mb-3 inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600" to={`/apps/${appId}/scheduled-tasks`}>

@@ -9,6 +9,8 @@ const BACKEND_PATHS = [
   '/internal',
   '/public',
   '/mcp',
+  '/a2a',
+  '/.well-known/agent-card.json',
   '/static',
   '/docs',
   '/scalar',

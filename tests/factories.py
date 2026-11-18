@@ -21,6 +21,8 @@ from factory.alchemy import SQLAlchemyModelFactory
 from models.user import User
 from models.app import App
 from models.ai_service import AIService
+from models.embedding_service import EmbeddingService
+from models.sandbox_service import SandboxService
 from models.agent import Agent
 from models.api_key import APIKey
 from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
@@ -49,6 +51,7 @@ class UserFactory(BaseFactory):
     email = factory.Sequence(lambda n: f"user{n}@mattin-test.com")
     name = factory.Faker("name")
     is_active = True
+    platform_role = "editor"
     create_date = factory.LazyFunction(datetime.now)
 
 
@@ -83,6 +86,41 @@ class AIServiceFactory(BaseFactory):
     name = factory.Sequence(lambda n: f"AI Service {n}")
     provider = "OpenAI"
     api_key = "sk-test-key"  # pragma: allowlist secret
+    endpoint = None
+    app = factory.SubFactory(AppFactory)
+
+    @factory.lazy_attribute
+    def app_id(self):
+        return self.app.app_id if self.app else None
+
+
+# ---------------------------------------------------------------------------
+# EmbeddingService / SandboxService
+# ---------------------------------------------------------------------------
+
+class EmbeddingServiceFactory(BaseFactory):
+    class Meta:
+        model = EmbeddingService
+
+    name = factory.Sequence(lambda n: f"Embedding Service {n}")
+    provider = "OpenAI"
+    description = "text-embedding-3-small"  # model id
+    api_key = "sk-test-key"  # pragma: allowlist secret
+    endpoint = None
+    app = factory.SubFactory(AppFactory)
+
+    @factory.lazy_attribute
+    def app_id(self):
+        return self.app.app_id if self.app else None
+
+
+class SandboxServiceFactory(BaseFactory):
+    class Meta:
+        model = SandboxService
+
+    name = factory.Sequence(lambda n: f"Sandbox Service {n}")
+    provider = "opensandbox"
+    api_key = "sb-test-key"  # pragma: allowlist secret
     endpoint = None
     app = factory.SubFactory(AppFactory)
 
@@ -279,6 +317,8 @@ def configure_factories(session) -> None:
         UserFactory,
         AppFactory,
         AIServiceFactory,
+        EmbeddingServiceFactory,
+        SandboxServiceFactory,
         AgentFactory,
         APIKeyFactory,
         AppCollaboratorFactory,

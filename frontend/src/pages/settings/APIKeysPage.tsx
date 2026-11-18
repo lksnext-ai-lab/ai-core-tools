@@ -42,7 +42,7 @@ function APIKeysPage() {
 
   // Load API keys from cache or API
   useEffect(() => {
-    loadAPIKeys();
+    void loadAPIKeys();
   }, [appId]);
 
   async function loadAPIKeys() {

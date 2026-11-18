@@ -401,7 +401,7 @@ poetry run pytest -k "test_name" -v -s  # Single test with output
 
 **Key capabilities**:
 - Conventional Commits format: `type(scope): description`
-- Plain (unsigned) commits (`git commit`) — no GPG configured
+- GPG-signed commits (`git commit -S`) — never bypass signing; ask the user if it fails
 - Always pulls before pushing (`git pull origin <branch>`)
 - Uses `--body-file` for all `gh issue create` / `gh pr create` — never `--body` or heredoc
 - Multi-remote: `origin` (GitHub, primary) and `lks` (GitLab mirror, only on explicit request)

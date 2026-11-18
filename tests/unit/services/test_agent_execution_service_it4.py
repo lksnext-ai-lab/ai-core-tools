@@ -170,7 +170,6 @@ class TestPrepareTurnSandboxHandleCreation:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
@@ -208,7 +207,6 @@ class TestPrepareTurnSandboxHandleCreation:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", MagicMock()),
         ):
@@ -261,7 +259,6 @@ class TestPrepareTurnSandboxHandleCreation:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch(
                 "tools.sandbox.factory.resolve_provider_and_service_id",
                 return_value=(mock_provider, 42),
@@ -294,7 +291,6 @@ class TestPrepareTurnSandboxHandleCreation:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
             import asyncio
@@ -326,7 +322,6 @@ class TestPrepareTurnSandboxHandleCreation:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch(
                 "tools.sandbox.factory.resolve_provider_and_service_id",
                 side_effect=SandboxProviderUnavailableError("provider 'bogus' not registered"),
@@ -388,7 +383,6 @@ class TestPrepareTurnFilePush:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
@@ -441,7 +435,6 @@ class TestPrepareTurnFilePush:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(fake_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
@@ -486,7 +479,6 @@ class TestPrepareTurnFilePush:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(mock_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):
@@ -719,7 +711,6 @@ class TestRequiresFileSyncTruePath:
 
         with (
             patch("services.agent_execution_service.get_app_config", return_value={"TMP_BASE_FOLDER": str(tmp_path)}),
-            patch("services.agent_execution_service.AgentExecutionService._validate_agent_access", new=AsyncMock()),
             patch("tools.sandbox.factory.resolve_provider_and_service_id", return_value=(fake_provider, None)),
             patch("services.sandbox_session_service.sandbox_session_service", mock_sss),
         ):

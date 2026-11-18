@@ -37,7 +37,7 @@ You audit **Mattin AI** for the three reliability dimensions that decide whether
 
 - **Tenant isolation**: every resource scoped by `app_id` (data, vector collections `silo_{id}`, rate limits, CORS, max file size). No cross-tenant bleed through shared caches, the checkpointer, or signed-URL scope. (Coordinate with `security-auditor` on the authz angle.)
 - **Fault isolation**: one tenant/agent/provider failure must not degrade others; blast radius contained.
-- **Resource isolation / noisy neighbor**: per-app rate limits (`App.agent_rate_limit`) and quotas (`TierConfig`) actually enforced on `/public/v1` and `/mcp/v1`; per-request timeouts; max payload sizes.
+- **Resource isolation / noisy neighbor**: per-agent rate limits (`App.agent_rate_limit`, with an independent budget for each agent) and quotas (`TierConfig`) actually enforced on `/public/v1` and `/mcp/v1`; per-request timeouts; max payload sizes.
 - **Network isolation**: internal services reachable only via the Caddy ingress; no accidental public exposure of backend/DB/Qdrant; CORS not `*` in prod; secrets never on the wire to clients.
 - **Runtime isolation**: app is stateless for horizontal scaling (no in-process state that breaks across replicas); container resource requests/limits set in the Helm charts; no shared mutable global that two replicas would corrupt.
 

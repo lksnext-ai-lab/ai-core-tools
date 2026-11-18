@@ -17,7 +17,7 @@ from fastapi import HTTPException
 # Environment fixture
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(autouse=True)
 def saas_env(monkeypatch):
     """Set deployment mode to SaaS for all tests in this module."""
     monkeypatch.setenv("AICT_DEPLOYMENT_MODE", "saas")

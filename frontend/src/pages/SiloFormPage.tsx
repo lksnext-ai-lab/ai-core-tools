@@ -5,6 +5,8 @@ import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
 import { MESSAGES, errorMessage } from '../constants/messages';
 import SiloForm from '../components/forms/SiloForm';
+import type { ServiceLifecycleWarning } from '../types/services';
+import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
 // Define the Silo type
 interface VectorDbOption {
@@ -25,6 +27,10 @@ interface Silo {
   output_parsers?: { parser_id: number; name: string }[];
   embedding_services?: { service_id: number; name: string }[];
   vector_db_options?: VectorDbOption[];
+  transcription_service_id?: number | null;
+  video_ai_service_id?: number | null;
+  ai_services?: { service_id: number; name: string; supports_video?: boolean }[];
+  lifecycle_warnings?: ServiceLifecycleWarning[];
 }
 
 function SiloFormPage() {
@@ -161,6 +167,8 @@ function SiloFormPage() {
           <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
         </button>
       </div>
+
+      {silo && <ServiceLifecycleAlert warnings={silo.lifecycle_warnings} variant="full" />}
 
       {/* Silo Form */}
       <SiloForm

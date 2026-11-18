@@ -122,6 +122,43 @@ class MetadataValuesCacheService:
         return []
 
     @classmethod
+    def is_truncated(cls, values: list[str]) -> bool:
+        """True when *values* hit the sampling cap, so more values may exist."""
+        return len(values) >= _SAMPLING_LIMIT
+
+    @classmethod
+    def search_values(
+        cls,
+        silo_id: int,
+        field: str,
+        query: str,
+        limit: int,
+        db,
+    ) -> list[str]:
+        """Case-insensitive substring search over a silo's values for *field*.
+
+        Never cached: queries vary per keystroke. Returns an empty list on error.
+        """
+        try:
+            from services.silo_service import SiloService  # noqa: PLC0415
+
+            return SiloService.get_metadata_field_values(
+                silo_id=silo_id,
+                field=field,
+                limit=limit,
+                db=db,
+                contains=query,
+            )
+        except Exception as exc:
+            logger.warning(
+                "metadata_values_cache: search failed for silo=%d field=%r: %s",
+                silo_id,
+                field,
+                exc,
+            )
+            return []
+
+    @classmethod
     def invalidate(cls, silo_id: int) -> None:
         """Remove all cached entries for a silo.
 

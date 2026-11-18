@@ -92,6 +92,7 @@ interface SettingsCacheContextType {
   getSandboxServices: (appId: string) => SandboxService[] | null;
   setSandboxServices: (appId: string, services: SandboxService[]) => void;
   invalidateSandboxServices: (appId: string) => void;
+  invalidateSystemServiceCaches: () => void;
 
   // MCP Configs
   getMCPConfigs: (appId: string) => MCPConfig[] | null;
@@ -202,6 +203,15 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
       delete newSandboxServices[appId];
       return { ...prev, sandboxServices: newSandboxServices };
     });
+  }, []);
+
+  const invalidateSystemServiceCaches = useCallback(() => {
+    setCache(prev => ({
+      ...prev,
+      aiServices: {},
+      embeddingServices: {},
+      sandboxServices: {},
+    }));
   }, []);
 
   const setMCPConfigs = useCallback((appId: string, configs: MCPConfig[]) => {
@@ -317,6 +327,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     invalidateEmbeddingServices,
     setSandboxServices,
     invalidateSandboxServices,
+    invalidateSystemServiceCaches,
     setMCPConfigs,
     invalidateMCPConfigs,
     setSkills,
@@ -332,6 +343,7 @@ export const SettingsCacheProvider: React.FC<SettingsCacheProviderProps> = ({ ch
     setAPIKeys, invalidateAPIKeys,
     setEmbeddingServices, invalidateEmbeddingServices,
     setSandboxServices, invalidateSandboxServices,
+    invalidateSystemServiceCaches,
     setMCPConfigs, invalidateMCPConfigs,
     setSkills, invalidateSkills,
     setDataStructures, invalidateDataStructures,

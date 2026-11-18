@@ -12,7 +12,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def admin_headers(fake_user, db, monkeypatch):
     """
     Auth headers for fake_user promoted to OMNIADMIN via monkeypatch.
@@ -29,7 +29,7 @@ def admin_headers(fake_user, db, monkeypatch):
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def system_embedding_svc(db):
     """A system EmbeddingService (app_id=None) for use in tests."""
     from models.embedding_service import EmbeddingService

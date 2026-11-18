@@ -71,7 +71,7 @@ function SystemSettingsPage() {
   }, []);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
 
   const settingsByCategory = useMemo(() => {

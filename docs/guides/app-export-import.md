@@ -161,6 +161,7 @@ api_keys_json={"GPT-4 Service":"sk-..."}
 - All API keys are removed from exports. Supply them on import using `api_keys_json`.
 - MCP configs are sanitized to remove auth tokens.
 - Vectors, file contents, and conversations are not exported.
+- AI and embedding services carry their `end_of_service_at` and `deprecation_notice` through export and import (see [Service End of Service](chat-bot/kb-ai-services.md#service-end-of-service)). Sandbox service export/import is not implemented yet (the endpoints return `501`), so sandbox lifecycle fields are not carried.
 
 ## Demo App
 

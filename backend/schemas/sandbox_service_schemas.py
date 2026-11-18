@@ -2,6 +2,8 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from schemas.service_lifecycle_schemas import ServiceLifecycleFieldsMixin, ServiceLifecycleStatusLiteral
+
 
 # ==================== SANDBOX SERVICE SCHEMAS ====================
 
@@ -13,6 +15,9 @@ class SandboxServiceListItemSchema(BaseModel):
     created_at: Optional[datetime]
     needs_api_key: bool = False
     is_system: bool = False
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: ServiceLifecycleStatusLiteral = "active"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -35,11 +40,14 @@ class SandboxServiceDetailSchema(BaseModel):
     daytona_memory_gb: Optional[int] = None
     e2b_template: Optional[str] = None
     e2b_workspace: Optional[str] = None
+    end_of_service_at: Optional[datetime] = None
+    deprecation_notice: Optional[str] = None
+    lifecycle_status: ServiceLifecycleStatusLiteral = "active"
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateUpdateSandboxServiceSchema(BaseModel):
+class CreateUpdateSandboxServiceSchema(ServiceLifecycleFieldsMixin):
     """Schema for creating or updating a sandbox service"""
     name: str
     provider: str

@@ -1,7 +1,7 @@
 ---
 name: pr-integrator
 description: Integrates open PRs into develop following best practices. For each PR (from a @pr-triager report or a single PR number) it updates the branch from origin/develop, verifies CI is green, and squash-merges behind confirmation gates, deleting the branch after. On conflicts it can optionally delegate resolution to the matching expert subagent (backend/react/alembic) behind a confirmation gate plus a mandatory diff-review gate — never merges a resolution you have not approved. Runs gh/git directly.
-model: Claude Sonnet 5
+model: Claude Sonnet 5.5
 tools: [read, search, execute, agent]
 ---
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
-import { StreamingChatError, useStreamingChat } from '../../hooks/useStreamingChat';
+import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
 import MessageContent from './MessageContent';
 import StreamingMessage from './StreamingMessage';
@@ -9,9 +9,15 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import OrchestratorFilterDropdowns, { toSearchFilter } from './OrchestratorFilterDropdowns';
+import type { ChatFilterField, ChatFilterSelection } from './OrchestratorFilterDropdowns';
+import { SEARCH_RESULT_LIMIT } from './SearchableMultiSelect';
 import ToolHistoryPanel from './ToolHistoryPanel';
 import MediaUploadModal from './MediaUploadModal';
 import VideoPlayer from './VideoPlayer';
+import HitlApprovalCard from './HitlApprovalCard';
+import { useApprovalExpiryWatch } from '../../hooks/useApprovalExpiryWatch';
+import type { HitlDecision } from '../../types/streaming';
 import type { VideoTimestamp } from './VideoPlayer';
 
 interface Message {
@@ -38,6 +44,25 @@ interface RawAttachedFile {
   file_size_display?: string;
   has_extractable_content?: boolean;
   content_preview?: string;
+}
+
+/**
+ * Legacy "Filter by Metadata" panel sends its filter as the entire search_params
+ * root (a pre-existing bug, out of scope here — see SearchFilters.tsx). The new
+ * orchestrator dropdowns must be nested under a "filter" key per resolve_search_params.
+ * Merge defensively so neither panel clobbers the other if both happen to render.
+ */
+function buildSearchParams(
+  legacyFilter: Record<string, unknown> | undefined,
+  exposedSelection: ChatFilterSelection,
+): Record<string, unknown> | undefined {
+  const hasLegacyFilter = legacyFilter !== undefined && Object.keys(legacyFilter).length > 0;
+  const exposedFilter = toSearchFilter(exposedSelection);
+  if (!hasLegacyFilter && !exposedFilter) return undefined;
+  return {
+    ...(hasLegacyFilter ? legacyFilter : {}),
+    ...(exposedFilter ? { filter: exposedFilter } : {}),
+  };
 }
 
 interface ChatInterfaceProps {
@@ -76,6 +101,8 @@ function ChatInterface({
     undefined
   );
   const [filtersKey, setFiltersKey] = useState(0);
+  const [chatFilters, setChatFilters] = useState<ChatFilterField[]>([]);
+  const [exposedFilterValues, setExposedFilterValues] = useState<ChatFilterSelection>({});
   /** UI-only state to render the floating "scroll to bottom" button. Behaviour
    *  is driven by refs to avoid scroll-handler re-renders racing the streaming flush. */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -101,13 +128,28 @@ function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const playgroundStream = useCallback(
-    (message: string, opts: Parameters<typeof apiService.chatWithAgentStream>[3]) =>
-      apiService.chatWithAgentStream(appId, agentId, message, opts),
+    (message: string, opts: StreamFnOptions) => {
+      if (opts.resume) {
+        return apiService.decideApprovalStream(opts.resume.approvalId, opts.resume.decisions, {
+          onEvent: opts.onEvent,
+          signal: opts.signal,
+        });
+      }
+      return apiService.chatWithAgentStream(appId, agentId, message, opts);
+    },
     [appId, agentId],
   );
 
-  const { streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream, toolExecutionHistory, clearToolHistory } =
-    useStreamingChat(playgroundStream);
+  const {
+    streamingContent, activeTools, thinkingMessage, isStreaming, responseElapsedMs, sendMessage, abortStream,
+    toolExecutionHistory, clearToolHistory, settleAwaitingTools, pendingApproval, setPendingApproval,
+  } = useStreamingChat(playgroundStream);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [expiredApprovalId, setExpiredApprovalId] = useState<string | null>(null);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  // While a person can still answer, a new message would discard the paused turn.
+  const approvalBlocksInput =
+    pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
 
   // Hold streaming content visible briefly after isStreaming flips to false,
   // so the transition to the final committed message is seamless.
@@ -192,6 +234,7 @@ function ChatInterface({
       try {
         setIsLoadingHistory(true);
         setMessages([]);
+        setPendingApproval(null);
 
         if (currentConversationId) {
           const response = await apiService.getConversationWithHistory(currentConversationId);
@@ -199,6 +242,8 @@ function ChatInterface({
           if (response.session_id) {
             setCurrentSessionId(response.session_id);
           }
+          // Restore an approval the conversation is still waiting for (e.g. after a reload).
+          setPendingApproval(response.pending_approval ?? null);
 
           if (response.messages && response.messages.length > 0) {
             const loadedMessages: Message[] = response.messages.map(
@@ -248,8 +293,8 @@ function ChatInterface({
       }
     };
 
-    loadConversationHistory();
-    loadPersistentFiles();
+    void loadConversationHistory();
+    void loadPersistentFiles();
 
     // Load playground media if session exists
     if (currentSessionId) {
@@ -259,7 +304,20 @@ function ChatInterface({
     } else {
       setPlaygroundMedia([]);
     }
-  }, [appId, agentId, currentConversationId, currentSessionId]);
+  }, [appId, agentId, currentConversationId, currentSessionId, historyReloadKey]);
+
+  useApprovalExpiryWatch(
+    currentConversationId ? expiredApprovalId : null,
+    useCallback(async () => {
+      if (!currentConversationId) return null;
+      const response = await apiService.getConversationWithHistory(currentConversationId);
+      return response.pending_approval?.approval_id ?? null;
+    }, [currentConversationId]),
+    useCallback(() => {
+      setExpiredApprovalId(null);
+      setHistoryReloadKey((k) => k + 1);
+    }, []),
+  );
 
   // Poll for media processing status updates
   // Keep the interval alive across playgroundMedia updates by depending on a stable boolean.
@@ -333,10 +391,129 @@ function ChatInterface({
     }
   }, [metadataFields, filterMetadata]);
 
+  // Orchestrator-level exposed chat filters — aggregated across the agent's own
+  // silo + all its subagents' silos, for whatever field names the designer whitelisted.
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadChatFilters = async () => {
+      try {
+        const response = await apiService.getAgentChatFilters(appId, agentId);
+        if (isMounted) setChatFilters(response.filters || []);
+      } catch (error) {
+        console.error('Error loading chat filters:', error);
+        if (isMounted) setChatFilters([]);
+      }
+    };
+
+    void loadChatFilters();
+    setExposedFilterValues({});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [appId, agentId]);
+
+  const searchChatFilterValues = useCallback(
+    async (fieldName: string, query: string) => {
+      const response = await apiService.searchAgentChatFilterValues(
+        appId,
+        agentId,
+        fieldName,
+        query,
+        SEARCH_RESULT_LIMIT,
+      );
+      return response.values;
+    },
+    [appId, agentId],
+  );
+
   // ─── Message sending ─────────────────────────────────────────────────────────
+
+  /** Commit a finished turn as an agent message (nothing to commit while it awaits approval). */
+  const commitAgentResponse = (
+    rawResponse: string | Record<string, unknown>,
+    elapsedMs: number,
+    awaitingApproval: boolean,
+  ) => {
+    const responseContent: string =
+      typeof rawResponse === 'object' ? JSON.stringify(rawResponse, null, 2) : rawResponse || '';
+    if (awaitingApproval && !responseContent.trim()) {
+      setHoldStreamingContent(false);
+      return;
+    }
+    const agentMsgId = (Date.now() + 1).toString();
+    lastStreamedMsgIdRef.current = agentMsgId;
+    const agentMsg: Message = {
+      id: agentMsgId,
+      type: 'agent',
+      content: responseContent,
+      timestamp: new Date(),
+      elapsedMs,
+    };
+    // Commit the message and release the streaming hold in the same batch
+    setMessages((prev) => [...prev, agentMsg]);
+    setHoldStreamingContent(false);
+  };
+
+  const handleApprovalDecision = async (decisions: HitlDecision[]) => {
+    const approval = pendingApproval;
+    if (!currentConversationId || !approval) return;
+    resetScrollLock();
+    try {
+      setHoldStreamingContent(true);
+      const result = await sendMessage('', {
+        conversationId: currentConversationId,
+        resume: { approvalId: approval.approval_id, decisions },
+      });
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
+      await refreshFileList(currentConversationId);
+      onMessageSent?.();
+    } catch (error) {
+      setHoldStreamingContent(false);
+      // The decision was not applied: keep the request on screen so it can be answered again.
+      setPendingApproval(approval);
+      setMessages((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        type: 'error',
+        content: error instanceof Error ? error.message : 'The approval could not be sent',
+        timestamp: new Date(),
+      }]);
+    }
+  };
+
+  const handleApprovalCancel = async () => {
+    const approval = pendingApproval;
+    if (!approval) return;
+    setApprovalBusy(true);
+    try {
+      const result = await apiService.cancelApproval(approval.approval_id);
+      settleAwaitingTools('cancelled');
+      setPendingApproval(result.pending_approval);
+      commitAgentResponse(result.response, 0, result.pending_approval !== null);
+    } catch (error) {
+      setMessages((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        type: 'error',
+        content: error instanceof Error ? error.message : 'The request could not be cancelled',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
+
+  const handleApprovalExpire = useCallback(() => {
+    if (!pendingApproval) return;
+    settleAwaitingTools('expired');
+    setExpiredApprovalId(pendingApproval.approval_id);
+  }, [pendingApproval, settleAwaitingTools]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && persistentFiles.length === 0) return;
+    // The server resolves an expired approval within this turn; reloading the history
+    // mid-turn would drop the message being sent.
+    setExpiredApprovalId(null);
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -354,9 +531,7 @@ function ChatInterface({
     setTimeout(() => scrollToBottom('instant'), 50);
 
     try {
-      const hasFilters =
-        filterMetadata !== undefined && Object.keys(filterMetadata).length > 0;
-      const searchParams = hasFilters ? filterMetadata : undefined;
+      const searchParams = buildSearchParams(filterMetadata, exposedFilterValues);
 
       // Hold streaming content visible while we commit the final message
       setHoldStreamingContent(true);
@@ -366,24 +541,7 @@ function ChatInterface({
         searchParams,
       });
 
-      const rawResponse = result.response || '';
-      const responseContent: string =
-        typeof rawResponse === 'object'
-          ? JSON.stringify(rawResponse, null, 2)
-          : rawResponse;
-
-      const agentMsgId = (Date.now() + 1).toString();
-      lastStreamedMsgIdRef.current = agentMsgId;
-      const agentMsg: Message = {
-        id: agentMsgId,
-        type: 'agent',
-        content: responseContent,
-        timestamp: new Date(),
-        elapsedMs: result.elapsedMs,
-      };
-      // Commit the message and release the streaming hold in the same batch
-      setMessages((prev) => [...prev, agentMsg]);
-      setHoldStreamingContent(false);
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
 
       if (result.conversationId && !currentConversationId) {
         setCurrentConversationId(result.conversationId);
@@ -432,6 +590,7 @@ function ChatInterface({
       setCurrentSessionId(null);
       setFilterMetadata(undefined);
       setFiltersKey((prev) => prev + 1);
+      setExposedFilterValues({});
       clearToolHistory();
       onConversationReset?.();
     } catch (error) {
@@ -622,7 +781,7 @@ function ChatInterface({
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      if (canSend) handleSendMessage();
+      if (canSend) void handleSendMessage();
     }
   };
 
@@ -648,7 +807,9 @@ function ChatInterface({
   const hasMediaProcessing = playgroundMedia.some(
     (m) => m.status !== 'ready' && m.status !== 'error'
   );
-  const canSend = !isStreaming && !hasMediaProcessing && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
+  const canSend =
+    !isStreaming && !hasMediaProcessing && !approvalBlocksInput
+    && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   // ─── Video timestamp parsing ──────────────────────────────────────────────────
 
@@ -1096,6 +1257,15 @@ function ChatInterface({
                     thinkingMessage={thinkingMessage}
                   />
                 )}
+                {pendingApproval && !isStreaming && (
+                  <HitlApprovalCard
+                    approval={pendingApproval}
+                    disabled={approvalBusy}
+                    onDecide={(decisions) => void handleApprovalDecision(decisions)}
+                    onCancel={() => void handleApprovalCancel()}
+                    onExpire={handleApprovalExpire}
+                  />
+                )}
               </>
             )}
             <div ref={messagesEndRef} />
@@ -1133,6 +1303,23 @@ function ChatInterface({
 
           {/* Input area */}
           <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
+            {/* Orchestrator-level exposed chat filters — independent of the legacy
+                "Filter by Metadata" panel above, since orchestrators typically have
+                no own silo/metadataFields at all. Self-contained: owns its own
+                collapse state, active-filter chips, and container. Placed directly
+                above the composer (mirrors MarketplaceChatPage) so it stays visible
+                without scrolling and reads as "what will scope my next message". */}
+            {chatFilters.length > 0 && (
+              <div className="mb-3">
+                <OrchestratorFilterDropdowns
+                  filters={chatFilters}
+                  selected={exposedFilterValues}
+                  onChange={setExposedFilterValues}
+                  onSearchValues={searchChatFilterValues}
+                  disabled={isStreaming}
+                />
+              </div>
+            )}
             <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
               {/* File attach button */}
               <div>
@@ -1210,8 +1397,8 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={`Message ${agentName}...`}
-                disabled={isStreaming}
+                placeholder={approvalBlocksInput ? 'Answer the approval request to continue' : `Message ${agentName}...`}
+                disabled={isStreaming || approvalBlocksInput}
                 className="flex-1 py-2 bg-transparent border-none outline-none resize-none
                            text-sm text-gray-800 dark:text-gray-100
                            placeholder:text-gray-400 dark:placeholder:text-gray-500

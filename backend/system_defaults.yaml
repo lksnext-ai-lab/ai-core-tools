@@ -34,6 +34,12 @@ settings:
     category: "sandbox"
     description: "Maximum idle time in seconds before cached sandboxes are stopped or destroyed."
 
+  service_end_of_service_warning_days:
+    value: "30"
+    type: "integer"
+    category: "services"
+    description: "Days before an AI, embedding or sandbox service's end-of-service date during which it is shown as deprecated. 0 = no deprecated phase."
+
 # System (platform) skill packages, seeded create-if-missing on startup by
 # backend/services/system_skills_seeder.py. `path` is relative to backend/system_skills/.
 skills:
