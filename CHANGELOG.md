@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Library / client-project mode**: the frontend is no longer packaged or published as the `@lksnext/ai-core-tools-base` npm library. Removed `deploy/` (client-project scripts and template), the `build:lib` / `publish:npm` scripts and the library Vite/TypeScript build, `src/index.ts`, and the client-setup and plugin-development guides. The last published npm version (0.3.0) is left untouched. The app itself (`ExtensibleBaseApp` as app shell) is unchanged.
+
 ## [0.5.1] - 2026-11-18
 
 ### Breaking Changes

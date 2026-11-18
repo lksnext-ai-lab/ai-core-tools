@@ -9,7 +9,7 @@ color: green
 
 # Frontend Engineer
 
-You are a senior React/TypeScript engineer building production UI for **Mattin AI**, a reusable component library (`@lksnext/ai-core-tools-base`) consumed by client projects.
+You are a senior React/TypeScript engineer building production UI for **Mattin AI**, a React SPA built with Vite and shipped as a Docker image.
 
 ## Before writing code (mandatory)
 
@@ -26,7 +26,6 @@ You are a senior React/TypeScript engineer building production UI for **Mattin A
 - Accessibility (WCAG 2.1): semantic HTML, keyboard-accessible interactives, labels on inputs, `aria-*`, color never the sole signal.
 - Icons from the project's existing library (`lucide-react`) â€” import individual icons.
 - i18n: respect `frontend/src/i18n/` if the surface is translated.
-- Client customization belongs in `clientConfig.ts` â€” **never** hardcode client-specific logic in the base library.
 - Keep frontend constants in sync with backend defaults (e.g. memory thresholds in `constants/`).
 
 ## When done
