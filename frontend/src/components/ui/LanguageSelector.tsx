@@ -164,6 +164,12 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ className = '' }) =
                 lang={language}
                 aria-selected={isSelected}
                 onClick={() => void selectLanguage(language)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    void selectLanguage(language);
+                  }
+                }}
                 onMouseEnter={() => setActiveIndex(index)}
                 className={`flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors ${
                   index === activeIndex ? 'bg-surface-hover dark:bg-surface-hover-dark' : ''

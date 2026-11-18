@@ -24,6 +24,6 @@ export const Active: Story = { args: { status: 'active' } };
 export const Inactive: Story = { args: { status: 'inactive' } };
 export const Pending: Story = { args: { status: 'pending' } };
 export const Processing: Story = { args: { status: 'processing' } };
-export const Error: Story = { args: { status: 'error' } };
+export const ErrorStatus: Story = { name: 'Error', args: { status: 'error' } };
 export const Success: Story = { args: { status: 'success' } };
 export const Warning: Story = { args: { status: 'warning' } };
