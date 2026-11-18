@@ -1,4 +1,4 @@
-"""Validation of a chat selection against the App (spec ``app-flexible-chat``, AD-4).
+"""Validation of a chat selection against the App.
 
 ``ChatSelectionResolver.resolve`` is the only door through which a client-provided selection becomes a
 ``ResolvedChatConfig``. Every id is checked against the App (own resources, plus system AI services

@@ -587,6 +587,7 @@ async def test_chat_turn_with_sandbox_gets_code_interpreter_block_and_tools(tmp_
     assert repl.call_args.kwargs["session_key"] == "conv_7_55"
     call = h.graph_calls[0]
     assert "<code_interpreter>" in call["system_prompt"]
+    assert str(tmp_path) not in call["system_prompt"]  # never the server's absolute path in a Chat prompt
     assert {"python_repl", "Bash"} <= set(_tool_names(call))
     # load_skill receives the turn's handle/provider so it can materialise the skill in the sandbox.
     assert loader.call_args.kwargs["sandbox_handle"] is handle

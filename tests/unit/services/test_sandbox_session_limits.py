@@ -242,3 +242,11 @@ def test_a_turn_that_outlives_a_reset_does_not_resurrect_or_write_back_the_sandb
     svc.end_use("conv_1_9")  # the stale turn finishes
     assert svc.begin_use("conv_1_9") is False
     assert writes == [] and "conv_1_9" not in svc._sessions
+
+
+def test_destroy_all_for_agent_matches_the_anonymous_key_exactly():
+    svc, prov = mk()
+    for key in ("anon_1", "anon_10", "anon_19", "conv_1_5", "conv_10_5", "thread_1_x", "thread_12_x"):
+        open_(svc, prov, key, None)
+    svc.destroy_all_for_agent(1)
+    assert set(svc._sessions) == {"anon_10", "anon_19", "conv_10_5", "thread_12_x"}

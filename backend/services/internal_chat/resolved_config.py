@@ -21,6 +21,7 @@ imported by ``tools.agentTools``).
 """
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
@@ -63,16 +64,28 @@ class TurnDiagnostics:
     turns or users) and holds ids only.
     """
 
-    __slots__ = ("mcp_unavailable_ids", "before_model", "sandbox_degraded", "outputs_skipped")
+    __slots__ = (
+        "mcp_unavailable_ids", "before_model", "sandbox_degraded", "outputs_skipped",
+        "step_limit_reached", "model_calls", "tool_counts", "conversation_id", "turn_id", "renew_marker",
+    )
 
     def __init__(self) -> None:
         self.mcp_unavailable_ids: list[int] = []
         # Set by the Chat service: called (synchronously, never raising) right before the model runs.
         self.before_model: Callable[[], None] | None = None
+        # Set by the Chat service: renews the busy marker, returns False when the marker was lost (aborts the turn).
+        self.renew_marker: Callable[[], bool] | None = None
         # Set by ``_prepare_turn`` when the turn was configured with a code interpreter but could not get one.
         self.sandbox_degraded: bool = False
         # Output files the sandbox pull skipped (size / count / time limits, errors); 0 = nothing skipped.
         self.outputs_skipped: int = 0
+        # The turn ended with the graph step limit: the conversation / checkpoint / sandbox are kept.
+        self.step_limit_reached: bool = False
+        # Counts only (written by the chat tool-call log middleware; never names of arguments or outputs).
+        self.model_calls: int = 0
+        self.tool_counts: dict[str, int] = {}
+        self.conversation_id: int | None = None
+        self.turn_id: str = uuid.uuid4().hex[:8]  # short correlation id of this turn's log lines
 
     def run_before_model(self) -> None:
         """Run the ``before_model`` hook, if any (the execution / streaming services call this)."""

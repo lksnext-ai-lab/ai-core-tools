@@ -1,6 +1,6 @@
-"""Business logic of the flexible per-App Chat (spec ``app-flexible-chat``, AD-2/4/8/9).
+"""Business logic of the flexible per-App Chat.
 
-``InternalChatService`` sits between the (step 8) router and the execution stack. It owns:
+``InternalChatService`` sits between the router and the execution stack. It owns:
 
 * the hidden per-App internal chat agent (get-or-create, never mutated);
 * validating the client's selection BEFORE anything is created (no conversation / message / metrics
@@ -60,6 +60,10 @@ from services.internal_chat.system_prompt import get_internal_chat_system_prompt
 from services.internal_chat.turn_info import build_turn_info, match_turns_to_messages, snapshot_ids
 from services.service_lifecycle_service import ServiceLifecycleService
 from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
+from utils.logger import get_logger
+from utils.service_lifecycle import is_retired
+
+logger = get_logger(__name__)
 
 SANDBOX_DESTROY_TIMEOUT_S = 10.0  # bound of the off-loop sandbox destroy on conversation delete / reset
 _destroy_pool = None
@@ -73,10 +77,7 @@ def _destroy_executor():
 
         _destroy_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sandbox_destroy")
     return _destroy_pool
-from utils.logger import get_logger
-from utils.service_lifecycle import is_retired
 
-logger = get_logger(__name__)
 
 CALLER_TYPE_INTERNAL_CHAT = ApprovalChannel.INTERNAL_CHAT.name  # "INTERNAL_CHAT": agent_execution_caller_type label
 
@@ -84,9 +85,10 @@ CALLER_TYPE_INTERNAL_CHAT = ApprovalChannel.INTERNAL_CHAT.name  # "INTERNAL_CHAT
 # scheduled_task_id, hitl_conversation_id, source, ...) would change access, billing or channel rules.
 _ALLOWED_CONTEXT_KEYS = ("user_id", "email", "oauth", "token")
 
+DOWNLOAD_LINK_TTL_SECONDS = 300  # Chat download links are short-lived
+
 # Bounds of every transaction that takes the conversation-state lock (hook, reset): the code runs on a
 # synchronous session, so an unbounded lock wait would also freeze the event loop.
-DOWNLOAD_LINK_TTL_SECONDS = 300  # Chat download links are short-lived
 HOOK_LOCK_TIMEOUT_MS = 3000
 HOOK_STATEMENT_TIMEOUT_MS = 8000
 # A turn in flight owns its conversation for at most the agent run timeout plus a margin; a crashed turn
@@ -473,6 +475,7 @@ class InternalChatService:
         """
         conversation = self._load_conversation(app_id, conversation_id)
         agent_id, session_id = conversation.agent_id, conversation.session_id
+        self._release_db_connection()
         await self._destroy_sandbox_bounded(agent_id, conversation_id)  # the row is deleted next: nothing to keep
         ConversationService.release_conversation_resources(self.db, conversation)
         try:
@@ -516,6 +519,7 @@ class InternalChatService:
         # Snapshot BEFORE the locked transaction (it may await; the transaction below must not): the cleanup
         # after the commit removes exactly these ids, so a file uploaded after the commit survives.
         attachment_context = self._attachment_context(app_id)
+        self._release_db_connection()
         stale_file_ids = await self._attached_file_ids(agent_id, attachment_context, conversation_id)
         try:
             set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
@@ -544,6 +548,7 @@ class InternalChatService:
         await ChatAttachmentService.remove_many(stale_file_ids, agent_id, attachment_context, conversation_id)
         conversation = self.db.get(Conversation, conversation_id)
         if conversation is not None:
+            self._release_db_connection()
             confirmed = await self._destroy_sandbox_bounded(agent_id, conversation_id)
             ConversationService.release_conversation_resources(
                 self.db, conversation, session_id=old_session_id, clear_sandbox_state=confirmed
@@ -583,6 +588,7 @@ class InternalChatService:
         self._guard_new_activity(app_id)  # a frozen App takes no new chat activity (list/delete/download stay open)
         scope = self._attachment_scope(app_id, conversation_id)
         embedding_service_id, _ = self._attachment_indexing(app_id)
+        self._release_db_connection()  # file processing + indexing are slow: hold no pooled connection meanwhile
         return await ChatAttachmentService.upload(
             self.db,
             file,
@@ -709,7 +715,9 @@ class InternalChatService:
 
         # Right before the model runs the execution / streaming services call this: the marker then lasts a full
         # run from that moment, however long the preparation took. Never raises.
-        turn_config.diagnostics.before_model = lambda: self.renew_turn(claim)
+        turn_config.diagnostics.before_model = lambda: self._renew_or_abort(claim)
+        turn_config.diagnostics.renew_marker = lambda: self.renew_turn(claim)
+        self._release_db_connection()  # the turn's slow steps (files, indexing, the model) hold no connection
 
         async def hook(event: TurnCompleted) -> Optional[dict]:
             return await self.on_turn_completed(event, guard)
@@ -768,15 +776,38 @@ class InternalChatService:
             raise ChatResourceNotFoundError()
         raise ChatConversationBusyError()
 
-    def renew_turn(self, claim: Optional[TurnClaim]) -> None:
-        """Push the claim's expiry a full TTL ahead (right before the model runs). Synchronous, bounded by the local
-        timeouts, never raises: if it fails the marker simply keeps the expiry it had."""
-        if claim is None or claim.released:
-            return
+    def _release_db_connection(self) -> None:
+        """End the session's transaction (objects stay usable) so no pooled connection is held across a slow await.
+
+        ``expire_on_commit`` is off for the commit: the turn's already loaded objects must not become unusable (a
+        conversation deleted meanwhile would otherwise fail the finishing steps). Never raises.
+        """
         previous_expire = self.db.expire_on_commit
         try:
+            self.db.expire_on_commit = False
+            self.db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Chat: could not end the transaction before a slow step (%s)", type(exc).__name__)
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            self.db.expire_on_commit = previous_expire
+
+    def renew_turn(self, claim: Optional[TurnClaim]) -> bool:
+        """Push the claim's expiry a full TTL ahead. Synchronous, bounded by the local timeouts, never raises.
+
+        Returns False ONLY when the marker is no longer this turn's (lost: expired and taken over, or reset): the
+        caller must abort the turn. If the renewal merely fails, the marker keeps the expiry it had (True).
+        """
+        if claim is None or claim.released:
+            return True
+        previous_expire = self.db.expire_on_commit
+        still_ours = True
+        try:
             set_local_timeouts(self.db, HOOK_LOCK_TIMEOUT_MS, HOOK_STATEMENT_TIMEOUT_MS)
-            ChatConversationStateRepository.renew_busy(
+            still_ours = ChatConversationStateRepository.renew_busy(
                 self.db, claim.conversation_id, claim.token, BUSY_MARKER_TTL_SECONDS
             )
             # Keep the objects the turn has already loaded as they are: expiring them here would make a conversation
@@ -794,6 +825,15 @@ class InternalChatService:
                 pass
         finally:
             self.db.expire_on_commit = previous_expire
+        return still_ours
+
+    def _renew_or_abort(self, claim: Optional[TurnClaim]) -> bool:
+        """Renew the marker; abort the turn with CONVERSATION_BUSY when it was lost (someone else may be running)."""
+        if not self.renew_turn(claim):
+            logger.warning("Chat: the busy marker of conversation %s was lost; aborting the turn",
+                           claim.conversation_id if claim is not None else None)
+            raise ChatConversationBusyError()
+        return True
 
     def release_turn(self, claim: Optional[TurnClaim]) -> None:
         """Release this turn's claim. Synchronous on purpose (no ``await``: a cancelled task's ``finally`` may be
@@ -858,6 +898,8 @@ class InternalChatService:
         """
         if not prepared.created:
             return
+        if prepared.turn_config.diagnostics.step_limit_reached:
+            return  # the turn ran out of steps: keep the conversation, its checkpoint, files and sandbox
         conversation_id = prepared.conversation_id
         try:
             self.db.rollback()  # the failed turn may have left the session in an aborted transaction

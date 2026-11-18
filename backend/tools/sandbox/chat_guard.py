@@ -1,7 +1,7 @@
 """Per-turn guards that only the App Chat applies to the sandbox tools.
 
 * ``redacted_logs`` / ``describe_exc``: on a Chat turn a provider exception text (it can echo code, file names or
-  user data) never reaches the logs: only the exception class name does (NFR-11, same rule as
+  user data) never reaches the logs: only the exception class name does (same rule as
   ``utils.turn_failure_log``). Agents keep their current logging.
 * ``ChatSandboxLimits``: one execution budget shared by the REPL tools and ``Bash``, a Bash timeout cap and no
   background shells (the provider offers no reliable way to kill them when the turn ends).

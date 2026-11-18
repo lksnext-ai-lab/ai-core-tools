@@ -116,7 +116,7 @@ def _usage_from_messages(messages: list) -> tuple[Optional[int], Optional[int], 
 
 CHAT_CALLER_TYPE = "INTERNAL_CHAT"  # == chat_service.CALLER_TYPE_INTERNAL_CHAT
 # Codes whose text is built by our own code (never from provider/tool output).
-_SAFE_CHAT_ERROR_CODES = {"TIMEOUT", "CancelledError", "Cancelled", "SERVICE_RETIRED"}
+_SAFE_CHAT_ERROR_CODES = {"TIMEOUT", "CancelledError", "Cancelled", "SERVICE_RETIRED", "STEP_LIMIT_REACHED"}
 
 
 def _is_safe_chat_error(error_code: Optional[str]) -> bool:

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import ast
 import contextvars
 import functools
-import inspect
 import json
 import posixpath
 import shutil
@@ -31,6 +30,10 @@ from services.agent_execution_context import (
 )
 from services.agent_metrics_collector import AgentMetricsCollector
 from services.agent_metrics_recorder import record_agent_execution
+from langgraph.errors import GraphRecursionError
+from services.internal_chat.errors import (
+    STEP_LIMIT_ERROR_CODE, STEP_LIMIT_MESSAGE, ChatConversationBusyError, ChatStepLimitError,
+)
 from services.internal_chat.resolved_config import InternalChatSessionError
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from tools.ocrAgentTools import (
@@ -51,7 +54,9 @@ from utils.logger import get_logger
 from utils.turn_failure_log import chat_failure_summary, log_turn_failure
 from utils.service_lifecycle import ServiceRetiredError, agent_turn_context_kwargs, service_call_context
 from utils.config import get_app_config
-from utils.async_files import write_bytes, write_temp_file
+import config as settings
+from services.chat_attachment_service import ATTACHMENT_INDEXING_TIMEOUT_SECONDS
+from utils.async_files import write_temp_file
 from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
 from tools.sandbox.chat_guard import redacted_logs
 from models.hitl_approval import ApprovalChannel, ApprovalStatus, HITLApproval
@@ -154,13 +159,13 @@ class _LazySandboxHandle:
         # rebuild a provider with the same tenant credentials instead of
         # falling back to zero-credential env defaults.
         self.sandbox_service_id = sandbox_service_id
-        # step_020: optional hook invoked from get() right after a *fresh*
+        # optional hook invoked from get() right after a *fresh*
         # underlying SandboxHandle is resolved (first use, or recreation after
         # invalidate()). Takes the resolved SandboxHandle and re-activates
         # whatever this proxy's own "previously active" registry says should be
         # active — see _active_skill_registry below.
         self._skills_loader = skills_loader
-        # step_020: name -> skill_id of every skill successfully (or
+        # name -> skill_id of every skill successfully (or
         # degraded-but-usable) activated on THIS session, across however many
         # underlying SandboxHandle recreations happen *within a single turn*.
         # IMPORTANT (F4 carry-over): despite the "session" language, the scope
@@ -177,14 +182,13 @@ class _LazySandboxHandle:
         # session-keyed entry in `sandbox_session_service.py` (mirroring how
         # `SandboxHandle` itself is cached there) would close this gap, but
         # was judged too large to fold into this fix round without touching
-        # that module's locking/eviction logic — deferred, tracked in
-        # plan.md's step_020 carry-over notes.
+        # that module's locking/eviction logic — deferred.
         # Kept on the proxy — not SandboxHandle.active_skills, which lives on
         # the underlying handle and is empty again after every recreate — so
         # it is the durable source of truth get() replays against a fresh
         # handle *within this turn*.
         self._active_skill_registry: Dict[str, int] = {}
-        # step_020: name -> last re-activation error detail, so a future caller
+        # name -> last re-activation error detail, so a future caller
         # (e.g. tools/skill_tools.py, duck-typing this attribute) can surface a
         # re-activation failure on the next load_skill/read_skill_file result
         # instead of it being silently swallowed. Never raised/logged-only.
@@ -291,12 +295,12 @@ class _LazySandboxHandle:
             _sss.evict(self.session_key)
         except Exception:
             logger.debug(
-                "IT4: sandbox_session_service.evict failed for %s during invalidate()",
+                "sandbox_session_service.evict failed for %s during invalidate()",
                 self.session_key,
                 exc_info=not self._chat,
             )
         # Deliberately NOT clearing _active_skill_registry / skill_reactivation_errors
-        # here (step_020): that registry is what get() replays against the fresh
+        # here: that registry is what get() replays against the fresh
         # underlying handle the *next* time it materialises one — it must survive
         # exactly the recreation invalidate() sets up.
 
@@ -365,7 +369,7 @@ class _LazySandboxHandle:
                     raise
                 if self._provider.requires_file_sync:
                     self._prepare_remote_workspace(_sss)
-                # step_020: re-activate any skills this proxy previously activated on an
+                # re-activate any skills this proxy previously activated on an
                 # earlier (now-replaced) underlying handle — e.g. first materialisation
                 # after invalidate() following a SandboxExpiredError mid-conversation, or
                 # any other path producing a fresh SandboxHandle/sandbox_id. This must
@@ -373,7 +377,7 @@ class _LazySandboxHandle:
                 # (re)created sandbox with fewer skills active than the conversation had
                 # before.
                 #
-                # Lock-scope note (NFR-4b): this runs inside the same `with self._lock:`
+                # Lock-scope note: this runs inside the same `with self._lock:`
                 # as the remote-workspace prep above, which already does sandbox I/O
                 # under this lock. That's intentional, not an oversight: self._lock is
                 # scoped to *this one* _LazySandboxHandle, i.e. one conversation/session
@@ -417,7 +421,7 @@ class _LazySandboxHandle:
                         # since the recreated sandbox will simply appear to have no
                         # skills active, which self-heals on the next load_skill call.
                         logger.error(
-                            "step_020: sandbox expired while re-activating skills for "
+                            "sandbox expired while re-activating skills for "
                             "session %s; invalidating so the next get() call recreates "
                             "it cleanly: %s",
                             self.session_key,
@@ -428,7 +432,7 @@ class _LazySandboxHandle:
                         raise
                     except Exception as exc:
                         logger.error(
-                            "step_020: skills_loader raised while re-activating skills "
+                            "skills_loader raised while re-activating skills "
                             "for sandbox session %s: %s",
                             self.session_key,
                             self._exc_text(exc),
@@ -458,7 +462,7 @@ class _LazySandboxHandle:
                 }
             except Exception as snap_exc:
                 logger.warning(
-                    "IT4: could not snapshot remote files before turn (%s): %s",
+                    "could not snapshot remote files before turn (%s): %s",
                     self.session_key,
                     self._exc_text(snap_exc),
                 )
@@ -484,10 +488,10 @@ class _LazySandboxHandle:
                         )
                     remote_input_path = f"{_WORKSPACE_INPUT_DIR}/{filename}"
                     self._provider.write_file(self._handle, remote_input_path, raw)
-                    logger.debug("IT4: pushed '%s' into sandbox %s", filename, self.session_key)
+                    logger.debug("pushed '%s' into sandbox %s", filename, self.session_key)
                 except Exception as push_exc:
                     logger.warning(
-                        "IT4: failed to push file '%s' into sandbox %s: %s",
+                        "failed to push file '%s' into sandbox %s: %s",
                         filename,
                         self.session_key,
                         self._exc_text(push_exc),
@@ -564,7 +568,7 @@ class _LazySandboxProvider:
         expected_seconds = _skill_bootstrap_budget_seconds()
         with self._lease(expected_seconds=expected_seconds):
             result = self._provider.ensure_skill(resolved, *args, **kwargs)
-        # step_020: record a successful (or degraded-but-still-usable) activation on the
+        # record a successful (or degraded-but-still-usable) activation on the
         # long-lived proxy, not just the (recreation-volatile) underlying SandboxHandle —
         # this is what get() replays the next time this session's sandbox is recreated.
         # A "failed" result (e.g. a name collision, OQ-4) is deliberately never recorded.
@@ -601,7 +605,7 @@ class _LazySandboxProvider:
         # _LazySandboxHandle via __getattr__. No lease is taken: the default
         # implementation does no sandbox I/O, it only needs a real
         # SandboxHandle in hand for future per-provider overrides
-        # (step_018) that may branch on handle/metadata.
+        # that may branch on handle/metadata.
         resolved = self._resolve(handle)
         return self._provider.skills_root(resolved, *args, **kwargs)
 
@@ -710,7 +714,7 @@ def _reactivate_previous_skills(
                     "replayed lazily on the next load_skill call"
                 )
                 logger.warning(
-                    "step_020: re-activation budget exceeded for session %s — skipping "
+                    "re-activation budget exceeded for session %s — skipping "
                     "%d remaining skill(s) starting with '%s'",
                     lazy_handle.session_key,
                     len(previously_active) - idx,
@@ -733,7 +737,7 @@ def _reactivate_previous_skills(
                 # did) would let get() return/cache a handle already proven dead, with
                 # no guaranteed self-heal trigger on every code path.
                 logger.error(
-                    "step_020: sandbox expired while re-activating skill '%s' (id=%s) "
+                    "sandbox expired while re-activating skill '%s' (id=%s) "
                     "for session %s — aborting remaining re-activations: %s",
                     name,
                     skill_id,
@@ -745,7 +749,7 @@ def _reactivate_previous_skills(
                 raise
             except Exception as exc:
                 logger.error(
-                    "step_020: failed to re-activate skill '%s' (id=%s) after sandbox "
+                    "failed to re-activate skill '%s' (id=%s) after sandbox "
                     "recreation for session %s: %s",
                     name,
                     skill_id,
@@ -767,7 +771,7 @@ def _reactivate_previous_skills(
                     f"unexpected activation status: {status!r}"
                 )
                 logger.error(
-                    "step_020: re-activation of skill '%s' (id=%s) for session %s "
+                    "re-activation of skill '%s' (id=%s) for session %s "
                     "reported status=%r — %s",
                     name,
                     skill_id,
@@ -1133,6 +1137,13 @@ class AgentExecutionService:
             logger.error("Internal chat turn has no conversation session: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail="Chat session is not available")
         except Exception as e:
+            if isinstance(e, ChatConversationBusyError):
+                raise  # the busy marker was lost: mapped to 409 CONVERSATION_BUSY (+ Retry-After) at the edge
+            if turn_config is not None and ctx is not None and isinstance(e, GraphRecursionError):
+                # Out of graph steps: not a failure of the conversation. Keep it (and its checkpoint / sandbox),
+                # save what the sandbox already produced and answer with a stable, translatable error.
+                await self.handle_chat_step_limit(ctx, e)
+                raise ChatStepLimitError() from e
             log_turn_failure(
                 logger, "Error executing agent chat", e, chat_turn=turn_config is not None,
                 agent_id=agent_id, conversation_id=ctx.effective_conv_id if ctx is not None else conversation_id,
@@ -1560,6 +1571,8 @@ class AgentExecutionService:
         effective_conv_id = conversation_id or (
             conversation.conversation_id if conversation else None
         )
+        if turn_config is not None:
+            turn_config.diagnostics.conversation_id = effective_conv_id
 
         # 9. Resolve working directory
         app_config = get_app_config()
@@ -1609,8 +1622,7 @@ class AgentExecutionService:
                     _copy_exc,
                 )
 
-        # 11. Lazy sandbox session (IT-4)
-        # Derives a stable session key and binds a lazy handle/provider pair.
+        # 11. Lazy sandbox session: derive a stable session key and bind a lazy handle/provider pair.
         # The actual sandbox is created only when code execution first needs it.
         # Remote workspace setup and input-file push happen at that same
         # first-use boundary.
@@ -1700,7 +1712,7 @@ class AgentExecutionService:
                     # Defence in depth: the Chat key is ALWAYS per conversation.
                     raise InternalChatSessionError("Unexpected sandbox session key for a chat turn")
 
-                # step_020: reuse step_019's DB-bound payload-provider factory (the same
+                # reuse the DB-bound payload-provider factory (the same
                 # one tools/agentTools.py uses to wire create_skill_loader_tool) so the
                 # re-activation loader can rebuild a SkillPackagePayload for a skill_id
                 # without this module importing SkillPackageService/Repository directly.
@@ -1848,6 +1860,39 @@ class AgentExecutionService:
                 exc_info=True,
             )
 
+    async def _deliver_outputs_after_failure(self, ctx: AgentExecutionContext) -> None:
+        """Best effort, bounded, never raises: save the files the sandbox already produced when a turn fails.
+
+        A new turn's remote snapshot treats every file already in the sandbox as pre-existing, so a file written
+        before a failed turn would never be delivered by the next one. Same pull as a normal turn, then the files
+        are registered in the conversation.
+        """
+        try:
+            await self._pull_outputs(ctx)
+            output_dir = _ensure_local_workspace_layout(ctx.working_dir)["output"] if ctx.working_dir else None
+            if output_dir:
+                with redacted_logs(ctx.is_chat_turn):
+                    await FileManagementService().sync_output_files(
+                        working_dir=output_dir,
+                        agent_id=ctx.agent_id,
+                        user_context=ctx.user_context,
+                        conversation_id=str(ctx.effective_conv_id) if ctx.effective_conv_id else None,
+                        exclude_filenames=ctx.pre_existing_files,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not deliver sandbox outputs after a failed turn (%s)", type(exc).__name__)
+
+    async def handle_chat_step_limit(self, ctx: AgentExecutionContext, exc: BaseException) -> None:
+        """A Chat turn ended with ``GraphRecursionError``: keep everything, save outputs, log counts only."""
+        diag = ctx.turn_config.diagnostics
+        diag.step_limit_reached = True
+        logger.info(
+            "Chat turn reached the step limit: conversation_id=%s turn=%s model_calls=%d tool_calls=%d tools=%s (%s)",
+            diag.conversation_id, diag.turn_id, diag.model_calls, sum(diag.tool_counts.values()),
+            dict(sorted(diag.tool_counts.items())), type(exc).__name__,
+        )
+        await self._deliver_outputs_after_failure(ctx)
+
     def _release_turn_lease(self, ctx: AgentExecutionContext) -> None:
         """Release the Chat turn's sandbox lease taken at first materialisation (see ``_take_turn_lease``).
 
@@ -1890,7 +1935,7 @@ class AgentExecutionService:
 
         if sandbox_handle is None:
             if ctx.sandbox_provider is not None:
-                logger.debug("IT4: sandbox was never materialised this turn; no remote pull")
+                logger.debug("sandbox was never materialised this turn; no remote pull")
             return
         provider = ctx.sandbox_provider
         if provider is None or not ctx.working_dir or not provider.requires_file_sync:
@@ -1975,7 +2020,7 @@ class AgentExecutionService:
         response = raw_response
         files_data: List[Dict[str, Any]] = []
 
-        # 0 (IT-4). Pull new files from the remote sandbox into the local output dir BEFORE sync (bounded, in a
+        # 0. Pull new files from the remote sandbox into the local output dir BEFORE sync (bounded, in a
         # worker thread, never failing the answer). Streaming runs it before the finalize grace window; any
         # other caller gets it here.
         await self._pull_outputs(ctx)
@@ -2742,6 +2787,20 @@ class AgentExecutionService:
         from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
 
         loop = asyncio.get_running_loop()
+        deadline = None
+        if turn_config is not None:
+            budget = float(getattr(settings, "ATTACHMENT_INDEXING_TURN_BUDGET_S", 120) or 0)
+            deadline = monotonic() + budget if budget > 0 else None
+            # Indexing is slow I/O: do not hold the request's pooled connection while it runs. The objects the
+            # turn already loaded stay usable (``expire_on_commit`` off for this commit).
+            if db is not None:
+                _previous_expire = db.expire_on_commit
+                try:
+                    db.expire_on_commit = False
+                    db.commit()
+                finally:
+                    db.expire_on_commit = _previous_expire
+        skipped_for_budget = 0
         for file_data in processed_files:
             if not (
                 file_data.get("uploaded_this_turn")
@@ -2752,15 +2811,27 @@ class AgentExecutionService:
             if turn_config is not None:
                 from services.chat_attachment_service import ChatAttachmentService
 
+                remaining = None if deadline is None else deadline - monotonic()
+                if remaining is not None and remaining <= 0:
+                    skipped_for_budget += 1  # out of the turn's indexing budget: the file stays in the prompt
+                    continue
                 try:
                     await ChatAttachmentService.vectorize_in_worker(
                         app_id=agent.app_id, agent_id=agent.agent_id, session_id=session_id,
                         file_id=file_data["file_id"], filename=file_data["filename"],
                         file_path=file_data.get("file_path"), content=file_data["content"],
                         embedding_service_id=None,
+                        timeout=(
+                            ATTACHMENT_INDEXING_TIMEOUT_SECONDS if remaining is None
+                            else max(0.1, min(ATTACHMENT_INDEXING_TIMEOUT_SECONDS, remaining))
+                        ),
                     )
                 except Exception as e:  # noqa: BLE001  (a retired service too: the file stays in the prompt)
                     logger.warning("Vectorization of a chat turn file failed (%s)", type(e).__name__)
+                # A long step: renew the busy marker and stop at once if it was lost (another turn may be running).
+                renew = getattr(turn_config.diagnostics, "renew_marker", None)
+                if callable(renew) and renew() is False:
+                    raise ChatConversationBusyError()
                 continue
             try:
                 await loop.run_in_executor(
@@ -2779,6 +2850,8 @@ class AgentExecutionService:
                 )
             except Exception as e:
                 logger.warning(f"Vectorization of {file_data.get('filename')} failed: {e}")
+        if skipped_for_budget:
+            logger.info("Chat: %d file(s) left in the prompt: the turn's indexing budget was used up", skipped_for_budget)
 
     def _select_message_files(
         self,
@@ -2995,7 +3068,7 @@ class AgentExecutionService:
             )
 
             # Prepare configuration
-            config = prepare_agent_config(fresh_agent)
+            config = prepare_agent_config(fresh_agent, chat_turn=turn_config is not None)
 
             # Add session-specific configuration if memory is enabled
             config["configurable"]["thread_id"] = compute_thread_id(
@@ -3008,7 +3081,9 @@ class AgentExecutionService:
             config["configurable"]["question"] = message
 
             # Build the HumanMessage (handles text-only and multimodal images)
-            message_payload = build_human_message(fresh_agent, message, image_files or [], user_context)
+            message_payload = build_human_message(
+                fresh_agent, message, image_files or [], user_context, chat_turn=turn_config is not None
+            )
 
             # Attach LangSmith tracer + metadata when configured
             ls_settings = resolve_langsmith_settings(fresh_agent.app)
@@ -3059,6 +3134,13 @@ class AgentExecutionService:
             except ServiceRetiredError as exc:
                 status, error_code, error_message = "ERROR", "SERVICE_RETIRED", exc.message
                 raise
+            except GraphRecursionError as exc:
+                if turn_config is None:
+                    status, error_code = "ERROR", type(exc).__name__
+                    error_message = str(exc)[:2000]
+                    raise
+                status, error_code, error_message = "ERROR", STEP_LIMIT_ERROR_CODE, STEP_LIMIT_MESSAGE
+                raise  # mapped to ChatStepLimitError by the caller (it owns the turn context)
             except Exception as exc:
                 status, error_code = "ERROR", type(exc).__name__
                 # A Chat turn stores only the class chain + log correlation id (the text can echo the message).

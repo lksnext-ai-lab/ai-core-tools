@@ -1,7 +1,7 @@
 """Failure logging for agent turns that must never write message content to the logs.
 
 A provider error text can echo the prompt, and so can the message line of a traceback (also of
-chained ``__cause__`` / ``__context__`` exceptions). The flexible App chat (NFR-11) therefore logs only
+chained ``__cause__`` / ``__context__`` exceptions). The flexible App chat therefore logs only
 the exception class names, ids, a short correlation id and the traceback *frames* (file, line,
 function and source line carry code, never exception messages). Every other channel (playground,
 public API, ...) logs exactly as before. The same class chain + correlation id is what a Chat turn

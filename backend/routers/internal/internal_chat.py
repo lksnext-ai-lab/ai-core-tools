@@ -1,4 +1,4 @@
-"""Internal API of the flexible per-App Chat (spec ``app-flexible-chat``, AD-8).
+"""Internal API of the flexible per-App Chat.
 
 Mounted by ``routers/internal/apps.py`` under ``/internal/apps/{app_id}/chat``. HTTP only: every use case lives
 in ``InternalChatService`` and every endpoint requires at least the ``viewer`` role of the App (the dependency
@@ -47,6 +47,7 @@ from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from services.file_management_service import FileManagementService
 from services.internal_chat.chat_service import InternalChatService
+from services.internal_chat.errors import ChatStepLimitError, ChatTooManyFilesError
 from tools.stream_guard import guard_agent_stream
 from utils.error_handlers import ConflictError, NotFoundError
 from utils.error_handlers import ValidationError as AppValidationError
@@ -87,7 +88,7 @@ class _ChatRoute(APIRoute):
         async def mapped(request: Request) -> Response:
             try:
                 return await handler(request)
-            except (NotFoundError, AppValidationError, ConflictError) as exc:
+            except (NotFoundError, AppValidationError, ConflictError, ChatStepLimitError, ChatTooManyFilesError) as exc:
                 # Same body shape as the global ``ServiceRetiredError`` handler in ``main.py``
                 # (``detail`` + ``error_code``), so clients parse every Chat error alike.
                 return JSONResponse(
@@ -105,6 +106,15 @@ ViewerRole = Annotated[AppRole, Depends(require_min_role("viewer"))]
 AuthDep = Annotated[AuthContext, Depends(get_current_user_oauth)]
 DbDep = Annotated[Session, Depends(get_db)]
 FileSizeGuard = Annotated[None, Depends(enforce_file_size_limit)]
+
+
+def _enforce_file_cap(files: Optional[List[UploadFile]], file_references: Optional[List[str]]) -> None:
+    """422 when one message carries more files (new uploads + references) than ``CHAT_MAX_FILES_PER_TURN``."""
+    import config as settings
+
+    limit = int(getattr(settings, "CHAT_MAX_FILES_PER_TURN", 10) or 0)
+    if limit and len(files or []) + len(file_references or []) > limit:
+        raise ChatTooManyFilesError(limit)
 
 
 def _jwt_token(request: Request) -> Optional[str]:
@@ -338,6 +348,7 @@ async def chat_stream(
     chat_selection = _parse_selection(selection)
     parsed_file_references = _parse_file_references(file_references)
     parsed_search_params = _parse_search_params(search_params)
+    _enforce_file_cap(files, parsed_file_references)
     service = _service(db, auth_context, app_id, request)
     prepared = service.prepare_turn(app_id, chat_selection, conversation_id)
     turn_conversation_id = prepared.conversation_id  # plain value (the ORM conversation expires on commit)
@@ -469,6 +480,7 @@ async def chat_message(
     chat_selection = _parse_selection(selection)
     parsed_file_references = _parse_file_references(file_references)
     parsed_search_params = _parse_search_params(search_params)
+    _enforce_file_cap(files, parsed_file_references)
     service = _service(db, auth_context, app_id, request)
     prepared = service.prepare_turn(app_id, chat_selection, conversation_id)
     turn_conversation_id = prepared.conversation_id  # plain value (the ORM conversation expires on commit)

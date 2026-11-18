@@ -22,7 +22,7 @@ from utils.logger import get_logger
 
 from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
 from .builtin_tools import create_sandbox_builtin_tools
-from .chat_guard import ChatSandboxLimits, describe_exc, redacted_logs
+from .chat_guard import ChatSandboxLimits, redacted_logs
 
 logger = get_logger(__name__)
 

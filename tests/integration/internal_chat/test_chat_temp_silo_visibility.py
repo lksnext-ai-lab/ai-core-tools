@@ -460,3 +460,69 @@ def test_every_route_with_a_silo_or_repository_id_answers_404_for_a_temp_one(cli
         f"routes whose request validation fails before the visibility rule runs; add a valid body to GUARD_BODIES or "
         f"an allow-list entry with a reason: {unverified}"
     )
+
+
+# ------------------------------------------------------------------ output parsers and ids in request bodies
+
+_PARSER_PARAM = re.compile(r"\{[a-z_]*parser_id\}")
+
+
+def _temp_parser_id(db, scene):
+    from models.silo import Silo as _Silo
+
+    parser_id = db.get(_Silo, scene["temp_silo"]).metadata_definition_id
+    assert parser_id is not None, "the temp silo has no metadata parser: the guard would be vacuous"
+    return parser_id
+
+
+def test_every_route_with_a_parser_id_in_the_path_hides_a_temp_silos_parser(client, db, scene):
+    """The metadata parser of a temp silo (its name carries the session id) answers like a missing parser."""
+    parser = _temp_parser_id(db, scene)
+    found = []
+    for doc, prefix in (("/openapi-internal.json", "/internal"), ("/openapi-public.json", "/public/v1")):
+        for path, operations in client.get(doc).json()["paths"].items():
+            if _PARSER_PARAM.search(path) and ("/apps/{app_id}/" in path or "/app/{app_id}/" in path):
+                full = path if path.startswith(prefix) else prefix + path
+                found.extend((m.upper(), full, prefix) for m in operations if m in ("get", "put", "post", "patch"))
+    assert found, "no route with a parser id: the enumeration is broken"
+    offenders = []
+    for method, template, prefix in found:
+        headers = scene["alice"] if prefix == "/internal" else scene["api_key"]
+
+        def call(parser_id):
+            url = re.sub(r"\{app_id\}", str(scene["app_id"]), template)
+            url = _PARSER_PARAM.sub(str(parser_id), url)
+            r = client.request(method, url, headers=headers, json={"name": "x", "output_parser_id": parser_id})
+            body = re.sub(rf"\b({parser}|{MISSING_ID})\b", "<ID>", r.text)
+            return r.status_code, body
+
+        temp, missing = call(parser), call(MISSING_ID)
+        if temp != missing or temp[0] not in (400, 404, 405, 422):  # a rejection, never 200 / 5xx
+            offenders.append((method, template, temp, missing))
+    assert not offenders, offenders
+
+
+def test_ids_sent_in_agent_bodies_answer_the_same_for_temp_and_missing(client, db, scene):
+    """silo_id / output_parser_id in create / update bodies of the internal and public routers."""
+    app_id = scene["app_id"]
+    parser = _temp_parser_id(db, scene)
+    silo = scene["temp_silo"]
+    agent = AgentFactory(app=db.get(App, app_id))
+    db.commit()
+    cases = [
+        ("POST", f"/internal/apps/{app_id}/agents/0", scene["alice"]),
+        ("POST", f"/internal/apps/{app_id}/agents/{agent.agent_id}", scene["alice"]),
+        ("POST", f"/public/v1/app/{app_id}/agents/", scene["api_key"]),
+        ("PUT", f"/public/v1/app/{app_id}/agents/{agent.agent_id}", scene["api_key"]),
+    ]
+    offenders = []
+    for method, url, headers in cases:
+        for field, temp_id in (("silo_id", silo), ("output_parser_id", parser)):
+            def call(value):
+                r = client.request(method, url, headers=headers, json={"name": "probe-agent", field: value})
+                return r.status_code, re.sub(rf"\b({temp_id}|{MISSING_ID})\b", "<ID>", r.text)
+
+            temp, missing = call(temp_id), call(MISSING_ID)
+            if temp != missing or missing[0] not in (400, 404, 422):  # a rejection, never 200 / 5xx
+                offenders.append((method, url, field, temp, missing))
+    assert not offenders, offenders

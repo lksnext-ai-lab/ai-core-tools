@@ -16,10 +16,19 @@ since the agent that owns it stops existing; relabels any remaining
 agent_execution_event INTERNAL_CHAT -> INTERNAL_PLAYGROUND and recreates both
 enum types without the label.
 
+The downgrade also purges what the internal chat agents left behind, so nothing
+becomes visible to the old code: their hidden temp repositories
+(``_playground_{agent_id}_...``, matched by EXACT prefix), the temp silos, the
+metadata output parsers of those silos, the PGVector rows of the ``silo_{id}``
+collections and the LangGraph checkpoint rows of the conversations' threads (deleted by exact thread id; a thread whose
+conversation row is already gone is left, to avoid scanning the checkpoint tables). If
+any of those silos lives in Qdrant the downgrade REFUSES (RuntimeError): delete
+those collections first, then downgrade again. The purge is idempotent.
+
 Operational notes: the downgrade rewrites "Conversation" and agent_execution_event
 (column type change) under ACCESS EXCLUSIVE locks -- run it in a maintenance
-window. It does NOT purge LangGraph checkpoint rows or uploaded files that
-belong to the deleted chat conversations.
+window. It does NOT delete uploaded files on disk that belong to the deleted chat
+conversations.
 """
 
 from alembic import op
@@ -75,6 +84,85 @@ def _recreate_enum_without_label(bind, *, type_name, original_labels, table, col
             )
         )
     bind.execute(sa.text(f"DROP TYPE {old_type_name}"))
+
+
+def _table_exists(bind, name):
+    return bind.execute(sa.text("SELECT to_regclass(:n)"), {"n": name}).scalar() is not None
+
+
+def _purge_internal_agent_leftovers(bind):
+    """Remove the temp repositories / silos / parsers / vectors / checkpoints of every internal chat agent."""
+    agent_ids = [r[0] for r in bind.execute(sa.text("SELECT agent_id FROM \"Agent\" WHERE kind = 'internal_chat'"))]
+    if not agent_ids:
+        return
+    # Exact-prefix match: ``_`` is a LIKE wildcard (agent 3 would also match 30-39, 300-399...).
+    repos = bind.execute(
+        sa.text(
+            'SELECT r.repository_id, r.silo_id FROM "Repository" r '
+            'JOIN "Agent" a ON a.kind = \'internal_chat\' AND a.app_id = r.app_id '
+            "WHERE r.type = 'playground_media' "
+            "AND left(r.name, length('_playground_' || a.agent_id || '_')) = '_playground_' || a.agent_id || '_'"
+        )
+    ).fetchall()
+    repo_ids = sorted({r[0] for r in repos})
+    silo_ids = sorted({r[1] for r in repos if r[1] is not None})
+    if silo_ids:
+        qdrant = bind.execute(
+            sa.text('SELECT silo_id FROM "Silo" WHERE silo_id = ANY(:ids) AND upper(coalesce(vector_db_type, \'\')) = \'QDRANT\''),
+            {"ids": silo_ids},
+        ).fetchall()
+        if qdrant:
+            raise RuntimeError(
+                "ichat001 downgrade refused: the chat temp silos "
+                f"{sorted(r[0] for r in qdrant)} are stored in Qdrant. Delete their collections "
+                "(silo_<id>) first, then run the downgrade again."
+            )
+        names = [f"silo_{i}" for i in silo_ids]
+        if _table_exists(bind, "langchain_pg_collection") and _table_exists(bind, "langchain_pg_embedding"):
+            bind.execute(
+                sa.text(
+                    "DELETE FROM langchain_pg_embedding WHERE collection_id IN "
+                    "(SELECT uuid FROM langchain_pg_collection WHERE name = ANY(:n))"
+                ),
+                {"n": names},
+            )
+            bind.execute(sa.text("DELETE FROM langchain_pg_collection WHERE name = ANY(:n)"), {"n": names})
+    parser_ids = []
+    if silo_ids:
+        parser_ids = [
+            r[0] for r in bind.execute(
+                sa.text('SELECT metadata_definition_id FROM "Silo" WHERE silo_id = ANY(:ids) '
+                        "AND metadata_definition_id IS NOT NULL"), {"ids": silo_ids})
+        ]
+    if repo_ids:
+        bind.execute(sa.text('DELETE FROM "Media" WHERE repository_id = ANY(:r) OR silo_id = ANY(:s)'),
+                     {"r": repo_ids, "s": silo_ids or [0]})
+        bind.execute(sa.text('DELETE FROM "Resource" WHERE repository_id = ANY(:r)'), {"r": repo_ids})
+        bind.execute(sa.text('DELETE FROM "Folder" WHERE repository_id = ANY(:r)'), {"r": repo_ids})
+        bind.execute(sa.text('DELETE FROM "Repository" WHERE repository_id = ANY(:r)'), {"r": repo_ids})
+    if silo_ids:
+        bind.execute(sa.text('DELETE FROM "Silo" WHERE silo_id = ANY(:ids)'), {"ids": silo_ids})
+    if parser_ids:
+        bind.execute(sa.text('DELETE FROM "OutputParser" WHERE parser_id = ANY(:ids)'), {"ids": sorted(set(parser_ids))})
+    # LangGraph checkpoint rows of the internal agents' threads, by EXACT thread id (``thread_{agent_id}_{session_id}``
+    # built from their Conversation rows, plus the agent-wide ``thread_{agent_id}``): equality uses the leading key of
+    # the checkpoint primary keys, so there is no scan of the (large) checkpoint tables while ACCESS EXCLUSIVE locks
+    # are held. A thread whose Conversation row is already gone is NOT matched by a ``LIKE 'thread\_<id>\_%'`` sweep:
+    # that cannot use the index under a non-C collation (it would scan every checkpoint table), so such leftover rows
+    # of an internal agent stay behind (they are unreachable for the old code: no agent has that id any more).
+    thread_ids = [
+        r[0] for r in bind.execute(sa.text(
+            "SELECT 'thread_' || c.agent_id || '_' || c.session_id FROM \"Conversation\" c "
+            "JOIN \"Agent\" a ON a.agent_id = c.agent_id WHERE a.kind = 'internal_chat'"
+        ))
+    ] + [f"thread_{agent_id}" for agent_id in agent_ids]
+    for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        if _table_exists(bind, table):
+            for start in range(0, len(thread_ids), 1000):
+                bind.execute(
+                    sa.text(f"DELETE FROM {table} WHERE thread_id = ANY(:ids)"),
+                    {"ids": thread_ids[start:start + 1000]},
+                )
 
 
 def upgrade():
@@ -167,6 +255,8 @@ def downgrade():
     op.drop_index("ix_conversation_turn_user_id", table_name="conversation_turn")
     op.drop_index("ix_conversation_turn_app_id", table_name="conversation_turn")
     op.drop_table("conversation_turn")
+
+    _purge_internal_agent_leftovers(bind)
 
     # Conversations of the internal chat agent, then the agent itself. Its
     # hitl_approval / agent_execution_event / Conversation rows go by FK cascade.

@@ -196,6 +196,20 @@ class _SummarizationKeepingEarlierSummary(SummarizationMiddleware):
         )
 
 
+_fallback_warned = False
+
+
+def _warn_summarization_fallback(exc: BaseException) -> None:
+    """ONE warning (class name only) the first time the plain library summarization replaces our subclass."""
+    global _fallback_warned
+    if not _fallback_warned:
+        _fallback_warned = True
+        logger.warning(
+            "Summarization: the installed langchain no longer matches what the bounded-summary subclass reads (%s); "
+            "using the plain SummarizationMiddleware", type(exc).__name__,
+        )
+
+
 def _summarization(
     agent, llm, cfg: Optional[SummarizationConfig], chat_turn: bool = False
 ) -> Optional[SummarizationMiddleware]:
@@ -210,13 +224,23 @@ def _summarization(
     # An explicitly configured ``trim_tokens`` wins.
     limits = None if cfg.trim_tokens else summary_trim_limits(summary_llm, cfg.trigger_tokens, chat_turn)
     threshold, target = (cfg.trim_tokens, cfg.trim_tokens) if cfg.trim_tokens else (limits or (None, None))
-    return _SummarizationKeepingEarlierSummary(
-        model=summary_llm,
-        trigger=("tokens", cfg.trigger_tokens or default_trigger_tokens(llm)),
-        keep=("messages", cfg.keep_messages),
-        trim_tokens_to_summarize=threshold,
-        trim_target_tokens=target,
-    )
+    trigger = ("tokens", cfg.trigger_tokens or default_trigger_tokens(llm))
+    keep = ("messages", cfg.keep_messages)
+    try:
+        return _SummarizationKeepingEarlierSummary(
+            model=summary_llm,
+            trigger=trigger,
+            keep=keep,
+            trim_tokens_to_summarize=threshold,
+            trim_target_tokens=target,
+        )
+    except (AttributeError, TypeError, NameError) as exc:
+        # The subclass reads private names of the installed langchain (``_summary_model`` and friends). If one was
+        # renamed, an agent with memory must still be built: use the plain library middleware.
+        _warn_summarization_fallback(exc)
+        return SummarizationMiddleware(
+            model=summary_llm, trigger=trigger, keep=keep, trim_tokens_to_summarize=threshold,
+        )
 
 
 def _pii(agent, llm, cfg: PIIConfig) -> List[Any]:
@@ -261,6 +285,7 @@ def build_agent_middlewares(
     chat_turn: bool = False,
     service_id: Optional[int] = None,
     model_name: Optional[str] = None,
+    turn_diagnostics: Any = None,
 ) -> List[Any]:
     """Return the ordered middleware list for ``create_agent``.
 
@@ -314,6 +339,10 @@ def build_agent_middlewares(
             service_id=service_id,
             model_name=model_name,
         ))
+        if turn_diagnostics is not None:
+            from tools.middleware.chat_tool_log import ChatToolCallLogMiddleware
+
+            chain.append(ChatToolCallLogMiddleware(turn_diagnostics))
 
     if configured:
         logger.info("Agent %s middleware chain: %s", agent.agent_id, [m.name for m in chain])

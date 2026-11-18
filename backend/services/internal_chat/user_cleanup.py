@@ -13,7 +13,7 @@ transaction) and never commits early:
    and the LangGraph thread of each of them. A failure here is logged with ids only; the user is already gone.
 """
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,13 +35,22 @@ class StagedChatConversation:
     session_id: str
 
 
-def stage_user_chat_conversations(db: Session, user_id: int) -> List[StagedChatConversation]:
-    """Delete the user's Chat conversation rows in the CURRENT transaction (no commit) and return what is left to clean."""
-    rows = db.execute(
+def stage_user_chat_conversations(
+    db: Session, user_id: int, app_id: Optional[int] = None
+) -> List[StagedChatConversation]:
+    """Delete the user's Chat conversation rows in the CURRENT transaction (no commit) and return what is left to clean.
+
+    With ``app_id`` only that App's conversations (a collaborator removed from / leaving one App); without it all of
+    the user's Chat conversations (the user is deleted).
+    """
+    query = (
         select(Conversation.conversation_id, Conversation.agent_id, Agent.app_id, Conversation.session_id)
         .join(Agent, Agent.agent_id == Conversation.agent_id)
         .where(Conversation.user_id == user_id, Conversation.source == ConversationSource.INTERNAL_CHAT)
-    ).all()
+    )
+    if app_id is not None:
+        query = query.where(Agent.app_id == app_id)
+    rows = db.execute(query).all()
     staged = [StagedChatConversation(*row) for row in rows]
     for item in staged:
         conversation = db.get(Conversation, item.conversation_id)

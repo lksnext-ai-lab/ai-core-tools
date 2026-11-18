@@ -579,7 +579,11 @@ async def create_agent(
         system_prompt_content = (
             system_prompt_content
             + "\n\n<workspace>\n"
-            + f"Working directory: {working_dir}\n"
+            + (
+                # Chat: never the server's absolute path; the tools take relative workspace paths.
+                "Working directory: the workspace (use relative paths)\n" if surface.is_chat
+                else f"Working directory: {working_dir}\n"
+            )
             + "Workspace layout:\n"
             + "- input/: user-provided files. Treat these as source material.\n"
             + "- work/: scratch files, scripts, dependencies, extracted content, and intermediate data.\n"
@@ -638,6 +642,7 @@ async def create_agent(
             agent, llm, ignore_agent_middlewares=True, chat_turn=True,
             # Frozen snapshot of the turn (never the ORM service, which expires after the pre-run commit).
             service_id=turn_config.ai_service_id, model_name=turn_config.ai_service_model,
+            turn_diagnostics=turn_config.diagnostics,
         )
         if surface.ignore_agent_middlewares
         else build_agent_middlewares(agent, llm)
@@ -962,37 +967,38 @@ async def create_agent(
 
 
 _DEFAULT_RECURSION_LIMIT = 50
+_DEFAULT_CHAT_RECURSION_LIMIT = 100
 
 
-def _load_recursion_limit() -> int:
-    """Read AICT_AGENT_RECURSION_LIMIT from the environment once at module load.
+def _load_recursion_limit(name: str = "AICT_AGENT_RECURSION_LIMIT", default: int = _DEFAULT_RECURSION_LIMIT) -> int:
+    """Read a graph step limit from the environment once at module load.
 
-    Logs a WARNING and falls back to 50 when the value is absent, non-integer, or
-    below 1 (LangGraph requires recursion_limit >= 1; a value < 1 fails every turn).
+    Logs a WARNING and falls back to ``default`` when the value is absent, non-integer, or below 1
+    (LangGraph requires recursion_limit >= 1; a value < 1 fails every turn).
     """
-    raw = os.getenv("AICT_AGENT_RECURSION_LIMIT")
+    raw = os.getenv(name)
     if raw is None:
-        return _DEFAULT_RECURSION_LIMIT
+        return default
     try:
         value = int(raw)
     except (ValueError, TypeError):
         logger.warning(
-            "prepare_agent_config: AICT_AGENT_RECURSION_LIMIT=%r is not a valid integer; "
-            "using default %d",
-            raw, _DEFAULT_RECURSION_LIMIT,
+            "prepare_agent_config: %s=%r is not a valid integer; using default %d", name, raw, default,
         )
-        return _DEFAULT_RECURSION_LIMIT
+        return default
     if value < 1:
         logger.warning(
-            "prepare_agent_config: AICT_AGENT_RECURSION_LIMIT=%r is < 1 (invalid); "
-            "using default %d",
-            raw, _DEFAULT_RECURSION_LIMIT,
+            "prepare_agent_config: %s=%r is < 1 (invalid); using default %d", name, raw, default,
         )
-        return _DEFAULT_RECURSION_LIMIT
+        return default
     return value
 
 
 AICT_AGENT_RECURSION_LIMIT: int = _load_recursion_limit()
+# App Chat turns run long tool chains (retrieval, skills, sandbox code): their own, higher limit. Sizing: one
+# model call that uses a tool costs 3 graph steps in the Chat's middleware chain (summarization check, model, tools),
+# so 100 steps are about 33 model calls with tools (the agent default of 50 is about 16).
+AICT_CHAT_RECURSION_LIMIT: int = _load_recursion_limit("AICT_CHAT_RECURSION_LIMIT", _DEFAULT_CHAT_RECURSION_LIMIT)
 
 
 def _resolve_and_build_retriever_tool(agent, caller_search_params, silo=None):
@@ -1088,13 +1094,13 @@ def _tag_untyped_tools(tools: List[Any]) -> None:
             _tag_tool(tool, "BUILTIN")
 
 
-def prepare_agent_config(agent):
-    """Helper function to prepare agent configuration."""
+def prepare_agent_config(agent, chat_turn: bool = False):
+    """Helper function to prepare agent configuration (``chat_turn``: the App Chat's own step limit)."""
     config = {
         "configurable": {
             "thread_id": compute_thread_id(agent)
         },
-        "recursion_limit": AICT_AGENT_RECURSION_LIMIT,
+        "recursion_limit": AICT_CHAT_RECURSION_LIMIT if chat_turn else AICT_AGENT_RECURSION_LIMIT,
     }
     return config
 
@@ -1130,11 +1136,15 @@ def parse_agent_response(response_text, agent):
     return response_text
 
 
+_CHAT_IMAGE_IDENTITY = "chat-image"  # opaque identity bound into the signed URL of a Chat image
+
+
 def build_human_message(
     agent: Agent,
     message: str,
     image_files: List[Dict],
     user_context: Optional[Dict] = None,
+    chat_turn: bool = False,
 ) -> HumanMessage:
     """Build the HumanMessage that will be fed into the agent chain.
 
@@ -1149,6 +1159,9 @@ def build_human_message(
             if applicable).
         image_files: List of image-file dicts (``file_path`` key required).
         user_context: Caller context dict used to generate signed URLs.
+        chat_turn: App Chat. The URL ends up in the checkpoint and is replayed to every later turn and to the model
+            provider, so it must stay valid (an expiring URL would break the history) but must not carry the
+            user's email: it is signed with an opaque identity instead.
 
     Returns:
         A ``HumanMessage`` instance ready for ``agent_chain.ainvoke()`` /
@@ -1180,7 +1193,7 @@ def build_human_message(
             # Production mode — generate a signed static URL
             aict_base_url = aict_base_url.rstrip("/")
             user_email: Optional[str] = (
-                user_context.get("email") if user_context else None
+                _CHAT_IMAGE_IDENTITY if chat_turn else (user_context.get("email") if user_context else None)
             )
             if user_email:
                 from utils.security import generate_signature
@@ -1193,7 +1206,8 @@ def build_human_message(
             else:
                 url = f"{aict_base_url}/static/{file_path}"
 
-            logger.info("Adding image to message using signed URL: %s", url)
+            # Never log the URL: it carries a signature (and, outside the Chat, the user's email).
+            logger.info("Adding image to message using a signed URL (file_id=%s)", img.get("file_id"))
             content.append({"type": "image_url", "image_url": {"url": url}})
         else:
             # Development mode — inline as base64 data URI

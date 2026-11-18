@@ -706,10 +706,9 @@ class SandboxSessionService:
             A live ``SandboxHandle``.
 
         Raises:
-            SandboxCapacityError: If the global concurrent-session cap
-                (``SANDBOX_MAX_CONCURRENT_SESSIONS``), or the owner's user / App
-                limit with nothing idle to evict, has been reached and a new
-                sandbox would need to be created.
+            SandboxCapacityError: If the global concurrent-session cap, or the
+                owner's per-user / per-App limit with nothing idle to evict, has
+                been reached and a new sandbox would need to be created.
         """
         switched = None
         with self._lock:
@@ -1249,9 +1248,10 @@ class SandboxSessionService:
         Called when an agent is deleted.  Matches all key patterns:
         ``conv_{agent_id}_*``, ``thread_{agent_id}_*``, and ``anon_{agent_id}``.
         """
-        prefixes = (f"conv_{agent_id}_", f"thread_{agent_id}_", f"anon_{agent_id}")
+        prefixes = (f"conv_{agent_id}_", f"thread_{agent_id}_")
+        anonymous = f"anon_{agent_id}"  # no separator after the id: an exact match (``anon_1`` is not ``anon_10``)
         with self._lock:
-            matching = [k for k in self._sessions if any(k.startswith(p) for p in prefixes)]
+            matching = [k for k in self._sessions if k == anonymous or any(k.startswith(p) for p in prefixes)]
             entries = {k: self._sessions.pop(k) for k in matching}
 
         for key, entry in entries.items():

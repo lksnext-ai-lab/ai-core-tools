@@ -1,4 +1,4 @@
-"""Pure helpers: per-turn snapshot -> ``ChatTurnInfo``, and pairing turns with history messages (AD-9).
+"""Pure helpers: per-turn snapshot -> ``ChatTurnInfo``, and pairing turns with history messages.
 
 No database access here, so everything is unit-testable with plain objects.
 """

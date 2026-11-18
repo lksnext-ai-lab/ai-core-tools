@@ -1,9 +1,9 @@
-"""Data access of the flexible per-App Chat (spec ``app-flexible-chat``, AD-2 / AD-7 / AD-9).
+"""Data access of the flexible per-App Chat.
 
 Data only: no business rules. Write methods ``flush`` but never ``commit`` (the service owns the
 transaction, and the turn-completion hook runs inside a SAVEPOINT that must not be committed from
 inside) -- the single exception is :meth:`InternalChatAgentRepository.get_or_create`, which commits
-by design (AD-2) so the race loser re-reads the winner's row.
+by design so the race loser re-reads the winner's row.
 """
 import uuid
 from datetime import datetime, timedelta
@@ -64,7 +64,7 @@ class InternalChatAgentRepository:
 
     @staticmethod
     def get_or_create(db: Session, app_id: int, system_prompt: str) -> int:
-        """Return the App's internal chat agent id, creating the row when missing (AD-2).
+        """Return the App's internal chat agent id, creating the row when missing.
 
         ``INSERT .. ON CONFLICT DO NOTHING`` on the partial unique index ``uq_agent_internal_chat_per_app``
         followed by a re-SELECT: concurrent first uses converge on one row and nobody sees an
@@ -135,7 +135,10 @@ class InternalChatAgentRepository:
                 .join(Agent, and_(Agent.app_id == Repository.app_id, Agent.kind == "internal_chat"))
                 .where(
                     Repository.type == PLAYGROUND_MEDIA_REPO_TYPE,
-                    Repository.name.startswith(func.concat(TEMP_REPO_PREFIX, Agent.agent_id, "_")),
+                    # Exact prefix compare, NOT LIKE / startswith: ``_`` is a LIKE wildcard, so agent 3's prefix would
+                    # also match the temp repositories of agents 30-39, 300-399...
+                    func.left(Repository.name, func.length(func.concat(TEMP_REPO_PREFIX, Agent.agent_id, "_")))
+                    == func.concat(TEMP_REPO_PREFIX, Agent.agent_id, "_"),
                     Repository.create_date < older_than,
                     ~live,
                 )

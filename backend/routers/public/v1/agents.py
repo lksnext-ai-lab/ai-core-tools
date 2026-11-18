@@ -20,6 +20,7 @@ from .auth import get_api_key_auth, validate_api_key_for_app, validate_agent_own
 from models.ai_service import AIService
 from models.silo import Silo
 from repositories.silo_repository import SiloRepository
+from repositories.output_parser_repository import OutputParserRepository
 from models.output_parser import OutputParser
 
 from utils.logger import get_logger
@@ -69,6 +70,7 @@ def _validate_referenced_resources(db: Session, agent_dict: dict, app_id: int):
         parser = db.query(OutputParser).filter(
             OutputParser.parser_id == output_parser_id,
             OutputParser.app_id == app_id,
+            OutputParserRepository.visible_clause(),  # never the metadata parser of a hidden conversation temp silo
         ).first()
         if not parser:
             raise HTTPException(

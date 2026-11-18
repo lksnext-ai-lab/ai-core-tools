@@ -127,6 +127,11 @@ SANDBOX_EVICT_MIN_IDLE_S = max(0, int(os.getenv('SANDBOX_EVICT_MIN_IDLE_S', '60'
 # tools and Bash, and has no background shells.
 SANDBOX_CHAT_BASH_MAX_TIMEOUT_S = max(1, int(os.getenv('SANDBOX_CHAT_BASH_MAX_TIMEOUT_S', '60')))
 
+# App Chat attachments: total time one turn may spend indexing its uploads (seconds; 0 = unlimited; keep it well
+# under the busy-marker TTL) and the maximum number of files one turn may carry (0 = unlimited).
+ATTACHMENT_INDEXING_TURN_BUDGET_S = max(0.0, float(os.getenv('ATTACHMENT_INDEXING_TURN_BUDGET_S', '120')))
+CHAT_MAX_FILES_PER_TURN = max(0, int(os.getenv('CHAT_MAX_FILES_PER_TURN', '10')))
+
 # Maximum number of OpenSandbox code contexts created per language in one
 # sandbox. Values above 1 allow parallel tool executions without sharing a busy
 # interpreter session.

@@ -1,4 +1,4 @@
-"""Schemas of the flexible per-App Chat (spec ``app-flexible-chat``, AD-4 / AD-8).
+"""Schemas of the flexible per-App Chat.
 
 Selection, per-turn snapshot (``ChatTurnInfo``) and options payload come first; the request/response
 schemas of the HTTP endpoints (conversations, messages, defaults) follow. Responses never carry the

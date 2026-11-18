@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Text, Enum, text
 from sqlalchemy.orm import backref, relationship
 from datetime import datetime
 from db.database import Base
@@ -18,6 +18,11 @@ class ConversationSource(enum.Enum):
 class Conversation(Base):
     """Chat session. History lives in LangGraph's checkpointer under thread_id = f"thread_{agent_id}_{session_id}"."""
     __tablename__ = "Conversation"
+    __table_args__ = (
+        # Alembic ichat004: one user's conversations of an agent, newest first; API-key conversation lookup.
+        Index("ix_conversation_agent_user_updated", "agent_id", "user_id", text("updated_at DESC")),
+        Index("ix_conversation_agent_api_key_hash", "agent_id", "api_key_hash"),
+    )
 
     conversation_id = Column(Integer, primary_key=True, autoincrement=True)
     agent_id = Column(Integer, ForeignKey('Agent.agent_id', ondelete='CASCADE'), nullable=False)

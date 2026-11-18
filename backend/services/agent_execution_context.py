@@ -89,7 +89,7 @@ class AgentExecutionContext:
     working_dir: Optional[str] = None
     pre_existing_files: set = field(default_factory=set)
 
-    # Sandbox (IT-4) — populated when enable_code_interpreter is True for non-subprocess providers
+    # Sandbox — populated when enable_code_interpreter is True for non-subprocess providers
     sandbox_handle: Optional[Any] = None           # SandboxHandle (typed as Any to avoid circular import)
     sandbox_provider: Optional[Any] = None         # SandboxProvider instance
     sandbox_session_key: Optional[str] = None      # Key used with SandboxSessionService

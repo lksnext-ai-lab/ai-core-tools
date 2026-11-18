@@ -1,7 +1,7 @@
 """
 Streaming agent execution service.
 
-``stream_agent_events`` is the canonical streaming seam (AD-5): it owns the
+``stream_agent_events`` is the canonical streaming seam: it owns the
 astream loop, the retry logic, metrics and cleanup for one agent chat turn,
 and yields typed ``AgentStreamEvent`` instances. The setup and
 post-processing phases are fully delegated to
@@ -30,6 +30,10 @@ from langchain_core.messages import AIMessage
 from langgraph.types import Command
 from sqlalchemy.orm import Session
 
+from langgraph.errors import GraphRecursionError
+from services.internal_chat.errors import (
+    BUSY_MESSAGE, STEP_LIMIT_ERROR_CODE, STEP_LIMIT_MESSAGE, ChatConversationBusyError,
+)
 from tools.agentTools import create_agent, prepare_agent_config, build_human_message, compute_thread_id
 from tools.langsmith_config import (
     apply_tracing_to_config,
@@ -177,7 +181,7 @@ class AgentStreamingService:
         channels have the pause rejected on the spot and get an ``error`` event, so the
         conversation is never left paused.
 
-        This is the **canonical streaming seam** (AD-5): it runs exactly the
+        This is the **canonical streaming seam**: it runs exactly the
         setup, astream loop, retry, metrics and cleanup logic a chat turn
         needs, and yields :class:`~tools.streaming_utils.AgentStreamEvent`
         instances rather than any wire format. ``stream_agent_chat`` is a
@@ -412,7 +416,7 @@ class AgentStreamingService:
                 )
                 agent_chain, mcp_client = create_agent_result[:2]
 
-                config = prepare_agent_config(ctx.fresh_agent)
+                config = prepare_agent_config(ctx.fresh_agent, chat_turn=turn_config is not None)
                 config["configurable"]["thread_id"] = compute_thread_id(
                     ctx.fresh_agent, ctx.session_id_for_cache, require_session=chat_turn
                 )
@@ -433,7 +437,8 @@ class AgentStreamingService:
                 # ------------------------------------------------------------
                 if resume is None:
                     stream_input = {"messages": [build_human_message(
-                        ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context
+                        ctx.fresh_agent, ctx.enhanced_message, ctx.image_files, ctx.user_context,
+                        chat_turn=turn_config is not None,
                     )]}
                 else:
                     pause = await _read_pause(agent_chain, config)
@@ -810,6 +815,45 @@ class AgentStreamingService:
                     "detail": exc.detail if exc.status_code < 500 else None,
                 },
             )
+        except ChatConversationBusyError as exc:
+            # The busy marker was lost while the turn was preparing: another turn may own the conversation.
+            logger.warning("Chat turn aborted: the busy marker was lost (%s)", type(exc).__name__)
+            metrics_status, metrics_error_code = "ERROR", "CONVERSATION_BUSY"
+            metrics_error_message = BUSY_MESSAGE
+            terminal_event_yielded = True
+            yield AgentStreamEvent(
+                "error",
+                {"message": BUSY_MESSAGE, "code": "conversation_busy"},
+                extra={"error_code": "CONVERSATION_BUSY", "error_kind": "conversation_busy", "detail": BUSY_MESSAGE},
+            )
+        except GraphRecursionError as exc:
+            if turn_config is None or ctx is None:
+                # Not a Chat turn: unchanged generic failure.
+                log_turn_failure(
+                    logger, "Error in streaming agent chat", exc, chat_turn=False,
+                    agent_id=agent_id, conversation_id=conversation_id,
+                )
+                metrics_status, metrics_error_code = "ERROR", type(exc).__name__
+                metrics_error_message = str(exc)[:2000]
+                terminal_event_yielded = True
+                yield AgentStreamEvent(
+                    "error",
+                    {"message": _AGENT_EXECUTION_FAILED},
+                    extra={"error_code": metrics_error_code, "error_kind": "agent_failure"},
+                )
+            else:
+                # Chat: out of graph steps. The conversation, its checkpoint and its sandbox are kept (the router
+                # does not discard it), what the sandbox already produced is saved, and the client gets a stable,
+                # translatable error (no raw text).
+                await self.execution_service.handle_chat_step_limit(ctx, exc)
+                metrics_status, metrics_error_code = "ERROR", STEP_LIMIT_ERROR_CODE
+                metrics_error_message = STEP_LIMIT_MESSAGE
+                terminal_event_yielded = True
+                yield AgentStreamEvent(
+                    "error",
+                    {"message": STEP_LIMIT_MESSAGE, "code": "step_limit_reached"},
+                    extra={"error_code": STEP_LIMIT_ERROR_CODE, "error_kind": "step_limit", "detail": STEP_LIMIT_MESSAGE},
+                )
         except Exception as exc:
             log_turn_failure(
                 logger, "Error in streaming agent chat", exc, chat_turn=turn_config is not None,
@@ -877,7 +921,7 @@ class AgentStreamingService:
 
         This is a thin presentation-layer bridge: it is a byte-for-byte SSE
         rendering of :meth:`stream_agent_events`, the canonical streaming
-        seam (AD-5). Every event it yields is one
+        seam. Every event it yields is one
         ``format_sse_event(ev.type, ev.data)`` string per
         :class:`~tools.streaming_utils.AgentStreamEvent` produced by that
         generator — SSE is a presentation of the typed event stream, not the

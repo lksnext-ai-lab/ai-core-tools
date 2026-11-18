@@ -128,17 +128,39 @@ def measure(test_engine, call) -> Counting:
     return counter
 
 
+# Statements on the ``app`` / ``async`` engines are not issued by the request itself (it runs on the ``test`` engine);
+# the few that can land inside a counting window come from background workers the app starts with each test client
+# (orphan-repository sweep, sandbox reaper, late metrics write). They are bounded noise, not per-item cost.
+BACKGROUND_TOLERANCE = 2
+BACKGROUND_CEILING = 4
+
+
+def _engine_counts(counter: Counting) -> dict:
+    return {name: len(v) for name, v in counter.statements.items()}
+
+
 def assert_budget(small: Counting, large: Counting, ceiling: int, label: str, growth_exc=AssertionError) -> None:
-    """Same count at both sizes (``growth_exc`` is raised only when the growth is exactly one statement per extra
-    selected item, the shape of a known finding) and the large count under the ceiling."""
-    if large.count != small.count:
-        grown = large.count - small.count
+    """The ``test`` engine (the only one the request uses) has the SAME count at both sizes (``growth_exc`` is raised
+    only when the growth is exactly one statement per extra selected item, the shape of a known finding) and stays
+    under the ceiling. The ``app`` and ``async`` engines may differ by background noise only: at most
+    ``BACKGROUND_TOLERANCE`` more in the large run and never more than ``BACKGROUND_CEILING``. All per-engine counts,
+    and the stray statements, are in every failure message."""
+    s, l = _engine_counts(small), _engine_counts(large)
+    strays = {n: [re.sub(r"\s+", " ", x)[:200] for x in v]
+              for n, v in {**{f"{k}(small)": small.statements[k] for k in ("app", "async")},
+                           **{f"{k}(large)": large.statements[k] for k in ("app", "async")}}.items() if v}
+    detail = f"small {small.per_engine()}, large {large.per_engine()}; background statements: {strays or 'none'}"
+    if l["test"] != s["test"]:
+        grown = l["test"] - s["test"]
         exc = growth_exc if grown == LARGE - SMALL else AssertionError
         raise exc(
-            f"{label}: {small.count} statements ({small.per_engine()}) with {SMALL} items but {large.count} "
-            f"({large.per_engine()}) with {LARGE}; +{grown}\nrepeated in the large run:\n{large.pattern()}"
+            f"{label}: {s['test']} request statements with {SMALL} items but {l['test']} with {LARGE}; +{grown} "
+            f"({detail})\nrepeated in the large run:\n{large.pattern()}"
         )
-    assert large.count <= ceiling, f"{label}: {large.count} statements, ceiling {ceiling}\n{large.pattern()}"
+    for name in ("app", "async"):
+        assert l[name] <= s[name] + BACKGROUND_TOLERANCE and l[name] <= BACKGROUND_CEILING, f"{label}: {name} engine grew ({detail})"
+    assert large.count <= ceiling + BACKGROUND_CEILING, f"{label}: {large.count} statements, ceiling {ceiling} ({detail})\n{large.pattern()}"
+    assert l["test"] <= ceiling, f"{label}: {l['test']} request statements, ceiling {ceiling} ({detail})\n{large.pattern()}"
 
 
 class TestOptionsBudget:
