@@ -25,7 +25,7 @@ You convert a `ready` spec into an executable **plan.md** for Mattin AI: the arc
 ## Architectural guardrails for Mattin AI
 
 - Backend: router (HTTP only) â†’ service (business logic) â†’ repository (data) â†’ model. DI via `Depends(get_db)`. RBAC `@require_min_role`. Never business logic in routers; never raw SQL.
-- Frontend: pages/components, all HTTP through `services/api.ts`, state via Context, never modify base library for client-specific needs (use `clientConfig.ts`).
+- Frontend: pages/components, all HTTP through `services/api.ts`, state via Context.
 - AI: `init_chat_model`/`create_agent`, LCEL chains, `AsyncPostgresSaver` checkpointer, MCP via `langchain-mcp-adapters`; per-app + global LangSmith tracing.
 - DB: Alembic migration for every schema change, downgrade tested; pgvector HNSW for vectors.
 

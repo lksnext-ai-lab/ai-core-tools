@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Mattin AI** is an extensible AI toolbox platform providing LLM integration, RAG systems, vector databases, and AI agent management. The project uses a **FastAPI backend** and a **React frontend** distributed as a reusable npm library for client-specific deployments.
+**Mattin AI** is an extensible AI toolbox platform providing LLM integration, RAG systems, vector databases, and AI agent management. The project uses a **FastAPI backend** and a **React frontend**, both shipped as Docker images.
 
 **Tech Stack**: Python 3.11+, FastAPI, SQLAlchemy, Alembic, LangChain/LangGraph, PostgreSQL + pgvector, React 18, TypeScript, Vite, Tailwind CSS.
 
@@ -39,8 +39,7 @@ alembic downgrade -1                            # Always test rollback
 cd frontend
 npm install
 npm run dev                     # Dev server (port 5173)
-npm run build:lib               # Build reusable library package
-npm run build:lib:watch         # Watch mode for library development
+npm run build                   # Production build (tsc + vite)
 npm run lint
 ```
 
@@ -99,14 +98,6 @@ docker compose down -v           # Parar y borrar volúmenes
   fallback a otro provider y con WARNING en el log (hasta 3 idénticos por turno);
   test connection y cleanup siguen funcionando. `SANDBOX_DEFAULT_PROVIDER` no tiene
   ciclo de vida.
-
-### Client Project Management
-
-```bash
-./deploy/scripts/create-client-project.sh <client-name>
-./deploy/scripts/update-client.sh <client-name>
-./deploy/scripts/publish-library.sh
-```
 
 ## Domain Model
 
@@ -194,7 +185,7 @@ User message + optional files
 
 ```
 frontend/src/
-├── core/                # ExtensibleBaseApp.tsx — library entry point
+├── core/                # AppRoot.tsx — app shell (routing, providers, layout)
 ├── components/          # Reusable UI (ui/, forms/, playground/)
 ├── pages/               # Page-level components
 ├── services/            # api.ts — centralized HTTP client
@@ -206,16 +197,6 @@ frontend/src/
 - All HTTP calls via `api.ts` — never direct `fetch()`
 - Global state via React Context (`useUser()`, `useTheme()`)
 - Route protection via `ProtectedRoute` and `AdminRoute` components
-
-### Client Projects (`clients/<name>/`)
-
-Frontend-only projects consuming `@lksnext/ai-core-tools-base`. All customization via `src/config/clientConfig.ts` (theme, branding, auth config, API URL, feature flags, custom routes). Never modify the base library for client-specific features.
-
-When base library changes:
-```bash
-cd frontend && npm run build:lib
-cd ../clients/<client-name> && npm install
-```
 
 ## Environment Configuration
 
@@ -307,13 +288,11 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - Direct `fetch()` in frontend — use `api.ts`
 - Business logic in routers — belongs in services
 - Raw SQL queries — use SQLAlchemy ORM
-- Modifying base library for client-specific features — use `clientConfig.ts`
 - Skipping migration downgrade tests — always verify rollback works
 - Manual version bumping — use semantic versioning tooling
 
 ## Additional Documentation
 
-- `docs/CLIENT_SETUP_GUIDE.md` — Client project setup
 - `docs/AUTHENTICATION_MIGRATION_GUIDE.md` — Auth system details
 - `docs/EXTERNAL_MCP_SETUP.md` — MCP integration
 - `docs/testing/` — Full testing guide
