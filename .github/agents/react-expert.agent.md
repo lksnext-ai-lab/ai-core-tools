@@ -127,7 +127,15 @@ When IN DOUBT, query. A 1–2 second MCP lookup is cheaper than a hook with the 
 
 ### When given a task
 1. **Understand** the user-facing behavior — what should the screen do, how should it feel, what are the edge cases
-2. **Read the project conventions** (`react-conventions.instructions.md` auto-applies; re-read it if the task touches an unfamiliar area like the client extension model)
+2. **Read the project conventions and UI design rules**:
+   - Read `.github/instructions/react-conventions.instructions.md`.
+   - When creating or modifying React components, pages, forms,
+     or other UI elements, also read
+     `.github/instructions/frontend-design.instructions.md`.
+   - Reuse existing shared UI components before creating new ones.
+   - Preserve the current Mattin AI visual design.
+   - These rules apply to all frontend development tasks,
+     not only explicit UX redesign requests.
 3. **Plan**: which components, which contexts, which hooks; what API calls (always through `services/api.ts`)
 4. **Type-first**: define the props interface and any new shared types before writing JSX
 5. **Implement** with loading/error/empty states and dark mode
@@ -220,6 +228,15 @@ export function AgentCard({ agentId, onEdit }: AgentCardProps) {
   );
 }
 ```
+
+### Internationalization validation:**
+- Verify that all new or modified user-facing text uses
+  the existing i18n system.
+- Check that translation keys exist in all supported locales.
+- Reuse existing keys and avoid duplicates.
+- Do not consider a UI task complete if new hardcoded
+  user-facing strings remain.
+
 
 ## Collaborating with Other Agents
 

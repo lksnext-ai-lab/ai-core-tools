@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, AlertTriangle, Tag, BarChart2, Info, Zap, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Check, CheckCircle2, XCircle, WifiOff, HelpCircle, Plug } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 import { useAppRole } from '../../hooks/useAppRole';
 import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
-import type { ServiceOptionLike } from '../../utils/serviceLifecycle';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import { Spinner } from '../../components/ui/Spinner';
+import { FormCheckbox, FormField, FormSelect } from '../../components/ui/FormField';
+import Title from '../../components/ui/Title';
+import { ServiceOptionStatus, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
 
 type LangsmithTestStatus = 'ok' | 'unauthorized' | 'network' | 'unknown';
 
@@ -23,6 +29,7 @@ interface SandboxServiceOption extends ServiceOptionLike {
 }
 
 function AppSettingsPage() {
+  const { t } = useTranslation('common');
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -93,7 +100,7 @@ function AppSettingsPage() {
       setOriginalLangsmithKey(langsmithKey);
       setLangsmithKeyChanged(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load app data');
+      setError(err instanceof Error ? err.message : t('appSettingsPage.loadFailed'));
       console.error('Error loading app data:', err);
     } finally {
       setLoading(false);
@@ -124,7 +131,7 @@ function AppSettingsPage() {
       setSlugSaved(true);
       setTimeout(() => setSlugSaved(false), 3000);
     } catch (err) {
-      setSlugError(err instanceof Error ? err.message : 'Failed to update slug');
+      setSlugError(err instanceof Error ? err.message : t('appSettingsPage.slugUpdateFailed'));
       console.error('Error updating slug:', err);
     } finally {
       setSavingSlug(false);
@@ -152,7 +159,7 @@ function AppSettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings');
+      setError(err instanceof Error ? err.message : t('appSettingsPage.saveFailed'));
       console.error('Error saving app settings:', err);
     } finally {
       setSaving(false);
@@ -194,7 +201,7 @@ function AppSettingsPage() {
     } catch (err) {
       setLangsmithTestResult({
         status: 'unknown',
-        message: err instanceof Error ? err.message : 'Failed to test LangSmith connection',
+        message: err instanceof Error ? err.message : t('appSettingsPage.langsmithTestFailed'),
       });
     } finally {
       setTestingLangsmith(false);
@@ -208,10 +215,7 @@ function AppSettingsPage() {
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading app settings...</p>
-        </div>
+        <LoadingState variant="page" message={t('appSettingsPage.loading')} />
       
     );
   }
@@ -221,7 +225,7 @@ function AppSettingsPage() {
       <div className="p-6">
         <Alert 
           type="error" 
-          title="Error Loading Settings" 
+          title={t('appSettingsPage.loadErrorTitle')}
           message={error}
           onDismiss={loadAppData}
         />
@@ -233,88 +237,70 @@ function AppSettingsPage() {
     
       <div className="p-6">
         <div className="max-w-2xl">
-          {/* Header */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">General Settings</h2>
-            <p className="text-gray-600">Configure basic app settings and integrations</p>
-            {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
-          </div>
-
+          <Title
+            variant="titSecundario"
+            titulo={t('appSettingsPage.generalSettings')}
+            subtitulo={t('appSettingsPage.subtitle')}
+          />
+          {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
           {/* Settings Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="bg-white shadow rounded-lg p-6">
+            <div >
               <div className="grid grid-cols-1 gap-6">
                 {/* App Name */}
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    App Name
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter app name"
-                  />
-                </div>
+                <FormField
+                  label={t('appSettingsPage.appName')}
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  disabled={!canEdit}
+                  placeholder={t('appSettingsPage.appNamePlaceholder')}
+                />
 
                 {/* App Slug */}
-                <div>
-                  <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-2">
-                    App Slug
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      id="slug"
-                      value={slugInput}
-                      onChange={(e) => setSlugInput(e.target.value.toLowerCase().replaceAll(/[^a-z0-9-]/g, ''))}
-                      disabled={!canEdit}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder="my-app"
-                      pattern="[a-z0-9-]+"
+                <div className="flex items-start gap-2">
+                  <FormField
+                    className="flex-1"
+                    label={t('appSettingsPage.appSlug')}
+                    id="slug"
+                    value={slugInput}
+                    onChange={(e) => setSlugInput(e.target.value.toLowerCase().replaceAll(/[^a-z0-9-]/g, ''))}
+                    disabled={!canEdit}
+                    placeholder={t('appSettingsPage.appSlugPlaceholder')}
+                    pattern="[a-z0-9-]+"
+                    helpText={t('appSettingsPage.appSlugHelp')}
+                  />
+                  {canEdit && (
+                    <ButtonApp
+                      label={savingSlug ? t('appSettingsPage.saving') : t('appSettingsPage.updateSlug')}
+                      onClick={handleSlugSubmit}
+                      disabled={!slugInput.trim()}
+                      loading={savingSlug}
+                      variant="secondary"
+                      className="mt-6 whitespace-nowrap"
                     />
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={handleSlugSubmit}
-                        disabled={savingSlug || !slugInput.trim()}
-                        className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center text-sm whitespace-nowrap"
-                      >
-                        {savingSlug && (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        )}
-                        {savingSlug ? 'Saving...' : 'Update Slug'}
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-gray-500">
-                    URL-friendly identifier for your app. Use lowercase letters, numbers, and hyphens only.
-                  </p>
+                  )}
                   {slugSaved && (
                     <p className="mt-1 text-sm text-green-600 flex items-center">
-                      <Check className="w-4 h-4 mr-1" /> Slug saved successfully
+                      <Check className="w-4 h-4 mr-1" /> {t('appSettingsPage.slugSaved')}
                     </p>
                   )}
                   {slugError && (
-                    <p className="mt-1 text-sm text-red-600">{slugError}</p>
+                    <p className="mt-1 text-sm text-error dark:text-error-dark">{slugError}</p>
                   )}
                 </div>
 
                 {/* Langsmith API Key */}
                 <div>
-                  <label htmlFor="langsmith_api_key" className="block text-sm font-medium text-gray-700 mb-2">
-                    Langsmith API Key
-                  </label>
-                  <div className="flex items-stretch space-x-2">
-                    <input
-                      type="password"
+                  <div className="flex items-start gap-2">
+                    <FormField
+                      className="flex-1"
+                      label={t('appSettingsPage.langsmithApiKey')}
                       id="langsmith_api_key"
                       name="langsmith_api_key"
+                      type="password"
                       value={formData.langsmith_api_key}
                       onChange={handleChange}
                       onKeyDown={(e) => {
@@ -328,31 +314,35 @@ function AppSettingsPage() {
                       data-lpignore="true"
                       data-form-type="other"
                       disabled={!canEdit}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder={!langsmithKeyChanged && originalLangsmithKey ? 'Leave empty to keep current key' : 'Enter Langsmith API key'}
+                      placeholder={!langsmithKeyChanged && originalLangsmithKey
+                        ? t('appSettingsPage.keepCurrentKeyPlaceholder')
+                        : t('appSettingsPage.enterLangsmithKeyPlaceholder')}
+                      helpText={(
+                        <>
+                          {t('appSettingsPage.langsmithHelpBeforeKey')}{' '}
+                          <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_API_KEY</code>
+                          {t('appSettingsPage.langsmithHelpBetweenKeys')}{' '}
+                          <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_TRACING=true</code>).
+                        </>
+                      )}
                     />
                     {canEdit && (
                       <button
                         type="button"
                         onClick={handleTestLangsmith}
                         disabled={testingLangsmith || !canTestLangsmith}
-                        className="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 rounded-lg text-sm whitespace-nowrap border border-gray-300"
-                        title="Verify the API key against LangSmith"
+                        className="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border border-ink bg-surface px-[15px] py-[9px] font-display text-sm font-normal tracking-[-0.02em] text-fg transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-surface-hover-dark"
+                        title={t('appSettingsPage.testLangsmithTitle')}
                       >
                         {testingLangsmith ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                          <Spinner size="sm" tone="current" />
                         ) : (
-                          <Plug className="w-4 h-4 mr-2" />
+                          <Plug className="w-4 h-4" />
                         )}
-                        {testingLangsmith ? 'Testing…' : 'Test connection'}
+                        {testingLangsmith ? t('appSettingsPage.testing') : t('appSettingsPage.testConnection')}
                       </button>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Your Langsmith API key for monitoring and tracing. Leave empty to use the global
-                    <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_API_KEY</code>
-                    environment variable (when <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_TRACING=true</code>).
-                  </p>
                   {langsmithTestResult && (
                     <div
                       role="status"
@@ -372,7 +362,7 @@ function AppSettingsPage() {
                       {langsmithTestResult.status === 'unknown' && <HelpCircle className="w-4 h-4 mr-2" />}
                       <span>
                         {langsmithTestResult.status === 'ok' && langsmithTestResult.projectName
-                          ? `Connected to LangSmith — project "${langsmithTestResult.projectName}"`
+                          ? t('appSettingsPage.connectedToProject', { projectName: langsmithTestResult.projectName })
                           : langsmithTestResult.message}
                       </span>
                     </div>
@@ -380,138 +370,90 @@ function AppSettingsPage() {
                 </div>
 
                 {/* Agent rate limit */}
-                <div>
-                    <label htmlFor="agent_rate_limit" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent Rate Limit
-                    </label>
-                    <input
-                    type="number"
-                    id="agent_rate_limit"
-                    name="agent_rate_limit"
-                    value={formData.agent_rate_limit}
-                    onChange={handleChange}
-                    min="0"
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter agent rate limit"
-                    />
-                  <p className="mt-1 text-sm text-gray-500">
-                    This will limit the number of calls your agents can make per minute in your application.
-                  </p>
-                </div>
+                <FormField
+                  label={t('appSettingsPage.agentRateLimit')}
+                  id="agent_rate_limit"
+                  name="agent_rate_limit"
+                  type="number"
+                  value={formData.agent_rate_limit}
+                  onChange={handleChange}
+                  min={0}
+                  disabled={!canEdit}
+                  placeholder={t('appSettingsPage.agentRateLimitPlaceholder')}
+                  helpText={t('appSettingsPage.agentRateLimitHelp')}
+                />
 
                 {/* Maximum File Size */}
-                <div>
-                    <label htmlFor="max_file_size_mb" className="block text-sm font-medium text-gray-700 mb-2">
-                    Maximum File Size (MB)
-                    </label>
-                    <input
-                    type="number"
-                    id="max_file_size_mb"
-                    name="max_file_size_mb"
-                    value={formData.max_file_size_mb}
-                    onChange={handleChange}
-                    min="0"
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter maximum file size in MB (0 = no limit)"
-                    />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Maximum size in megabytes for files uploaded to repositories. Set to 0 for no limit.
-                  </p>
-                </div>
+                <FormField
+                  label={t('appSettingsPage.maxFileSize')}
+                  id="max_file_size_mb"
+                  name="max_file_size_mb"
+                  type="number"
+                  value={formData.max_file_size_mb}
+                  onChange={handleChange}
+                  min={0}
+                  disabled={!canEdit}
+                  placeholder={t('appSettingsPage.maxFileSizePlaceholder')}
+                  helpText={t('appSettingsPage.maxFileSizeHelp')}
+                />
 
                 {/* Agent CORS Origins */}
-                <div>
-                    <label htmlFor="agent_cors_origins" className="block text-sm font-medium text-gray-700 mb-2">
-                    Agent CORS Origins
-                    </label>
-                    <input
-                    type="text"
-                    id="agent_cors_origins"
-                    name="agent_cors_origins"
-                    value={formData.agent_cors_origins}
-                    onChange={handleChange}
-                    disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter allowed CORS origins (e.g., https://example.com, https://app.example.com)"
-                    />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Comma-separated list of allowed origins for CORS requests to your agents.
-                  </p>
-                </div>
+                <FormField
+                  label={t('appSettingsPage.agentCorsOrigins')}
+                  id="agent_cors_origins"
+                  name="agent_cors_origins"
+                  value={formData.agent_cors_origins}
+                  onChange={handleChange}
+                  disabled={!canEdit}
+                  placeholder={t('appSettingsPage.agentCorsOriginsPlaceholder')}
+                  helpText={t('appSettingsPage.agentCorsOriginsHelp')}
+                />
 
                 {/* Enable OpenAI-compatible API */}
-                <div>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="enable_openai_api"
-                      name="enable_openai_api"
-                      checked={formData.enable_openai_api}
-                      onChange={handleChange}
-                      disabled={!canEdit}
-                      className="form-checkbox h-5 w-5 text-blue-600 rounded disabled:cursor-not-allowed"
-                    />
-                    <span className="text-sm font-medium text-gray-700">Enable OpenAI-compatible API</span>
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Allow external applications to interact with your agents using the OpenAI API format. 
-                    When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.
-                  </p>
-                </div>
+                <FormCheckbox
+                  label={t('appSettingsPage.enableOpenAiApi')}
+                  id="enable_openai_api"
+                  checked={formData.enable_openai_api}
+                  onChange={handleChange}
+                  disabled={!canEdit}
+                  helpText={t('appSettingsPage.enableOpenAiApiHelp')}
+                />
 
                 {/* Sandbox Service */}
                 <div>
-                  <label htmlFor="default_sandbox_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                    Code Interpreter Sandbox Service
-                  </label>
-                  <select
+                  <FormSelect
+                    label={t('appSettingsPage.sandboxService')}
                     id="default_sandbox_service_id"
-                    name="default_sandbox_service_id"
-                    aria-describedby={serviceStatusId(sandboxServices, formData.default_sandbox_service_id, 'default_sandbox_service_id')}
                     value={formData.default_sandbox_service_id ?? ''}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
                       default_sandbox_service_id: e.target.value ? Number.parseInt(e.target.value) : null,
                     }))}
                     disabled={!canEdit}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Inherit system default</option>
-                    <ServiceSelectOptions
-                      options={sandboxServices}
-                      savedValue={savedSandboxServiceId}
-                      getLabel={(service) => `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`}
-                    />
-                  </select>
+                    ariaDescribedBy={serviceStatusId(sandboxServices, formData.default_sandbox_service_id, 'default_sandbox_service_id')}
+                    options={[
+                      { value: '', label: t('appSettingsPage.inheritSystemDefault') },
+                      ...selectableServiceOptions(sandboxServices, savedSandboxServiceId).map((service) => ({
+                        value: service.service_id,
+                        label: serviceOptionLabel(
+                          service,
+                          `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`,
+                        ),
+                      })),
+                    ]}
+                    helpText={(
+                      <>
+                        {t('appSettingsPage.sandboxServiceHelpBeforeSettings')}{' '}
+                        <span className="font-medium">{t('appSettingsPage.sandboxServicesSettings')}</span>.
+                      </>
+                    )}
+                  />
                   <ServiceOptionStatus selectId="default_sandbox_service_id" options={sandboxServices} selectedId={formData.default_sandbox_service_id} />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Default Sandbox Service used when agents in this app run the Code Interpreter capability.
-                    Leave at "Inherit" to use the system default. Manage available services under{' '}
-                    <span className="font-medium">Settings → Sandbox Services</span>.
-                  </p>
                 </div>
               </div>
 
               {/* Error Display */}
-              {error && (
-                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <AlertTriangle className="w-5 h-5 text-red-400" />
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-red-800">
-                        Error Saving Settings
-                      </h3>
-                      <div className="mt-2 text-sm text-red-700">
-                        <p>{error}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {error && <Alert type="error" title={t('appSettingsPage.saveErrorTitle')} message={error} className="mt-4" />}
 
               {/* Submit Button - Only show for admins */}
               {canEdit && (
@@ -519,20 +461,15 @@ function AppSettingsPage() {
                   <div className="flex items-center">
                     {saved && (
                       <div className="flex items-center text-green-600">
-                        <Check className="w-4 h-4 mr-1" /> Settings saved successfully
+                        <Check className="w-4 h-4 mr-1" /> {t('appSettingsPage.settingsSaved')}
                       </div>
                     )}
                   </div>
-                  <button
+                  <ButtonApp
                     type="submit"
-                    disabled={saving}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg flex items-center"
-                  >
-                    {saving && (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    )}
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
+                    label={saving ? t('appSettingsPage.saving') : t('appSettingsPage.saveChanges')}
+                    loading={saving}
+                  />
                 </div>
               )}
             </div>
@@ -541,121 +478,69 @@ function AppSettingsPage() {
           {/* Info Sections */}
           <div className="mt-8 space-y-6">
             {/* App Slug Info */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Tag className="w-5 h-5 text-gray-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-gray-800">
-                    About App Slug
-                  </h3>
-                  <div className="mt-2 text-sm text-gray-700">
-                    <p>
-                      The app slug is a unique, URL-friendly identifier for your app.
-                      It's used in various endpoints including MCP server URLs to make them more readable
-                      (e.g., <code className="bg-gray-200 px-1 rounded text-xs">/mcp/v1/my-app/my-server</code> instead of using numeric IDs).
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title={t('appSettingsPage.aboutAppSlug')}
+              message={(
+                <p>
+                  {t('appSettingsPage.aboutAppSlugDescription')}{' '}
+                  <code className="bg-gray-200 px-1 rounded text-xs">/mcp/v1/my-app/my-server</code>{' '}
+                  {t('appSettingsPage.aboutAppSlugSuffix')}
+                </p>
+              )}
+            />
 
             {/* Langsmith Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <BarChart2 className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-blue-800">
-                    About Langsmith Integration
-                  </h3>
-                  <div className="mt-2 text-sm text-blue-700">
-                    <p>
-                      Langsmith provides monitoring, tracing, and debugging capabilities for your AI agents.
-                      Connect your Langsmith account to track agent performance and troubleshoot issues.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title={t('appSettingsPage.aboutLangsmithTitle')}
+              message={t('appSettingsPage.aboutLangsmithMessage')}
+            />
 
             {/* OpenAI-compatible API Info */}
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Zap className="w-5 h-5 text-purple-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-purple-800">
-                    About OpenAI-compatible API
-                  </h3>
-                  <div className="mt-2 text-sm text-purple-700">
-                    <p className="mb-2">
-                      When enabled, your agents can be accessed through OpenAI-compatible API endpoints. 
-                      This allows integration with third-party tools and clients that expect OpenAI API format.
-                    </p>
-                    <p className="mb-2">
-                      <strong>Impact of this setting:</strong>
-                    </p>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>Enables compatibility with OpenAI-compatible clients and SDKs</li>
-                      <li>Provides standard chat completion endpoints</li>
-                      <li>Allows seamless integration with tools expecting OpenAI API interface</li>
-                      <li>Does not affect your existing internal APIs or agent functionality</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title={t('appSettingsPage.aboutOpenAiApiTitle')}
+              message={(
+                <>
+                  <p className="mb-2">{t('appSettingsPage.aboutOpenAiApiMessage')}</p>
+                  <p className="mb-2">
+                    <strong>{t('appSettingsPage.openAiApiImpact')}</strong>
+                  </p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>{t('appSettingsPage.openAiApiImpactCompatibility')}</li>
+                    <li>{t('appSettingsPage.openAiApiImpactEndpoints')}</li>
+                    <li>{t('appSettingsPage.openAiApiImpactIntegration')}</li>
+                    <li>{t('appSettingsPage.openAiApiImpactExisting')}</li>
+                  </ul>
+                </>
+              )}
+            />
 
             {/* App Settings Info */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Info className="w-5 h-5 text-gray-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-gray-800">
-                    App Configuration
-                  </h3>
-                  <div className="mt-2 text-sm text-gray-700">
-                    <p>
-                      These settings affect the overall behavior of your app. 
-                      The app name is used in navigation and API responses. 
-                      Changes to these settings are applied immediately.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title={t('appSettingsPage.appConfigurationTitle')}
+              message={t('appSettingsPage.appConfigurationMessage')}
+            />
 
             {/* Sandbox Service Info */}
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Shield className="w-5 h-5 text-orange-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-orange-800">
-                    About Sandbox Services
-                  </h3>
-                  <div className="mt-2 text-sm text-orange-700">
-                    <p className="mb-2">
-                      A Sandbox Service controls the isolated environment where agents execute Python code
-                      when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted,
-                      container-isolated), Daytona, or E2B (managed cloud sandboxes) services under{' '}
-                      <strong>Settings → Sandbox Services</strong>.
-                    </p>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li><strong>Select a service</strong> — pins this app's agents to a specific sandbox configuration.</li>
-                      <li><strong>Inherit</strong> — uses the platform default configured by your system administrator.</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Alert
+              type="info"
+              title={t('appSettingsPage.aboutSandboxServicesTitle')}
+              message={(
+                <>
+                  <p className="mb-2">
+                    {t('appSettingsPage.aboutSandboxServicesMessageBeforeSettings')}{' '}
+                    <strong>{t('appSettingsPage.sandboxServicesSettings')}</strong>.
+                  </p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li><strong>{t('appSettingsPage.selectService')}</strong> — {t('appSettingsPage.selectServiceDescription')}</li>
+                    <li><strong>{t('appSettingsPage.inherit')}</strong> — {t('appSettingsPage.inheritDescription')}</li>
+                  </ul>
+                </>
+              )}
+            />
           </div>
         </div>
       </div>

@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { errorMessage, MESSAGES } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
+import { Title } from '../../components/ui/Title';
+import { Tabs } from '../../components/ui/Tabs';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import { FormField } from '../../components/ui/FormField';
+import CardApp from '../../components/ui/CardApp';
 
 interface SystemSetting {
   readonly key: string;
@@ -40,6 +46,7 @@ function getSourceBadgeColor(source: SystemSetting['source']): string {
 }
 
 function SystemSettingsPage() {
+  const { t } = useTranslation('common');
   const confirm = useConfirm();
   const mutate = useApiMutation();
 
@@ -64,11 +71,11 @@ function SystemSettingsPage() {
         return Array.from(categoriesSet)[0] ?? 'marketplace';
       });
     } catch (err) {
-      setLoadError(errorMessage(err, 'Failed to load system settings'));
+      setLoadError(errorMessage(err, t('systemSettingsPage.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadSettings();
@@ -111,7 +118,10 @@ function SystemSettingsPage() {
   async function handleSaveSetting(setting: SystemSetting) {
     const newValue = editingValues[setting.key];
     if (!validateValue(newValue, setting.type)) {
-      toast.error(`Invalid ${setting.type} value for ${setting.key}`);
+      toast.error(t('systemSettingsPage.invalidValue', {
+        type: t(`systemSettingsPage.types.${setting.type}`, { defaultValue: setting.type }),
+        key: setting.key,
+      }));
       return;
     }
 
@@ -119,9 +129,9 @@ function SystemSettingsPage() {
     const result = await mutate(
       () => apiService.updateSystemSetting(setting.key, newValue),
       {
-        loading: MESSAGES.SAVING(`"${setting.key}"`),
-        success: MESSAGES.UPDATED(`Setting "${setting.key}"`),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED(`"${setting.key}"`)),
+        loading: t('systemSettingsPage.saving', { key: setting.key }),
+        success: t('systemSettingsPage.saved', { key: setting.key }),
+        error: (err) => errorMessage(err, t('systemSettingsPage.saveFailed', { key: setting.key })),
       },
     );
     updateSavingKeys(setting.key, 'remove');
@@ -131,10 +141,10 @@ function SystemSettingsPage() {
 
   async function handleResetSetting(setting: SystemSetting) {
     const ok = await confirm({
-      title: 'Reset setting?',
-      message: `Reset "${setting.key}" to its default value?`,
+      title: t('systemSettingsPage.resetTitle'),
+      message: t('systemSettingsPage.resetMessage', { key: setting.key }),
       variant: 'warning',
-      confirmLabel: 'Reset',
+      confirmLabel: t('systemSettingsPage.reset'),
     });
     if (!ok) return;
 
@@ -142,9 +152,9 @@ function SystemSettingsPage() {
     const result = await mutate(
       () => apiService.resetSystemSetting(setting.key),
       {
-        loading: `Resetting "${setting.key}"…`,
-        success: `Setting "${setting.key}" reset to default`,
-        error: (err) => errorMessage(err, `Failed to reset setting "${setting.key}"`),
+        loading: t('systemSettingsPage.resetting', { key: setting.key }),
+        success: t('systemSettingsPage.resetSuccess', { key: setting.key }),
+        error: (err) => errorMessage(err, t('systemSettingsPage.resetFailed', { key: setting.key })),
       },
     );
     updateSavingKeys(setting.key, 'remove');
@@ -159,8 +169,10 @@ function SystemSettingsPage() {
     if (setting.type === 'boolean') {
       const boolValue = currentValue.toLowerCase() === 'true';
       return (
-        <input
+        <FormField
+          id={setting.key}
           type="checkbox"
+          ariaLabel={setting.description || setting.key}
           checked={boolValue}
           onChange={(e) =>
             setEditingValues((prev) => ({
@@ -169,15 +181,16 @@ function SystemSettingsPage() {
             }))
           }
           disabled={isReadOnly}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         />
       );
     }
 
     if (setting.type === 'integer') {
       return (
-        <input
+        <FormField
+          id={setting.key}
           type="number"
+          ariaLabel={setting.description || setting.key}
           value={currentValue}
           onChange={(e) =>
             setEditingValues((prev) => ({
@@ -186,15 +199,16 @@ function SystemSettingsPage() {
             }))
           }
           disabled={isReadOnly}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           placeholder={String(setting.resolved_value ?? '')}
         />
       );
     }
 
     return (
-      <input
+      <FormField
+        id={setting.key}
         type="text"
+        ariaLabel={setting.description || setting.key}
         value={currentValue}
         onChange={(e) =>
           setEditingValues((prev) => ({
@@ -203,14 +217,20 @@ function SystemSettingsPage() {
           }))
         }
         disabled={isReadOnly}
-        className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed w-full"
         placeholder={String(setting.resolved_value ?? '')}
       />
     );
   }
 
   if (loading) {
-    return <LoadingState message="Loading system settings..." />;
+    return(
+      <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <Title variant='titPrincipal' titulo={t('systemSettingsPage.title')} subtitulo={t('systemSettingsPage.subtitle')}></Title>
+              </div>
+              <LoadingState variant="page" message={t('systemSettingsPage.loading')} />
+            </div>
+    );
   }
 
   if (loadError) {
@@ -218,36 +238,25 @@ function SystemSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="">
+      <Title variant='titPrincipal' titulo={t('systemSettingsPage.title')} subtitulo={t('systemSettingsPage.subtitle')}></Title>
+
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
-        <p className="text-gray-600">Manage global system configuration</p>
-      </div>
+        <Tabs
+          tabs={categories.map((category) => ({
+            id: category,
+            label: t(`systemSettingsPage.categories.${category}`, {
+              defaultValue: category.charAt(0).toUpperCase() + category.slice(1),
+            }),
+          }))}
+          activeTab={activeTab}
+          onChange={setActiveTab}
+        />
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
-          <div className="flex overflow-x-auto">
-            {categories.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setActiveTab(category)}
-                className={`px-4 py-3 font-medium text-sm whitespace-nowrap ${
-                  activeTab === category
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {category.charAt(0).toUpperCase() + category.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="divide-y divide-gray-200">
+        <CardApp variant="white" className="divide-y divide-btCard-border dark:divide-btCard-border-dark mt-2">
           {currentCategorySettings.length === 0 ? (
-            <div className="px-6 py-8 text-center text-gray-500">
-              No settings found in this category.
+            <div className="rounded-md border border-dashed border-line px-6 py-9 text-center text-sm text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark">
+              {t('systemSettingsPage.noSettings')}
             </div>
           ) : (
             currentCategorySettings.map((setting) => {
@@ -256,63 +265,68 @@ function SystemSettingsPage() {
               const isSaving = savingKeys.has(setting.key);
 
               return (
-                <div key={setting.key} className="px-6 py-4 hover:bg-gray-50">
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    <div className="lg:col-span-1">
-                      <p className="font-medium text-gray-900">
-                        {setting.description || setting.key}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">Key: {setting.key}</p>
-                      <div className="flex items-center gap-2 mt-2">
+                <div key={setting.key} className="px-6 py-4">
+                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="break-all font-mono text-[13px] font-medium text-fg dark:text-fg-dark">
+                          {setting.key}
+                        </p>
                         <span
-                          className={`inline-block px-2 py-1 text-xs font-medium rounded ${getSourceBadgeColor(
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${getSourceBadgeColor(
                             setting.source,
                           )}`}
                         >
-                          {setting.source === 'env' ? 'Environment Variable' : setting.source}
+                          {t(`systemSettingsPage.sources.${setting.source}`, { defaultValue: setting.source })}
                         </span>
-                        <span className="text-xs text-gray-500">{setting.type}</span>
+                        <span className="text-[11px] text-fg-faint dark:text-fg-faint-dark">
+                          {t(`systemSettingsPage.types.${setting.type}`, { defaultValue: setting.type })}
+                        </span>
                       </div>
-                    </div>
-
-                    <div className="lg:col-span-1">
-                      <p className="text-xs text-gray-600 mb-1">Current Value</p>
-                      <p className="font-mono text-sm text-gray-900 break-words">
-                        {String(setting.resolved_value ?? 'N/A')}
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-fg-secondary dark:text-fg-secondary-dark">
+                        {setting.description || setting.key}
                       </p>
                     </div>
 
-                    <div className="lg:col-span-1">
-                      <div className="space-y-2">
-                        <div>{renderInputField(setting)}</div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleSaveSetting(setting)}
-                            disabled={setting.source === 'env' || isSaving || isUnchanged}
-                            className="flex-1 px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {isSaving ? 'Saving…' : 'Save'}
-                          </button>
+                    <div className="space-y-2">
+                      <div>{renderInputField(setting)}</div>
+                      <div id={`${setting.key}-help`} className="space-y-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                        <p>
+                          {t('systemSettingsPage.currentValue')}{' '}
+                          <span className="break-words font-mono text-fg dark:text-fg-dark">
+                            {String(setting.resolved_value ?? t('systemSettingsPage.notAvailable'))}
+                          </span>
+                        </p>
+                      </div>
+                      {setting.source !== 'env' && (
+                        <div className="flex justify-end gap-2 pt-1">
                           {setting.source === 'db' && (
-                            <button
-                              type="button"
+                            <ButtonApp
+                              label={t('systemSettingsPage.reset')}
                               onClick={() => handleResetSetting(setting)}
                               disabled={isSaving}
-                              className="flex-1 px-3 py-2 text-xs bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                            >
-                              Reset
-                            </button>
+                              variant="muted"
+                              size="small"
+                            />
                           )}
+                          <ButtonApp
+                            label={isSaving ? t('systemSettingsPage.savingButton') : t('systemSettingsPage.save')}
+                            onClick={() => handleSaveSetting(setting)}
+                            disabled={isSaving || isUnchanged}
+                            variant="primary"
+                            size="small"
+                          />
                         </div>
-                      </div>
+                      )}
                     </div>
+
+                    
                   </div>
                 </div>
               );
             })
           )}
-        </div>
+        </CardApp>
       </div>
     </div>
   );

@@ -1,6 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ThemeContext } from './ThemeContext';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ThemeContext, type ColorMode } from './ThemeContext';
 import type { ThemeConfig } from '../core/types';
+
+const COLOR_MODE_STORAGE_KEY = 'mattin-color-mode';
+
+// Storage can throw (private mode, blocked site data) — fall back to light.
+function readStoredColorMode(): ColorMode {
+  try {
+    return localStorage.getItem(COLOR_MODE_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
 
 interface ThemeProviderProps {
   theme: ThemeConfig;
@@ -30,10 +41,27 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ theme, children })
     document.title = currentTheme.name || 'Mattin AI';
   }, [currentTheme]);
 
+  const [colorMode, setColorMode] = useState<ColorMode>(readStoredColorMode);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', colorMode === 'dark');
+    try {
+      localStorage.setItem(COLOR_MODE_STORAGE_KEY, colorMode);
+    } catch {
+      // Persisting is best-effort only.
+    }
+  }, [colorMode]);
+
+  const toggleColorMode = useCallback(() => {
+    setColorMode((mode) => (mode === 'dark' ? 'light' : 'dark'));
+  }, []);
+
   const contextValue = useMemo(() => ({
     theme: currentTheme,
-    setTheme: setCurrentTheme
-  }), [currentTheme]);
+    setTheme: setCurrentTheme,
+    colorMode,
+    toggleColorMode
+  }), [currentTheme, colorMode, toggleColorMode]);
 
   return (
     <ThemeContext.Provider value={contextValue}>

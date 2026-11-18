@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ExternalLink, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ExternalLink, Filter, Search } from 'lucide-react';
 import { FormField } from '../../../ui/FormField';
 import Alert from '../../../ui/Alert';
+import { Badge } from '../../../ui/Badge';
+import { ButtonApp } from '../../../ui/ButtonApp';
+import { ButtonCard } from '../../../ui/ButtonCard';
 import { useProviderModels } from '../../../../hooks/useProviderModels';
 import { getProviderDescriptor } from '../providers';
 import type {
@@ -10,6 +14,7 @@ import type {
   ServiceScope,
 } from '../../../../types/services';
 import type { CredentialsState } from './CredentialsStep';
+import { Skeleton } from '../../../ui/Skeleton';
 
 interface ModelSelectionStepProps {
   readonly kind: ServiceKind;
@@ -25,11 +30,11 @@ interface ModelSelectionStepProps {
 
 type CapabilityFilter = 'vision' | 'function_calling' | 'reasoning' | 'audio';
 
-const FILTER_OPTIONS: readonly { id: CapabilityFilter; label: string }[] = [
-  { id: 'vision', label: 'Vision' },
-  { id: 'function_calling', label: 'Function calling' },
-  { id: 'reasoning', label: 'Reasoning' },
-  { id: 'audio', label: 'Audio' },
+const FILTER_OPTIONS: readonly { id: CapabilityFilter; labelKey: string }[] = [
+  { id: 'vision', labelKey: 'vision' },
+  { id: 'function_calling', labelKey: 'functionCalling' },
+  { id: 'reasoning', labelKey: 'reasoning' },
+  { id: 'audio', labelKey: 'audio' },
 ];
 
 const SIXTY_DAYS_SECONDS = 60 * 24 * 60 * 60;
@@ -51,6 +56,7 @@ function ModelSelectionStep({
   manualModelName,
   onManualModelNameChange,
 }: Readonly<ModelSelectionStepProps>) {
+  const { t } = useTranslation('common');
   const descriptor = getProviderDescriptor(provider);
   const [search, setSearch] = useState('');
   const [activeFilters, setActiveFilters] = useState<readonly CapabilityFilter[]>([]);
@@ -100,28 +106,31 @@ function ModelSelectionStep({
 
   // ----- Manual input mode -----
   if (descriptor && !descriptor.supportsModelListing) {
-    let manualHelp = 'Enter the model identifier you want to use.';
-    if (provider === 'Azure') {
-      manualHelp = 'Enter the deployment name configured in your Azure OpenAI resource.';
-    } else if (provider === 'GoogleCloud') {
-      manualHelp = kind === 'embedding'
-        ? 'Enter the Vertex AI Gemini embedding model id you want to use.'
-        : 'Enter the Vertex AI model id you want to use.';
-    }
+    let manualHelpKey = 'manualHelp.default';
+    let manualFieldLabelKey = 'modelId';
     let manualPlaceholder = 'sentence-transformers/all-MiniLM-L6-v2';
-    if (provider === 'Azure') manualPlaceholder = 'my-gpt-4o-deployment';
-    else if (provider === 'GoogleCloud') {
-      manualPlaceholder = kind === 'embedding' ? 'gemini-embedding-2-preview' : 'gemini-2.5-pro';
+    if (provider === 'Azure') {
+      manualHelpKey = 'manualHelp.azure';
+      manualFieldLabelKey = 'deploymentName';
+      manualPlaceholder = 'my-gpt-4o-deployment';
+    } else if (provider === 'GoogleCloud') {
+      if (kind === 'embedding') {
+        manualHelpKey = 'manualHelp.googleCloudEmbedding';
+        manualPlaceholder = 'gemini-embedding-2-preview';
+      } else {
+        manualHelpKey = 'manualHelp.googleCloud';
+        manualPlaceholder = 'gemini-2.5-pro';
+      }
     }
 
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold text-gray-900">Model identifier</h3>
-          <p className="text-sm text-gray-600 mt-1">{manualHelp}</p>
+          <h3 className="text-base font-semibold text-fg dark:text-fg-dark">{t('serviceWizard.modelStep.modelIdentifier')}</h3>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{t(`serviceWizard.modelStep.${manualHelpKey}`)}</p>
         </div>
         <FormField
-          label={provider === 'Azure' ? 'Deployment name' : 'Model id'}
+          label={t(`serviceWizard.modelStep.${manualFieldLabelKey}`)}
           id="manual_model_name"
           type="text"
           value={manualModelName}
@@ -156,11 +165,11 @@ function ModelSelectionStep({
       <div className="space-y-4">
         <Alert
           type="warning"
-          title="No models returned"
-          message="The provider returned an empty list. You can type a model id manually below if you know it."
+          title={t('serviceWizard.modelStep.noModelsTitle')}
+          message={t('serviceWizard.modelStep.noModelsMessage')}
         />
         <FormField
-          label="Model id"
+          label={t('serviceWizard.modelStep.modelId')}
           id="manual_model_name_empty"
           type="text"
           value={manualModelName}
@@ -174,23 +183,27 @@ function ModelSelectionStep({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-semibold text-gray-900">Choose a model</h3>
-        <p className="text-sm text-gray-600 mt-1">
-          {filteredModels.length} of {data.models.length} model
-          {data.models.length === 1 ? '' : 's'} available from{' '}
-          {descriptor?.label || provider}. Newest models are shown first.
+        <h3 className="text-base font-semibold text-fg dark:text-fg-dark">{t('serviceWizard.modelStep.chooseModel')}</h3>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
+          {t('serviceWizard.modelStep.availableModels', {
+            count: data.models.length,
+            visibleCount: filteredModels.length,
+            provider: descriptor?.label || provider,
+          })}
         </p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint dark:text-fg-faint-dark pointer-events-none" />
+          <FormField
+            id="model-search"
             type="text"
+            ariaLabel={t('serviceWizard.modelStep.search')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by id or name"
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder={t('serviceWizard.modelStep.search')}
+            inputClassName="pl-9 pr-3"
           />
         </div>
         {kind === 'ai' && (
@@ -198,18 +211,16 @@ function ModelSelectionStep({
             {FILTER_OPTIONS.map((f) => {
               const active = activeFilters.includes(f.id);
               return (
-                <button
+                <ButtonApp
                   key={f.id}
-                  type="button"
+                  label={t(`serviceWizard.modelStep.filters.${f.labelKey}`)}
                   onClick={() => toggleFilter(f.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                    active
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  {f.label}
-                </button>
+                  icon={<Filter className="w-4 h-4" aria-hidden="true" />}
+                  variant="muted"
+                  size="medium"
+                  ariaPressed={active}
+                  className={`rounded-full ${active ? '' : 'opacity-60'}`}
+                />
               );
             })}
           </div>
@@ -217,11 +228,11 @@ function ModelSelectionStep({
       </div>
 
       {filteredModels.length === 0 ? (
-        <p className="text-sm text-gray-500 italic px-2 py-8 text-center">
-          No models match your filters.
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark italic px-2 py-8 text-center">
+          {t('serviceWizard.modelStep.noMatches')}
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filteredModels.map((m) => (
             <ModelCard
               key={m.id}
@@ -243,69 +254,59 @@ interface ModelCardProps {
 }
 
 function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
+  const { t } = useTranslation('common');
   const recent = isRecent(model.created_at);
+  const capabilityLabels = [
+    { enabled: model.capabilities.vision, labelKey: 'vision' },
+    { enabled: model.capabilities.audio, labelKey: 'audio' },
+    { enabled: model.capabilities.reasoning, labelKey: 'reasoning' },
+    { enabled: model.capabilities.function_calling, labelKey: 'tools' },
+    { enabled: model.capabilities.embedding, labelKey: 'embedding' },
+  ].filter(({ enabled }) => enabled);
+
   return (
-    <button
-      type="button"
+    <ButtonCard
+      variant="selectable-radio"
+      selected={selected}
+      ariaLabel={t('serviceWizard.modelStep.selectModel', { model: model.display_name })}
       onClick={onSelect}
-      className={`text-left p-3 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-        selected
-          ? 'border-blue-600 ring-2 ring-blue-200 bg-blue-50'
-          : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-      }`}
     >
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">
-            {model.display_name}
+          <span className="text-sm  text-fg dark:text-fg-dark leading-tight line-clamp-2">
+            {model.display_name} / {model.id}
           </span>
           <div className="flex flex-wrap gap-1 flex-shrink-0">
             {recent && (
-              <span className="text-[10px] uppercase font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                New
-              </span>
+              <Badge label={t('serviceWizard.modelStep.new')} variant="success" className="uppercase" />
             )}
             {model.deprecated && (
-              <span className="text-[10px] uppercase font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-                Deprecated
-              </span>
+              <Badge label={t('serviceWizard.modelStep.deprecated')} variant="warning" className="uppercase" />
             )}
           </div>
         </div>
-        <p className="text-xs font-mono text-gray-500 truncate">{model.id}</p>
-        <CapabilityChips info={model} />
+        {/*<p className="text-xs font-mono text-fg-secondary dark:text-fg-secondary-dark truncate">{model.id}</p>*/}
+        {capabilityLabels.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {capabilityLabels.map(({ labelKey }) => (
+              <Badge
+                key={labelKey}
+                variant="default"
+                label={t(`serviceWizard.modelStep.capabilities.${labelKey}`)}
+              />
+            ))}
+          </div>
+        )}
         {model.context_window != null && (
-          <p className="text-[11px] text-gray-500 pt-0.5">
-            {Intl.NumberFormat().format(model.context_window)} ctx tokens
+          <p className="text-[11px] text-fg-secondary dark:text-fg-secondary-dark pt-0.5">
+            {t('serviceWizard.modelStep.contextTokens', {
+              count: model.context_window,
+              formattedCount: Intl.NumberFormat().format(model.context_window),
+            })}
           </p>
         )}
       </div>
-    </button>
-  );
-}
-
-function CapabilityChips({ info }: { readonly info: ProviderModelInfo }) {
-  const chips: { label: string; tone: string }[] = [];
-  const c = info.capabilities;
-  if (c.vision) chips.push({ label: 'Vision', tone: 'bg-purple-100 text-purple-800' });
-  if (c.audio) chips.push({ label: 'Audio', tone: 'bg-orange-100 text-orange-800' });
-  if (c.reasoning) chips.push({ label: 'Reasoning', tone: 'bg-indigo-100 text-indigo-800' });
-  if (c.function_calling) chips.push({ label: 'Tools', tone: 'bg-blue-100 text-blue-800' });
-  if (c.embedding) chips.push({ label: 'Embedding', tone: 'bg-green-100 text-green-800' });
-
-  if (chips.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-1 pt-1">
-      {chips.map((chip) => (
-        <span
-          key={chip.label}
-          className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${chip.tone}`}
-        >
-          {chip.label}
-        </span>
-      ))}
-    </div>
+    </ButtonCard>
   );
 }
 
@@ -315,22 +316,22 @@ function ModelGridSkeleton() {
   return (
     <div className="space-y-4">
       <div>
-        <div className="h-5 w-40 bg-gray-200 rounded animate-pulse" />
-        <div className="h-4 w-64 mt-2 bg-gray-100 rounded animate-pulse" />
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-4 w-64 mt-2" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {Array.from({ length: 6 }).map((_, idx) => (
           <div
             key={idx}
-            className="p-3 rounded-lg border border-gray-200 bg-white space-y-2 animate-pulse"
+            className="p-3 rounded-lg border border-line bg-surface space-y-2 dark:border-line-dark dark:bg-surface-dark"
           >
-            <div className="h-4 w-3/4 bg-gray-200 rounded" />
-            <div className="h-3 w-1/2 bg-gray-100 rounded" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
             <div className="flex gap-1 pt-1">
-              <div className="h-3 w-12 bg-gray-100 rounded" />
-              <div className="h-3 w-10 bg-gray-100 rounded" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-10" />
             </div>
-            <div className="h-3 w-20 bg-gray-100 rounded mt-1" />
+            <Skeleton className="h-3 w-20 mt-1" />
           </div>
         ))}
       </div>
@@ -359,6 +360,7 @@ function ProviderListingError({
   manualModelName,
   onManualModelNameChange,
 }: Readonly<ProviderListingErrorProps>) {
+  const { t } = useTranslation('common');
   // 404 from a Custom OpenAI-compatible endpoint that doesn't expose
   // /models — fall back to manual entry inline.
   if (status === 404) {
@@ -366,11 +368,11 @@ function ProviderListingError({
       <div className="space-y-3">
         <Alert
           type="info"
-          title="Endpoint did not return a model list"
-          message="Some self-hosted servers do not implement the Ollama tags endpoint or OpenAI's /models route. Type the model id manually below."
+          title={t('serviceWizard.modelStep.endpointNoModelsTitle')}
+          message={t('serviceWizard.modelStep.endpointNoModelsMessage')}
         />
         <FormField
-          label="Model id"
+          label={t('serviceWizard.modelStep.modelId')}
           id="manual_model_name_fallback"
           type="text"
           value={manualModelName}
@@ -382,49 +384,43 @@ function ProviderListingError({
     );
   }
 
-  let title = 'Failed to load models';
+  let titleKey = 'serviceWizard.modelStep.errors.loadFailed';
   let description = message;
   if (status === 401) {
-    title = 'Invalid API key';
-    description =
-      'The provider rejected your credentials. Double-check the key was copied without extra spaces and that it has the right permissions.';
+    titleKey = 'serviceWizard.modelStep.errors.invalidApiKey';
+    description = t('serviceWizard.modelStep.errors.invalidApiKeyMessage');
   } else if (status === 408) {
-    title = 'Request timed out';
-    description =
-      'The provider did not respond within 15 seconds. Check your network or the endpoint URL and retry.';
+    titleKey = 'serviceWizard.modelStep.errors.timeout';
+    description = t('serviceWizard.modelStep.errors.timeoutMessage');
   } else if (status === 502) {
-    title = 'Could not reach the provider';
-    description =
-      'A network error stopped the request. If you are using a self-hosted endpoint, verify the URL and that the service is running.';
+    titleKey = 'serviceWizard.modelStep.errors.providerUnreachable';
+    description = t('serviceWizard.modelStep.errors.providerUnreachableMessage');
   }
 
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
-      <div>
-        <h4 className="text-sm font-semibold text-red-800">{title}</h4>
-        <p className="text-sm text-red-700 mt-1">{description}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onRetry}
-          className="px-3 py-1.5 text-xs font-medium bg-white text-red-800 border border-red-300 rounded hover:bg-red-100"
-        >
-          Retry listing
-        </button>
-        {status === 401 && descriptorDocUrl && (
-          <a
-            href={descriptorDocUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-red-800 hover:text-red-900"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Get a {provider} key
-          </a>
-        )}
-      </div>
-    </div>
+    <Alert
+      type="error"
+      title={t(titleKey)}
+      message={(
+        <>
+          {description}
+          <span className="mt-3 flex flex-wrap items-center gap-3">
+            <ButtonApp label={t('serviceWizard.modelStep.errors.retry')} variant="danger" size="compact" onClick={onRetry} />
+            {status === 401 && descriptorDocUrl && (
+              <a
+                href={descriptorDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium underline"
+              >
+                <ExternalLink className="w-3 h-3" />
+                {t('serviceWizard.modelStep.errors.getProviderKey', { provider })}
+              </a>
+            )}
+          </span>
+        </>
+      )}
+    />
   );
 }
 

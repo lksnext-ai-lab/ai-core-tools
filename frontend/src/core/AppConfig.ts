@@ -1,11 +1,20 @@
 import type { ThemeConfig, NavigationConfig } from './types';
 import type { AuthProps } from '../auth/AuthConfig';
 
+export interface OrganizationConfig {
+  name: string;
+  /** Optional logo URL; when absent the chip shows the name's initials. */
+  logo?: string;
+}
+
 export interface AppConfig {
   // Basic configuration
   name?: string;
   logo?: string;
   favicon?: string;
+
+  /** Client organization shown as a chip in the header (display only, no logic). */
+  organization?: OrganizationConfig;
   
   // Theme configuration
   themeProps?: {

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Upload, ArrowDownToLine, Loader2, Plug, Pencil, Trash2, Lightbulb } from 'lucide-react';
+import { Upload, ArrowDownToLine, Plug, Pencil, Trash2} from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import MCPConfigForm from '../../components/forms/MCPConfigForm';
 import { apiService } from '../../services/api';
@@ -19,10 +20,16 @@ import ImportModal, {
 } from '../../components/ui/ImportModal';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Spinner } from '../../components/ui/Spinner';
+import { Title } from '../../components/ui/Title';
+import ButtonApp from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
 
 function MCPConfigsPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -56,7 +63,7 @@ function MCPConfigsPage() {
     } catch (err) {
       setTestResult({
         status: 'error',
-        message: err instanceof Error ? err.message : 'Failed to test connection'
+        message: err instanceof Error ? err.message : t('mcpConfigsPage.testFailed')
       });
     } finally {
       setTestingConfigId(null);
@@ -83,7 +90,7 @@ function MCPConfigsPage() {
       // Cache the response
       settingsCache.setMCPConfigs(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load MCP configs');
+      setError(err instanceof Error ? err.message : t('mcpConfigsPage.loadFailed'));
       console.error('Error loading MCP configs:', err);
     } finally {
       setLoading(false);
@@ -101,7 +108,7 @@ function MCPConfigsPage() {
       // Cache the response
       settingsCache.setMCPConfigs(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load MCP configs');
+      setError(err instanceof Error ? err.message : t('mcpConfigsPage.loadFailed'));
       console.error('Error loading MCP configs:', err);
     } finally {
       setLoading(false);
@@ -113,21 +120,22 @@ function MCPConfigsPage() {
 
     const target = configs.find((c) => c.config_id === configId);
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('MCP config'),
+      title: t('servicesManager.confirmDeleteTitle', { entity: t('mcpConfigsPage.entity') }),
       message: target
-        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone.`
-        : MESSAGES.CONFIRM_DELETE_MESSAGE('MCP config'),
+        ? t('mcpConfigsPage.confirmDeleteNamed', { name: target.name })
+        : t('servicesManager.confirmDeleteMessage', { entity: t('mcpConfigsPage.entity') }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteMCPConfig(Number.parseInt(appId), configId),
       {
-        loading: MESSAGES.DELETING('MCP config'),
-        success: MESSAGES.DELETED('MCP config'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('MCP config')),
+        loading: t('mcpConfigsPage.deleting'),
+        success: t('mcpConfigsPage.deleted'),
+        error: (err) => errorMessage(err, t('mcpConfigsPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -150,7 +158,7 @@ function MCPConfigsPage() {
       setEditingConfig(config);
       setIsModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load config details');
+      setError(err instanceof Error ? err.message : t('mcpConfigsPage.loadConfigFailed'));
       console.error('Error loading MCP config:', err);
     }
   }
@@ -166,9 +174,9 @@ function MCPConfigsPage() {
           ? apiService.updateMCPConfig(Number.parseInt(appId), editingConfig.config_id, data)
           : apiService.createMCPConfig(Number.parseInt(appId), data),
       {
-        loading: isUpdate ? MESSAGES.UPDATING('MCP config') : MESSAGES.CREATING('MCP config'),
-        success: isUpdate ? MESSAGES.UPDATED('MCP config') : MESSAGES.CREATED('MCP config'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('MCP config')),
+        loading: isUpdate ? t('mcpConfigsPage.updating') : t('mcpConfigsPage.creating'),
+        success: isUpdate ? t('mcpConfigsPage.updated') : t('mcpConfigsPage.created'),
+        error: (err) => errorMessage(err, t('mcpConfigsPage.saveFailed')),
       },
     );
     // Only run side-effects if the create/update itself succeeded — refetch
@@ -218,11 +226,11 @@ function MCPConfigsPage() {
       a.remove();
       
       toast.success(
-        'Configuration exported. Remember that authentication tokens must be reconfigured after import.',
+        t('mcpConfigsPage.exportSuccess'),
         { duration: 7000 },
       );
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('MCP config')));
+      toast.error(errorMessage(err, t('mcpConfigsPage.exportFailed')));
     } finally {
       setExportingConfigId(null);
     }
@@ -233,7 +241,7 @@ function MCPConfigsPage() {
     conflictMode: ConflictMode,
     newName?: string
   ): Promise<ImportResponse> {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('mcpConfigsPage.appIdNotFound'));
     
     try {
       const result = await apiService.importMCPConfig(
@@ -246,7 +254,7 @@ function MCPConfigsPage() {
       if (result.success) {
         setShowImportModal(false);
 
-        let message = result.message || MESSAGES.IMPORTED('MCP config');
+        let message = result.message || t('mcpConfigsPage.imported');
         if (result.summary?.warnings && result.summary.warnings.length > 0) {
           message += '. ' + result.summary.warnings.join('. ');
         }
@@ -258,25 +266,31 @@ function MCPConfigsPage() {
 
       return result;
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.IMPORT_FAILED('MCP config')));
+      toast.error(errorMessage(err, t('mcpConfigsPage.importFailed')));
       throw err;
     }
   }
 
   if (loading) {
     return (
-      
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading MCP configs...</p>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+           <Title variant="titSecundario" titulo={t('mcpConfigsPage.title')} subtitulo={t('mcpConfigsPage.subtitle')} />
         </div>
-      
+
+        <LoadingState variant="page" message={t('mcpConfigsPage.loading')} />
+      </div>
     );
   }
 
   if (error) {
     return (
       <div className="p-6">
+      <div className="flex items-center justify-between">
+          <Title variant='titSecundario' titulo={t('mcpConfigsPage.title')} subtitulo={t('mcpConfigsPage.subtitle')} />
+        </div>
+
         <Alert type="error" message={error} onDismiss={() => loadMCPConfigs()} />
       </div>
     );
@@ -288,32 +302,24 @@ function MCPConfigsPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">MCP Configs</h2>
-            <p className="text-gray-600">
-              Manage Model Context Protocol server configurations
-            </p>
+            <Title variant="titSecundario" titulo={t('mcpConfigsPage.title')} subtitulo={t('mcpConfigsPage.subtitle')} />
           </div>
           {canEdit && (
             <div className="flex gap-2">
-              <button
+              <ButtonApp
+                label={t('mcpConfigsPage.import')}
                 onClick={() => setShowImportModal(true)}
-                className={
-                  "border border-gray-300 hover:bg-gray-50 text-gray-700 " +
-                  "px-4 py-2 rounded-lg flex items-center"
-                }
-              >
-                <Upload className="w-4 h-4 mr-2" />Import
-              </button>
-              <button 
+                icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+                variant="secondary"
+                size="medium"
+              />
+              <ButtonApp
+                label={t('mcpConfigsPage.addConfig')}
                 onClick={handleCreateConfig}
-                className={
-                  "bg-purple-600 hover:bg-purple-700 text-white " +
-                  "px-4 py-2 rounded-lg flex items-center"
-                }
-              >
-                <span className="mr-2">+</span>
-                {' '}Add MCP Config
-              </button>
+                icon={<span aria-hidden="true">+</span>}
+                variant="primary"
+                size="medium"
+              />
             </div>
           )}
         </div>
@@ -330,12 +336,8 @@ function MCPConfigsPage() {
         {canEdit && (
           <Alert 
             type="warning" 
-            title="Security Notice" 
-            message={
-              "MCP configurations export without authentication tokens for " +
-              "security. You must reconfigure authentication tokens and API " +
-              "keys after importing a configuration."
-            } 
+            title={t('mcpConfigsPage.security.title')}
+            message={t('mcpConfigsPage.security.message')}
             className="mb-4" 
           />
         )}
@@ -343,23 +345,24 @@ function MCPConfigsPage() {
         {/* Configs Table */}
         <Table
           data={configs}
+          stickyEdgeColumns
           keyExtractor={(config) => config.config_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('mcpConfigsPage.columns.name'),
               render: (config) => (
                 <div className="flex items-center">
-                  <Plug className="w-5 h-5 text-purple-400 mr-3 shrink-0" />
+                  <BackgroundImage icon={Plug} size={34} iconSize={17} variant="marron" className="mr-2" />
                   {canEdit ? (
                     <button
                       type="button"
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                      className="text-sm font-medium text-fg dark:text-fg-dark text-left"
                       onClick={() => void handleEditConfig(config.config_id)}
                     >
                       {config.name}
                     </button>
                   ) : (
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-fg dark:text-fg-dark">
                       {config.name}
                     </span>
                   )}
@@ -367,21 +370,22 @@ function MCPConfigsPage() {
               )
             },
             {
-              header: 'Description',
+              header: t('mcpConfigsPage.columns.description'),
               render: (config) => (
-                <div className="text-sm text-gray-600 max-w-xs truncate">
-                  {config.description || <span className="text-gray-400 italic">No description</span>}
+                <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate">
+                  {config.description || <span className="text-fg-tertiary dark:text-fg-tertiary-dark italic">{t('mcpConfigsPage.noDescription')}</span>}
                 </div>
               ),
               className: 'px-6 py-4'
             },
             {
-              header: 'Created',
-              render: (config) => config.created_at ? new Date(config.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              header: t('mcpConfigsPage.columns.created'),
+              render: (config) => config.created_at ? new Date(config.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('mcpConfigsPage.notAvailable'),
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Actions',
+              header: t('mcpConfigsPage.columns.actions'),
+              sticky: 'right',
               className: 'relative',
               render: (config) => (
                 canEdit ? (
@@ -390,12 +394,12 @@ function MCPConfigsPage() {
                       {
                         label: (
                           exportingConfigId === config.config_id 
-                            ? 'Exporting...' 
-                            : 'Export'
+                            ? t('mcpConfigsPage.exporting')
+                            : t('mcpConfigsPage.export')
                         ),
                         onClick: () => { void handleExport(config.config_id); },
                         icon: exportingConfigId === config.config_id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          ? <Spinner size="sm" tone="current" />
                           : <ArrowDownToLine className="w-4 h-4" />,
                         disabled: exportingConfigId === config.config_id,
                         variant: 'primary' as const
@@ -403,19 +407,19 @@ function MCPConfigsPage() {
                       {
                         label: (
                           testingConfigId === config.config_id 
-                            ? 'Testing...' 
-                            : 'Test Connection'
+                            ? t('mcpConfigsPage.testing')
+                            : t('mcpConfigsPage.testConnection')
                         ),
                         onClick: () => { 
                           void handleTestConnection(config.config_id); 
                         },
                         icon: testingConfigId === config.config_id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          ? <Spinner size="sm" tone="current" />
                           : <Plug className="w-4 h-4" />,
                         disabled: testingConfigId === config.config_id
                       },
                       {
-                        label: 'Edit',
+                        label: t('mcpConfigsPage.edit'),
                         onClick: () => {
                           void handleEditConfig(config.config_id);
                         },
@@ -423,72 +427,66 @@ function MCPConfigsPage() {
                         variant: 'primary'
                       },
                       {
-                        label: 'Delete',
+                        label: t('mcpConfigsPage.delete'),
                         onClick: () => { void handleDelete(config.config_id); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger'
                       }
                     ]}
                     size="sm"
+                    triggerAriaLabel={t('mcpConfigsPage.actions.menuForConfig', { name: config.name })}
                   />
                 ) : (
-                  <span className="text-gray-400 text-sm">View only</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">{t('mcpConfigsPage.viewOnly')}</span>
                 )
               )
             }
           ]}
-          emptyIcon={<Plug className="w-10 h-10 text-gray-300" />}
-          emptyMessage="No MCP Configs"
-          emptySubMessage="Add your first MCP configuration to connect agents with external tools and data sources."
+          emptyIcon={<BackgroundImage icon={Plug} size={64} iconSize={32} />}
+          emptyMessage={t('mcpConfigsPage.empty.title')}
+          emptySubMessage={t('mcpConfigsPage.empty.subtitle')}
           loading={loading}
         />
 
         {!loading && configs.length === 0 && canEdit && (
           <div className="text-center py-6">
-            <button 
+            <ButtonApp
+              label={t('mcpConfigsPage.addFirstConfig')}
               onClick={handleCreateConfig}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-            >
-              Add First MCP Config
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
 
         {/* Info Box */}
-        <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <Lightbulb className="w-5 h-5 text-purple-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-purple-800">
-                About Model Context Protocol (MCP)
-              </h3>
-              <div className="mt-2 text-sm text-purple-700">
-                <p>
-                  MCP enables secure, controlled connections between AI agents and external tools. 
-                  Configure filesystem access, database connections, APIs, web browsers, and custom tools. 
-                  Use STDIO for local processes or SSE for remote services.
-                </p>
-                <div className="mt-2">
-                  <strong>Popular MCP Servers:</strong>
-                  <ul className="list-disc list-inside mt-1 space-y-1">
-                    <li><code>@modelcontextprotocol/server-filesystem</code> - File system access</li>
-                    <li><code>@modelcontextprotocol/server-sqlite</code> - SQLite database queries</li>
-                    <li><code>@modelcontextprotocol/server-github</code> - GitHub API integration</li>
-                    <li><code>@modelcontextprotocol/server-brave-search</code> - Web search</li>
-                  </ul>
-                </div>
+        <Alert
+          type="info"
+          title={t('mcpConfigsPage.about.title')}
+          className="mt-6"
+          message={
+            <>
+              <p>
+                {t('mcpConfigsPage.about.description')}
+              </p>
+              <div className="mt-2">
+                <strong>{t('mcpConfigsPage.about.popularServers')}</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li><code>@modelcontextprotocol/server-filesystem</code> - {t('mcpConfigsPage.about.filesystem')}</li>
+                  <li><code>@modelcontextprotocol/server-sqlite</code> - {t('mcpConfigsPage.about.sqlite')}</li>
+                  <li><code>@modelcontextprotocol/server-github</code> - {t('mcpConfigsPage.about.github')}</li>
+                  <li><code>@modelcontextprotocol/server-brave-search</code> - {t('mcpConfigsPage.about.webSearch')}</li>
+                </ul>
               </div>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Create/Edit Modal */}
         <Modal
           isOpen={isModalOpen}
           onClose={handleCloseModal}
-          title={editingConfig ? 'Edit MCP Config' : 'Create New MCP Config'}
+          title={editingConfig ? t('mcpConfigsPage.editTitle') : t('mcpConfigsPage.createTitle')}
         >
           <MCPConfigForm
             mcpConfig={editingConfig}
@@ -501,42 +499,40 @@ function MCPConfigsPage() {
         <Modal
           isOpen={isTestModalOpen}
           onClose={() => !testingConfigId && setIsTestModalOpen(false)}
-          title="Connection Test Result"
+          title={t('mcpConfigsPage.testResultTitle')}
         >
           <div className="p-4">
             {testingConfigId ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Testing connection to MCP server...</p>
-              </div>
+              <LoadingState variant="section" message={t('mcpConfigsPage.testingConnection')} />
             ) : testResult && (
               <div>
                 <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  <strong>Status:</strong> {testResult.status === 'success' ? 'Success' : 'Error'}
+                  <strong>{t('mcpConfigsPage.resultStatus')}:</strong> {testResult.status === 'success' ? t('mcpConfigsPage.success') : t('mcpConfigsPage.error')}
                   <br />
-                  <strong>Message:</strong> {testResult.message}
+                  <strong>{t('mcpConfigsPage.resultMessage')}:</strong> {testResult.message}
                 </div>
                 
                 {testResult.tools && testResult.tools.length > 0 && (
                   <div>
-                    <h4 className="font-semibold mb-2">Available Tools:</h4>
-                    <div className="max-h-60 overflow-y-auto border rounded">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {testResult.tools.map((tool: { name: string; description: string }) => (
-                            <tr key={tool.name}>
-                              <td className="px-4 py-2 text-sm font-medium text-gray-900">{tool.name}</td>
-                              <td className="px-4 py-2 text-sm text-gray-500">{tool.description}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <h4 className="font-semibold mb-2">{t('mcpConfigsPage.availableTools')}:</h4>
+                    <div className="max-h-60 overflow-y-auto">
+                      <Table
+                        data={testResult.tools}
+                        keyExtractor={(tool: { name: string; description: string }) => tool.name}
+                        columns={[
+                          {
+                            header: t('mcpConfigsPage.columns.name'),
+                            accessor: 'name',
+                            className: 'px-4 py-2 text-sm font-medium text-fg dark:text-fg-dark',
+                          },
+                          {
+                            header: t('mcpConfigsPage.columns.description'),
+                            accessor: 'description',
+                            className: 'px-4 py-2 text-sm text-fg-secondary dark:text-fg-secondary-dark',
+                          },
+                        ]}
+                        rowClassName=""
+                      />
                     </div>
                   </div>
                 )}
@@ -544,12 +540,13 @@ function MCPConfigsPage() {
             )}
             {!testingConfigId && (
               <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setIsTestModalOpen(false)}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded"
-                >
-                  Close
-                </button>
+                <ButtonApp
+                              label={t('mcpConfigsPage.close')}
+                              type="button"
+                              onClick={() => setIsTestModalOpen(false)}
+                              variant="secondary"
+                              size="medium"
+                            />
               </div>
             )}
           </div>
@@ -560,7 +557,7 @@ function MCPConfigsPage() {
           onClose={() => setShowImportModal(false)}
           onImport={handleImport}
           componentType="mcp_config"
-          componentLabel="MCP Configuration"
+          componentLabel={t('mcpConfigsPage.componentLabel')}
         />      </div>
     
   );

@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { configService } from '../core/ConfigService';
+import CardApp from '../components/ui/CardApp';
+import Alert from '../components/ui/Alert';
+import ButtonLink from '../components/ui/ButtonLink';
+import { LoadingState } from '../components/ui/LoadingState';
 
 const VerifyEmailPage: React.FC = () => {
+  const { t } = useTranslation('common');
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -11,7 +17,7 @@ const VerifyEmailPage: React.FC = () => {
   useEffect(() => {
     if (!token) {
       setStatus('error');
-      setMessage('No verification token found in the URL.');
+      setMessage(t('verifyEmailPage.missingToken'));
       return;
     }
 
@@ -26,38 +32,60 @@ const VerifyEmailPage: React.FC = () => {
         const data = await response.json();
         if (response.ok) {
           setStatus('success');
-          setMessage(data.message || 'Email verified successfully.');
+          setMessage(data.message || t('verifyEmailPage.successMessage'));
         } else {
           setStatus('error');
-          setMessage(data.detail || 'Verification failed.');
+          setMessage(data.detail || t('verifyEmailPage.failureMessage'));
         }
       } catch {
         setStatus('error');
-        setMessage('An error occurred. Please try again.');
+        setMessage(t('verifyEmailPage.unexpectedError'));
       }
     };
 
     void verify();
-  }, [token]);
+  }, [token, t]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-        {status === 'loading' && <p className="text-gray-600">Verifying your email...</p>}
-        {status === 'success' && (
-          <>
-            <h2 className="text-xl font-semibold text-green-700 mb-2">Email verified!</h2>
-            <p className="text-gray-600 mb-4">{message}</p>
-            <Link to="/login" className="text-blue-600 hover:underline">Sign in now</Link>
-          </>
-        )}
-        {status === 'error' && (
-          <>
-            <h2 className="text-xl font-semibold text-red-700 mb-2">Verification failed</h2>
-            <p className="text-gray-600 mb-4">{message}</p>
-            <Link to="/login" className="text-blue-600 hover:underline">Back to login</Link>
-          </>
-        )}
+    <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
+      <div className="max-w-md w-full">
+        <CardApp className="p-8">
+          {status === 'loading' && (
+            <LoadingState variant="section" message={t('verifyEmailPage.verifying')} />
+          )}
+          {status === 'success' && (
+            <div className="space-y-4">
+              <Alert
+                type="success"
+                title={t('verifyEmailPage.successTitle')}
+                message={message}
+              />
+              <ButtonLink
+                label={t('setPasswordPage.backToSignIn')}
+                to="/login"
+                variant="secondary"
+                size="medium"
+                className="w-full"
+              />
+            </div>
+          )}
+          {status === 'error' && (
+            <div className="space-y-4">
+              <Alert
+                type="error"
+                title={t('verifyEmailPage.failureTitle')}
+                message={message}
+              />
+              <ButtonLink
+                label={t('setPasswordPage.backToSignIn')}
+                to="/login"
+                variant="secondary"
+                size="medium"
+                className="w-full"
+              />
+            </div>
+          )}
+        </CardApp>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Terminal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Badge } from '../ui/Badge';
 
 interface CodeExecutionPanelProps {
   lines: string[];
@@ -7,6 +9,7 @@ interface CodeExecutionPanelProps {
 }
 
 const CodeExecutionPanel: React.FC<CodeExecutionPanelProps> = ({ lines, isRunning }) => {
+  const { t } = useTranslation('common');
   const [expanded, setExpanded] = useState(true);
   const scrollRef = useRef<HTMLPreElement>(null);
 
@@ -38,17 +41,19 @@ const CodeExecutionPanel: React.FC<CodeExecutionPanelProps> = ({ lines, isRunnin
       >
         <Terminal className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
         <span className="flex-1 text-left text-[11px] font-semibold tracking-wide uppercase text-neutral-400">
-          Code output
+          {t('agentPlayground.codeExecution.title')}
         </span>
         {isRunning ? (
-          <span className="flex items-center gap-1 rounded-full bg-blue-900/50 px-2 py-0.5 text-blue-300 text-[10px]">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            running
-          </span>
+          <Badge
+            label={t('agentPlayground.codeExecution.running')}
+            variant="info"
+            icon={<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-info dark:bg-info-dark" />}
+          />
         ) : (
-          <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-neutral-400 text-[10px]">
-            {lines.length} {lines.length === 1 ? 'line' : 'lines'}
-          </span>
+          <Badge
+            label={t('agentPlayground.codeExecution.lines', { count: lines.length })}
+            variant="default"
+          />
         )}
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 text-neutral-500" />

@@ -239,4 +239,4 @@ export interface NavigationConfig {
   custom?: NavigationItem[];
 }
 
-export type { AppConfig } from './AppConfig';
+export type { AppConfig, OrganizationConfig } from './AppConfig';

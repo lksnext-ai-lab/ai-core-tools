@@ -1,6 +1,12 @@
+import i18n from '../../i18n';
 import type { ScheduledTaskRun } from '../../services/api';
 
-export function describeSchedule(cron: string): string {
+type ScheduleTranslator = (
+  key: string,
+  options?: { count?: number; day?: string; time?: string },
+) => string;
+
+function describeScheduleInSpanish(cron: string): string {
   const [minute, hour, dayOfMonth, , dayOfWeek] = cron.trim().split(/\s+/);
   if (minute?.startsWith('*/') && hour === '*') return `Cada ${minute.slice(2)} minutos`;
   if (minute === '0' && hour?.startsWith('*/')) return `Cada ${hour.slice(2)} horas`;
@@ -12,12 +18,50 @@ export function describeSchedule(cron: string): string {
   return `Diariamente ${time}`;
 }
 
+function describeLocalizedCalendarSchedule(
+  dayOfWeek: string | undefined,
+  dayOfMonth: string | undefined,
+  time: string | null,
+  translate: ScheduleTranslator,
+): string {
+  if (dayOfWeek !== '*') {
+    const key = time ? 'marketplacePage.schedule.weekly' : 'marketplacePage.schedule.weeklyConfigured';
+    return translate(key, { time: time ?? '' });
+  }
+  if (dayOfMonth !== '*') {
+    const key = time ? 'marketplacePage.schedule.monthly' : 'marketplacePage.schedule.monthlyConfigured';
+    return translate(key, { day: dayOfMonth ?? '', time: time ?? '' });
+  }
+  const key = time ? 'marketplacePage.schedule.daily' : 'marketplacePage.schedule.dailyConfigured';
+  return translate(key, { time: time ?? '' });
+}
+
+function describeLocalizedSchedule(cron: string, translate: ScheduleTranslator): string {
+  const [minute, hour, dayOfMonth, , dayOfWeek] = cron.trim().split(/\s+/);
+  if (minute?.startsWith('*/') && hour === '*') {
+    return translate('marketplacePage.schedule.everyMinutes', { count: Number(minute.slice(2)) });
+  }
+  if (minute === '0' && hour?.startsWith('*/')) {
+    return translate('marketplacePage.schedule.everyHours', { count: Number(hour.slice(2)) });
+  }
+  const time = Number.isInteger(Number(hour)) && Number.isInteger(Number(minute))
+    ? `${String(Number(hour)).padStart(2, '0')}:${String(Number(minute)).padStart(2, '0')}`
+    : null;
+  return describeLocalizedCalendarSchedule(dayOfWeek, dayOfMonth, time, translate);
+}
+
+export function describeSchedule(cron: string, translate?: ScheduleTranslator): string {
+  return translate
+    ? describeLocalizedSchedule(cron, translate)
+    : describeScheduleInSpanish(cron);
+}
+
 export function conversationModeLabel(mode: string): string {
   return mode === 'continuous' ? 'Conversación continua' : 'Conversación nueva por ejecución';
 }
 
 export function formatDateTime(value?: string | null): string {
-  return value ? new Date(value).toLocaleString() : '—';
+  return value ? new Date(value).toLocaleString(i18n.resolvedLanguage ?? i18n.language) : '—';
 }
 
 export function runDuration(run: ScheduledTaskRun): string | null {
@@ -39,14 +83,14 @@ export function runStatus(status?: string | null): { label: string; className: s
 }
 
 /** Plain-text preview of an output: file markers and markdown noise removed. */
-export function outputPreview(text?: string | null, max = 160): string {
+export function outputPreview(text?: string | null, max = 160, imageMarker = '[image]'): string {
   if (!text) return '';
   const plain = text
     .split('\n')
     .filter((line) => !/^\s*\|?[\s:|-]+\|?\s*$/.test(line) || !line.includes('-')) // table separators
     .map((line) => line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, '').replace(/\|/g, ' '))
     .join(' ')
-    .replace(/!\[[^\]]*\]\(file:\/\/[^)]*\)/g, '[imagen]')
+    .replace(/!\[[^\]]*\]\(file:\/\/[^)]*\)/g, imageMarker)
     .replace(/\[📎?\s*([^\]]*)\]\(file:\/\/[^)]*\)/g, '[$1]')
     .replace(/[#*_`>]/g, '')
     .replace(/\s+/g, ' ')

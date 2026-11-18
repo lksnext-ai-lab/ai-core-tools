@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
-import { ExternalLink, Loader2, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 import { apiService } from '../../services/api';
 import Modal from '../ui/Modal';
+import Alert from '../ui/Alert';
 import type { DomainUrlDetail, DomainUrlStatus, DiscoverySource } from '../../types/crawl';
+import { ButtonApp } from '../ui/ButtonApp';
+import { LoadingState } from '../ui/LoadingState';
+import { Spinner } from '../ui/Spinner';
+import { Badge, type BadgeVariant } from '../ui/Badge';
 
 interface DomainUrlDrawerProps {
   appId: number;
@@ -12,29 +18,29 @@ interface DomainUrlDrawerProps {
   onClose: () => void;
 }
 
-function statusBadgeClass(status: DomainUrlStatus): string {
+function statusBadgeVariant(status: DomainUrlStatus): BadgeVariant {
   switch (status) {
-    case 'INDEXED': return 'bg-green-100 text-green-800';
-    case 'CRAWLING': return 'bg-blue-100 text-blue-800';
-    case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-    case 'FAILED': return 'bg-red-100 text-red-800';
-    case 'SKIPPED': return 'bg-gray-100 text-gray-600';
-    case 'REMOVED': return 'bg-gray-100 text-gray-400';
-    case 'EXCLUDED': return 'bg-orange-100 text-orange-700';
-    default: return 'bg-gray-100 text-gray-600';
+    case 'INDEXED': return 'success';
+    case 'CRAWLING': return 'info';
+    case 'PENDING': return 'warning';
+    case 'FAILED': return 'error';
+    case 'SKIPPED':
+    case 'REMOVED': return 'default';
+    case 'EXCLUDED': return 'secondary';
+    default: return 'default';
   }
 }
 
-function formatDate(iso: string | null | undefined): string {
+function formatDate(iso: string | null | undefined, language?: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString();
+  return new Date(iso).toLocaleString(language);
 }
 
 function Field({ label, value }: Readonly<{ label: string; value: React.ReactNode }>) {
   return (
     <div>
-      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</dt>
-      <dd className="mt-0.5 text-sm text-gray-800">{value ?? '—'}</dd>
+      <dt className="text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark uppercase tracking-wide">{label}</dt>
+      <dd className="mt-0.5 text-sm text-fg dark:text-fg-dark">{value ?? '—'}</dd>
     </div>
   );
 }
@@ -46,6 +52,7 @@ export default function DomainUrlDrawer({
   canEdit,
   onClose,
 }: Readonly<DomainUrlDrawerProps>) {
+  const { t, i18n } = useTranslation('common');
   const [urlDetail, setUrlDetail] = useState<DomainUrlDetail | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(false);
@@ -74,7 +81,7 @@ export default function DomainUrlDrawer({
         if (detail.status === 'fulfilled') {
           setUrlDetail(detail.value);
         } else {
-          setError('Failed to load URL detail');
+          setError(t('domainDetailPage.urlDrawer.errors.loadDetail'));
         }
 
         if (contentResp.status === 'fulfilled') {
@@ -87,7 +94,7 @@ export default function DomainUrlDrawer({
     };
 
     void fetchData();
-  }, [appId, domainId, urlId]);
+  }, [appId, domainId, urlId, t]);
 
   const handleRecrawl = async () => {
     if (!urlId || recrawling) return;
@@ -98,7 +105,7 @@ export default function DomainUrlDrawer({
       const updated = await apiService.getDomainUrl(appId, domainId, urlId);
       setUrlDetail(updated);
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to mark for re-crawl');
+      setError(err?.message ?? t('domainDetailPage.urls.errors.recrawl'));
     } finally {
       setRecrawling(false);
     }
@@ -110,21 +117,14 @@ export default function DomainUrlDrawer({
     <Modal
       isOpen={urlId !== null}
       onClose={onClose}
-      title="URL Detail"
+      title={t('domainDetailPage.urlDrawer.title')}
       size="xlarge"
     >
       <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-            {error}
-          </div>
-        )}
+        {error && <Alert type="error" message={error} />}
 
         {loadingMeta ? (
-          <div className="flex justify-center items-center py-12">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-            <span className="ml-2 text-sm text-gray-500">Loading URL details...</span>
-          </div>
+          <LoadingState variant="section" message={t('domainDetailPage.urlDrawer.loading')} />
         ) : urlDetail ? (
           <>
             {/* URL + Status */}
@@ -134,74 +134,65 @@ export default function DomainUrlDrawer({
                   href={urlDetail.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-mono text-sm break-all"
+                  className="flex items-center gap-1 text-sm text-bronze  dark:text-bronze-dark inline-block font-mono text-sm break-all"
                 >
                   {urlDetail.url}
                   <ExternalLink className="w-3 h-3 flex-shrink-0" />
                 </a>
               </div>
-              <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium ${statusBadgeClass(urlDetail.status as DomainUrlStatus)}`}>
-                {urlDetail.status}
-              </span>
+              <Badge
+                label={t(`domainDetailPage.urls.statuses.${urlDetail.status.toLowerCase()}`, { defaultValue: urlDetail.status })}
+                variant={statusBadgeVariant(urlDetail.status as DomainUrlStatus)}
+                className={`flex-shrink-0 ${urlDetail.status === 'REMOVED' ? 'line-through opacity-70' : ''}`}
+              />
             </div>
 
             {/* Core metadata */}
             <dl className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <Field label="Discovered via" value={urlDetail.discovered_via as DiscoverySource} />
-              <Field label="Depth" value={urlDetail.depth} />
-              <Field label="Last crawled" value={formatDate(urlDetail.last_crawled_at)} />
-              <Field label="Last indexed" value={formatDate(urlDetail.last_indexed_at)} />
-              <Field label="Next crawl" value={
-                <span title={urlDetail.consecutive_skips > 1 ? `${urlDetail.consecutive_skips} consecutive skips — backoff active` : undefined}>
-                  {formatDate(urlDetail.next_crawl_at)}
+              <Field label={t('domainDetailPage.urlDrawer.discoveredVia')} value={t(`domainDetailPage.urls.sources.${String(urlDetail.discovered_via).toLowerCase()}`, { defaultValue: urlDetail.discovered_via as DiscoverySource })} />
+              <Field label={t('domainDetailPage.urlDrawer.depth')} value={urlDetail.depth} />
+              <Field label={t('domainDetailPage.urlDrawer.lastCrawled')} value={formatDate(urlDetail.last_crawled_at, i18n.resolvedLanguage)} />
+              <Field label={t('domainDetailPage.urlDrawer.lastIndexed')} value={formatDate(urlDetail.last_indexed_at, i18n.resolvedLanguage)} />
+              <Field label={t('domainDetailPage.urlDrawer.nextCrawl')} value={
+                <span title={urlDetail.consecutive_skips > 1 ? t('domainDetailPage.urlDrawer.backoffTooltip', { count: urlDetail.consecutive_skips }) : undefined}>
+                  {formatDate(urlDetail.next_crawl_at, i18n.resolvedLanguage)}
                   {urlDetail.consecutive_skips > 1 && (
-                    <span className="ml-1 text-orange-500 text-xs">({urlDetail.consecutive_skips}× backoff)</span>
+                    <span className="ml-1 text-orange-500 text-xs">{t('domainDetailPage.urlDrawer.backoffShort', { count: urlDetail.consecutive_skips })}</span>
                   )}
                 </span>
               } />
-              <Field label="Failure count" value={
+              <Field label={t('domainDetailPage.urlDrawer.failureCount')} value={
                 urlDetail.failure_count > 0
-                  ? <span className="text-red-600 font-medium">{urlDetail.failure_count}</span>
+                  ? <span className="text-error font-medium">{urlDetail.failure_count}</span>
                   : urlDetail.failure_count
               } />
             </dl>
 
             {/* Last error */}
             {urlDetail.last_error && (
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Last error</p>
-                <pre className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2 whitespace-pre-wrap max-h-24 overflow-y-auto">
-                  {urlDetail.last_error}
-                </pre>
-              </div>
+              <Alert type="error" title={t('domainDetailPage.urlDrawer.lastError')} message={urlDetail.last_error} />
             )}
 
             {/* HTTP cache hints */}
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">HTTP cache hints</p>
+              <p className="text-xs font-medium text-fg dark:text-fg-dark uppercase tracking-wide mb-2">{t('domainDetailPage.urlDrawer.httpCacheHints')}</p>
               <dl className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <Field label="ETag" value={urlDetail.http_etag ?? '—'} />
-                <Field label="Last-Modified" value={urlDetail.http_last_modified ?? '—'} />
-                <Field label="Sitemap lastmod" value={formatDate(urlDetail.sitemap_lastmod)} />
+                <Field label={t('domainDetailPage.urlDrawer.etagHeader')} value={urlDetail.http_etag ?? '—'} />
+                <Field label={t('domainDetailPage.urlDrawer.lastModifiedHeader')} value={urlDetail.http_last_modified ?? '—'} />
+                <Field label={t('domainDetailPage.urlDrawer.sitemapLastmod')} value={formatDate(urlDetail.sitemap_lastmod, i18n.resolvedLanguage)} />
               </dl>
             </div>
 
             {/* Actions */}
             {canEdit && (
               <div>
-                <button
-                  type="button"
+                <ButtonApp
+                  label={recrawling ? t('domainDetailPage.urlDrawer.marking') : t('domainDetailPage.urls.actions.forceRecrawl')}
                   onClick={() => { void handleRecrawl(); }}
-                  disabled={recrawling}
-                  className="flex items-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  {recrawling ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  {recrawling ? 'Marking...' : 'Force re-crawl'}
-                </button>
+                  loading={recrawling}
+                  size="small"
+                  icon={<RefreshCw className="w-4 h-4" />}
+                />
               </div>
             )}
           </>
@@ -209,18 +200,18 @@ export default function DomainUrlDrawer({
 
         {/* Content preview */}
         <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Indexed content preview</p>
+          <p className="text-xs font-medium text-fg dark:text-fg-dark uppercase tracking-wide mb-2">{t('domainDetailPage.urlDrawer.contentPreview')}</p>
           {loadingContent ? (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading content...
+            <div className="flex items-center gap-2 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              <Spinner size="sm" tone="muted" />
+              {t('domainDetailPage.urlDrawer.loadingContent')}
             </div>
           ) : content ? (
-            <pre className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded p-3 whitespace-pre-wrap max-h-64 overflow-y-auto">
+            <pre className="text-xs text-fg dark:text-fg-dark bg-bg dark:bg-bg-dark border border-border dark:border-border-dark rounded p-3 whitespace-pre-wrap max-h-64 overflow-y-auto">
               {content}
             </pre>
           ) : (
-            <p className="text-sm text-gray-500 italic">No indexed content found for this URL.</p>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark italic">{t('domainDetailPage.urlDrawer.noContent')}</p>
           )}
         </div>
       </div>

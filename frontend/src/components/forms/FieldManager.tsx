@@ -1,4 +1,9 @@
 import { randomId } from '../../utils/randomId';
+import { useTranslation } from 'react-i18next';
+import Alert from '../ui/Alert';
+import { ButtonApp } from '../ui/ButtonApp';
+import FormField, { FormSelect, FormTextArea } from '../ui/FormField';
+import Table, { type TableColumn } from '../ui/Table';
 
 interface FieldDefinition {
   name: string;
@@ -19,15 +24,16 @@ interface FieldManagerProps {
 }
 
 function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Readonly<FieldManagerProps>) {
+  const { t } = useTranslation('common');
   const fieldTypes = [
-    { value: 'str', name: 'String' },
-    { value: 'int', name: 'Integer' },
-    { value: 'float', name: 'Float' },
-    { value: 'bool', name: 'Boolean' },
-    { value: 'date', name: 'Date' },
-    { value: 'dict', name: 'Dictionary (JSON Object)' },
-    { value: 'list', name: 'List' },
-    { value: 'parser', name: 'Parser Reference' }
+    { value: 'str', name: t('dataStructuresPage.fields.types.string') },
+    { value: 'int', name: t('dataStructuresPage.fields.types.integer') },
+    { value: 'float', name: t('dataStructuresPage.fields.types.float') },
+    { value: 'bool', name: t('dataStructuresPage.fields.types.boolean') },
+    { value: 'date', name: t('dataStructuresPage.fields.types.date') },
+    { value: 'dict', name: t('dataStructuresPage.fields.types.dictionary') },
+    { value: 'list', name: t('dataStructuresPage.fields.types.list') },
+    { value: 'parser', name: t('dataStructuresPage.fields.types.parser') }
   ];
 
   const addField = () => {
@@ -77,221 +83,193 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
     return pattern.test(name);
   };
 
+  const parserOptions = [
+    { value: '', label: t('dataStructuresPage.fields.selectParser') },
+    ...availableParsers.map((parser) => ({ value: parser.value, label: parser.name }))
+  ];
+
   const getListItemTypes = () => [
-    { value: 'str', name: 'String' },
-    { value: 'int', name: 'Integer' },
-    { value: 'float', name: 'Float' },
-    { value: 'bool', name: 'Boolean' },
-    { value: 'date', name: 'Date' },
-    { value: 'dict', name: 'Dictionary (JSON Object)' },
-    { value: 'parser', name: 'Parser Reference' }
+    { value: 'str', name: t('dataStructuresPage.fields.types.string') },
+    { value: 'int', name: t('dataStructuresPage.fields.types.integer') },
+    { value: 'float', name: t('dataStructuresPage.fields.types.float') },
+    { value: 'bool', name: t('dataStructuresPage.fields.types.boolean') },
+    { value: 'date', name: t('dataStructuresPage.fields.types.date') },
+    { value: 'dict', name: t('dataStructuresPage.fields.types.dictionary') },
+    { value: 'parser', name: t('dataStructuresPage.fields.types.parser') }
+  ];
+
+  const rows = fields.map((field, index) => ({ field, index }));
+  type FieldRow = (typeof rows)[number];
+
+  const cellClassName = 'px-6 py-4 align-top';
+
+  const columns: TableColumn<FieldRow>[] = [
+    {
+      header: t('dataStructuresPage.fields.columns.name'),
+      headerClassName: 'w-1/4',
+      className: cellClassName,
+      render: ({ field, index }) => (
+        <FormField
+          id={`field_name_${index}`}
+          ariaLabel={t('dataStructuresPage.fields.fieldNameAria')}
+          value={field.name}
+          onChange={(e) => updateField(index, { name: e.target.value })}
+          error={field.name && !validateFieldName(field.name) ? t('dataStructuresPage.fields.invalidFieldName') : undefined}
+          placeholder="field_name"
+        />
+      ),
+    },
+    {
+      header: t('dataStructuresPage.fields.columns.typeConfiguration'),
+      headerClassName: 'w-1/3',
+      className: cellClassName,
+      render: ({ field, index }) => (
+        <div className="space-y-3">
+          {/* Main Type Selector */}
+          <FormSelect
+            id={`field_type_${index}`}
+            label={t('dataStructuresPage.fields.fieldType')}
+            labelClassName="sr-only"
+            value={field.type}
+            onChange={(e) => updateField(index, { type: e.target.value })}
+            options={fieldTypes.map((type) => ({ value: type.value, label: type.name }))}
+          />
+
+          {/* Parser Reference Selector */}
+          {field.type === 'parser' && (
+            <FormSelect
+              id={`parser_ref_${index}`}
+              label={t('dataStructuresPage.fields.referenceParser')}
+              value={field.parser_id || ''}
+              onChange={(e) => updateField(index, { parser_id: Number.parseInt(e.target.value) || undefined })}
+              options={parserOptions}
+            />
+          )}
+
+          {/* List Type Selectors */}
+          {field.type === 'list' && (
+            <div className="space-y-2">
+              <FormSelect
+                id={`list_item_type_${index}`}
+                label={t('dataStructuresPage.fields.listItemType')}
+                value={field.list_item_type || 'str'}
+                onChange={(e) => updateField(index, { list_item_type: e.target.value })}
+                options={getListItemTypes().map((type) => ({ value: type.value, label: type.name }))}
+              />
+
+              {field.list_item_type === 'parser' && (
+                <FormSelect
+                  id={`list_item_parser_${index}`}
+                  label={t('dataStructuresPage.fields.listItemParser')}
+                  value={field.list_item_parser_id || ''}
+                  onChange={(e) => updateField(index, { list_item_parser_id: Number.parseInt(e.target.value) || undefined })}
+                  options={parserOptions}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: t('dataStructuresPage.fields.columns.description'),
+      headerClassName: 'w-1/3',
+      className: cellClassName,
+      render: ({ field, index }) => (
+        <FormTextArea
+          id={`field_description_${index}`}
+          label={t('dataStructuresPage.fields.descriptionLabel')}
+          labelClassName="sr-only"
+          value={field.description}
+          onChange={(e) => updateField(index, { description: e.target.value })}
+          rows={3}
+          textareaClassName="resize-none"
+          placeholder={t('dataStructuresPage.fields.descriptionPlaceholder')}
+        />
+      ),
+    },
+    {
+      header: t('dataStructuresPage.fields.columns.optional'),
+      headerClassName: 'text-center w-20',
+      className: `${cellClassName} text-center`,
+      render: ({ field, index }) => (
+        <FormField
+          type="checkbox"
+          id={`optional_${index}`}
+          ariaLabel={t('dataStructuresPage.fields.optionalAria')}
+          checked={field.optional ?? false}
+          onChange={(e) => updateField(index, { optional: e.target.checked })}
+        />
+      ),
+    },
+    {
+      header: t('dataStructuresPage.fields.columns.actions'),
+      headerClassName: 'w-16',
+      className: cellClassName,
+      render: ({ index }) => (
+        <button
+          type="button"
+          onClick={() => removeField(index)}
+          className="text-red-600 hover:text-red-900 transition-colors p-2"
+          title={t('dataStructuresPage.fields.removeField')}
+          aria-label={t('dataStructuresPage.fields.removeField')}
+        >
+          <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+          </svg>
+        </button>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium text-gray-900">Fields ({fields.length}/{maxFields})</h3>
-        <button
-          type="button"
+        <h3 className="text-lg font-medium text-fg dark:text-fg-dark">{t('dataStructuresPage.fields.heading', { count: fields.length, max: maxFields })}</h3>
+        <ButtonApp
+          label={t('dataStructuresPage.fields.addField')}
+          variant="primary"
+          size="medium"
           onClick={addField}
           disabled={fields.length >= maxFields}
-          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm rounded transition-colors"
-        >
-          Add Field
-        </button>
+        />
       </div>
 
       {/* Fields Table */}
-      {fields.length > 0 ? (
-        <div className="border border-gray-300 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                  Field Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
-                  Type & Configuration
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                  Optional
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {fields.map((field, index) => (
-                <tr key={field._key} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 align-top">
-                    <input
-                      type="text"
-                      value={field.name}
-                      onChange={(e) => updateField(index, { name: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        field.name && !validateFieldName(field.name) 
-                          ? 'border-red-300 bg-red-50' 
-                          : 'border-gray-300'
-                      }`}
-                      placeholder="field_name"
-                    />
-                    {field.name && !validateFieldName(field.name) && (
-                      <p className="text-xs text-red-600 mt-1">
-                        Only letters, numbers, and underscores
-                      </p>
-                    )}
-                  </td>
-                  
-                  <td className="px-6 py-4 align-top">
-                    <div className="space-y-3">
-                      {/* Main Type Selector */}
-                      <select
-                        value={field.type}
-                        onChange={(e) => updateField(index, { type: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        {fieldTypes.map((type) => (
-                          <option key={type.value} value={type.value}>
-                            {type.name}
-                          </option>
-                        ))}
-                      </select>
-                      
-                      {/* Parser Reference Selector */}
-                      {field.type === 'parser' && (
-                        <div>
-                          <label htmlFor={`parser_ref_${index}`} className="block text-xs font-medium text-gray-700 mb-1">
-                            Reference Parser:
-                          </label>
-                          <select
-                            id={`parser_ref_${index}`}
-                            value={field.parser_id || ''}
-                            onChange={(e) => updateField(index, { parser_id: Number.parseInt(e.target.value) || undefined })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select parser...</option>
-                            {availableParsers.map((parser) => (
-                              <option key={parser.value} value={parser.value}>
-                                {parser.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      
-                      {/* List Type Selectors */}
-                      {field.type === 'list' && (
-                        <div className="space-y-2">
-                          <label htmlFor={`list_item_type_${index}`} className="block text-xs font-medium text-gray-700 mb-1">
-                            List Item Type:
-                          </label>
-                          <select
-                            id={`list_item_type_${index}`}
-                            value={field.list_item_type || 'str'}
-                            onChange={(e) => updateField(index, { list_item_type: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {getListItemTypes().map((type) => (
-                              <option key={type.value} value={type.value}>
-                                {type.name}
-                              </option>
-                            ))}
-                          </select>
-                          
-                          {field.list_item_type === 'parser' && (
-                            <div>
-                              <label htmlFor={`list_item_parser_${index}`} className="block text-xs font-medium text-gray-700 mb-1">
-                                List Item Parser:
-                              </label>
-                              <select
-                                id={`list_item_parser_${index}`}
-                                value={field.list_item_parser_id || ''}
-                                onChange={(e) => updateField(index, { list_item_parser_id: Number.parseInt(e.target.value) || undefined })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              >
-                                <option value="">Select parser...</option>
-                                {availableParsers.map((parser) => (
-                                  <option key={parser.value} value={parser.value}>
-                                    {parser.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  
-                  <td className="px-6 py-4 align-top">
-                    <textarea
-                      value={field.description}
-                      onChange={(e) => updateField(index, { description: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      placeholder="Describe this field..."
-                    />
-                  </td>
-                  
-                  <td className="px-6 py-4 align-top text-center">
-                    <input
-                      type="checkbox"
-                      id={`optional_${index}`}
-                      checked={field.optional ?? false}
-                      onChange={(e) => updateField(index, { optional: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                      title="Mark field as optional"
-                    />
-                  </td>
-                  
-                  <td className="px-6 py-4 align-top">
-                    <button
-                      type="button"
-                      onClick={() => removeField(index)}
-                      className="text-red-600 hover:text-red-900 transition-colors p-2"
-                      title="Remove field"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
-          <p className="text-gray-500 mb-4">No fields defined yet</p>
-          <button
-            type="button"
+      <Table
+        columns={columns}
+        data={rows}
+        keyExtractor={({ field, index }) => field._key ?? index}
+        emptyMessage={t('dataStructuresPage.fields.empty')}
+      />
+      {fields.length === 0 && (
+        <div className="flex justify-center">
+          <ButtonApp
+            label={t('dataStructuresPage.fields.addFirstField')}
+            variant="primary"
+            size="medium"
             onClick={addField}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-          >
-            Add First Field
-          </button>
+          />
         </div>
       )}
 
       {/* Field Types Help */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <h4 className="text-sm font-medium text-blue-800 mb-2">Field Types Reference</h4>
-        <div className="text-xs text-blue-700 space-y-1">
-          <p><strong>String:</strong> Text data (e.g., "hello world")</p>
-          <p><strong>Integer:</strong> Whole numbers (e.g., 42)</p>
-          <p><strong>Float:</strong> Decimal numbers (e.g., 3.14)</p>
-          <p><strong>Boolean:</strong> True/False values</p>
-          <p><strong>Date:</strong> Date values (e.g., 2024-01-15)</p>
-          <p><strong>List:</strong> Array of items with specified type</p>
-          <p><strong>Parser Reference:</strong> Reference to another data structure</p>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title={t('dataStructuresPage.fields.referenceTitle')}
+        message={(
+          <div className="text-xs space-y-1">
+            <p><strong>{t('dataStructuresPage.fields.types.string')}:</strong> {t('dataStructuresPage.fields.typeHelp.string')}</p>
+            <p><strong>{t('dataStructuresPage.fields.types.integer')}:</strong> {t('dataStructuresPage.fields.typeHelp.integer')}</p>
+            <p><strong>{t('dataStructuresPage.fields.types.float')}:</strong> {t('dataStructuresPage.fields.typeHelp.float')}</p>
+            <p><strong>{t('dataStructuresPage.fields.types.boolean')}:</strong> {t('dataStructuresPage.fields.typeHelp.boolean')}</p>
+            <p><strong>{t('dataStructuresPage.fields.types.date')}:</strong> {t('dataStructuresPage.fields.typeHelp.date')}</p>
+            <p><strong>{t('dataStructuresPage.fields.types.list')}:</strong> {t('dataStructuresPage.fields.typeHelp.list')}</p>
+            <p><strong>{t('dataStructuresPage.fields.types.parser')}:</strong> {t('dataStructuresPage.fields.typeHelp.parser')}</p>
+          </div>
+        )}
+      />
     </div>
   );
 }

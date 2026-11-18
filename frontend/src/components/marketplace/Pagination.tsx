@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 /** Page navigator shared by the marketplace catalogs. */
 interface PaginationProps {
   readonly page: number;
@@ -6,6 +8,7 @@ interface PaginationProps {
 }
 
 export function Pagination({ page, totalPages, onPageChange }: PaginationProps) {
+  const { t } = useTranslation('common');
   // Build a window of page numbers around the current page
   const pages: number[] = [];
   const start = Math.max(1, page - 2);
@@ -15,14 +18,18 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
   }
 
   return (
-    <nav className="flex items-center justify-center gap-1 mt-4" aria-label="Pagination">
+    <nav className="flex items-center justify-center gap-1 mt-4" aria-label={t('pagination.ariaLabel')}>
       <button
         type="button"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+        className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+          disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
       >
-        Previous
+        {t('pagination.previous')}
       </button>
 
       {start > 1 && (
@@ -30,11 +37,16 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           <button
             type="button"
             onClick={() => onPageChange(1)}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+            className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
+          
           >
             1
           </button>
-          {start > 2 && <span className="px-2 text-gray-400">…</span>}
+          {start > 2 && <span className="px-2 text-fg-secondary dark:text-fg-secondary-dark">…</span>}
         </>
       )}
 
@@ -43,10 +55,10 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           key={p}
           type="button"
           onClick={() => onPageChange(p)}
-          className={`px-3 py-2 text-sm rounded-lg border ${
+          className={`h-10 px-3 py-2 text-sm rounded-lg border ${
             p === page
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'border-gray-300 hover:bg-gray-50'
+              ? 'bg-fg text-white border-fg dark:bg-fg-dark dark:text-ink-on-dark dark:border-fg-dark'
+              : 'border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark'
           }`}
         >
           {p}
@@ -55,11 +67,15 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
 
       {end < totalPages && (
         <>
-          {end < totalPages - 1 && <span className="px-2 text-gray-400">…</span>}
+          {end < totalPages - 1 && <span className="px-2 text-fg-secondary dark:text-fg-secondary-dark">…</span>}
           <button
             type="button"
             onClick={() => onPageChange(totalPages)}
-            className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+            className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
           >
             {totalPages}
           </button>
@@ -70,9 +86,13 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
         type="button"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
-        className="px-3 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+        className="h-10 px-3 py-2 rounded-lg  border border-line hover:bg-surface-hover dark:border-line-dark dark:hover:bg-surface-hover-dark
+        disabled:opacity-40
+    disabled:cursor-not-allowed
+    disabled:hover:bg-transparent
+    dark:disabled:hover:bg-transparent"
       >
-        Next
+        {t('pagination.next')}
       </button>
     </nav>
   );

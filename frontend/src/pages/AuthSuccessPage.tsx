@@ -1,11 +1,16 @@
 import { useContext, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { OIDCContext } from '../auth/OIDCProvider';
+import Alert from '../components/ui/Alert';
+import ButtonApp from '../components/ui/ButtonApp';
+import { LoadingState } from '../components/ui/LoadingState';
+import CardApp from '../components/ui/CardApp';
 
 function AuthSuccessPage() {
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const { isAuthenticated, loading, sessionError } = useAuth();
   const returnTo = useContext(OIDCContext)?.returnTo ?? null;
@@ -15,43 +20,37 @@ function AuthSuccessPage() {
     if (isAuthenticated) {
       navigate(returnTo ?? '/', { replace: true });
     } else if (sessionError === 'unavailable') {
-      setError('The server could not be reached. Please try again in a moment.');
+      setError(t('authSuccessPage.serverUnavailable'));
     } else {
-      setError('Authentication failed - please try again');
+      setError(t('authSuccessPage.authenticationFailed'));
     }
-  }, [isAuthenticated, loading, sessionError, returnTo, navigate]);
+  }, [isAuthenticated, loading, sessionError, returnTo, navigate, t]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <CardApp className="min-h-screen flex items-center justify-center ">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-900">Completing sign in...</h2>
-          <p className="text-gray-600 mt-2">Please wait while we set up your account</p>
+          <LoadingState variant="indicator" className="mb-4" />
+          <h2 className="text-xl font-semibold text-fg dark:text-fg-dark">{t('authSuccessPage.completingSignIn')}</h2>
+          <p className="text-fg-secondary  dark:text-fg-secondary-dark mt-2">{t('authSuccessPage.settingUpAccount')}</p>
         </div>
-      </div>
+      </CardApp>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-100">
+      <div>
         <div className="max-w-md w-full space-y-8 p-8">
-          <div className="text-center">
-            <div className="mx-auto h-16 w-16 bg-red-500 rounded-full flex items-center justify-center mb-4">
-              <X className="w-5 h-5 text-white" />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900">Sign in failed</h2>
-            <p className="text-gray-600 mt-2">{error}</p>
-          </div>
+          <Alert type="error" title={t('authSuccessPage.signInFailed')} message={error} />
           
           <div className="text-center">
-            <button
+            <ButtonApp
+              label={t('authSuccessPage.tryAgain')}
               onClick={() => navigate('/login', { replace: true })}
-              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
-            >
-              Try Again
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         </div>
       </div>

@@ -1,17 +1,17 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import {
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
   ShieldAlert,
   Upload,
-  XCircle,
 } from 'lucide-react';
 import Modal from '../ui/Modal';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { apiService } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
 import type { ClaudePluginImportResult, ClaudePluginSkillResult } from '../../core/types';
+import { ButtonApp } from '../ui/ButtonApp';
+import { FormField } from '../ui/FormField';
+import { StatusBadge } from '../ui/Badge';
+import { useTranslation } from 'react-i18next';
 
 export interface ClaudePluginImportModalProps {
   readonly appId: number;
@@ -23,29 +23,13 @@ export interface ClaudePluginImportModalProps {
 
 type Phase = 'idle' | 'submitting' | 'done';
 
-function statusBadge(status: ClaudePluginSkillResult['status']) {
-  if (status === 'imported') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">
-        <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-        Imported
-      </span>
-    );
-  }
-  if (status === 'skipped') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800">
-        <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-        Skipped
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
-      <XCircle className="w-3.5 h-3.5" aria-hidden="true" />
-      Failed
-    </span>
-  );
+function statusBadge(
+  status: ClaudePluginSkillResult['status'],
+  labels: Record<ClaudePluginSkillResult['status'], string>,
+) {
+  if (status === 'imported') return <StatusBadge status="success" customLabel={labels.imported} />;
+  if (status === 'skipped') return <StatusBadge status="warning" customLabel={labels.skipped} />;
+  return <StatusBadge status="error" customLabel={labels.failed} />;
 }
 
 /**
@@ -56,6 +40,7 @@ function statusBadge(status: ClaudePluginSkillResult['status']) {
  * metadata only and is never read/enforced here (AD-15).
  */
 function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudePluginImportModalProps) {
+  const { t } = useTranslation('common');
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ClaudePluginImportResult | null>(null);
@@ -111,7 +96,7 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
     const file = e.target.files?.[0] ?? null;
     setError(null);
     if (file && !file.name.toLowerCase().endsWith('.zip')) {
-      setError('Please select a valid Claude Code plugin package (.zip file).');
+      setError(t('skillsPage.claudePluginImport.invalidFile'));
       setSelectedFile(null);
       return;
     }
@@ -120,7 +105,7 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
 
   async function handleSubmit() {
     if (!selectedFile) {
-      setError('Please choose a .zip file to import.');
+      setError(t('skillsPage.claudePluginImport.chooseFile'));
       return;
     }
 
@@ -131,7 +116,7 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
       setResult(response);
       setPhase('done');
     } catch (err) {
-      setError(errorMessage(err, 'Failed to import Claude Code plugin'));
+      setError(errorMessage(err, t('skillsPage.claudePluginImport.failed')));
       setPhase('idle');
     }
   }
@@ -143,7 +128,12 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Import Claude Code Plugin" size="medium">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={t('skillsPage.claudePluginImport.title')}
+      size="medium"
+    >
       <div className="space-y-4">
         {/* Persistent live region: always mounted (empty/hidden until a report exists) so the
             summary text change is announced as a mutation rather than relying on a freshly
@@ -155,71 +145,60 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
           role="status"
           aria-live="polite"
           tabIndex={-1}
-          className={result ? 'text-sm text-gray-700 dark:text-gray-300 outline-none' : 'sr-only'}
+          className={result ? 'text-sm text-fg dark:text-fg-dark outline-none' : 'sr-only'}
         >
           {result
-            ? `${result.imported_count} imported, ${result.skipped_count} skipped, ${result.failed_count} failed.`
+            ? t('skillsPage.claudePluginImport.summary', {
+                imported: result.imported_count,
+                skipped: result.skipped_count,
+                failed: result.failed_count,
+              })
             : ''}
         </div>
 
         {!result && (
           <>
-            <p ref={uploadIntroRef} tabIndex={-1} className="text-sm text-gray-600 dark:text-gray-400 outline-none">
-              Upload a Claude Code plugin package (.zip). Each <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">skills/&lt;name&gt;/SKILL.md</code>{' '}
-              found in the archive is imported as a disabled skill so an administrator can review
-              it — including any bootstrap script it carries — before enabling it.
+            <p ref={uploadIntroRef} tabIndex={-1} className="text-sm text-fg-secondary dark:text-fg-secondary-dark outline-none">
+              {t('skillsPage.claudePluginImport.introBeforePath')}{' '}
+              <code className="bg-fg-tertiary dark:bg-tertiary-dark px-1 rounded">skills/&lt;name&gt;/SKILL.md</code>{' '}
+              {t('skillsPage.claudePluginImport.introAfterPath')}
             </p>
 
-            <FormError error={error} />
+            {error && <Alert type="error" message={error} />}
 
-            <div>
-              <label
-                htmlFor={fileInputId}
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-              >
-                Plugin package
-              </label>
-              <input
-                ref={fileInputRef}
-                id={fileInputId}
-                type="file"
-                accept=".zip,application/zip"
-                onChange={handleFileChange}
-                disabled={isSubmitting}
-                aria-describedby={`${fileInputId}-help`}
-                className="block w-full text-sm text-gray-700 dark:text-gray-200 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-900/40 dark:file:text-purple-200 dark:hover:file:bg-purple-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <p id={`${fileInputId}-help`} className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Only a .zip archive is accepted.
-              </p>
-            </div>
+            <FormField
+              ref={fileInputRef}
+              id={fileInputId}
+              label={t('skillsPage.claudePluginImport.packageLabel')}
+              type="file"
+              accept=".zip,application/zip"
+              onChange={handleFileChange}
+              disabled={isSubmitting}
+              helpText={t('skillsPage.claudePluginImport.packageHelp')}
+            />
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-line dark:border-line-dark bg-surface dark:bg-surface-dark">
+              <ButtonApp
+                label={t('cancel')}
                 type="button"
                 onClick={handleClose}
                 disabled={isSubmitting}
-                className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
+                variant="secondary"
+                size="medium"
+              />
+              <ButtonApp
+                label={isSubmitting
+                  ? t('skillsPage.claudePluginImport.importing')
+                  : t('skillsPage.claudePluginImport.import')}
                 onClick={() => { void handleSubmit(); }}
-                disabled={isSubmitting || !selectedFile}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg flex items-center transition-colors disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" aria-hidden="true" />
-                )}
-                {isSubmitting ? 'Importing…' : 'Import'}
-              </button>
+                disabled={!selectedFile}
+                loading={isSubmitting}
+                icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+              />
               {/* A button label swap alone isn't reliably announced (WCAG 4.1.3) — mirror the
                   sr-only status pattern already used for async actions in SkillsPage. */}
               <span role="status" aria-live="polite" className="sr-only">
-                {isSubmitting ? 'Importing plugin…' : ''}
+                {isSubmitting ? t('skillsPage.claudePluginImport.importingStatus') : ''}
               </span>
             </div>
           </>
@@ -228,40 +207,39 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
         {result && (
           <div className="space-y-4">
             {result.skills.some((s) => s.has_bootstrap) && (
-              <div
-                role="alert"
-                className="flex items-start gap-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3"
-              >
-                <ShieldAlert className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0" aria-hidden="true" />
-                <p className="text-sm text-red-700 dark:text-red-300">
-                  One or more imported skills carry a bootstrap script that will execute code once
-                  enabled. Review each entry marked below carefully before enabling it.
-                </p>
-              </div>
+              <Alert
+                type="error"
+                title={t('skillsPage.claudePluginImport.reviewTitle')}
+                message={t('skillsPage.claudePluginImport.reviewMessage')}
+              />
             )}
 
-            <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <ul className="divide-y divide-line dark:divide-btCard-border-dark border dark:border-btCard-border-dark rounded-md overflow-hidden">
               {result.skills.map((skill) => (
-                <li key={skill.name} className="p-3 bg-white dark:bg-gray-800">
+                <li key={skill.name} className="p-3 bg-surface dark:bg-surface-dark">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">
+                    <span className="text-sm font-mono font-medium text-fg dark:text-fg-dark">
                       {skill.name}
                     </span>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {skill.has_bootstrap && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
                           <ShieldAlert className="w-3.5 h-3.5" aria-hidden="true" />
-                          Runs bootstrap script
+                          {t('skillsPage.claudePluginImport.runsBootstrap')}
                         </span>
                       )}
-                      {statusBadge(skill.status)}
+                      {statusBadge(skill.status, {
+                        imported: t('skillsPage.claudePluginImport.status.imported'),
+                        skipped: t('skillsPage.claudePluginImport.status.skipped'),
+                        failed: t('skillsPage.claudePluginImport.status.failed'),
+                      })}
                     </div>
                   </div>
                   {skill.reason && (skill.status === 'skipped' || skill.status === 'failed') && (
-                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{skill.reason}</p>
+                    <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">{skill.reason}</p>
                   )}
                   {skill.has_bootstrap && skill.bootstrap_script_path && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">
+                    <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark font-mono">
                       {skill.bootstrap_script_path}
                       {skill.runtime ? ` (${skill.runtime})` : ''}
                     </p>
@@ -270,21 +248,21 @@ function ClaudePluginImportModal({ appId, isOpen, onClose, onImported }: ClaudeP
               ))}
             </ul>
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-line dark:border-line-dark ">
+              <ButtonApp
+                label={t('skillsPage.claudePluginImport.importAnother')}
                 type="button"
+                variant="secondary"
+                size="control"
                 onClick={handleRetry}
-                className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                Import another
-              </button>
-              <button
+              />
+              <ButtonApp
+                label={t('skillsPage.claudePluginImport.done')}
                 type="button"
+                variant="primary"
+                size="control"
                 onClick={handleClose}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-              >
-                Done
-              </button>
+              />
             </div>
           </div>
         )}

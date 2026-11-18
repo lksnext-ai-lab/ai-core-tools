@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Timer } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
@@ -9,6 +10,7 @@ import SearchFilters from './SearchFilters';
 import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
+import BackgroundImage from '../ui/BackgroundImage';
 import OrchestratorFilterDropdowns, { toSearchFilter } from './OrchestratorFilterDropdowns';
 import type { ChatFilterField, ChatFilterSelection } from './OrchestratorFilterDropdowns';
 import { SEARCH_RESULT_LIMIT } from './SearchableMultiSelect';
@@ -19,6 +21,9 @@ import HitlApprovalCard from './HitlApprovalCard';
 import { useApprovalExpiryWatch } from '../../hooks/useApprovalExpiryWatch';
 import type { HitlDecision } from '../../types/streaming';
 import type { VideoTimestamp } from './VideoPlayer';
+import { LoadingState } from '../ui/LoadingState';
+import ButtonApp from '../ui/ButtonApp';
+import { SegmentedTabs } from '../ui/SegmentedTabs';
 
 interface Message {
   id: string;
@@ -75,6 +80,8 @@ interface ChatInterfaceProps {
   onMessageSent?: () => void;
   metadataFields?: SearchFilterMetadataField[];
   vectorDbType?: string;
+  /** Extra controls rendered at the start of the chat toolbar (left of "Reset"). */
+  toolbarStart?: React.ReactNode;
 }
 
 function ChatInterface({
@@ -87,13 +94,15 @@ function ChatInterface({
   onMessageSent,
   metadataFields,
   vectorDbType,
+  toolbarStart,
 }: Readonly<ChatInterfaceProps>) {
+  const { t } = useTranslation('common');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [persistentFiles, setPersistentFiles] = useState<RawAttachedFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [sidePanelTab, setSidePanelTab] = useState<'info' | 'filters'>('info');
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(
     conversationId || null
   );
@@ -124,6 +133,7 @@ function ChatInterface({
   const userScrolledUpRef = useRef(false);
   const lastScrollTopRef = useRef(0);
   const filterPanelId = `metadata-filters-${agentId}`;
+  const hasMetadataFilters = !!metadataFields && metadataFields.length > 0;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -476,7 +486,7 @@ function ChatInterface({
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : 'The approval could not be sent',
+        content: error instanceof Error ? error.message : t('agentPlayground.chat.approvalCouldNotBeSent'),
         timestamp: new Date(),
       }]);
     }
@@ -495,7 +505,7 @@ function ChatInterface({
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : 'The request could not be cancelled',
+        content: error instanceof Error ? error.message : t('agentPlayground.chat.requestCouldNotBeCancelled'),
         timestamp: new Date(),
       }]);
     } finally {
@@ -560,7 +570,7 @@ function ChatInterface({
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : 'An error occurred',
+        content: error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed'),
         timestamp: new Date(),
         elapsedMs: error instanceof StreamingChatError ? error.elapsedMs : responseElapsedMs,
       };
@@ -695,7 +705,7 @@ function ChatInterface({
     // Make that scope explicit to avoid a surprising destructive action.
     if (fileId.startsWith('media_')) {
       const confirmed = window.confirm(
-        'Removing this media item will delete all uploaded media for this playground session. Do you want to continue?'
+        t('agentPlayground.chat.removePlaygroundMediaConfirm')
       );
       if (!confirmed) {
         return;
@@ -945,144 +955,52 @@ function ChatInterface({
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      {/* Metadata Filters Section */}
-      {metadataFields && metadataFields.length > 0 && (
-        <div className="pg-glass rounded-xl overflow-hidden">
-          <button
-            type="button"
-            className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/30 dark:hover:bg-gray-700/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
-            onClick={() => setIsFilterExpanded((prev) => !prev)}
-            aria-expanded={isFilterExpanded}
-            aria-controls={filterPanelId}
-          >
-            <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              <svg
-                className="w-4 h-4 text-indigo-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
-                />
-              </svg>
-              Filter by Metadata
-            </span>
-            <svg
-              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                isFilterExpanded ? 'rotate-180' : ''
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-
-          <div
-            id={filterPanelId}
-            className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 ${
-              isFilterExpanded ? '' : 'hidden'
-            }`}
-          >
-            <SearchFilters
-              key={filtersKey}
-              metadataFields={metadataFields}
-              dbType={vectorDbType?.toUpperCase()}
-              disabled={isStreaming}
-              onFilterMetadataChange={handleFilterMetadataChange}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Chat Interface + File Panel */}
-      <div className="flex gap-4 items-start">
+    <div className="flex flex-col gap-4">
+      {/* Chat Interface + right column (info / filters) */}
+      <div className="grid grid-cols-1 items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* Chat card */}
-        <div className="flex-1 pg-glass rounded-2xl flex flex-col h-[calc(100vh-20rem)] min-h-[480px]">
-          {/* Reset button — subtle, top-right corner */}
-          <div className="flex justify-end px-4 pt-3 pb-1">
-            <button
-              type="button"
+        <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
+          {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
+          <div className="flex items-center gap-2 px-6 pt-3 pb-1">
+            {toolbarStart}
+            <ButtonApp
+              className="ml-auto"
+              label={t('agentPlayground.chat.reset')}
+              variant="secondary"
+              size="compact"
               onClick={handleResetConversation}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
-                         text-gray-500 dark:text-gray-400
-                         hover:text-red-600 dark:hover:text-red-400
-                         hover:bg-red-50 dark:hover:bg-red-900/20
-                         border border-transparent hover:border-red-200 dark:hover:border-red-800/40
-                         transition-all duration-150"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Reset
-            </button>
+              icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+            />
           </div>
 
           {/* Messages container */}
           <div
             ref={messagesContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-2 space-y-3
-                       bg-gradient-to-b from-gray-50/50 to-white/30
-                       dark:from-gray-900/50 dark:to-gray-800/30
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-[26px] space-y-[22px]
+                       bg-canvas dark:bg-canvas-dark
                        scroll-smooth"
           >
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-full">
-                <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500">
-                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-300 border-t-transparent" />
-                  <span className="text-sm">Loading conversation...</span>
-                </div>
+                <LoadingState variant="section" message={t('agentPlayground.chat.loadingConversation')} />
               </div>
             ) : (
               <>
                 {messages.length === 0 && !showStreaming && (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-                    <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                      <svg
-                        className="w-6 h-6 text-indigo-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                        Start a conversation with {agentName}
+                  <div className="flex flex-col items-center justify-center h-full py-10 text-center animate-fade-in">
+                    <BackgroundImage
+                      icon={MessageCircle}
+                      size={52}
+                      iconSize={26}
+                      variant="marron"
+                      className="mb-5 rounded-xl"
+                    />
+                    <div className="space-y-2">
+                      <p className="font-display text-[26px] font-normal tracking-tight text-fg dark:text-fg-dark">
+                        {t('agentPlayground.chat.startChatting', { agent: agentName })}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        Type a message below to begin
+                      <p className="text-[14.5px] text-fg-secondary dark:text-fg-secondary-dark max-w-[400px] mx-auto">
+                        {t('agentPlayground.chat.starterPromptDescription')}
                       </p>
                     </div>
                   </div>
@@ -1096,20 +1014,21 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-end animate-slide-in-right"
+                        className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4"
                       >
-                        <div className="max-w-[85%] lg:max-w-[75%] min-w-0">
-                          <div className="pg-bubble-user">
+                        <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <div className="max-w-[82%] min-w-0">
+                          <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                             <MessageContent
                               content={message.content}
                               resolveFileUrl={resolveFileUrl}
                             />
                             {message.files && message.files.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-bronze-border dark:border-bronze-border-dark">
                                 {message.files.map((filename) => (
                                   <span
                                     key={filename}
-                                    className="inline-flex items-center gap-1 text-xs bg-gray-200/60 dark:bg-gray-600/60 text-gray-600 dark:text-gray-300 rounded-full px-2 py-0.5"
+                                    className="inline-flex items-center gap-1 text-xs bg-canvas dark:bg-canvas-dark text-fg-secondary  dark:text-fg-secondary-dark rounded-full px-2 py-0.5"
                                   >
                                     <svg
                                       className="w-3 h-3"
@@ -1132,7 +1051,7 @@ function ChatInterface({
                             )}
                           </div>
                           <div className="text-right mt-1">
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
                               {message.timestamp.toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -1148,10 +1067,10 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-start animate-slide-in-left"
+                        className="flex justify-start max-w-[760px] mx-auto animate-slide-in-left"
                       >
-                        <div className="max-w-[85%] lg:max-w-[75%] min-w-0">
-                          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 text-red-700 dark:text-red-300 rounded-2xl rounded-bl-sm px-4 py-3">
+                        <div className="max-w-[82%] min-w-0">
+                          <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                             <div className="flex items-center gap-2 mb-1">
                               <svg
                                 className="w-4 h-4 shrink-0"
@@ -1168,20 +1087,20 @@ function ChatInterface({
                                 />
                               </svg>
                               <span className="text-xs font-semibold uppercase tracking-wide">
-                                Error
+                                {t('agentPlayground.chat.errorLabel')}
                               </span>
                             </div>
                             <p className="text-sm">{message.content}</p>
                           </div>
                           <div className="mt-1">
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
                               {message.timestamp.toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
@@ -1198,47 +1117,50 @@ function ChatInterface({
                   return (
                     <div
                       key={message.id}
-                      className={`flex justify-start ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+                      className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
-                      <div className="max-w-[90%] lg:max-w-[80%] min-w-0">
-                        <div className="pg-bubble-agent text-gray-800 dark:text-gray-100">
-                          <MessageContent
-                            content={stripTimestampLabels(message.content)}
-                            resolveFileUrl={resolveFileUrl}
-                          />
-                        </div>
-                        {msgTimestamps.length > 0 &&
-                          readyVideoMedias.map((media) => {
-                            const streamUrl = videoStreamUrls[media.media_id];
-                            const mediaTimestamps = getTimestampsForMedia(
-                              msgTimestamps,
-                              media.name,
-                              readyVideoMedias.length,
-                            );
-                            if (!streamUrl || mediaTimestamps.length === 0) return null;
-                            return (
-                              <VideoPlayer
-                                key={media.media_id}
-                                videoUrl={streamUrl}
-                                timestamps={mediaTimestamps}
-                                title={media.name}
-                                isAudio={media.media_type === 'audio'}
-                              />
-                            );
-                          })}
-                        <div className="mt-1">
-                          <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {message.timestamp.toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
+                      <div className="flex items-start gap-4 max-w-[82%] min-w-0">
+                        <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        <div className="min-w-0 flex-1">
+                          <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
+                            <MessageContent
+                              content={stripTimestampLabels(message.content)}
+                              resolveFileUrl={resolveFileUrl}
+                            />
+                          </div>
+                          {msgTimestamps.length > 0 &&
+                            readyVideoMedias.map((media) => {
+                              const streamUrl = videoStreamUrls[media.media_id];
+                              const mediaTimestamps = getTimestampsForMedia(
+                                msgTimestamps,
+                                media.name,
+                                readyVideoMedias.length,
+                              );
+                              if (!streamUrl || mediaTimestamps.length === 0) return null;
+                              return (
+                                <VideoPlayer
+                                  key={media.media_id}
+                                  videoUrl={streamUrl}
+                                  timestamps={mediaTimestamps}
+                                  title={media.name}
+                                  isAudio={media.media_type === 'audio'}
+                                />
+                              );
                             })}
-                          </span>
-                          {message.elapsedMs !== undefined && (
-                            <span className="ml-2 inline-flex items-center gap-1 text-xs tabular-nums text-gray-400 dark:text-gray-500">
-                              <Timer className="h-3 w-3" aria-hidden="true" />
-                              {formatDuration(message.elapsedMs)}
+                          <div className="mt-1">
+                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
                             </span>
-                          )}
+                            {message.elapsedMs !== undefined && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
+                                <Timer className="h-3 w-3" aria-hidden="true" />
+                                {formatDuration(message.elapsedMs)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1281,10 +1203,10 @@ function ChatInterface({
                   scrollToBottom();
                 }}
                 className="pg-scroll-fab pointer-events-auto"
-                aria-label="Scroll to bottom"
+                aria-label={t('agentPlayground.chat.scrollToBottom')}
               >
                 <svg
-                  className="w-4 h-4 text-gray-600 dark:text-gray-300"
+                  className="w-4 h-4 text-fg-secondary dark:text-fg-secondary-dark"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1302,7 +1224,7 @@ function ChatInterface({
           )}
 
           {/* Input area */}
-          <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
+          <div className="px-4 pb-4 pt-3 border-t border-line dark:border-line-dark">
             {/* Orchestrator-level exposed chat filters — independent of the legacy
                 "Filter by Metadata" panel above, since orchestrators typically have
                 no own silo/metadataFields at all. Self-contained: owns its own
@@ -1320,7 +1242,7 @@ function ChatInterface({
                 />
               </div>
             )}
-            <div className="pg-glass pg-input-container rounded-xl px-3 py-2.5 flex items-end gap-2">
+            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark transition-colors duration-150">
               {/* File attach button */}
               <div>
                 <input
@@ -1336,13 +1258,12 @@ function ChatInterface({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
-                  className="p-2 rounded-xl text-gray-400 dark:text-gray-500
-                             hover:text-indigo-600 dark:hover:text-indigo-400
-                             hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                  className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg
+                             text-fg-tertiary dark:text-fg-tertiary-dark
                              disabled:opacity-40 disabled:cursor-not-allowed
-                             transition-all duration-150"
-                  title="Attach file"
-                  aria-label="Attach file"
+                             transition-colors duration-150"
+                  title={t('agentPlayground.chat.attachFile')}
+                  aria-label={t('agentPlayground.chat.attachFile')}
                 >
                   <svg
                     className="w-5 h-5"
@@ -1366,13 +1287,12 @@ function ChatInterface({
                 type="button"
                 onClick={handleMediaButtonClick}
                 disabled={isStreaming}
-                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500
-                           hover:text-purple-600 dark:hover:text-purple-400
-                           hover:bg-purple-50 dark:hover:bg-purple-900/20
-                           disabled:opacity-40 disabled:cursor-not-allowed
-                           transition-all duration-150"
-                title="Attach media (video/audio)"
-                aria-label="Attach media"
+                className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                           text-fg-tertiary dark:text-fg-tertiary-dark
+                          disabled:opacity-40 disabled:cursor-not-allowed
+                           transition-colors duration-150"
+                title={t('agentPlayground.chat.attachMediaTitle')}
+                aria-label={t('agentPlayground.chat.attachMedia')}
               >
                 <svg
                   className="w-5 h-5"
@@ -1397,13 +1317,15 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={approvalBlocksInput ? 'Answer the approval request to continue' : `Message ${agentName}...`}
+                placeholder={approvalBlocksInput
+                  ? t('agentPlayground.chat.answerApprovalToContinue')
+                  : t('agentPlayground.chat.messagePlaceholder', { agent: agentName })}
                 disabled={isStreaming || approvalBlocksInput}
-                className="flex-1 py-2 bg-transparent border-none outline-none resize-none
-                           text-sm text-gray-800 dark:text-gray-100
-                           placeholder:text-gray-400 dark:placeholder:text-gray-500
+                className="flex-1 py-[9px] bg-transparent border-none outline-none resize-none
+                           text-[14.5px] text-fg dark:text-fg-dark
+                           placeholder:text-fg-tertiary dark:placeholder:text-fg-tertiary-dark
                            disabled:opacity-50
-                           focus:outline-none focus:ring-0
+                           focus:outline-none focus:ring-0 focus:border-accent dark:focus:border-accent
                            max-h-40 input-login"
                 rows={1}
                 style={{ minHeight: '1.5rem' }}
@@ -1414,67 +1336,94 @@ function ChatInterface({
                 <button
                   type="button"
                   onClick={abortStream}
-                  className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400
-                             hover:bg-red-200 dark:hover:bg-red-900/50 transition-all duration-150
-                             active:scale-95 shrink-0"
-                  aria-label="Stop generating"
-                  title="Stop generating"
+                  className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark
+                             text-error dark:text-error-dark
+                             hover:border-error dark:hover:border-error-dark transition-colors duration-150"
+                  aria-label={t('agentPlayground.chat.stopGenerating')}
+                  title={t('agentPlayground.chat.stopGenerating')}
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <rect x="6" y="6" width="12" height="12" rx="2" />
-                  </svg>
+                  <Square className="w-4 h-4" />
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleSendMessage}
                   disabled={!canSend}
-                  className="pg-btn-send shrink-0 !p-2 rounded-xl"
-                  aria-label="Send message"
+                  className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
+                             hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
+                             transition-opacity duration-150"
+                  aria-label={t('agentPlayground.chat.sendMessage')}
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                    />
-                  </svg>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               )}
             </div>
 
             {/* Hint text */}
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 px-1">
-              Press Enter to send, Shift+Enter for new line
+            <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
+              {t('agentPlayground.chat.sendKeyboardHint')}
             </p>
           </div>
         </div>
 
-        {/* Attached Files Panel */}
-        <AttachedFilesPanel
-          files={panelFiles}
-          isLoading={isLoadingFiles}
-          onRemoveFile={handleRemovePersistentFile}
-          onDownloadFile={handleDownloadFile}
-        />
+        {/* Right column: Información (attached files + tool activity) / Filtros de metadatos */}
+        <aside
+          aria-label={t('agentPlayground.chat.sidePanel')}
+          className="flex min-w-0 flex-col gap-3.5"
+        >
+          {hasMetadataFilters && (
+            <SegmentedTabs
+              ariaLabel={t('agentPlayground.chat.sidePanel')}
+              tabs={[
+                { id: 'info', label: t('agentPlayground.chat.infoTab') },
+                { id: 'filters', label: t('agentPlayground.chat.filtersTab') },
+              ]}
+              activeTab={sidePanelTab}
+              onChange={setSidePanelTab}
+              className="flex-none"
+            />
+          )}
 
-        {/* Tool Execution History Panel */}
-        <ToolHistoryPanel
-          history={toolExecutionHistory}
-          onClear={clearToolHistory}
-        />
+          <div className={`flex flex-col gap-3.5 ${sidePanelTab === 'info' || !hasMetadataFilters ? '' : 'hidden'}`}>
+            {/* Attached Files Panel */}
+            <AttachedFilesPanel
+              variant="section"
+              files={panelFiles}
+              isLoading={isLoadingFiles}
+              onRemoveFile={handleRemovePersistentFile}
+              onDownloadFile={handleDownloadFile}
+            />
+
+            {/* Tool Execution History Panel */}
+            <ToolHistoryPanel
+              history={toolExecutionHistory}
+              onClear={clearToolHistory}
+            />
+          </div>
+
+          {/* Metadata filters — kept mounted (hidden) so their values survive tab switches */}
+          {hasMetadataFilters && (
+            <section
+              id={filterPanelId}
+              aria-label={t('agentPlayground.chat.filterByMetadata')}
+              className={`rounded-lg border border-line p-3.5 dark:border-line-dark ${sidePanelTab === 'filters' ? '' : 'hidden'}`}
+            >
+              <p className="mb-3 text-[12.5px] leading-normal text-fg-secondary dark:text-fg-secondary-dark">
+                {t('agentPlayground.chat.filtersHelp')}
+              </p>
+              <SearchFilters
+                key={filtersKey}
+                layout="stacked"
+                metadataFields={metadataFields}
+                dbType={vectorDbType?.toUpperCase()}
+                disabled={isStreaming}
+                onFilterMetadataChange={handleFilterMetadataChange}
+              />
+            </section>
+          )}
+        </aside>
       </div>
 
       {/* Media Upload Modal */}

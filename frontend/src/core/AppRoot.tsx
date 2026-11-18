@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { I18nextProvider } from 'react-i18next';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '../themes/ThemeProvider';
 import { AuthProvider } from '../auth/AuthConfig';
@@ -47,6 +48,7 @@ import AppSettingsPage from '../pages/settings/AppSettingsPage';
 import OutputDestinationsPage from '../pages/settings/OutputDestinationsPage';
 import MCPConfigsPage from '../pages/settings/MCPConfigsPage';
 import SkillsPage from '../pages/settings/SkillsPage';
+import SkillFormPage from '../pages/settings/SkillFormPage';
 import MiddlewaresPage from '../pages/settings/MiddlewaresPage';
 import DataStructuresPage from '../pages/settings/DataStructuresPage';
 import UsersPage from '../pages/admin/UsersPage';
@@ -68,6 +70,7 @@ import SystemAIServicesPage from '../pages/admin/SystemAIServicesPage';
 import SystemEmbeddingServicesPage from '../pages/admin/SystemEmbeddingServicesPage';
 import SystemSandboxServicesPage from '../pages/admin/SystemSandboxServicesPage';
 import SystemSkillsPage from '../pages/admin/SystemSkillsPage';
+import SystemSkillFormPage from '../pages/admin/SystemSkillFormPage';
 import TierConfigPage from '../pages/admin/TierConfigPage';
 import { DeploymentModeProvider } from '../contexts/DeploymentModeContext';
 import { PlatformChatbotProvider } from '../contexts/PlatformChatbotContext';
@@ -83,6 +86,7 @@ import SharePointSourcesPage from '../pages/SharePointSourcesPage';
 import SharePointWizardPage from '../pages/SharePointWizardPage';
 import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
 import AppMetricsPage from '../pages/AppMetricsPage';
+import i18n from '../i18n';
 
 interface AppRootProps {
   config: AppConfig;
@@ -132,7 +136,8 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
     headerProps: {
       ...config.headerProps,
       title: config.headerProps?.title || config.name,
-      logoUrl: config.headerProps?.logoUrl || config.logo
+      logoUrl: config.headerProps?.logoUrl || config.logo,
+      organization: config.organization
     },
     footerProps: config.footerProps,
     layoutProps: config.layoutProps,
@@ -143,8 +148,45 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
   }), [mergedNavigationConfig, config, features]);
 
   return (
+    <I18nextProvider i18n={i18n}>
     <ThemeProvider theme={clientConfig.theme}>
-      <Toaster richColors closeButton position="top-right" />
+      
+<Toaster
+  position="bottom-center"
+  closeButton
+  toastOptions={{
+    unstyled: true,
+    classNames: {
+      toast: `
+        relative flex items-center gap-3
+        rounded-lg
+        bg-ink dark:bg-ink-dark
+        px-4 py-3 pr-12 shadow-lg
+      `,
+
+      title: "text-sm font-medium",
+      description: "text-xs opacity-80",
+
+      error: "text-error-dark dark:text-error",
+      success: "text-success-dark dark:text-success",
+      warning: "text-bronze-dark dark:text-bronze",
+      info: "text-info-dark dark:text-info",
+      loading: "text-fg-dark dark:text-fg",
+
+      icon: "text-current [&_svg]:stroke-current",
+
+      closeButton: `
+        !absolute !left-auto !right-3 !top-1/2
+        !-translate-y-1/2
+        !bg-transparent !border-0 !shadow-none
+        !text-ink-on dark:!text-ink-on-dark
+        [&_svg]:!w-5 [&_svg]:!h-5
+        cursor-pointer
+      `,
+    },
+  }}
+/>
+
       <AuthProvider config={config.authProps}>
         <UserProvider>
           <SettingsCacheProvider>
@@ -163,7 +205,12 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
                 <Route path="/password-reset" element={<PasswordResetPage />} />
                 <Route path="/set-password" element={<SetPasswordPage />} />
                 <Route path="/change-password" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute
+                    {...commonLayoutProps}
+                    mainProps={{
+                      className: "relative isolate flex flex-col before:content-[''] before:absolute before:inset-0 before:z-0 before:bg-ink/40 dark:before:bg-black/60 before:pointer-events-none [&>div]:relative [&>div]:z-10 [&>div]:flex-1 [&>div]:min-h-0 [&>div]:flex [&>div]:flex-col",
+                    }}
+                  >
                     <ChangePasswordPage />
                   </ProtectedLayoutRoute>
                 } />
@@ -199,7 +246,10 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
                 <Route path="/marketplace/scheduled-tasks/:taskId/conversation" element={<ProtectedLayoutRoute {...commonLayoutProps}><MarketplaceScheduledTaskRunPage /></ProtectedLayoutRoute>} />
 
                 <Route path="/marketplace/chat/:conversationId" element={
-                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute
+                    {...commonLayoutProps}
+                    mainProps={{ className: '!p-0 [&>div]:max-w-none [&>div]:h-full' }}
+                  >
                     <MarketplaceChatPage />
                   </ProtectedLayoutRoute>
                 } />
@@ -355,6 +405,18 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
                   </EditorLayoutRoute>
                 } />
 
+                <Route path="/apps/:appId/skills/new" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SkillFormPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/skills/:skillId/edit" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <SkillFormPage />
+                  </EditorLayoutRoute>
+                } />
+
                 <Route path="/apps/:appId/middlewares" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                     <MiddlewaresPage />
@@ -475,6 +537,18 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
                   </AdminLayoutRoute>
                 } />
 
+                <Route path="/admin/system-skills/new" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSkillFormPage />
+                  </AdminLayoutRoute>
+                } />
+
+                <Route path="/admin/system-skills/:skillId/edit" element={
+                  <AdminLayoutRoute {...commonLayoutProps}>
+                    <SystemSkillFormPage />
+                  </AdminLayoutRoute>
+                } />
+
                 <Route path="/admin/tier-config" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <TierConfigPage />
@@ -504,5 +578,6 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
         </UserProvider>
       </AuthProvider>
     </ThemeProvider>
+    </I18nextProvider>
   );
 };
