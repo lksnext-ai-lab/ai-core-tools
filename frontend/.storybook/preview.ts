@@ -3,6 +3,7 @@ import { withThemeByClassName } from '@storybook/addon-themes';
 
 import './preview.css';
 import '../src/index.css';
+import '../src/i18n';
 
 const preview: Preview = {
   parameters: {

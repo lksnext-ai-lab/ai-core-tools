@@ -218,7 +218,7 @@ function RagConfigSection({ value, onChange, metadataFields, loadingMetadata = f
           />
         </div>
 
-        {loadingMetadata && <p className="text-sm text-gray-500">{t('agentFormPage.ragConfig.loadingMetadataFields')}</p>}
+        {loadingMetadata && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('agentFormPage.ragConfig.loadingMetadataFields')}</p>}
 
         {filters.length > 0 && (
           <div className="space-y-2">

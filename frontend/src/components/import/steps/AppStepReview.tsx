@@ -185,10 +185,10 @@ function AppStepReview({
       {/* Skipped components */}
       {skippedItems.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">
+          <p className="text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1">
             {t('importModal.appReview.skipped', { count: skippedItems.length })}
           </p>
-          <div className="text-xs text-gray-400 space-y-0.5">
+          <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark space-y-0.5">
             {skippedItems.map((row) => (
               <p key={`${row.type}:${row.name}`}>
                 {row.icon} {row.type}: {row.name}

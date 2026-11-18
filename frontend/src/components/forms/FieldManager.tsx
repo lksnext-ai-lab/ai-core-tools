@@ -140,7 +140,6 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
             <FormSelect
               id={`parser_ref_${index}`}
               label={t('dataStructuresPage.fields.referenceParser')}
-              labelClassName="block text-xs font-medium text-gray-700 mb-1"
               value={field.parser_id || ''}
               onChange={(e) => updateField(index, { parser_id: Number.parseInt(e.target.value) || undefined })}
               options={parserOptions}
@@ -153,7 +152,6 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
               <FormSelect
                 id={`list_item_type_${index}`}
                 label={t('dataStructuresPage.fields.listItemType')}
-                labelClassName="block text-xs font-medium text-gray-700 mb-1"
                 value={field.list_item_type || 'str'}
                 onChange={(e) => updateField(index, { list_item_type: e.target.value })}
                 options={getListItemTypes().map((type) => ({ value: type.value, label: type.name }))}
@@ -163,7 +161,6 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
                 <FormSelect
                   id={`list_item_parser_${index}`}
                   label={t('dataStructuresPage.fields.listItemParser')}
-                  labelClassName="block text-xs font-medium text-gray-700 mb-1"
                   value={field.list_item_parser_id || ''}
                   onChange={(e) => updateField(index, { list_item_parser_id: Number.parseInt(e.target.value) || undefined })}
                   options={parserOptions}
@@ -240,15 +237,14 @@ function FieldManager({ fields, onChange, availableParsers, maxFields = 20 }: Re
       </div>
 
       {/* Fields Table */}
-      {fields.length > 0 ? (
-        <Table
-          columns={columns}
-          data={rows}
-          keyExtractor={({ field, index }) => field._key ?? index}
-        />
-      ) : (
-        <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
-          <p className="text-gray-500 mb-4">{t('dataStructuresPage.fields.empty')}</p>
+      <Table
+        columns={columns}
+        data={rows}
+        keyExtractor={({ field, index }) => field._key ?? index}
+        emptyMessage={t('dataStructuresPage.fields.empty')}
+      />
+      {fields.length === 0 && (
+        <div className="flex justify-center">
           <ButtonApp
             label={t('dataStructuresPage.fields.addFirstField')}
             variant="primary"

@@ -17,12 +17,13 @@ import type {
 } from '../types/marketplace';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import CardApp from '../components/ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 /** Parses an agent-load error into a user-friendly message. */
-function getAgentLoadError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : 'Failed to load agent';
+function getAgentLoadError(err: unknown, notFoundMessage: string, fallbackMessage: string): string {
+  const msg = err instanceof Error ? err.message : fallbackMessage;
   if (msg.includes('404') || msg.includes('not found')) {
-    return 'Agent not found or no longer available.';
+    return notFoundMessage;
   }
   return msg;
 }
@@ -34,20 +35,32 @@ interface RatingSummaryProps {
 }
 
 function RatingSummary({ ratingAvg, ratingCount, conversationCount }: RatingSummaryProps) {
+  const { t, i18n } = useTranslation('common');
+
   return (
     <div className="flex items-center gap-2 mt-1.5">
       <StarRating value={ratingAvg ? Math.round(ratingAvg) : null} size="md" />
       {ratingAvg === null ? (
-        <span className="text-sm text-fg-default dark:text-fg-default-dark">No ratings yet</span>
+        <span className="text-sm text-fg-default dark:text-fg-default-dark">
+          {t('marketplaceAgentDetail.noRatingsYet')}
+        </span>
       ) : (
         <span className="text-sm text-fg-default dark:text-fg-default-dark">
-          {ratingAvg.toFixed(1)}{' '}
-          <span className="text-fg-default dark:text-fg-default-dark">({ratingCount} rating{ratingCount === 1 ? '' : 's'})</span>
+          {new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(ratingAvg)}{' '}
+          <span className="text-fg-default dark:text-fg-default-dark">
+            ({t('marketplaceAgentDetail.ratingCount', {
+              count: ratingCount,
+              formattedCount: ratingCount.toLocaleString(i18n.language),
+            })})
+          </span>
         </span>
       )}
       {conversationCount > 0 && (
         <span className="text-sm text-fg-default dark:text-fg-default-dark">
-          · {conversationCount.toLocaleString()} conversations
+          · {t('marketplaceAgentDetail.conversationCount', {
+            count: conversationCount,
+            formattedCount: conversationCount.toLocaleString(i18n.language),
+          })}
         </span>
       )}
     </div>
@@ -69,6 +82,17 @@ const CATEGORY_VARIANT: Record<
   Other: 'default',
 };
 
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  Productivity: 'productivity',
+  Research: 'research',
+  Writing: 'writing',
+  Code: 'code',
+  'Data Analysis': 'dataAnalysis',
+  'Customer Support': 'customerSupport',
+  Education: 'education',
+  Other: 'other',
+};
+
 interface MarketplaceAgentDetailPageProps {
   /** Agent to show. Defaults to the `:agentId` route param. */
   readonly agentId?: number;
@@ -87,6 +111,7 @@ export default function MarketplaceAgentDetailPage({
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const mutate = useApiMutation();
+  const { t, i18n } = useTranslation('common');
   const numericId = agentIdProp ?? Number(agentId);
   const isPanel = variant === 'panel';
 
@@ -102,7 +127,7 @@ export default function MarketplaceAgentDetailPage({
 
   const loadData = useCallback(async () => {
     if (!numericId || Number.isNaN(numericId)) {
-      setError('Invalid agent ID');
+      setError(t('marketplaceAgentDetail.invalidAgentId'));
       setLoading(false);
       return;
     }
@@ -120,11 +145,15 @@ export default function MarketplaceAgentDetailPage({
       );
       setMyRating(ratingData.rating);
     } catch (err) {
-      setError(getAgentLoadError(err));
+      setError(getAgentLoadError(
+        err,
+        t('marketplaceAgentDetail.agentUnavailable'),
+        t('marketplaceAgentDetail.loadFailed'),
+      ));
     } finally {
       setLoading(false);
     }
-  }, [numericId]);
+  }, [numericId, t]);
 
   useEffect(() => {
     void loadData();
@@ -137,9 +166,9 @@ export default function MarketplaceAgentDetailPage({
       const conv = await mutate(
         () => apiService.createMarketplaceConversation(agent.agent_id),
         {
-          loading: 'Starting conversation…',
-          success: 'Conversation started',
-          error: (err) => errorMessage(err, 'Failed to start conversation'),
+          loading: t('marketplacePage.startingConversation'),
+          success: t('marketplacePage.conversationStarted'),
+          error: (err) => errorMessage(err, t('marketplacePage.startConversationFailed')),
         },
       );
       if (!conv) return;
@@ -147,7 +176,7 @@ export default function MarketplaceAgentDetailPage({
     } finally {
       setStarting(false);
     }
-  }, [agent, starting, mutate, navigate]);
+  }, [agent, starting, mutate, navigate, t]);
 
   const handleRate = useCallback(
     async (rating: number) => {
@@ -156,9 +185,9 @@ export default function MarketplaceAgentDetailPage({
       const result = await mutate(
         () => apiService.rateMarketplaceAgent(agent.agent_id, rating),
         {
-          loading: 'Submitting rating…',
-          success: 'Rating saved',
-          error: (err) => errorMessage(err, 'Failed to submit rating'),
+          loading: t('marketplaceAgentDetail.ratingSubmitting'),
+          success: t('marketplaceAgentDetail.ratingSaved'),
+          error: (err) => errorMessage(err, t('marketplaceAgentDetail.ratingFailed')),
         },
       );
       setRatingSubmitting(false);
@@ -171,11 +200,11 @@ export default function MarketplaceAgentDetailPage({
           : prev,
       );
     },
-    [agent, mutate, ratingSubmitting],
+    [agent, mutate, ratingSubmitting, t],
   );
 
   if (loading) {
-    return <LoadingState message="Loading agent details..." />;
+    return <LoadingState message={t('marketplaceAgentDetail.loading')} />;
   }
 
   if (error) {
@@ -186,9 +215,9 @@ export default function MarketplaceAgentDetailPage({
         <div className="text-center">
           <Link
             to="/marketplace"
-            className="text-sm text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1"
+            className="text-sm text-bronze  dark:text-bronze-dark inline-block items-center gap-1"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Marketplace
+            <ArrowLeft className="w-4 h-4 inline-block ml-1" aria-hidden="true" /> {t('marketplaceChat.backToMarketplace')}
           </Link>
         </div>
       </div>
@@ -198,7 +227,7 @@ export default function MarketplaceAgentDetailPage({
   if (!agent) return null;
 
   const publishedDate = agent.published_at
-    ? new Date(agent.published_at).toLocaleDateString()
+    ? new Date(agent.published_at).toLocaleDateString(i18n.language)
     : null;
 
   const hasConversation = conversations.length > 0;
@@ -223,9 +252,9 @@ export default function MarketplaceAgentDetailPage({
       {/* Back link */}
       <Link
         to="/marketplace"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="inline-flex items-center gap-1 text-sm text-bronze  dark:text-bronze-dark"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to Marketplace
+        <ArrowLeft className="w-4 h-4 inline-block ml-1" aria-hidden="true" /> {t('marketplaceChat.backToMarketplace')}
       </Link>
 
       {/* Cover image / gradient banner */}
@@ -233,11 +262,11 @@ export default function MarketplaceAgentDetailPage({
         {agent.cover_image_url ? (
           <img
             src={agent.cover_image_url}
-            alt={`${agent.display_name} cover`}
+            alt={t('marketplaceAgentDetail.coverImageAlt', { agent: agent.display_name })}
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-r from-blue-500 to-indigo-600" />
+          <div className="w-full h-full bg-gradient-to-r from-bronze-border to-bronze-bg dark:from-bronze-border-dark dark:to-bronze-bg-dark" />
         )}
       </div>
 
@@ -252,16 +281,18 @@ export default function MarketplaceAgentDetailPage({
               className="w-full h-full object-cover rounded-xl"
             />
           ) : (
-            <Bot className="w-10 h-10 text-blue-400" aria-hidden="true" />
+            <Bot className="w-10 h-10 text-bronze dark:text-bronze-dark" aria-hidden="true" />
           )}
         </div>
 
         {/* Name, publisher, badges */}
         <div className="flex-1 pt-2">
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-fg dark:text-fg-dark">
             {agent.display_name}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">by {agent.app_name}</p>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-0.5">
+            {t('marketplaceChat.publishedBy')} {agent.app_name}
+          </p>
 
           {/* Rating summary */}
           <RatingSummary
@@ -273,15 +304,17 @@ export default function MarketplaceAgentDetailPage({
           <div className="flex flex-wrap items-center gap-2 mt-2">
             {agent.category && (
               <Badge
-                label={agent.category}
+                label={CATEGORY_LABEL_KEYS[agent.category]
+                  ? t(`marketplacePage.categories.${CATEGORY_LABEL_KEYS[agent.category]}`)
+                  : agent.category}
                 variant={CATEGORY_VARIANT[agent.category] ?? 'default'}
               />
             )}
             {agent.has_knowledge_base && (
-              <Badge label="Knowledge-enhanced" variant="success" icon="📚" />
+              <Badge label={t('marketplaceChat.knowledgeEnhanced')} variant="success" icon="📚" />
             )}
             {agent.has_memory && (
-              <Badge label="Memory" variant="info" icon="🧠" />
+              <Badge label={t('marketplaceChat.memory')} variant="info" icon="🧠" />
             )}
           </div>
         </div>
@@ -289,7 +322,7 @@ export default function MarketplaceAgentDetailPage({
         {/* Action buttons (desktop) */}
         <div className="hidden sm:flex flex-col gap-2 pt-2">
           <ButtonApp
-            label={starting ? 'Starting…' : 'Start New Chat'}
+            label={starting ? t('marketplaceAgentDetail.starting') : t('marketplaceAgentDetail.startNewChat')}
             onClick={handleStartChat}
             variant="primary"
             size="medium"
@@ -311,33 +344,32 @@ export default function MarketplaceAgentDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Description */}
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow-md border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">About</h2>
+          <CardApp className="p-6" titulo={t('marketplaceAgentDetail.about')}>
             <AgentDescription agent={agent} />
-          </div>
+          </CardApp>
         </div>
 
         {/* Sidebar: info panel */}
         <div className="space-y-6">
           {/* Info card */}
           <div className="bg-white rounded-lg shadow-md border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Details</h2>
+            <h2 className="text-md font-semibold text-fg dark:text-fg-dark mb-4">{t('marketplaceChat.details')}</h2>
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <dt className="text-gray-500">Memory</dt>
+                <dt className="text-gray-500">{t('marketplaceChat.memory')}</dt>
                 <dd className="font-medium text-gray-900">
-                  {agent.has_memory ? 'Enabled' : 'Disabled'}
+                  {agent.has_memory ? t('marketplaceChat.enabled') : t('marketplaceChat.disabled')}
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">Knowledge Base</dt>
+                <dt className="text-gray-500">{t('marketplaceChat.knowledgeBase')}</dt>
                 <dd className="font-medium text-gray-900">
-                  {agent.has_knowledge_base ? 'Yes' : 'No'}
+                  {agent.has_knowledge_base ? t('marketplaceChat.yes') : t('marketplaceChat.no')}
                 </dd>
               </div>
               {publishedDate && (
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">Published</dt>
+                  <dt className="text-gray-500">{t('marketplaceChat.published')}</dt>
                   <dd className="font-medium text-gray-900">{publishedDate}</dd>
                 </div>
               )}
@@ -346,13 +378,15 @@ export default function MarketplaceAgentDetailPage({
 
           {/* Rating card */}
           <div className="bg-white rounded-lg shadow-md border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Rate this agent</h2>
+            <h2 className="text-md font-semibold text-fg dark:text-fg-dark mb-3">
+              {t('marketplaceAgentDetail.rateThisAgent')}
+            </h2>
             {hasConversation ? (
               <div className="space-y-2">
                 <StarRating value={myRating} interactive size="md" onChange={handleRate} />
                 {myRating !== null && !ratingSubmitting && (
                   <p className="text-xs text-gray-500">
-                    Your rating: {myRating} star{myRating === 1 ? '' : 's'}. Click to change.
+                    {t('marketplaceAgentDetail.yourRating', { count: myRating })}
                   </p>
                 )}
               </div>
@@ -360,7 +394,7 @@ export default function MarketplaceAgentDetailPage({
               <div className="space-y-2">
                 <StarRating value={null} size="md" />
                 <p className="text-xs text-gray-500">
-                  Start a conversation with this agent to leave a rating.
+                  {t('marketplaceAgentDetail.startConversationToRate')}
                 </p>
               </div>
             )}
@@ -369,7 +403,7 @@ export default function MarketplaceAgentDetailPage({
           {/* Mobile action button */}
           <div className="sm:hidden">
             <ButtonApp
-              label={starting ? 'Starting…' : 'Start New Chat'}
+              label={starting ? t('marketplaceAgentDetail.starting') : t('marketplaceAgentDetail.startNewChat')}
               onClick={handleStartChat}
               variant="primary"
               size="medium"
@@ -382,7 +416,7 @@ export default function MarketplaceAgentDetailPage({
           {conversations.length > 0 && (
             <div className="bg-white rounded-lg shadow-md border p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Your Conversations
+                {t('marketplaceAgentDetail.yourConversations')}
               </h2>
               <ul className="space-y-3">
                 {conversations.map((conv) => (
@@ -392,7 +426,7 @@ export default function MarketplaceAgentDetailPage({
                       className="block p-3 rounded-lg border hover:bg-gray-50 transition-colors"
                     >
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        {conv.title || 'Untitled conversation'}
+                        {conv.title || t('marketplaceAgentDetail.untitledConversation')}
                       </p>
                       {conv.last_message && (
                         <p className="text-xs text-gray-500 truncate mt-1">
@@ -400,8 +434,8 @@ export default function MarketplaceAgentDetailPage({
                         </p>
                       )}
                       <p className="text-xs text-gray-400 mt-1">
-                        {new Date(conv.updated_at).toLocaleDateString()} ·{' '}
-                        {conv.message_count} message{conv.message_count === 1 ? '' : 's'}
+                        {new Date(conv.updated_at).toLocaleDateString(i18n.language)} ·{' '}
+                        {t('marketplaceAgentDetail.messageCount', { count: conv.message_count })}
                       </p>
                     </Link>
                   </li>
@@ -428,10 +462,6 @@ interface MarketplaceAgentPanelViewProps {
   readonly onRate: (rating: number) => void;
 }
 
-const PANEL_CARD =
-  'rounded-xl border border-line dark:border-line-dark bg-surface dark:bg-surface-dark p-6';
-const PANEL_CARD_TITLE =
-  'font-display text-[17px] font-medium text-fg dark:text-fg-dark mb-3';
 const PANEL_DT = 'text-fg-tertiary dark:text-fg-tertiary-dark';
 const PANEL_DD_ON = 'font-medium text-success dark:text-success-dark';
 const PANEL_DD_OFF = 'font-medium text-fg-tertiary dark:text-fg-tertiary-dark';
@@ -447,6 +477,7 @@ function MarketplaceAgentPanelView({
   onStartChat,
   onRate,
 }: MarketplaceAgentPanelViewProps) {
+  const { t, i18n } = useTranslation('common');
   const hasConversation = conversations.length > 0;
 
   return (
@@ -470,7 +501,9 @@ function MarketplaceAgentPanelView({
           <h3 className="font-display text-[28px] leading-tight text-fg dark:text-fg-dark break-words">
             {agent.display_name}
           </h3>
-          <p className="text-[16px] text-fg-tertiary dark:text-fg-tertiary-dark">by {agent.app_name}</p>
+          <p className="text-[16px] text-fg-tertiary dark:text-fg-tertiary-dark">
+            {t('marketplaceChat.publishedBy')} {agent.app_name}
+          </p>
           <RatingSummary
             ratingAvg={agent.rating_avg}
             ratingCount={agent.rating_count}
@@ -482,15 +515,20 @@ function MarketplaceAgentPanelView({
       {/* Category, capabilities and tags */}
       <div className="flex flex-wrap items-center gap-2">
         {agent.category && (
-          <Badge label={agent.category} variant={CATEGORY_VARIANT[agent.category] ?? 'default'} />
+          <Badge
+            label={CATEGORY_LABEL_KEYS[agent.category]
+              ? t(`marketplacePage.categories.${CATEGORY_LABEL_KEYS[agent.category]}`)
+              : agent.category}
+            variant={CATEGORY_VARIANT[agent.category] ?? 'default'}
+          />
         )}
-        {agent.has_knowledge_base && <Badge label="Knowledge" variant="success" />}
-        {agent.has_memory && <Badge label="Memory" variant="info" />}
+        {agent.has_knowledge_base && <Badge label={t('marketplacePage.knowledge')} variant="success" />}
+        {agent.has_memory && <Badge label={t('marketplaceChat.memory')} variant="info" />}
         {agent.tags?.map((tag) => <Badge key={tag} label={tag} variant="default" />)}
       </div>
 
       <ButtonApp
-        label={starting ? 'Starting…' : 'Start New Chat'}
+        label={starting ? t('marketplaceAgentDetail.starting') : t('marketplaceAgentDetail.startNewChat')}
         onClick={onStartChat}
         variant="primary"
         size="medium"
@@ -499,32 +537,30 @@ function MarketplaceAgentPanelView({
       />
 
       {/* About */}
-      <CardApp className={PANEL_CARD}>
-        <h4 className={PANEL_CARD_TITLE}>About</h4>
+      <CardApp titulo={t('marketplaceAgentDetail.about')}>
         <div className="text-[15px] leading-relaxed text-fg-secondary dark:text-fg-secondary-dark">
           <AgentDescription agent={agent} />
         </div>
       </CardApp>
 
       {/* Details */}
-      <CardApp className={PANEL_CARD}>
-        <h4 className={PANEL_CARD_TITLE}>Details</h4>
+      <CardApp titulo={t('marketplaceChat.details')}>
         <dl className="space-y-3 text-[15px]">
           <div className="flex justify-between gap-4">
-            <dt className={PANEL_DT}>Memory</dt>
+            <dt className={PANEL_DT}>{t('marketplaceChat.memory')}</dt>
             <dd className={agent.has_memory ? PANEL_DD_ON : PANEL_DD_OFF}>
-              {agent.has_memory ? 'Enabled' : 'Disabled'}
+              {agent.has_memory ? t('marketplaceChat.enabled') : t('marketplaceChat.disabled')}
             </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className={PANEL_DT}>Knowledge Base</dt>
+            <dt className={PANEL_DT}>{t('marketplaceChat.knowledgeBase')}</dt>
             <dd className={agent.has_knowledge_base ? PANEL_DD_ON : PANEL_DD_OFF}>
-              {agent.has_knowledge_base ? 'Yes' : 'No'}
+              {agent.has_knowledge_base ? t('marketplaceChat.yes') : t('marketplaceChat.no')}
             </dd>
           </div>
           {publishedDate && (
             <div className="flex justify-between gap-4">
-              <dt className={PANEL_DT}>Published</dt>
+              <dt className={PANEL_DT}>{t('marketplaceChat.published')}</dt>
               <dd className="font-medium text-fg dark:text-fg-dark">{publishedDate}</dd>
             </div>
           )}
@@ -532,15 +568,14 @@ function MarketplaceAgentPanelView({
       </CardApp>
 
       {/* Rating */}
-      <CardApp className={PANEL_CARD}>
-        <h4 className={PANEL_CARD_TITLE}>Rate this agent</h4>
+      <CardApp titulo={t('marketplaceAgentDetail.rateThisAgent')}>
         <div className="space-y-2">
           {hasConversation ? (
             <>
               <StarRating value={myRating} interactive size="md" onChange={onRate} />
               {myRating !== null && !ratingSubmitting && (
                 <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                  Your rating: {myRating} star{myRating === 1 ? '' : 's'}. Click to change.
+                  {t('marketplaceAgentDetail.yourRating', { count: myRating })}
                 </p>
               )}
             </>
@@ -548,7 +583,7 @@ function MarketplaceAgentPanelView({
             <>
               <StarRating value={null} size="md" />
               <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
-                Start a conversation with this agent to leave a rating.
+                {t('marketplaceAgentDetail.startConversationToRate')}
               </p>
             </>
           )}
@@ -557,8 +592,7 @@ function MarketplaceAgentPanelView({
 
       {/* Existing conversations */}
       {hasConversation && (
-        <CardApp className={PANEL_CARD}>
-          <h4 className={PANEL_CARD_TITLE}>Your Conversations</h4>
+        <CardApp titulo={t('marketplaceAgentDetail.yourConversations')}>
           <ul className="space-y-3">
             {conversations.map((conv) => (
               <li key={conv.conversation_id}>
@@ -567,7 +601,7 @@ function MarketplaceAgentPanelView({
                   className="block p-3 rounded-lg border border-line dark:border-line-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors"
                 >
                   <p className="text-sm font-medium text-fg dark:text-fg-dark truncate">
-                    {conv.title || 'Untitled conversation'}
+                    {conv.title || t('marketplaceAgentDetail.untitledConversation')}
                   </p>
                   {conv.last_message && (
                     <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark truncate mt-1">
@@ -575,8 +609,8 @@ function MarketplaceAgentPanelView({
                     </p>
                   )}
                   <p className="text-xs text-fg-faint dark:text-fg-faint-dark mt-1">
-                    {new Date(conv.updated_at).toLocaleDateString()} ·{' '}
-                    {conv.message_count} message{conv.message_count === 1 ? '' : 's'}
+                    {new Date(conv.updated_at).toLocaleDateString(i18n.language)} ·{' '}
+                    {t('marketplaceAgentDetail.messageCount', { count: conv.message_count })}
                   </p>
                 </Link>
               </li>
@@ -593,6 +627,8 @@ interface AgentDescriptionProps {
 }
 
 function AgentDescription({ agent }: AgentDescriptionProps) {
+  const { t } = useTranslation('common');
+
   if (agent.long_description) {
     return (
       <div className="prose prose-sm max-w-none">
@@ -603,5 +639,9 @@ function AgentDescription({ agent }: AgentDescriptionProps) {
   if (agent.short_description) {
     return <p className="text-fg dark:text-fg-dark">{agent.short_description}</p>;
   }
-  return <p className="text-fg-tertiary dark:text-fg-tertiary-dark italic">No description available.</p>;
+  return (
+    <p className="text-fg-tertiary dark:text-fg-tertiary-dark italic">
+      {t('marketplacePage.noDescriptionProvided')}
+    </p>
+  );
 }

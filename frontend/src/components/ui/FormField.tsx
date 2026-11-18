@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 interface FormFieldProps {
   label?: React.ReactNode;
   id: string;
-  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file' | 'date' | 'radio' | 'checkbox';
+  type?: 'text' | 'email' | 'password' | 'number' | 'url' | 'tel' | 'time' | 'file' | 'date' | 'checkbox';
   name?: string;
   ariaLabel?: string;
   ariaInvalid?: boolean;
@@ -32,6 +32,7 @@ interface FormFieldProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   min?: number;
   max?: number;
+  minLength?: number;
   step?: number;
   maxLength?: number;
   pattern?: string;
@@ -82,6 +83,7 @@ export function FormField({
   onKeyDown,
   min,
   max,
+  minLength,
   step,
   maxLength,
   pattern,
@@ -102,7 +104,7 @@ export function FormField({
   const resolvedNoFileSelectedLabel = noFileSelectedLabel ?? t('formField.file.noFileSelected');
   const [selectedFileName, setSelectedFileName] = React.useState('');
   const displayedFileName = fileName ?? selectedFileName;
-  const inlineLabel = type === 'radio' || type === 'checkbox';
+  const inlineLabel = type === 'checkbox';
   const helpTextId = helpText && !error ? `${id}-help` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [ariaDescribedBy, errorId, helpTextId].filter(Boolean).join(' ') || undefined;
@@ -112,9 +114,12 @@ export function FormField({
     }
     onChange?.(event);
   };
-  const inputBaseClassName = type === 'radio' || type === 'checkbox'
-    ? 'h-4 w-4 shrink-0 accent-ink dark:accent-ink-dark border-line-strong rounded focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 disabled:cursor-not-allowed'
-    : 'w-full px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark';
+  const inputBaseClassName = type === 'checkbox'
+  ? 'h-4 w-4 shrink-0 accent-ink dark:accent-ink-dark border-line-strong rounded focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 disabled:cursor-not-allowed'
+  : `${type === 'date' ? 'w-fit' : 'w-full'} px-3 py-2 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark`;
+  const dateInputClassName = type === 'date'
+    ? 'dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer'
+    : '';
   const resolvedLabelClassName = labelClassName ?? (inlineLabel
     ? 'text-sm font-medium text-fg dark:text-fg-dark'
     : 'block text-sm font-medium text-fg dark:text-fg-dark mb-1');
@@ -199,6 +204,7 @@ export function FormField({
           onKeyDown={onKeyDown}
           min={min}
           max={max}
+          minLength={minLength}
           step={step}
           maxLength={maxLength}
           pattern={pattern}
@@ -215,7 +221,7 @@ export function FormField({
               : 'focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent'
           } ${
             disabled && !inlineLabel ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
-          } ${inputClassName}`}
+          } ${inputClassName} ${dateInputClassName}`}
         />
       )}
 
@@ -520,31 +526,94 @@ export function FormCheckbox({
 }
 
 interface FormRadioProps {
-  label: string;
+  id?: string;
+  name?: string;
+  value?: string | number;
+  label?: React.ReactNode;
+  ariaLabel?: string;
   checked: boolean;
   onChange: () => void;
+  disabled?: boolean;
+  required?: boolean;
+  helpText?: React.ReactNode;
+  ariaDescribedBy?: string;
   className?: string;
+  inputClassName?: string;
+  labelClassName?: string;
+  radioOnly?: boolean;
 }
 
 /**
  * Reusable radio option (label + native radio). Group several inside a fieldset/legend.
  */
 export function FormRadio({
+  id,
+  name,
+  value,
   label,
+  ariaLabel,
   checked,
   onChange,
+  disabled = false,
+  required = false,
+  helpText,
+  ariaDescribedBy,
   className = '',
+  inputClassName = '',
+  labelClassName = '',
+  radioOnly = false,
 }: Readonly<FormRadioProps>) {
+  const helpTextId = helpText && id ? `${id}-help` : undefined;
+
+  const describedBy = [ariaDescribedBy, helpTextId]
+    .filter(Boolean)
+    .join(' ') || undefined;
+
   return (
-    <label className={`text-fg dark:text-fg-dark ${className}`}>
+    <div className={`${
+    radioOnly
+      ? 'w-fit'
+      : 'grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3'
+  } ${className}`}>
       <input
+        id={id}
+        name={name}
         type="radio"
+        value={value}
         checked={checked}
         onChange={onChange}
-        className="w-4 h-4 accent-ink dark:accent-ink-dark"
+        disabled={disabled}
+        required={required}
+        aria-label={ariaLabel}
+        aria-describedby={describedBy}
+        className={`mt-0.5 h-4 w-4 shrink-0 accent-ink dark:accent-ink-dark
+          focus:outline-none focus-visible:outline
+          focus-visible:outline-1 focus-visible:outline-offset-0
+          focus-visible:outline-accent
+          disabled:opacity-50 disabled:cursor-not-allowed
+          ${inputClassName}`}
       />
-      {label}
-    </label>
+
+      {!radioOnly && label !== undefined && (
+        <label
+          htmlFor={id}
+          className={`text-sm text-fg dark:text-fg-dark
+            ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+            ${labelClassName}`}
+        >
+          {label}
+        </label>
+      )}
+
+      {helpText && (
+        <p
+          id={helpTextId}
+          className="col-start-2 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark"
+        >
+          {helpText}
+        </p>
+      )}
+    </div>
   );
 }
 

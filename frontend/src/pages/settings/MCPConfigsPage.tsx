@@ -373,7 +373,7 @@ function MCPConfigsPage() {
               header: t('mcpConfigsPage.columns.description'),
               render: (config) => (
                 <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate">
-                  {config.description || <span className="text-gray-400 italic">{t('mcpConfigsPage.noDescription')}</span>}
+                  {config.description || <span className="text-fg-tertiary dark:text-fg-tertiary-dark italic">{t('mcpConfigsPage.noDescription')}</span>}
                 </div>
               ),
               className: 'px-6 py-4'
@@ -515,23 +515,24 @@ function MCPConfigsPage() {
                 {testResult.tools && testResult.tools.length > 0 && (
                   <div>
                     <h4 className="font-semibold mb-2">{t('mcpConfigsPage.availableTools')}:</h4>
-                    <div className="max-h-60 overflow-y-auto border rounded">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('mcpConfigsPage.columns.name')}</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('mcpConfigsPage.columns.description')}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {testResult.tools.map((tool: { name: string; description: string }) => (
-                            <tr key={tool.name}>
-                              <td className="px-4 py-2 text-sm font-medium text-gray-900">{tool.name}</td>
-                              <td className="px-4 py-2 text-sm text-gray-500">{tool.description}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="max-h-60 overflow-y-auto">
+                      <Table
+                        data={testResult.tools}
+                        keyExtractor={(tool: { name: string; description: string }) => tool.name}
+                        columns={[
+                          {
+                            header: t('mcpConfigsPage.columns.name'),
+                            accessor: 'name',
+                            className: 'px-4 py-2 text-sm font-medium text-fg dark:text-fg-dark',
+                          },
+                          {
+                            header: t('mcpConfigsPage.columns.description'),
+                            accessor: 'description',
+                            className: 'px-4 py-2 text-sm text-fg-secondary dark:text-fg-secondary-dark',
+                          },
+                        ]}
+                        rowClassName=""
+                      />
                     </div>
                   </div>
                 )}

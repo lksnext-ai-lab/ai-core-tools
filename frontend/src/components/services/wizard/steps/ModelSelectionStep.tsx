@@ -232,7 +232,7 @@ function ModelSelectionStep({
           {t('serviceWizard.modelStep.noMatches')}
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filteredModels.map((m) => (
             <ModelCard
               key={m.id}
@@ -256,17 +256,25 @@ interface ModelCardProps {
 function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
   const { t } = useTranslation('common');
   const recent = isRecent(model.created_at);
+  const capabilityLabels = [
+    { enabled: model.capabilities.vision, labelKey: 'vision' },
+    { enabled: model.capabilities.audio, labelKey: 'audio' },
+    { enabled: model.capabilities.reasoning, labelKey: 'reasoning' },
+    { enabled: model.capabilities.function_calling, labelKey: 'tools' },
+    { enabled: model.capabilities.embedding, labelKey: 'embedding' },
+  ].filter(({ enabled }) => enabled);
+
   return (
     <ButtonCard
-      variant="selectable"
+      variant="selectable-radio"
       selected={selected}
       ariaLabel={t('serviceWizard.modelStep.selectModel', { model: model.display_name })}
       onClick={onSelect}
     >
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">
-            {model.display_name}
+          <span className="text-sm  text-fg dark:text-fg-dark leading-tight line-clamp-2">
+            {model.display_name} / {model.id}
           </span>
           <div className="flex flex-wrap gap-1 flex-shrink-0">
             {recent && (
@@ -277,8 +285,18 @@ function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
             )}
           </div>
         </div>
-        <p className="text-xs font-mono text-fg-secondary dark:text-fg-secondary-dark truncate">{model.id}</p>
-        <CapabilityChips info={model} />
+        {/*<p className="text-xs font-mono text-fg-secondary dark:text-fg-secondary-dark truncate">{model.id}</p>*/}
+        {capabilityLabels.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {capabilityLabels.map(({ labelKey }) => (
+              <Badge
+                key={labelKey}
+                variant="default"
+                label={t(`serviceWizard.modelStep.capabilities.${labelKey}`)}
+              />
+            ))}
+          </div>
+        )}
         {model.context_window != null && (
           <p className="text-[11px] text-fg-secondary dark:text-fg-secondary-dark pt-0.5">
             {t('serviceWizard.modelStep.contextTokens', {
@@ -289,32 +307,6 @@ function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
         )}
       </div>
     </ButtonCard>
-  );
-}
-
-function CapabilityChips({ info }: { readonly info: ProviderModelInfo }) {
-  const { t } = useTranslation('common');
-  const chips: { labelKey: string; tone: string }[] = [];
-  const c = info.capabilities;
-  if (c.vision) chips.push({ labelKey: 'vision', tone: 'bg-purple-100 text-purple-800' });
-  if (c.audio) chips.push({ labelKey: 'audio', tone: 'bg-orange-100 text-orange-800' });
-  if (c.reasoning) chips.push({ labelKey: 'reasoning', tone: 'bg-indigo-100 text-indigo-800' });
-  if (c.function_calling) chips.push({ labelKey: 'tools', tone: 'bg-blue-100 text-blue-800' });
-  if (c.embedding) chips.push({ labelKey: 'embedding', tone: 'bg-green-100 text-green-800' });
-
-  if (chips.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-1 pt-1">
-      {chips.map((chip) => (
-        <span
-          key={chip.labelKey}
-          className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${chip.tone}`}
-        >
-          {t(`serviceWizard.modelStep.capabilities.${chip.labelKey}`)}
-        </span>
-      ))}
-    </div>
   );
 }
 

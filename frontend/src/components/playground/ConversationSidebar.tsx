@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useTranslation } from 'react-i18next';
 import Alert from '../ui/Alert';
 import { LoadingState } from '../ui/LoadingState';
 import { SidePanel } from '../ui/SidePanel';
@@ -28,22 +29,24 @@ interface ConversationSidebarProps {
   readonly onClose: () => void;
 }
 
-function formatDate(dateString: string): string {
+function formatDate(dateString: string, language: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
+  const relativeTime = new Intl.RelativeTimeFormat(language, { numeric: 'auto' });
 
-  if (diffMins < 1) return 'Ahora';
-  if (diffMins < 60) return `Hace ${diffMins}m`;
-  if (diffHours < 24) return `Hace ${diffHours}h`;
-  if (diffDays < 7) return `Hace ${diffDays}d`;
+  if (diffMins < 1) return relativeTime.format(-diffSeconds, 'second');
+  if (diffMins < 60) return relativeTime.format(-diffMins, 'minute');
+  if (diffHours < 24) return relativeTime.format(-diffHours, 'hour');
+  if (diffDays < 7) return relativeTime.format(-diffDays, 'day');
 
-  return date.toLocaleDateString('es-ES', { 
-    day: 'numeric', 
-    month: 'short' 
+  return date.toLocaleDateString(language, {
+    day: 'numeric',
+    month: 'short',
   });
 }
 
@@ -56,6 +59,7 @@ export default function ConversationSidebar({
   open,
   onClose,
 }: ConversationSidebarProps) {
+  const { t, i18n } = useTranslation('common');
   const confirm = useConfirm();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +79,7 @@ export default function ConversationSidebar({
       setConversations(response.conversations || []);
     } catch (err) {
       console.error('Error loading conversations:', err);
-      setError('Error al cargar conversaciones');
+      setError(t('marketplaceHome.loadConversationsFailed'));
     } finally {
       setLoading(false);
     }
@@ -84,10 +88,14 @@ export default function ConversationSidebar({
   async function handleDeleteConversation(conversationId: number, e: React.MouseEvent) {
     e.stopPropagation();
 
+    const title = conversations.find((conversation) => conversation.conversation_id === conversationId)?.title
+      || t('marketplaceChat.newConversation');
     const ok = await confirm({
-      title: 'Delete conversation',
-      message: 'Are you sure you want to delete this conversation? This action cannot be undone.',
-      confirmLabel: 'Delete',
+      title: t('marketplaceHome.confirmDeleteTitle'),
+      message: t('marketplaceHome.confirmDeleteMessage', {
+        agent: title,
+      }),
+      confirmLabel: t('marketplaceHome.deleteConversation'),
       variant: 'danger',
     });
 
@@ -102,7 +110,7 @@ export default function ConversationSidebar({
       }
     } catch (err) {
       console.error('Error deleting conversation:', err);
-      alert('Error al eliminar conversación');
+      alert(t('marketplaceHome.deleteConversationFailed'));
     }
   }
 
@@ -114,7 +122,7 @@ export default function ConversationSidebar({
       ));
     } catch (err) {
       console.error('Error updating conversation title:', err);
-      alert('Error al actualizar título');
+      alert(t('marketplaceHome.renameConversationFailed'));
     }
   }
 
@@ -145,7 +153,7 @@ export default function ConversationSidebar({
   const renderContent = () => {
     if (loading) {
       return (
-        <LoadingState variant="section" message="Loading conversations..." />
+        <LoadingState variant="section" message={t('agentPlayground.chat.loadingConversation')} />
       );
     }
 
@@ -161,7 +169,7 @@ export default function ConversationSidebar({
                 onClick={() => void loadConversations()}
                 className="font-medium text-error underline hover:text-error-strong dark:text-error-dark dark:hover:text-error-strong-dark"
               >
-                Reintentar
+                {t('conversationSidebar.retry')}
               </button>
             </div>
           )}
@@ -173,8 +181,8 @@ export default function ConversationSidebar({
     if (conversations.length === 0) {
       return (
         <div className="px-1.5 py-3">
-          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark">No hay conversaciones aún</p>
-          <p className="mt-1 text-[12px] text-fg-tertiary dark:text-fg-tertiary-dark">Crea una nueva para empezar</p>
+          <p className="text-[13px] text-fg-tertiary dark:text-fg-tertiary-dark">{t('marketplaceHome.noConversations')}</p>
+          <p className="mt-1 text-[12px] text-fg-tertiary dark:text-fg-tertiary-dark">{t('conversationSidebar.emptyDescription')}</p>
         </div>
       );
     }
@@ -215,10 +223,10 @@ export default function ConversationSidebar({
                   >
                     <span className="flex min-w-0 items-baseline justify-between gap-2">
                       <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg dark:text-fg-dark">
-                        {conversation.title || 'New conversation'}
+                        {conversation.title || t('marketplaceChat.newConversation')}
                       </span>
                       <time className="flex-none text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
-                        {formatDate(conversation.updated_at)}
+                        {formatDate(conversation.updated_at, i18n.resolvedLanguage ?? i18n.language)}
                       </time>
                     </span>
                     {conversation.last_message && (
@@ -230,7 +238,7 @@ export default function ConversationSidebar({
                 )}
 
                 <div className="mt-[3px] text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
-                  {conversation.message_count} mensajes
+                  {t('marketplaceAgentDetail.messageCount', { count: conversation.message_count })}
                 </div>
               </div>
 
@@ -240,8 +248,8 @@ export default function ConversationSidebar({
                     type="button"
                     data-action="rename"
                     onClick={(e) => handleRenameStart(e, conversation)}
-                    aria-label="Renombrar conversación"
-                    title="Renombrar conversación"
+                    aria-label={t('marketplaceHome.renameConversation')}
+                    title={t('marketplaceHome.renameConversation')}
                     className="flex h-8 w-8 items-center justify-center text-fg-tertiary opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-fg-secondary dark:text-fg-tertiary-dark dark:hover:text-fg-secondary-dark"
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
@@ -250,8 +258,8 @@ export default function ConversationSidebar({
                     type="button"
                     data-action="delete"
                     onClick={(e) => handleDeleteConversation(conversation.conversation_id, e)}
-                    aria-label="Eliminar conversación"
-                    title="Eliminar conversación"
+                    aria-label={t('marketplaceHome.deleteConversation')}
+                    title={t('marketplaceHome.deleteConversation')}
                     className="flex h-8 w-8 items-center justify-center text-fg-tertiary opacity-0 transition group-hover:opacity-100 focus:opacity-100 hover:text-error dark:text-fg-tertiary-dark dark:hover:text-error-dark"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -270,8 +278,8 @@ export default function ConversationSidebar({
       open={open}
       onClose={onClose}
       side="right"
-      title="Conversaciones"
-      closeLabel="Cerrar conversaciones"
+      title={t('agentPlayground.conversations')}
+      closeLabel={t('conversationSidebar.close')}
       widthClassName="w-[340px] max-w-full"
       headerActions={
         <button
@@ -284,7 +292,7 @@ export default function ConversationSidebar({
                      border border-ink dark:border-ink-dark text-fg dark:text-fg-dark
                      hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150"
         >
-          Nueva
+          {t('marketplaceChat.newConversation')}
         </button>
       }
       footer={
@@ -295,7 +303,7 @@ export default function ConversationSidebar({
                      border border-ink dark:border-ink-dark text-fg dark:text-fg-dark
                      hover:bg-surface-hover dark:hover:bg-surface-hover-dark transition-colors duration-150"
         >
-          Actualizar
+          {t('conversationSidebar.refresh')}
         </button>
       }
     >

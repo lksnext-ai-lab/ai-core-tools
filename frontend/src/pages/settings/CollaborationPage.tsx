@@ -456,14 +456,14 @@ function CollaborationPage() {
                     </div>
                   )
                 ),
-                className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+                className: 'px-6 py-4 whitespace-nowrap text-sm text-fg-secondary dark:text-fg-secondary-dark'
               },
               ...(canManage ? [{
                 header: t('collaborationPage.table.actions'),
                 sticky: 'right' as const,
                 render: (member: Collaborator) => (
                   member.role === 'owner' ? (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-fg-secondary dark:text-fg-secondary-dark">-</span>
                   ) : (
                     <div className="flex space-x-2">
                       {member.status === 'accepted' && member.role !== 'owner' && (
@@ -502,7 +502,7 @@ function CollaborationPage() {
               }] : [])
             ]}
             rowClassName={(member) => member.role === 'owner' ? "bg-surface-tint dark:bg-surface-tint-dark" : ""}
-            emptyIcon={<Users className="w-10 h-10 text-gray-300" />}
+            emptyIcon={<Users className="w-10 h-10 text-fg-secondary dark:text-fg-secondary-dark" />}
             emptyMessage={t('collaborationPage.empty.title')}
             emptySubMessage={canManage 
               ? t('collaborationPage.empty.manageMessage')

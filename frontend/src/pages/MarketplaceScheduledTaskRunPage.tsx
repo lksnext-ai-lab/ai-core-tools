@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { apiService, type MarketplaceScheduledTask } from '../services/api';
 import { ScheduledTaskOutputView, type ScheduledTaskOutputSource } from '../components/scheduled-tasks/ScheduledTaskOutputView';
 
 /** Marketplace: read-only result of a run (/runs/:runId) or of a continuous conversation (/conversation). */
 export default function MarketplaceScheduledTaskRunPage() {
+  const { t } = useTranslation('common');
   const { taskId, runId } = useParams();
   const numericTaskId = Number.parseInt(taskId ?? '0', 10);
   const numericRunId = runId ? Number.parseInt(runId, 10) : null;
@@ -23,10 +25,10 @@ export default function MarketplaceScheduledTaskRunPage() {
 
   return (
     <ScheduledTaskOutputView
-      title={task?.name ?? 'Tarea programada'}
-      subtitle={numericRunId === null ? 'Respuestas de la conversación continua' : 'Resultado de la ejecución'}
+      title={task?.name ?? t('scheduledTaskDetailPage.results.taskFallback')}
+      subtitle={numericRunId === null ? t('scheduledTaskDetailPage.results.conversationSubtitle') : t('scheduledTaskDetailPage.results.runSubtitle')}
       backHref={`/marketplace/scheduled-tasks/${taskId}`}
-      backLabel="Volver a la tarea"
+      backLabel={t('scheduledTaskDetailPage.results.backToTask')}
       source={source}
       timeline={numericRunId === null}
     />

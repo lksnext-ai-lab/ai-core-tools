@@ -172,7 +172,7 @@ function SystemSettingsPage() {
         <FormField
           id={setting.key}
           type="checkbox"
-          ariaLabel='{setting.description || setting.key}'
+          ariaLabel={setting.description || setting.key}
           checked={boolValue}
           onChange={(e) =>
             setEditingValues((prev) => ({

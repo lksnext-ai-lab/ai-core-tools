@@ -335,7 +335,7 @@ function AgentsPage() {
                   className="rounded-lg"
                 />
                 <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-fg dark:text-fg-dark">
                     {canEdit ? (
                       <Link 
                         to={`/apps/${appId}/agents/${agent.agent_id}`} 
@@ -465,7 +465,6 @@ function AgentsPage() {
           {
             header: t('agentsPage.columns.actions'),
             sticky: 'right',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
             render: (agent) => (
               <ActionDropdown

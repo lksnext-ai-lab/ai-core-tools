@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { FormCheckbox, FormField } from './FormField';
+import { FormCheckbox, FormRadio } from './FormField';
 
 export type ButtonCardVariant =
   | 'default'
@@ -79,16 +79,14 @@ export function ButtonCard({
       />
       <div className={`pointer-events-none relative z-10 flex min-h-0 flex-1 ${radioVariant ? (trailingRadioVariant ? 'flex-row-reverse items-start gap-3' : 'flex-row items-start gap-3') : 'flex-col'} ${interactiveChildrenClassName}`}>
         {radioVariant && (
-          <FormField
+          <FormRadio
             id={`${radioName ?? 'button-card-radio'}-${radioValue ?? ariaLabel}`}
             name={radioName ?? 'button-card-radio'}
-            type="radio"
             value={radioValue ?? ''}
             checked={selected}
             ariaLabel={ariaLabel}
             disabled={disabled}
-            label={undefined}
-            className="w-fit"
+            radioOnly
             inputClassName="mt-1 cursor-pointer"
             onChange={() => {
               if (!selected) onClick();

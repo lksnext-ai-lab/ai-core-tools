@@ -371,8 +371,8 @@ const RepositoryDetailPage: React.FC = () => {
     setShowDeleteFolderModal(true);
   };
 
-  const handleMoveFolder = (folderId: number, currentParentId?: number) => {
-    setFolderActionData({ folderId, parentFolderId: currentParentId });
+  const handleMoveFolder = (folderId: number, currentParentId: number | undefined, folderName: string) => {
+    setFolderActionData({ folderId, parentFolderId: currentParentId, folderName });
     setNewParentFolderId(null); // Start with no selection so user can choose
     setShowMoveFolderModal(true);
   };
@@ -996,25 +996,25 @@ const RepositoryDetailPage: React.FC = () => {
         title={t('repositoryDetailPage.modals.deleteFile.title')}
       >
         <div className="p-6">
-          <p className="text-gray-700 mb-6">
+          <p className="text-fg dark:text-fg-dark mb-6">
             {t('repositoryDetailPage.modals.deleteFile.message', { name: resourceToDelete?.name })}
           </p>
           <div className="flex justify-end gap-3">
-            <button
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.cancel')}
               onClick={() => {
                 setShowDeleteModal(false);
                 setResourceToDelete(null);
               }}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              {t('repositoryDetailPage.actions.cancel')}
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.delete')}
               onClick={confirmDeleteResource}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              {t('repositoryDetailPage.actions.delete')}
-            </button>
+              variant="dangerSolid"
+              size="medium"
+            />
           </div>
         </div>
       </Modal>
@@ -1092,22 +1092,22 @@ const RepositoryDetailPage: React.FC = () => {
         title={t('repositoryDetailPage.modals.deleteFolder.title')}
       >
         <div className="space-y-4">
-          <p className="text-gray-700">
+          <p className="text-fg dark:text-fg-dark">
             {t('repositoryDetailPage.modals.deleteFolder.message', { name: folderActionData.folderName })}
           </p>
           <div className="flex justify-end space-x-3">
-            <button
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.cancel')}
               onClick={() => setShowDeleteFolderModal(false)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              {t('repositoryDetailPage.actions.cancel')}
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.delete')}
               onClick={deleteFolder}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-              {t('repositoryDetailPage.actions.delete')}
-            </button>
+              variant="dangerSolid"
+              size="medium"
+            />
           </div>
         </div>
       </Modal>
@@ -1122,22 +1122,22 @@ const RepositoryDetailPage: React.FC = () => {
         title={t('repositoryDetailPage.modals.deleteMedia.title')}
       >
         <div className="p-6">
-          <p className="text-gray-700 mb-6">
+          <p className="text-fg dark:text-fg-dark mb-6">
             {t('repositoryDetailPage.modals.deleteMedia.message', { name: mediaToDelete?.name })}
           </p>
           <div className="flex justify-end gap-3">
-            <button
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.cancel')}
               onClick={() => setShowDeleteMediaModal(false)}
-              className="px-4 py-2 bg-gray-100 rounded-lg"
-            >
-              {t('repositoryDetailPage.actions.cancel')}
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.delete')}
               onClick={confirmDeleteMedia}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg"
-            >
-              {t('repositoryDetailPage.actions.delete')}
-            </button>
+              variant="dangerSolid"
+              size="medium"
+            />
           </div>
         </div>
       </Modal>
@@ -1149,36 +1149,32 @@ const RepositoryDetailPage: React.FC = () => {
         title={t('repositoryDetailPage.modals.moveFolder.title')}
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('repositoryDetailPage.modals.moveTo', { name: folderActionData.folderName })}
-            </label>
-            <select
-              value={newParentFolderId || ''}
-              onChange={(e) => setNewParentFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">{t('repositoryDetailPage.root')}</option>
-              {getValidDestinationFolders().map((folder) => (
-                <option key={folder.folder_id} value={folder.folder_id}>
-                  {folder.full_path}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FormSelect
+            id="move-folder-destination"
+            label={t('repositoryDetailPage.modals.moveTo', { name: folderActionData.folderName })}
+            value={newParentFolderId || ''}
+            onChange={(e) => setNewParentFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
+            options={[
+              { value: '', label: t('repositoryDetailPage.root') },
+              ...getValidDestinationFolders().map((folder) => ({
+                value: folder.folder_id,
+                label: folder.full_path
+              }))
+            ]}
+          />
           <div className="flex justify-end space-x-3">
-            <button
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.cancel')}
               onClick={() => setShowMoveFolderModal(false)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              {t('repositoryDetailPage.actions.cancel')}
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.move')}
               onClick={moveFolder}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              {t('repositoryDetailPage.actions.move')}
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         </div>
       </Modal>
@@ -1190,41 +1186,35 @@ const RepositoryDetailPage: React.FC = () => {
         title={t('repositoryDetailPage.modals.moveMedia.title')}
       >
         <div className="space-y-4">
-          <label className="block text-sm font-medium text-gray-700">
-            {t('repositoryDetailPage.modals.moveTo', { name: mediaToMove?.name })}
-          </label>
-
-          <select
+          <FormSelect
+            id="move-media-destination"
+            label={t('repositoryDetailPage.modals.moveTo', { name: mediaToMove?.name })}
             value={moveMediaToFolderId || ''}
-            onChange={(e) =>
-              setMoveMediaToFolderId(
-                e.target.value ? Number.parseInt(e.target.value) : null
-              )
-            }
-            className="w-full px-3 py-2 border rounded-md"
-          >
-            <option value="">{t('repositoryDetailPage.root')}</option>
-            {repository?.folders &&
-              getAllFolderPaths(repository.folders).map((folder) => (
-                <option key={folder.folder_id} value={folder.folder_id}>
-                  {folder.full_path}
-                </option>
-              ))}
-          </select>
+            onChange={(e) => setMoveMediaToFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
+            options={[
+              { value: '', label: t('repositoryDetailPage.root') },
+              ...(repository?.folders
+                ? getAllFolderPaths(repository.folders).map((folder) => ({
+                    value: folder.folder_id,
+                    label: folder.full_path
+                  }))
+                : [])
+            ]}
+          />
 
           <div className="flex justify-end gap-3">
-            <button
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.cancel')}
               onClick={() => setShowMoveMediaModal(false)}
-              className="px-4 py-2 bg-gray-100 rounded-lg"
-            >
-              {t('repositoryDetailPage.actions.cancel')}
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.move')}
               onClick={confirmMoveMedia}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg"
-            >
-              {t('repositoryDetailPage.actions.move')}
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         </div>
       </Modal>
@@ -1236,36 +1226,34 @@ const RepositoryDetailPage: React.FC = () => {
         title={t('repositoryDetailPage.modals.moveFile.title')}
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('repositoryDetailPage.modals.moveTo', { name: resourceToMove?.name })}
-            </label>
-            <select
-              value={moveToFolderId || ''}
-              onChange={(e) => setMoveToFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">{t('repositoryDetailPage.root')}</option>
-              {repository?.folders ? getAllFolderPaths(repository.folders).map((folder) => (
-                <option key={folder.folder_id} value={folder.folder_id}>
-                  {folder.full_path}
-                </option>
-              )) : null}
-            </select>
-          </div>
+          <FormSelect
+            id="move-file-destination"
+            label={t('repositoryDetailPage.modals.moveTo', { name: resourceToMove?.name })}
+            value={moveToFolderId || ''}
+            onChange={(e) => setMoveToFolderId(e.target.value ? Number.parseInt(e.target.value) : null)}
+            options={[
+              { value: '', label: t('repositoryDetailPage.root') },
+              ...(repository?.folders
+                ? getAllFolderPaths(repository.folders).map((folder) => ({
+                    value: folder.folder_id,
+                    label: folder.full_path
+                  }))
+                : [])
+            ]}
+          />
           <div className="flex justify-end space-x-3">
-            <button
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.cancel')}
               onClick={() => setShowMoveModal(false)}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              {t('repositoryDetailPage.actions.cancel')}
-            </button>
-            <button
+              variant="secondary"
+              size="medium"
+            />
+            <ButtonApp
+              label={t('repositoryDetailPage.actions.move')}
               onClick={confirmMoveResource}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              {t('repositoryDetailPage.actions.move')}
-            </button>
+              variant="primary"
+              size="medium"
+            />
           </div>
         </div>
       </Modal>

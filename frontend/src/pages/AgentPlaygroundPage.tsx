@@ -16,6 +16,7 @@ import { Badge } from '../components/ui/Badge';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import type { ServiceLifecycleWarning } from '../types/services';
 import { Title } from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
 
 interface Agent {
   agent_id: number;
@@ -179,16 +180,16 @@ function AgentPlaygroundPage() {
 
   if (!agent) {
     return (
-      <div className="max-w-2xl mx-auto mt-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('agentPlayground.notFoundTitle')}</h2>
-        <p className="text-gray-600">{t('agentPlayground.notFoundMessage')}</p>
-        <button
+      <CardApp className="max-w-2xl mx-auto mt-8 p-6 " titulo={t('agentPlayground.notFoundTitle')}>
+       <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('agentPlayground.notFoundMessage')}</p>
+        <ButtonApp
+          label={t('agentPlayground.backToAgents')}
+          variant="primary"
+          size="medium"
           onClick={() => navigate(`/apps/${appId}/agents`)}
-          className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-        >
-          {t('agentPlayground.backToAgents')}
-        </button>
-      </div>
+          className="mt-4"
+        />
+      </CardApp>
     );
   }
 

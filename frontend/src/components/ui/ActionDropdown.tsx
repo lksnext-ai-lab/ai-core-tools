@@ -47,9 +47,8 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   };
 
   useLayoutEffect(() => {
-    if (isOpen && !position) {
-      setDropdownStyle(calculateRegularDropdownStyle());
-    }
+    if (!isOpen) return;
+    setDropdownStyle(position ? calculateDropdownStyle() : calculateRegularDropdownStyle());
   }, [isOpen, position]);
 
   useEffect(() => {
@@ -193,9 +192,6 @@ const ActionDropdown: React.FC<ActionDropdownProps> = ({
   };
 
   const getDropdownStyle = () => {
-    if (position) {
-      return calculateDropdownStyle();
-    }
     if (Object.keys(dropdownStyle).length > 0) {
       return dropdownStyle;
     }

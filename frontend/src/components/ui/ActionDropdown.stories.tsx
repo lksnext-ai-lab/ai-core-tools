@@ -1,6 +1,5 @@
-import { useState, type ComponentProps } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { fn } from 'storybook/test';
+import { fn, userEvent, within } from 'storybook/test';
 import { ArrowDownToLine, CheckCircle2, ClipboardCopy, Pencil, Plug, RefreshCw, Settings, Trash2 } from 'lucide-react';
 
 import ActionDropdown, { type ActionItem } from './ActionDropdown';
@@ -18,6 +17,13 @@ const meta = {
   component: ActionDropdown,
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component:
+          'Actions menu rendered in a portal with fixed positioning, so it is never clipped by tables or scroll containers. '
+          + 'Use `triggerAriaLabel` when the trigger has no visible text.',
+      },
+    },
   },
   tags: ['autodocs'],
   argTypes: {
@@ -44,6 +50,12 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
+export const Open: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /actions/i }));
+  },
+};
+
 export const Sizes: Story = {
   render: (args) => (
     <div className="flex items-start gap-6">
@@ -61,10 +73,15 @@ export const CustomTrigger: Story = {
   },
 };
 
-export const IconOnlyTrigger: Story = {
+export const WithRowAriaLabel: Story = {
   args: {
-    triggerText: '',
-    triggerAriaLabel: 'Row actions',
+    triggerAriaLabel: 'Actions for Support agent',
+  },
+};
+
+export const WithoutIcon: Story = {
+  args: {
+    triggerIcon: null,
   },
 };
 
@@ -90,32 +107,4 @@ export const WithDisabledAndLoading: Story = {
       { label: 'Delete', onClick: fn(), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' },
     ],
   },
-};
-
-function ContextMenuDemo(args: ComponentProps<typeof ActionDropdown>) {
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
-
-  return (
-    <>
-      <div
-        onContextMenu={(e) => {
-          e.preventDefault();
-          setPosition({ x: e.clientX, y: e.clientY });
-        }}
-        className="flex h-[200px] w-[360px] items-center justify-center rounded-lg border border-dashed border-line text-sm text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark"
-      >
-        Right-click anywhere in this area
-      </div>
-      <ActionDropdown
-        {...args}
-        position={position}
-        isOpen={position !== null}
-        onClose={() => setPosition(null)}
-      />
-    </>
-  );
-}
-
-export const ContextMenu: Story = {
-  render: (args) => <ContextMenuDemo {...args} />,
 };

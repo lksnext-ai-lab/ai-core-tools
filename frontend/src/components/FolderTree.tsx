@@ -24,7 +24,7 @@ interface FolderTreeProps {
   onFolderCreate?: (parentFolderId?: number) => void;
   onFolderRename?: (folderId: number, currentName: string) => void;
   onFolderDelete?: (folderId: number, folderName: string) => void;
-  onFolderMove?: (folderId: number, currentParentId?: number) => void;
+  onFolderMove?: (folderId: number, currentParentId: number | undefined, folderName: string) => void;
   canEdit?: boolean;
 }
 
@@ -291,7 +291,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({
         break;
       case 'move':
         console.log('FolderTree: calling onFolderMove');
-        onFolderMove?.(folder.folder_id, folder.parent_folder_id);
+        onFolderMove?.(folder.folder_id, folder.parent_folder_id, folder.name);
         break;
     }
   };

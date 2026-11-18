@@ -304,14 +304,17 @@ function ImportModal({
 
             {/* Next Steps */}
             {importResult.summary.next_steps && importResult.summary.next_steps.length > 0 && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">{t('importModal.result.nextSteps')}</h4>
-                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-                  {importResult.summary.next_steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ul>
-              </div>
+              <Alert
+                type="info"
+                title={t('importModal.result.nextSteps')}
+                message={(
+                  <ul className="list-disc list-inside space-y-1">
+                    {importResult.summary.next_steps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                )}
+              />
             )}
           </div>
         )}

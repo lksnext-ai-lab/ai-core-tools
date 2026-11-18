@@ -349,7 +349,7 @@ function APIKeysPage() {
                     triggerAriaLabel={t('apiKeysPage.actions.menuForKey', { name: apiKey.name })}
                   />
                 ) : (
-                  <span className="text-gray-400 text-sm">{t('apiKeysPage.viewOnly')}</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('apiKeysPage.viewOnly')}</span>
                 )
               )
             }

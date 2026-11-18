@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { adminService } from '../../services/admin';
 import type { User } from '../../services/admin';
 import { errorMessage } from '../../constants/messages';
@@ -34,6 +35,7 @@ function UserPicker({
   disabled = false,
   inputId,
 }: Readonly<UserPickerProps>) {
+  const { t } = useTranslation('common');
   const uid = useId();
   const comboboxId = inputId ?? `user-picker-${uid}`;
   const listboxId = `${comboboxId}-listbox`;
@@ -64,13 +66,13 @@ function UserPicker({
         setIsOpen(true);
         setActiveIndex(-1);
       } catch (err: unknown) {
-        setFetchError(errorMessage(err, 'Failed to search users'));
+        setFetchError(errorMessage(err, t('userPicker.searchFailed')));
         setCandidates([]);
       } finally {
         setIsLoading(false);
       }
     },
-    [excludeUserId],
+    [excludeUserId, t],
   );
 
   useEffect(() => {
@@ -163,9 +165,9 @@ function UserPicker({
     activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
 
   const liveRegionText = isLoading
-    ? 'Searching…'
+    ? t('searchableMultiSelect.searching')
     : candidates.length > 0
-    ? `${candidates.length} results`
+    ? t('userPicker.resultCount', { count: candidates.length })
     : '';
 
   return (
@@ -193,8 +195,8 @@ function UserPicker({
             type="button"
             onClick={handleClear}
             disabled={disabled}
-            aria-label={`Remove selected user ${value.name || value.email}`}
-            className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none  disabled:opacity-50"
+            aria-label={t('userPicker.removeSelectedUser', { user: value.name || value.email })}
+            className="flex-shrink-0 text-fg-tertiary hover:text-fg-secondary dark:text-fg-tertiary-dark dark:hover:text-fg-secondary-dark focus:outline-none disabled:opacity-50"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -230,7 +232,7 @@ function UserPicker({
             onFocus={() => {
               if (candidates.length > 0) setIsOpen(true);
             }}
-            placeholder="Search by name or email…"
+            placeholder={t('userManagement.searchPlaceholder')}
             className="w-full py-2 pl-9 pr-3 text-sm border rounded-lg bg-surface text-fg placeholder:text-fg-faint dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-faint-dark focus:outline-none focus:border-accent dark:border-line-strong-dark dark:focus:border-accent disabled:bg-surface-hover disabled:text-fg-tertiary disabled:cursor-not-allowed dark:disabled:bg-surface-hover-dark dark:disabled:text-fg-tertiary-dark"
           />
         </div>
@@ -248,11 +250,11 @@ function UserPicker({
           id={listboxId}
           role="listbox"
           aria-label={label}
-          className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto focus:outline-none"
+          className="absolute z-50 w-full mt-1 bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-lg shadow-lg max-h-60 overflow-y-auto focus:outline-none"
         >
           {candidates.length === 0 && !isLoading && (
-            <li role="presentation" className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400 select-none">
-              No users found
+            <li role="presentation" className="px-4 py-3 text-sm text-fg-tertiary dark:text-fg-tertiary-dark select-none">
+              {t('userManagement.noUsersFound')}
             </li>
           )}
           {candidates.map((user, index) => {
@@ -272,24 +274,24 @@ function UserPicker({
                   index > 0 ? 'border-t border-line dark:border-line-dark' : ''
                 } ${
                   isActive
-                    ? 'bg-surface-hover dark:bg-btCard-hover'
+                    ? 'bg-surface-hover dark:bg-surface-hover-dark'
                     : 'bg-surface dark:bg-surface-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">
+                    <p className="text-sm font-medium text-fg dark:text-fg-dark truncate">
                       {user.name || user.email}
                     </p>
                     {user.name && (
-                      <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                      <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark truncate">
                         {user.email}
                       </p>
                     )}
                   </div>
                   {!user.is_active && (
-                    <span className="flex-shrink-0 text-xs text-gray-500 dark:text-slate-400 italic">
-                      inactive
+                    <span className="flex-shrink-0 text-xs text-fg-secondary dark:text-fg-secondary-dark italic">
+                      {t('userManagement.inactive')}
                     </span>
                   )}
                 </div>

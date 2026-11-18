@@ -6,6 +6,7 @@ import { FormTextArea } from '../ui/FormField';
 import Modal from '../ui/Modal';
 import { Tabs } from '../ui/Tabs';
 import { apiService } from '../../services/api';
+import { useTranslation } from 'react-i18next';
 
 interface PromptModalProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ function PromptModal({
   initialPromptTemplate = '',
   onPromptUpdate 
 }: Readonly<PromptModalProps>) {
+  const { t } = useTranslation('common');
   const [promptData, setPromptData] = useState<PromptData>({
     system_prompt: initialSystemPrompt,
     prompt_template: initialPromptTemplate
@@ -79,7 +81,10 @@ function PromptModal({
         // Don't fail the whole operation if reset fails
       }
       
-      setSuccess(`${type === 'system' ? 'System' : 'Template'} prompt updated and conversation reset!`);
+      const promptType = type === 'system'
+        ? t('agentFormPage.prompts.systemPrompt')
+        : t('agentFormPage.prompts.template');
+      setSuccess(t('promptModal.updated', { promptType }));
       
       // Call the callback to refresh agent data if needed
       if (onPromptUpdate) {
@@ -91,7 +96,7 @@ function PromptModal({
       setError(null);
       onClose(); // Close the modal after successful save
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update prompt');
+      setError(err instanceof Error ? err.message : t('promptModal.updateFailed'));
       console.error('Error updating prompt:', err);
     } finally {
       setSaving(false);
@@ -107,34 +112,37 @@ function PromptModal({
   const tabs: Array<{ id: 'system' | 'template'; label: string; description: string; icon: ReactNode }> = [
     {
       id: 'system' as const,
-      label: 'System Prompt',
-      description: 'Agent behavior and capabilities',
+      label: t('agentFormPage.prompts.systemPrompt'),
+      description: t('promptModal.systemDescription'),
       icon: <Brain className="w-4 h-4" />
     },
     {
       id: 'template' as const,
-      label: 'Template Prompt',
-      description: 'User interaction template',
+      label: t('agentFormPage.prompts.template'),
+      description: t('promptModal.templateDescription'),
       icon: <MessageCircle className="w-4 h-4" />
     }
   ];
 
-  const promptTypeLabel = activeTab === 'system' ? 'System' : 'Template';
-  const saveLabel = saving ? 'Saving...' : `Save ${promptTypeLabel} Prompt`;
+  const saveLabel = saving
+    ? t('agentFormPage.saving.inProgress')
+    : activeTab === 'system'
+      ? t('promptModal.saveSystemPrompt')
+      : t('promptModal.saveTemplatePrompt');
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Edit Prompts" subtitle={agentName} size="large">
+    <Modal isOpen={isOpen} onClose={handleClose} title={t('agentPlayground.editPrompts')} subtitle={agentName} size="large">
       <Tabs tabs={tabs} activeTab={activeTab} onChange={(tabId) => setActiveTab(tabId as 'system' | 'template')} className="-mx-6 mb-6 px-6" />
 
       {activeTab === 'system' && (
         <div className="space-y-4">
           <FormTextArea
-            label="System Prompt"
+            label={t('agentFormPage.prompts.systemPrompt')}
             id="system_prompt"
             value={promptData.system_prompt}
             onChange={(e) => handlePromptChange('system', e.target.value)}
             rows={12}
-            placeholder="Define the agent's behavior, capabilities, and personality..."
+            placeholder={t('agentFormPage.prompts.systemPromptPlaceholder')}
           />
         </div>
       )}
@@ -142,12 +150,12 @@ function PromptModal({
       {activeTab === 'template' && (
         <div className="space-y-4">
           <FormTextArea
-            label="Template Prompt"
+            label={t('agentFormPage.prompts.template')}
             id="prompt_template"
             value={promptData.prompt_template}
             onChange={(e) => handlePromptChange('template', e.target.value)}
             rows={12}
-            placeholder="Define the template for user interactions..."
+            placeholder={t('promptModal.templatePlaceholder')}
           />
         </div>
       )}
@@ -157,24 +165,24 @@ function PromptModal({
 
       <Alert
         type="info"
-        title="Tips for Writing Effective Prompts"
+        title={t('promptModal.tipsTitle')}
         message={(
           <ul className="space-y-1">
-            <li>• Be specific about the agent's role and capabilities</li>
-            <li>• Include examples of expected behavior</li>
-            <li>• Use clear, concise language</li>
-            <li>• Test your prompts in the playground to see how they work</li>
-            <li>• <strong>Note:</strong> Saving prompts will reset the conversation to test with fresh context</li>
+            <li>• {t('promptModal.tipSpecific')}</li>
+            <li>• {t('promptModal.tipExamples')}</li>
+            <li>• {t('promptModal.tipClear')}</li>
+            <li>• {t('promptModal.tipTest')}</li>
+            <li>• <strong>{t('promptModal.note')}:</strong> {t('promptModal.conversationResetNotice')}</li>
           </ul>
         )}
       />
 
       <div className="mt-6 flex flex-col gap-4 border-t border-line pt-6 dark:border-line-dark sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
-          Saving prompts will also reset the conversation for fresh testing
+          {t('promptModal.conversationResetNotice')}
         </div>
         <div className="flex justify-end gap-3">
-          <ButtonApp label="Close" onClick={handleClose} variant="secondary" size="medium" />
+          <ButtonApp label={t('promptModal.close')} onClick={handleClose} variant="secondary" size="medium" />
           <ButtonApp
             label={saveLabel}
             onClick={() => savePrompt(activeTab)}

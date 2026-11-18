@@ -72,7 +72,7 @@ export function ServiceOptionStatus({ options, selectedId, selectId }: ServiceOp
     <div
       id={`${selectId}_lifecycle`}
       className={`mt-1 flex items-start gap-1 text-xs ${
-        retired ? 'text-red-700 dark:text-red-300' : 'text-yellow-800 dark:text-yellow-200'
+        retired ? 'text-error dark:text-error-dark' : 'text-bronze dark:text-bronze-dark'
       }`}
     >
       <Icon className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />

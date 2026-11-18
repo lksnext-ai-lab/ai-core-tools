@@ -6,11 +6,12 @@ export interface ExpansionDetailsProps {
   readonly headerStart?: ReactNode;
   readonly headerExtra?: ReactNode;
   readonly children: ReactNode;
+  readonly defaultOpen?: boolean;
 }
 
 /** Collapsible section used to group related content, e.g. in CrawlPolicyForm. */
-export function ExpansionDetails({ header, headerStart, headerExtra, children }: Readonly<ExpansionDetailsProps>) {
-  const [isOpen, setIsOpen] = useState(true);
+export function ExpansionDetails({ header, headerStart, headerExtra, children, defaultOpen = true }: Readonly<ExpansionDetailsProps>) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const contentId = useId();
 
   return (

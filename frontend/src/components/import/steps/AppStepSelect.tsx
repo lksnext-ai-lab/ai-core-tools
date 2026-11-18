@@ -250,10 +250,10 @@ if (selected) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
           {t('importModal.appSelect.description')}
         </p>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
           {t('importModal.appSelect.selectedCount', {
             selected: selectedCount,
             total: totalCount,
@@ -289,7 +289,7 @@ if (selected) {
               />
             )}
             headerExtra={(
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                 {catSelectedCount}/{cat.items.length}
               </span>
             )}

@@ -60,7 +60,7 @@ export function BreakdownTable({ dimensions, active, onChange, items, loading }:
               <th className="px-6 py-3 text-right text-[11px] font-medium text-fg-tertiary uppercase tracking-[0.05em] dark:text-fg-tertiary-dark">{t('metricsDashboard.table.lastRun')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+          <tbody className="divide-y divide-line dark:divide-line-dark">
             {loading && !items && <EmptyRow text={t('metricsDashboard.loading')} />}
             {items && items.length === 0 && <EmptyRow text={t('metricsDashboard.breakdown.noRuns')} />}
             {items?.map((item) => (
@@ -76,7 +76,7 @@ export function BreakdownTable({ dimensions, active, onChange, items, loading }:
                 <td className="py-2 pr-4">
                   <div className="flex items-center gap-2">
                     <span className="w-14 tabular-nums">{formatCount(item.runs)}</span>
-                    <span className="hidden h-1.5 w-24 rounded-full bg-gray-100 sm:block dark:bg-gray-700" aria-hidden>
+                    <span className="hidden h-1.5 w-24 rounded-full bg-line sm:block dark:bg-line-dark" aria-hidden>
                       <span
                         className="block h-1.5 rounded-full bg-fg dark:bg-fg-dark"
                         style={{ width: `${(item.runs / maxRuns) * 100}%` }}

@@ -4,7 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import Alert from '../../ui/Alert';
 import type { AgentImportPreview } from '../../../types/import';
 import { ServiceOptionStatus, serviceStatusId } from '../../ui/ServiceOptionStatus';
-import { FormSelect } from '../../ui/FormField';
+import { FormRadio, FormSelect } from '../../ui/FormField';
 import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
 import { selectableServiceOptions, serviceOptionLabel } from '../../../utils/serviceLifecycle';
 import CardApp from '../../ui/CardApp';
@@ -91,50 +91,43 @@ function AgentStepDeps({
         title={t('importModal.agentUpload.components.aiService')}
         badge={t('importModal.agentDependencies.required')}
         badgeVariant="error"
-      >
+      > 
         {preview.ai_service ? (
           <>
-            <div className="space-y-2">
-              <FormField
-                type="radio"
-                id="agent-import-ai-service-bundled"
-                name="ai_service_source"
-                value="bundled"
-                className="flex items-center gap-2"
-                labelClassName="text-sm text-fg dark:text-fg-dark"
-                checked={!useExistingAIService}
-                onChange={() =>
-                  onUseExistingAIServiceChange(false)
-                }
-                label={(
-                  <>
-                    <Trans
-                      i18nKey="importModal.agentDependencies.importBundledAIService"
-                      values={{ name: preview.ai_service.component_name }}
-                      components={{ strong: <strong /> }}
-                    />
-                    {preview.ai_service.provider && (
-                      <span className="text-fg-secondary dark:text-fg-secondary-dark ml-1">
-                        ({preview.ai_service.provider})
-                      </span>
-                    )}
-                  </>
-                )}
-              />
-              <FormField
-                type="radio"
-                id="agent-import-ai-service-existing"
-                name="ai_service_source"
-                value="existing"
-                className="flex items-center gap-2"
-                labelClassName="text-sm text-fg dark:text-fg-dark"
-                checked={useExistingAIService}
-                onChange={() =>
-                  onUseExistingAIServiceChange(true)
-                }
-                label={t('importModal.agentDependencies.useExistingAIService')}
-              />
-            </div>
+            
+          <div className="space-y-2">
+            <FormRadio
+              id="agent-import-ai-service-bundled"
+              name="ai_service_source"
+              value="bundled"
+              checked={!useExistingAIService}
+              onChange={() => onUseExistingAIServiceChange(false)}
+              label={
+                <>
+                  <Trans
+                    i18nKey="importModal.agentDependencies.importBundledAIService"
+                    values={{ name: preview.ai_service.component_name }}
+                    components={{ strong: <strong /> }}
+                  />
+                  {preview.ai_service.provider && (
+                    <span className="text-fg-secondary dark:text-fg-secondary-dark ml-1">
+                      ({preview.ai_service.provider})
+                    </span>
+                  )}
+                </>
+              }
+            />
+
+            <FormRadio
+              id="agent-import-ai-service-existing"
+              name="ai_service_source"
+              value="existing"
+              checked={useExistingAIService}
+              onChange={() => onUseExistingAIServiceChange(true)}
+              label={t('importModal.agentDependencies.useExistingAIService')}
+            />
+          </div>
+
             {useExistingAIService && (
               <FormSelect
                 label={t('importModal.agentUpload.components.aiService')}

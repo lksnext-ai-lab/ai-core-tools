@@ -1,5 +1,5 @@
 import Alert from '../../ui/Alert';
-import { FormField } from '../../ui/FormField';
+import { FormField, FormRadio } from '../../ui/FormField';
 import type { ConflictMode } from '../../../types/import';
 import { useTranslation } from 'react-i18next';
 
@@ -50,33 +50,28 @@ function AppStepConfig({
             message={t('importModal.appConfig.conflictWarning', {
               name: appName,
             })}
-          />
+          /> 
           <div className="space-y-2">
             {MODES.map((m) => (
-              <FormField
+              <FormRadio
                 key={m.value}
                 id={`app-conflict-${m.value}`}
-                type="radio"
                 name="app_conflict_mode"
                 value={m.value}
                 checked={conflictMode === m.value}
-                onChange={() =>
-                  onConflictModeChange(m.value)
-                }
-                className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3"
-                inputClassName="mt-0.5"
-                labelClassName="flex flex-col cursor-pointer"
-                label={(
-                  <>
-                    <span className="text-sm  text-fg dark:text-fg-dark">
+                onChange={() => onConflictModeChange(m.value)}
+                label={
+                  <span className="flex flex-col">
+                    <span className="text-sm text-fg dark:text-fg-dark">
                       {t(m.labelKey)}
                     </span>
                     <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                       {t(m.descriptionKey)}
                     </span>
-                  </>
-                )}
+                  </span>
+                }
               />
+
             ))}
           </div>
         </>

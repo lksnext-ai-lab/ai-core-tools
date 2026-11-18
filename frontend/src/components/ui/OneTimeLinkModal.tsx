@@ -77,7 +77,7 @@ function OneTimeLinkModal({ isOpen, onClose, token, expiresAt, title }: OneTimeL
         />
 
         <div>
-          <label htmlFor="onetimelink-value" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
+          <label htmlFor="onetimelink-value" className="block text-sm font-medium text-fg dark:text-fg-dark mb-1.5">
             {t('oneTimeLink.label')}
           </label>
           <div className="flex gap-2">

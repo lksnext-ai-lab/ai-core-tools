@@ -267,7 +267,7 @@ function MCPServerPanelView({ server, appId, canEdit, onDelete }: Readonly<Panel
               </p>
               <Tabs tabs={clientTabs} activeTab={client} onChange={(id) => setClient(id as ClientTab)} />
               <div className="relative mt-4">
-                <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-gray-900 p-4 text-xs text-gray-100">
+                <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-white p-4 text-xs text-white">
                   {snippet}
                 </pre>
                 <ButtonApp

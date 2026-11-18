@@ -2,6 +2,7 @@ import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatPercent } from './format';
 import CardApp from '../ui/CardApp';
+import { Badge } from '../ui/Badge';
 
 interface Props {
   label: string;
@@ -31,13 +32,13 @@ function ChangeBadge({ change, higherIsBetter }: { change: number; higherIsBette
   const flat = Math.abs(change) < 0.005;
   const good = flat ? null : (change > 0) === higherIsBetter;
   const Icon = flat ? Minus : change > 0 ? ArrowUpRight : ArrowDownRight;
-  const tone = good === null
-    ? 'text-gray-500 dark:text-gray-400'
-    : good ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400';
   return (
-    <span className={`inline-flex items-center gap-0.5 font-medium ${tone}`} title={t('metricsDashboard.change.title')}>
-      <Icon className="h-3 w-3" aria-hidden />
-      {flat ? '0%' : `${change > 0 ? '+' : '−'}${formatPercent(Math.abs(change))}`}
+    <span className="inline-flex" title={t('metricsDashboard.change.title')}>
+      <Badge
+        variant={good === null ? 'default' : good ? 'success' : 'error'}
+        label={flat ? '0%' : `${change > 0 ? '+' : '−'}${formatPercent(Math.abs(change))}`}
+        icon={<Icon className="h-3 w-3" aria-hidden />}
+      />
       <span className="sr-only">{t(good === null ? 'metricsDashboard.change.unchanged' : good ? 'metricsDashboard.change.improved' : 'metricsDashboard.change.worsened')} {t('metricsDashboard.change.previousPeriod')}</span>
     </span>
   );

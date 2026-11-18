@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import InlineFileDownload from '../playground/InlineFileDownload';
 import type { ScheduledTaskRun } from '../../services/api';
 import { formatDateTime } from './format';
+import { CardApp } from '../..';
 
 interface Props {
   runs: ScheduledTaskRun[];
@@ -16,11 +17,7 @@ export function RunFiles({ runs, resolveFileUrl, showRunDate = false }: Readonly
   const { t } = useTranslation('common');
   const files = runs.flatMap((run) => (run.output_files ?? []).map((file) => ({ run, file })));
   return (
-    <section className="rounded-md border border-line bg-surface-tint p-4 dark:border-line-dark dark:bg-surface-tint-dark">
-      <h2 className="mb-3 flex items-center gap-2 text-[15px] font-medium text-fg dark:text-fg-dark">
-        <FileText className="h-4 w-4 text-bronze dark:text-bronze-dark" aria-hidden="true" />
-        {t('scheduledTaskDetailPage.results.generatedFiles')}
-      </h2>
+    <CardApp icon={FileText} titulo={t('scheduledTaskDetailPage.results.generatedFiles')}>
       {files.length === 0 ? (
         <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.results.noGeneratedFiles')}</p>
       ) : (
@@ -39,6 +36,6 @@ export function RunFiles({ runs, resolveFileUrl, showRunDate = false }: Readonly
           ))}
         </ul>
       )}
-    </section>
+    </CardApp>
   );
 }
