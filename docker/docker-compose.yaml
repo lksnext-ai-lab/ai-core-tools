@@ -92,6 +92,14 @@ services:
 
       # Agent turns and human approvals (see docker/.env.example)
       AICT_AGENT_RUN_TIMEOUT_SECONDS: ${AICT_AGENT_RUN_TIMEOUT_SECONDS:-600}
+      # Client-side timeout of embedding requests (OpenAI, MistralAI, HuggingFace, Ollama, Bedrock), seconds.
+      AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS: ${AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS:-120}
+      # Graph-step limits of one turn: agents, and the App Chat (which also retrieves, loads skills and runs code).
+      AICT_AGENT_RECURSION_LIMIT: ${AICT_AGENT_RECURSION_LIMIT:-50}
+      AICT_CHAT_RECURSION_LIMIT: ${AICT_CHAT_RECURSION_LIMIT:-100}
+      # App Chat attachments: total indexing time per turn (s, 0 = unlimited) and files per turn (0 = unlimited).
+      ATTACHMENT_INDEXING_TURN_BUDGET_S: ${ATTACHMENT_INDEXING_TURN_BUDGET_S:-120}
+      CHAT_MAX_FILES_PER_TURN: ${CHAT_MAX_FILES_PER_TURN:-10}
       HITL_MAX_APPROVAL_TTL_SECONDS: ${HITL_MAX_APPROVAL_TTL_SECONDS:-604800}
       HITL_EXPIRY_SWEEP_SECONDS: ${HITL_EXPIRY_SWEEP_SECONDS:-60}
 
