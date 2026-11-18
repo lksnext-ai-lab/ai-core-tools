@@ -18,6 +18,7 @@ import { baseTheme } from '../themes/baseTheme';
 
 import LandingPage from '../pages/LandingPage';
 import AppsPage from '../pages/AppsPage';
+import MyGroupsPage from '../pages/MyGroupsPage';
 import AppDashboard from '../pages/AppDashboard';
 import AgentsPage from '../pages/AgentsPage';
 import AgentFormPage from '../pages/AgentFormPage';
@@ -43,6 +44,7 @@ import AboutPage from '../pages/AboutPage';
 import AIServicesPage from '../pages/settings/AIServicesPage';
 import APIKeysPage from '../pages/settings/APIKeysPage';
 import CollaborationPage from '../pages/settings/CollaborationPage';
+import GroupAccessPage from '../pages/settings/GroupAccessPage';
 import EmbeddingServicesPage from '../pages/settings/EmbeddingServicesPage';
 import SandboxServicesPage from '../pages/settings/SandboxServicesPage';
 import AppSettingsPage from '../pages/settings/AppSettingsPage';
@@ -182,9 +184,15 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 <Route path="/" element={<LandingPage />} />
 
                 <Route path="/apps" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AppsPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/my-groups" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <MyGroupsPage />
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/profile" element={
@@ -222,15 +230,15 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AppDashboard />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/agents" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AgentsPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/agents/:agentId" element={
@@ -253,9 +261,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/silos" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SilosPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/silos/:siloId" element={
@@ -271,9 +279,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/repositories" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <RepositoriesPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/repositories/:repositoryId" element={
@@ -283,9 +291,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/repositories/:repositoryId/detail" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <RepositoryDetailPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/repositories/:repositoryId/playground" element={
@@ -295,9 +303,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/domains" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <DomainsPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/domains/:domainId" element={
@@ -307,15 +315,15 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/domains/:domainId/detail" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <DomainDetailPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/sharepoint" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SharePointSourcesPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/sharepoint/new" element={
@@ -325,21 +333,21 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/sharepoint/:sourceId" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SharePointSourceDetailPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/metrics" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <AppMetricsPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/mcp-servers" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <MCPServersPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/mcp-servers/new" element={
@@ -349,9 +357,9 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/mcp-servers/:serverId" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <MCPServerDetailPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/mcp-servers/:serverId/edit" element={
@@ -361,75 +369,81 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                 } />
 
                 <Route path="/apps/:appId/skills" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SkillsPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/middlewares" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                     <MiddlewaresPage />
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><AppSettingsPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/general" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><AppSettingsPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/output-destinations" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><OutputDestinationsPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/ai-services" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><AIServicesPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/embedding-services" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><EmbeddingServicesPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/sandbox-services" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><SandboxServicesPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/mcp-configs" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><MCPConfigsPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/api-keys" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><APIKeysPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/data-structures" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><DataStructuresPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/apps/:appId/settings/collaboration" element={
-                  <EditorLayoutRoute {...commonLayoutProps}>
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
                       <SettingsLayout><CollaborationPage /></SettingsLayout>
-                  </EditorLayoutRoute>
+                  </ProtectedLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/settings/group-access" element={
+                  <ProtectedLayoutRoute {...commonLayoutProps}>
+                    <SettingsLayout><GroupAccessPage /></SettingsLayout>
+                  </ProtectedLayoutRoute>
                 } />
 
                 <Route path="/admin/users" element={

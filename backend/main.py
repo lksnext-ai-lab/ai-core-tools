@@ -57,6 +57,7 @@ from routers.public.v1 import public_v1_router
 from routers.mcp import mcp_router
 from routers.a2a_server import a2a_router
 from routers.scim import router as scim_router
+from services.scim_service import SCIMAuthenticationError
 from utils.provider import initialize_provider, shutdown_provider, get_provider
 from lks_idprovider_fastapi.dependencies import get_default_provider
 
@@ -348,6 +349,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Has-More"],
 )
 
 
@@ -400,6 +402,24 @@ async def _db_operational_error_handler(_request: Request, exc: SQLAlchemyOperat
 async def _service_retired_handler(_request: Request, exc: ServiceRetiredError) -> JSONResponse:
     """Map a retired service to 409 with its message (the guard already logged it)."""
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.message, "error_code": exc.error_code})
+
+
+@app.exception_handler(SCIMAuthenticationError)
+async def _scim_authentication_error_handler(
+    _request: Request, exc: SCIMAuthenticationError
+) -> JSONResponse:
+    """Return SCIM authentication failures as protocol errors, not server errors."""
+    headers = {"WWW-Authenticate": "Bearer"} if exc.authenticate else None
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+            "detail": exc.detail,
+            "status": str(exc.status_code),
+        },
+        headers=headers,
+        media_type="application/scim+json",
+    )
 
 
 # Mount routers - clean structure with no nesting

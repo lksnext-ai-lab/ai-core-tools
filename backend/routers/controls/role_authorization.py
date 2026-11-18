@@ -1,13 +1,12 @@
 from enum import Enum
-from typing import List, Optional, Set, Union
+from typing import Dict, List, Optional, Set
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from lks_idprovider import AuthContext
 
 from db.database import get_db
-from models.app import App
-from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
 from routers.internal.auth_utils import get_current_user_oauth
+from services.app_role_service import AppRoleService, ROLE_HIERARCHY as ROLE_NAMES
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,14 +20,7 @@ class AppRole(str, Enum):
     GUEST = "guest" # Not authenticated
 
 # Hierarchy: higher index = higher privilege
-ROLE_HIERARCHY = [
-    AppRole.GUEST,
-    AppRole.USER,
-    AppRole.VIEWER,
-    AppRole.EDITOR,
-    AppRole.ADMINISTRATOR,
-    AppRole.OWNER,
-]
+ROLE_HIERARCHY = [AppRole(role) for role in ROLE_NAMES]
 
 def get_role_level(role: AppRole) -> int:
     return ROLE_HIERARCHY.index(role)
@@ -38,52 +30,33 @@ def resolve_user_app_role(
     app_id: int,
     user_id: Optional[int] = None,
 ) -> Optional[AppRole]:
+    """Resolve the current app role from ownership, collaboration, and group policy.
+
+    Platform privileges are independent: this resolver does not elevate platform
+    roles or grant platform administration rights. Returns ``None`` if the app
+    does not exist.
     """
-    Resolve the effective role of a user for a specific app, based solely on
-    ownership/collaboration — omniadmins get no app-level bypass here; their
-    elevated privileges are platform-level only (see require_admin / is_omniadmin
-    usages in routers/internal/admin.py).
-    Returns None if the app does not exist.
-    """
-    # If not authenticated (no user_id), return GUEST
     if not user_id:
         return AppRole.GUEST
 
-    # 1. Check App existence
-    app = db.query(App).filter(App.app_id == app_id).first()
-    if not app:
-        return None
+    return resolve_user_app_roles(db, [app_id], user_id).get(app_id)
 
-    # 2. Check Ownership
-    if app.owner_id == user_id:
-        return AppRole.OWNER
 
-    # 3. Check Collaboration
-    collaboration = db.query(AppCollaborator).filter(
-        AppCollaborator.app_id == app_id,
-        AppCollaborator.user_id == user_id,
-        AppCollaborator.status == CollaborationStatus.ACCEPTED
-    ).first()
-
-    if collaboration:
-        # Map CollaborationRole to AppRole
+def resolve_user_app_roles(
+    db: Session,
+    app_ids: List[int],
+    user_id: int,
+) -> Dict[int, AppRole]:
+    """Resolve effective roles for several apps using batched data access."""
+    role_names = AppRoleService(db).get_effective_roles(user_id, app_ids)
+    resolved: Dict[int, AppRole] = {}
+    for app_id, role_name in role_names.items():
         try:
-            # Direct mapping if names match
-            return AppRole(collaboration.role.value)
+            resolved[app_id] = AppRole(role_name)
         except ValueError:
-            # Fallback or specific mapping if needed
-            if collaboration.role == CollaborationRole.ADMINISTRATOR:
-                return AppRole.ADMINISTRATOR
-            elif collaboration.role == CollaborationRole.EDITOR:
-                return AppRole.EDITOR
-            elif collaboration.role == CollaborationRole.OWNER:
-                return AppRole.OWNER
-
-            logger.warning(f"Unknown collaboration role: {collaboration.role}")
-            return AppRole.USER
-
-    # 4. Authenticated but no affiliation
-    return AppRole.USER
+            logger.warning("Unknown effective app role: %s", role_name)
+            resolved[app_id] = AppRole.USER
+    return resolved
 
 def has_min_role(user_role: AppRole, required_role: AppRole) -> bool:
     return get_role_level(user_role) >= get_role_level(required_role)
@@ -111,12 +84,26 @@ class RoleChecker:
 
         if self.required_min_role:
             if not has_min_role(role, self.required_min_role):
+                logger.warning(
+                    "Denied app authorization user_id=%s app_id=%s role=%s required_role=%s",
+                    user_id,
+                    app_id,
+                    role.value,
+                    self.required_min_role.value,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Insufficient permissions"
                 )
         
         if self.allowed_roles and not has_any_role(role, self.allowed_roles):
+            logger.warning(
+                "Denied app authorization user_id=%s app_id=%s role=%s allowed_roles=%s",
+                user_id,
+                app_id,
+                role.value,
+                sorted(allowed_role.value for allowed_role in self.allowed_roles),
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions"
@@ -124,12 +111,12 @@ class RoleChecker:
         
         return role
 
-def require_min_role(role: Union[AppRole, str]):
+def require_min_role(role: AppRole | str):
     if isinstance(role, str):
         role = AppRole(role)
     return RoleChecker(required_min_role=role)
 
-def require_any_role(roles: Set[Union[AppRole, str]]):
+def require_any_role(roles: Set[AppRole | str]):
     resolved_roles = set()
     for r in roles:
         if isinstance(r, str):

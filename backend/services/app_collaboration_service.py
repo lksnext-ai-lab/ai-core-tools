@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
 from models.app import App
 from repositories.app_collaboration_repository import AppCollaborationRepository
+from services.app_role_service import AppRoleService, ROLE_HIERARCHY
 from utils.logger import get_logger
 from datetime import datetime
 
@@ -15,8 +16,18 @@ class AppCollaborationService:
         self.repo = AppCollaborationRepository(db)
 
     def get_user_accessible_apps(self, user_id: int) -> List[App]:
-        """Get all apps that a user can access (owned + collaborated)."""
-        return self.repo.get_user_accessible_apps(user_id)
+        """Get all apps accessible through any current app role."""
+        apps, _, _ = AppRoleService(self.db).get_accessible_apps_with_roles(user_id)
+        return apps
+
+    def has_accepted_collaboration(self, user_id: int, app_id: int) -> bool:
+        """Check for an accepted manual collaboration, excluding derived group access."""
+        return (
+            self.repo.get_accepted_collaboration_by_app_and_user(
+                app_id, user_id
+            )
+            is not None
+        )
 
     def can_user_manage_app(self, user_id: int, app_id: int) -> bool:
         """Check if user can manage an app (owner only)."""
@@ -31,16 +42,17 @@ class AppCollaborationService:
         return self.repo.can_user_administer_app(user_id, app_id)
 
     def can_user_access_app(self, user_id: int, app_id: int) -> bool:
-        """Check if user can access an app (owner or accepted collaborator)."""
-        return self.repo.can_user_access_app(user_id, app_id)
+        """Check access from any current app role, including active group grants."""
+        role = self.get_user_app_role(user_id, app_id)
+        return role is not None and ROLE_HIERARCHY.index(role) >= ROLE_HIERARCHY.index("viewer")
 
     def get_user_app_role(self, user_id: int, app_id: int) -> Optional[str]:
-        """Get the role of a user in an app."""
+        """Get the effective role of a user in an app."""
         if not user_id or user_id <= 0 or not app_id or app_id <= 0:
             return None
 
         try:
-            return self.repo.get_user_app_role(user_id, app_id)
+            return AppRoleService(self.db).get_effective_role(user_id, app_id)
         except Exception as e:
             logger.warning(f"Error getting role for user {user_id} in app {app_id}: {str(e)}")
             return None
@@ -203,60 +215,64 @@ class AppCollaborationService:
                 return False
 
             if collaboration.role == CollaborationRole.OWNER:
-                from services.app_ownership_service import AppOwnershipService
-                from services.app_ownership_errors import (
-                    NotOfferRecipientError,
-                    OwnershipOfferNotFoundError,
-                )
+                return self._respond_to_ownership_offer(invitation_id, user_id, action)
 
-                if action == 'accept':
-                    try:
-                        AppOwnershipService.accept(
-                            self.db, invitation_id, actor_user_id=user_id
-                        )
-                        return True
-                    except (OwnershipOfferNotFoundError, NotOfferRecipientError) as exc:
-                        logger.warning(
-                            f"respond_to_invitation: ownership accept rejected "
-                            f"invitation_id={invitation_id} user_id={user_id} — {exc}"
-                        )
-                        return False
-                elif action == 'decline':
-                    try:
-                        AppOwnershipService.decline(
-                            self.db, invitation_id, actor_user_id=user_id
-                        )
-                        return True
-                    except (OwnershipOfferNotFoundError, NotOfferRecipientError) as exc:
-                        logger.warning(
-                            f"respond_to_invitation: ownership decline rejected "
-                            f"invitation_id={invitation_id} user_id={user_id} — {exc}"
-                        )
-                        return False
-                else:
-                    logger.warning(
-                        f"Invalid action '{action}' for ownership offer {invitation_id}"
-                    )
-                    return False
-
-            update_data: dict = {}
-            if action == 'accept':
-                update_data = {
-                    'status': CollaborationStatus.ACCEPTED,
-                    'accepted_at': datetime.now(),
-                }
-            elif action == 'decline':
-                update_data = {'status': CollaborationStatus.DECLINED}
-            else:
-                logger.warning(f"Invalid action {action} for invitation {invitation_id}")
-                return False
-
-            self.repo.update_collaboration(collaboration, update_data)
-            return True
+            return self._respond_to_regular_invitation(
+                collaboration, invitation_id, action
+            )
 
         except Exception as e:
             logger.error(f"Error responding to invitation: {str(e)}")
             return False
+
+    def _respond_to_ownership_offer(
+        self, invitation_id: int, user_id: int, action: str
+    ) -> bool:
+        from services.app_ownership_service import AppOwnershipService
+        from services.app_ownership_errors import (
+            NotOfferRecipientError,
+            OwnershipOfferNotFoundError,
+        )
+
+        if action not in {'accept', 'decline'}:
+            logger.warning(
+                f"Invalid action '{action}' for ownership offer {invitation_id}"
+            )
+            return False
+
+        try:
+            if action == 'accept':
+                AppOwnershipService.accept(
+                    self.db, invitation_id, actor_user_id=user_id
+                )
+            else:
+                AppOwnershipService.decline(
+                    self.db, invitation_id, actor_user_id=user_id
+                )
+            return True
+        except (OwnershipOfferNotFoundError, NotOfferRecipientError) as exc:
+            logger.warning(
+                f"respond_to_invitation: ownership {action} rejected "
+                f"invitation_id={invitation_id} user_id={user_id} — {exc}"
+            )
+            return False
+
+    def _respond_to_regular_invitation(
+        self, collaboration: AppCollaborator, invitation_id: int, action: str
+    ) -> bool:
+        if action == 'accept':
+            update_data = {
+                'status': CollaborationStatus.ACCEPTED,
+                'accepted_at': datetime.now(),
+            }
+        elif action == 'decline':
+            update_data = {'status': CollaborationStatus.DECLINED}
+        else:
+            logger.warning(f"Invalid action {action} for invitation {invitation_id}")
+            return False
+
+        self.repo.update_collaboration(collaboration, update_data)
+        return True
 
     def get_user_pending_invitations(self, user_id: int) -> List[AppCollaborator]:
         """Get all pending invitations for a user."""

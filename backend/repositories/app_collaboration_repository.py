@@ -1,10 +1,9 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from models.app_collaborator import AppCollaborator, CollaborationStatus, CollaborationRole
 from models.app import App
 from models.user import User
-from datetime import datetime
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,25 +12,6 @@ class AppCollaborationRepository:
     
     def __init__(self, db: Session):
         self.db = db
-    
-    def get_user_accessible_apps(self, user_id: int) -> List[App]:
-        """Return all apps a user can access: owned + accepted collaborations."""
-        owned_apps = self.db.query(App).options(joinedload(App.owner)).filter(App.owner_id == user_id).all()
-
-        collaborations = self.db.query(AppCollaborator).options(
-            joinedload(AppCollaborator.app).joinedload(App.owner)
-        ).filter(
-            AppCollaborator.user_id == user_id,
-            AppCollaborator.status == CollaborationStatus.ACCEPTED
-        ).all()
-        
-        collaborated_apps = [collab.app for collab in collaborations if collab.app]
-
-        return sorted(
-            {app.app_id: app for app in owned_apps + collaborated_apps}.values(),
-            key=lambda x: x.create_date or datetime.min,
-            reverse=True
-        )
     
     def can_user_manage_app(self, user_id: int, app_id: int) -> bool:
         """Check if user can manage an app (owner only)"""
@@ -69,42 +49,6 @@ class AppCollaborationRepository:
         
         return collaboration is not None
     
-    def can_user_access_app(self, user_id: int, app_id: int) -> bool:
-        """Check if user can access an app (owner or accepted collaborator)."""
-        app = self.db.query(App).filter(
-            App.app_id == app_id,
-            App.owner_id == user_id
-        ).first()
-
-        if app:
-            return True
-
-        collaboration = self.db.query(AppCollaborator).filter(
-            AppCollaborator.app_id == app_id,
-            AppCollaborator.user_id == user_id,
-            AppCollaborator.status == CollaborationStatus.ACCEPTED
-        ).first()
-        
-        return collaboration is not None
-    
-    def get_user_app_role(self, user_id: int, app_id: int) -> Optional[str]:
-        if not user_id or user_id <= 0 or not app_id or app_id <= 0:
-            return None
-
-        app = self.db.query(App).filter(App.app_id == app_id).first()
-        if app and app.owner_id == user_id:
-            return "owner"
-
-        collaboration = self.db.query(AppCollaborator).filter(
-            and_(
-                AppCollaborator.app_id == app_id,
-                AppCollaborator.user_id == user_id,
-                AppCollaborator.status == CollaborationStatus.ACCEPTED
-            )
-        ).first()
-        
-        return collaboration.role.value if collaboration else None
-    
     def get_app_collaborators(self, app_id: int) -> List[AppCollaborator]:
         """Get all collaborators for an app"""
         return self.db.query(AppCollaborator).options(
@@ -117,6 +61,16 @@ class AppCollaborationRepository:
         return self.db.query(AppCollaborator).filter(
             AppCollaborator.app_id == app_id,
             AppCollaborator.user_id == user_id
+        ).first()
+
+    def get_accepted_collaboration_by_app_and_user(
+        self, app_id: int, user_id: int
+    ) -> Optional[AppCollaborator]:
+        """Return the accepted manual collaboration for the specified user and app."""
+        return self.db.query(AppCollaborator).filter(
+            AppCollaborator.app_id == app_id,
+            AppCollaborator.user_id == user_id,
+            AppCollaborator.status == CollaborationStatus.ACCEPTED,
         ).first()
     
     def get_collaboration_by_id(self, collaboration_id: int) -> Optional[AppCollaborator]:

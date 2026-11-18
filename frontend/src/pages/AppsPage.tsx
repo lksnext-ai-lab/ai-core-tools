@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
 import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, Check } from 'lucide-react';
@@ -9,6 +9,7 @@ import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
 import Table from '../components/ui/Table';
 import AppImportStepper from '../components/import/AppImportStepper';
+import { APP_LIST_PAGE_SIZE } from '../constants/appList';
 
 interface App {
   app_id: number;
@@ -28,47 +29,153 @@ interface App {
   collaborator_count: number;
 }
 
+function dedupeApps(apps: readonly App[]): App[] {
+  const seenIds = new Set<number>();
+  return apps.filter((app) => {
+    if (seenIds.has(app.app_id)) return false;
+    seenIds.add(app.app_id);
+    return true;
+  });
+}
+
+function hasAppAccessDeniedState(state: unknown): boolean {
+  return typeof state === 'object'
+    && state !== null
+    && 'appAccessDenied' in state
+    && state.appAccessDenied === true;
+}
+
 // React Component = Function that returns HTML-like JSX
 function AppsPage() {
   const { user } = useUser();
+  const location = useLocation();
   const isEditor = user?.is_admin || (user?.is_editor ?? false);
+  const accessDenied = hasAppAccessDeniedState(location.state);
 
   // State = variables that trigger re-renders when they change
   const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
   const [loading, setLoading] = useState(true);          // Like self.loading = True
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [listStatus, setListStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [deletingAppId, setDeletingAppId] = useState<number | null>(null);
+  const appsRef = useRef<App[]>([]);
+  const nextOffset = useRef(0);
+  const committedOffset = useRef(0);
+  const listGeneration = useRef(0);
+  const loadMoreRequestId = useRef(0);
+  const deleteGeneration = useRef(0);
+  const refreshingRef = useRef(false);
 
   // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
-    void loadApps();
+    let active = true;
+    const generation = ++listGeneration.current;
+
+    async function fetchApps() {
+      try {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        const response = await apiService.getAppsPage(APP_LIST_PAGE_SIZE, 0);
+        if (active && generation === listGeneration.current) {
+          const firstPage = dedupeApps(response.apps);
+          appsRef.current = firstPage;
+          nextOffset.current = response.apps.length;
+          committedOffset.current = response.apps.length;
+          setApps(firstPage);
+          setHasMore(response.hasMore);
+          setListStatus(`${firstPage.length} apps loaded.`);
+        }
+      } catch (err) {
+        if (active && generation === listGeneration.current) {
+          setError(err instanceof Error ? err.message : 'Failed to load apps');
+          setListStatus('Apps could not be loaded.');
+        }
+      } finally {
+        if (active && generation === listGeneration.current) setLoading(false);
+      }
+    }
+
+    void fetchApps();
+    return () => {
+      active = false;
+      if (listGeneration.current === generation) listGeneration.current += 1;
+    };
   }, []);
 
-  // Function to load apps from API
-  async function loadApps() {
+  // Reload page one after create/import and invalidate any in-flight next-page request.
+  async function refreshApps() {
+    const generation = ++listGeneration.current;
+    loadMoreRequestId.current += 1;
+    setLoadingMore(false);
+    nextOffset.current = 0;
+    refreshingRef.current = true;
+    setLoading(true);
+    setError(null);
+    setListStatus('Refreshing apps…');
     try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-      const response = await apiService.getApps();
-      setApps(response);
+      const response = await apiService.getAppsPage(APP_LIST_PAGE_SIZE, 0);
+      if (generation !== listGeneration.current) return;
+      const firstPage = dedupeApps(response.apps);
+      appsRef.current = firstPage;
+      nextOffset.current = response.apps.length;
+      committedOffset.current = response.apps.length;
+      setApps(firstPage);
+      setHasMore(response.hasMore);
+      setListStatus(`${firstPage.length} apps loaded.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load apps');
+      if (generation === listGeneration.current) {
+        nextOffset.current = committedOffset.current;
+        setError(err instanceof Error ? err.message : 'Failed to refresh apps');
+        setListStatus('Apps could not be refreshed.');
+      }
     } finally {
-      setLoading(false);
+      if (generation === listGeneration.current) {
+        refreshingRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
-  // Function to refresh apps without showing loading spinner (for after create/import)
-  async function refreshApps() {
+  async function loadMoreApps() {
+    if (loading || loadingMore || refreshingRef.current || !hasMore) return;
+
+    const generation = listGeneration.current;
+    const requestId = ++loadMoreRequestId.current;
+    const offset = nextOffset.current;
+    const currentDisplayCount = appsRef.current.length;
     try {
-      const response = await apiService.getApps();
-      setApps(response);
+      setLoadingMore(true);
+      setError(null);
+      setListStatus('Loading more apps…');
+      const response = await apiService.getAppsPage(APP_LIST_PAGE_SIZE, offset);
+      if (
+        generation !== listGeneration.current ||
+        requestId !== loadMoreRequestId.current ||
+        offset !== nextOffset.current
+      ) return;
+      const mergedApps = dedupeApps([...appsRef.current, ...response.apps]);
+      const appendedCount = mergedApps.length - currentDisplayCount;
+      appsRef.current = mergedApps;
+      nextOffset.current += response.apps.length;
+      committedOffset.current = nextOffset.current;
+      setApps(mergedApps);
+      setHasMore(response.hasMore);
+      setListStatus(appendedCount > 0
+        ? `Loaded ${appendedCount} more apps.`
+        : 'No additional apps were returned.');
     } catch (err) {
-      // Silently fail to avoid disrupting user experience
-      console.error('Failed to refresh apps:', err);
+      if (generation === listGeneration.current && requestId === loadMoreRequestId.current) {
+        setError(err instanceof Error ? err.message : 'Failed to load more apps');
+        setListStatus('Could not load more apps. You can try again.');
+      }
+    } finally {
+      if (requestId === loadMoreRequestId.current) setLoadingMore(false);
     }
   }
 
@@ -102,6 +209,8 @@ function AppsPage() {
 
   // Function to delete an app (for owners only)
   async function handleDeleteApp(app: App) {
+    if (deletingAppId !== null) return;
+
     const confirmMessage = `⚠️ DELETE APP: "${app.name}"
 
 This will permanently delete:
@@ -126,17 +235,18 @@ Type the app name to confirm: "${app.name}"`;
       return;
     }
 
+    const requestId = ++deleteGeneration.current;
+    setDeletingAppId(app.app_id);
     try {
-      setLoading(true);
       setError(null);
       setSuccess(null);
       await apiService.deleteApp(app.app_id);
       setSuccess(`App "${app.name}" has been successfully deleted.`);
-      void refreshApps(); // Refresh the list without loading spinner
+      await refreshApps();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete app');
     } finally {
-      setLoading(false);
+      if (requestId === deleteGeneration.current) setDeletingAppId(null);
     }
   }
 
@@ -185,11 +295,22 @@ Type the app name to confirm: "${app.name}"`;
   };
 
   // Show loading spinner while fetching data
-  if (loading) {
+  if (loading && apps.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading apps...</span>
+      <div className="space-y-6">
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{listStatus}</div>
+        {accessDenied && (
+          <Alert
+            type="info"
+            title="Access denied"
+            message="You do not have access to that app."
+            polite
+          />
+        )}
+        <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" aria-hidden="true"></div>
+          <span className="ml-2">Loading apps...</span>
+        </div>
       </div>
     );
   }
@@ -197,8 +318,20 @@ Type the app name to confirm: "${app.name}"`;
   // Main render
   return (
     <div className="space-y-6">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{listStatus}</div>
+      {accessDenied && (
+        <Alert
+          type="info"
+          title="Access denied"
+          message="You do not have access to that app."
+          polite
+        />
+      )}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess(null)} />}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
+      {deletingAppId !== null && (
+        <div role="status" aria-live="polite" className="sr-only">Deleting app…</div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -405,17 +538,18 @@ Type the app name to confirm: "${app.name}"`;
                     icon: <Upload className="w-4 h-4" />,
                     variant: 'secondary'
                   },
-                  ...(app.role === 'owner' ? [] : [{
+                  ...(app.role === 'owner' || app.role === 'viewer' ? [] : [{
                     label: 'Leave App',
                     onClick: () => handleLeaveApp(app),
                     icon: <LogOut className="w-4 h-4" />,
                     variant: 'danger' as const
                   }]),
                   ...(app.role === 'owner' ? [{
-                    label: 'Delete App',
+                    label: deletingAppId === app.app_id ? 'Deleting App…' : 'Delete App',
                     onClick: () => handleDeleteApp(app),
                     icon: <Trash2 className="w-4 h-4" />,
-                    variant: 'danger' as const
+                    variant: 'danger' as const,
+                    disabled: deletingAppId !== null
                   }] : [])
                 ]}
                 size="sm"
@@ -425,9 +559,28 @@ Type the app name to confirm: "${app.name}"`;
         ]}
         emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
         emptyMessage="No apps yet"
-        emptySubMessage="Create your first AI application to get started"
+        emptySubMessage={isEditor
+          ? 'Create your first AI application to get started'
+          : 'No applications are currently available to your account'}
         loading={loading}
       />
+
+      {hasMore && !loading && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadMoreApps()}
+            disabled={loadingMore}
+            aria-busy={loadingMore}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          >
+            {loadingMore && (
+              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" aria-hidden="true" />
+            )}
+            Load more apps
+          </button>
+        </div>
+      )}
 
       {!loading && apps.length === 0 && isEditor && (
         <div className="text-center py-6">

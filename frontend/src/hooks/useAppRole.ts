@@ -1,49 +1,73 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { apiService } from '../services/api';
 import { AppRole } from '../types/roles';
 import { hasMinRole } from '../utils/roleUtils';
+import { AppRoleContext } from '../contexts/AppRoleContext';
 
 /**
  * Hook to check if the current user is the owner of an app
  * Returns { isOwner, userRole, loading, hasMinRole }
  */
 export function useAppRole(appId: string | undefined) {
-  const [userRole, setUserRole] = useState<AppRole>(AppRole.GUEST);
-  const [loading, setLoading] = useState(true);
+  const sharedRole = useContext(AppRoleContext);
+  const useSharedRole = appId !== undefined && sharedRole?.appId === appId;
+  const [roleState, setRoleState] = useState<{
+    appId: string | undefined;
+    userRole: AppRole;
+    loading: boolean;
+  }>({ appId: undefined, userRole: AppRole.GUEST, loading: true });
 
   useEffect(() => {
+    let active = true;
+
     async function fetchAppRole() {
+      if (useSharedRole) return;
+
       if (!appId) {
-        setLoading(false);
+        setRoleState({ appId, userRole: AppRole.GUEST, loading: false });
         return;
       }
 
+      setRoleState({ appId, userRole: AppRole.GUEST, loading: true });
       try {
         const app = await apiService.getApp(Number.parseInt(appId));
         // Cast the string from API to AppRole, defaulting to GUEST if invalid
         const role = Object.values(AppRole).includes(app.user_role as AppRole) 
           ? (app.user_role as AppRole) 
           : AppRole.GUEST;
-        setUserRole(role);
+        if (active) setRoleState({ appId, userRole: role, loading: false });
       } catch (err) {
         console.error('Error fetching app role:', err);
-        setUserRole(AppRole.GUEST);
-      } finally {
-        setLoading(false);
+        if (active) setRoleState({ appId, userRole: AppRole.GUEST, loading: false });
       }
     }
 
     void fetchAppRole();
-  }, [appId]);
+    return () => {
+      active = false;
+    };
+  }, [appId, useSharedRole]);
+
+  // Avoid briefly exposing the previous app's role while a new app is loading.
+  const localRole = roleState.appId === appId ? roleState.userRole : AppRole.GUEST;
+  const localLoading = appId !== undefined && (
+    roleState.appId !== appId || roleState.loading
+  );
+  const currentRole = useSharedRole
+    ? sharedRole?.userRole ?? AppRole.GUEST
+    : localRole;
+  const loading = useSharedRole
+    ? sharedRole?.loading ?? true
+    : localLoading;
 
   return {
     // Backward compatibility
-    isOwner: hasMinRole(userRole, AppRole.OWNER),
-    isAdmin: hasMinRole(userRole, AppRole.ADMINISTRATOR),
+    isOwner: hasMinRole(currentRole, AppRole.OWNER),
+    isAdmin: hasMinRole(currentRole, AppRole.ADMINISTRATOR),
     // New extensible properties
-    userRole,
+    userRole: currentRole,
     loading,
-    hasMinRole: (role: AppRole) => hasMinRole(userRole, role)
+    hasMinRole: (role: AppRole) => hasMinRole(currentRole, role)
   };
 }
 

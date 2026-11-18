@@ -1,4 +1,5 @@
 from typing import Optional, List
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from models.app import App
 from models.app_collaborator import AppCollaborator, CollaborationStatus
@@ -33,6 +34,45 @@ class AppRepository:
     def get_all(self) -> List[App]:
         """Get all apps."""
         return self.db.query(App).all()
+
+    def get_entity_counts_by_app_ids(
+        self, app_ids: List[int]
+    ) -> dict[int, dict[str, int]]:
+        """Return batched counts of app-owned entities for the requested apps."""
+        counts = {
+            app_id: {
+                "agent_count": 0,
+                "repository_count": 0,
+                "domain_count": 0,
+                "silo_count": 0,
+                "collaborator_count": 0,
+            }
+            for app_id in dict.fromkeys(app_ids)
+        }
+        if not counts:
+            return counts
+
+        from models.agent import Agent
+        from models.domain import Domain
+        from models.repository import Repository as AppRepositoryModel
+        from models.silo import Silo
+
+        entity_models = (
+            (Agent, "agent_count"),
+            (AppRepositoryModel, "repository_count"),
+            (Domain, "domain_count"),
+            (Silo, "silo_count"),
+            (AppCollaborator, "collaborator_count"),
+        )
+        for model, count_key in entity_models:
+            rows = self.db.execute(
+                select(model.app_id, func.count())
+                .where(model.app_id.in_(counts))
+                .group_by(model.app_id)
+            ).all()
+            for app_id, count in rows:
+                counts[app_id][count_key] = count
+        return counts
     
     def get_by_owner(self, user_id: int) -> List[App]:
         """Get apps owned by a specific user ordered by creation date"""

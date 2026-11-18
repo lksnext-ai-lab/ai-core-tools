@@ -22,6 +22,7 @@ from .metrics import router as metrics_router
 from .approvals import approvals_router
 from .scim_connections import router as scim_connections_router
 from .scim_group_rules import router as scim_group_rules_router
+from .my_groups import router as my_groups_router
 
 # CSRF double-submit is internal-only; public/v1 and mcp/v1 use API-key auth.
 internal_router = APIRouter(dependencies=[Depends(enforce_csrf)])
@@ -47,6 +48,7 @@ internal_router.include_router(conversations_router)
 internal_router.include_router(approvals_router, prefix="/approvals")
 internal_router.include_router(auth_router, prefix="/auth")
 internal_router.include_router(user_router)
+internal_router.include_router(my_groups_router)
 internal_router.include_router(
     scim_group_rules_router,
     prefix="/apps/{app_id}/scim-group-rules",

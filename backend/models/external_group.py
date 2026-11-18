@@ -33,15 +33,21 @@ class ExternalGroup(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
-    connection = relationship("ProvisioningConnection", lazy="selectin")
+    connection = relationship(
+        "ProvisioningConnection",
+        back_populates="groups",
+        lazy="selectin",
+    )
     memberships = relationship(
         "ExternalGroupMembership",
+        back_populates="group",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",
     )
     access_rules = relationship(
         "GroupAppAccessRule",
+        back_populates="group",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",

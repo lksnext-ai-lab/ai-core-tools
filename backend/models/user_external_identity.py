@@ -52,7 +52,11 @@ class UserExternalIdentity(Base):
         {"sqlite_autoincrement": True},
     )
 
-    connection = relationship("ProvisioningConnection", lazy="selectin")
+    connection = relationship(
+        "ProvisioningConnection",
+        back_populates="identities",
+        lazy="selectin",
+    )
     user = relationship("User", lazy="selectin")
     manager_identity = relationship(
         "UserExternalIdentity",

@@ -1,8 +1,9 @@
-from typing import Optional, List
+from typing import Any, Optional, List
 from sqlalchemy.orm import Session
 from models.app import App
 from repositories.app_repository import AppRepository
 from repositories.app_collaboration_repository import AppCollaborationRepository
+from services.app_role_service import AppRoleService
 from datetime import datetime
 from services.a2a_server.lifecycle_service import schedule_owner_purge
 from utils.logger import get_logger
@@ -29,8 +30,23 @@ class AppService:
         return self.app_repo.get_all()
 
     def get_apps(self, user_id: int) -> List[App]:
-        """Get all apps for a specific user (owned + collaborated) ordered by creation date"""
-        return self.collaboration_repo.get_user_accessible_apps(user_id)
+        """Get apps accessible through any current app role."""
+        apps, _, _ = self.get_apps_with_roles(user_id)
+        return apps
+
+    def get_apps_with_roles(
+        self, user_id: int, limit: Optional[int] = None, offset: int = 0
+    ) -> tuple[List[App], dict[int, str], bool]:
+        """Get one ordered app page, effective roles, and whether more rows exist."""
+        return AppRoleService(self.db).get_accessible_apps_with_roles(
+            user_id, limit, offset
+        )
+
+    def get_entity_counts_by_app_ids(
+        self, app_ids: List[int]
+    ) -> dict[int, dict[str, int]]:
+        """Return batched counts for the requested apps."""
+        return self.app_repo.get_entity_counts_by_app_ids(app_ids)
 
     def get_app(self, app_id: int) -> Optional[App]:
         """Get a specific app by ID"""
@@ -99,11 +115,7 @@ class AppService:
         from .sandbox_service_service import SandboxServiceService
         from .api_key_service import APIKeyService
         from .mcp_config_service import MCPConfigService
-        from .middleware_service import MiddlewareService
-        from repositories.middleware_repository import MiddlewareRepository
         from .resource_service import ResourceService
-        from .skill_service import SkillService
-        from .mcp_server_service import MCPServerService
         
         # Get the app
         app = self.app_repo.get_by_id(app_id)
@@ -127,106 +139,19 @@ class AppService:
             mcp_config_service = MCPConfigService()
             resource_service = ResourceService()
 
-            # Delete in the correct order to respect foreign key constraints
-            
-            # 1. Delete agents (they depend on AI services, silos, output parsers)
-            agents = self.app_repo.get_agents_by_app_id(app_id)
-            for agent in agents:
-                logger.info(f"Deleting agent {agent.agent_id}: {agent.name}")
-                if not agent_service.delete_agent(self.db, agent.agent_id):
-                    raise RuntimeError(f"agent {agent.agent_id} could not be deleted")
-
-            # 1b. Delete middlewares (after agents; before AI services, which they may reference)
-            for middleware in MiddlewareRepository.get_all_by_app_id(self.db, app_id):
-                logger.info(f"Deleting middleware {middleware.middleware_id}: {middleware.name}")
-                MiddlewareService.delete_middleware(self.db, app_id, middleware.middleware_id)
-
-            # 2. Delete skills (after agents, since agents may reference skills)
-            skills = self.app_repo.get_skills_by_app_id(app_id)
-            for skill in skills:
-                logger.info(f"Deleting skill {skill.skill_id}: {skill.name}")
-                SkillService.delete_skill(self.db, app_id, skill.skill_id)
-
-            # 3. Delete MCP servers (after agents, since they may expose agents)
-            mcp_servers = self.app_repo.get_mcp_servers_by_app_id(app_id)
-            for server in mcp_servers:
-                logger.info(f"Deleting MCP server {server.server_id}: {server.name}")
-                MCPServerService.delete_mcp_server(self.db, app_id, server.server_id)
-
-            # 4. Delete resources (they depend on repositories)
-            repositories = self.app_repo.get_repositories_by_app_id(app_id)
-            for repository in repositories:
-                resources = resource_service.get_resources_by_repo_id(repository.repository_id, self.db)
-                for resource in resources:
-                    logger.info(f"Deleting resource {resource.resource_id}: {resource.name}")
-                    resource_service.delete_resource(resource.resource_id, self.db)
-            
-            # 5. Get domains (for later deletion; DomainUrl/CrawlPolicy/CrawlJob cascade from domain FK)
-            domains = self.app_repo.get_domains_by_app_id(app_id)
-
-            # 5b. Delete SharePoint sources and their silos (before main silo deletion)
-            from repositories.sharepoint_source_repository import SharePointSourceRepository
-            sp_sources = SharePointSourceRepository.list_by_app(app_id, self.db)
-            for sp_source in sp_sources:
-                logger.info(f"Deleting SharePoint source {sp_source.id}: {sp_source.name}")
-                silo_id = sp_source.silo_id
-                # SharePointFile rows cascade-delete via FK; vectors are orphaned (acceptable for app deletion)
-                self.db.delete(sp_source)
-                self.db.flush()
-                if silo_id:
-                    silo_service.delete_silo(silo_id, self.db)
-
-            # 6. Delete repositories (they depend on silos)
-            for repository in repositories:
-                logger.info(f"Deleting repository {repository.repository_id}: {repository.name}")
-                repository_service.delete_repository(repository, self.db)
-            
-            # 7. Delete domains (they depend on silos)
-            for domain in domains:
-                logger.info(f"Deleting domain {domain.domain_id}: {domain.name}")
-                domain_service.delete_domain(domain.domain_id, self.db)
-            
-            # 8. Delete silos (they depend on embedding services and output parsers)
-            silos = self.app_repo.get_silos_by_app_id(app_id)
-            for silo in silos:
-                logger.info(f"Deleting silo {silo.silo_id}: {silo.name}")
-                silo_service.delete_silo(silo.silo_id, self.db)
-            
-            # 9. Delete output parsers
-            output_parsers = self.app_repo.get_output_parsers_by_app_id(app_id)
-            for parser in output_parsers:
-                logger.info(f"Deleting output parser {parser.parser_id}: {parser.name}")
-                output_parser_service.delete_output_parser(self.db, app_id, parser.parser_id)
-            
-            # 10. Delete MCP configs
-            mcp_configs = self.app_repo.get_mcp_configs_by_app_id(app_id)
-            for config in mcp_configs:
-                logger.info(f"Deleting MCP config {config.config_id}: {config.name}")
-                mcp_config_service.delete_mcp_config(self.db, app_id, config.config_id)
-            
-            # 11. Delete API keys
-            api_keys = self.app_repo.get_api_keys_by_app_id(app_id)
-            for api_key in api_keys:
-                logger.info(f"Deleting API key {api_key.key_id}: {api_key.name}")
-                api_key_service.delete_api_key(self.db, app_id, api_key.key_id)
-            
-            # 12. Delete AI services
-            ai_services = self.app_repo.get_ai_services_by_app_id(app_id)
-            for service in ai_services:
-                logger.info(f"Deleting AI service {service.service_id}: {service.name}")
-                ai_service_service.delete_ai_service(self.db, app_id, service.service_id)
-            
-            # 13. Delete embedding services
-            embedding_services = self.app_repo.get_embedding_services_by_app_id(app_id)
-            for service in embedding_services:
-                logger.info(f"Deleting embedding service {service.service_id}: {service.name}")
-                embedding_service_service.delete_embedding_service(self.db, app_id, service.service_id)
-            
-            # 13b. Delete sandbox services
-            sandbox_services = self.app_repo.get_sandbox_services_by_app_id(app_id)
-            for service in sandbox_services:
-                logger.info(f"Deleting sandbox service {service.service_id}: {service.name}")
-                sandbox_service_service.delete_sandbox_service(self.db, app_id, service.service_id)
+            self._delete_app_agents_and_integrations(app_id, agent_service)
+            self._delete_app_content(
+                app_id, resource_service, repository_service, domain_service, silo_service
+            )
+            self._delete_app_services(
+                app_id,
+                output_parser_service,
+                mcp_config_service,
+                api_key_service,
+                ai_service_service,
+                embedding_service_service,
+                sandbox_service_service,
+            )
 
             # 14. Delete collaborations
             collaborations = self.collaboration_repo.get_collaborations_by_app(app_id)
@@ -262,9 +187,111 @@ class AppService:
                 schedule_owner_purge(app_id)  # FR-22/AD-10: app-wide A2A purge; sync, never raises
 
             return success
-                
+
         except Exception as e:
             logger.error(f"Error during cascade deletion of app {app_id}: {str(e)}")
             # Rollback the transaction
             self.db.rollback()
-            return False 
+            return False
+
+    def _delete_app_agents_and_integrations(
+        self, app_id: int, agent_service: Any
+    ) -> None:
+        from .middleware_service import MiddlewareService
+        from .mcp_server_service import MCPServerService
+        from .skill_service import SkillService
+        from repositories.middleware_repository import MiddlewareRepository
+
+        # Delete agents before the services, silos, parsers, and integrations they reference.
+        for agent in self.app_repo.get_agents_by_app_id(app_id):
+            logger.info(f"Deleting agent {agent.agent_id}: {agent.name}")
+            if not agent_service.delete_agent(self.db, agent.agent_id):
+                raise RuntimeError(f"agent {agent.agent_id} could not be deleted")
+
+        for middleware in MiddlewareRepository.get_all_by_app_id(self.db, app_id):
+            logger.info(f"Deleting middleware {middleware.middleware_id}: {middleware.name}")
+            MiddlewareService.delete_middleware(self.db, app_id, middleware.middleware_id)
+
+        for skill in self.app_repo.get_skills_by_app_id(app_id):
+            logger.info(f"Deleting skill {skill.skill_id}: {skill.name}")
+            SkillService.delete_skill(self.db, app_id, skill.skill_id)
+
+        for server in self.app_repo.get_mcp_servers_by_app_id(app_id):
+            logger.info(f"Deleting MCP server {server.server_id}: {server.name}")
+            MCPServerService.delete_mcp_server(self.db, app_id, server.server_id)
+
+    def _delete_app_content(
+        self,
+        app_id: int,
+        resource_service: Any,
+        repository_service: Any,
+        domain_service: Any,
+        silo_service: Any,
+    ) -> None:
+        from repositories.sharepoint_source_repository import SharePointSourceRepository
+
+        repositories = self.app_repo.get_repositories_by_app_id(app_id)
+        for repository in repositories:
+            resources = resource_service.get_resources_by_repo_id(
+                repository.repository_id, self.db
+            )
+            for resource in resources:
+                logger.info(f"Deleting resource {resource.resource_id}: {resource.name}")
+                resource_service.delete_resource(resource.resource_id, self.db)
+
+        domains = self.app_repo.get_domains_by_app_id(app_id)
+
+        for sp_source in SharePointSourceRepository.list_by_app(app_id, self.db):
+            logger.info(f"Deleting SharePoint source {sp_source.id}: {sp_source.name}")
+            silo_id = sp_source.silo_id
+            # SharePointFile rows cascade-delete via FK; vectors are orphaned (acceptable for app deletion)
+            self.db.delete(sp_source)
+            self.db.flush()
+            if silo_id:
+                silo_service.delete_silo(silo_id, self.db)
+
+        for repository in repositories:
+            logger.info(f"Deleting repository {repository.repository_id}: {repository.name}")
+            repository_service.delete_repository(repository, self.db)
+
+        for domain in domains:
+            logger.info(f"Deleting domain {domain.domain_id}: {domain.name}")
+            domain_service.delete_domain(domain.domain_id, self.db)
+
+        for silo in self.app_repo.get_silos_by_app_id(app_id):
+            logger.info(f"Deleting silo {silo.silo_id}: {silo.name}")
+            silo_service.delete_silo(silo.silo_id, self.db)
+
+    def _delete_app_services(
+        self,
+        app_id: int,
+        output_parser_service: Any,
+        mcp_config_service: Any,
+        api_key_service: Any,
+        ai_service_service: Any,
+        embedding_service_service: Any,
+        sandbox_service_service: Any,
+    ) -> None:
+        for parser in self.app_repo.get_output_parsers_by_app_id(app_id):
+            logger.info(f"Deleting output parser {parser.parser_id}: {parser.name}")
+            output_parser_service.delete_output_parser(self.db, app_id, parser.parser_id)
+
+        for config in self.app_repo.get_mcp_configs_by_app_id(app_id):
+            logger.info(f"Deleting MCP config {config.config_id}: {config.name}")
+            mcp_config_service.delete_mcp_config(self.db, app_id, config.config_id)
+
+        for api_key in self.app_repo.get_api_keys_by_app_id(app_id):
+            logger.info(f"Deleting API key {api_key.key_id}: {api_key.name}")
+            api_key_service.delete_api_key(self.db, app_id, api_key.key_id)
+
+        for service in self.app_repo.get_ai_services_by_app_id(app_id):
+            logger.info(f"Deleting AI service {service.service_id}: {service.name}")
+            ai_service_service.delete_ai_service(self.db, app_id, service.service_id)
+
+        for service in self.app_repo.get_embedding_services_by_app_id(app_id):
+            logger.info(f"Deleting embedding service {service.service_id}: {service.name}")
+            embedding_service_service.delete_embedding_service(self.db, app_id, service.service_id)
+
+        for service in self.app_repo.get_sandbox_services_by_app_id(app_id):
+            logger.info(f"Deleting sandbox service {service.service_id}: {service.name}")
+            sandbox_service_service.delete_sandbox_service(self.db, app_id, service.service_id)

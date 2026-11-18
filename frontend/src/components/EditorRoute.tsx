@@ -1,17 +1,16 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { AppRole } from '../types/roles';
 import { SessionGate } from './SessionGate';
+import { AppRoleRoute } from './AppRoleRoute';
 
-interface EditorRouteProps {
-  children: React.ReactNode;
+export interface EditorRouteProps {
+  readonly children: ReactNode;
 }
 
 function EditorRoute({ children }: Readonly<EditorRouteProps>) {
   return (
     <SessionGate>
-      {user => (!user.is_admin && user.platform_role === 'viewer'
-        ? <Navigate to="/home" replace />
-        : children)}
+      {() => <AppRoleRoute requiredRole={AppRole.EDITOR}>{children}</AppRoleRoute>}
     </SessionGate>
   );
 }

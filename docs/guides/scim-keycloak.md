@@ -266,14 +266,27 @@ include:
 - a new Keycloak user appears in `GET /Users`;
 - an existing Mattin user with the same unique email is safely linked when it
   has no incompatible external identity;
-- disabling the Keycloak user and saving it results in `active: false`;
-- re-enabling the user and saving it results in `active: true`.
+- disabling the Keycloak user and saving it deprovisions the Mattin account as
+  described below.
 
 The resource URL for a provisioned user uses Mattin's generated SCIM id:
 
 ```text
 GET /scim/v2/{connection-key}/Users/{scim-id}
 ```
+
+## Deprovisioning and group membership
+
+On Keycloak user deactivation (`PATCH active=false`) or
+`DELETE /Users/{scim_id}`, Mattin
+sets `User.is_active=false` and removes that user's `UserExternalIdentity`,
+`OIDCIdentityLink` mappings, SCIM group memberships, and manager references.
+The local `User`, business data, apps, and ownership remain. Group rows and
+group-to-app policies also remain; app ownership transfer or deletion is a
+separate administrative action.
+
+For group PATCH requests, `remove` with `path=members` and no `value` clears all
+memberships from that group.
 
 ### 5. Troubleshooting
 

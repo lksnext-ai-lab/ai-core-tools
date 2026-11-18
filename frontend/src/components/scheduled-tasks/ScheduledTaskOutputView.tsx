@@ -53,7 +53,7 @@ export function ScheduledTaskOutputView({ title, subtitle, backHref, backLabel, 
         </div>
       )}
       {!error && runs === null && (
-        <div className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">Cargando…</div>
+        <div role="status" aria-live="polite" className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">Cargando…</div>
       )}
       {runs !== null && runs.length === 0 && (
         <div className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">No hay respuestas todavía.</div>

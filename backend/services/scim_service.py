@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from datetime import datetime
 import re
-from typing import Optional
+from typing import Any, Optional
 
 import bcrypt
 from sqlalchemy.exc import IntegrityError
@@ -153,108 +153,160 @@ class SCIMService:
         identity = self.user_repository.get_by_external_id(
             db, connection.id, payload.externalId
         )
+        if identity is not None and not payload.active:
+            response = self._deprovision_user(db, identity)
+            return response, False
+
         email = self._email(payload.emails)
         mapped_user = self.user_repository.get_oidc_linked_user(
             db, connection.id, payload.externalId
         )
-        if (
-            identity is not None
-            and mapped_user is not None
-            and identity.user_id != mapped_user.user_id
-        ):
-            raise SCIMRequestError(409, "The external ID is mapped to conflicting Mattin users.")
-        if email:
-            email_users = self.user_repository.get_email_users(db, email)
-            if len(email_users) > 1:
-                raise SCIMRequestError(409, "The email matches multiple Mattin users.")
-            existing_user = email_users[0] if email_users else None
-            allowed_user_id = (
-                identity.user_id if identity is not None
-                else mapped_user.user_id if mapped_user is not None
-                else None
-            )
-            if (
-                existing_user
-                and allowed_user_id is not None
-                and existing_user.user_id != allowed_user_id
-            ):
-                raise SCIMRequestError(409, "The email is already assigned to another Mattin user.")
-        else:
-            existing_user = None
-
-        # Email is a provisioning-time reconciliation hint only. It may attach
-        # an unlinked local account, but it must never move an account between
-        # connections or replace an existing external identity.
-        if identity is None and mapped_user is None and existing_user is not None:
-            linked_identities = self.user_repository.get_external_identities_for_user(
-                db, existing_user.user_id
-            )
-            if linked_identities:
-                raise SCIMRequestError(
-                    409,
-                    "The email belongs to a Mattin user already linked to another external identity.",
-                )
-        if identity is None and mapped_user is not None:
-            linked_identities = self.user_repository.get_external_identities_for_user(
-                db, mapped_user.user_id
-            )
-            if linked_identities:
-                raise SCIMRequestError(
-                    409,
-                    "The external ID is mapped to a Mattin user already linked to another identity.",
-                )
-
+        existing_user = self._resolve_upsert_users(
+            db, connection, payload, identity, email, mapped_user
+        )
         created = identity is None
         try:
             if identity is None:
-                user = mapped_user or existing_user
-                if user is None:
-                    user = User(
-                        email=email,
-                        name=self._display_name(payload),
-                        is_active=payload.active,
-                        auth_method="scim",
-                    )
-                    db.add(user)
-                    db.flush()
-                else:
-                    # Explicit OIDC mappings and the safe email bootstrap both
-                    # select the local account; never overwrite a conflicting
-                    # local email while attaching the external identity.
-                    if (
-                        mapped_user is not None
-                        and email
-                        and user.email
-                        and user.email.lower() == email.lower()
-                    ):
-                        user.email = email
-                    user.name = self._display_name(payload, user.name)
-                    user.is_active = payload.active
-                identity = UserExternalIdentity(
-                    user_id=user.user_id,
-                    connection_id=connection.id,
-                    external_id=payload.externalId,
-                    scim_id=str(uuid.uuid4()),
-                    user_name=payload.userName,
-                    is_active=payload.active,
-                    last_synced_at=datetime.now(),
+                identity = self._create_external_identity(
+                    db, connection, payload, email, mapped_user, existing_user
                 )
-                db.add(identity)
             else:
-                identity.user_name = payload.userName
-                identity.is_active = payload.active
-                identity.user.is_active = payload.active
-                identity.user.name = self._display_name(payload, identity.user.name)
-                if email is not None:
-                    identity.user.email = email
-            if identity is not None:
-                identity.last_synced_at = datetime.now()
+                self._update_external_identity(identity, payload, email)
+            identity.last_synced_at = datetime.now()
             db.commit()
             db.refresh(identity)
             return self._response(identity), created
         except IntegrityError:
             db.rollback()
             raise SCIMRequestError(409, "The SCIM user conflicts with an existing identity.")
+
+    def _resolve_upsert_users(
+        self,
+        db: Session,
+        connection: ProvisioningConnection,
+        payload: SCIMUserCreate,
+        identity: Optional[UserExternalIdentity],
+        email: Optional[str],
+        mapped_user: Optional[User],
+    ) -> Optional[User]:
+        if (
+            identity is not None
+            and mapped_user is not None
+            and identity.user_id != mapped_user.user_id
+        ):
+            raise SCIMRequestError(409, "The external ID is mapped to conflicting Mattin users.")
+
+        existing_user = self._find_email_user(db, email, identity, mapped_user)
+        if identity is None:
+            self._validate_unlinked_user(db, mapped_user, existing_user)
+        return existing_user
+
+    def _find_email_user(
+        self,
+        db: Session,
+        email: Optional[str],
+        identity: Optional[UserExternalIdentity],
+        mapped_user: Optional[User],
+    ) -> Optional[User]:
+        if not email:
+            return None
+        email_users = self.user_repository.get_email_users(db, email)
+        if len(email_users) > 1:
+            raise SCIMRequestError(409, "The email matches multiple Mattin users.")
+        existing_user = email_users[0] if email_users else None
+        allowed_user_id = None
+        if identity is not None:
+            allowed_user_id = identity.user_id
+        elif mapped_user is not None:
+            allowed_user_id = mapped_user.user_id
+        if (
+            existing_user is not None
+            and allowed_user_id is not None
+            and existing_user.user_id != allowed_user_id
+        ):
+            raise SCIMRequestError(409, "The email is already assigned to another Mattin user.")
+        return existing_user
+
+    def _validate_unlinked_user(
+        self,
+        db: Session,
+        mapped_user: Optional[User],
+        existing_user: Optional[User],
+    ) -> None:
+        candidate_user = mapped_user or existing_user
+        if candidate_user is None:
+            return
+        linked_identities = self.user_repository.get_external_identities_for_user(
+            db, candidate_user.user_id
+        )
+        if not linked_identities:
+            return
+        if mapped_user is not None:
+            raise SCIMRequestError(
+                409,
+                "The external ID is mapped to a Mattin user already linked to another identity.",
+            )
+        raise SCIMRequestError(
+            409,
+            "The email belongs to a Mattin user already linked to another external identity.",
+        )
+
+    def _create_external_identity(
+        self,
+        db: Session,
+        connection: ProvisioningConnection,
+        payload: SCIMUserCreate,
+        email: Optional[str],
+        mapped_user: Optional[User],
+        existing_user: Optional[User],
+    ) -> UserExternalIdentity:
+        user = mapped_user or existing_user
+        if user is None:
+            user = User(
+                email=email,
+                name=self._display_name(payload),
+                is_active=payload.active,
+                auth_method="scim",
+            )
+            db.add(user)
+            db.flush()
+        else:
+            # Explicit OIDC mappings and the safe email bootstrap both select
+            # the local account; never overwrite a conflicting local email.
+            if (
+                mapped_user is not None
+                and email
+                and user.email
+                and user.email.lower() == email.lower()
+            ):
+                user.email = email
+            user.name = self._display_name(payload, user.name)
+            user.is_active = payload.active
+
+        identity = UserExternalIdentity(
+            user_id=user.user_id,
+            connection_id=connection.id,
+            external_id=payload.externalId,
+            scim_id=str(uuid.uuid4()),
+            user_name=payload.userName,
+            is_active=payload.active,
+            last_synced_at=datetime.now(),
+        )
+        db.add(identity)
+        return identity
+
+    def _update_external_identity(
+        self,
+        identity: UserExternalIdentity,
+        payload: SCIMUserCreate,
+        email: Optional[str],
+    ) -> None:
+        identity.user_name = payload.userName
+        identity.is_active = payload.active
+        identity.user.is_active = payload.active
+        identity.user.name = self._display_name(payload, identity.user.name)
+        if email is not None:
+            identity.user.email = email
 
     def patch_user(
         self,
@@ -267,11 +319,18 @@ class SCIMService:
         identity = self.user_repository.get_by_scim_id(db, connection.id, scim_id)
         if identity is None:
             raise SCIMRequestError(404, "User not found.")
+        original_name = identity.user.name
+        original_email = identity.user.email
         for operation in patch.Operations:
             op = operation.op.lower()
             if op not in {"add", "replace", "remove"}:
                 raise SCIMRequestError(400, f"Unsupported PATCH operation: {operation.op}.")
             self._apply_patch(identity, operation)
+        if not identity.is_active:
+            identity.user.name = original_name
+            identity.user.email = original_email
+            return self._deprovision_user(db, identity)
+
         identity.user.is_active = identity.is_active
         identity.last_synced_at = datetime.now()
         try:
@@ -289,10 +348,18 @@ class SCIMService:
         identity = self.user_repository.get_by_scim_id(db, connection.id, scim_id)
         if identity is None:
             raise SCIMRequestError(404, "User not found.")
+        self._deprovision_user(db, identity)
+
+    def _deprovision_user(
+        self, db: Session, identity: UserExternalIdentity
+    ) -> SCIMUserResponse:
+        """Deactivate the Mattin account and remove its external identity data."""
         identity.is_active = False
         identity.user.is_active = False
-        identity.last_synced_at = datetime.now()
+        response = self._response(identity)
+        self.user_repository.delete_external_data(db, identity)
         db.commit()
+        return response
 
     @staticmethod
     def _group_response(group: ExternalGroup) -> SCIMGroupResponse:
@@ -458,33 +525,90 @@ class SCIMService:
                 raise SCIMRequestError(400, "displayName cannot be removed.")
             group.display_name = str(value)
             return
-        if path == "members" or path.startswith("members["):
-            if operation == "remove" and path.startswith("members["):
-                match = re.search(r'value\s+eq\s+"([^"]+)"', path, re.IGNORECASE)
-                if not match:
-                    raise SCIMRequestError(400, "Unsupported members PATCH path.")
-                group.memberships[:] = [
-                    item for item in group.memberships
-                    if item.user_external_identity.scim_id != match.group(1)
-                ]
+        if path.startswith("members[") and self._patch_filtered_group_member(
+                db, connection, group, operation, path, value
+            ):
                 return
-            members = value if isinstance(value, list) else ([] if value is None else [value])
-            resolved = self._resolve_members(
-                db, connection, [SCIMGroupMember.model_validate(item) for item in members]
-            )
-            if operation == "replace":
-                self._set_group_members(db, group, resolved)
-            elif operation == "remove":
-                remove_ids = {identity.id for identity in resolved}
-                group.memberships[:] = [
-                    item for item in group.memberships
-                    if item.user_external_identity_id not in remove_ids
-                ]
-            else:
-                current = [item.user_external_identity for item in group.memberships]
-                self._set_group_members(db, group, current + resolved)
+        if path == "members" or path.startswith("members["):
+            self._patch_group_members(db, connection, group, operation, value)
             return
         raise SCIMRequestError(400, f"Unsupported PATCH path: {path}.")
+
+    def _patch_filtered_group_member(
+        self,
+        db: Session,
+        connection: ProvisioningConnection,
+        group: ExternalGroup,
+        operation: str,
+        path: str,
+        value: object,
+    ) -> bool:
+        match = re.search(r'value\s+eq\s+"([^"]+)"', path, re.IGNORECASE)
+        if not match:
+            raise SCIMRequestError(400, "Unsupported members PATCH path.")
+        target_scim_id = match.group(1)
+        if operation == "remove":
+            group.memberships[:] = [
+                item for item in group.memberships
+                if item.user_external_identity.scim_id != target_scim_id
+            ]
+            return True
+        if operation == "replace":
+            resolved = self._resolve_members(
+                db,
+                connection,
+                [
+                    SCIMGroupMember.model_validate(item)
+                    for item in self._member_values(value)
+                ],
+            )
+            current = [
+                item.user_external_identity
+                for item in group.memberships
+                if item.user_external_identity.scim_id != target_scim_id
+            ]
+            self._set_group_members(db, group, current + resolved)
+            return True
+        return False
+
+    def _patch_group_members(
+        self,
+        db: Session,
+        connection: ProvisioningConnection,
+        group: ExternalGroup,
+        operation: str,
+        value: object,
+    ) -> None:
+        if operation == "remove" and value is None:
+            group.memberships.clear()
+            return
+        resolved = self._resolve_members(
+            db,
+            connection,
+            [
+                SCIMGroupMember.model_validate(item)
+                for item in self._member_values(value)
+            ],
+        )
+        if operation == "replace":
+            self._set_group_members(db, group, resolved)
+        elif operation == "remove":
+            remove_ids = {identity.id for identity in resolved}
+            group.memberships[:] = [
+                item for item in group.memberships
+                if item.user_external_identity_id not in remove_ids
+            ]
+        else:
+            current = [item.user_external_identity for item in group.memberships]
+            self._set_group_members(db, group, current + resolved)
+
+    @staticmethod
+    def _member_values(value: object) -> list[object]:
+        if isinstance(value, list):
+            return value
+        if value is None:
+            return []
+        return [value]
 
     def delete_group(
         self, db: Session, connection: ProvisioningConnection, scim_id: str
@@ -501,42 +625,82 @@ class SCIMService:
     @staticmethod
     def _apply_patch(identity: UserExternalIdentity, operation: SCIMUserPatchOperation) -> None:
         """Apply one validated supported PATCH attribute."""
-        path = (operation.path or "").strip().lower()
-        if ":" in path:
-            path = path.rsplit(":", 1)[-1]
+        path = SCIMService._normalize_patch_path(operation.path)
         value = operation.value
         if not path and isinstance(value, dict):
-            for key, item in value.items():
-                SCIMService._apply_patch(identity, SCIMUserPatchOperation(op=operation.op, path=key, value=item))
+            SCIMService._apply_patch_object(identity, operation, value)
             return
         if path == "active":
             identity.is_active = (
                 value if isinstance(value, bool) else str(value).lower() == "true"
             )
         elif path == "externalid":
-            if operation.op.lower() == "remove" or str(value) != identity.external_id:
-                raise SCIMRequestError(409, "externalId cannot be changed.")
+            SCIMService._validate_external_id_patch(identity, operation, value)
         elif path == "username":
             identity.user_name = str(value)
         elif path in {"displayname", "name.formatted"}:
             identity.user.name = str(value) if value is not None else None
         elif path.startswith("emails"):
-            if isinstance(value, list):
-                email = SCIMService._email(
-                    [SCIMEmail.model_validate(item) for item in value]
-                )
-            else:
-                email = value.get("value") if isinstance(value, dict) else value
-            if email:
-                identity.user.email = str(email)
-            elif operation.op.lower() == "remove":
-                identity.user.email = None
+            SCIMService._apply_email_patch(identity, operation, value)
         elif path in {"", "name"} and isinstance(value, dict):
-            identity.user.name = " ".join(
-                str(item) for item in (value.get("givenName"), value.get("familyName")) if item
-            ) or value.get("formatted")
+            SCIMService._apply_name_patch(identity, value)
         else:
             raise SCIMRequestError(400, f"Unsupported PATCH path: {operation.path}.")
+
+    @staticmethod
+    def _normalize_patch_path(path: Optional[str]) -> str:
+        normalized_path = (path or "").strip().lower()
+        if ":" in normalized_path:
+            normalized_path = normalized_path.rsplit(":", 1)[-1]
+        return normalized_path
+
+    @staticmethod
+    def _apply_patch_object(
+        identity: UserExternalIdentity,
+        operation: SCIMUserPatchOperation,
+        values: dict[str, Any],
+    ) -> None:
+        for key, value in values.items():
+            SCIMService._apply_patch(
+                identity,
+                SCIMUserPatchOperation(op=operation.op, path=key, value=value),
+            )
+
+    @staticmethod
+    def _validate_external_id_patch(
+        identity: UserExternalIdentity,
+        operation: SCIMUserPatchOperation,
+        value: object,
+    ) -> None:
+        if operation.op.lower() == "remove" or str(value) != identity.external_id:
+            raise SCIMRequestError(409, "externalId cannot be changed.")
+
+    @staticmethod
+    def _apply_email_patch(
+        identity: UserExternalIdentity,
+        operation: SCIMUserPatchOperation,
+        value: object,
+    ) -> None:
+        if isinstance(value, list):
+            email = SCIMService._email(
+                [SCIMEmail.model_validate(item) for item in value]
+            )
+        elif isinstance(value, dict):
+            email = value.get("value")
+        else:
+            email = value
+        if email:
+            identity.user.email = str(email)
+        elif operation.op.lower() == "remove":
+            identity.user.email = None
+
+    @staticmethod
+    def _apply_name_patch(
+        identity: UserExternalIdentity, value: dict[str, Any]
+    ) -> None:
+        identity.user.name = " ".join(
+            str(item) for item in (value.get("givenName"), value.get("familyName")) if item
+        ) or value.get("formatted")
 
     async def authenticate(
         self,

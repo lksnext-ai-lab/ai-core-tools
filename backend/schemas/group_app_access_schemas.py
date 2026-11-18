@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from models.group_app_access_rule import GroupAppAccessRole
 
@@ -41,6 +41,26 @@ class GroupAppAccessRuleDetail(BaseModel):
 
 class GroupAppAccessRuleListItem(GroupAppAccessRuleDetail):
     """A group access policy in an app policy list."""
+
+
+class EligibleGroupListItem(BaseModel):
+    """An active group from the caller's linked provisioning connection."""
+
+    group_id: int
+    display_name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EligibleGroupsPage(BaseModel):
+    """A bounded page of groups that can be selected for an app policy."""
+
+    items: list[EligibleGroupListItem]
+    total: int
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GroupAppEffectiveAccess(BaseModel):

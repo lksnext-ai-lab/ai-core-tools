@@ -39,6 +39,10 @@ class GroupAppAccessRule(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
-    group = relationship("ExternalGroup", lazy="selectin")
+    group = relationship(
+        "ExternalGroup",
+        back_populates="access_rules",
+        lazy="selectin",
+    )
     app = relationship("App", lazy="selectin")
     created_by_user = relationship("User", lazy="selectin")

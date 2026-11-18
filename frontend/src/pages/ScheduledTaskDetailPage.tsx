@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, CalendarClock, LoaderCircle, Pencil, PlayCircle } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -6,6 +6,8 @@ import { apiService, type Agent, type ScheduledTask, type ScheduledTaskRun } fro
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { ScheduledTaskResults } from '../components/scheduled-tasks/ScheduledTaskResults';
 import { conversationModeLabel, describeSchedule, formatDateTime } from '../components/scheduled-tasks/format';
+import { useAppRole } from '../hooks/useAppRole';
+import { AppRole } from '../types/roles';
 
 const VISIBILITY_LABELS: Record<string, string> = {
   unpublished: 'No publicada',
@@ -28,6 +30,8 @@ function Field({ label, children, wide = false }: Readonly<{ label: string; chil
 
 export default function ScheduledTaskDetailPage() {
   const { appId, taskId } = useParams();
+  const { hasMinRole } = useAppRole(appId);
+  const canEdit = hasMinRole(AppRole.EDITOR);
   const numericAppId = Number.parseInt(appId ?? '0', 10);
   const numericTaskId = Number.parseInt(taskId ?? '0', 10);
   const [task, setTask] = useState<ScheduledTask | null>(null);
@@ -35,40 +39,93 @@ export default function ScheduledTaskDetailPage() {
   const [runs, setRuns] = useState<ScheduledTaskRun[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [loadedRouteKey, setLoadedRouteKey] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
 
-  const loadRuns = useCallback(() => apiService.getScheduledTaskRuns(numericAppId, numericTaskId)
-    .then((result) => setRuns(result.items))
-    .catch(() => setRuns([])), [numericAppId, numericTaskId]);
+  const routeKey = `${numericAppId}:${numericTaskId}`;
+  const loadRuns = useCallback(async (
+    generation: number,
+    targetAppId: number,
+    targetTaskId: number,
+  ) => {
+    try {
+      const result = await apiService.getScheduledTaskRuns(targetAppId, targetTaskId);
+      if (requestGeneration.current === generation) setRuns(result.items);
+    } catch {
+      if (requestGeneration.current === generation) setRuns([]);
+    }
+  }, []);
 
   useEffect(() => {
+    const generation = ++requestGeneration.current;
+    let active = true;
+    setTask(null);
+    setAgent(null);
+    setRuns(null);
+    setRunning(false);
+    setLoadedRouteKey(null);
     setLoading(true);
-    apiService.getScheduledTask(numericAppId, numericTaskId)
-      .then((found) => {
+    async function loadTask() {
+      try {
+        const found = await apiService.getScheduledTask(numericAppId, numericTaskId);
+        if (!active || requestGeneration.current !== generation) return;
+
         setTask(found);
-        void loadRuns();
-        apiService.getAgents(numericAppId)
-          .then((agents) => setAgent(agents.find((item) => item.agent_id === found.agent_id) ?? null))
+        setLoadedRouteKey(routeKey);
+        void loadRuns(generation, numericAppId, numericTaskId);
+        void apiService.getAgents(numericAppId)
+          .then((agents) => {
+            if (active && requestGeneration.current === generation) {
+              setAgent(agents.find((item) => item.agent_id === found.agent_id) ?? null);
+            }
+          })
           .catch(() => undefined);
-      })
-      .catch((error) => toast.error(error instanceof Error ? error.message : 'No se pudo cargar el detalle de la tarea'))
-      .finally(() => setLoading(false));
-  }, [numericAppId, numericTaskId, loadRuns]);
+      } catch (error) {
+        if (active && requestGeneration.current === generation) {
+          setTask(null);
+          setLoadedRouteKey(routeKey);
+          toast.error(error instanceof Error ? error.message : 'No se pudo cargar el detalle de la tarea');
+        }
+      } finally {
+        if (active && requestGeneration.current === generation) setLoading(false);
+      }
+    }
+
+    void loadTask();
+    return () => {
+      active = false;
+      if (requestGeneration.current === generation) requestGeneration.current += 1;
+    };
+  }, [numericAppId, numericTaskId, routeKey, loadRuns]);
 
   const runNow = async () => {
     if (!task) return;
+    const generation = requestGeneration.current;
+    const targetAppId = numericAppId;
+    const targetTaskId = task.id;
     setRunning(true);
     try {
-      await apiService.runScheduledTaskNow(numericAppId, task.id);
+      await apiService.runScheduledTaskNow(targetAppId, targetTaskId);
+      if (requestGeneration.current !== generation) return;
       toast.success('Ejecución puesta en cola. Aparecerá en el historial al terminar.');
-      setTimeout(() => { void loadRuns(); }, 3000);
+      setTimeout(() => {
+        void loadRuns(generation, targetAppId, targetTaskId);
+      }, 3000);
     } catch (error) {
+      if (requestGeneration.current !== generation) return;
       toast.error(error instanceof Error ? error.message : 'No se pudo ejecutar la tarea');
     } finally {
-      setRunning(false);
+      if (requestGeneration.current === generation) setRunning(false);
     }
   };
 
-  if (loading) return <div className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800">Cargando tarea…</div>;
+  if (loading || loadedRouteKey !== routeKey) {
+    return (
+      <div role="status" aria-live="polite" className="rounded-xl bg-white p-8 text-center text-gray-500 dark:bg-gray-800">
+        Cargando tarea…
+      </div>
+    );
+  }
   if (!task) return <div className="rounded-xl bg-white p-8 text-center text-gray-600 dark:bg-gray-800">No se encontró la tarea programada.</div>;
 
   const base = `/apps/${appId}/scheduled-tasks/${task.id}`;
@@ -84,16 +141,18 @@ export default function ScheduledTaskDetailPage() {
           <p className="text-gray-600 dark:text-gray-400">{task.description || 'Detalle de la tarea programada'}</p>
         </div>
         <div className="flex gap-2">
-          {task.status === 'active' && (
+          {canEdit && task.status === 'active' && (
             <button type="button" disabled={running} onClick={() => { void runNow(); }}
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 disabled:opacity-50 dark:border-gray-600">
               {running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PlayCircle className="h-4 w-4" aria-hidden="true" />}
               Ejecutar ahora
             </button>
           )}
-          <Link to={`${base}/edit`} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:border-gray-600">
-            <Pencil className="h-4 w-4" aria-hidden="true" />Editar
-          </Link>
+          {canEdit && (
+            <Link to={`${base}/edit`} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:border-gray-600">
+              <Pencil className="h-4 w-4" aria-hidden="true" />Editar
+            </Link>
+          )}
         </div>
       </div>
       <dl className="grid gap-4 rounded-xl border border-gray-200 bg-white p-6 sm:grid-cols-2 dark:border-gray-700 dark:bg-gray-800">

@@ -24,7 +24,7 @@ The operational setup and validation procedure is maintained in the
 - SCIM synchronizes users, account status, selected profile attributes, groups, and group membership.
 - Mattin administrators explicitly map synchronized groups to apps and app roles.
 - Direct-manager access is optional and applies only when a source sends a reliable manager attribute; a manager receives `VIEWER` on apps owned by direct reports in the same connection.
-- User and app records are retained on deprovisioning. Ownership transfer or deletion is a separate administrative action.
+- SCIM deprovisioning retains the local `User`, business data, apps, and ownership, while removing the user's SCIM/OIDC identity mappings, group memberships, and manager references. Ownership transfer or deletion is a separate administrative action.
 - Entra is the first client profile to validate. Keycloak outbound SCIM is a second interoperability target, not a requirement for Entra-specific behavior in the SCIM core.
 
 ### Out of scope for the first release
@@ -49,7 +49,7 @@ The operational setup and validation procedure is maintained in the
 8. **Group permissions are explicit and managed by an authorized user.** The app owner (or an accepted app administrator) can map groups from their connected source to apps they manage. A manager may manage access only if Mattin explicitly grants that capability; manager-derived `VIEWER` access alone does not grant policy-management rights.
 9. **Manager permissions are direct-report only, connection-scoped, and read-only.** The policy grants `VIEWER` on apps owned by direct reports in the same connection.
 10. **Derived access is computed, not copied into manual collaborations.** Removing a group membership removes only access derived from that group; it must not delete an independently accepted `AppCollaborator` record.
-11. **Deprovisioning disables the affected external identity and preserves records.** It does not delete apps, conversations, audit history, or transfer ownership.
+11. **Deprovisioning disables the local user and removes provisioning links.** It sets `User.is_active=false`, removes the user's `UserExternalIdentity`, `OIDCIdentityLink` mappings, SCIM group memberships, and manager references, but retains the `User`, business data, apps, group rows, group-to-app policies, and app ownership.
 12. **Group and manager data are not platform roles.** No group mapping or manager relationship can grant a cross-app administrator role.
 
 ## Actors and runtime flows
@@ -85,8 +85,8 @@ If OIDC and SCIM use different identifiers, issuers, or source systems, SCIM may
 
 1. **The source-directory administrator** removes or disables a user in the source directory or removes the user from its provisioning scope.
 2. **The source SCIM client** sends `active=false` or the supported deprovision operation.
-3. **Mattin** marks only that connection's external identity inactive, removes or disables its synchronized memberships, and denies future authenticated requests for the linked local user.
-4. **Mattin** retains the local user and owned apps. An administrator separately transfers ownership or deletes apps if required.
+3. **Mattin** sets the local `User.is_active=false` and removes that user's `UserExternalIdentity`, `OIDCIdentityLink` mappings, SCIM group memberships, and manager references.
+4. **Mattin** retains the local `User`, business data, apps, and ownership. Group rows and group-to-app policies also remain; an administrator separately transfers ownership or deletes apps if required.
 
 ## Data model
 
@@ -136,7 +136,7 @@ One row links a local user to one external identity and its SCIM resource.
 | `external_id` | Stable source identifier received through SCIM `externalId`; it may be matched to a verified OIDC identifier only through an explicit trusted mapping. |
 | `scim_id` | Mattin-generated stable SCIM resource identifier exposed as SCIM `id` and used in resource URLs. |
 | `user_name` | Current SCIM `userName`; mutable and not an identity key. |
-| `is_active` | Provisioned identity state; because each local user has one external identity in release one, it also drives the local account's active access state. |
+| `is_active` | State of a currently provisioned identity. On deprovisioning, the identity row is removed and the linked local `User.is_active` is set to false. |
 | `manager_external_id` | Optional external identifier of the manager, retained while that identity is not yet resolved. |
 | `manager_identity_id` | Nullable self-FK to the manager's `UserExternalIdentity` once resolved. |
 | `department` | Optional informational department synchronized from the source; not an authorization rule. |
@@ -220,13 +220,13 @@ Additional authentication strategies can be added when a supported client requir
 | `GET /scim/v2/{connection_key}/Schemas` | Advertise supported core and enterprise attributes. |
 | `POST /scim/v2/{connection_key}/Users` | Create or safely reconcile a user within this connection; return its stable Mattin resource identifier as SCIM `id`. |
 | `GET /scim/v2/{connection_key}/Users` | List/search only this connection's users with pagination and supported filters, at minimum the matching attributes configured for each supported client profile (`externalId`, `userName`). |
-| `GET /scim/v2/{connection_key}/Users/{scim_id}` | Retrieve a user resource from this connection, including an inactive resource when SCIM semantics require it. |
+| `GET /scim/v2/{connection_key}/Users/{scim_id}` | Retrieve a currently provisioned user resource from this connection. |
 | `PATCH /scim/v2/{connection_key}/Users/{scim_id}` | Apply partial updates to supported attributes, including `active` and same-connection manager reference. |
-| `DELETE /scim/v2/{connection_key}/Users/{scim_id}` | Deprovision access while retaining Mattin history and ownership records. |
+| `DELETE /scim/v2/{connection_key}/Users/{scim_id}` | Deprovision the user as described below, while retaining the local user, business data, apps, and ownership. |
 | `POST /scim/v2/{connection_key}/Groups` | Create a synchronized group in this connection. |
 | `GET /scim/v2/{connection_key}/Groups` | List/search only this connection's groups; support exclusion of `members` where requested. |
 | `GET /scim/v2/{connection_key}/Groups/{scim_id}` | Retrieve a group from this connection. |
-| `PATCH /scim/v2/{connection_key}/Groups/{scim_id}` | Rename a group and add/remove same-connection membership entries. |
+| `PATCH /scim/v2/{connection_key}/Groups/{scim_id}` | Rename a group and add/remove same-connection membership entries; `remove` with `path=members` and no `value` clears all memberships. |
 | `DELETE /scim/v2/{connection_key}/Groups/{scim_id}` | Mark the group inactive, remove its memberships, and ensure its rules no longer grant access. |
 
 `/Bulk` is not required for the initial release. `ServiceProviderConfig` must advertise only capabilities actually implemented by Mattin. Implement and test the filter operators, casing behavior, pagination, status codes, and response schemas used by each supported client profile; do not claim general SCIM compatibility beyond what is tested.
@@ -244,7 +244,7 @@ The SCIM schema is provider-neutral; each source product maps its own directory 
 | Login name or username | `userName` | `UserExternalIdentity.user_name` |
 | Work email | `emails[type eq "work"].value` | `User.email` |
 | Display/given/family name | `displayName`, `name.givenName`, `name.familyName` | `User.name` |
-| Provisioning/account state | `active` | `UserExternalIdentity.is_active` and the local active-access check |
+| Provisioning/account state | `active` | `User.is_active`; deactivation also removes the user's provisioning identity links |
 | Department, when supported | Enterprise User `department` | `UserExternalIdentity.department` |
 | Stable group identifier | Group `externalId` | `ExternalGroup.external_id`, scoped by `connection_id` |
 | Group name | Group `displayName` | `ExternalGroup.display_name` |
@@ -281,14 +281,12 @@ reconciliation. No identities are merged.
 
 ### Deactivation behavior
 
-When one connection sets `active=false` or deprovisions an identity, Mattin:
+On SCIM user deactivation (`PATCH` with `active=false` or `DELETE /Users/{scim_id}`), Mattin:
 
-- Marks that external identity inactive and blocks authenticated requests for its linked local user.
-- Removes or disables synchronized group memberships and manager-derived access.
-- Retains the `User`, apps, conversations, audit history, and manual collaborations for administration and retention.
+- Sets `User.is_active=false`, blocking authenticated requests for that user.
+- Removes the user's `UserExternalIdentity`, `OIDCIdentityLink` mappings, SCIM group memberships, and manager references.
+- Retains the local `User`, its business data, apps, and ownership. Group rows and group-to-app policies also remain.
 - Does not transfer `App.owner_id`; app transfer/deletion remains a separate explicit workflow.
-
-Release one creates a separate local `User` for each external identity, so that identity's deactivation can safely drive `User.is_active`. A future cross-connection account-linking feature must instead track active identities separately and must not let one source deactivate another source's identity.
 
 ## Permission resolution
 
@@ -370,7 +368,8 @@ The authentication endpoint, when OAuth mode is selected, and the SCIM resource 
 - For SCIM group requests, **Mattin** matches each `ExternalGroup` by `(connection_id, external_id)`. Group member references are resolved only to user identities in that same connection.
 - A SCIM membership add creates a missing `ExternalGroupMembership`; adding an existing membership is a no-op. A removal deletes the matching membership if present; removing an absent membership is a no-op. These operations are idempotent so clients can safely retry requests.
 - For a SCIM user update carrying a manager reference, **Mattin** stores `manager_external_id` and resolves it to `manager_identity_id` only within the same connection. If the manager has not arrived yet, the external ID is retained and resolution can be retried when identities are synchronized.
-- Deactivation marks the external identity inactive and disables access for its linked local user. It removes or disables synchronized memberships but preserves Mattin records and manual collaborations.
+- Group PATCH `remove` with `path=members` and no `value` clears all memberships from that group.
+- Deactivation sets `User.is_active=false` and removes the user's `UserExternalIdentity`, `OIDCIdentityLink` mappings, SCIM group memberships, and manager references. It preserves the local user, business data, apps, ownership, group rows, and group-to-app policies.
 
 #### App access evaluation
 
@@ -441,7 +440,7 @@ Validate Entra and Keycloak as separate client profiles before describing both a
 - Manager lookup and inherited access cannot cross provisioning connections.
 - OIDC rejects unconfigured issuers and never links identities through email alone.
 - SCIM email bootstrap never links an OIDC identity during login, never crosses an existing external identity, and rejects ambiguous matches.
-- `active=false` blocks access; reactivation restores eligible access without recreating the user.
+- `active=false` and `DELETE /Users` set `User.is_active=false` and remove provisioning links, memberships, and manager references while retaining the local user and business data/apps.
 - Group add/remove and group deprovision update effective access correctly and idempotently.
 - A group rule grants only the configured role on the configured app.
 - A user with several roles receives the highest applicable app role; removing one source preserves other sources.

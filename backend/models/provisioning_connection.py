@@ -38,12 +38,14 @@ class ProvisioningConnection(Base):
 
     identities = relationship(
         "UserExternalIdentity",
+        back_populates="connection",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",
     )
     groups = relationship(
         "ExternalGroup",
+        back_populates="connection",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",

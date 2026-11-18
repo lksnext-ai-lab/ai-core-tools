@@ -24,5 +24,9 @@ class ExternalGroupMembership(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
-    group = relationship("ExternalGroup", lazy="selectin")
+    group = relationship(
+        "ExternalGroup",
+        back_populates="memberships",
+        lazy="selectin",
+    )
     user_external_identity = relationship("UserExternalIdentity", lazy="selectin")

@@ -41,6 +41,11 @@ from .scheduled_task import ScheduledTask, ScheduledTaskRun
 from .a2a_context_link import A2AContextLink
 from .output_delivery import OutputArtifact, OutputDestination, ScheduledTaskOutputBinding, OutputDelivery, OutputDeliveryAttempt
 from .oidc_identity_link import OIDCIdentityLink
+from .provisioning_connection import ProvisioningConnection
+from .user_external_identity import UserExternalIdentity
+from .external_group import ExternalGroup
+from .external_group_membership import ExternalGroupMembership
+from .group_app_access_rule import GroupAppAccessRole, GroupAppAccessRule
 
 __all__ = [
     'User', 'App', 'AppCollaborator', 'APIKey',
@@ -66,4 +71,9 @@ __all__ = [
     'AgentToolCall',
     'A2AContextLink',
     'OIDCIdentityLink',
+    'ProvisioningConnection',
+    'UserExternalIdentity',
+    'ExternalGroup',
+    'ExternalGroupMembership',
+    'GroupAppAccessRule', 'GroupAppAccessRole',
 ]

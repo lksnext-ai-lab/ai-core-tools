@@ -5,25 +5,24 @@
 # When @docs-manager updates documentation, it reads this file to determine
 # what commits need to be analyzed, then advances the baseline after updating.
 
-last_synced_commit: "726a635f337c7870bac2b55e125db2d401e89c49"
-last_synced_date: "2026-11-17T11:40:08+01:00"
+last_synced_commit: "8ffceb95ec1ea2dcfa399d6207dbf5e6981fefc6"
+last_synced_date: "2026-11-18T11:54:46+01:00"
 last_synced_by: "docs-manager-agent"
 
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
+    - "docs/architecture/rfc-scim-provisioning.md"
     - "docs/guides/scim-keycloak.md"
     - "docs/.doc-metadata.yaml"
   files_created: []
   files_deleted: []
   commits_covered: null
-  commit_range: "fdb3943..726a635"
+  commit_range: "726a635..8ffceb9"
   notes: >
-    Focused SCIM Keycloak local-test wizard documentation update. The guide now
-    covers the admin UI flow, explicit local-autoconnect opt-in, local URL
-    restrictions, temporary Keycloak admin-cli credentials, and the distinction
-    between target creation/testing and reconciliation; existing manual/API
-    guidance is retained. The checkout's current HEAD was recorded, but the
-    commit history since the previous baseline was not available for enumeration
-    in this environment, so commits_covered is unknown and unrelated docs were
-    not audited.
+    Focused SCIM behavior documentation update: user deprovisioning disables the
+    local User, removes provisioning identity links, group memberships, and
+    manager references while retaining business data, apps, ownership, groups,
+    and group-to-app policies; group PATCH remove with path=members and no value
+    clears all memberships. Commit history was not enumerated, so commits_covered
+    is unknown; no unrelated documentation was audited.

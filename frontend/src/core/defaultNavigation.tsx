@@ -49,8 +49,13 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps',
       name: 'My Apps',
       icon: <Layers size={16} />,
-      section: 'mainFeatures',
-      editorOnly: true
+      section: 'mainFeatures'
+    },
+    {
+      path: '/my-groups',
+      name: 'My Groups',
+      icon: <Users size={16} />,
+      section: 'mainFeatures'
     },
     {
       path: '/about',
@@ -189,6 +194,12 @@ export const defaultNavigation: NavigationConfig = {
     {
       path: '/apps/:appId/settings/collaboration',
       name: 'Collaboration',
+      icon: <Users size={16} />,
+      section: 'settings'
+    },
+    {
+      path: '/apps/:appId/settings/group-access',
+      name: 'Group Access',
       icon: <Users size={16} />,
       section: 'settings'
     },

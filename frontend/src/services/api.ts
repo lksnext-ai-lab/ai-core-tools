@@ -11,6 +11,7 @@ import type {
   ServiceLifecycleWarning,
   ServiceUsage,
 } from '../types/services';
+import { MAX_APP_LIST_PAGE_SIZE } from '../constants/appList';
 
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
@@ -199,6 +200,62 @@ export interface App {
   silo_count: number;
   collaborator_count: number;
   onboarding_dismissed?: boolean;
+}
+
+export type GroupAppRole = 'viewer' | 'editor';
+export type GroupContribution = 'VIEWER' | 'EDITOR';
+
+export interface MyGroup {
+  readonly group_id: number;
+  readonly display_name: string;
+}
+
+export interface MyGroupsPageResult {
+  readonly items: MyGroup[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+}
+
+export interface MyGroupApp {
+  readonly app_id: number;
+  readonly app_name: string | null;
+  readonly contribution: GroupContribution;
+  readonly effective_role: string | null;
+}
+
+export interface MyGroupAppsPageResult {
+  readonly group_id: number;
+  readonly display_name: string;
+  readonly items: MyGroupApp[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+}
+
+export interface EligibleGroup {
+  readonly group_id: number;
+  readonly display_name: string;
+}
+
+export interface EligibleGroupsPageResult {
+  readonly items: EligibleGroup[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+}
+
+export interface GroupAppRule {
+  readonly id: number;
+  readonly group_id: number;
+  readonly app_id: number;
+  readonly role: GroupAppRole;
+  readonly created_by_user_id: number | null;
+  readonly is_active: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly group_display_name: string;
+  readonly connection_id: number;
 }
 
 /** RAG retrieval-time filter applied on top of an agent's fixed silo. Mirrors RagConfigSection's RagFixedFilter shape. */
@@ -864,7 +921,10 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {},
     _isRetryAfterRefresh = false,
-    _requestOptions: { suppressAuthRedirect?: boolean } = {},
+    _requestOptions: {
+      suppressAuthRedirect?: boolean;
+      onResponse?: (response: Response) => void;
+    } = {},
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     const authHeaders = this.buildAuthHeaders(
@@ -905,6 +965,7 @@ class ApiService {
       await this.handleResponseError(response);
     }
 
+    _requestOptions.onResponse?.(response);
     if (response.status === 204) return null as T;
     return response.json();
   }
@@ -915,6 +976,28 @@ class ApiService {
 
   async getApps(): Promise<App[]> {
     return this.request('/internal/apps/');
+  }
+
+  async getAppsPage(limit: number, offset: number): Promise<{ apps: App[]; hasMore: boolean }> {
+    const requestedLimit = Number.isFinite(limit) ? Math.trunc(limit) : 1;
+    const requestedOffset = Number.isFinite(offset) ? Math.trunc(offset) : 0;
+    const boundedLimit = Math.min(
+      MAX_APP_LIST_PAGE_SIZE,
+      Math.max(1, requestedLimit),
+    );
+    const boundedOffset = Math.max(0, requestedOffset);
+    let hasMore = false;
+    const apps = await this.request<App[]>(
+      `/internal/apps/?limit=${boundedLimit}&offset=${boundedOffset}`,
+      {},
+      false,
+      {
+        onResponse: (response) => {
+          hasMore = response.headers.get('X-Has-More')?.toLowerCase() === 'true';
+        },
+      },
+    );
+    return { apps, hasMore };
   }
 
   async getSCIMKeycloakLocalSetupStatus(): Promise<KeycloakLocalSetupStatus> {
@@ -995,6 +1078,66 @@ class ApiService {
 
   async getApp(appId: number): Promise<App> {
     return this.request(`/internal/apps/${appId}`);
+  }
+
+  async getMyGroups(offset = 0, limit = 50): Promise<MyGroupsPageResult> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    return this.request(`/internal/my-groups?${query}`);
+  }
+
+  async getMyGroupApps(
+    groupId: number,
+    offset = 0,
+    limit = 50,
+  ): Promise<MyGroupAppsPageResult> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    return this.request(`/internal/my-groups/${groupId}/apps?${query}`);
+  }
+
+  async getEligibleGroups(
+    appId: number,
+    offset = 0,
+    limit = 50,
+  ): Promise<EligibleGroupsPageResult> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    return this.request(`/internal/apps/${appId}/scim-group-rules/eligible-groups?${query}`);
+  }
+
+  async getGroupAppRules(
+    appId: number,
+    offset = 0,
+    limit = 100,
+  ): Promise<GroupAppRule[]> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    return this.request(`/internal/apps/${appId}/scim-group-rules?${query}`);
+  }
+
+  async createGroupAppRule(
+    appId: number,
+    groupId: number,
+    role: GroupAppRole,
+  ): Promise<GroupAppRule> {
+    return this.request(`/internal/apps/${appId}/scim-group-rules`, {
+      method: 'POST',
+      body: JSON.stringify({ group_id: groupId, role }),
+    });
+  }
+
+  async updateGroupAppRule(
+    appId: number,
+    ruleId: number,
+    role: GroupAppRole,
+  ): Promise<GroupAppRule> {
+    return this.request(`/internal/apps/${appId}/scim-group-rules/${ruleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async revokeGroupAppRule(appId: number, ruleId: number): Promise<GroupAppRule> {
+    return this.request(`/internal/apps/${appId}/scim-group-rules/${ruleId}`, {
+      method: 'DELETE',
+    });
   }
 
   async createApp(data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string }): Promise<App> {

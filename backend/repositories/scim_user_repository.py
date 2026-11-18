@@ -2,9 +2,10 @@
 
 from typing import Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
+from models.external_group_membership import ExternalGroupMembership
 from models.user import User
 from models.user_external_identity import UserExternalIdentity
 from models.oidc_identity_link import OIDCIdentityLink
@@ -100,3 +101,29 @@ class SCIMUserRepository:
             )
         )
         return db.execute(statement).scalar_one_or_none()
+
+    @staticmethod
+    def delete_external_data(db: Session, identity: UserExternalIdentity) -> None:
+        """Remove SCIM/OIDC data for a deprovisioned user, preserving the local User."""
+        db.execute(
+            delete(ExternalGroupMembership).where(
+                ExternalGroupMembership.user_external_identity_id == identity.id
+            )
+        )
+        db.execute(
+            delete(OIDCIdentityLink).where(OIDCIdentityLink.user_id == identity.user_id)
+        )
+        db.execute(
+            update(UserExternalIdentity)
+            .where(
+                or_(
+                    UserExternalIdentity.manager_identity_id == identity.id,
+                    and_(
+                        UserExternalIdentity.connection_id == identity.connection_id,
+                        UserExternalIdentity.manager_external_id == identity.external_id,
+                    ),
+                )
+            )
+            .values(manager_identity_id=None, manager_external_id=None)
+        )
+        db.delete(identity)

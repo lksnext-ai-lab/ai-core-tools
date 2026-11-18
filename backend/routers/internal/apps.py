@@ -1,4 +1,14 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, status, UploadFile, File, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from typing import List, Tuple, Optional, Annotated
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
@@ -24,7 +34,10 @@ from schemas.import_schemas import (
     AppImportPreviewSchema,
 )
 from .auth_utils import get_current_user_oauth
-from routers.controls.role_authorization import require_min_role, AppRole
+from routers.controls.role_authorization import (
+    require_min_role,
+    AppRole,
+)
 from utils.secret_utils import mask_api_key, is_masked_key, normalize_credential_map
 
 from .agents import agents_router
@@ -574,21 +587,55 @@ def calculate_app_entity_counts(app_id: int, db: Session, collaboration_service:
         return _get_empty_counts()
 
 
+def calculate_app_entity_counts_for_apps(
+    app_ids: List[int], db: Session, app_service: AppService
+) -> dict[int, dict[str, int]]:
+    """Fetch app entity counts in batches, returning zeros if the read fails."""
+    empty_counts = {app_id: _get_empty_counts() for app_id in app_ids}
+    if not app_ids:
+        return empty_counts
+
+    savepoint = None
+    try:
+        savepoint = db.begin_nested()
+        counts = app_service.get_entity_counts_by_app_ids(app_ids)
+        if savepoint:
+            savepoint.commit()
+        return counts
+    except Exception as exc:
+        logger.warning("Error calculating batched app entity counts: %s", exc)
+        if savepoint:
+            _handle_savepoint_rollback(savepoint, db, app_ids[0])
+        else:
+            _handle_transaction_rollback(db, app_ids[0])
+        return empty_counts
+
+
 @apps_router.get("/",
                 summary="List user's apps",
                 tags=["Apps"],
                 response_model=List[AppListItemSchema])
-async def list_apps(
+def list_apps(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
+    response: Response,
+    limit: Annotated[Optional[int], Query(ge=1, le=100)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     user_id = int(auth_context.identity.id)
-    app_service, collaboration_service = get_services(db)
-    apps = app_service.get_apps(user_id)
+    app_service, _ = get_services(db)
+    apps, app_roles, has_more = app_service.get_apps_with_roles(
+        user_id, limit, offset
+    )
+    if limit is not None:
+        response.headers["X-Has-More"] = str(has_more).lower()
+    app_counts = calculate_app_entity_counts_for_apps(
+        [app.app_id for app in apps], db, app_service
+    )
     app_list = []
     for app in apps:
-        role = collaboration_service.get_user_app_role(user_id, app.app_id) or "owner"
-        counts = calculate_app_entity_counts(app.app_id, db, collaboration_service)
+        role = app_roles[app.app_id]
+        counts = app_counts.get(app.app_id, _get_empty_counts())
         owner_name = None
         owner_email = None
         if app.owner:
@@ -622,7 +669,6 @@ async def get_app(
     db: Annotated[Session, Depends(get_db)],
     role: Annotated[AppRole, Depends(require_min_role("viewer"))],
 ):
-    user_id = int(auth_context.identity.id)
     app_service, collaboration_service = get_services(db)
     app = app_service.get_app(app_id)
     if not app:
@@ -631,13 +677,6 @@ async def get_app(
             detail=APP_NOT_FOUND_MSG
         )
     
-    if not collaboration_service.can_user_access_app(user_id, app_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this app"
-        )
-    
-    user_role = collaboration_service.get_user_app_role(user_id, app_id)
     counts = calculate_app_entity_counts(app_id, db, collaboration_service)
     owner_email = None
     owner_name = None
@@ -649,7 +688,7 @@ async def get_app(
         app_id=app.app_id,
         name=app.name,
         langsmith_api_key=mask_api_key(app.langsmith_api_key),
-        user_role=user_role,
+        user_role=role.value,
         created_at=app.create_date,
         owner_id=app.owner_id,
         owner_email=owner_email,
@@ -986,12 +1025,10 @@ async def leave_app(
 ):
     user_id = int(auth_context.identity.id)
     _, collaboration_service = get_services(db)
-    user_role = collaboration_service.get_user_app_role(user_id, app_id)
-    
-    if not user_role:
+    if not collaboration_service.has_accepted_collaboration(user_id, app_id):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="App not found or access denied"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an accepted app collaborator can leave a collaboration"
         )
     
     try:
