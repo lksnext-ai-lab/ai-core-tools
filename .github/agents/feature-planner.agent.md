@@ -95,7 +95,7 @@ The Feature Planner agent may **only** operate inside the `/plans` directory at 
 ### Forbidden Operations (ABSOLUTE)
 
 - ❌ **NEVER** create, modify, or delete any file outside `/plans`
-- ❌ **NEVER** touch application source code (`backend/`, `frontend/`, `clients/`)
+- ❌ **NEVER** touch application source code (`backend/`, `frontend/`)
 - ❌ **NEVER** modify configuration files (`.env`, `docker/docker-compose.yaml`, `pyproject.toml`, `alembic.ini`)
 - ❌ **NEVER** edit database migrations (`alembic/`)
 - ❌ **NEVER** modify documentation (`docs/`)

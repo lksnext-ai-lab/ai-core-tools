@@ -302,7 +302,7 @@ Files changed: backend/models/..., backend/services/..., backend/routers/...
 
 ### `@react-expert`
 
-**Purpose**: Senior React frontend engineer (generic role). Implements components, pages, hooks, forms, and state management. Project-specific paths and the library/client extension model come from `react-conventions.instructions.md` (auto-applied on `frontend/**`).
+**Purpose**: Senior React frontend engineer (generic role). Implements components, pages, hooks, forms, and state management. Project-specific paths come from `react-conventions.instructions.md` (auto-applied on `frontend/**`).
 
 **Key capabilities** (generic role):
 - React 19 — functional components, hooks (incl. `use`, `useActionState`, `useOptimistic`), concurrent features
@@ -313,7 +313,7 @@ Files changed: backend/models/..., backend/services/..., backend/routers/...
 - Accessibility — semantic HTML, ARIA, keyboard navigation, WCAG 2.1
 - Performance — `React.memo`, `useMemo`, `useCallback`, code splitting
 
-**Companion instruction**: `.github/instructions/react-conventions.instructions.md` — auto-applied to `frontend/**`. Carries the library + per-client extension model, `ExtensibleBaseApp` entry point, centralized `services/api.ts`, constants synced with the backend, Vite commands, and the FAKE/LOCAL/OIDC auth flows.
+**Companion instruction**: `.github/instructions/react-conventions.instructions.md` — auto-applied to `frontend/**`. Carries the `AppRoot` entry point, centralized `services/api.ts`, constants synced with the backend, Vite commands, and the FAKE/LOCAL/OIDC auth flows.
 
 **When to use**: Any new page, component, form, or frontend hook.
 
@@ -623,7 +623,7 @@ Scoped `.instructions.md` files automatically applied by Copilot when matching f
 |---|---|---|
 | `domain-model.instructions.md` | `backend/**`, `frontend/**`, `alembic/**`, `tests/**` | Product & domain reference — core concepts, RBAC, all entities + relationships, API surface, agent execution flow, memory, client deployment, env vars. Extracted from `copilot-instructions.md` so the heavy catalog loads only when implementing, not on every triage/planning/release call. |
 | `backend-conventions.instructions.md` | `backend/**` | Layered architecture, real file paths, key utilities (`vector_store_factory`, `embeddingTools`, `langsmith_config`), `AICT_LOGIN` auth modes, tenant scoping with `@require_min_role`, memory thread-ID format, Poetry usage |
-| `react-conventions.instructions.md` | `frontend/**` | Library + per-client (`clients/<name>/`) extension model, `ExtensibleBaseApp`, centralized `services/api.ts`, constants synced with backend, Vite commands, Tailwind dark mode + a11y |
+| `react-conventions.instructions.md` | `frontend/**` | `AppRoot`, centralized `services/api.ts`, constants synced with backend, Vite commands, Tailwind dark mode + a11y |
 | `testing-conventions.instructions.md` | `tests/**` | Savepoint-based transactional isolation, full fixtures map, factory-boy setup, test DB on port 5433, CI workflow, mocking patterns |
 | `alembic.instructions.md` | `alembic/**` | Migration naming (PascalCase entities, snake_case junctions), model registry in `backend/models/__init__.py`, ignored tables filter, round-trip downgrade test |
 | `git-github.instructions.md` | `**` (global) | branch naming, Conventional Commits, remote config (`origin` / `gitlab` / `mattinai`), `gh --body-file` rule |
@@ -691,7 +691,7 @@ The authoritative reference for the entire repository. Contains:
 - **Domain model**: all core entities (App, User, Agent, Silo, Repository, Domain, etc.) and their relationships
 - **API surface**: `/internal`, `/public/v1`, `/mcp/v1` route conventions
 - **Agent execution flow**: memory management, RAG retrieval, LLM call chain
-- **Client deployment model**: reusable npm library pattern
+- **Frontend deployment**: single SPA shipped as a Docker image
 - **Code style**: Python snake_case, TypeScript PascalCase, Conventional Commits
 - **Key user workflows**: 10 documented end-to-end scenarios
 

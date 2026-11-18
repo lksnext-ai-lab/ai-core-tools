@@ -357,7 +357,7 @@ jobs:
           name: coverage-report-middlewares
 
       # node_modules lets the TypeScript analyzer resolve types (React, etc.).
-      # --ignore-scripts skips "prepare", which would build the whole library.
+      # --ignore-scripts skips lifecycle scripts; only the installed types are needed.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
