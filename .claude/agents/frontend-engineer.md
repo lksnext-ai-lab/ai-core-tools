@@ -1,7 +1,7 @@
 ---
 name: frontend-engineer
 user-invocable: false
-description: Senior React 19 / TypeScript engineer for the Mattin AI frontend library. Use to build or modify pages, components, hooks, and contexts with Tailwind, dark mode, and accessibility. Does not run git.
+description: Senior React 19 / TypeScript engineer for the Mattin AI frontend. Use to build or modify pages, components, hooks, and contexts with Tailwind, dark mode, and accessibility. Does not run git.
 tools: [Read, Write, Edit, Glob, Grep, Bash, mcp__claude_ai_Context7__resolve-library-id, mcp__claude_ai_Context7__query-docs]
 model: sonnet
 color: green
