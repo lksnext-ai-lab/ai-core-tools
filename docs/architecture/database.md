@@ -455,7 +455,7 @@ Provides common fields and methods for AIService and EmbeddingService.
 
 ### App Chat tables
 
-Added by migration `ichat001` (`ichat002` adds the columns noted below and `ichat002`/`ichat003` add columns to the `App` table above). Details and delete rules: [App Chat](../ai/app-chat.md#defaults-and-conversation-state); code interpreter: [App Chat](../ai/app-chat.md#code-interpreter).
+Added by migration `ichat001` (`ichat002` adds the columns noted below and `ichat002`/`ichat003` add columns to the `App` table above; `ichat004` adds two indexes to `"Conversation"`, listed after the tables). Details and delete rules: [App Chat](../ai/app-chat.md#defaults-and-conversation-state); code interpreter: [App Chat](../ai/app-chat.md#code-interpreter).
 
 **`conversation_turn`** — snapshot of the configuration of each assistant message.
 
@@ -477,6 +477,13 @@ Added by migration `ichat001` (`ichat002` adds the columns noted below and `icha
 **`chat_conversation_state`** — PK `conversation_id` (CASCADE): `app_id` (CASCADE), `selection` (JSON), `generation` (Integer, bumped by reset), `updated_at`, plus (`ichat002`) `busy_token` (UUID, nullable) and `busy_until` (timestamptz, nullable): the "turn in flight" marker, which expires by itself.
 
 Temporary conversation silos live in `Repository` rows of type `playground_media`. The partial index `ix_Repository_silo_id_temp` on `Repository(silo_id) WHERE type = 'playground_media'` (`ichat002`) serves the rule that hides them from lists, exports and "used by" views.
+
+Indexes of `"Conversation"` added by `ichat004` (plain `CREATE INDEX IF NOT EXISTS`, see [App Chat](../ai/app-chat.md#migrations-ichat001-to-ichat004)):
+
+| Index | Columns | Serves |
+|-------|---------|--------|
+| `ix_conversation_agent_user_updated` | `(agent_id, user_id, updated_at DESC)` | A user's conversation list of the shared internal agent, newest first |
+| `ix_conversation_agent_api_key_hash` | `(agent_id, api_key_hash)` | The API-key conversation lookup |
 
 ### Media
 

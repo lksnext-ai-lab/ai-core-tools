@@ -241,6 +241,37 @@ navigationProps: {
 }
 ```
 
+## Migration Notes: App Chat
+
+Every client project gets the [App Chat](../ai/app-chat.md) after `npm install` of the new library version; no code change is needed. What to know when you update:
+
+**Routes and menu**
+- New routes `/apps/:appId/chat` and `/apps/:appId/chat/:conversationId` and a "Chat" menu entry in the App navigation.
+- To hide the entry: `navigation: { remove: ['/apps/:appId/chat'] }` (see [Navigation Customization](#navigation-customization)). It removes the **menu only**: the page stays reachable by URL and the server has no switch, so every App member can still use the Chat endpoints.
+- `AppChatPage` and `SidePanel` are not exported from `index.ts`; the Chat is reached only through the library routes.
+
+**Translations** (library `common` namespace, `frontend/src/i18n/locales/{en,es}/common.json`)
+- New `appChat.*` keys; additions under `conversationSidebar.*` and `agentPlayground.chat.*`; a new top-level `confirm` key. If your project overrides or replaces the library's locale resources, add them.
+
+**App settings**
+- New fields `default_embedding_service_id` and `chat_code_interpreter_enabled` in the App read/update API and on the App settings page.
+- **Administrators can now edit the App settings** (previously only the owner). The LangSmith API key stays owner-only (read-only for administrators; omitting it keeps it).
+
+**Release note for API consumers**
+- The public/playground file and chat endpoints now return **404** for a `conversation_id` that is not numeric or not owned by the caller (same user, or same API key).
+- The App Chat is internal-API only (`/internal/apps/{app_id}/chat/...`).
+
+**Backend and Docker**
+- Chat environment variables (all optional): `AICT_CHAT_RECURSION_LIMIT`, `AICT_AGENT_RECURSION_LIMIT`, `CHAT_MAX_FILES_PER_TURN`, `ATTACHMENT_INDEXING_TURN_BUDGET_S`, and the `SANDBOX_*` limits of the code interpreter. See [Environment Variables](../reference/environment-variables.md).
+- Docker: the `opensandbox` compose profile now **requires `OPENSANDBOX_API_KEY`** (at least 32 characters; the service refuses to start without it). Without the profile the code interpreter degrades per turn instead of failing. See [Environment Variables](../reference/environment-variables.md#sandbox-providers).
+- Database: migrations `ichat001` to `ichat004` (run by the backend at start). See [App Chat, Operations](../ai/app-chat.md#migrations-ichat001-to-ichat004) before rolling back.
+
+**Shared components with changed accessibility behaviour** (they affect your pages too if you use them)
+- `SidePanel`: acts as a modal dialog (focus moves in, Tab wraps, the rest of the page is `inert` while open, Esc closes, focus returns to the opener).
+- `Alert`: exposes `role="alert"` for error/warning and `role="status"` otherwise (no explicit `aria-live`); the optional `polite` prop makes error/warning polite.
+- `ConfirmationModal`: its default button labels are translated (`cancel`, `confirm`).
+- A global `prefers-reduced-motion` rule in `index.css` shortens animations and transitions for users who ask for reduced motion.
+
 ## Custom Pages & Components
 
 ### Adding a Custom Page

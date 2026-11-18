@@ -78,16 +78,33 @@ If the App does not allow it, skills with scripts still load but their scripts d
 - If you switch to another conversation while an answer is being written, the answer is still completed and is there when you come back.
 - A conversation answers **one message at a time**. If you send another while the previous one is still being answered (for example from a second tab), the message is not sent and your text stays in the message box; wait for the answer to finish and send it again.
 - Deleting or resetting a conversation also removes its attached files and their temporary knowledge base. If your user account is deleted, so are your Chat conversations and files.
+- **Leaving an App, or being removed from it, deletes your Chat conversations and files in that App.** The leave confirmation does not mention this, so export anything you need before you leave. Your Chat data in other Apps, and other members' data, are not touched. The owner cannot leave their own App.
+- **Reset asks for confirmation** before it forgets the history.
+- If a long task uses up the steps the assistant is allowed to take, the message ends with "The assistant ran out of steps before finishing". Your conversation and the files created so far are kept: write "continue" and it carries on. At most 10 files can be sent with one message (the default; the platform operator can change it). Beyond that the Chat shows "Too many files in one message. Send fewer files at a time.", your typed text goes back to the message box and the files stay attached.
+
+## Using the Chat with a keyboard or a screen reader
+
+- **Esc** stops a running answer. When you send a message, keyboard focus moves to **Stop generating**; when the answer ends, focus returns to the message box (unless you moved it elsewhere on purpose).
+- A screen reader hears one short status when the assistant starts answering and one when the answer is ready (or failed, or the conversation was reset). The text being streamed is **not** read out while it is written; read the answer once it is complete. Each message is prefixed with who wrote it.
+- The **Conversations** panel behaves as a modal dialog: focus moves into it, the rest of the page is inert, Tab stays inside it, Esc closes it and focus goes back to the button that opened it.
+- Animations are reduced when your system asks for reduced motion.
 
 ## Privacy
 
-- **Your conversations are private to you.** Other members of the App, including administrators, owners and platform administrators, cannot read your Chat conversations or files through the platform. One exception to know about: if the App allows running code and uses a self-hosted OpenSandbox server, other members' code can reach your sandbox (see [For administrators](#for-administrators)).
-- Chat conversations never appear in the Agents list, in the Marketplace, in exports, or through the public API, MCP or A2A.
-- When something fails, the platform's logs and the metrics dashboard record only the kind of error and an identifier, not what you wrote or the provider's error text.
-- If your App has **LangSmith** tracing enabled, your Chat messages are sent to the App's LangSmith project, like those of any agent. Only the App owner can change the LangSmith key, so the owner controls where that goes.
-- If the App has a **Default embedding service**, the files you attach are sent to that embedding provider (it can be a platform-wide service) and their text chunks are stored in the App's vector database until the conversation is reset or deleted.
-- If the App allows [running code](#running-code), the code the model writes and the files you attach in that message run in a sandbox of the App's sandbox provider (or the platform's system default one).
-- When you select an **MCP** server that connects by URL, your sign-in token is sent to it so it can identify you, as in the Playground. Only select servers you trust.
+What the Chat does guarantee: **your conversations are private to you at the database and API level.** Other members of the App, including administrators, owners and platform administrators using the Chat, cannot read, list or delete your Chat conversations or files through the platform. Chat conversations never appear in the Agents list, in the Marketplace, in exports, or through the public API, MCP or A2A.
+
+What it does **not** guarantee: it is not a technical protection against the people who run the App or the platform. App administrators and platform operators decide which AI-service and embedding endpoints, MCP server URLs and skills the Chat can use, and which LangSmith project traces it, so they can point them at services that receive your content. In `LOCAL` sign-in mode, platform administrators can also set a user's password through the admin set-password flow. Treat the Chat as a normal work tool, not a confidential channel from your administrators.
+
+Where your content can go:
+
+- **The model providers** of the AI services you select.
+- **The embedding provider**, if the App has a **Default embedding service**: the files you attach are sent to it (it can be a platform-wide service) and their text chunks are stored in the App's vector database until the conversation is reset or deleted.
+- **MCP servers** you select. When you select an MCP server that connects by URL, your sign-in token is sent to it so it can identify you, as in the Playground. Only select servers you trust.
+- **LangSmith**, if the App has tracing enabled: your Chat messages are sent to the App's LangSmith project, like those of any agent. Only the App owner can change the App's LangSmith key; the platform operator can also configure a global fallback.
+- **The sandbox provider**, if the App allows [running code](#running-code): the code the model writes and the files you attach in that message run in a sandbox of the App's sandbox provider (or the platform's system default one). With a self-hosted OpenSandbox server, other members' code can reach your sandbox (see [For administrators](#for-administrators)).
+- **Image links.** When your images are sent to the model as links, those links do not expire and every provider the conversation used keeps them. Deleting or resetting the conversation, or removing you from the App, deletes the file and so makes the links useless.
+
+When something fails, the platform's failure logs and the metrics dashboard record only the kind of error and an identifier, not what you wrote or the provider's error text. This covers failure logs and metrics only: other log lines on success can contain file names.
 
 ## Warnings and messages
 
@@ -103,6 +120,7 @@ If the App does not allow it, skills with scripts still load but their scripts d
 | "Sending is disabled: ..." | There is no usable model, or none selected. Select one |
 | "Code cannot be run in this chat" | Skills with scripts load, but their scripts will not run: running code is turned off for the App (shown only once a skill is selected), its sandbox service has reached end of service, or its provider is not allowed on this installation. See [Running code](#running-code) |
 | "N files created by the code could not be delivered (size, number or time limit)" | Some result files were over the limits and were skipped. The answer itself is complete |
+| "The assistant ran out of steps before finishing. Your conversation and any files created so far were kept: write "continue" to let it carry on." | The message used up the steps the assistant may take. Nothing is lost: write "continue" |
 
 ## What the Chat does not do
 
@@ -121,6 +139,9 @@ If the App does not allow it, skills with scripts still load but their scripts d
   - A member can still exhaust the backend's memory (a sandbox with a huge number of files, or a command that prints without end) or fill the sandbox host's disk. This is a known, accepted risk, tracked as a follow-up.
   - The limits on live sandboxes (3 per user, 10 per App) are counted per backend process, not across all workers. The 5 executions per message and the result-file limits apply per message.
   - If the system default is not running (for example the OpenSandbox profile is not started), the Chat does not show a warning: the model still gets the code tools, the first call returns an error and the answer is written without code. The App's default sandbox service shows up in **Used by** and in end-of-service warnings. See [Knowledge Base AI Services](kb-ai-services.md#service-end-of-service).
+- **Choose trusted sources, MCP servers and skills.** In every Chat the model has a tool that downloads a URL into its working directory, with no approval step. A malicious instruction hidden in a document, an MCP result, an uploaded file or a skill (a prompt injection) can make the model send conversation text to a public web address. This is a known and accepted risk; the only mitigation is to make selectable only sources, MCP servers and skills you trust. See [App Chat](../../ai/app-chat.md#accepted-risks-of-the-chat-in-addition-to-the-sandbox-ones).
+- **Privacy limits.** Members' conversations are private from other members and administrators through the platform, but you (and the platform operator) control the AI, embedding and MCP endpoints and the LangSmith project that receive their content. Do not describe the Chat to members as confidential from administrators.
+- **Removing a member** from the App deletes that member's Chat conversations and files in the App (the same when they leave). The removal confirmation in the interface does not say so.
 - **App settings permissions.** Administrators and the owner can save the App settings. Only the owner can change or clear the LangSmith key (it is read-only for administrators). Deleting the App, transferring ownership and managing collaborators are unchanged.
 - Temporary knowledge bases of conversations do not appear in the silo, repository or output-parser lists and do not count against the plan's silo limit.
 - Models, sources and skills appear in the selector according to what exists in the App. A frozen App (after a plan downgrade) accepts no new Chat messages or uploads; existing conversations can still be read and deleted.

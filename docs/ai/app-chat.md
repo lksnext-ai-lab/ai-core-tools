@@ -19,9 +19,9 @@ Technically it is a *hidden internal agent per App* plus a *per-request configur
 | API | `/internal/apps/{app_id}/chat/...` (internal API only) |
 | Router | `backend/routers/internal/internal_chat.py` |
 | Service | `backend/services/internal_chat/` (`chat_service.py`, `selection_resolver.py`, `resolved_config.py`) |
-| Migrations | `ichat001`, `ichat002`, `ichat003` |
+| Migrations | `ichat001`, `ichat002`, `ichat003`, `ichat004` |
 | Metrics channel | `INTERNAL_CHAT` |
-| Env vars | none for the Chat itself; `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` (embedding client timeout) and the `SANDBOX_*` variables of the [code interpreter](#code-interpreter), see [Operations](#operations) |
+| Env vars | `AICT_CHAT_RECURSION_LIMIT` ([step limit](#step-limit)), `CHAT_MAX_FILES_PER_TURN` and `ATTACHMENT_INDEXING_TURN_BUDGET_S` ([attachments per turn](#attachment-indexing)); also `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` (embedding client timeout) and the `SANDBOX_*` variables of the [code interpreter](#code-interpreter), see [Operations](#operations) |
 
 ## The hidden internal agent
 
@@ -146,7 +146,7 @@ What the Chat page shows (`codeInterpreterNotice` in `frontend/src/components/ch
 
 - **One sandbox per conversation**, key `conv_{agent_id}_{conversation_id}`, the platform never shares a sandbox key between conversations or users (for OpenSandbox, see accepted risk 1 below). The key is asserted in `_prepare_turn` (`InternalChatSessionError` otherwise).
 - Open to **every member of the App, Viewers included**. There is no approval before code runs: the Chat cannot ask (see [Behaviours and limits](#behaviours-and-limits)).
-- Created lazily at the first tool call of a turn. Destroyed when the conversation is **reset**, **deleted** or the **user is deleted** (`internal_chat/user_cleanup.py`).
+- Created lazily at the first tool call of a turn. Destroyed when the conversation is **reset**, **deleted**, the **user is deleted** or the member is **removed from / leaves the App** (`internal_chat/user_cleanup.py`).
 - Skills with bundled scripts always load in the Chat; their scripts run only when the interpreter is on.
 - A cached sandbox keeps the service it was created with until it expires or the conversation is reset, except that a change of the App default (App default <-> system default, or another provider) is detected on the next turn and the old sandbox is destroyed and recreated.
 
@@ -255,6 +255,40 @@ Reset rotates the conversation's `session_id` (new LangGraph thread) and bumps `
 
 Repository methods: `claim_busy`, `renew_busy`, `release_busy` in `backend/repositories/internal_chat_repository.py`. A lock timeout while claiming is also answered as busy.
 
+**Lost marker.** The turn renews the marker before the model runs and during its slow steps. If the renewal finds the marker gone (someone else may now be running the conversation), the turn aborts with the same **409** `CONVERSATION_BUSY` (`Retry-After: 5` on `/messages`; SSE `error` event `conversation_busy` on `/stream`) instead of continuing (`InternalChatService.renew_turn`).
+
+**Database connection.** The request's pooled connection is released before the slow waits (file processing and attachment indexing, the model run, and the destroy/listing awaits of delete and reset), so a slow turn does not hold a connection (`InternalChatService._release_db_connection`).
+
+#### Step limit
+
+Every model call and every tool call is a graph step. A turn that exhausts its steps ends with the error `STEP_LIMIT_REACHED` instead of an answer.
+
+| Setting | Default | Applies to |
+|---------|---------|------------|
+| `AICT_CHAT_RECURSION_LIMIT` | `100` | Chat turns only (they retrieve knowledge, load skills and run code, so they spend more steps) |
+| `AICT_AGENT_RECURSION_LIMIT` | `50` | Every other agent run (playground, public API, ...) |
+
+Both are read once at startup (`backend/tools/agentTools.py`); a value that is not an integer or is below 1 logs a warning and falls back to the default.
+
+**Sizing.** The Chat's middleware chain costs about 3 graph steps per model call that uses tools, so `AICT_CHAT_RECURSION_LIMIT=100` allows about **33** tool-using model calls per turn, and the agent default of 50 about **16**. Tests cut a turn at both points of the graph (right after the model node and right after the tools node) with parallel tool calls: the next turn answers every tool call once and no pending tool runs silently (`test_chat_step_limit.py`).
+
+| Route | Result |
+|-------|--------|
+| `POST /messages` | HTTP **422** `{detail, error_code: "STEP_LIMIT_REACHED"}` |
+| `POST /stream` | SSE `error` event `{message, code: "step_limit_reached"}` |
+
+The text is fixed (never built from the exception). What the Chat does with such a turn:
+
+- **Keeps** the conversation (even one created by that very request), its checkpoint, its files and its sandbox, and releases the busy marker.
+- Writes **no turn row** (`conversation_turn`) and no assistant message.
+- Runs the bounded [output pull](#output-files) itself, so the files the code already generated are delivered and listed.
+- The user can write a follow-up such as "continue": the next turn works on the same checkpoint (covered by tests on both routes).
+- Metrics record the error code `STEP_LIMIT_REACHED`.
+
+On the Chat page the error is shown translated (`appChat.transportErrors.stepLimitReached` in the frontend locale files, "write continue to let it carry on").
+
+Logs: every tool call of a Chat turn writes one INFO line, `chat tool=<name> n=<i> outcome=<ok|error:<Class>> ms=<d> conversation_id=<id> turn=<corr>` (`backend/tools/middleware/chat_tool_log.py`; no arguments, no content), and reaching the limit writes one summary line with the number of model calls and tool calls per tool. The playground and the public API are unchanged: they still surface the same `GraphRecursionError` through their generic error handling.
+
 **SSE events** (`data: {"type": ..., "data": {...}}`; lines starting with `:` are heartbeats):
 
 | Event | Content |
@@ -263,7 +297,7 @@ Repository methods: `claim_busy`, `renew_busy`, `release_busy` in `backend/repos
 | `token` | `{content}` text chunk |
 | `tool_start`, `tool_end` | Tool activity |
 | `done` | `{response, conversation_id, files, status: "completed", assistant_message_id, turn}`. `turn` is the `ChatTurnInfo` snapshot (`turn_index`, `ai_service_*`, `silo_*`, `skills`, `mcp_configs`, `created_at`, `warnings`) or `null` if it could not be persisted (the answer is still valid). `turn.warnings` also reports selected MCP configs whose tools failed to load, and `{kind: "sandbox_output", id: <count>}` when output files of the code could not be delivered (`id` is a count of files) |
-| `error` | `{message}`; for a retired service `{message, code: "service_retired"}` |
+| `error` | `{message}`; for a retired service `{message, code: "service_retired"}`; for a lost busy marker `{message, code: "conversation_busy"}`; at the step limit `{message, code: "step_limit_reached"}` (see [Step limit](#step-limit)) |
 
 If the first turn of a conversation created by that very request fails before answering, the empty conversation is removed before the `error` event is delivered.
 
@@ -294,7 +328,8 @@ Details (`backend/services/chat_attachment_service.py`, `chat_service.py`):
 - **Temp silo.** One per conversation, created with the default at the time of the first indexed upload. If the App default changes later, the conversation's silo keeps the service it was created with (a collection never mixes embedding models).
 - **Off the request.** Indexing runs in a small dedicated thread pool on its own database session, with a **60 s** limit per file and at most **2 concurrent jobs per embedding service** (jobs over the cap are not queued). On timeout, provider error, retired service or the cap, the upload still succeeds, the file is kept and `vectorized` is `false`: it is sent whole. A timed-out job cannot be killed; it keeps its slot until it returns.
 - **Files sent with a turn.** Files in the `files[]` form field of `/stream` or `/messages` are indexed only if the conversation already has a temp silo; otherwise they are sent whole. The UI always uploads first.
-- **Removal.** The temp silo, its repository and vectors are removed when the conversation is deleted or reset and when the user is deleted (their Chat conversations, files, temp silos and threads go with them). A periodic sweep in the file cleanup worker (`sweep_orphan_chat_temp_repositories`, repositories older than 15 minutes, 20 per pass) removes temp repositories of internal-chat conversations that no longer exist.
+- **Per-turn bounds.** `CHAT_MAX_FILES_PER_TURN` (default `10`, `0` = unlimited): one message may carry at most this many files, counting new uploads plus `file_references`; beyond it the request is a **422** `{detail, error_code: "TOO_MANY_FILES"}` (on `/messages` and on `/stream`) before anything is claimed or written. The Chat page shows `appChat.transportErrors.tooManyFiles`, the typed text returns to the message box and the files stay attached. `ATTACHMENT_INDEXING_TURN_BUDGET_S` (default `120`, `0` = unlimited): total time the indexing of one turn's files may take, in addition to the 60 s per file; keep it well below `AICT_AGENT_RUN_TIMEOUT_SECONDS`. Files over the budget are sent whole. The request's database connection is released before indexing waits and the files are committed first, so slow indexing holds no pooled connection.
+- **Removal.** The temp silo, its repository and vectors are removed when the conversation is deleted or reset, when the user is deleted (their Chat conversations, files, temp silos and threads go with them) and when the member is removed from the App or leaves it (see [Member removal](#member-removal)). A periodic sweep in the file cleanup worker (`sweep_orphan_chat_temp_repositories`, repositories older than 15 minutes, 20 per pass) removes temp repositories of internal-chat conversations that no longer exist. It matches the repository name against the exact prefix `_playground_{agent_id}_` (`left(name, length(prefix)) = prefix`, not `LIKE`, because `_` is a `LIKE` wildcard: agent 3 would otherwise also match agents 30-39, 300-399, ...).
 - **Privacy.** With a default embedding service set, every member's Chat attachments are sent to that embedding provider (which can be a platform-wide system service), and their chunks are stored in the App's vector database until the conversation is reset or deleted.
 - **Lifecycle.** An embedding service used as an App default appears in its "used by" view (`apps_using_as_default`) and in lifecycle warnings (`warnings_for_app`, `via: "app default"`).
 
@@ -308,6 +343,8 @@ Details (`backend/services/chat_attachment_service.py`, `chat_service.py`):
 | 409 | `/stream`, `/messages`: a turn of this conversation is still in flight. Header `Retry-After: 5`; nothing is written | `{detail, error_code: "CONVERSATION_BUSY"}` |
 | 413 | `/stream`, `/messages` and the file upload: request body larger than the App's file size limit (`max_file_size_mb`; 0 = unlimited; checked from `Content-Length` by `enforce_file_size_limit`) | `{detail}` |
 | 422 | Malformed JSON in `selection`, `file_references` or `search_params`; invalid body | `{detail}` (the input is never echoed) |
+| 422 | `/stream`, `/messages`: more files in one message than `CHAT_MAX_FILES_PER_TURN` (uploads + references). Raised before any claim or stream starts, so on `/stream` it is a plain HTTP 422 body, not an SSE event | `{detail: "Too many files in one message (maximum N)", error_code: "TOO_MANY_FILES"}` |
+| 422 | `/messages`: the turn ran out of steps ([Step limit](#step-limit)); the conversation is kept | `{detail, error_code: "STEP_LIMIT_REACHED"}` |
 
 A frozen App (tier downgrade) keeps existing conversations listable, readable, renamable and deletable, and file list/delete/download work; it takes no new activity.
 
@@ -318,15 +355,45 @@ A frozen App (tier downgrade) keeps existing conversations listable, readable, r
 - A Chat conversation id does not work on the playground or the public API (404), and the Chat never falls back to the shared `default` session or the agent-wide thread.
 - The shared agent row is never written during a turn. Concurrent turns of different users with different selections run on independent configs.
 
+### Member removal
+
+When a collaborator is **removed** from an App or **leaves** it (`AppCollaborationService.remove_collaborator` / `leave_app_collaboration`), that member's Chat data **in that App** is deleted with the collaboration. It reuses the two phases of user deletion (`internal_chat/user_cleanup.py`, now with an `app_id`):
+
+1. In the same transaction as the removal: the member's Chat conversation rows of that App (state and turn rows go by foreign-key cascade).
+2. After the commit, best effort: temp silo, repository and vectors, sandbox, stored files and the LangGraph thread of each conversation.
+
+A failure of the cleanup is logged by class name and **never blocks the removal** (leftovers are then handled like those of an interrupted cleanup, see [Known limits](#known-limits)). The **owner cannot leave** their App (`App owners cannot leave their own apps`). The same user's Chat data in **other Apps**, and every other member's data, stay.
+
 ## Privacy of content
 
-For Chat turns, failure handling keeps message content out of the turn failure logs and out of the metrics error text:
+Privacy of the Chat is enforced at the **database and API level against other users of the platform**: another member, an App administrator, the owner or a platform administrator using the Chat cannot read or touch your conversations or files. It is **not** a technical guarantee against the people who configure the App or run the platform, because they control the endpoints a turn talks to:
+
+| Who | What they control | Consequence |
+|-----|-------------------|-------------|
+| App administrators and owners | AI-service and embedding endpoints, MCP configs and their URLs, skills | A model, embedding or MCP endpoint they point at receives what the turn sends. MCP servers selected by URL receive the member's sign-in token. A skill is text injected into the prompt |
+| App owner | The App's LangSmith API key | Chat prompts and answers are traced to that project |
+| Platform operator | Environment (LangSmith env fallback, system AI/sandbox services), the database, the host | Full access to everything stored |
+| Platform administrators in `LOCAL` auth mode | The admin set-password flow (an admin-triggered token the user, or whoever holds it, consumes to set the password) | A user's password can be set without the user, so the account can be taken over |
+
+Chat content can therefore reach: the **model providers** of the services used, the **embedding provider** (indexed attachments), **MCP servers** (selected tools), **LangSmith**, and the **sandbox provider** (code interpreter).
+
+For Chat turns, failure handling keeps message content out of the turn failure logs and out of the metrics error text. This covers **failure logs and metrics only**: some success-path INFO lines (for example file listings and file-registration messages in `file_management_service.py`) still contain file names.
 
 - **Turn failure logs** carry the exception class chain, `agent_id`, `conversation_id`, a short `correlation_id` and traceback frames (file, line, function), not the provider's error text nor `str(exc)`. Helper: `backend/utils/turn_failure_log.py`.
 - **Other warnings on the Chat path** are not covered by that helper. For example, when MCP tools are unavailable or time out, `backend/tools/agentTools.py` still logs the root cause, which can include server-side detail (such as an MCP server's address or error) but not the user's message.
 - **Metrics**: the error text is kept as is only for codes the platform builds itself (timeout, cancelled, service retired, `approval_*`). Otherwise the error dashboard stores the exception class chain with `correlation_id=<id>`, so an entry can be matched to its log line, or `<code> (details withheld)`. Tool-call errors are stored as `Tool error (details withheld)`.
 - Other channels (playground, public API, ...) log and record exactly as before.
 - With **LangSmith** enabled for the App, Chat prompts and answers are sent to the App's LangSmith project like any other agent run. The LangSmith API key can be changed only by the App owner, so the owner controls where Chat prompts are traced (see [App settings permissions](#app-settings-permissions)). Each trace carries selection metadata (`chat_app_id`, `chat_ai_service_*`, `chat_silo_*`, `chat_skill_*`, `chat_mcp_config_*`; ids and names only).
+
+### Image links
+
+When `AICT_BASE_URL` is set, the images of a Chat conversation are sent to the model as signed `/static` URLs (without it they are inlined as base64). For the Chat these URLs are signed with the opaque identity `chat-image`, so **no email** is in the URL, and the URL is never logged (only the file id). The signature is the legacy, non-expiring one **on purpose**: the URL is stored in the checkpoint and replayed to every later turn and provider, so an expiring one would break the history. Consequence: they are **bearer links that do not expire**, held by every model provider the conversation used, by LangSmith (if enabled) and by the checkpoint database. Deleting or resetting the conversation, removing the member from the App, or deleting the user deletes the file and so revokes them. Follow-up: inline base64 or re-signing at replay. The Chat system prompt no longer contains the server's working directory path (the workspace is described with relative paths).
+
+### Accepted risks of the Chat (in addition to the sandbox ones)
+
+- **URL download tool, always on, no approval.** Every Chat turn has the base tool `download_url_to_workspace`, whether or not the code interpreter is on, and the Chat cannot ask for approval. A prompt injection in a document, an MCP result, an upload or a skill can therefore make the model send conversation text to a public URL (for example in the query string of a GET). The tool validates the URL and each redirect against an SSRF guard (`utils/ssrf_guard.py`), but there is a DNS-rebinding window between that check and the request, and the request honours the environment's proxy settings (`requests`). The only mitigation is to choose trusted sources, MCP servers and skills.
+- Privacy is not a guarantee against administrators and operators (see above); success-path logs can contain file names.
+- Image links do not expire (see above).
 
 ## Behaviours and limits
 
@@ -349,7 +416,7 @@ For Chat turns, failure handling keeps message content out of the turn failure l
 - Uploaded originals under `data/tmp/conversations/` are not removed by the cleanup worker; for Chat uploads they are deleted with the file, on reset and on conversation delete (see [Attachment folders from older builds](#attachment-folders-from-older-builds)).
 - **Images and vision.** The platform has no per-model vision flag and the Chat never filters the history by capability. Once an image is attached, it is sent with every later turn (all the conversation's files are attached again unless the request sends `file_references=[]`, which the Chat page never does), so switching to a model without vision fails those turns (the provider rejects them; the user sees the generic error). Send an explicit empty file selection, or start a new conversation, to continue on such a model.
 - **Models without tool support.** Every Chat turn binds at least one base tool, so a model that cannot take tools fails every turn, even with no silo, skill or MCP selected.
-- **Images with `AICT_BASE_URL`.** When `AICT_BASE_URL` is set, images are sent as signed URLs. A "Custom" (Ollama) model probably cannot read them (inferred from the Ollama converter, which expects base64; not confirmed against a real Ollama).
+- **Images with `AICT_BASE_URL`.** When `AICT_BASE_URL` is set, images are sent as signed URLs that never expire (see [Image links](#image-links)). A "Custom" (Ollama) model probably cannot read them (inferred from the Ollama converter, which expects base64; not confirmed against a real Ollama).
 - **Small windows.** If the most recent 20 messages (`keep`) alone exceed a small model's window, the turn still fails; summarization cannot shrink them. Models without a profile (Ollama, Azure AI) use the 32k trigger even if their real context is smaller.
 - **Summary written, answer failed.** The summary is stored as its own step, so if the model call after it fails, the conversation's stored history is already compacted into that summary (the turn row and answer do not exist).
 - **User image marker.** In the history, a user message that had an inline (base64) image shows a raw `[IMAGE:<hash>]` marker: placeholders are resolved to images only for assistant messages (`conversation_service.py`), and the marker is shared with the playground.
@@ -372,9 +439,19 @@ For Chat turns, failure handling keeps message content out of the turn failure l
 - A hung output pull keeps its sandbox lease and one of the pull slots until the provider read returns.
 - **Nothing was verified against a real sandbox provider.** The tests use in-memory fake providers; the E2B private streaming client and the stop behaviour of OpenSandbox and Daytona streamed reads are only proven against fakes of the SDK shapes.
 
+### Known limits and follow-ups (release)
+
+- **Output-file caps apply to every agent channel**, not only the Chat: 20 files, 50 MB per file, 100 MB in total, a 20 s time budget and 2 concurrent pulls per process. A slow App can degrade others (shared pull slots; a pull that finds them busy is skipped at once). Non-Chat channels get no user-visible warning except `usage.outputs_skipped` (public API) / `outputs_skipped` in the SSE `done` event.
+- **Step limit.** A Chat turn that spends `AICT_CHAT_RECURSION_LIMIT` steps ends with `STEP_LIMIT_REACHED` and the user has to write "continue" (see [Step limit](#step-limit)); the playground and public API keep their generic error for the same condition.
+- **Summarization depends on private LangChain names.** The Chat's summarization middleware is a subclass that reads private names of the installed LangChain version. If they are missing it falls back to the plain library middleware with one warning (class name). The contract is checked by tests against the installed version (`test_summarization_contract.py`); re-run them on every LangChain bump.
+- **Unbounded growth of storage.** Checkpoints, `data/tmp/conversations` and sandbox outputs have no age-based sweep for the Chat. The operator must monitor disk, which on the single-host deployment is shared with PostgreSQL.
+- **No per-tenant isolation of the shared pools.** Attachment indexing and output pulls use shared slots, so one App or user can occupy them for others.
+- **Image links do not expire** and the Chat always has the URL download tool: see [Image links](#image-links) and [Accepted risks](#accepted-risks-of-the-chat-in-addition-to-the-sandbox-ones).
+- **Member removal leftovers.** The cleanup after a removal is best effort and never blocks it: if it fails, files, vectors or a sandbox of that member can stay behind, and nothing retries it (the orphan sweep only covers temp repositories of conversations that no longer exist).
+
 ## Behaviour change outside the Chat
 
-- Playground and public API file/chat endpoints now answer **404 `Conversation not found`** when given a `conversation_id` that is not the caller's for that agent (same user, or same API key). The check applies to agents with memory; for agents without memory the id is only a grouping label for ephemeral files. Previously a foreign id was accepted. Helper: `ChatAttachmentService.require_owned_conversation`.
+- Playground and public API file/chat endpoints now answer **404 `Conversation not found`** when given a `conversation_id` that is not numeric or not the caller's for that agent (same user, or same API key). **Release note for API consumers:** a client that sent an arbitrary string or a foreign id as `conversation_id` to these endpoints now gets 404. The check applies to agents with memory; for agents without memory the id is only a grouping label for ephemeral files. Previously a foreign id was accepted. Helper: `ChatAttachmentService.require_owned_conversation`.
 - **Temporary silos are hidden.** The temp silo of a conversation (playground and Chat), its repository (type `playground_media`) and its metadata output parser no longer appear in silo, repository or output-parser lists, pickers, exports or "used by" views, internal or public. Addressed by id they answer 404 like a missing one; a normal agent cannot be pointed at one; imports cannot bind to one by name; a repository cannot be created with the reserved type. API consumers that listed silos or repositories will no longer see them. The partial index `ix_Repository_silo_id_temp` (migration `ichat002`) serves the visibility lookup.
 
 ## App settings permissions
@@ -383,9 +460,20 @@ Administrators and above can now update the App settings (`PUT /internal/apps/{i
 
 ## Operations
 
-### Migrations `ichat001`, `ichat002` and `ichat003`
+### Migrations `ichat001` to `ichat004`
 
-All three are additive. `ichat001` revises `chatfiltmerge003`; `ichat002` revises `ichat001`; `ichat003` revises `ichat002` and is the current head.
+All four are additive. `ichat001` revises `chatfiltmerge003`; `ichat002` revises `ichat001`; `ichat003` revises `ichat002`; `ichat004` revises `ichat003` and is the current head.
+
+**`ichat004`**: two indexes on `"Conversation"`, created with a plain `CREATE INDEX IF NOT EXISTS` (the repository has no `CONCURRENTLY` pattern, so it takes a short write lock on the table): `ix_conversation_agent_user_updated` on `(agent_id, user_id, updated_at DESC)` (a user's conversation list of the shared internal agent, newest first) and `ix_conversation_agent_api_key_hash` on `(agent_id, api_key_hash)` (the API-key conversation lookup). The model declares both in `__table_args__`. Its downgrade drops both. **On a very large `"Conversation"` table**, create them by hand first without blocking writers, then upgrade (the `IF NOT EXISTS` makes the migration a no-op for them):
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_conversation_agent_user_updated
+  ON "Conversation" (agent_id, user_id, updated_at DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_conversation_agent_api_key_hash
+  ON "Conversation" (agent_id, api_key_hash);
+```
+
+(`CONCURRENTLY` cannot run inside a transaction block, and a failed run leaves an `INVALID` index under the same name: drop it before retrying, or `IF NOT EXISTS` will skip it.)
 
 **`ichat003`**: `App.chat_code_interpreter_enabled` (Boolean, NOT NULL, server default `false`). Existing Apps get `false`: no App runs code in the Chat until an administrator turns it on. Its downgrade drops the column, so the stored opt-ins are lost.
 
@@ -401,15 +489,39 @@ Rollout: deploy the backend before the frontend library; the menu entry appears 
 
 ### Rolling back
 
-Run the downgrade **before** rolling back the image; an older build does not know the new enum values or `Agent.kind`. Removing the three Chat migrations takes three steps back from `ichat003`:
+**The old image cannot start against a database at `ichat004` on its own.** `backend/Dockerfile` starts with `alembic upgrade head`, and Alembic fails on a revision it does not know. So a rollback is always: **downgrade first, then deploy the old image**. The downgrade must be run with the **new** image (it holds the revision files); an older build also does not know the new enum values or `Agent.kind`.
+
+What each step reverts:
 
 ```bash
+alembic downgrade ichat003           # reverts ichat004 (drops the two Conversation indexes)
 alembic downgrade ichat002           # reverts ichat003
 alembic downgrade ichat001           # reverts ichat002
 alembic downgrade chatfiltmerge003   # reverts ichat001
 ```
 
-(`alembic downgrade chatfiltmerge003` alone runs all three in order.) Downgrading `ichat003` drops the code interpreter opt-in of every App. Downgrading `ichat002` drops the busy markers (transient) and the Apps' default embedding service (configuration, lost: set it again after upgrading). The `ichat001` downgrade is destructive by design: it drops the three tables, deletes all Chat conversations and the internal agents (with their approvals and execution events), relabels remaining `agent_execution_event` rows from `INTERNAL_CHAT` to `INTERNAL_PLAYGROUND`, and recreates both enum types without the label. It rewrites `Conversation` and `agent_execution_event` under `ACCESS EXCLUSIVE` locks: use a maintenance window. It does not purge LangGraph checkpoint rows, uploaded files, or the temporary silos, `playground_media` repositories and vectors of the deleted conversations; they stay behind, are not reachable from the UI and are not removed by the orphan sweep (it needs the internal agent, which the downgrade deletes). Remove them by hand if needed.
+(`alembic downgrade chatfiltmerge003` alone runs all four in order.) Go as far back as the image you will deploy needs: an image that still contains `ichat003` needs only the first command; an image from before the Chat needs all of them.
+
+- `ichat004` downgrade: drops the two indexes (no data lost).
+- `ichat003` downgrade: drops the code interpreter opt-in of every App.
+- `ichat002` downgrade: drops the busy markers (transient) and the Apps' default embedding service (configuration, lost: set it again after upgrading).
+- `ichat001` downgrade is destructive by design. It drops the three tables, deletes all Chat conversations and the internal agents (with their approvals and execution events), relabels remaining `agent_execution_event` rows from `INTERNAL_CHAT` to `INTERNAL_PLAYGROUND`, and recreates both enum types without the label. It rewrites `Conversation` and `agent_execution_event` under `ACCESS EXCLUSIVE` locks: use a maintenance window. It also **purges what the internal agents left behind**, matched by the exact prefix of the internal agent's id (not `LIKE`): their temp `playground_media` repositories, the `Media`, `Resource` and `Folder` rows of those repositories, the temp silos, the metadata output parsers of those silos, the PGVector rows of the `silo_{id}` collections, the LangGraph checkpoint rows (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`), and the conversation and turn rows. The purge is idempotent. Checkpoints are deleted by **exact thread id**, built from the internal agents' `Conversation` rows (`thread_{agent}_{session}`) plus `thread_{agent}`; this uses the index and does not scan the large checkpoint tables under the locks. A checkpoint thread whose `Conversation` row was already gone **is left behind** (there is no index-friendly way to find it); it is unreachable for the old code.
+
+Runbook:
+
+1. Take a database backup and open a maintenance window; stop the backend.
+2. Record the ids you will need for the file cleanup (step 7), because the downgrade deletes the rows that hold them:
+   ```sql
+   SELECT conversation_id FROM "Conversation" WHERE source = 'INTERNAL_CHAT';
+   SELECT agent_id, app_id FROM "Agent" WHERE kind = 'internal_chat';
+   ```
+3. If any temp silo of the internal agents is stored in **Qdrant**, delete its collection (`silo_{id}`) first. The `ichat001` downgrade **refuses** in that case: it raises `RuntimeError` naming the silos and changes nothing; after the cleanup, run the downgrade again.
+4. Run the downgrade with the new image, as far back as needed (commands above).
+5. Deploy the old image.
+6. Checkpoint threads whose `Conversation` row was already gone before the downgrade stay in the checkpoint tables (the downgrade does not scan them). They are unreachable for the old code; if you remove them by hand, match the thread id exactly, never with a `LIKE` on `thread_{id}_` (`_` is a wildcard and would also hit other agents' ids).
+7. **Files on disk are not removed by the downgrade.** Remove `data/tmp/conversations/{conversation_id}/` for each recorded conversation id and `data/tmp/persistent/agent_{internal_agent_id}_...` for each internal agent id by hand.
+
+What is verified and what is not: the purge, the refusal on Qdrant and the add/drop of the `ichat004` indexes are covered by `tests/integration/test_ichat004_migration.py` (three tests, on an ephemeral test database, including that only the internal agents' leftovers are removed). Not verified: the downgrade on a real production database (volume, lock duration, a real Qdrant), and the old image started against the downgraded database.
 
 ### Attachment folders from older builds
 
@@ -430,6 +542,10 @@ One-off cleanup (optional): inspect `data/tmp/conversations/*` of deployments th
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` | `120` | Client-side timeout of embedding calls (read when the client is built; retries are not changed). Applied to OpenAI, MistralAI, Custom/HuggingFace, Ollama and AWS Bedrock embedding clients. **Not** applied to Azure AI and Google (AI Studio and Vertex AI), whose clients expose no timeout. Source: `backend/tools/embeddingTools.py` |
+| `AICT_CHAT_RECURSION_LIMIT` | `100` | Graph step limit of a Chat turn only; invalid or below 1 falls back to the default with a warning. See [Step limit](#step-limit) |
+| `AICT_AGENT_RECURSION_LIMIT` | `50` | Graph step limit of every other agent run (same fallback rule). Existed before, undocumented |
+| `CHAT_MAX_FILES_PER_TURN` | `10` | Files (uploads + references) per Chat message; `0` = unlimited; HTTP 422 `TOO_MANY_FILES` beyond it (`/messages` and `/stream`) |
+| `ATTACHMENT_INDEXING_TURN_BUDGET_S` | `120` | Seconds of indexing allowed per Chat turn; `0` = unlimited; keep well below `AICT_AGENT_RUN_TIMEOUT_SECONDS` |
 | `SANDBOX_MAX_SESSIONS_PER_USER`, `SANDBOX_MAX_SESSIONS_PER_APP`, `SANDBOX_EVICT_MIN_IDLE_S`, `SANDBOX_CHAT_BASH_MAX_TIMEOUT_S` | `3`, `10`, `60`, `60` | **Chat only** limits, see [Limits](#limits-chat-only). The two session limits are per backend process |
 | `SANDBOX_MAX_EXECUTIONS_PER_TURN` | `5` | Per turn. Applies to agents (REPL executions) and to the Chat (REPL and `Bash` share it); `0` refuses every execution |
 | `SANDBOX_PULL_MAX_FILES`, `SANDBOX_PULL_MAX_FILE_BYTES`, `SANDBOX_PULL_MAX_TOTAL_BYTES`, `SANDBOX_PULL_TIME_BUDGET_S`, `SANDBOX_PULL_MAX_CONCURRENT` | `20`, `52428800`, `104857600`, `20`, `2` | Output file delivery (agents and Chat), see [Output files](#output-files) |
@@ -458,6 +574,7 @@ This removes the **menu entry only**. The routes `/apps/:appId/chat` and `/apps/
 - Model switch: `test_chat_model_switch.py` switches provider, service and model between turns of one conversation (summarization, small windows, images, tools, retired models, failure paths, the stamp). It runs the router, services, real checkpointer, real `SummarizationMiddleware`, the real normaliser and PostgreSQL; only the LLM boundary is replaced by `_provider_sim.py`, subclasses of the real LangChain model classes that validate the request with each provider's own installed converter and answer with the message shapes the real adapters produce. **No real provider API is called**: "accepted" means the installed converter takes the messages and tool calls are paired, not that the API would. Capability, context-window and error rejections are hand-written rules. Unit tests: `tests/unit/tools/middleware/test_history_normalizer.py` and `test_summary_input_bound.py`.
 - Temp silo visibility: `test_chat_temp_silo_visibility.py` includes a **route-enumeration guard**. A new route that takes a silo or repository id must pass it (hidden temp silos answer 404 like a missing one).
 - Code interpreter: `test_chat_code_interpreter.py` (router, service, resolver, execution/streaming, session service, skill loader and PostgreSQL are real; only the LLM and the sandbox **provider class** are in-memory fakes). Unit files: `test_sandbox_output_pull.py`, `test_sandbox_session_limits.py`, `test_sandbox_bounded_read.py`, `test_chat_turn_sandbox_lease.py`, `test_outputs_skipped_metadata.py`, `test_resolved_config_code_interpreter.py`. The App switch API is covered by the integration file `tests/integration/routers/internal/test_app_chat_code_interpreter_switch.py`. **No real sandbox provider is called.** Details per file: [Testing Guide](../testing/README.md#chat-tests-and-langgraph-checkpoints).
+- Step limit, removal and migrations: `test_chat_step_limit.py` (both routes; conversation kept, next turn continues, the agent limit is not used by the Chat, tool-call log lines carry names and outcomes only), `test_orphan_sweep_exact_prefix.py`, `test_collaborator_removal_cleanup.py` (removed/left member's data of that App gone, others untouched, a cleanup failure never fails the removal), `tests/integration/test_ichat004_migration.py`, `tests/unit/tools/middleware/test_summarization_contract.py`. Details: [Testing Guide](../testing/README.md#chat-tests-and-langgraph-checkpoints).
 - Query budget: `test_chat_query_budget.py` counts the SQL statements of the listing/options endpoints and of a whole turn (no N+1, absolute ceiling).
 - Frontend: Vitest + Testing Library render tests in `frontend/tests/ui` (`npm run test:ui`).
 

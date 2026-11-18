@@ -109,6 +109,11 @@ npm test            # node --test + type check (test:types) + Vitest
 npm run test:ui     # Vitest render tests only
 ```
 
+Chat accessibility tests (render tests in `frontend/tests/ui/`):
+
+- `ChatAccessibility.test.tsx`: keyboard operation (focus moves to Stop when a turn starts and Esc stops it, unless an inner layer already used the key), one status announcement per turn (never the streamed text), speaker prefixes for screen readers, the conversations panel as a modal dialog (focus in, page inert, Tab wraps, focus restored), reset asking for confirmation, and the Spanish wording of the new texts.
+- `ChatAxe.test.tsx`: runs `axe` (the `vitest-axe` dev dependency) on the Chat with the conversations panel closed and open. The `color-contrast` and `region` rules are **turned off** because jsdom has no layout, so they cannot be evaluated there; contrast must be checked in a real browser.
+
 ### Chat tests and LangGraph checkpoints
 
 Backend tests of the App Chat live in `tests/integration/internal_chat/`, with the shared fakes (LLM, retriever, MCP client, metrics write) and world fixture in `_chat_support.py`. The LangGraph checkpoint tables are not part of `Base.metadata`, so they **survive the test schema drop**: assert on threads relative to a baseline taken at the start of the test, never on absolute counts. Some Chat test files deserve a note:
@@ -128,6 +133,17 @@ Backend tests of the App Chat live in `tests/integration/internal_chat/`, with t
   - `tests/unit/services/test_chat_turn_sandbox_lease.py`: a Chat turn takes its lease when the sandbox is first materialised, releases it exactly once (agents take none), and a recovered sandbox gets a new lease.
   - `tests/unit/services/test_internal_chat_sandbox_prepare.py` and `tests/unit/tools/test_sandbox_factory_explicit_service.py`: the sandbox block of `_prepare_turn` (per-conversation key, owner only for the Chat, degradation) and the provider built from an explicit service without any environment fallback.
   - `tests/unit/services/test_outputs_skipped_metadata.py`: `outputs_skipped` is present only when greater than 0 and never alters the answer.
+- Step limit, removal and migrations (final review round):
+  - `tests/integration/internal_chat/test_chat_step_limit.py`: a Chat turn at the step limit ends with `STEP_LIMIT_REACHED` on `/messages` and `/stream`, keeps conversation and checkpoint, and the next turn continues, also when the cut falls right after the model node or right after the tools node with parallel tool calls (every tool call is answered once, none runs silently); the Chat never uses the agent limit; tool-call log lines carry names and outcomes only.
+  - `tests/unit/tools/test_chat_recursion_limit.py`: parsing and fallback of `AICT_CHAT_RECURSION_LIMIT` / `AICT_AGENT_RECURSION_LIMIT`.
+  - `tests/integration/internal_chat/test_orphan_sweep_exact_prefix.py`: the orphan sweep never matches another agent's temp repository (exact prefix, not `LIKE`).
+  - `tests/integration/internal_chat/test_collaborator_removal_cleanup.py`: a removed or departed member's Chat data of that App is gone, other Apps and members are untouched, and a cleanup failure never fails the removal.
+  - `tests/integration/test_ichat004_migration.py`: the `ichat004` indexes are added and dropped; the `ichat001` downgrade purges only the internal agents' leftovers and refuses when a temp silo is in Qdrant.
+  - `tests/unit/tools/middleware/test_summarization_contract.py`: the private LangChain names the summarization subclass reads exist in the installed version, the subclass builds, and a missing name falls back to the plain middleware with one warning.
+  - `tests/integration/internal_chat/test_chat_connection_and_limits.py`: no database connection held while uploads or a turn's files are indexed, a lost busy marker aborts the turn with `CONVERSATION_BUSY`, the indexing budget (`0` = unlimited) and the files-per-turn cap (422, nothing created).
+  - `tests/integration/internal_chat/test_chat_pool_not_held.py`: with a connection pool of one and real engines, the request's pooled connection is not held while attachment indexing runs.
+  - `tests/unit/tools/middleware/test_chat_tool_log_steps.py`: the tool-call log middleware adds no graph node (so no extra graph steps per model call), unlike a `before_model` hook, which does.
+  - `tests/unit/tools/test_chat_image_urls.py`: a Chat image URL carries the opaque `chat-image` identity and still verifies; image URLs are never logged.
 
 See [App Chat](../ai/app-chat.md#testing).
 

@@ -204,6 +204,17 @@ LANGSMITH_PROJECT=mattin-ai-production
 
 See [App Chat](../ai/app-chat.md#attachment-indexing).
 
+### Agent and Chat Execution Limits
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_AGENT_RECURSION_LIMIT` | No | `50` | Graph step limit of an agent run (every model call and tool call is a step). Not an integer or below 1: warning and default |
+| `AICT_CHAT_RECURSION_LIMIT` | No | `100` | Same, for App Chat turns only (they spend more steps). Reaching it ends the Chat turn with `STEP_LIMIT_REACHED` and keeps the conversation. Same fallback rule |
+| `CHAT_MAX_FILES_PER_TURN` | No | `10` | App Chat: files (uploads plus references) per message; `0` = unlimited; HTTP 422 `TOO_MANY_FILES` beyond it (`/messages` and `/stream`) |
+| `ATTACHMENT_INDEXING_TURN_BUDGET_S` | No | `120` | App Chat: total seconds of attachment indexing per turn; `0` = unlimited; keep well below `AICT_AGENT_RUN_TIMEOUT_SECONDS` |
+
+Sizing: the Chat's middleware chain costs about 3 graph steps per tool-using model call, so 100 allows about 33 such calls per Chat turn and the agent default of 50 about 16. See [App Chat](../ai/app-chat.md#step-limit).
+
 ### Application Settings
 
 | Variable | Required | Default | Description |
