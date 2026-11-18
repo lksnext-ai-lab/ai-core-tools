@@ -1358,7 +1358,7 @@ function ChatInterface({
           )}
 
           {/* Input area */}
-          <div className="px-4 pb-4 pt-3 border-t border-white/20 dark:border-gray-700/30">
+          <div className="px-4 pb-4 pt-3 border-t border-line dark:border-line-dark">
             {/* Orchestrator-level exposed chat filters — independent of the legacy
                 "Filter by Metadata" panel above, since orchestrators typically have
                 no own silo/metadataFields at all. Self-contained: owns its own

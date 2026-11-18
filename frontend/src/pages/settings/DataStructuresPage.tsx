@@ -379,7 +379,7 @@ function DataStructuresPage() {
                     triggerAriaLabel={t('dataStructuresPage.actions.menuForStructure', { name: structure.name })}
                   />
                 ) : (
-                  <span className="text-gray-400 text-sm">{t('dataStructuresPage.viewOnly')}</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-sm">{t('dataStructuresPage.viewOnly')}</span>
                 )
               )
             }

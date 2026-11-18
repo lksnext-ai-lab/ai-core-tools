@@ -266,7 +266,7 @@ export default function ConversationSidebar({
                 onClick={() => void loadConversations()}
                 className="font-medium text-error underline hover:text-error-strong dark:text-error-dark dark:hover:text-error-strong-dark"
               >
-                {t('serviceUsage.retry')}
+                {t('conversationSidebar.retry')}
               </button>
             </div>
           )}

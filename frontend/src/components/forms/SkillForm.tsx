@@ -182,7 +182,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
           <span
             key={tool}
             className={`inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full ${
-              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]'
+              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark'
             }`}
           >
             {tool}
@@ -191,7 +191,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
                 type="button"
                 ref={(el) => { removeButtonRefs.current[idx] = el; }}
                 onClick={() => removeTool(idx)}
-                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-[var(--color-border-card-dark)]"
+                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark"
                 aria-label={t('skillForm.allowedTools.remove', { tool })}
               >
                 <X className="w-3 h-3" aria-hidden="true" />
@@ -210,7 +210,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
             onBlur={() => addTool(draft)}
             placeholder={tools.length === 0 ? t('skillForm.allowedTools.placeholder') : ''}
             aria-describedby="allowed_tools_help"
-            className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-gray-400 dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
+            className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
           />
         )}
         {disabled && tools.length === 0 && (
@@ -786,7 +786,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
             <div className="flex items-center gap-2 border-b border-line dark:border-line-dark px-3 py-2 text-sm text-fg dark:text-fg-dark bg-surface-tint dark:bg-surface-tint-dark">
               <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
               <span className="font-mono text-xs">SKILL.md</span>
-              <span className="ml-auto text-xs text-gray-400">{t('skillForm.resources.instructions')}</span>
+              <span className="ml-auto text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('skillForm.resources.instructions')}</span>
             </div>
             {fileTree.length > 0 ? (
               <div className="max-h-72 overflow-y-auto py-1">

@@ -14,7 +14,7 @@ import type {
 } from '../types/marketplace';
 import Title from '../components/ui/Title';
 import ButtonApp from '../components/ui/ButtonApp';
-import { FormSelect } from '../components/ui/FormField';
+import { FormField, FormSelect } from '../components/ui/FormField';
 import { SidePanel } from '../components/ui/SidePanel';
 import { Tabs } from '../components/ui/Tabs';
 import MarketplaceAgentDetailPage from './MarketplaceAgentDetailPage';
@@ -61,7 +61,6 @@ export default function MarketplacePage() {
         tabs={tabs}
         activeTab={tab}
         onChange={(tabId) => setSearchParams(tabId === 'agents' ? {} : { tab: tabId })}
-        className="border-gray-200 dark:border-gray-700"
       />
       <div id={`${tab}-panel`} role="tabpanel" aria-labelledby={tab}>
         {tab === 'agents' ? <MarketplaceAgentsTab /> : <MarketplaceScheduledTasksTab />}
@@ -188,12 +187,13 @@ function MarketplaceAgentsTab() {
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-fg-faint dark:text-fg-faint-dark pointer-events-none">
             <Search className="w-4 h-4  text-fg-faint dark:text-fg-faint-dark" />
           </span>
-          <input
-            type="text"
+          <FormField
+            id="marketplace-agents-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('marketplacePage.searchAgents')}
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-accent dark:bg-surface-dark dark:border-btCard-border-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark"
+            ariaLabel={t('marketplacePage.searchAgents')}
+            inputClassName="pl-10 pr-3"
           />
         </div>
 
@@ -266,7 +266,7 @@ function EmptyState({ search, category }: EmptyStateProps) {
   const hasFilters = Boolean(search || category);
   return (
     <div className="text-center py-16">
-      <Search className="w-12 h-12 text-gray-300 mx-auto" aria-hidden="true"  />
+      <Search className="w-12 h-12 text-fg-tertiary dark:text-fg-tertiary-dark mx-auto" aria-hidden="true"  />
       <h3 className="mt-4 text-lg font-medium text-fg-primary dark:text-fg-primary-dark">{t('marketplacePage.noAgentsFound')}</h3>
       <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
         {hasFilters

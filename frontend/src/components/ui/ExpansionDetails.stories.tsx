@@ -36,6 +36,12 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
+export const Collapsed: Story = {
+  args: {
+    defaultOpen: false,
+  },
+};
+
 export const WithFormFields: Story = {
   decorators: [
     (Story) => (

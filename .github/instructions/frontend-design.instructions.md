@@ -21,13 +21,12 @@ No realizar rediseños generales ni modificaciones visuales ajenas a la tarea.
 
 ## Antes de crear o modificar componentes
 
-- Revisar los componentes existentes en `frontend/src/components/ui`.
-- Comprobar si existe un componente reutilizable que cubra la necesidad.
+- Antes de crear cualquier elemento visual, revisar los componentes reutilizables existentes, especialmente en `frontend/src/components/ui`, y comprobar si alguno cubre la necesidad mediante sus props o variantes.
 - Revisar sus props y variantes antes de crear una implementación alternativa.
-- Consultar los tokens, estilos y variables CSS definidos en `index.css`.
+- Aplicar las reglas semánticas de tokens definidas en estas instrucciones, utilizando los tokens de `tailwind.config.js`.
+- Consultar `tailwind.config.js` únicamente cuando sea necesario verificar un token o resolver un caso no contemplado.
+- Consultar `index.css` solo cuando la tarea afecte a estilos globales o clases CSS específicas definidas en ese archivo.
 - Revisar componentes similares para mantener la coherencia visual.
-- No crear componentes nuevos si ya existe uno equivalente.
-- Antes de implementar cualquier elemento visual, comprobar si existe un componente reutilizable equivalente en el proyecto.
 - Esta comprobación incluye no solo controles de formulario, sino también alertas, mensajes de validación, notificaciones, ventanas modales, tarjetas, badges, tooltips, indicadores de carga y otros elementos de interfaz.
 - Priorizar los componentes compartidos existentes frente a implementaciones personalizadas con JSX y Tailwind cuando su funcionalidad y uso previsto sean equivalentes.
 - Revisar cómo se implementan elementos similares en otras pantallas antes de decidir qué componente utilizar.
@@ -35,7 +34,6 @@ No realizar rediseños generales ni modificaciones visuales ajenas a la tarea.
 ## Reglas generales
 
 - La aplicación utiliza React, TypeScript y Tailwind CSS 3.
-- Priorizar siempre los componentes reutilizables existentes.
 - Conservar la lógica de negocio y el comportamiento existente.
 - Conservar eventos `onClick`, `onChange`, estados `disabled` y `loading`,
   navegación, validaciones y permisos.
@@ -53,12 +51,78 @@ No realizar rediseños generales ni modificaciones visuales ajenas a la tarea.
 ## Consistencia visual
 
 - Priorizar los componentes y tokens del sistema de diseño existente.
-- No introducir colores, tipografías o espaciados nuevos si existe
-  un valor equivalente definido en el proyecto.
+- No introducir colores, tipografías o espaciados nuevos si existe un valor equivalente definido en el proyecto.
 - Evitar repetir bloques extensos de clases Tailwind.
 - No utilizar estilos inline para sobrescribir estilos de Tailwind.
 - No utilizar !important salvo que sea estrictamente necesario.
 
+
+### Uso semántico de tokens de diseño
+
+Los tokens de diseño de Mattin AI están definidos en `tailwind.config.js`.
+
+Al crear o modificar componentes, utilizar los tokens según la función visual de cada elemento.
+
+Priorizar siempre los estilos proporcionados por los componentes reutilizables.
+
+#### Textos
+
+- Texto principal, nombres y contenido habitual: `text-fg dark:text-fg-dark`.
+- Texto secundario, descripciones y contenido complementario: `text-fg-secondary dark:text-fg-secondary-dark`.
+- Texto terciario, metadatos y contenido de menor jerarquía: `text-fg-tertiary dark:text-fg-tertiary-dark`.
+- Texto de menor relevancia o deshabilitado: utilizar los tokens `fg.faint` o `fg.faint2` según el patrón existente.
+- Para texto sobre superficies de alto contraste, utilizar `text-ink-on` o `dark:text-ink-on-dark` cuando corresponda al patrón existente.
+- No utilizar colores arbitrarios como `text-gray-*`, `text-slate-*` o valores hexadecimales cuando exista un token semántico equivalente en el proyecto.
+- Respetar los colores propios de los componentes reutilizables y sus variantes.
+
+#### Fondos
+
+- Fondo general de página: `bg-canvas dark:bg-canvas-dark`.
+- Fondo de superficie o contenido: `bg-surface dark:bg-surface-dark`.
+- Fondo alternativo de superficie: `bg-surface-tint dark:bg-surface-tint-dark`.
+- Fondo de superficie al pasar el ratón: `bg-surface-hover dark:bg-surface-hover-dark`.
+- Para tarjetas, utilizar preferentemente `CardApp` o `ButtonCard` y sus variantes.
+- No aplicar fondos personalizados a componentes que ya gestionan su propia apariencia.
+
+#### Bordes
+
+- Borde general: `border-line dark:border-line-dark`.
+- Borde de mayor contraste: `border-line-strong dark:border-line-strong-dark`.
+- Para tarjetas, formularios y tablas, respetar los bordes definidos en sus componentes reutilizables.
+- No introducir grosores ni colores de borde arbitrarios.
+
+#### Estados y mensajes
+
+- Información: `info`, `info-bg`, `info-border`.
+- Éxito: `success`, `success-bg`, `success-border`.
+- Error: `error`, `error-bg`, `error-border`.
+- Advertencia: `bronze`, `bronze-bg`, `bronze-border`.
+- Utilizar las variantes `dark` correspondientes.
+- Priorizar los componentes reutilizables de alertas, badges y mensajes antes de aplicar estos tokens manualmente.
+- No utilizar colores genéricos como `blue-*`, `green-*`, `red-*` o `yellow-*` para representar estados.
+
+#### Estados interactivos
+
+- Utilizar el token `accent` para el foco de controles cuando corresponda al patrón del componente.
+- Respetar los estilos de hover, selected, disabled y focus definidos en los componentes reutilizables.
+- No añadir anillos, sombras ni bordes adicionales cuando el componente ya gestiona esos estados.
+- Los estilos de foco de `ButtonCard` se gestionan exclusivamente dentro del propio componente.
+
+#### Tipografía
+
+- Utilizar `font-sans` (Inter) para el texto habitual.
+- Utilizar `font-display` (Space Grotesk) para títulos y elementos que sigan ese patrón.
+- Respetar los tamaños, pesos y jerarquías definidos en los componentes reutilizables.
+- No introducir tamaños arbitrarios cuando exista un patrón establecido.
+
+#### Criterios generales
+
+- Utilizar siempre tokens semánticos de Mattin AI en lugar de colores directos de Tailwind.
+- Mantener compatibilidad con modo claro y oscuro.
+- No crear nuevos tokens ni modificar los existentes sin autorización.
+- No sobrescribir los estilos visuales de componentes reutilizables desde las páginas.
+- Consultar `tailwind.config.js` solo para verificar tokens existentes o resolver usos no documentados.
+- No consultar `index.css` como catálogo de tokens.
 
 ## Gestión de variantes
 
@@ -438,8 +502,6 @@ Aplicar los siguientes criterios en orden:
 
 - Comprobar que los cambios no generan errores de TypeScript.
 - Comprobar que no se han eliminado funcionalidades existentes.
-- Cuando se cree o modifique un componente reutilizable,
-  actualizar sus stories si corresponde.
 - No modificar archivos fuera del alcance de la tarea.
 - Informar de los archivos modificados y de las comprobaciones realizadas.
 - No afirmar que una comprobación ha pasado si no se ha ejecutado.
@@ -456,12 +518,60 @@ Aplicar los siguientes criterios en orden:
 - Conservar los atributos de accesibilidad al sustituir
   componentes existentes.
   
- ## Arquitectura
+## Arquitectura
 
 - Respetar la separación entre biblioteca base y aplicaciones cliente.
 - Crear componentes genéricos reutilizables en `frontend/src/components/ui`.
 - No incorporar personalizaciones específicas de un cliente directamente en la biblioteca base.
 - Respetar los mecanismos de configuración y extensión existentes en el proyecto.
+
+
+## Creación y ubicación de componentes
+
+Antes de crear un componente React, determinar si es un componente UI reutilizable, un componente específico de una funcionalidad o un componente interno de una página.
+
+### Componentes UI reutilizables
+
+- Ubicar en `frontend/src/components/ui` los componentes genéricos de presentación o interacción que puedan utilizarse en distintas funcionalidades.
+- Estos componentes no deben depender de entidades, servicios, rutas ni lógica de negocio específicos.
+- Deben permitir configurar su comportamiento y presentación mediante props.
+- Antes de crear uno nuevo, comprobar si existe un componente equivalente o una variante reutilizable.
+- Seguir las convenciones de diseño, accesibilidad, internacionalización y Storybook del proyecto.
+
+### Componentes específicos de una funcionalidad
+
+- Mantener los componentes vinculados a una entidad o funcionalidad concreta fuera de `components/ui`.
+- Ubicarlos siguiendo la estructura existente de esa funcionalidad o junto a las páginas que los utilizan.
+- No convertir automáticamente un componente en UI genérico por utilizarse en varias pantallas.
+- Evitar que los componentes genéricos dependan de modelos o lógica de negocio específicos.
+
+### Componentes internos de una página
+
+- Si un componente solo se utiliza en una página y contiene lógica específica de ella, mantenerlo próximo a esa página.
+- Extraer componentes cuando mejore la claridad, el mantenimiento o la reutilización del código.
+- No crear componentes independientes para fragmentos pequeños que no aporten una responsabilidad clara.
+
+### Criterios de decisión
+
+Antes de decidir la ubicación, comprobar:
+
+1. ¿Existe ya un componente que cubra la necesidad?
+2. ¿Es independiente de la lógica de negocio?
+3. ¿Puede utilizarse en funcionalidades diferentes sin conocer sus entidades o servicios?
+4. ¿Su API puede expresarse mediante props genéricas?
+5. ¿Existe una convención de ubicación para componentes equivalentes en el proyecto?
+
+- Si es genérico y reutilizable, utilizar `components/ui`.
+- Si pertenece a una funcionalidad, mantenerlo en su ámbito.
+- Si es exclusivo de una página, mantenerlo próximo a ella.
+- No mover componentes existentes ni reorganizar carpetas sin que la tarea lo requiera.
+
+### Verificación final
+
+- Comprobar que cada componente nuevo está ubicado según su responsabilidad.
+- Evitar duplicar componentes UI existentes.
+- Comprobar que los componentes genéricos no contienen dependencias de negocio innecesarias.
+- Crear o actualizar las stories de Storybook cuando corresponda según las reglas del proyecto.
 
 ## Creación de nuevos componentes UI
 
@@ -490,7 +600,8 @@ Cuando se solicite crear un nuevo componente, seguir las siguientes reglas:
 - No utilizar `any`; utilizar tipos específicos o `unknown` con validación cuando corresponda.
 
 ### 3. Reutilización
-- Crear componentes genéricos y reutilizables, evitando implementaciones específicas de una pantalla.
+- Cuando se cree un componente UI reutilizable, diseñarlo de forma genérica e independiente de una pantalla concreta.
+- Para componentes específicos de una funcionalidad o página, seguir los criterios de ubicación establecidos en "Creación y ubicación de componentes".
 - Comprobar si existe un componente similar antes de crear uno nuevo.
 - Mantener separada la presentación de la lógica de negocio.
 - Respetar la arquitectura de frontend definida en
@@ -502,21 +613,37 @@ Cuando se solicite crear un nuevo componente, seguir las siguientes reglas:
 - No modificar la biblioteca base para incorporar
   personalizaciones exclusivas de un cliente.
 
+
 ### 4. Storybook
+
+#### Creación y actualización automática
+
+- Crear o actualizar las stories de Storybook como parte de la misma tarea de desarrollo, sin esperar a que el usuario lo solicite expresamente.
 - Crear un archivo `.stories.tsx` para cada componente UI reutilizable nuevo.
-- No exigir stories para componentes internos específicos de una página,
-  salvo que su complejidad o necesidad de documentación lo justifique.
-- Actualizar las stories existentes cuando cambien las props,
-  variantes o comportamientos visuales del componente reutilizable.
-- Generar una story para cada variante visual definida.
-- Documentar las props mediante los controles de Storybook cuando sea posible.
-- Incluir estados relevantes como `disabled`, `loading`, `hover` o `error` cuando correspondan.
-- Para eventos como `onClick`, utilizar las utilidades de Storybook para visualizar las interacciones.
-- Evitar duplicar stories cuando una diferencia pueda representarse mediante controles.
-- Todas las variantes deben poder visualizarse en modo claro y oscuro.
-- Priorizar un selector global de tema en Storybook.
-- Evitar duplicar las stories exclusivamente para representar
-  light y dark mode.
+- Cuando se modifique un componente UI reutilizable, revisar su story existente y actualizarla si cambian sus props, variantes, estados o comportamiento visual.
+- No exigir stories para componentes internos específicos de una página, salvo que su complejidad o necesidad de documentación lo justifique.
+- No modificar stories de componentes ajenos a la tarea.
+
+#### Variantes, estados e interacciones
+
+- Asegurar que todas las variantes visuales del componente puedan visualizarse en Storybook.
+- Incluir los estados relevantes, como `disabled`, `loading`, `hover`, `selected` o `error`, cuando correspondan.
+- Documentar las props mediante los controles de Storybook siempre que sea posible.
+- Utilizar las utilidades de Storybook para representar interacciones como `onClick` cuando corresponda.
+- Evitar duplicar stories cuando las diferencias puedan representarse mediante controles.
+
+#### Modo claro y oscuro
+
+- Asegurar que los componentes y sus variantes puedan visualizarse en modo claro y oscuro.
+- Priorizar el selector global de tema de Storybook.
+- No duplicar stories exclusivamente para representar los modos claro y oscuro.
+
+#### Verificación final
+
+- Antes de finalizar una tarea que cree o modifique un componente UI reutilizable, comprobar si es necesario crear o actualizar su story.
+- Verificar que las stories reflejan las props, variantes, estados e interacciones actuales del componente.
+- Comprobar que las stories modificadas no presentan errores de TypeScript ni de compilación.
+- No considerar completa la implementación de un componente UI reutilizable nuevo si falta su story correspondiente.
 
 ### 5. Calidad
 - Utilizar React y TypeScript.
@@ -541,11 +668,14 @@ Estas instrucciones deben aplicarse durante la implementación de cualquier comp
 - Revisar el código creado o modificado y comprobar que cumple todas las reglas de diseño aplicables.
 - Verificar que se han utilizado correctamente los componentes reutilizables y sus propiedades.
 - Comprobar especialmente los requisitos específicos del tipo de interfaz implementada:
-  - Formularios: validaciones, ayuda y mensajes de error.
+  - Formularios: componentes reutilizables, validaciones, ayuda y mensajes de error.
   - Tablas: iconos, tipografía, columnas fijas y estado vacío.
-  - Tarjetas: uso de `CardApp` y sus variantes.
+  - Tarjetas de contenido: uso de `CardApp` y sus variantes.
+  - Tarjetas interactivas: uso de `ButtonCard`, variantes, selección, interacción y foco de teclado.
   - Páginas: layout, márgenes, títulos y navegación.
   - Pestañas: componente reutilizable y conservación del estado.
+  - Componentes nuevos: responsabilidad, ubicación y reutilización.
+  - Storybook: creación o actualización de stories cuando corresponda.
 - Verificar la internacionalización de todos los textos nuevos.
 - Corregir los incumplimientos detectados antes de dar la tarea por terminada.
 - Si alguna regla no puede cumplirse, explicar el motivo y solicitar confirmación antes de aplicar una alternativa.

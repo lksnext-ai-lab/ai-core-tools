@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useId, useState } from 'react';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ModalProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ function isTopModal(id: string): boolean {
 }
 
 function Modal({ isOpen, onClose, title, subtitle, children, size = 'large' }: Readonly<ModalProps>) {
+  const { t } = useTranslation('common');
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<Element | null>(null);
@@ -173,7 +175,7 @@ function Modal({ isOpen, onClose, title, subtitle, children, size = 'large' }: R
             </div>
             <button
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t('close')}
               className="p-1 text-fg-tertiary hover:text-fg hover:bg-surface-hover dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:hover:bg-surface-hover-dark transition-colors focus:outline-none focus-visible:outline-none rounded-lg"
             >
               <X className="w-5 h-5" aria-hidden="true" />

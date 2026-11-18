@@ -12,7 +12,7 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['inline', 'section', 'page', 'fullScreen'],
+      options: ['inline', 'section', 'page', 'fullScreen', 'indicator'],
     },
   },
 } satisfies Meta<typeof LoadingState>;
@@ -35,6 +35,10 @@ export const Page: Story = {
 export const FullScreen: Story = {
   args: { variant: 'fullScreen', message: 'Comprobando tu sesión…' },
   parameters: { layout: 'fullscreen' },
+};
+
+export const Indicator: Story = {
+  args: { variant: 'indicator' },
 };
 
 export const InsideCard: Story = {

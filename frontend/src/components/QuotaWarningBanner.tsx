@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 import { useSubscription } from '../hooks/useSubscription';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Global sticky banner shown when the user has used >= 80% of their monthly system LLM quota.
@@ -10,6 +11,7 @@ import { useSubscription } from '../hooks/useSubscription';
 const QuotaWarningBanner: React.FC = () => {
   const { isSaasMode } = useDeploymentMode();
   const { usage } = useSubscription();
+  const { t } = useTranslation('common');
 
   if (!isSaasMode || !usage) return null;
 
@@ -21,25 +23,28 @@ const QuotaWarningBanner: React.FC = () => {
 
   return (
     <div
-      className={`sticky top-0 z-50 w-full px-4 py-2 text-sm text-center font-medium ${
-        isExhausted ? 'bg-red-600 text-white' : 'bg-yellow-400 text-yellow-900'
+      role={isExhausted ? 'alert' : 'status'}
+      className={`sticky top-0 z-50 w-full border-b px-4 py-2 text-sm text-center font-medium ${
+        isExhausted
+          ? 'bg-error-bg border-error-border text-error-strong dark:bg-error-bg-dark dark:border-error-border-dark dark:text-error-strong-dark'
+          : 'bg-bronze-bg border-bronze-border text-bronze-strong dark:bg-bronze-bg-dark dark:border-bronze-border-dark dark:text-bronze-strong-dark'
       }`}
     >
       {isExhausted ? (
         <>
-          Your monthly system LLM quota is exhausted.{' '}
+          {t('quotaWarningBanner.exhausted')}{' '}
           <Link to="/subscription" className="underline font-bold">
-            Upgrade your plan
+            {t('quotaWarningBanner.upgradePlan')}
           </Link>{' '}
-          to continue using system LLM.
+          {t('quotaWarningBanner.continueUsing')}
         </>
       ) : (
         <>
-          You have used {Math.round(pct * 100)}% of your monthly system LLM quota.{' '}
+          {t('quotaWarningBanner.used', { percentage: Math.round(pct * 100) })}{' '}
           <Link to="/subscription" className="underline">
-            Upgrade
+            {t('quotaWarningBanner.upgrade')}
           </Link>{' '}
-          to avoid interruptions.
+          {t('quotaWarningBanner.avoidInterruptions')}
         </>
       )}
     </div>

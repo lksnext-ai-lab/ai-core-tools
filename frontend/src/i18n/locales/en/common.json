@@ -4,11 +4,27 @@
   "cancel": "Cancel",
   "delete": "Delete",
   "edit": "Edit",
+  "close": "Close",
+  "dismiss": "Dismiss",
   "name": "Name",
   "description": "Description",
   "required": "Required field",
   "language": "Language",
   "languageChangeError": "Could not change the language. Please try again.",
+  "themeSelector": {
+    "label": "Theme"
+  },
+  "tabs": {
+    "navigation": "Tab navigation"
+  },
+  "frozenResourceBadge": {
+    "label": "Frozen",
+    "tooltip": "This resource is frozen. Upgrade your plan or delete other resources to unfreeze it."
+  },
+  "systemServiceBadge": {
+    "label": "System",
+    "tooltip": "Platform service managed by the system administrators"
+  },
   "readOnlyBanner": {
     "title": "Read-only mode:",
     "description": "Only users with the {{minRole}} role can modify these settings. You have {{userRole}} access."
@@ -220,6 +236,14 @@
         "Plot twist: I work while you sleep."
       ]
     }
+  },
+  "authSuccessPage": {
+    "serverUnavailable": "The server could not be reached. Please try again in a moment.",
+    "authenticationFailed": "Authentication failed. Please try again.",
+    "completingSignIn": "Completing sign in...",
+    "settingUpAccount": "Please wait while we set up your account",
+    "signInFailed": "Sign in failed",
+    "tryAgain": "Try again"
   },
   "errors": {
     "generic": "Something went wrong.",
@@ -983,6 +1007,200 @@
       "saveFailed": "Failed to save domain"
     }
   },
+  "tierConfigPage": {
+    "title": "Tier configuration",
+    "subtitle": "Configure resource limits per subscription tier. Use -1 to indicate unlimited.",
+    "loading": "Loading tier configuration...",
+    "loadFailed": "Failed to load tier configuration",
+    "columns": {
+      "resource": "Resource",
+      "limit": "Limit",
+      "actions": "Actions"
+    },
+    "actions": {
+      "limitForResource": "Limit for {{resource}} in {{tier}}",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "notifications": {
+      "savingLimit": "Saving limit…",
+      "limitUpdated": "Limit updated",
+      "saveFailed": "Failed to save limit"
+    }
+  },
+  "saasUserListPage": {
+    "title": "SaaS users",
+    "subtitle": "Manage tiers and quotas for SaaS-mode users",
+    "loading": "Loading users...",
+    "loadFailed": "Failed to load users",
+    "empty": "No SaaS users found.",
+    "columns": {
+      "email": "Email",
+      "tier": "Tier",
+      "billing": "Billing",
+      "llmUsage": "LLM usage",
+      "apps": "Apps",
+      "overrideTier": "Override tier"
+    },
+    "tiers": {
+      "free": "Free",
+      "starter": "Starter",
+      "pro": "Pro"
+    },
+    "billingStatuses": {
+      "active": "Active",
+      "trialing": "Trialing",
+      "past_due": "Past due",
+      "cancelled": "Cancelled",
+      "none": "None"
+    },
+    "actions": {
+      "overrideTierForUser": "Override tier for {{email}}"
+    },
+    "notifications": {
+      "updatingTier": "Updating tier…",
+      "tierUpdated": "Tier updated",
+      "overrideFailed": "Failed to override tier"
+    }
+  },
+  "quotaWarningBanner": {
+    "exhausted": "Your monthly system LLM quota is exhausted.",
+    "upgradePlan": "Upgrade your plan",
+    "continueUsing": "to continue using the system LLM.",
+    "used": "You have used {{percentage}}% of your monthly system LLM quota.",
+    "upgrade": "Upgrade",
+    "avoidInterruptions": "to avoid interruptions."
+  },
+  "subscriptionPage": {
+    "title": "Subscription",
+    "subtitle": "Manage your plan and monthly usage",
+    "loading": "Loading subscription...",
+    "loadFailed": "Failed to load subscription data",
+    "currentPlan": "Current plan",
+    "plans": "Plans",
+    "billing": {
+      "label": "Billing:",
+      "statuses": {
+        "active": "Active",
+        "trialing": "Trialing",
+        "past_due": "Past due",
+        "cancelled": "Cancelled",
+        "none": "None"
+      }
+    },
+    "actions": {
+      "opening": "Opening…",
+      "manageBilling": "Manage billing",
+      "redirecting": "Redirecting…",
+      "upgradeTo": "Upgrade to {{tier}}"
+    },
+    "notifications": {
+      "startingCheckout": "Starting checkout…",
+      "redirectingToCheckout": "Redirecting to checkout…",
+      "checkoutFailed": "Failed to start checkout",
+      "openingBillingPortal": "Opening billing portal…",
+      "billingPortalReady": "Billing portal ready",
+      "billingPortalFailed": "Failed to open billing portal"
+    },
+    "usage": {
+      "title": "System LLM usage",
+      "unlimited": "{{count}} calls — Unlimited",
+      "calls": "{{used}} / {{limit}} calls",
+      "quotaExhausted": "Quota exhausted. Own API calls are unaffected.",
+      "approachingQuota": "Approaching quota limit."
+    },
+    "tiers": {
+      "free": {
+        "name": "Free",
+        "price": "$0"
+      },
+      "starter": {
+        "name": "Starter",
+        "price": "From $X/mo"
+      },
+      "pro": {
+        "name": "Pro",
+        "price": "From $Y/mo"
+      }
+    },
+    "features": {
+      "app": "{{count}} App",
+      "apps": "{{count}} Apps",
+      "agentsPerApp": "{{count}} Agents per App",
+      "silosPerApp": "{{count}} Silos per App",
+      "systemLlmLimited": "System LLM (limited)",
+      "ownApiKeys": "Own API keys",
+      "trialDays": "{{count}}-day trial",
+      "unlimitedCollaborators": "Unlimited collaborators"
+    }
+  },
+  "sharePointWizardPage": {
+    "title": "Add SharePoint Source",
+    "subtitle": "Connect a Microsoft SharePoint drive to index its documents.",
+    "steps": {
+      "connect": "Connect",
+      "drive": "Choose Drive",
+      "indexing": "Indexing"
+    },
+    "errors": {
+      "title": "Error",
+      "siteNotFound": "Site not found. Check the URL and permissions.",
+      "requiredFields": "Please fill in all required fields.",
+      "connectionFailed": "Connection test failed.",
+      "connectionFailedCredentials": "Connection test failed. Check your credentials.",
+      "siteAndDriveRequired": "Please select a site and a drive.",
+      "siloNameRequired": "Please provide a silo name.",
+      "createFailed": "Failed to create SharePoint source."
+    },
+    "actions": {
+      "testing": "Testing...",
+      "testAndNext": "Test & Next",
+      "creating": "Creating...",
+      "create": "Create",
+      "next": "Next",
+      "load": "Load",
+      "back": "Back",
+      "cancel": "Cancel",
+      "importing": "Importing..."
+    },
+    "fields": {
+      "sourceName": "Source Name *",
+      "description": "Description",
+      "tenantId": "Tenant ID *",
+      "clientId": "Client ID *",
+      "clientSecret": "Client Secret *",
+      "siteUrl": "SharePoint Site URL *",
+      "drive": "Drive",
+      "siloName": "Silo Name *",
+      "embeddingService": "Embedding Service",
+      "vectorDatabase": "Vector Database",
+      "fileExtensionFilters": "File Extension Filters"
+    },
+    "placeholders": {
+      "sourceName": "My SharePoint Source",
+      "description": "Optional description",
+      "clientSecret": "Your Azure app client secret",
+      "siteUrl": "https://yourtenant.sharepoint.com/sites/Marketing",
+      "fileExtensions": "e.g. pdf, docx — press Enter to add"
+    },
+    "help": {
+      "siteUrl": "Enter the URL of your SharePoint site, then click Load.",
+      "siloName": "A new silo will be created to store the indexed documents.",
+      "fileExtensions": "Leave empty to index all supported file types."
+    },
+    "states": {
+      "loadingDrives": "Loading drives...",
+      "noDrives": "No drives found for this site."
+    },
+    "options": {
+      "defaultEmbedding": "— Use default —",
+      "pgvector": "PGVector (PostgreSQL)",
+      "qdrant": "Qdrant"
+    },
+    "defaults": {
+      "siloSuffix": "Silo"
+    }
+  },
   "sharePointSourcesPage": {
     "title": "SharePoint sources",
     "subtitle": "Sync documents from Microsoft SharePoint",
@@ -1506,6 +1724,7 @@
     "workspace": "Workspace",
     "noLimit": "No limit",
     "requestsPerMinute": "{{limit}} req/min",
+    "requestsPerMinutePerAgent": "{{limit}} req/min per agent",
     "usageOfLimit": "{{percentage}}% of {{limit}} req/min",
     "noLimitConfigured": "No limit configured",
     "unlimitedRequestCapacity": "This workspace has unlimited request capacity.",
@@ -1517,6 +1736,9 @@
     "createFirstAgent": "Create your first agent",
     "noActivityYet": "No activity yet",
     "goToAgent": "Go to {{name}}",
+    "totalCalls_one": "{{count}} total call",
+    "totalCalls_other": "{{count}} total calls",
+    "viewAllAgents": "View all {{count}} agents",
     "collaborators_one": "{{count}} collaborator",
     "collaborators_other": "{{count}} collaborators",
     "langSmithActive": "LangSmith active",
@@ -1644,6 +1866,12 @@
     "message": "Message",
     "response": "Response",
     "close": "Close"
+  },
+  "serviceStatusBadge": {
+    "apiKeyRequired": "API key required",
+    "failing": "Failing",
+    "since": "Since",
+    "ready": "Ready"
   },
   "serviceLifecycle": {
     "optionRetired": "(retired)",
@@ -1849,7 +2077,6 @@
       "title": "Review and save",
       "subtitle": "The service will be saved with the following configuration.",
       "name": "Name",
-      "autoGenerated": "Auto-generated. You can rename it later from the service editor.",
       "provider": "Provider",
       "model": "Model",
       "projectId": "Project ID",
@@ -2911,6 +3138,13 @@
       "retention_other": "The last {{count}} runs are retained",
       "loading": "Loading runs…",
       "empty": "No runs yet.",
+      "outputLoading": "Loading result…",
+      "outputEmpty": "No responses yet.",
+      "outputLoadFailed": "Could not load the result.",
+      "taskFallback": "Scheduled task",
+      "conversationSubtitle": "Continuous conversation responses",
+      "runSubtitle": "Run result",
+      "backToTask": "Back to task",
       "responses_one": "{{count}} response",
       "responses_other": "{{count}} responses",
       "lastResponse": "· latest {{date}}",
@@ -2924,7 +3158,28 @@
       "noOutput": "The agent returned no text.",
       "notFinished": "The run has not finished yet.",
       "generatedFiles": "Generated files",
-      "noGeneratedFiles": "This run did not generate any files."
+      "noGeneratedFiles": "This run did not generate any files.",
+      "outputDeliveries": {
+        "title": "Output notifications",
+        "confirmUnknownRetry": "Teams may have received this card. Resending it could publish a duplicate. Do you want to continue?",
+        "retryQueued": "Retry queued",
+        "retryFailed": "Could not retry the delivery",
+        "retry": "Retry",
+        "retrying": "Queuing…",
+        "nextAttempt": "Next attempt",
+        "attempts_one": "Attempt ({{count}})",
+        "attempts_other": "Attempts ({{count}})",
+        "status": {
+          "pending": "Pending",
+          "sending": "Sending",
+          "retryWait": "Retry scheduled",
+          "accepted": "Accepted by Teams Workflows",
+          "delivered": "Delivered",
+          "failed": "Failed",
+          "unknown": "Uncertain result",
+          "cancelled": "Cancelled"
+        }
+      }
     }
   },
   "scheduledTaskFormPage": {
@@ -3368,6 +3623,89 @@
     "joined": "Joined",
     "noRecentUsers": "No recent users"
   },
+  "registerPage": {
+    "title": "Create an account",
+    "successTitle": "Check your email",
+    "successMessage": "We sent a verification link to {{email}}. Click it to activate your account.",
+    "registrationFailed": "Registration failed",
+    "submit": "Create account",
+    "creatingAccount": "Creating account...",
+    "signIn": "Already have an account? Sign in",
+    "socialLoginComingSoon": "Social login (Google, GitHub) ? coming soon"
+  },
+  "profilePage": {
+    "title": "Profile",
+    "subtitle": "Your account details, marketplace usage and collaborations.",
+    "userNotFound": "User not found. Please log in.",
+    "account": {
+      "userId": "User ID",
+      "type": "Account type",
+      "standardUser": "Standard user",
+      "status": "Status"
+    },
+    "usage": {
+      "title": "Marketplace call usage",
+      "subtitle": "Current month",
+      "loading": "Loading...",
+      "exempt": "Exempt (Admin)",
+      "unlimited": "Unlimited",
+      "limitReached": "Limit reached"
+    },
+    "invitations": {
+      "title": "Pending invitations",
+      "loading": "Loading invitations...",
+      "empty": "No pending invitations",
+      "invitedBy": "Invited by {{email}}",
+      "acceptAria": "Accept invitation to {{name}}",
+      "declineAria": "Decline invitation to {{name}}"
+    },
+    "collaborations": {
+      "title": "Active collaborations",
+      "loading": "Loading collaborations...",
+      "empty": "No active collaborations",
+      "leaveAria": "Leave {{name}}"
+    }
+  },
+  "verifyEmailPage": {
+    "verifying": "Verifying your email...",
+    "missingToken": "No verification token found in the URL.",
+    "successTitle": "Email verified!",
+    "successMessage": "Email verified successfully.",
+    "failureTitle": "Verification failed",
+    "failureMessage": "Verification failed.",
+    "unexpectedError": "An error occurred. Please try again."
+  },
+  "passwordResetPage": {
+    "setNewPassword": "Set new password",
+    "successTitle": "Password updated!",
+    "redirectingToLogin": "Redirecting to login...",
+    "resetFailed": "Password reset failed"
+  },
+  "passwordResetRequestPage": {
+    "title": "Reset password",
+    "successTitle": "Check your email",
+    "successMessage": "If an account with that email exists, we sent a password reset link.",
+    "sending": "Sending...",
+    "submit": "Send reset link"
+  },
+  "changePasswordPage": {
+    "title": "Change password",
+    "description": "Choose a new password. All other sessions will be signed out.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "passwordMinLength": "Minimum {{count}} characters",
+    "passwordTooShort": "New password must be at least {{count}} characters.",
+    "passwordsDoNotMatch": "New passwords do not match.",
+    "passwordMustBeDifferent": "New password must be different from your current password.",
+    "changeFailed": "Password change failed. Please check your current password.",
+    "changing": "Changing password...",
+    "submit": "Change password",
+    "cancel": "Cancel",
+    "successTitle": "Password changed",
+    "successMessage": "Your password has been updated. For security, all other sessions have been signed out. Please sign in again.",
+    "goToSignIn": "Go to sign in"
+  },
   "setPasswordPage": {
     "invalidLinkTitle": "Invalid link",
     "missingTokenMessage": "This set-password link is missing a token. Please use the full link from your invitation email.",
@@ -3412,6 +3750,21 @@
     "expiresOn": "It expires on",
     "sendSecurely": "Send it to the user over a secure, private channel.",
     "singleUse": "It can only be used once to set a password."
+  },
+  "platformChatbot": {
+    "defaultAgentName": "AI Assistant",
+    "new": "New",
+    "newConversation": "New conversation",
+    "open": "Open chat",
+    "close": "Close chat",
+    "greeting": "Hi! How can I help you today?",
+    "inputPlaceholder": "Type a message..."
+  },
+  "userPicker": {
+    "removeSelectedUser": "Remove selected user: {{user}}",
+    "searchFailed": "Failed to search users",
+    "resultCount_one": "{{count}} result",
+    "resultCount_other": "{{count}} results"
   },
   "userManagement": {
     "title": "Users",
@@ -3801,6 +4154,13 @@
       "dataStructure": "Data Structure",
       "select": "-- Select a Data Structure --"
     },
+    "chatFilters": {
+      "title": "Chat filters",
+      "description": "Configure chat-time filters for this agent",
+      "loading": "Loading available fields…",
+      "loadFailed": "Could not load available filter fields.",
+      "empty": "No metadata fields are available from the selected tools or silo yet."
+    },
     "capabilities": {
       "title": "Capabilities",
       "mcpWarningTitle_one": "This agent is used in {{count}} MCP server",
@@ -3942,6 +4302,23 @@
       "profileSaved": "Marketplace profile saved",
       "profileSaveFailed": "Failed to save marketplace profile"
     }
+  },
+  "promptModal": {
+    "systemDescription": "Agent behavior and capabilities",
+    "templateDescription": "Template for user interactions",
+    "templatePlaceholder": "Define the template for user interactions...",
+    "tipsTitle": "Tips for writing effective prompts",
+    "tipSpecific": "Be specific about the agent's role and capabilities",
+    "tipExamples": "Include examples of expected behavior",
+    "tipClear": "Use clear, concise language",
+    "tipTest": "Test your prompts in the playground to see how they work",
+    "note": "Note",
+    "conversationResetNotice": "Saving prompts will reset the conversation so you can test with fresh context.",
+    "saveSystemPrompt": "Save system prompt",
+    "saveTemplatePrompt": "Save template prompt",
+    "updated": "The {{promptType}} was updated and the conversation was reset.",
+    "updateFailed": "Failed to update prompt",
+    "close": "Close"
   },
   "agentPlayground": {
     "title": "Agent Playground",
@@ -4247,6 +4624,9 @@
   },
   "playgroundMedia": {
     "title": "Upload Media",
+    "relevantMoments_one": "Relevant moment",
+    "relevantMoments_other": "Relevant moments",
+    "jumpToMentionedMoments": "Jump to the mentioned moments:",
     "fileUpload": "File Upload",
     "youtubeUrl": "YouTube URL",
     "selectFiles": "Select Video/Audio Files",
@@ -4333,6 +4713,97 @@
     "renameConversation": "Rename conversation",
     "deleteConversation": "Delete conversation"
   },
+  "homePage": {
+    "title": "Welcome to AI Core Tools",
+    "subtitle": "Hello! Manage your AI applications, agents, and data sources from one central location.",
+    "subtitleWithName": "Hello {{name}}! Manage your AI applications, agents, and data sources from one central location.",
+    "appsDescription": "View and manage all your AI applications in one place.",
+    "goToApps": "Go to Apps",
+    "usersDescription": "Manage user accounts and permissions.",
+    "manageUsers": "Manage Users",
+    "statisticsDescription": "View system usage and performance metrics.",
+    "viewStats": "View Stats",
+    "aboutDescription": "Learn more about AI Core Tools and its features.",
+    "learnMore": "Learn More",
+    "gettingStartedTitle": "Getting Started",
+    "createAppDescription": "Start by creating an AI application to organize your projects.",
+    "addAiAgents": "Add AI Agents",
+    "addAiAgentsDescription": "Configure intelligent agents to handle specific tasks.",
+    "connectDataSources": "Connect Data Sources",
+    "connectDataSourcesDescription": "Link repositories, silos, and domains to your agents.",
+    "deployAndMonitor": "Deploy & Monitor",
+    "deployAndMonitorDescription": "Launch your AI solutions and track their performance."
+  },
+  "landingPage": {
+    "logoAlt": "Mattin AI logo",
+    "goToDashboard": "Go to Dashboard",
+    "logIn": "Log in",
+    "getStartedFree": "Get started free",
+    "heroBadge": "AI Platform for Teams",
+    "heroHeadlineFirst": "Build Your AI Workforce.",
+    "heroHeadlineSecond": "Deploy in Minutes.",
+    "heroDescription": "Mattin AI gives your team intelligent agents with RAG, vector search, and enterprise integrations — all in one platform.",
+    "startForFree": "Start for free",
+    "signIn": "Sign in",
+    "features": {
+      "title": "Everything you need to build with AI",
+      "agentsTitle": "Intelligent Agents",
+      "agentsDescription": "Configure LLM agents with memory, system prompts, output parsers, and tool integrations.",
+      "knowledgeTitle": "Vector Knowledge Bases",
+      "knowledgeDescription": "Silos with PGVector or Qdrant for RAG. Upload docs, crawl domains, query semantically.",
+      "mcpTitle": "MCP Integration",
+      "mcpDescription": "Connect agents to external tools via Model Context Protocol — Claude Desktop, Cursor, and more.",
+      "llmTitle": "Multi-Provider LLM",
+      "llmDescription": "OpenAI, Anthropic, Mistral, Azure, Google. Switch models without rewriting your agents.",
+      "collaborationTitle": "Team Collaboration",
+      "collaborationDescription": "Invite collaborators with role-based access. Owners, administrators, editors, viewers.",
+      "apiTitle": "API & Marketplace",
+      "apiDescription": "Full REST API, public agent marketplace, and API key management for external access."
+    },
+    "pricing": {
+      "title": "Simple, transparent pricing",
+      "subtitle": "Start free, upgrade when you are ready",
+      "apps": "Apps",
+      "agentsPerApp": "Agents per app",
+      "silosPerApp": "Silos per app",
+      "llmCallsPerMonth": "LLM calls / month",
+      "collaborators": "Collaborators",
+      "mcpServers": "MCP Servers",
+      "free": "Free",
+      "freeTagline": "Get started at no cost",
+      "freePriceHint": "Free forever",
+      "freeNote": "Use your own API keys for unlimited LLM usage",
+      "starter": "Starter",
+      "starterTagline": "For growing teams",
+      "starterPriceHint": "For growing teams",
+      "pro": "Pro",
+      "proTagline": "For power users",
+      "proPriceHint": "For power users",
+      "proNote": "Unlimited LLM calls via system AI services",
+      "getStarted": "Get started"
+    },
+    "units": {
+      "apps_one": "app",
+      "apps_other": "apps",
+      "agents_one": "agent",
+      "agents_other": "agents",
+      "silos_one": "silo",
+      "silos_other": "silos",
+      "llmCalls_one": "LLM call",
+      "llmCalls_other": "LLM calls",
+      "collaborators_one": "collaborator",
+      "collaborators_other": "collaborators",
+      "servers_one": "server",
+      "servers_other": "servers"
+    },
+    "unlimited": "Unlimited {{unit}}",
+    "ctaTitle": "Ready to build your AI workforce?",
+    "ctaDescription": "Join teams already using Mattin AI. Free to start, no credit card required.",
+    "createFreeAccount": "Create your free account",
+    "footerTagline": "The extensible AI toolbox for modern teams.",
+    "documentation": "Documentation",
+    "copyright": "© {{year}} Mattin AI. All rights reserved."
+  },
   "marketplacePage": {
     "title": "Marketplace",
     "subtitle": "Discover and interact with AI agents and scheduled tasks across the platform.",
@@ -4402,6 +4873,40 @@
       "dailyConfigured": "Daily at the configured time"
     }
   },
+  "marketplaceScheduledTaskPage": {
+    "backToMarketplace": "Back to marketplace",
+    "by": "Published by {{appName}}",
+    "details": "Details"
+  },
+  "marketplaceAgentDetail": {
+    "invalidAgentId": "Invalid agent ID",
+    "agentUnavailable": "Agent not found or no longer available.",
+    "loadFailed": "Failed to load agent",
+    "loading": "Loading agent details...",
+    "coverImageAlt": "{{agent}} cover",
+    "about": "About",
+    "starRating": "Star rating",
+    "starOption_one": "{{count}} star",
+    "starOption_other": "{{count}} stars",
+    "rateThisAgent": "Rate this agent",
+    "startNewChat": "Start New Chat",
+    "starting": "Starting…",
+    "noRatingsYet": "No ratings yet",
+    "ratingCount_one": "{{formattedCount}} rating",
+    "ratingCount_other": "{{formattedCount}} ratings",
+    "conversationCount_one": "{{formattedCount}} conversation",
+    "conversationCount_other": "{{formattedCount}} conversations",
+    "ratingSubmitting": "Submitting rating…",
+    "ratingSaved": "Rating saved",
+    "ratingFailed": "Failed to submit rating",
+    "yourRating_one": "Your rating: {{count}} star. Click to change.",
+    "yourRating_other": "Your rating: {{count}} stars. Click to change.",
+    "startConversationToRate": "Start a conversation with this agent to leave a rating.",
+    "yourConversations": "Your Conversations",
+    "untitledConversation": "Untitled conversation",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages"
+  },
   "marketplaceChat": {
     "agentFallback": "Agent",
     "invalidConversationId": "Invalid conversation ID",
@@ -4465,6 +4970,11 @@
     "marketplaceUsage": "Marketplace usage",
     "callsThisMonth": "{{used}} / {{quota}} calls this month"
   },
+  "messageContent": {
+    "copyCode": "Copy code",
+    "externalImage": "External image",
+    "invalidJson": "Invalid JSON"
+  },
   "attachedFiles": {
     "title": "Attached Files",
     "fileCount_one": "{{count}} file",
@@ -4472,6 +4982,8 @@
     "uploading": "Uploading...",
     "emptyTitle": "No files attached yet",
     "emptyDescription": "Use the attach button to upload",
+    "imageUnavailable": "[Image unavailable: {{filename}}]",
+    "loadingImage": "Loading {{filename}}…",
     "generated": "Generated",
     "status": {
       "ready": "Ready",
@@ -4491,10 +5003,31 @@
     "removeFile": "Remove file",
     "removeFileNamed": "Remove {{filename}}"
   },
+  "searchableMultiSelect": {
+    "any": "— any —",
+    "selectedCount": "{{count}} selected",
+    "searchValues": "Search values",
+    "searchPlaceholder": "Search…",
+    "searching": "Searching…",
+    "searchFailed": "Search failed — try again",
+    "noMatches": "No matches",
+    "clearSelection": "Clear selection",
+    "showingFirst": "Showing first {{count}} — type to search all values",
+    "showingFirstMatches": "Showing first {{count}} matches — keep typing to narrow down",
+    "showingOf": "Showing {{shown}} of {{total}} — type to narrow down"
+  },
+  "orchestratorFilters": {
+    "title": "Filters",
+    "clearAll": "Clear all",
+    "removeValue": "Remove {{value}} from {{field}} filter"
+  },
   "hitlApproval": {
     "required": "Approval required",
     "expired": "Expired",
     "expiresIn": "Expires in {{time}}",
+    "time": {
+      "hoursMinutes": "{{hours}} hr {{minutes}} min"
+    },
     "statusExpired": "This request expired and the tool was not executed. The agent's answer will appear shortly.",
     "statusSingle": "The agent wants to run this tool. Nothing runs until you decide.",
     "statusMultiple": "The agent wants to run these tools. Choose for each tool, then submit your decisions.",
@@ -4513,6 +5046,7 @@
     }
   },
   "conversationSidebar": {
+    "retry": "Retry",
     "new": "New",
     "closeLabel": "Close conversations",
     "refresh": "Refresh",

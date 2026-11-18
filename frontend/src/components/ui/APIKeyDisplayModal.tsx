@@ -94,7 +94,7 @@ function APIKeyDisplayModal({ isOpen, onClose, apiKey }: Readonly<APIKeyDisplayM
         />
 
         {/* Close Button */}
-        <div className="flex justify-end pt-4 border-t border-gray-200">
+        <div className="flex justify-end pt-4 border-t border-line dark:border-line-dark">
           <ButtonApp
             label={t('apiKeysPage.displayModal.saved')}
             variant="primary"

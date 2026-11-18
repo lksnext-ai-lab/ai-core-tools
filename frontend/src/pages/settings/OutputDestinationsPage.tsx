@@ -322,7 +322,7 @@ export default function OutputDestinationsPage() {
                     ]}
                   />
                 ) : (
-                  <span className="text-sm text-gray-400">{t("outputDestinationsPage.viewOnly")}</span>
+                  <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t("outputDestinationsPage.viewOnly")}</span>
                 ),
             },
           ]}

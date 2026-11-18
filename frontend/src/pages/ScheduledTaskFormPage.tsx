@@ -270,7 +270,7 @@ export default function ScheduledTaskFormPage() {
   if (loadState !== "ready" || (editing && task?.id !== Number(taskId))) {
     return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900">
+      <h1 className="text-2xl font-bold text-fg dark:text-fg-dark">
         {editing ? t("scheduledTaskFormPage.title.edit") : t("scheduledTaskFormPage.title.create")}
       </h1>
       {loadState === "error" ? (

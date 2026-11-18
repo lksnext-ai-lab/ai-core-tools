@@ -1,6 +1,6 @@
 import { Trans, useTranslation } from 'react-i18next';
 import Alert from '../../ui/Alert';
-import FormField from '../../ui/FormField';
+import FormField, { FormRadio } from '../../ui/FormField';
 import type {
   AgentImportPreview,
   ConflictMode,
@@ -45,24 +45,20 @@ function AgentStepConflicts({
             components={{ strong: <strong /> }}
           />
         )}
-      />
+      /> 
 
       <div className="space-y-2">
         {MODES.map((mode) => {
           const label = t(`importModal.conflict.options.${mode}`);
           return (
-            <FormField
+            <FormRadio
               key={mode}
-              type="radio"
               id={`agent-conflict-${mode}`}
               name="conflict_mode"
-              label={label}
               value={mode}
+              label={label}
               checked={conflictMode === mode}
               onChange={() => onConflictModeChange(mode)}
-              className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3 [&>p]:col-start-2"
-              inputClassName="mt-0.5"
-              labelClassName="text-sm font-medium text-fg dark:text-fg-dark"
               helpText={t(`importModal.conflict.help.${mode}`)}
             />
           );

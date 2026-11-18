@@ -9,6 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { ButtonApp } from '../../components/ui/ButtonApp';
 import FormField from '../../components/ui/FormField';
 import Table from '../../components/ui/Table';
+import TablePagination from '../../components/ui/TablePagination';
 import CreateLocalUserModal from '../../components/ui/CreateLocalUserModal';
 import OneTimeLinkModal from '../../components/ui/OneTimeLinkModal';
 import DeleteUserDialog from '../../components/admin/DeleteUserDialog';
@@ -435,31 +436,11 @@ function UsersPage() {
           emptySubMessage={searchQuery ? t('userManagement.adjustSearch') : t('userManagement.noUsersYet')}
         />
 
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-700 dark:text-slate-400">
-                {t('userManagement.showingPage', { currentPage, totalPages })}
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {t('userManagement.previous')}
-                </button>
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {t('userManagement.next')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {isLocalMode && (

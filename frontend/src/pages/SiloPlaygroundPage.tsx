@@ -583,22 +583,22 @@ function SiloPlaygroundPage() {
         title={t('siloPlayground.deleteDocumentTitle')}
         size="small"
       >
-        <p className="text-sm text-gray-700 mb-4">
+        <p className="text-sm text-fg dark:text-fg-dark mb-4">
           {t('siloPlayground.deleteDocumentConfirmation')}
         </p>
         <div className="flex gap-2 justify-end">
-          <button
+          <ButtonApp
+            label={t('cancel')}
             onClick={() => setDeleteTarget(null)}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            {t('cancel')}
-          </button>
-          <button
+            variant="primary"
+            size="medium"
+          />
+          <ButtonApp
+            label={t('delete')}
             onClick={() => void handleDeleteConfirmed()}
-            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            {t('delete')}
-          </button>
+            variant="dangerSolid"
+            size="medium"
+          />
         </div>
       </Modal>
 
@@ -609,23 +609,25 @@ function SiloPlaygroundPage() {
         title={t('siloPlayground.bulkDeleteTitle', { count: selectedIds.size })}
         size="small"
       >
-        <p className="text-sm text-gray-700 mb-4">
+        <p className="text-sm text-fg dark:text-fg-dark mb-4">
           {t('siloPlayground.bulkDeleteConfirmation', { count: selectedIds.size })}
         </p>
         <div className="flex gap-2 justify-end">
-          <button
+          <ButtonApp
+            label={t('cancel')}
             onClick={() => setShowBulkDeleteModal(false)}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            {t('cancel')}
-          </button>
-          <button
+            variant="secondary"
+            size="medium"
+          />
+          <ButtonApp
+            label={bulkDeleteLoading
+              ? t('siloPlayground.deleting')
+              : t('siloPlayground.deleteCount', { count: selectedIds.size })}
             onClick={() => void handleBulkDelete()}
             disabled={bulkDeleteLoading}
-            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-          >
-            {bulkDeleteLoading ? t('siloPlayground.deleting') : t('siloPlayground.deleteCount', { count: selectedIds.size })}
-          </button>
+            variant="dangerSolid"
+            size="medium"
+          />
         </div>
       </Modal>
 
@@ -637,40 +639,42 @@ function SiloPlaygroundPage() {
         size="small"
       >
         {deleteByFilterLoading ? (
-          <p className="text-sm text-gray-600">{t('siloPlayground.countingMatchingDocuments')}</p>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('siloPlayground.countingMatchingDocuments')}</p>
         ) : deleteByFilterCount === -1 ? (
-          <p className="text-sm text-red-600">{t('siloPlayground.countMatchingFailed')}</p>
+          <p className="text-sm text-error dark:text-error-dark">{t('siloPlayground.countMatchingFailed')}</p>
         ) : (
           <>
-            <p className="text-sm text-gray-700 mb-3">
+            <p className="text-sm text-fg dark:text-fg-dark mb-3">
               {deleteByFilterCount === null
                 ? t('siloPlayground.deleteByFilterCountUnknown')
                 : t('siloPlayground.deleteByFilterConfirmation', { count: deleteByFilterCount })}
             </p>
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mb-2">
               {t('siloPlayground.typeSiloNameToConfirm')} <strong>{silo.name}</strong>:
             </p>
-            <input
+            <FormField
+              id="delete-by-filter-confirm-name"
               type="text"
               value={deleteByFilterConfirmName}
               onChange={(e) => setDeleteByFilterConfirmName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-red-400"
+              ariaLabel={t('siloPlayground.typeSiloNameToConfirm')}
               placeholder={silo.name}
+              className="mb-4"
             />
             <div className="flex gap-2 justify-end">
-              <button
+              <ButtonApp
+                label={t('cancel')}
                 onClick={() => { setShowDeleteByFilterModal(false); setDeleteByFilterConfirmName(''); }}
-                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-              >
-                {t('cancel')}
-              </button>
-              <button
+                variant="secondary"
+                size="medium"
+              />
+              <ButtonApp
+                label={bulkDeleteLoading ? t('siloPlayground.deleting') : t('siloPlayground.deleteAllMatching')}
                 onClick={() => void handleDeleteByFilterConfirmed()}
                 disabled={deleteByFilterConfirmName !== silo.name || bulkDeleteLoading}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {bulkDeleteLoading ? t('siloPlayground.deleting') : t('siloPlayground.deleteAllMatching')}
-              </button>
+                variant="dangerSolid"
+                size="medium"
+              />
             </div>
           </>
         )}

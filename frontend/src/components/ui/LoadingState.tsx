@@ -1,6 +1,6 @@
 import { Spinner, type SpinnerSize } from './Spinner';
 
-export type LoadingStateVariant = 'inline' | 'section' | 'page' | 'fullScreen';
+export type LoadingStateVariant = 'inline' | 'section' | 'page' | 'fullScreen' | 'indicator';
 
 export interface LoadingStateProps {
   readonly message?: string;
@@ -19,6 +19,7 @@ const variantClasses: Record<LoadingStateVariant, string> = {
   section: 'flex flex-col items-center justify-center gap-2 p-6',
   page: 'flex min-h-64 flex-col items-center justify-center gap-3 py-12',
   fullScreen: 'flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas dark:bg-canvas-dark',
+  indicator: 'flex items-center justify-center',
 };
 
 const spinnerSizes: Record<LoadingStateVariant, SpinnerSize> = {
@@ -26,6 +27,7 @@ const spinnerSizes: Record<LoadingStateVariant, SpinnerSize> = {
   section: 'lg',
   page: 'xl',
   fullScreen: 'xl',
+  indicator: 'xl',
 };
 
 /**
@@ -40,7 +42,9 @@ export function LoadingState({
   return (
     <output aria-live="polite" className={`${variantClasses[variant]} ${className}`}>
       <Spinner size={spinnerSizes[variant]} />
-      <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{message}</span>
+      {variant !== 'indicator' && (
+        <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{message}</span>
+      )}
     </output>
   );
 }

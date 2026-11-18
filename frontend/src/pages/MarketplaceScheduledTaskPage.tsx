@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CalendarClock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { apiService, type MarketplaceScheduledTask, type ScheduledTaskRun } from '../services/api';
 import { ScheduledTaskResults } from '../components/scheduled-tasks/ScheduledTaskResults';
-import { conversationModeLabel, describeSchedule, formatDateTime } from '../components/scheduled-tasks/format';
+import { describeSchedule, formatDateTime } from '../components/scheduled-tasks/format';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import BackgroundImage from '../components/ui/BackgroundImage';
@@ -21,6 +22,7 @@ export default function MarketplaceScheduledTaskPage({
   taskId: taskIdProp,
   variant = 'page',
 }: MarketplaceScheduledTaskPageProps = {}) {
+  const { t } = useTranslation('common');
   const { taskId } = useParams();
   const numericTaskId = taskIdProp ?? Number.parseInt(taskId ?? '0', 10);
   const isPanel = variant === 'panel';
@@ -34,22 +36,22 @@ export default function MarketplaceScheduledTaskPage({
         setTask(found);
         apiService.getMarketplaceScheduledTaskRuns(numericTaskId).then((r) => setRuns(r.items)).catch(() => setRuns([]));
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Scheduled task not found'));
-  }, [numericTaskId]);
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : t('scheduledTaskDetailPage.notFound')));
+  }, [numericTaskId, t]);
 
   if (isPanel) {
     if (error) return <ErrorState error={error} />;
-    if (!task) return <LoadingState message="Cargando tarea…" />;
+    if (!task) return <LoadingState message={t('scheduledTaskDetailPage.loading')} />;
     return <MarketplaceScheduledTaskPanelView task={task} runs={runs} />;
   }
 
   const back = (
     <Link to="/marketplace?tab=tasks" className="mb-3 inline-flex items-center gap-2 text-sm text-fg-secondary hover:text-accent dark:text-fg-secondary-dark dark:hover:text-accent-dark">
-      <ArrowLeft className="h-4 w-4" aria-hidden="true" />Volver al marketplace
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />{t('marketplaceScheduledTaskPage.backToMarketplace')}
     </Link>
   );
   if (error) return <div className="mx-auto max-w-4xl">{back}<div role="alert" className="rounded-xl border border-line bg-surface p-8 text-center text-fg-secondary dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark">{error}</div></div>;
-  if (!task) return <div className="rounded-xl border border-line bg-surface p-8 text-center text-fg-secondary dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark">Cargando tarea…</div>;
+  if (!task) return <div className="rounded-xl border border-line bg-surface p-8 text-center text-fg-secondary dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark">{t('scheduledTaskDetailPage.loading')}</div>;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -61,16 +63,18 @@ export default function MarketplaceScheduledTaskPage({
       </div>
       <dl className="grid gap-4 rounded-xl border border-line bg-surface p-6 text-sm sm:grid-cols-3 dark:border-line-dark dark:bg-surface-dark">
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">Programación</dt>
-          <dd className="mt-1 inline-flex items-center gap-2 text-fg dark:text-fg-dark"><CalendarClock className="h-4 w-4 text-accent dark:text-accent-dark" aria-hidden="true" />{describeSchedule(task.cron_expression)}</dd>
+          <dt className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('scheduledTaskDetailPage.fields.schedule')}</dt>
+          <dd className="mt-1 inline-flex items-center gap-2 text-fg dark:text-fg-dark"><CalendarClock className="h-4 w-4 text-accent dark:text-accent-dark" aria-hidden="true" />{describeSchedule(task.cron_expression, (key, options) => t(key, options))}</dd>
         </div>
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">Próxima ejecución</dt>
-          <dd className="mt-1 text-fg dark:text-fg-dark">{task.status === 'active' ? formatDateTime(task.next_run_at) : 'Pausada'}</dd>
+          <dt className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('scheduledTaskDetailPage.fields.nextRun')}</dt>
+          <dd className="mt-1 text-fg dark:text-fg-dark">{task.status === 'active' ? formatDateTime(task.next_run_at) : t('scheduledTaskDetailPage.status.paused')}</dd>
         </div>
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">Modo</dt>
-          <dd className="mt-1 text-fg dark:text-fg-dark">{conversationModeLabel(task.conversation_mode)}</dd>
+          <dt className="text-[11px] uppercase tracking-[0.06em] text-fg-tertiary dark:text-fg-tertiary-dark">{t('scheduledTaskDetailPage.fields.conversationMode')}</dt>
+          <dd className="mt-1 text-fg dark:text-fg-dark">{task.conversation_mode === 'continuous'
+            ? t('scheduledTaskDetailPage.conversationModes.continuous')
+            : t('scheduledTaskDetailPage.conversationModes.newPerRun')}</dd>
         </div>
       </dl>
       <ScheduledTaskResults
@@ -96,6 +100,8 @@ interface MarketplaceScheduledTaskPanelViewProps {
 
 /** Compact single-column scheduled task view shown in the marketplace side panel. */
 function MarketplaceScheduledTaskPanelView({ task, runs }: MarketplaceScheduledTaskPanelViewProps) {
+  const { t } = useTranslation('common');
+
   return (
     <div className="space-y-5 px-4 py-4">
       {/* Header */}
@@ -105,33 +111,37 @@ function MarketplaceScheduledTaskPanelView({ task, runs }: MarketplaceScheduledT
           <h3 className="font-display text-[28px] leading-tight text-fg dark:text-fg-dark break-words">
             {task.name}
           </h3>
-          <p className="text-[16px] text-fg-tertiary dark:text-fg-tertiary-dark">by {task.app_name}</p>
+          <p className="text-[16px] text-fg-tertiary dark:text-fg-tertiary-dark">
+            {t('marketplaceScheduledTaskPage.by', { appName: task.app_name })}
+          </p>
         </div>
       </div>
 
       {/* About */}
       <CardApp className={PANEL_CARD}>
-        <h4 className={PANEL_CARD_TITLE}>Descripción</h4>
+        <h4 className={PANEL_CARD_TITLE}>{t('description')}</h4>
         <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-fg-secondary dark:text-fg-secondary-dark">
-          {task.description || 'Sin descripción.'}
+          {task.description || t('marketplacePage.noDescriptionProvided')}
         </p>
       </CardApp>
 
       {/* Details */}
       <CardApp className={PANEL_CARD}>
-        <h4 className={PANEL_CARD_TITLE}>Detalles</h4>
+        <h4 className={PANEL_CARD_TITLE}>{t('marketplaceScheduledTaskPage.details')}</h4>
         <dl className="space-y-3 text-[15px]">
           <div className="flex justify-between gap-4">
-            <dt className={PANEL_DT}>Programación</dt>
-            <dd className={PANEL_DD}>{describeSchedule(task.cron_expression)} · {task.timezone}</dd>
+            <dt className={PANEL_DT}>{t('scheduledTaskDetailPage.fields.schedule')}</dt>
+            <dd className={PANEL_DD}>{describeSchedule(task.cron_expression, (key, options) => t(key, options))} · {task.timezone}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className={PANEL_DT}>Próxima ejecución</dt>
-            <dd className={PANEL_DD}>{task.status === 'active' ? formatDateTime(task.next_run_at) : 'Pausada'}</dd>
+            <dt className={PANEL_DT}>{t('scheduledTaskDetailPage.fields.nextRun')}</dt>
+            <dd className={PANEL_DD}>{task.status === 'active' ? formatDateTime(task.next_run_at) : t('scheduledTaskDetailPage.status.paused')}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className={PANEL_DT}>Modo</dt>
-            <dd className={PANEL_DD}>{conversationModeLabel(task.conversation_mode)}</dd>
+            <dt className={PANEL_DT}>{t('scheduledTaskDetailPage.fields.conversationMode')}</dt>
+            <dd className={PANEL_DD}>{task.conversation_mode === 'continuous'
+              ? t('scheduledTaskDetailPage.conversationModes.continuous')
+              : t('scheduledTaskDetailPage.conversationModes.newPerRun')}</dd>
           </div>
         </dl>
       </CardApp>

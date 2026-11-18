@@ -22,10 +22,10 @@ export function ErrorsPanel({ errors, showApp = false }: Props) {
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
           <ul className="space-y-2">
             {errors.groups.map((g) => (
-              <li key={g.error_code} className="rounded-lg border border-gray-100 p-3 dark:border-gray-700">
+              <li key={g.error_code} className="rounded-lg border border-line p-3 dark:border-line-dark">
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                  <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
-                    <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden />
+                  <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-fg dark:text-fg-dark">
+                    <AlertTriangle className="h-3.5 w-3.5 text-error dark:text-error-dark" aria-hidden />
                     {g.error_code}
                   </span>
                   <span className="whitespace-nowrap text-xs tabular-nums  text-fg-secondary dark:text-fg-secondary-dark">
@@ -40,7 +40,7 @@ export function ErrorsPanel({ errors, showApp = false }: Props) {
           </ul>
           <div>
             <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-secondary dark:text-fg-secondary-dark">{t('metricsDashboard.errors.latestFailures')}</h4>
-            <ul className="divide-y divide-gray-100 text-sm dark:divide-gray-700">
+            <ul className="divide-y divide-border-line text-sm dark:divide-line-dark">
               {errors.recent.map((r, i) => (
                 <li key={`${r.started_at}-${i}`} className="py-2">
                   <div className="flex items-center justify-between gap-2">

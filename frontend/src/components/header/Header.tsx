@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
             </Link>
           )}
           {hasBreadcrumb && children && (
-            <ChevronRight size={12} className="flex-shrink-0 text-gray-400" aria-hidden="true" />
+            <ChevronRight size={12} className="flex-shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark " aria-hidden="true" />
           )}
           {children}
         </div>

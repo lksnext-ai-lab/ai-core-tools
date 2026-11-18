@@ -4,11 +4,27 @@
   "cancel": "Cancelar",
   "delete": "Eliminar",
   "edit": "Editar",
+  "close": "Cerrar",
+  "dismiss": "Descartar",
   "name": "Nombre",
   "description": "Descripción",
   "required": "Campo obligatorio",
   "language": "Idioma",
   "languageChangeError": "No se ha podido cambiar el idioma. Inténtalo de nuevo.",
+  "themeSelector": {
+    "label": "Tema"
+  },
+  "tabs": {
+    "navigation": "Navegación por pestañas"
+  },
+  "frozenResourceBadge": {
+    "label": "Congelado",
+    "tooltip": "Este recurso está congelado. Mejora tu plan o elimina otros recursos para desbloquearlo."
+  },
+  "systemServiceBadge": {
+    "label": "Sistema",
+    "tooltip": "Servicio de plataforma gestionado por los administradores del sistema"
+  },
   "readOnlyBanner": {
     "title": "Modo de solo lectura:",
     "description": "Solo los usuarios con el rol de {{minRole}} pueden modificar esta configuración. Tienes acceso de {{userRole}}."
@@ -220,6 +236,14 @@
         "Giro inesperado: trabajo mientras duermes."
       ]
     }
+  },
+  "authSuccessPage": {
+    "serverUnavailable": "No se pudo conectar con el servidor. Inténtalo de nuevo dentro de unos momentos.",
+    "authenticationFailed": "La autenticación ha fallado. Inténtalo de nuevo.",
+    "completingSignIn": "Completando el inicio de sesión...",
+    "settingUpAccount": "Espera mientras configuramos tu cuenta",
+    "signInFailed": "Error al iniciar sesión",
+    "tryAgain": "Intentar de nuevo"
   },
   "errors": {
     "generic": "Algo salió mal.",
@@ -983,6 +1007,200 @@
       "saveFailed": "No se pudo guardar el dominio"
     }
   },
+  "tierConfigPage": {
+    "title": "Configuración de niveles",
+    "subtitle": "Configura los límites de recursos por nivel de suscripción. Usa -1 para indicar que no hay límite.",
+    "loading": "Cargando la configuración de niveles...",
+    "loadFailed": "No se pudo cargar la configuración de niveles",
+    "columns": {
+      "resource": "Recurso",
+      "limit": "Límite",
+      "actions": "Acciones"
+    },
+    "actions": {
+      "limitForResource": "Límite de {{resource}} para {{tier}}",
+      "save": "Guardar",
+      "saving": "Guardando…"
+    },
+    "notifications": {
+      "savingLimit": "Guardando límite…",
+      "limitUpdated": "Límite actualizado",
+      "saveFailed": "No se pudo guardar el límite"
+    }
+  },
+  "saasUserListPage": {
+    "title": "Usuarios SaaS",
+    "subtitle": "Gestiona los niveles y las cuotas de los usuarios del modo SaaS",
+    "loading": "Cargando usuarios...",
+    "loadFailed": "No se pudieron cargar los usuarios",
+    "empty": "No se encontraron usuarios SaaS.",
+    "columns": {
+      "email": "Correo electrónico",
+      "tier": "Nivel",
+      "billing": "Facturación",
+      "llmUsage": "Uso del LLM",
+      "apps": "Aplicaciones",
+      "overrideTier": "Cambiar nivel"
+    },
+    "tiers": {
+      "free": "Gratis",
+      "starter": "Inicial",
+      "pro": "Pro"
+    },
+    "billingStatuses": {
+      "active": "Activa",
+      "trialing": "En periodo de prueba",
+      "past_due": "Pago pendiente",
+      "cancelled": "Cancelada",
+      "none": "Ninguno"
+    },
+    "actions": {
+      "overrideTierForUser": "Cambiar el nivel de {{email}}"
+    },
+    "notifications": {
+      "updatingTier": "Actualizando el nivel…",
+      "tierUpdated": "Nivel actualizado",
+      "overrideFailed": "No se pudo cambiar el nivel"
+    }
+  },
+  "quotaWarningBanner": {
+    "exhausted": "Se ha agotado tu cuota mensual de LLM del sistema.",
+    "upgradePlan": "Mejora tu plan",
+    "continueUsing": "para seguir usando el LLM del sistema.",
+    "used": "Has utilizado el {{percentage}} % de tu cuota mensual de LLM del sistema.",
+    "upgrade": "Actualizar",
+    "avoidInterruptions": "para evitar interrupciones."
+  },
+  "subscriptionPage": {
+    "title": "Suscripción",
+    "subtitle": "Gestiona tu plan y el uso mensual",
+    "loading": "Cargando suscripción...",
+    "loadFailed": "No se pudieron cargar los datos de la suscripción",
+    "currentPlan": "Plan actual",
+    "plans": "Planes",
+    "billing": {
+      "label": "Facturación:",
+      "statuses": {
+        "active": "Activa",
+        "trialing": "En periodo de prueba",
+        "past_due": "Pago pendiente",
+        "cancelled": "Cancelada",
+        "none": "Ninguno"
+      }
+    },
+    "actions": {
+      "opening": "Abriendo…",
+      "manageBilling": "Gestionar facturación",
+      "redirecting": "Redirigiendo…",
+      "upgradeTo": "Cambiar al plan {{tier}}"
+    },
+    "notifications": {
+      "startingCheckout": "Iniciando el proceso de pago…",
+      "redirectingToCheckout": "Redirigiendo al proceso de pago…",
+      "checkoutFailed": "No se pudo iniciar el proceso de pago",
+      "openingBillingPortal": "Abriendo el portal de facturación…",
+      "billingPortalReady": "Portal de facturación listo",
+      "billingPortalFailed": "No se pudo abrir el portal de facturación"
+    },
+    "usage": {
+      "title": "Uso del LLM del sistema",
+      "unlimited": "{{count}} llamadas — Ilimitadas",
+      "calls": "{{used}} / {{limit}} llamadas",
+      "quotaExhausted": "Cuota agotada. Las llamadas con API propia no se ven afectadas.",
+      "approachingQuota": "Te estás acercando al límite de cuota."
+    },
+    "tiers": {
+      "free": {
+        "name": "Gratis",
+        "price": "0 $"
+      },
+      "starter": {
+        "name": "Inicial",
+        "price": "Desde $X/mes"
+      },
+      "pro": {
+        "name": "Pro",
+        "price": "Desde $Y/mes"
+      }
+    },
+    "features": {
+      "app": "{{count}} aplicación",
+      "apps": "{{count}} aplicaciones",
+      "agentsPerApp": "{{count}} agentes por aplicación",
+      "silosPerApp": "{{count}} silos por aplicación",
+      "systemLlmLimited": "LLM del sistema (limitado)",
+      "ownApiKeys": "Claves API propias",
+      "trialDays": "{{count}} días de prueba",
+      "unlimitedCollaborators": "Colaboradores ilimitados"
+    }
+  },
+  "sharePointWizardPage": {
+    "title": "Añadir origen de SharePoint",
+    "subtitle": "Conecta una unidad de Microsoft SharePoint para indexar sus documentos.",
+    "steps": {
+      "connect": "Conexión",
+      "drive": "Elegir unidad",
+      "indexing": "Indexación"
+    },
+    "errors": {
+      "title": "Error",
+      "siteNotFound": "No se encontró el sitio. Comprueba la URL y los permisos.",
+      "requiredFields": "Completa todos los campos obligatorios.",
+      "connectionFailed": "No se pudo probar la conexión.",
+      "connectionFailedCredentials": "No se pudo probar la conexión. Comprueba las credenciales.",
+      "siteAndDriveRequired": "Selecciona un sitio y una unidad.",
+      "siloNameRequired": "Introduce un nombre para el silo.",
+      "createFailed": "No se pudo crear el origen de SharePoint."
+    },
+    "actions": {
+      "testing": "Probando...",
+      "testAndNext": "Probar y continuar",
+      "creating": "Creando...",
+      "create": "Crear",
+      "next": "Siguiente",
+      "load": "Cargar",
+      "back": "Atrás",
+      "cancel": "Cancelar",
+      "importing": "Importando..."
+    },
+    "fields": {
+      "sourceName": "Nombre del origen *",
+      "description": "Descripción",
+      "tenantId": "ID del tenant *",
+      "clientId": "ID del cliente *",
+      "clientSecret": "Secreto del cliente *",
+      "siteUrl": "URL del sitio de SharePoint *",
+      "drive": "Unidad",
+      "siloName": "Nombre del silo *",
+      "embeddingService": "Servicio de embeddings",
+      "vectorDatabase": "Base de datos vectorial",
+      "fileExtensionFilters": "Filtros de extensión de archivo"
+    },
+    "placeholders": {
+      "sourceName": "Mi origen de SharePoint",
+      "description": "Descripción opcional",
+      "clientSecret": "Secreto de cliente de la aplicación de Azure",
+      "siteUrl": "https://tu-tenant.sharepoint.com/sites/Marketing",
+      "fileExtensions": "p. ej., pdf, docx; pulsa Intro para añadir"
+    },
+    "help": {
+      "siteUrl": "Introduce la URL del sitio de SharePoint y pulsa Cargar.",
+      "siloName": "Se creará un silo para almacenar los documentos indexados.",
+      "fileExtensions": "Déjalo vacío para indexar todos los tipos de archivo compatibles."
+    },
+    "states": {
+      "loadingDrives": "Cargando unidades...",
+      "noDrives": "No se encontraron unidades para este sitio."
+    },
+    "options": {
+      "defaultEmbedding": "— Usar valor predeterminado —",
+      "pgvector": "PGVector (PostgreSQL)",
+      "qdrant": "Qdrant"
+    },
+    "defaults": {
+      "siloSuffix": "Silo"
+    }
+  },
   "sharePointSourcesPage": {
     "title": "Orígenes de SharePoint",
     "subtitle": "Sincroniza documentos desde Microsoft SharePoint",
@@ -1506,6 +1724,7 @@
     "workspace": "Espacio de trabajo",
     "noLimit": "Sin límite",
     "requestsPerMinute": "{{limit}} solicitudes/min",
+    "requestsPerMinutePerAgent": "{{limit}} solicitudes/min por agente",
     "usageOfLimit": "{{percentage}} % del límite de {{limit}} solicitudes/min",
     "noLimitConfigured": "No hay ningún límite configurado",
     "unlimitedRequestCapacity": "Este espacio de trabajo tiene capacidad ilimitada de solicitudes.",
@@ -1517,6 +1736,9 @@
     "createFirstAgent": "Crea tu primer agente",
     "noActivityYet": "Todavía no hay actividad",
     "goToAgent": "Ir a {{name}}",
+    "totalCalls_one": "{{count}} llamada en total",
+    "totalCalls_other": "{{count}} llamadas en total",
+    "viewAllAgents": "Ver los {{count}} agentes",
     "collaborators_one": "{{count}} colaborador",
     "collaborators_other": "{{count}} colaboradores",
     "langSmithActive": "LangSmith activo",
@@ -1644,6 +1866,12 @@
     "message": "Mensaje",
     "response": "Respuesta",
     "close": "Cerrar"
+  },
+  "serviceStatusBadge": {
+    "apiKeyRequired": "Se requiere una clave API",
+    "failing": "Con errores",
+    "since": "Desde",
+    "ready": "Listo"
   },
   "serviceLifecycle": {
     "optionRetired": "(retirado)",
@@ -1849,7 +2077,6 @@
       "title": "Revisa y guarda",
       "subtitle": "El servicio se guardará con la siguiente configuración.",
       "name": "Nombre",
-      "autoGenerated": "Se genera automáticamente. Puedes cambiarlo después desde el editor del servicio.",
       "provider": "Proveedor",
       "model": "Modelo",
       "projectId": "ID del proyecto",
@@ -2911,6 +3138,13 @@
       "retention_other": "Se conservan las últimas {{count}} ejecuciones",
       "loading": "Cargando ejecuciones…",
       "empty": "Todavía no hay ejecuciones.",
+      "outputLoading": "Cargando resultado…",
+      "outputEmpty": "Todavía no hay respuestas.",
+      "outputLoadFailed": "No se pudo cargar el resultado.",
+      "taskFallback": "Tarea programada",
+      "conversationSubtitle": "Respuestas de la conversación continua",
+      "runSubtitle": "Resultado de la ejecución",
+      "backToTask": "Volver a la tarea",
       "responses_one": "{{count}} respuesta",
       "responses_other": "{{count}} respuestas",
       "lastResponse": "· última {{date}}",
@@ -2924,7 +3158,28 @@
       "noOutput": "El agente no devolvió texto.",
       "notFinished": "La ejecución todavía no ha terminado.",
       "generatedFiles": "Archivos generados",
-      "noGeneratedFiles": "Esta ejecución no generó archivos."
+      "noGeneratedFiles": "Esta ejecución no generó archivos.",
+      "outputDeliveries": {
+        "title": "Notificaciones de salida",
+        "confirmUnknownRetry": "Es posible que Teams haya recibido esta tarjeta. Reenviarla podría publicar un duplicado. ¿Quieres continuar?",
+        "retryQueued": "Reintento puesto en cola",
+        "retryFailed": "No se pudo reintentar el envío",
+        "retry": "Reintentar",
+        "retrying": "En cola…",
+        "nextAttempt": "Próximo intento",
+        "attempts_one": "Intento ({{count}})",
+        "attempts_other": "Intentos ({{count}})",
+        "status": {
+          "pending": "Pendiente",
+          "sending": "Enviando",
+          "retryWait": "Reintento programado",
+          "accepted": "Aceptado por Teams Workflows",
+          "delivered": "Entregado",
+          "failed": "Fallido",
+          "unknown": "Resultado incierto",
+          "cancelled": "Cancelado"
+        }
+      }
     }
   },
   "scheduledTaskFormPage": {
@@ -3368,6 +3623,89 @@
     "joined": "Fecha de alta",
     "noRecentUsers": "No hay usuarios recientes"
   },
+  "registerPage": {
+    "title": "Crear una cuenta",
+    "successTitle": "Revisa tu correo",
+    "successMessage": "Hemos enviado un enlace de verificaci?n a {{email}}. Haz clic en ?l para activar tu cuenta.",
+    "registrationFailed": "No se pudo completar el registro",
+    "submit": "Crear cuenta",
+    "creatingAccount": "Creando cuenta...",
+    "signIn": "?Ya tienes una cuenta? Inicia sesi?n",
+    "socialLoginComingSoon": "Inicio de sesi?n con redes sociales (Google, GitHub): pr?ximamente"
+  },
+  "profilePage": {
+    "title": "Perfil",
+    "subtitle": "Los datos de tu cuenta, el uso del marketplace y tus colaboraciones.",
+    "userNotFound": "No se encontró el usuario. Inicia sesión.",
+    "account": {
+      "userId": "ID de usuario",
+      "type": "Tipo de cuenta",
+      "standardUser": "Usuario estándar",
+      "status": "Estado"
+    },
+    "usage": {
+      "title": "Uso de llamadas al marketplace",
+      "subtitle": "Mes actual",
+      "loading": "Cargando...",
+      "exempt": "Exento (administrador)",
+      "unlimited": "Ilimitado",
+      "limitReached": "Límite alcanzado"
+    },
+    "invitations": {
+      "title": "Invitaciones pendientes",
+      "loading": "Cargando invitaciones...",
+      "empty": "No hay invitaciones pendientes",
+      "invitedBy": "Invitación de {{email}}",
+      "acceptAria": "Aceptar la invitación a {{name}}",
+      "declineAria": "Rechazar la invitación a {{name}}"
+    },
+    "collaborations": {
+      "title": "Colaboraciones activas",
+      "loading": "Cargando colaboraciones...",
+      "empty": "No hay colaboraciones activas",
+      "leaveAria": "Salir de {{name}}"
+    }
+  },
+  "verifyEmailPage": {
+    "verifying": "Verificando tu correo electrónico...",
+    "missingToken": "No se encontró el token de verificación en la URL.",
+    "successTitle": "¡Correo electrónico verificado!",
+    "successMessage": "El correo electrónico se verificó correctamente.",
+    "failureTitle": "No se pudo verificar el correo electrónico",
+    "failureMessage": "La verificación no se pudo completar.",
+    "unexpectedError": "Se produjo un error. Inténtalo de nuevo."
+  },
+  "passwordResetPage": {
+    "setNewPassword": "Establecer nueva contraseña",
+    "successTitle": "¡Contraseña actualizada!",
+    "redirectingToLogin": "Redirigiendo al inicio de sesión...",
+    "resetFailed": "No se pudo restablecer la contraseña"
+  },
+  "passwordResetRequestPage": {
+    "title": "Restablecer contraseña",
+    "successTitle": "Revisa tu correo",
+    "successMessage": "Si existe una cuenta con ese correo, te hemos enviado un enlace para restablecer la contraseña.",
+    "sending": "Enviando...",
+    "submit": "Enviar enlace para restablecer la contraseña"
+  },
+  "changePasswordPage": {
+    "title": "Cambiar contraseña",
+    "description": "Elige una contraseña nueva. Se cerrarán las demás sesiones.",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Nueva contraseña",
+    "confirmNewPassword": "Confirmar nueva contraseña",
+    "passwordMinLength": "Mínimo {{count}} caracteres",
+    "passwordTooShort": "La contraseña nueva debe tener al menos {{count}} caracteres.",
+    "passwordsDoNotMatch": "Las contraseñas nuevas no coinciden.",
+    "passwordMustBeDifferent": "La contraseña nueva debe ser distinta de la actual.",
+    "changeFailed": "No se pudo cambiar la contraseña. Comprueba la contraseña actual.",
+    "changing": "Cambiando contraseña...",
+    "submit": "Cambiar contraseña",
+    "cancel": "Cancelar",
+    "successTitle": "Contraseña cambiada",
+    "successMessage": "Tu contraseña se ha actualizado. Por seguridad, se han cerrado las demás sesiones. Inicia sesión de nuevo.",
+    "goToSignIn": "Ir al inicio de sesión"
+  },
   "setPasswordPage": {
     "invalidLinkTitle": "Enlace no válido",
     "missingTokenMessage": "Este enlace para crear una contraseña no incluye un token. Usa el enlace completo del correo de invitación.",
@@ -3412,6 +3750,21 @@
     "expiresOn": "Caduca el",
     "sendSecurely": "Envíalo al usuario por un canal privado y seguro.",
     "singleUse": "Solo se puede usar una vez para establecer una contraseña."
+  },
+  "platformChatbot": {
+    "defaultAgentName": "Asistente de IA",
+    "new": "Nueva",
+    "newConversation": "Nueva conversación",
+    "open": "Abrir chat",
+    "close": "Cerrar chat",
+    "greeting": "¡Hola! ¿En qué puedo ayudarte hoy?",
+    "inputPlaceholder": "Escribe un mensaje..."
+  },
+  "userPicker": {
+    "removeSelectedUser": "Quitar usuario seleccionado: {{user}}",
+    "searchFailed": "No se pudo buscar usuarios",
+    "resultCount_one": "{{count}} resultado",
+    "resultCount_other": "{{count}} resultados"
   },
   "userManagement": {
     "title": "Usuarios",
@@ -3708,7 +4061,7 @@
     },
     "prompts": {
       "title": "Prompts e instrucciones",
-      "systemPrompt": "System prompt",
+      "systemPrompt": "Prompt del sistema",
       "systemPromptPlaceholder": "Define el comportamiento y las capacidades del agente...",
       "template": "Plantilla del prompt",
       "templatePlaceholder": "Plantilla para las interacciones con el usuario (debe incluir {question})...",
@@ -3800,6 +4153,13 @@
     "outputParser": {
       "dataStructure": "Estructura de datos",
       "select": "-- Selecciona una estructura de datos --"
+    },
+    "chatFilters": {
+      "title": "Filtros de chat",
+      "description": "Configura los filtros de chat para este agente",
+      "loading": "Cargando campos disponibles…",
+      "loadFailed": "No se pudieron cargar los campos de filtro disponibles.",
+      "empty": "Todavía no hay campos de metadatos disponibles en las herramientas o el silo seleccionados."
     },
     "capabilities": {
       "title": "Capacidades",
@@ -3942,6 +4302,23 @@
       "profileSaved": "Perfil de marketplace guardado",
       "profileSaveFailed": "No se pudo guardar el perfil de marketplace"
     }
+  },
+  "promptModal": {
+    "systemDescription": "Comportamiento y capacidades del agente",
+    "templateDescription": "Plantilla para las interacciones con el usuario",
+    "templatePlaceholder": "Define la plantilla para las interacciones con el usuario...",
+    "tipsTitle": "Consejos para escribir prompts eficaces",
+    "tipSpecific": "Especifica el rol y las capacidades del agente",
+    "tipExamples": "Incluye ejemplos del comportamiento esperado",
+    "tipClear": "Utiliza un lenguaje claro y conciso",
+    "tipTest": "Prueba los prompts en el entorno del agente para comprobar su funcionamiento",
+    "note": "Nota",
+    "conversationResetNotice": "Al guardar los prompts, se reiniciará la conversación para que puedas probarlos con un contexto nuevo.",
+    "saveSystemPrompt": "Guardar el prompt del sistema",
+    "saveTemplatePrompt": "Guardar la plantilla del prompt",
+    "updated": "Se actualizó {{promptType}} y se reinició la conversación.",
+    "updateFailed": "No se pudo actualizar el prompt",
+    "close": "Cerrar"
   },
   "agentPlayground": {
     "title": "Entorno del agente",
@@ -4247,6 +4624,9 @@
   },
   "playgroundMedia": {
     "title": "Subir contenido multimedia",
+    "relevantMoments_one": "Momento relevante",
+    "relevantMoments_other": "Momentos relevantes",
+    "jumpToMentionedMoments": "Saltar a los momentos mencionados:",
     "fileUpload": "Subir archivos",
     "youtubeUrl": "URL de YouTube",
     "selectFiles": "Selecciona archivos de vídeo o audio",
@@ -4333,6 +4713,97 @@
     "renameConversation": "Cambiar nombre de la conversación",
     "deleteConversation": "Eliminar conversación"
   },
+  "homePage": {
+    "title": "Te damos la bienvenida a AI Core Tools",
+    "subtitle": "¡Hola! Gestiona tus aplicaciones de IA, agentes y fuentes de datos desde un único lugar.",
+    "subtitleWithName": "¡Hola, {{name}}! Gestiona tus aplicaciones de IA, agentes y fuentes de datos desde un único lugar.",
+    "appsDescription": "Consulta y gestiona todas tus aplicaciones de IA desde un único lugar.",
+    "goToApps": "Ir a aplicaciones",
+    "usersDescription": "Gestiona las cuentas de usuario y sus permisos.",
+    "manageUsers": "Gestionar usuarios",
+    "statisticsDescription": "Consulta el uso del sistema y las métricas de rendimiento.",
+    "viewStats": "Ver estadísticas",
+    "aboutDescription": "Descubre AI Core Tools y sus funcionalidades.",
+    "learnMore": "Más información",
+    "gettingStartedTitle": "Primeros pasos",
+    "createAppDescription": "Empieza creando una aplicación de IA para organizar tus proyectos.",
+    "addAiAgents": "Añade agentes de IA",
+    "addAiAgentsDescription": "Configura agentes inteligentes para realizar tareas específicas.",
+    "connectDataSources": "Conecta fuentes de datos",
+    "connectDataSourcesDescription": "Vincula repositorios, silos y dominios con tus agentes.",
+    "deployAndMonitor": "Despliega y supervisa",
+    "deployAndMonitorDescription": "Lanza tus soluciones de IA y supervisa su rendimiento."
+  },
+  "landingPage": {
+    "logoAlt": "Logotipo de Mattin AI",
+    "goToDashboard": "Ir al panel",
+    "logIn": "Iniciar sesión",
+    "getStartedFree": "Empieza gratis",
+    "heroBadge": "Plataforma de IA para equipos",
+    "heroHeadlineFirst": "Construye tu equipo de IA.",
+    "heroHeadlineSecond": "Despliégalo en minutos.",
+    "heroDescription": "Mattin AI ofrece a tu equipo agentes inteligentes con RAG, búsqueda vectorial e integraciones empresariales, todo en una sola plataforma.",
+    "startForFree": "Empieza gratis",
+    "signIn": "Inicia sesión",
+    "features": {
+      "title": "Todo lo que necesitas para crear con IA",
+      "agentsTitle": "Agentes inteligentes",
+      "agentsDescription": "Configura agentes LLM con memoria, instrucciones de sistema, analizadores de salida e integraciones de herramientas.",
+      "knowledgeTitle": "Bases de conocimiento vectoriales",
+      "knowledgeDescription": "Silos con PGVector o Qdrant para RAG. Sube documentos, rastrea dominios y consulta semánticamente.",
+      "mcpTitle": "Integración con MCP",
+      "mcpDescription": "Conecta agentes con herramientas externas mediante Model Context Protocol, como Claude Desktop, Cursor y otras.",
+      "llmTitle": "LLM de varios proveedores",
+      "llmDescription": "OpenAI, Anthropic, Mistral, Azure y Google. Cambia de modelo sin tener que reconfigurar tus agentes.",
+      "collaborationTitle": "Colaboración en equipo",
+      "collaborationDescription": "Invita a colaboradores con acceso basado en roles: propietarios, administradores, editores y lectores.",
+      "apiTitle": "API y marketplace",
+      "apiDescription": "API REST completa, marketplace público de agentes y gestión de claves API para el acceso externo."
+    },
+    "pricing": {
+      "title": "Precios sencillos y transparentes",
+      "subtitle": "Empieza gratis y mejora tu plan cuando quieras",
+      "apps": "Aplicaciones",
+      "agentsPerApp": "Agentes por aplicación",
+      "silosPerApp": "Silos por aplicación",
+      "llmCallsPerMonth": "Llamadas LLM al mes",
+      "collaborators": "Colaboradores",
+      "mcpServers": "Servidores MCP",
+      "free": "Gratis",
+      "freeTagline": "Empieza sin coste",
+      "freePriceHint": "Gratis para siempre",
+      "freeNote": "Usa tus propias claves API para disponer de llamadas LLM ilimitadas",
+      "starter": "Inicial",
+      "starterTagline": "Para equipos en crecimiento",
+      "starterPriceHint": "Para equipos en crecimiento",
+      "pro": "Pro",
+      "proTagline": "Para usuarios avanzados",
+      "proPriceHint": "Para usuarios avanzados",
+      "proNote": "Llamadas LLM ilimitadas mediante los servicios de IA del sistema",
+      "getStarted": "Empezar"
+    },
+    "units": {
+      "apps_one": "aplicación",
+      "apps_other": "aplicaciones",
+      "agents_one": "agente",
+      "agents_other": "agentes",
+      "silos_one": "silo",
+      "silos_other": "silos",
+      "llmCalls_one": "llamada LLM",
+      "llmCalls_other": "llamadas LLM",
+      "collaborators_one": "colaborador",
+      "collaborators_other": "colaboradores",
+      "servers_one": "servidor",
+      "servers_other": "servidores"
+    },
+    "unlimited": "Sin límite: {{unit}}",
+    "ctaTitle": "¿Preparado para crear tu equipo de IA?",
+    "ctaDescription": "Únete a los equipos que ya usan Mattin AI. Empieza gratis, sin tarjeta de crédito.",
+    "createFreeAccount": "Crea tu cuenta gratuita",
+    "footerTagline": "La caja de herramientas de IA extensible para equipos modernos.",
+    "documentation": "Documentación",
+    "copyright": "© {{year}} Mattin AI. Todos los derechos reservados."
+  },
   "marketplacePage": {
     "title": "Marketplace",
     "subtitle": "Descubre e interactúa con agentes de IA y tareas programadas de la plataforma.",
@@ -4402,6 +4873,40 @@
       "dailyConfigured": "Diariamente en el horario configurado"
     }
   },
+  "marketplaceScheduledTaskPage": {
+    "backToMarketplace": "Volver al marketplace",
+    "by": "Publicada por {{appName}}",
+    "details": "Detalles"
+  },
+  "marketplaceAgentDetail": {
+    "invalidAgentId": "El identificador del agente no es válido",
+    "agentUnavailable": "El agente no existe o ya no está disponible.",
+    "loadFailed": "No se pudo cargar el agente",
+    "loading": "Cargando los detalles del agente...",
+    "coverImageAlt": "Imagen de portada de {{agent}}",
+    "about": "Acerca de",
+    "starRating": "Valoración por estrellas",
+    "starOption_one": "{{count}} estrella",
+    "starOption_other": "{{count}} estrellas",
+    "rateThisAgent": "Valora este agente",
+    "startNewChat": "Iniciar nuevo chat",
+    "starting": "Iniciando…",
+    "noRatingsYet": "Todavía no hay valoraciones",
+    "ratingCount_one": "{{formattedCount}} valoración",
+    "ratingCount_other": "{{formattedCount}} valoraciones",
+    "conversationCount_one": "{{formattedCount}} conversación",
+    "conversationCount_other": "{{formattedCount}} conversaciones",
+    "ratingSubmitting": "Enviando valoración…",
+    "ratingSaved": "Valoración guardada",
+    "ratingFailed": "No se pudo enviar la valoración",
+    "yourRating_one": "Tu valoración: {{count}} estrella. Haz clic para cambiarla.",
+    "yourRating_other": "Tu valoración: {{count}} estrellas. Haz clic para cambiarla.",
+    "startConversationToRate": "Inicia una conversación con este agente para dejar una valoración.",
+    "yourConversations": "Tus conversaciones",
+    "untitledConversation": "Conversación sin título",
+    "messageCount_one": "{{count}} mensaje",
+    "messageCount_other": "{{count}} mensajes"
+  },
   "marketplaceChat": {
     "agentFallback": "Agente",
     "invalidConversationId": "El identificador de conversación no es válido",
@@ -4465,6 +4970,11 @@
     "marketplaceUsage": "Uso del marketplace",
     "callsThisMonth": "{{used}} / {{quota}} llamadas este mes"
   },
+  "messageContent": {
+    "copyCode": "Copiar código",
+    "externalImage": "Imagen externa",
+    "invalidJson": "JSON no válido"
+  },
   "attachedFiles": {
     "title": "Archivos adjuntos",
     "fileCount_one": "{{count}} archivo",
@@ -4472,6 +4982,8 @@
     "uploading": "Subiendo...",
     "emptyTitle": "Aún no hay archivos adjuntos",
     "emptyDescription": "Usa el botón de adjuntar para subir archivos",
+    "imageUnavailable": "[Imagen no disponible: {{filename}}]",
+    "loadingImage": "Cargando {{filename}}…",
     "generated": "Generado",
     "status": {
       "ready": "Listo",
@@ -4491,10 +5003,31 @@
     "removeFile": "Eliminar archivo",
     "removeFileNamed": "Eliminar {{filename}}"
   },
+  "searchableMultiSelect": {
+    "any": "— cualquiera —",
+    "selectedCount": "{{count}} seleccionados",
+    "searchValues": "Buscar valores",
+    "searchPlaceholder": "Buscar…",
+    "searching": "Buscando…",
+    "searchFailed": "La búsqueda ha fallado — inténtalo de nuevo",
+    "noMatches": "Sin coincidencias",
+    "clearSelection": "Borrar selección",
+    "showingFirst": "Mostrando los primeros {{count}} — escribe para buscar entre todos los valores",
+    "showingFirstMatches": "Mostrando las primeras {{count}} coincidencias — sigue escribiendo para acotar",
+    "showingOf": "Mostrando {{shown}} de {{total}} — escribe para acotar"
+  },
+  "orchestratorFilters": {
+    "title": "Filtros",
+    "clearAll": "Borrar todos",
+    "removeValue": "Quitar {{value}} del filtro {{field}}"
+  },
   "hitlApproval": {
     "required": "Se requiere aprobación",
     "expired": "Caducada",
     "expiresIn": "Caduca en {{time}}",
+    "time": {
+      "hoursMinutes": "{{hours}} h {{minutes}} min"
+    },
     "statusExpired": "Esta solicitud ha caducado y la herramienta no se ejecutó. La respuesta del agente aparecerá en breve.",
     "statusSingle": "El agente quiere ejecutar esta herramienta. No se ejecutará hasta que decidas.",
     "statusMultiple": "El agente quiere ejecutar estas herramientas. Elige una opción para cada una y envía tus decisiones.",
@@ -4513,6 +5046,7 @@
     }
   },
   "conversationSidebar": {
+    "retry": "Reintentar",
     "new": "Nueva",
     "closeLabel": "Cerrar conversaciones",
     "refresh": "Actualizar",

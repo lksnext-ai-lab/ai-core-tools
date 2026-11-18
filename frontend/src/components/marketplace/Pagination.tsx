@@ -46,7 +46,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           >
             1
           </button>
-          {start > 2 && <span className="px-2 text-gray-400">…</span>}
+          {start > 2 && <span className="px-2 text-fg-secondary dark:text-fg-secondary-dark">…</span>}
         </>
       )}
 
@@ -67,7 +67,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
 
       {end < totalPages && (
         <>
-          {end < totalPages - 1 && <span className="px-2 text-gray-400">…</span>}
+          {end < totalPages - 1 && <span className="px-2 text-fg-secondary dark:text-fg-secondary-dark">…</span>}
           <button
             type="button"
             onClick={() => onPageChange(totalPages)}

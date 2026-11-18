@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 
 import Alert from './Alert';
 
@@ -14,7 +15,6 @@ const meta = {
       control: 'inline-radio',
       options: ['success', 'error', 'warning', 'info'],
     },
-    onDismiss: { action: 'dismissed' },
   },
   decorators: [
     (Story) => (
@@ -42,7 +42,7 @@ export const CustomTitle: Story = {
 };
 
 export const Dismissible: Story = {
-  args: { type: 'info', message: 'You can close this message.', onDismiss: () => undefined },
+  args: { type: 'info', message: 'You can close this message.', onDismiss: fn() },
 };
 
 export const RichMessage: Story = {

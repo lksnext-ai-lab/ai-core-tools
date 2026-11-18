@@ -9,6 +9,7 @@ import { ServiceOptionStatus, serviceStatusId } from '../ui/ServiceOptionStatus'
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
 import { MediaServicesFields, type MediaAIServiceOption } from './MediaServicesFields';
 import { FormField, FormSelect } from '../ui/FormField';
+import CardApp from '../ui/CardApp';
 
 interface VectorDbOption {
   code: string;
@@ -305,10 +306,10 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
             </div>
           </div>
 
+          
           {/* Media (video/audio) indexing */}
           {(silo?.ai_services?.length ?? 0) > 0 && (
-            <fieldset className="space-y-4 border-t border-gray-200 pt-6 mt-5">
-              <legend className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">{t('siloFormPage.media.title')}</legend>
+            <CardApp className="space-y-4 pt-6 mt-5" titulo={t('siloFormPage.media.title')}>
               <MediaServicesFields
                 scope="silo"
                 aiServices={silo?.ai_services ?? []}
@@ -319,7 +320,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 disabled={isSubmitting}
                 onChange={(field, value) => setFormData(prev => ({ ...prev, [field]: value }))}
               />
-            </fieldset>
+            </CardApp>
           )}
 
           {/* Error Message */}

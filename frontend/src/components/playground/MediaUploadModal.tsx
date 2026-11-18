@@ -114,7 +114,7 @@ function MediaUploadModal({
             <FormField
               id="pg-youtube-url-input"
               type="text"
-              label="YouTube URL"
+              label={t('playgroundMedia.youtubeUrl')}
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               placeholder="https://youtube.com/watch?v=..."

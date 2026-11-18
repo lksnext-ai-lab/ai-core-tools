@@ -253,7 +253,7 @@ function renderBreadcrumbs(crumbs: Crumb[], t: (key: string) => string): React.R
         return (
           <React.Fragment key={`${crumb.label}-${index}`}>
             {index > 0 && (
-              <ChevronRight size={12} className="text-gray-400 flex-shrink-0" />
+              <ChevronRight size={12} className="text-fg-tertiary dark:text-fg-tertiary-dark flex-shrink-0" />
             )}
             {!isLast && crumb.path ? (
               <Link

@@ -66,6 +66,7 @@ function ServiceWizard({
   const [credentials, setCredentials] = useState<CredentialsState>(EMPTY_CREDENTIALS);
   const [selectedModel, setSelectedModel] = useState<ProviderModelInfo | null>(null);
   const [manualModelName, setManualModelName] = useState('');
+  const [serviceNameOverride, setServiceNameOverride] = useState<string | null>(null);
   const [supportsVideo, setSupportsVideo] = useState(false);
   const [endOfServiceDate, setEndOfServiceDate] = useState('');
   const [deprecationNotice, setDeprecationNotice] = useState('');
@@ -79,6 +80,7 @@ function ServiceWizard({
   // Reset every time the wizard re-opens.
   useEffect(() => {
     if (!isOpen) return;
+    setServiceNameOverride(null);
     if (mode === 'edit-model' && initialService) {
       setProvider(initialService.provider || '');
       if (kind === 'sandbox') {
@@ -156,6 +158,7 @@ function ServiceWizard({
     const base = `${descriptor?.label || provider} - ${modelPart}`;
     return ensureUnique(base, existingNames);
   }, [provider, kind, descriptor, selectedModel, manualModelName, existingNames]);
+  const serviceName = serviceNameOverride ?? autoName;
 
   const stepDisabled = useMemo(() => {
     switch (steps[currentStep].id) {
@@ -167,11 +170,11 @@ function ServiceWizard({
         if (!descriptor?.supportsModelListing) return !manualModelName.trim();
         return !selectedModel;
       case 'confirm':
-        return !autoName;
+        return !serviceName.trim();
       default:
         return false;
     }
-  }, [steps, currentStep, provider, descriptor, credentials, selectedModel, manualModelName, autoName]);
+  }, [steps, currentStep, provider, descriptor, credentials, selectedModel, manualModelName, serviceName]);
 
   const handleNext = async () => {
     const stepId = steps[currentStep].id;
@@ -199,7 +202,7 @@ function ServiceWizard({
   const buildPayload = (): ServiceFormData | SandboxServiceFormData => {
     if (kind === 'sandbox') {
       const sandboxPayload: SandboxServiceFormData = {
-        name: autoName || provider,
+        name: serviceName.trim() || provider,
         provider,
         api_key: credentials.api_key,
         base_url: credentials.base_url,
@@ -220,7 +223,7 @@ function ServiceWizard({
       ? selectedModel?.id || ''
       : manualModelName.trim();
     return {
-      name: autoName || `${provider} - ${modelName}`,
+      name: serviceName.trim() || `${provider} - ${modelName}`,
       provider,
       model_name: modelName,
       api_key: credentials.api_key,
@@ -357,7 +360,8 @@ function ServiceWizard({
                 provider={provider}
                 model={selectedModel}
                 manualModelName={manualModelName}
-                autoName={autoName}
+                serviceName={serviceName}
+                onServiceNameChange={setServiceNameOverride}
                 credentials={credentials}
                 supportsVideo={supportsVideo}
                 onSupportsVideoChange={setSupportsVideo}

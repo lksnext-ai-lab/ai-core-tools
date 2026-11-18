@@ -34,7 +34,7 @@ export function SessionGate({ children }: SessionGateProps) {
       void refreshUser().finally(() => setRetrying(false));
     };
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900">
+      <div className="min-h-screen flex items-center justify-center">
         <ErrorState
           className="max-w-md w-full"
           error="We couldn't reach the server to check your session."

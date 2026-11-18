@@ -67,7 +67,6 @@ const Alert: React.FC<AlertProps> = ({
 }) => {
   const { t } = useTranslation('common');
   const styles = alertStyles[type];
-  const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
   const assertive = !polite && (type === 'error' || type === 'warning');
 
   return (
@@ -80,8 +79,8 @@ const Alert: React.FC<AlertProps> = ({
         <div className="flex-1">
           {title && (
             <h3 className={`text-sm font-medium ${styles.titleColor}`}>
-            {title || defaultTitle}
-          </h3>
+              {title}
+            </h3>
           )}
           
           <div className={`text-sm ${styles.messageColor} mt-1  whitespace-pre-line`}>{message}</div>
@@ -92,7 +91,7 @@ const Alert: React.FC<AlertProps> = ({
               aria-label={dismissAriaLabel}
               className={`mt-2 text-sm ${styles.buttonColor} underline`}
             >
-              {dismissLabel ?? t('alert.dismiss')}
+              {dismissLabel ?? t('dismiss')}
             </button>
           )}
         </div>
