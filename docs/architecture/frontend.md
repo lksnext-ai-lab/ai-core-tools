@@ -28,13 +28,13 @@ The frontend is a **React 18 + TypeScript** single-page application built with *
             Backend API (/internal/*)
 ```
 
-Branding, theme, auth and API URL are configured in `src/App.tsx` (a `LibraryConfig` object, type in `src/core/types.ts`) and through runtime config (`window.__RUNTIME_CONFIG__`, injected at container start).
+Branding, theme, auth and API URL are configured in `src/App.tsx` (an `AppConfig` object, type in `src/core/AppConfig.ts`) and through runtime config (`window.__RUNTIME_CONFIG__`, injected at container start).
 
 ## Structure
 
 ### Core (`src/core/`)
 
-**Entry point**: `ExtensibleBaseApp` component, mounted by `src/App.tsx`.
+**Entry point**: `AppRoot` component, mounted by `src/App.tsx`.
 
 The app shell provides:
 - **Routing** (React Router)
@@ -273,7 +273,7 @@ const defaultNavigation = [
 ];
 ```
 
-**NavigationMerger**: Merges the default navigation with the extra navigation items passed in the config.
+The navigation comes from `defaultNavigation` (`src/core/defaultNavigation.tsx`) unless the config provides `navigationConfig`.
 
 ## Build & Development
 

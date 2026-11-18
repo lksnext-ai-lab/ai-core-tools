@@ -185,7 +185,7 @@ User message + optional files
 
 ```
 frontend/src/
-├── core/                # ExtensibleBaseApp.tsx — app shell (routing, auth, layout)
+├── core/                # AppRoot.tsx — app shell (routing, providers, layout)
 ├── components/          # Reusable UI (ui/, forms/, playground/)
 ├── pages/               # Page-level components
 ├── services/            # api.ts — centralized HTTP client
