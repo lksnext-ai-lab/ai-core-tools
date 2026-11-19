@@ -464,6 +464,19 @@ export function CompactSelectPopover(props: Readonly<CompactSelectPopoverProps>)
                     {group.items.map(({ option, index }) => {
                       const selected = selectedValues.includes(option.value);
                       const active = index === safeActive;
+                      const activate = () => {
+                        setActiveIndex(index);
+                        const result = activateResult(flat, index, multiple, selectedValues);
+                        if (result.kind === 'single' && props.multiple !== true) {
+                          props.onChange(result.value);
+                          close(true);
+                        } else if (result.kind === 'multiple' && props.multiple === true) {
+                          props.onChange(result.values);
+                          setSelectionAnnouncement(
+                            selectionChangeLabel?.(option.label, result.selected) ?? '',
+                          );
+                        }
+                      };
                       return (
                         <div
                           key={option.value}
@@ -472,17 +485,11 @@ export function CompactSelectPopover(props: Readonly<CompactSelectPopoverProps>)
                           aria-selected={selected}
                           aria-disabled={option.disabled || undefined}
                           onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setActiveIndex(index);
-                            const result = activateResult(flat, index, multiple, selectedValues);
-                            if (result.kind === 'single' && props.multiple !== true) {
-                              props.onChange(result.value);
-                              close(true);
-                            } else if (result.kind === 'multiple' && props.multiple === true) {
-                              props.onChange(result.values);
-                              setSelectionAnnouncement(
-                                selectionChangeLabel?.(option.label, result.selected) ?? '',
-                              );
+                          onClick={activate}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              activate();
                             }
                           }}
                           onMouseEnter={() => setActiveIndex(index)}
