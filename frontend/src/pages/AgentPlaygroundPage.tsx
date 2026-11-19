@@ -272,6 +272,7 @@ function AgentPlaygroundPage() {
                     agentId={Number.parseInt(agentId!)}
                     agentName={agent.name}
                     conversationId={currentConversationId}
+                    wide
                     onConversationCreated={handleConversationCreated}
                     onConversationReset={handleConversationReset}
                     onMessageSent={handleMessageSent}
