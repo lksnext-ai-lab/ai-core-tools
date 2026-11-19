@@ -1131,15 +1131,18 @@ class FileManagementService:
         """Delete every file of a conversation: its session metadata and its working directory."""
         session_key = self._get_session_key(agent_id, user_context, conversation_id)
         self._files.pop(session_key, None)
-        paths = [os.path.join(self._persistent_dir, session_key)]
+        targets = [(self._persistent_dir, session_key)]
         if conversation_id:
-            paths.append(os.path.join(self._tmp_base_folder, "conversations", str(conversation_id)))
-        for path in paths:
+            targets.append((os.path.join(self._tmp_base_folder, "conversations"), str(conversation_id)))
+        for base_dir, part in targets:
             try:
-                if os.path.isdir(path):
+                path = resolve_within(base_dir, part)
+                if path != os.path.realpath(base_dir) and os.path.isdir(path):
                     shutil.rmtree(path)
+            except UnsafePathError:
+                logger.warning("Refusing to delete conversation storage outside %s", sanitize_for_log(base_dir))
             except Exception as e:
-                logger.error(f"Error deleting conversation storage {path}: {e}")
+                logger.error("Error deleting conversation storage under %s: %s", sanitize_for_log(base_dir), e)
 
     def delete_agent_storage(self, agent_id: int, conversation_ids: List[int]) -> None:
         """Delete every file stored for an agent: all its sessions and its conversations' working directories."""
