@@ -18,7 +18,7 @@ Repository-wide guidance for GitHub Copilot. **Keep this file lean** — it is r
 |---|---|---|
 | **Domain model, entities, API surface, agent execution flow, memory, env vars** | `.github/instructions/domain-model.instructions.md` | auto on `backend/**`, `frontend/**`, `alembic/**`, `tests/**` (else `#file:` it) |
 | **Backend conventions** (paths, layering, utilities, auth modes, tenant scoping) | `backend-conventions.instructions.md` | auto on `backend/**` |
-| **Frontend conventions** (library + client model, `api.ts`, constants sync) | `react-conventions.instructions.md` | auto on `frontend/**` |
+| **Frontend conventions** (`AppRoot`, `api.ts`, constants sync) | `react-conventions.instructions.md` | auto on `frontend/**` |
 | **Migrations** (naming, model registry, downgrade test) | `alembic.instructions.md` | auto on `alembic/**` |
 | **Testing** (fixtures, savepoint isolation, factory-boy, test DB) | `testing-conventions.instructions.md` | auto on `tests/**` |
 | **Git / GitHub** (GitFlow, `--body-file`, remotes) | `git-github.instructions.md` | global |
@@ -60,7 +60,7 @@ backend/
 ### Frontend (`frontend/src/`)
 
 ```
-core/         # ExtensibleBaseApp (library entry point) and config
+core/         # AppRoot (app shell: routing, providers) and config
 components/    # ui/ · forms/ · playground/
 pages/         # Page-level components
 services/      # api.ts — ALL HTTP goes through here
@@ -70,10 +70,6 @@ auth/          # OIDC authentication
 ```
 
 **Patterns:** all HTTP via `api.ts` · global state via Context (`useUser()`, `useTheme()`) · Tailwind utilities · protect routes with `ProtectedRoute` / `AdminRoute`.
-
-### Client Projects (`clients/`)
-
-Consume `@lksnext/ai-core-tools-base`. Customize via `src/config/clientConfig.ts` and `src/themes/`. **Never modify the base library** for client-specific features.
 
 ## Code Style
 
@@ -103,9 +99,6 @@ pytest -v --cov=backend --cov-report=term-missing
 
 # Full stack
 cd docker && docker compose up -d --build   # http://localhost/
-
-# Library publish
-cd frontend && npm run build:lib && npm run publish:npm
 ```
 
 ## Anti-Patterns to Avoid
@@ -114,7 +107,6 @@ cd frontend && npm run build:lib && npm run publish:npm
 - ❌ Business logic in routers — move to services
 - ❌ Raw SQL — use SQLAlchemy ORM
 - ❌ Hardcoded secrets — use environment variables
-- ❌ Modifying the base library for client needs — use `clientConfig.ts`
 - ❌ Manual version bumping — use `@version-bumper`
 - ❌ Skipping migration downgrades — always test rollback
 

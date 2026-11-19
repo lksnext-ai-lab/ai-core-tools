@@ -485,7 +485,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_conversation_agent_api_key_hash
 - `INTERNAL_CHAT` added to the `conversationsource` and `agent_execution_caller_type` enums (`ApprovalChannel` is a string column; Python-only).
 - Tables `conversation_turn`, `chat_user_default`, `chat_conversation_state` (foreign keys and delete rules in [Defaults and conversation state](#defaults-and-conversation-state)).
 
-Rollout: deploy the backend before the frontend library; the menu entry appears when a client project updates `@lksnext/ai-core-tools-base` and can be hidden there (see [Hide the menu entry](#hide-the-menu-entry-client-projects)).
+Rollout: deploy the backend before the frontend; the menu entry appears with the new frontend image.
 
 ### Rolling back
 
@@ -553,18 +553,6 @@ One-off cleanup (optional): inspect `data/tmp/conversations/*` of deployments th
 Full list with the OpenSandbox server variables (`OPENSANDBOX_API_KEY` is mandatory for the `opensandbox` compose profile): [Environment Variables](../reference/environment-variables.md#sandbox-providers). Operations of the sandbox host: `docker/README.md`. Without the `opensandbox` profile running, a Chat on the system default provider still offers the code tools (the provider is only checked for being registered and allowed): the first call returns a generic error and the answer is written without code. `turn_config.code_interpreter` is then `false` on `/messages` (and `true` on the early `metadata` event of `/stream`).
 
 Related, already existing: `AICT_AGENT_RUN_TIMEOUT_SECONDS` (default 600) sets the busy-marker expiry (`+ 60 s`) and the expected duration of a sandbox turn lease.
-
-## Hide the menu entry (client projects)
-
-The entry is part of the default App navigation (`appNavigation`, `/apps/:appId/chat`). To hide it in a client project, in `src/config/clientConfig.ts`:
-
-```typescript
-navigation: {
-  remove: ['/apps/:appId/chat']
-}
-```
-
-This removes the **menu entry only**. The routes `/apps/:appId/chat` and `/apps/:appId/chat/:conversationId` stay registered and reachable by URL, and the backend endpoints stay available to every App member. See [Client Project Setup](../guides/client-setup.md#navigation-customization).
 
 ## Testing
 

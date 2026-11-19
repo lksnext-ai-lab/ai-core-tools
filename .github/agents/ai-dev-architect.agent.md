@@ -407,7 +407,7 @@ The repository currently has the following agents. Always check this map before 
 | Agent | Domain |
 |-------|--------|
 | `@backend-expert` | Python / FastAPI / SQLAlchemy / Pydantic / LangChain implementation |
-| `@react-expert` | React 19 + TypeScript + Vite + Tailwind for the Mattin frontend library |
+| `@react-expert` | React 19 + TypeScript + Vite + Tailwind for the Mattin frontend |
 | `@alembic-expert` | Alembic migration design, naming, downgrade safety |
 | `@test-expert` | pytest unit/integration tests, fixtures, mocking, coverage |
 | `@docs-manager` | Documentation under `docs/`, freshness audit via `.doc-metadata.yaml` |

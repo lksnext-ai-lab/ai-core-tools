@@ -7,14 +7,12 @@ import { AuthProvider } from '../auth/AuthConfig';
 import { UserProvider } from '../contexts/UserContext';
 import { SettingsCacheProvider } from '../contexts/SettingsCacheContext';
 import { ConfirmProvider } from '../contexts/ConfirmContext';
-import { Layout } from '../components/layout/Layout';
 import SettingsLayout from '../components/layout/SettingsLayout';
 import ScrollToTop from '../components/layout/ScrollToTop';
 import { ProtectedLayoutRoute, AdminLayoutRoute, EditorLayoutRoute } from '../components/ProtectedLayoutRoute';
 import { configService } from './ConfigService';
-import { mergeNavigationConfig } from './NavigationMerger';
 import { defaultNavigation } from './defaultNavigation';
-import type { LibraryConfig, ExtraRoute } from './types';
+import type { AppConfig } from './AppConfig';
 import { baseTheme } from '../themes/baseTheme';
 
 import LandingPage from '../pages/LandingPage';
@@ -91,17 +89,11 @@ import SharePointSourceDetailPage from '../pages/SharePointSourceDetailPage';
 import AppMetricsPage from '../pages/AppMetricsPage';
 import i18n from '../i18n';
 
-interface ExtensibleBaseAppProps {
-  config: LibraryConfig;
-  extraRoutes?: ExtraRoute[];
-  children?: React.ReactNode;
+interface AppRootProps {
+  config: AppConfig;
 }
 
-export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
-  config,
-  extraRoutes = [],
-}) => {
-  const allExtraRoutes = [...(config.routes || []), ...extraRoutes];
+export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
   const clientConfig = useMemo(() => ({
     clientId: 'library-client',
     name: config.name || 'AI Core Tools',
@@ -138,9 +130,7 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
 
   const features = config.features || {};
   
-  const mergedNavigationConfig = config.navigation
-    ? mergeNavigationConfig(config.navigation)
-    : (config.navigationConfig || defaultNavigation);
+  const mergedNavigationConfig = config.navigationConfig || defaultNavigation;
 
   const commonLayoutProps = useMemo(() => ({
     navigationConfig: mergedNavigationConfig,
@@ -579,29 +569,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       <AboutPage />
                     </ProtectedLayoutRoute>
                 } />
-
-                {allExtraRoutes.map(route => {
-                  let element;
-                  if (route.adminOnly) {
-                    element = <AdminLayoutRoute {...commonLayoutProps}>{route.element}</AdminLayoutRoute>;
-                  } else if (route.protected) {
-                    element = <ProtectedLayoutRoute {...commonLayoutProps}>{route.element}</ProtectedLayoutRoute>;
-                  } else {
-                    element = (
-                      <Layout {...commonLayoutProps}>
-                        {route.element}
-                      </Layout>
-                    );
-                  }
-
-                  return (
-                    <Route 
-                      key={route.path} 
-                      path={route.path} 
-                      element={element}
-                    />
-                  );
-                })}
 
                 <Route path="*" element={<Navigate to="/apps" replace />} />
               </Routes>

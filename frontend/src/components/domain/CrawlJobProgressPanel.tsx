@@ -8,7 +8,7 @@ import { Spinner } from '../ui/Spinner';
 import { Badge, type BadgeVariant } from '../ui/Badge';
 import { ButtonApp } from '../ui/ButtonApp';
 import CardApp from '../ui/CardApp';
-import { Alert } from '../..';
+import Alert from '../ui/Alert';
 
 interface CrawlJobProgressPanelProps {
   appId: number;

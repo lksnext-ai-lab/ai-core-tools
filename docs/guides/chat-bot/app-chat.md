@@ -146,7 +146,6 @@ When something fails, the platform's failure logs and the metrics dashboard reco
 - Temporary knowledge bases of conversations do not appear in the silo, repository or output-parser lists and do not count against the plan's silo limit.
 - Models, sources and skills appear in the selector according to what exists in the App. A frozen App (after a plan downgrade) accepts no new Chat messages or uploads; existing conversations can still be read and deleted.
 - Chat usage appears in the metrics dashboards under the **INTERNAL_CHAT** channel.
-- **Hiding the menu entry** (client projects): in `clientConfig.ts` add `navigation: { remove: ['/apps/:appId/chat'] }`. This hides only the menu entry; the page remains reachable by URL. See [Client Project Setup](../client-setup.md#navigation-customization).
 
 ## Known limits
 

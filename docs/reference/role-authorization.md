@@ -267,7 +267,7 @@ Role authorization returns specific HTTP status codes:
 React hook to get user's role in current app:
 
 ```typescript
-import { useAppRole } from '@lksnext/ai-core-tools-base';
+import { useAppRole } from '../hooks/useAppRole';
 
 function MyComponent() {
   const { role, isOwner, isAdmin, isEditor, isViewer } = useAppRole(appId);
@@ -287,7 +287,7 @@ function MyComponent() {
 Require authentication to access route:
 
 ```typescript
-import { ProtectedRoute } from '@lksnext/ai-core-tools-base';
+import ProtectedRoute from '../components/ProtectedRoute';
 
 <Route path="/playground" element={
   <ProtectedRoute>
@@ -303,7 +303,7 @@ import { ProtectedRoute } from '@lksnext/ai-core-tools-base';
 Require admin/omniadmin role:
 
 ```typescript
-import { AdminRoute } from '@lksnext/ai-core-tools-base';
+import AdminRoute from '../components/AdminRoute';
 
 <Route path="/admin/*" element={
   <AdminRoute>
@@ -319,7 +319,7 @@ import { AdminRoute } from '@lksnext/ai-core-tools-base';
 Utility functions for role checks:
 
 ```typescript
-import { hasMinRole, getRoleLevel } from '@lksnext/ai-core-tools-base/roleUtils';
+import { hasMinRole, getRoleLevel } from '../utils/roleUtils';
 
 // Check if user has minimum role
 if (hasMinRole(userRole, 'editor')) {
@@ -348,7 +348,7 @@ def can_modify_resource(db: Session, app_id: int, user_id: int, email: str) -> b
 ### Frontend: Conditional Rendering
 
 ```typescript
-import { useAppRole } from '@lksnext/ai-core-tools-base';
+import { useAppRole } from '../hooks/useAppRole';
 
 function AgentList({ appId }) {
   const { role, isEditor } = useAppRole(appId);

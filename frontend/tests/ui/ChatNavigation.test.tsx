@@ -3,8 +3,8 @@ import { Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Sidebar } from '../../src/components/sidebar/Sidebar';
-import { mergeNavigationConfig } from '../../src/core/NavigationMerger';
-import appSource from '../../src/core/ExtensibleBaseApp.tsx?raw';
+import { defaultNavigation } from '../../src/core/defaultNavigation';
+import appSource from '../../src/core/AppRoot.tsx?raw';
 import { apiMock } from './apiMock';
 import { renderWithProviders, tr } from './testUtils';
 
@@ -16,7 +16,7 @@ vi.mock('../../src/contexts/UserContext', () => ({
   useUser: () => ({ user: userState.current, loading: false }),
 }));
 
-function renderSidebar(config = mergeNavigationConfig()) {
+function renderSidebar(config = defaultNavigation) {
   apiMock.getApps.mockResolvedValue([{ app_id: 7, name: 'Demo' }] as never);
   return renderWithProviders(
     <Routes>
@@ -28,7 +28,7 @@ function renderSidebar(config = mergeNavigationConfig()) {
 
 describe('Chat routes', () => {
   it('are open to any App member: wrapped in ProtectedLayoutRoute, not the editor or admin wrapper', () => {
-    // Source-level guard: rendering ExtensibleBaseApp needs the whole auth stack.
+    // Source-level guard: rendering AppRoot needs the whole auth stack.
     const lines = appSource.split('\n').filter((line) => /<Route path="\/apps\/:appId\/chat(\/:conversationId)?"/.test(line));
     expect(lines).toHaveLength(2);
     for (const line of lines) {
@@ -41,17 +41,10 @@ describe('Chat routes', () => {
 
 describe('Chat menu entry', () => {
   it('is part of the default App navigation, open to every member', () => {
-    const entry = mergeNavigationConfig().appNavigation?.find((item) => item.path === '/apps/:appId/chat');
+    const entry = defaultNavigation.appNavigation?.find((item) => item.path === '/apps/:appId/chat');
     expect(entry).toBeDefined();
     expect(entry?.adminOnly).toBeFalsy();
     expect(entry?.editorOnly).toBeFalsy();
-  });
-
-  it('can be hidden by a client project with navigation.remove, which leaves the rest of the menu alone', () => {
-    const merged = mergeNavigationConfig({ remove: ['/apps/:appId/chat'] });
-    const paths = merged.appNavigation?.map((item) => item.path);
-    expect(paths).not.toContain('/apps/:appId/chat');
-    expect(paths).toContain('/apps/:appId/agents');
   });
 
   it('is rendered, translated and linked to the App chat for a user with the platform role viewer', async () => {
@@ -65,12 +58,5 @@ describe('Chat menu entry', () => {
     expect(screen.queryByRole('link', { name: tr('breadcrumbs.navigation.myApps') })).not.toBeInTheDocument();
     // And the App panel (not just the global rail) is what is showing.
     expect(screen.getByRole('link', { name: tr('breadcrumbs.navigation.agents') })).toBeInTheDocument();
-  });
-
-  it('is not rendered when the client removed it from the navigation', async () => {
-    userState.current = { is_admin: false, platform_role: 'editor' };
-    renderSidebar(mergeNavigationConfig({ remove: ['/apps/:appId/chat'] }));
-    await screen.findByRole('link', { name: tr('breadcrumbs.navigation.agents') });
-    expect(screen.queryByRole('link', { name: tr('breadcrumbs.navigation.chat') })).not.toBeInTheDocument();
   });
 });

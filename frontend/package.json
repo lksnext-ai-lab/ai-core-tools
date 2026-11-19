@@ -1,7 +1,7 @@
 {
   "name": "@lksnext/ai-core-tools-base",
   "version": "0.3.0",
-  "description": "Base React components and utilities for AI Core Tools - an extensible AI toolbox platform",
+  "description": "Mattin AI frontend",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -9,35 +9,10 @@
     "directory": "frontend"
   },
   "homepage": "https://github.com/lksnext-ai-lab/ai-core-tools#readme",
-  "keywords": [
-    "react",
-    "ai",
-    "llm",
-    "rag",
-    "vector-search",
-    "components",
-    "ui-library",
-    "typescript"
-  ],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    },
-    "./dist/style.css": "./dist/style.css"
-  },
-  "files": [
-    "dist/**/*"
-  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:lib": "vite build --mode library && tsc -p tsconfig.build.json",
-    "build:lib:watch": "tsc -p tsconfig.build.json --watch & vite build --mode library --watch",
     "build:production": "tsc -b --noCheck && vite build",
     "lint": "eslint .",
     "test": "node --test tests/*.test.cjs && npm run test:types && npm run test:ui",
@@ -46,10 +21,6 @@
     "test:scheduled-task-form": "node --test tests/ScheduledTaskFormPage.test.cjs",
     "test:hitl-approval": "node --test tests/HitlApprovalDecisions.test.cjs",
     "preview": "vite preview",
-    "pack:local": "npm run build:lib && npm pack",
-    "publish:npm": "npm run build:lib && npm publish --access public",
-    "publish:npm:dry-run": "npm run build:lib && npm publish --access public --dry-run",
-    "prepare": "npm run build:lib",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -68,10 +39,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
-    "@storybook/addon-docs": "10.6.1",
-    "@storybook/addon-onboarding": "10.6.1",
-    "@storybook/addon-themes": "^10.6.1",
-    "@storybook/react-vite": "10.6.1",
+    "@storybook/addon-docs": "10.6.7",
+    "@storybook/addon-onboarding": "10.6.7",
+    "@storybook/addon-themes": "^10.6.7",
+    "@storybook/react-vite": "10.6.7",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.3",
@@ -91,21 +62,28 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^6.30.1",
-    "storybook": "10.6.1",
+    "storybook": "10.6.7",
     "tailwindcss": "^3.4.0",
     "terser": "^5.44.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
-    "vite": "^7.3.6",
+    "vite": "^7.3.8",
     "vitest": "4.1.12",
     "vitest-axe": "^0.1.0"
   },
   "overrides": {
-    "uri-js": "npm:fast-uri@^3.1.8"
+    "uri-js": "npm:fast-uri@^3.1.8",
+    "@joshwooding/vite-plugin-react-docgen-typescript": {
+      "glob": "^14.0.2"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    }
   },
   "eslintConfig": {
     "extends": [
       "plugin:storybook/recommended"
     ]
-  }
+  },
+  "private": true
 }

@@ -9,7 +9,7 @@ import { errorMessage } from '../../constants/messages';
 import { Title } from '../../components/ui/Title';
 import Table from '../../components/ui/Table';
 import CardApp from '../../components/ui/CardApp';
-import { BackgroundImage } from '../..';
+import { BackgroundImage } from '../../components/ui/BackgroundImage';
 
 function StatsPage() {
   const { t, i18n } = useTranslation('common');

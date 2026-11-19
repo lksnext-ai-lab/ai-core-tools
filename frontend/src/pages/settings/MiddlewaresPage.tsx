@@ -20,7 +20,8 @@ import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
-import { BackgroundImage, LoadingState } from '../..';
+import { BackgroundImage } from '../../components/ui/BackgroundImage';
+import { LoadingState } from '../../components/ui/LoadingState';
 import Title from '../../components/ui/Title';
 
 function MiddlewaresPage() {
