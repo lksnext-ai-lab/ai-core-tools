@@ -54,6 +54,16 @@ skills:
   - name: charts
     path: charts
 
+# Platform prompt of the hidden internal chat agent behind the per-App Chat. Read at turn time
+# (backend/services/internal_chat/system_prompt.py) and cached per process: editing it applies to every App
+# without a migration, after a backend restart.
+internal_chat:
+  system_prompt: |
+    You are a helpful, accurate and concise assistant. Answer in the language of the user's message.
+    When the question refers to the user's knowledge base or documents and a search tool is available,
+    use it before answering, and cite the sources you relied on. Use any other available tools when
+    they help. Never invent facts or sources: if you cannot find the answer, say so.
+
 # Tier configuration defaults - used when no DB override exists
 # -1 means unlimited
 tier_config:

@@ -83,14 +83,18 @@ def create_llm_from_service(ai_service, temperature=0, is_vision=False):
 
     return builder()
 
-def get_llm(agent, is_vision=False):
+def get_llm(agent, is_vision=False, ai_service_override=None):
     """
     Función base para obtener cualquier modelo LLM
     Args:
         agent: Agent object with model configuration
         is_vision: Boolean que indica si es un modelo de visión
+        ai_service_override: AIService to use instead of the agent's own (flexible chat,
+            per turn). Never assigned on the agent. Ignored when ``is_vision`` is True.
     """
-    if is_vision:
+    if ai_service_override is not None and not is_vision:
+        ai_service = ai_service_override
+    elif is_vision:
         ai_service = agent.vision_service_rel
     else:
         ai_service = agent.ai_service

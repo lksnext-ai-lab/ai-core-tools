@@ -1,7 +1,7 @@
 
 import React, { type ReactNode } from 'react';
-import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 
 interface AlertProps {
   type: 'success' | 'error' | 'warning' | 'info';
@@ -11,6 +11,10 @@ interface AlertProps {
   className?: string;
   /** Announce politely (role=status) even for error/warning types. Default: false. */
   polite?: boolean;
+  /** Text of the dismiss button. Default: the translated `alert.dismiss`. */
+  dismissLabel?: string;
+  /** Accessible name of the dismiss button when several alerts are on screen (keeps the visible text). */
+  dismissAriaLabel?: string;
 }
 
 const alertStyles = {
@@ -57,7 +61,9 @@ const Alert: React.FC<AlertProps> = ({
   message,
   onDismiss,
   className = '',
-  polite = false
+  polite = false,
+  dismissLabel,
+  dismissAriaLabel,
 }) => {
   const { t } = useTranslation('common');
   const styles = alertStyles[type];
@@ -67,7 +73,6 @@ const Alert: React.FC<AlertProps> = ({
     <div
       className={`${styles.container} border rounded-lg p-4 ${className}`}
       role={assertive ? 'alert' : 'status'}
-      aria-live={assertive ? 'assertive' : 'polite'}
     >
       <div className="flex">
         <span className={`${styles.iconColor} mr-3 shrink-0`} aria-hidden="true">{alertIcons[type]}</span>
@@ -83,9 +88,10 @@ const Alert: React.FC<AlertProps> = ({
             <button
               type="button"
               onClick={onDismiss}
+              aria-label={dismissAriaLabel}
               className={`mt-2 text-sm ${styles.buttonColor} underline`}
             >
-              {t('dismiss')}
+              {dismissLabel ?? t('dismiss')}
             </button>
           )}
         </div>

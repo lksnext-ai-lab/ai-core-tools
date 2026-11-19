@@ -50,7 +50,7 @@ class TestRecoverStuck:
     async def test_stuck_transition_goes_back_to_pending_or_is_cancelled(self, still_paused, expected):
         approval = SimpleNamespace(
             agent_id=3, thread_id="thread_3_conv_3_x", status=ApprovalStatus.DECIDING.value,
-            resolution_reason=None, decided_at=None, last_error=None,
+            resolution_reason=None, decided_at=None, last_error=None, channel="playground",
         )
         db = MagicMock()
         pending = [{"id": "call_1"}] if still_paused else []
@@ -64,6 +64,62 @@ class TestRecoverStuck:
         assert approval.status == expected.value
         assert approval.last_error
         db.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("channel", ["playground", "marketplace", "public_api"])
+    async def test_interactive_channels_are_still_re_pended_when_paused(self, channel):
+        approval = SimpleNamespace(
+            agent_id=3, thread_id="thread_3_conv_3_x", status=ApprovalStatus.DECIDING.value,
+            resolution_reason=None, decided_at=None, last_error=None, channel=channel,
+        )
+        with patch.object(worker.HITLApprovalRepository, "list_stuck_ids", return_value=["a"]), \
+                patch.object(worker.HITLApprovalRepository, "get", return_value=approval), \
+                patch("services.agent_cache_service.CheckpointerCacheService.get_pending_tool_calls_async",
+                      AsyncMock(return_value=[{"id": "call_1"}])):
+            await worker._recover_stuck(MagicMock())
+        assert approval.status == ApprovalStatus.PENDING.value
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [ApprovalStatus.DECIDING, ApprovalStatus.EXPIRING])
+    async def test_internal_chat_rows_are_cancelled_never_re_pended_even_when_paused(self, status):
+        approval = SimpleNamespace(
+            agent_id=3, thread_id="thread_3_conv_3_x", status=status.value,
+            resolution_reason=None, decided_at=None, last_error=None, channel="internal_chat",
+        )
+        db = MagicMock()
+        with patch.object(worker.HITLApprovalRepository, "list_stuck_ids", return_value=["a"]), \
+                patch.object(worker.HITLApprovalRepository, "get", return_value=approval), \
+                patch("services.agent_cache_service.CheckpointerCacheService.get_pending_tool_calls_async",
+                      AsyncMock(return_value=[{"id": "call_1"}])):
+            await worker._recover_stuck(db)
+        assert approval.status == ApprovalStatus.CANCELLED.value
+        assert approval.resolution_reason == "channel_not_interactive"
+        assert approval.decided_at is not None and approval.last_error
+        db.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("channel", [
+        "internal_sync", "mcp", "a2a", "scheduled", "openai_compat", "platform_chatbot", "something_new",
+    ])
+    @pytest.mark.parametrize("still_paused, expected, reason", [
+        (True, ApprovalStatus.PENDING, None),
+        (False, ApprovalStatus.CANCELLED, "interrupted"),
+    ])
+    async def test_other_non_interactive_channels_keep_the_previous_behaviour(
+        self, channel, still_paused, expected, reason
+    ):
+        """Re-pended (then expired through a rejection resume) when paused, cancelled as interrupted otherwise."""
+        approval = SimpleNamespace(
+            agent_id=3, thread_id="thread_3_conv_3_x", status=ApprovalStatus.DECIDING.value,
+            resolution_reason=None, decided_at=None, last_error=None, channel=channel,
+        )
+        with patch.object(worker.HITLApprovalRepository, "list_stuck_ids", return_value=["a"]), \
+                patch.object(worker.HITLApprovalRepository, "get", return_value=approval), \
+                patch("services.agent_cache_service.CheckpointerCacheService.get_pending_tool_calls_async",
+                      AsyncMock(return_value=[{"id": "call_1"}] if still_paused else [])):
+            await worker._recover_stuck(MagicMock())
+        assert approval.status == expected.value
+        assert approval.resolution_reason == reason
 
     @pytest.mark.asyncio
     async def test_missing_row_is_skipped(self):

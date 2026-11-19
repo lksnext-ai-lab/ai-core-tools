@@ -21,6 +21,7 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, Field
 from utils.logger import get_logger
 
+from .chat_guard import ChatSandboxLimits, redacted_logs
 from .provider import SandboxExpiredError, SandboxHandle, SandboxProvider
 
 logger = get_logger(__name__)
@@ -38,6 +39,7 @@ class _SandboxHandleRef:
     """
 
     handle: SandboxHandle
+    chat_limits: ChatSandboxLimits | None = None  # set on Chat turns only
 
 
 _BG_SHELLS_KEY = "_mattin_builtin_background_shells"
@@ -232,6 +234,10 @@ def _recreate_stale_handle(
     if session_service is None or session_key is None:
         return False
     try:
+        if getattr(handle_ref.handle, "_is_lazy_sandbox_proxy", False) is True:
+            handle_ref.handle.invalidate()  # recover through the lazy proxy (see tool_factory)
+            handle_ref.handle.get()
+            return True
         session_service.evict(session_key)
         handle_ref.handle = session_service.get_or_create(
             session_key,
@@ -245,12 +251,17 @@ def _recreate_stale_handle(
         )
         return True
     except Exception as exc:
-        logger.warning(
-            "Failed to recreate sandbox session %s after expiry: %s",
-            session_key,
-            exc,
-            exc_info=True,
-        )
+        if handle_ref.chat_limits is not None:  # Chat: class name + session key only
+            logger.warning(
+                "Failed to recreate sandbox session %s after expiry (%s)", session_key, type(exc).__name__
+            )
+        else:
+            logger.warning(
+                "Failed to recreate sandbox session %s after expiry: %s",
+                session_key,
+                exc,
+                exc_info=True,
+            )
         return False
 
 
@@ -275,13 +286,14 @@ def _run_bash_with_recovery(
     """
     for attempt in range(2):
         try:
-            return _run_bash(
-                provider,
-                handle_ref.handle,
-                command,
-                timeout=timeout,
-                max_output_chars=max_output_chars,
-            )
+            with redacted_logs(handle_ref.chat_limits is not None):
+                return _run_bash(
+                    provider,
+                    handle_ref.handle,
+                    command,
+                    timeout=timeout,
+                    max_output_chars=max_output_chars,
+                )
         except SandboxExpiredError:
             if attempt == 0 and _recreate_stale_handle(
                 handle_ref,
@@ -1033,6 +1045,15 @@ def _bash_tool(
     ) -> str:
         """Sandbox-only operation: execute a bash command inside the sandbox."""
         timeout_s = _timeout_ms_to_seconds(timeout)
+        limits = handle_ref.chat_limits
+        if limits is not None:
+            # App Chat: Bash shares the turn's execution budget with the REPL tools, one call is capped, and
+            # there are no background shells (they would outlive the turn and cannot be reliably killed).
+            if run_in_background:
+                return "[Error] Background shells are not available in the Chat; run the command in the foreground."
+            if not limits.consume():
+                return f"[Execution budget exceeded: {limits.max_executions} executions per turn]"
+            timeout_s = limits.cap_timeout(timeout_s)
         if not run_in_background:
             return _run_bash_with_recovery(
                 provider,
@@ -1200,6 +1221,7 @@ def create_sandbox_builtin_tools(
     *,
     session_key: str | None = None,
     session_service: Any | None = None,
+    chat_limits: ChatSandboxLimits | None = None,
 ) -> list:
     """Return Claude-style builtin tools for a Linux sandbox.
 
@@ -1219,7 +1241,7 @@ def create_sandbox_builtin_tools(
     if not _supports_bash(provider):
         return []
     read_files: set[str] = set()
-    handle_ref = _SandboxHandleRef(handle)
+    handle_ref = _SandboxHandleRef(handle, chat_limits=chat_limits)
     kwargs: dict[str, Any] = {
         "session_key": session_key,
         "session_service": session_service,

@@ -113,14 +113,15 @@ const ProfilePage: React.FC = () => {
   }
 
   async function handleLeaveApp(appId: number, appName: string) {
+    // Same wording as the apps list, including what happens to the member's Chat data.
     const confirmed = await confirm({
       title: t('appsPage.confirmLeaveTitle'),
       message: t('appsPage.confirmLeaveMessage', { name: appName }),
       confirmLabel: t('appsPage.actions.leaveApp'),
+      cancelLabel: t('cancel'),
+      variant: 'warning',
     });
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
     try {
       await apiService.leaveApp(appId);
       setSuccess(t('appsPage.appLeftSuccessfully', { name: appName }));

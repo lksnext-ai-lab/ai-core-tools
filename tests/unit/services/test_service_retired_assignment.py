@@ -7,6 +7,7 @@ No database: repositories and sessions are mocked.
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import contextlib
 import pytest
 
 from services.agent_service import AgentService
@@ -269,6 +270,8 @@ class TestPlaygroundTempRepoRetired:
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = agent
         with patch.object(PlaygroundMediaService, "get_temp_repository", return_value=None), patch(
+            "services.playground_media_service._temp_repo_creation_lock", lambda *a: contextlib.nullcontext()
+        ), patch.object(PlaygroundMediaService, "_session_is_live", return_value=True), patch(
             EMB_REPO, return_value=_svc(4, retired=True)
         ), patch("services.playground_media_service.RepositoryService.create_repository") as create:
             with pytest.raises(ServiceRetiredError):

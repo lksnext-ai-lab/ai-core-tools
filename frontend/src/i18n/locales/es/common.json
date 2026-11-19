@@ -1,5 +1,6 @@
 {
   "save": "Guardar",
+  "confirm": "Confirmar",
   "cancel": "Cancelar",
   "delete": "Eliminar",
   "edit": "Editar",
@@ -81,6 +82,7 @@
       "about": "Acerca de",
       "dashboard": "Panel",
       "agents": "Agentes",
+      "chat": "Chat",
       "scheduledTasks": "Tareas programadas",
       "dataSources": "Fuentes de datos",
       "silos": "Silos",
@@ -92,6 +94,7 @@
       "skills": "Skills",
       "middlewares": "Middlewares",
       "appSettings": "Configuración App",
+      "general": "General",
       "outputChannels": "Canales de salida",
       "aiServices": "Servicios de IA",
       "embeddingServices": "Servicios de embeddings",
@@ -272,7 +275,7 @@
     "appExportedSuccessfully": "La aplicación \"{{name}}\" se ha exportado correctamente.",
     "appExportFailed": "No se pudo exportar la aplicación \"{{name}}\".",
     "confirmLeaveTitle": "¿Salir de la aplicación?",
-    "confirmLeaveMessage": "¿Seguro que quieres salir de \"{{name}}\"? Perderás el acceso a esta aplicación.",
+    "confirmLeaveMessage": "¿Seguro que quieres salir de \"{{name}}\"? Perderás el acceso a esta aplicación. Se eliminarán tus conversaciones y archivos del Chat en esta aplicación.",
     "appLeftSuccessfully": "Has salido de la aplicación \"{{name}}\".",
     "appLeaveFailed": "No se pudo salir de la aplicación \"{{name}}\".",
     "confirmDeleteTitle": "¿Eliminar aplicación?",
@@ -329,6 +332,7 @@
     "slugSaved": "El slug se ha guardado correctamente",
     "slugUpdateFailed": "No se pudo actualizar el slug",
     "langsmithApiKey": "Clave de API de LangSmith",
+    "langsmithOwnerOnly": "Solo el propietario de la App puede cambiar la clave de API de LangSmith.",
     "keepCurrentKeyPlaceholder": "Déjalo vacío para conservar la clave actual",
     "enterLangsmithKeyPlaceholder": "Introduce la clave de API de LangSmith",
     "langsmithHelpBeforeKey": "Tu clave de API de LangSmith para supervisión y trazas. Déjala vacía para usar la variable global",
@@ -351,8 +355,16 @@
     "enableOpenAiApiHelp": "Permite que aplicaciones externas interactúen con tus agentes usando el formato de API de OpenAI. Al habilitarla, tus agentes serán compatibles con herramientas y clientes que esperan endpoints de API compatibles con OpenAI.",
     "sandboxService": "Servicio sandbox del intérprete de código",
     "inheritSystemDefault": "Heredar valor predeterminado del sistema",
-    "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
+    "chatCodeInterpreter": "Permitir ejecutar código en el Chat",
+    "chatCodeInterpreterHelp": "Todos los miembros de esta App, incluidos los lectores, podrán ejecutar código en un sandbox desde el Chat, usando el servicio de sandbox por defecto de la App, o el del sistema si no hay ninguno seleccionado (se aplican su coste y su acceso a la red). El Chat no puede pedir aprobación antes de ejecutar código. Con un servidor OpenSandbox autoalojado, los sandboxes no están aislados entre sí: el código que ejecuta un miembro puede alcanzar los sandboxes de otros miembros en el mismo servidor.",
+    "systemServiceOption": "[Sistema] {{name}}",
+    "sandboxServiceHelpBeforeSettings": "Servicio sandbox predeterminado que se usa cuando los agentes de esta aplicación ejecutan la capacidad de intérprete de código, y el Chat de la App cuando se permite ejecutar código en el Chat. Deja \"Heredar\" para usar el valor predeterminado del sistema. Administra los servicios disponibles en",
     "sandboxServicesSettings": "Configuración → Servicios sandbox",
+    "embeddingService": "Servicio de embeddings por defecto",
+    "noDefaultEmbeddingService": "Ninguno (los archivos adjuntos no se indexan)",
+    "embeddingServiceHelpBeforeSettings": "Se usa para indexar los archivos adjuntos en el Chat de la App y que el modelo pueda buscar en ellos. Déjalo vacío para enviar los archivos adjuntos completos al modelo. Gestiona los servicios disponibles en",
+    "embeddingServicesSettings": "Servicios de embeddings (en Configuración)",
+    "embeddingServicesLoadFailed": "No se pudieron cargar los servicios de embeddings, así que la lista puede estar incompleta. Recarga la página para intentarlo de nuevo.",
     "saveErrorTitle": "Error al guardar la configuración",
     "settingsSaved": "La configuración se ha guardado correctamente",
     "saveChanges": "Guardar cambios",
@@ -649,7 +661,7 @@
       "automatic": "Automático",
       "keepMessages": "Mensajes recientes que se conservarán",
       "maxTokens": "Máximo de tokens que se resumirán",
-      "noLimit": "Sin límite",
+      "autoLimit": "Automático (ventana de contexto del modelo)",
       "help": "Deja el umbral vacío para resumir al alcanzar el 85 % de la ventana de contexto del modelo (hasta 150.000 tokens). Deja vacío el último campo para resumir todo el historial anterior. Los agentes con memoria que no tengan un middleware de resumen usarán estos mismos valores predeterminados."
     },
     "pii": {
@@ -2411,8 +2423,8 @@
     },
     "remove": {
       "title": "¿Eliminar colaborador?",
-      "namedMessage": "¿Quieres quitar a {{name}} de esta aplicación? Perderá el acceso inmediatamente.",
-      "message": "¿Quieres eliminar a este colaborador? Perderá el acceso a esta aplicación."
+      "namedMessage": "¿Quieres quitar a {{name}} de esta aplicación? Perderá el acceso inmediatamente. Se eliminarán sus conversaciones y archivos del Chat en esta aplicación.",
+      "message": "¿Quieres eliminar a este colaborador? Perderá el acceso a esta aplicación. Se eliminarán sus conversaciones y archivos del Chat en esta aplicación."
     },
     "actions": {
       "remove": "Eliminar"
@@ -3952,6 +3964,7 @@
       "lastSeen": "{{count}} · último {{date}}",
       "latestFailures": "Fallos recientes",
       "agentFallback": "Agente n.º {{id}}",
+      "appChat": "Chat",
       "appFallback": "Aplicación n.º {{id}}"
     },
     "tools": {
@@ -4322,6 +4335,17 @@
     "conversations": "Conversaciones",
     "chat": {
       "reset": "Reiniciar conversación",
+      "generatingFor": "Generando durante {{duration}}",
+      "statusAnswering": "{{agent}} está respondiendo…",
+      "statusReady": "{{agent}} ha respondido. La respuesta está lista.",
+      "statusFailed": "No se pudo completar la respuesta. Consulta el mensaje de error en la conversación.",
+      "statusReset": "Conversación reiniciada.",
+      "speakerYou": "Tú:",
+      "speakerAssistant": "{{agent}}:",
+      "messagesRegion": "Mensajes de la conversación",
+      "resetConfirmTitle": "Reiniciar conversación",
+      "resetConfirmMessage": "Se borrarán los mensajes y los archivos adjuntos de esta conversación. No se puede deshacer.",
+      "resetFailed": "No se pudo reiniciar la conversación. Inténtalo de nuevo.",
       "loadingConversation": "Cargando conversación...",
       "startChatting": "Empieza a conversar con {{agent}}",
       "starterPromptDescription": "Escribe un mensaje abajo para empezar",
@@ -4690,12 +4714,6 @@
     "renameConversation": "Cambiar nombre de la conversación",
     "deleteConversation": "Eliminar conversación"
   },
-  "conversationSidebar": {
-    "retry": "Reintentar",
-    "emptyDescription": "Crea una conversación nueva para empezar.",
-    "close": "Cerrar conversaciones",
-    "refresh": "Actualizar"
-  },
   "homePage": {
     "title": "Te damos la bienvenida a AI Core Tools",
     "subtitle": "¡Hola! Gestiona tus aplicaciones de IA, agentes y fuentes de datos desde un único lugar.",
@@ -5026,6 +5044,140 @@
       "invalidJson": "Los argumentos deben ser JSON válido.",
       "jsonObjectRequired": "Los argumentos deben ser un objeto JSON.",
       "editedArgumentsRequired": "Esta herramienta solo acepta argumentos editados."
+    }
+  },
+  "conversationSidebar": {
+    "retry": "Reintentar",
+    "new": "Nueva",
+    "closeLabel": "Cerrar conversaciones",
+    "refresh": "Actualizar",
+    "loading": "Cargando conversaciones...",
+    "loadError": "Error al cargar conversaciones",
+    "empty": "No hay conversaciones aún",
+    "emptyHint": "Crea una nueva para empezar",
+    "untitled": "Nueva conversación",
+    "messageCount_one": "{{count}} mensaje",
+    "messageCount_other": "{{count}} mensajes",
+    "justNow": "Ahora",
+    "minutesAgo": "Hace {{value}}m",
+    "hoursAgo": "Hace {{value}}h",
+    "daysAgo": "Hace {{value}}d",
+    "confirmDeleteMessage": "¿Seguro que quieres eliminar esta conversación? Esta acción no se puede deshacer.",
+    "deleteFailed": "Error al eliminar conversación",
+    "renameNamed": "Renombrar {{title}}",
+    "deleteNamed": "Eliminar {{title}}",
+    "renameFailed": "Error al actualizar título"
+  },
+  "alert": {
+    "dismiss": "Descartar",
+    "dismissNamed": "Descartar: {{name}}"
+  },
+  "appChat": {
+    "page": {
+      "title": "Chat",
+      "subtitle": "Elige el modelo, la fuente, las skills y las herramientas de cada mensaje",
+      "conversations": "Conversaciones",
+      "loading": "Cargando el chat...",
+      "loadErrorTitle": "No se pudo abrir el chat",
+      "optionsLoadFailed": "No se pudieron cargar las opciones del chat. Inténtalo de nuevo.",
+      "retry": "Reintentar",
+      "assistantName": "el asistente"
+    },
+    "selection": {
+      "groupLabel": "Ajustes del próximo mensaje",
+      "model": "Modelo",
+      "modelPlaceholder": "Selecciona un modelo",
+      "modelRetired": "Este modelo ha llegado a su fin de servicio",
+      "noModels": "No hay modelos disponibles",
+      "source": "Fuente",
+      "sourceNone": "Ninguna",
+      "unnamedSource": "Fuente n.º {{id}}",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "nonePlural": "Ninguna",
+      "nSelected_one": "{{count}} elemento",
+      "nSelected_other": "{{count}} elementos",
+      "added": "Se ha seleccionado {{name}}",
+      "removed": "Se ha quitado {{name}}",
+      "results_one": "{{count}} resultado",
+      "results_other": "{{count}} resultados",
+      "search": "Buscar",
+      "noResults": "Sin resultados"
+    },
+    "sourceTypes": {
+      "repository": "Repositorios",
+      "domain": "Dominios web",
+      "sharepoint": "SharePoint",
+      "silo": "Silos"
+    },
+    "siloDisabled": {
+      "embedding_service_retired": "Su servicio de embeddings está retirado"
+    },
+    "skillGroups": {
+      "app": "Skills de la App",
+      "system": "Skills del sistema"
+    },
+    "meta": {
+      "source": "Fuente",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "deleted": "(eliminado)",
+      "toggle": "Detalles de {{model}}"
+    },
+    "blocked": {
+      "loading": "Cargando los ajustes del chat...",
+      "noUsableModel": "El envío está desactivado: esta App no tiene ningún modelo disponible para el chat.",
+      "noSelection": "El envío está desactivado: selecciona primero un modelo.",
+      "modelRetired": "El envío está desactivado: el modelo seleccionado ya no está disponible. Elige otro modelo."
+    },
+    "empty": {
+      "title": "No hay ningún modelo disponible para el chat",
+      "messageAdmin": "Esta App no tiene ningún servicio de IA activo apto para el chat. Configura uno para empezar a chatear.",
+      "messageMember": "Esta App no tiene ningún servicio de IA activo apto para el chat. Pide a un administrador de la App que configure uno.",
+      "configureLink": "Configurar servicios de IA"
+    },
+    "notices": {
+      "conversationNotFound": "Esa conversación no está disponible. Se ha abierto una nueva.",
+      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo y vuelve a enviar tu mensaje.",
+      "label": "Aviso"
+    },
+    "warnings": {
+      "title": "Parte de tu selección no se ha usado",
+      "ai_service": "El modelo anterior ya no está disponible; se ha seleccionado otro.",
+      "ai_serviceNamed": "El modelo \"{{name}}\" ya no está disponible; se ha seleccionado otro.",
+      "silo": "La fuente anterior ya no está disponible y se ha quitado de la selección.",
+      "siloNamed": "La fuente \"{{name}}\" ya no está disponible y se ha quitado de la selección.",
+      "skill": "Una skill ya no está disponible y se ha quitado de la selección.",
+      "skillNamed": "La skill \"{{name}}\" ya no está disponible y se ha quitado de la selección.",
+      "mcp_config": "No se pudo usar una configuración MCP (no disponible o eliminada); el mensaje se respondió sin ella.",
+      "mcp_configNamed": "No se pudo usar la configuración MCP \"{{name}}\" (no disponible o eliminada); el mensaje se respondió sin ella.",
+      "sandbox_output_one": "No se ha podido entregar {{count}} archivo creado por el código (límite de tamaño, número o tiempo).",
+      "sandbox_output_other": "No se han podido entregar {{count}} archivos creados por el código (límite de tamaño, número o tiempo)."
+    },
+    "attachmentIndexing": {
+      "title": "Los archivos adjuntos no se indexarán",
+      "noDefault": "Esta App no tiene un servicio de embeddings por defecto, así que los archivos adjuntos en el Chat se envían completos al modelo en lugar de indexarse. Hay que definir un servicio de embeddings a nivel de App.",
+      "retired": "El servicio de embeddings por defecto de esta App ha llegado a su fin de servicio, así que los archivos adjuntos en el Chat se envían completos al modelo en lugar de indexarse. Elige otro servicio de embeddings a nivel de App.",
+      "configureLink": "Abrir la configuración de la App",
+      "askAdmin": "Pide a un administrador o propietario de esta App que lo configure.",
+      "unavailable": "Los archivos adjuntos en el Chat no se pueden indexar ahora, así que se envían completos al modelo en lugar de indexarse."
+    },
+    "codeInterpreter": {
+      "title": "En este chat no se puede ejecutar código",
+      "disabled": "Las skills que incluyen scripts se cargarán, pero sus scripts no se ejecutarán, porque ejecutar código en el Chat está desactivado para esta App.",
+      "retired": "Las skills que incluyen scripts se cargarán, pero sus scripts no se ejecutarán, porque el servicio de sandbox por defecto de esta App ha llegado a su fin de servicio. Elige otro servicio de sandbox a nivel de App.",
+      "providerUnavailable": "Las skills que incluyen scripts se cargarán, pero sus scripts no se ejecutarán, porque el servicio de sandbox que se aplica a esta App (el predeterminado de la App o el del sistema) usa un proveedor que esta instalación no permite. Contacta con el administrador de la plataforma.",
+      "unavailable": "Las skills que incluyen scripts se cargarán, pero sus scripts no se pueden ejecutar en este chat ahora mismo."
+    },
+    "transportErrors": {
+      "noSelection": "Selecciona un modelo antes de enviar un mensaje.",
+      "noConversation": "Esta conversación no está disponible.",
+      "forbidden": "Ahora mismo no puedes enviar mensajes en esta App. Puede estar congelada o tu acceso puede haber cambiado.",
+      "notFound": "La conversación o alguno de los elementos seleccionados ya no está disponible.",
+      "serviceRetired": "El modelo seleccionado ha llegado a su fin de servicio. Elige otro modelo e inténtalo de nuevo.",
+      "conversationBusy": "Esta conversación sigue respondiendo a un mensaje anterior. Espera a que termine e inténtalo de nuevo. Tu mensaje se ha conservado en el cuadro de texto.",
+      "stepLimitReached": "El asistente se quedó sin pasos antes de terminar. Tu conversación y los archivos creados hasta ahora se han conservado: escribe «continúa» para que siga.",
+      "tooManyFiles": "Demasiados archivos en un mensaje. Envía menos archivos cada vez."
     }
   }
 }

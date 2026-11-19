@@ -41,6 +41,8 @@ npm install
 npm run dev                     # Dev server (port 5173)
 npm run build                   # Production build (tsc + vite)
 npm run lint
+npm test                        # node --test + type check + Vitest render tests (frontend/tests/ui)
+npm run test:ui                 # Vitest + Testing Library only
 ```
 
 ### Testing
@@ -97,7 +99,20 @@ docker compose down -v           # Parar y borrar volúmenes
   agente o el default de la app): el code interpreter se desactiva ese turno, sin
   fallback a otro provider y con WARNING en el log (hasta 3 idénticos por turno);
   test connection y cleanup siguen funcionando. `SANDBOX_DEFAULT_PROVIDER` no tiene
-  ciclo de vida.
+  ciclo de vida. En el App Chat con el provider por defecto del
+  sistema y sin el profile, las tools de código se ofrecen igualmente: la primera
+  llamada devuelve un error y la respuesta sigue sin código (`turn_config.code_interpreter`
+  = false en `/messages`; true en el evento `metadata` temprano de `/stream`).
+  - `OPENSANDBOX_API_KEY` es **obligatoria** con el profile (>= 32 caracteres; un
+    preflight hace fallar `up` sin ella). `OPENSANDBOX_INSECURE_SERVER=YES` solo ya
+    no basta: el escape de desarrollo exige además `OPENSANDBOX_ALLOW_INSECURE_DEV=1`.
+    La API solo escucha en la red de control. Ruptura para despliegues existentes:
+    definir la key, quitar `OPENSANDBOX_INSECURE_SERVER`, `docker compose --profile
+    opensandbox down` + `up -d` (red recreada, sandboxes vivos perdidos).
+  - Override opcional `docker-compose.sandbox-hardened.yaml` (sin egress, Docker
+    Engine >= 28, rompe `pip install`): `COMPOSE_FILE=docker-compose.yaml:docker-compose.sandbox-hardened.yaml`.
+    Por defecto hay egress y los sandboxes de un mismo servidor OpenSandbox no están
+    aislados entre sí. Detalle: `docker/README.md` y `docs/ai/app-chat.md#code-interpreter`.
 
 ## Domain Model
 
@@ -298,6 +313,24 @@ A2A_ENABLED=true                # Kill switch: false -> every /a2a/* route 404s
 A2A_PUBLIC_BASE_URL=             # Base for absolute card/RPC URLs; falls back to FRONTEND_URL, then Host header
 A2A_MAX_REQUEST_MB=32            # SendMessage/SendStreamingMessage body cap
 A2A_TASK_RETENTION_DAYS=30       # How long terminal tasks/events/links are kept
+
+# Sandbox / code interpreter (all optional, defaults shown). Session caps are per backend process (0 = unlimited);
+# the execution budget is per turn (0 refuses every execution); pull caps are per turn (0 = no cap)
+# Full reference: docs/reference/environment-variables.md#sandbox-providers
+# OPENSANDBOX_API_KEY=            # MANDATORY with the docker `opensandbox` profile (>= 32 chars)
+# SANDBOX_MAX_SESSIONS_PER_USER=3     # App Chat only
+# SANDBOX_MAX_SESSIONS_PER_APP=10     # App Chat only
+# SANDBOX_EVICT_MIN_IDLE_S=60
+# SANDBOX_CHAT_BASH_MAX_TIMEOUT_S=60
+# SANDBOX_MAX_EXECUTIONS_PER_TURN=5
+# SANDBOX_PULL_MAX_FILES=20           # output files, all agents + Chat
+# SANDBOX_PULL_MAX_FILE_BYTES=52428800
+# SANDBOX_PULL_MAX_TOTAL_BYTES=104857600
+# SANDBOX_PULL_TIME_BUDGET_S=20
+# SANDBOX_PULL_MAX_CONCURRENT=2
+
+# Embedding clients — optional, default shown
+# AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS=120   # Client-side timeout (OpenAI, MistralAI, HuggingFace, Ollama, Bedrock; not Azure AI/Google)
 ```
 
 ### Frontend `.env`
@@ -329,6 +362,7 @@ Local dev: port 5173 (Vite). Docker: port 3000.
 - **Human approvals** (`services/hitl_approval_service.py`): every human-in-the-loop pause gets a `hitl_approval` row (owner, actions by `action_id` = tool call id, `expires_at`). Only the requester (same user / same API key) can answer, once (row compare-and-set); answers go through `/internal/approvals/{id}/…` and `/public/v1/app/{app}/approvals/{id}/decisions`. Unanswered approvals are rejected — never approved — by `services/hitl_expiry_worker.py`; non-interactive channels (MCP, scheduled, OpenAI-compatible, platform chatbot) reject the pause on the spot. Changing an agent's approval rules cancels its pending approvals
 - **Service end-of-service**: AI, embedding and sandbox services have optional `end_of_service_at` (00:00 UTC) + `deprecation_notice` (<=1000 chars; migration `svceos001`). Status active/deprecated/retired is computed at read time (`utils/service_lifecycle.py`; window = setting `service_end_of_service_warning_days`, default 30, env `AICT_SYSTEM_SERVICE_END_OF_SERVICE_WARNING_DAYS`, 0 = no deprecated phase). Retired services are blocked where LLM/transcription/video/embedding clients are built (`ensure_service_active`): HTTP 409 `SERVICE_RETIRED`, SSE `service_retired`, MCP `isError`, A2A failed task, scheduled runs failed without retry. Test connection, delete and cleanup are never blocked; retired services can't be newly selected. Omitted lifecycle field on update keeps its value, explicit null clears it. "Used by" endpoints + `POST /internal/apps/{id}/ai-services/{id}/move-agents` (`expected_count` mismatch -> 409, nothing changes). Internal API only exposes `lifecycle_warnings`. Known limits: silo chunk-neighbour view blocked on retired silos; sandbox export/import is 501. Docs: `docs/guides/chat-bot/kb-ai-services.md`
 - **System skills**: platform-wide skills (`Skill.app_id IS NULL`) are seeded create-if-missing from `backend/system_defaults.yaml`'s `skills:` block on every backend startup, in all deployment modes (self-managed and SaaS alike)
+- **App Chat**: a "Chat" menu entry per App (min role VIEWER) where the user picks AI service, silo, skills and MCP configs per message (`/internal/apps/{app_id}/chat`, `backend/services/internal_chat/`, `routers/internal/internal_chat.py`). It runs on a hidden internal agent per App (`Agent.kind='internal_chat'`, created on first use, never exposed in lists, export, marketplace, MCP, A2A or the public API, 404 on every other surface) that is never modified: each turn builds a frozen `ResolvedChatConfig`. Everything is per user (conversations, files, defaults, threads; no one else can read them). No per-agent approval/PII rules; chat failures log/record only class names + a correlation id. One turn at a time per conversation (a second one gets 409 `CONVERSATION_BUSY`). Attachments are indexed into a hidden per-conversation temp silo with `App.default_embedding_service_id`, else sent whole; temp silos are hidden from every silo/repository/output-parser list and 404 by id. Administrators can now update App settings, except the LangSmith key (owner only). Tables `conversation_turn`/`chat_user_default`/`chat_conversation_state`, migrations `ichat001`..`ichat004` (`ichat004` = `Conversation` indexes; the `ichat001` downgrade deletes Chat data and purges temp repos/silos/vectors/checkpoints (by exact thread id; threads without a Conversation row stay), refuses if a temp silo is in Qdrant, leaves files under `data/tmp` - roll back = downgrade first, then old image). Step limit: `AICT_CHAT_RECURSION_LIMIT` (100; Chat only, ~33 tool-using model calls at ~3 steps each) / `AICT_AGENT_RECURSION_LIMIT` (50, ~16); exhausted -> 422 `STEP_LIMIT_REACHED` / SSE `step_limit_reached`, conversation kept. Per-turn `CHAT_MAX_FILES_PER_TURN` (10; 422 `TOO_MANY_FILES` on both routes), `ATTACHMENT_INDEXING_TURN_BUDGET_S` (120). Removing/leaving an App deletes that member's Chat data of that App. Privacy is DB/API-level only (admins/operators control endpoints, MCP URLs, skills, LangSmith); accepted: the Chat always has `download_url_to_workspace` (prompt-injection exfiltration); image links are signed `/static` URLs without expiry. Hide the entry with `navigation: { remove: ['/apps/:appId/chat'] }` in `clientConfig.ts` (menu only). Playground/public file and chat endpoints now 404 on a `conversation_id` that is not the caller's. **Code interpreter** (opt-in, `App.chat_code_interpreter_enabled`, default false, `ichat003`, changed by ADMINISTRATOR+; hidden agent keeps `enable_code_interpreter=false`, enablement only from the turn config): switch on uses the App default sandbox service (retired -> none, no fallback), else the system default (`SANDBOX_DEFAULT_PROVIDER`); `GET /options` has `code_interpreter {enabled, reason}`, the turn's truth is `turn_config.code_interpreter`. One sandbox per conversation (`conv_{agent}_{conversation}`, destroyed on reset/delete/user deletion), open to every member incl. VIEWER, no approval. Chat-only limits: 3/user and 10/App live sandboxes (per backend process; own idle >= `SANDBOX_EVICT_MIN_IDLE_S` evicted, never another user's), Bash cap 60 s, no background shells; 5 executions per turn (agents' REPL too; shared REPL+Bash in the Chat). Output files (all agents, `services/sandbox_output_pull.py`, `SANDBOX_PULL_*`) are capped; skipped ones become the Chat warning `{kind: "sandbox_output", id: <count>}` / `metadata.outputs_skipped` for agents. Accepted risks (OpenSandbox sandboxes not isolated from each other, default egress, system-default provider charged to the platform, no approval, memory/disk exhaustion by a member): see `docs/ai/app-chat.md#code-interpreter`. Docs: `docs/ai/app-chat.md`, `docs/guides/chat-bot/app-chat.md`
 
 ## Anti-Patterns
 

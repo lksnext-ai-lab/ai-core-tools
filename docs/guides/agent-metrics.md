@@ -18,7 +18,7 @@ Each view has a 24h / 7d / 30d / 90d range and shows:
 
 - **KPIs** with the change against the previous period of the same length: executions, error rate, latency p95 (and p50), time to first token (streaming), total tokens, tokens per execution, tool calls, active apps/users.
 - **Activity**, **token usage** (input vs output) and **latency** (p50/p95) over time. Empty periods show as zero.
-- **Breakdown** by app, agent, model, provider, channel (playground, public API, MCP, agent-as-tool) or user — whichever apply to the view.
+- **Breakdown** by app, agent, model, provider, channel (playground, public API, MCP, agent-as-tool, App Chat — `INTERNAL_CHAT`, see [App Chat](../ai/app-chat.md)) or user — whichever apply to the view.
 - **Tools**: calls, error rate and avg/p95 duration per tool, with its type (knowledge base, MCP, sub-agent, built-in).
 - **Errors** grouped by error type, plus the latest failed executions.
 

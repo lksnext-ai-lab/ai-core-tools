@@ -12,6 +12,7 @@ from services.repository_service import RepositoryService
 from services.resource_service import ResourceService
 from services.silo_service import SiloService
 from repositories.media_repository import MediaRepository
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE
 
 # API Key authentication using header
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
@@ -170,7 +171,7 @@ def validate_repository_ownership(db: Session, repo_id: int, app_id: int):
         HTTPException: 404 if repository not found or doesn't belong to app
     """
     repo = RepositoryService.get_repository(repo_id, db)
-    if not repo or repo.app_id != app_id:
+    if not repo or repo.app_id != app_id or repo.type == PLAYGROUND_MEDIA_REPO_TYPE:
         raise HTTPException(status_code=404, detail="Repository not found")
     return repo
 
@@ -218,6 +219,7 @@ def validate_silo_ownership(db: Session, silo_id: int, app_id: int):
         HTTPException: 404 if silo not found or doesn't belong to app
     """
     silo = SiloService.get_silo(silo_id, db)
-    if not silo or silo.app_id != app_id:
+    if not silo or silo.app_id != app_id or SiloService.is_temp_silo(silo_id, db):
+        # Also the hidden temp silo of a playground / Chat conversation: same answer as a missing silo.
         raise HTTPException(status_code=404, detail="Silo not found")
     return silo

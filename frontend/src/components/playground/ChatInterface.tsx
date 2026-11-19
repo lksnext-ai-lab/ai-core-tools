@@ -1,9 +1,13 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../../hooks/useStreamingChat';
 import { formatDuration } from '../../utils/duration';
+import { formatClockTime, prefersReducedMotion } from '../../utils/clockTime';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import Alert from '../ui/Alert';
 import MessageContent from './MessageContent';
 import StreamingMessage from './StreamingMessage';
 import SearchFilters from './SearchFilters';
@@ -20,36 +24,15 @@ import VideoPlayer from './VideoPlayer';
 import HitlApprovalCard from './HitlApprovalCard';
 import { useApprovalExpiryWatch } from '../../hooks/useApprovalExpiryWatch';
 import type { HitlDecision } from '../../types/streaming';
+import type { ChatTurnConfig, ChatTurnInfo } from '../../types/appChat';
 import type { VideoTimestamp } from './VideoPlayer';
 import { LoadingState } from '../ui/LoadingState';
 import ButtonApp from '../ui/ButtonApp';
 import { SegmentedTabs } from '../ui/SegmentedTabs';
+import { ChatTransportError, createAgentPlaygroundTransport } from './chatTransport';
+import type { ChatMessageModel, ChatTransport, TransportFile } from './chatTransport';
 
-interface Message {
-  id: string;
-  type: 'user' | 'agent' | 'error';
-  content: string;
-  timestamp: Date;
-  files?: string[];
-  elapsedMs?: number;
-}
-
-/** Shape returned by the API for each history message. */
-interface RawHistoryMessage {
-  role: string;
-  content: string;
-}
-
-/** Shape returned by the API for each attached/persistent file. */
-interface RawAttachedFile {
-  file_id: string;
-  filename: string;
-  file_type?: string;
-  processing_status?: string;
-  file_size_display?: string;
-  has_extractable_content?: boolean;
-  content_preview?: string;
-}
+type Message = ChatMessageModel;
 
 /**
  * Legacy "Filter by Metadata" panel sends its filter as the entire search_params
@@ -70,9 +53,8 @@ function buildSearchParams(
   };
 }
 
-interface ChatInterfaceProps {
+interface ChatInterfaceBaseProps {
   appId: number;
-  agentId: number;
   agentName: string;
   conversationId?: number | null;
   onConversationCreated?: (conversationId: number) => void;
@@ -82,11 +64,43 @@ interface ChatInterfaceProps {
   vectorDbType?: string;
   /** Extra controls rendered at the start of the chat toolbar (left of "Reset"). */
   toolbarStart?: React.ReactNode;
+  /** When set, the "Reset" button is drawn inside this element (a page-level header slot) instead of the toolbar. */
+  resetButtonTarget?: HTMLElement | null;
+  /** Height classes of the chat card on `sm` and up. Defaults to the playground's `sm:h-[calc(100vh-20rem)]`. */
+  cardHeightClassName?: string;
+  /** Gives the conversation more room: a narrower side column and wider messages (App Chat). */
+  wide?: boolean;
+  /** Extra content rendered under each agent message (e.g. the App Chat's per-turn badge). */
+  renderMessageMeta?: (message: ChatMessageModel) => React.ReactNode;
+  /** Translated reason why sending is blocked (e.g. no model selected). Disables sending and is shown under the composer. */
+  sendBlockedReason?: string;
+  /** Moves focus to the composer whenever this number changes (and on mount when it is above 0). */
+  focusComposerSignal?: number;
+  /**
+   * Chat only: called when a turn started by an instance that has since been replaced (the user moved to
+   * another conversation) finishes. The turn still completes and is stored server-side, but no other parent
+   * callback runs for it.
+   */
+  onDetachedTurnFinished?: () => void;
 }
+
+/**
+ * Without `transport` the component talks to the agent playground and needs `agentId`.
+ * A custom transport (e.g. the App Chat's) must be memoized by the caller.
+ */
+type ChatInterfaceProps = ChatInterfaceBaseProps & (
+  | { agentId: number; transport?: undefined }
+  | { agentId?: number; transport: ChatTransport }
+);
 
 function ChatInterface({
   appId,
   agentId,
+  transport: transportProp,
+  renderMessageMeta,
+  sendBlockedReason,
+  focusComposerSignal,
+  onDetachedTurnFinished,
   agentName,
   conversationId,
   onConversationCreated,
@@ -95,12 +109,21 @@ function ChatInterface({
   metadataFields,
   vectorDbType,
   toolbarStart,
+  resetButtonTarget,
+  cardHeightClassName = 'sm:h-[calc(100vh-20rem)]',
+  wide = false,
 }: Readonly<ChatInterfaceProps>) {
-  const { t } = useTranslation('common');
+  const { t, i18n } = useTranslation('common');
+  const confirm = useConfirm();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [persistentFiles, setPersistentFiles] = useState<RawAttachedFile[]>([]);
+  const transport = useMemo(
+    () => transportProp ?? createAgentPlaygroundTransport(appId, agentId as number),
+    [transportProp, appId, agentId],
+  );
+  const { agentMedia, exposedFilters, approvals } = transport.capabilities;
+  const [persistentFiles, setPersistentFiles] = useState<readonly TransportFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<'info' | 'filters'>('info');
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(
@@ -132,22 +155,38 @@ function ChatInterface({
    *  during streaming so the wheel/touch input is respected. Resets on send or on reaching bottom. */
   const userScrolledUpRef = useRef(false);
   const lastScrollTopRef = useRef(0);
-  const filterPanelId = `metadata-filters-${agentId}`;
+  const filterPanelId = `metadata-filters-${agentId ?? 'chat'}`;
+  const sendBlockedReasonId = useId();
+  /** Id of a conversation this component just created by sending its first turn (see the history effect). */
+  const createdBySendRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  /**
+   * False once a Chat instance was replaced: its in-flight turn must not call parent callbacks (they would
+   * navigate the user away from the conversation they moved to). The playground is deliberately unchanged.
+   */
+  const isAlive = () => agentMedia || mountedRef.current;
   const hasMetadataFilters = !!metadataFields && metadataFields.length > 0;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendButtonRef = useRef<HTMLButtonElement>(null);
+  const stopButtonRef = useRef<HTMLButtonElement>(null);
+  /** Text of the single polite status region (turn started / finished / failed / reset). Never token text. */
+  const [statusMessage, setStatusMessage] = useState('');
+  const [resetFailed, setResetFailed] = useState(false);
+
+  useEffect(() => {
+    if (focusComposerSignal) textareaRef.current?.focus();
+  }, [focusComposerSignal]);
 
   const playgroundStream = useCallback(
-    (message: string, opts: StreamFnOptions) => {
-      if (opts.resume) {
-        return apiService.decideApprovalStream(opts.resume.approvalId, opts.resume.decisions, {
-          onEvent: opts.onEvent,
-          signal: opts.signal,
-        });
-      }
-      return apiService.chatWithAgentStream(appId, agentId, message, opts);
-    },
-    [appId, agentId],
+    (message: string, opts: StreamFnOptions) => transport.streamMessage(message, opts),
+    [transport],
   );
 
   const {
@@ -157,14 +196,30 @@ function ChatInterface({
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [expiredApprovalId, setExpiredApprovalId] = useState<string | null>(null);
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  const [focusAfterErrorTick, setFocusAfterErrorTick] = useState(0);
   // While a person can still answer, a new message would discard the paused turn.
   const approvalBlocksInput =
-    pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
+    approvals && pendingApproval !== null && pendingApproval.status === 'pending' && pendingApproval.approval_id !== expiredApprovalId;
 
   // Hold streaming content visible briefly after isStreaming flips to false,
   // so the transition to the final committed message is seamless.
   const [holdStreamingContent, setHoldStreamingContent] = useState(false);
   const showStreaming = isStreaming || holdStreamingContent;
+
+  /** Focus is "lost" when it sits on <body> or on a composer control that was just disabled or removed. */
+  const composerFocusLost = () => {
+    const active = document.activeElement;
+    return (
+      !active || active === document.body || active === textareaRef.current
+      || active === sendButtonRef.current || active === stopButtonRef.current
+    );
+  };
+
+  // The composer locks while a turn runs and the Send button becomes Stop: without this, focus falls to
+  // <body> and a keyboard user can no longer reach Stop. Only when focus was in the composer (or lost).
+  useEffect(() => {
+    if (isStreaming && composerFocusLost()) stopButtonRef.current?.focus();
+  }, [isStreaming]);
 
   // ─── Scroll helpers ──────────────────────────────────────────────────────────
 
@@ -174,7 +229,8 @@ function ChatInterface({
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior });
+    // Reduced motion: never animate the scroll.
+    container.scrollTo({ top: container.scrollHeight, behavior: prefersReducedMotion() ? 'auto' : behavior });
   }, []);
 
   /** Reset the scroll-up lock — used when sending a new message or clicking the FAB. */
@@ -240,64 +296,61 @@ function ChatInterface({
   }, [conversationId]);
 
   useEffect(() => {
+    // The Chat creates its conversation with the first turn: what is on screen is already that turn, so
+    // reloading would blank the chat. (The playground keeps reloading: its session id comes from the reload.)
+    if (!agentMedia && currentConversationId !== null && createdBySendRef.current === currentConversationId) {
+      createdBySendRef.current = null;
+      return;
+    }
+    let cancelled = false;
     const loadConversationHistory = async () => {
       try {
         setIsLoadingHistory(true);
         setMessages([]);
         setPendingApproval(null);
 
-        if (currentConversationId) {
-          const response = await apiService.getConversationWithHistory(currentConversationId);
+        const response = await transport.loadHistory(currentConversationId);
+        // A slow answer of a previous conversation must not overwrite the current one.
+        if (cancelled) return;
 
-          if (response.session_id) {
-            setCurrentSessionId(response.session_id);
+        if (currentConversationId) {
+          if (agentMedia && response.sessionId) {
+            setCurrentSessionId(response.sessionId);
           }
           // Restore an approval the conversation is still waiting for (e.g. after a reload).
-          setPendingApproval(response.pending_approval ?? null);
+          if (approvals) setPendingApproval(response.pendingApproval ?? null);
+        }
 
-          if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map(
-              (msg: RawHistoryMessage, index: number) => ({
-                id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent',
-                content: msg.content,
-                timestamp: new Date(),
-              })
-            );
-            setMessages(loadedMessages);
-          } else {
-            setMessages([]);
-          }
+        if (response.messages.length > 0) {
+          const loadedMessages: Message[] = response.messages.map(
+            (msg, index: number) => ({
+              id: `history-${index}`,
+              type: msg.role === 'user' ? 'user' : 'agent',
+              content: msg.content,
+              timestamp: new Date(),
+              ...(msg.turn ? { turn: msg.turn } : {}),
+            })
+          );
+          setMessages(loadedMessages);
         } else {
-          const response = await apiService.getConversationHistory(appId, agentId);
-
-          if (response.messages && response.messages.length > 0) {
-            const loadedMessages: Message[] = response.messages.map(
-              (msg: RawHistoryMessage, index: number) => ({
-                id: `history-${index}`,
-                type: msg.role === 'user' ? 'user' : 'agent',
-                content: msg.content,
-                timestamp: new Date(),
-              })
-            );
-            setMessages(loadedMessages);
-          } else {
-            setMessages([]);
-          }
+          setMessages([]);
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading conversation history:', error);
         setMessages([]);
       } finally {
-        setIsLoadingHistory(false);
+        if (!cancelled) setIsLoadingHistory(false);
       }
     };
 
     const loadPersistentFiles = async () => {
       try {
-        const response = await apiService.listAttachedFiles(appId, agentId, currentConversationId);
+        const response = await transport.listFiles(currentConversationId);
+        if (cancelled) return;
         setPersistentFiles(response.files || []);
       } catch (error) {
+        if (cancelled) return;
         console.error('Error loading persistent files:', error);
         setPersistentFiles([]);
       }
@@ -307,22 +360,25 @@ function ChatInterface({
     void loadPersistentFiles();
 
     // Load playground media if session exists
-    if (currentSessionId) {
-      apiService.listPlaygroundMedia(appId, agentId, currentSessionId)
+    if (agentMedia && transport.media && currentSessionId) {
+      transport.media.list(currentSessionId)
         .then((media) => setPlaygroundMedia(Array.isArray(media) ? media : []))
         .catch(() => setPlaygroundMedia([]));
     } else {
       setPlaygroundMedia([]);
     }
-  }, [appId, agentId, currentConversationId, currentSessionId, historyReloadKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, transport, currentConversationId, currentSessionId, historyReloadKey]);
 
   useApprovalExpiryWatch(
-    currentConversationId ? expiredApprovalId : null,
+    approvals && currentConversationId ? expiredApprovalId : null,
     useCallback(async () => {
       if (!currentConversationId) return null;
-      const response = await apiService.getConversationWithHistory(currentConversationId);
-      return response.pending_approval?.approval_id ?? null;
-    }, [currentConversationId]),
+      const response = await transport.loadHistory(currentConversationId);
+      return response.pendingApproval?.approval_id ?? null;
+    }, [currentConversationId, transport]),
     useCallback(() => {
       setExpiredApprovalId(null);
       setHistoryReloadKey((k) => k + 1);
@@ -341,7 +397,7 @@ function ChatInterface({
   }, [playgroundMedia]);
 
   useEffect(() => {
-    if (!currentSessionId || !hasProcessingMediaForPolling) {
+    if (!agentMedia || !transport.media || !currentSessionId || !hasProcessingMediaForPolling) {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
@@ -353,6 +409,8 @@ function ChatInterface({
       return;
     }
 
+    const mediaApi = transport.media;
+
     // Cap total polling so a media item stuck in a processing state (e.g. a
     // dead background task) does not poll forever: 3s interval × 200 = 10 min.
     const MAX_POLLS = 200;
@@ -362,7 +420,7 @@ function ChatInterface({
     pollingRef.current = setInterval(async () => {
       polls += 1;
       try {
-        const media = await apiService.listPlaygroundMedia(appId, agentId, currentSessionId);
+        const media = await mediaApi.list(currentSessionId);
         const list = Array.isArray(media) ? media : [];
         playgroundMediaRef.current = list;
         setPlaygroundMedia(list);
@@ -392,7 +450,7 @@ function ChatInterface({
         pollingRef.current = null;
       }
     };
-  }, [appId, agentId, currentSessionId, hasProcessingMediaForPolling]);
+  }, [appId, transport, currentSessionId, hasProcessingMediaForPolling]);
 
   useEffect(() => {
     if ((!metadataFields || metadataFields.length === 0) && filterMetadata !== undefined) {
@@ -407,8 +465,12 @@ function ChatInterface({
     let isMounted = true;
 
     const loadChatFilters = async () => {
+      if (!exposedFilters || !transport.filters) {
+        setChatFilters([]);
+        return;
+      }
       try {
-        const response = await apiService.getAgentChatFilters(appId, agentId);
+        const response = await transport.filters.list();
         if (isMounted) setChatFilters(response.filters || []);
       } catch (error) {
         console.error('Error loading chat filters:', error);
@@ -422,20 +484,15 @@ function ChatInterface({
     return () => {
       isMounted = false;
     };
-  }, [appId, agentId]);
+  }, [transport]);
 
   const searchChatFilterValues = useCallback(
     async (fieldName: string, query: string) => {
-      const response = await apiService.searchAgentChatFilterValues(
-        appId,
-        agentId,
-        fieldName,
-        query,
-        SEARCH_RESULT_LIMIT,
-      );
+      if (!transport.filters) return [];
+      const response = await transport.filters.searchValues(fieldName, query, SEARCH_RESULT_LIMIT);
       return response.values;
     },
-    [appId, agentId],
+    [transport],
   );
 
   // ─── Message sending ─────────────────────────────────────────────────────────
@@ -445,6 +502,8 @@ function ChatInterface({
     rawResponse: string | Record<string, unknown>,
     elapsedMs: number,
     awaitingApproval: boolean,
+    turn?: ChatTurnInfo | null,
+    turnConfig?: ChatTurnConfig | null,
   ) => {
     const responseContent: string =
       typeof rawResponse === 'object' ? JSON.stringify(rawResponse, null, 2) : rawResponse || '';
@@ -460,10 +519,13 @@ function ChatInterface({
       content: responseContent,
       timestamp: new Date(),
       elapsedMs,
+      ...(turn ? { turn } : {}),
+      ...(turnConfig ? { turnConfig } : {}),
     };
     // Commit the message and release the streaming hold in the same batch
     setMessages((prev) => [...prev, agentMsg]);
     setHoldStreamingContent(false);
+    setStatusMessage(t('agentPlayground.chat.statusReady', { agent: agentName }));
   };
 
   const handleApprovalDecision = async (decisions: HitlDecision[]) => {
@@ -519,6 +581,22 @@ function ChatInterface({
     setExpiredApprovalId(pendingApproval.approval_id);
   }, [pendingApproval, settleAwaitingTools]);
 
+  /** The backend refused the message before starting a turn (busy conversation, too many files): nothing ran. */
+  const isRejectedBeforeStart = (error: unknown): boolean => {
+    const cause = error instanceof Error ? error.cause : undefined;
+    return [error, cause].some(
+      (e) => e instanceof ChatTransportError && (e.code === 'conversationBusy' || e.code === 'tooManyFiles'),
+    );
+  };
+
+  const describeSendError = (error: unknown): string => {
+    // The streaming hook wraps whatever the transport threw; the original stays in `cause`.
+    const cause = error instanceof Error ? error.cause : undefined;
+    if (error instanceof ChatTransportError) return t(`appChat.transportErrors.${error.code}`);
+    if (cause instanceof ChatTransportError) return t(`appChat.transportErrors.${cause.code}`);
+    return error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed');
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && persistentFiles.length === 0) return;
     // The server resolves an expired approval within this turn; reloading the history
@@ -534,6 +612,7 @@ function ChatInterface({
     };
 
     setMessages((prev) => [...prev, userMsg]);
+    setStatusMessage(t('agentPlayground.chat.statusAnswering', { agent: agentName }));
     const messageText = inputMessage;
     setInputMessage('');
     // Force scroll to bottom so the user sees the streaming response
@@ -551,32 +630,68 @@ function ChatInterface({
         searchParams,
       });
 
-      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null);
+      if (!isAlive()) {
+        onDetachedTurnFinished?.();
+        return;
+      }
+
+      commitAgentResponse(result.response, result.elapsedMs, result.pendingApproval !== null, result.turn, result.turnConfig);
 
       if (result.conversationId && !currentConversationId) {
+        createdBySendRef.current = result.conversationId;
         setCurrentConversationId(result.conversationId);
         onConversationCreated?.(result.conversationId);
       }
-      if (result.sessionId && !currentSessionId) {
+      if (agentMedia && result.sessionId && !currentSessionId) {
         setCurrentSessionId(result.sessionId);
       }
 
       await refreshFileList(result.conversationId || currentConversationId);
       onMessageSent?.();
 
-      textareaRef.current?.focus();
+      // Focus goes back to the composer once it is enabled again (see the effect below), if it was lost.
+      setFocusAfterErrorTick((tick) => tick + 1);
     } catch (error) {
+      if (!isAlive()) return;
       setHoldStreamingContent(false);
+      setStatusMessage(t('agentPlayground.chat.statusFailed'));
+      if (isRejectedBeforeStart(error)) {
+        // The turn was rejected before it started: take the message back so it can be resent as it was
+        // (attached files stay attached).
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        // The composer is locked while a turn is in flight, so it is still empty here.
+        setInputMessage(messageText);
+      }
+      // The turn failed after the backend had created the conversation (e.g. the agent ran out of steps): it
+      // is kept server-side, so adopt it. The next message then continues it instead of starting another.
+      if (error instanceof StreamingChatError && error.conversationId && !currentConversationId) {
+        createdBySendRef.current = error.conversationId;
+        setCurrentConversationId(error.conversationId);
+        onConversationCreated?.(error.conversationId);
+        onMessageSent?.();
+      }
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: 'error',
-        content: error instanceof Error ? error.message : t('agentPlayground.chat.sendMessageFailed'),
+        content: describeSendError(error),
         timestamp: new Date(),
         elapsedMs: error instanceof StreamingChatError ? error.elapsedMs : responseElapsedMs,
       };
       setMessages((prev) => [...prev, errorMsg]);
+      // The composer was disabled during the turn, so focus fell to <body>: ask for it back (see the effect below).
+      setFocusAfterErrorTick((tick) => tick + 1);
     }
   };
+
+  // After a turn ends, return focus to the composer once it is enabled again, but only when focus is
+  // lost (on <body>, or the Stop button that just disappeared): never steal it from a control the user
+  // has moved to meanwhile (a selector chip, the side panel...).
+  useEffect(() => {
+    if (focusAfterErrorTick === 0) return;
+    // Some engines keep the just-disabled composer as the active element instead of falling back to <body>;
+    // the send and stop buttons count as part of the composer.
+    if (composerFocusLost()) textareaRef.current?.focus();
+  }, [focusAfterErrorTick]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -591,8 +706,17 @@ function ChatInterface({
   // ─── Reset ───────────────────────────────────────────────────────────────────
 
   const handleResetConversation = async () => {
+    const ok = await confirm({
+      title: t('agentPlayground.chat.resetConfirmTitle'),
+      message: t('agentPlayground.chat.resetConfirmMessage'),
+      confirmLabel: t('agentPlayground.chat.reset'),
+      cancelLabel: t('cancel'),
+      variant: 'warning',
+    });
+    if (!ok) return;
+    setResetFailed(false);
     try {
-      await apiService.resetAgentConversation(appId, agentId, currentConversationId);
+      await transport.resetConversation(currentConversationId);
       setMessages([]);
       setPersistentFiles([]);
       setPlaygroundMedia([]);
@@ -602,11 +726,26 @@ function ChatInterface({
       setFiltersKey((prev) => prev + 1);
       setExposedFilterValues({});
       clearToolHistory();
+      setStatusMessage(t('agentPlayground.chat.statusReset'));
       onConversationReset?.();
     } catch (error) {
       console.error('Error resetting conversation:', error);
+      setResetFailed(true);
     }
   };
+
+  const bubbleMaxWidth = wide ? 'max-w-[94%]' : 'max-w-[82%]';
+  const messageMaxWidth = wide ? 'max-w-none' : 'max-w-[760px]';
+
+  const resetButton = (
+    <ButtonApp
+      label={t('agentPlayground.chat.reset')}
+      variant="secondary"
+      size="compact"
+      onClick={handleResetConversation}
+      icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+    />
+  );
 
   // ─── File upload ─────────────────────────────────────────────────────────────
 
@@ -624,11 +763,12 @@ function ChatInterface({
 
     if (!targetConversationId) {
       try {
-        const convResponse = await apiService.createConversation(agentId);
-        targetConversationId = convResponse.conversation_id;
+        const convResponse = await transport.createConversation();
+        if (!isAlive()) return;
+        targetConversationId = convResponse.conversationId;
         setCurrentConversationId(targetConversationId);
-        if (convResponse.session_id) {
-          setCurrentSessionId(convResponse.session_id);
+        if (agentMedia && convResponse.sessionId) {
+          setCurrentSessionId(convResponse.sessionId);
         }
         if (onConversationCreated && targetConversationId) {
           onConversationCreated(targetConversationId);
@@ -642,14 +782,14 @@ function ChatInterface({
 
     for (const file of newFiles) {
       try {
-        await apiService.uploadFileForChat(appId, agentId, file, targetConversationId);
+        await transport.uploadFile(targetConversationId, file);
       } catch (error) {
         console.error(`Error uploading file ${file.name}:`, error);
       }
     }
 
     try {
-      const response = await apiService.listAttachedFiles(appId, agentId, targetConversationId);
+      const response = await transport.listFiles(targetConversationId);
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error('Error reloading persistent files:', error);
@@ -675,7 +815,7 @@ function ChatInterface({
   const refreshFileList = async (convId: number | null) => {
     if (!convId) return;
     try {
-      const filesResponse = await apiService.listAttachedFiles(appId, agentId, convId);
+      const filesResponse = await transport.listFiles(convId);
       setPersistentFiles(filesResponse.files || []);
     } catch {
       // Non-critical
@@ -686,8 +826,8 @@ function ChatInterface({
 
   const resolveFileUrl = useCallback(
     (fileId: string): Promise<string> =>
-      apiService.getFileDownloadUrl(appId, agentId, fileId, currentConversationId),
-    [appId, agentId, currentConversationId]
+      transport.getFileDownloadUrl(currentConversationId, fileId),
+    [transport, currentConversationId]
   );
 
   const handleDownloadFile = async (fileId: string) => {
@@ -714,12 +854,8 @@ function ChatInterface({
       return;
     }
     try {
-      await apiService.removeAttachedFile(appId, agentId, fileId, currentConversationId);
-      const response = await apiService.listAttachedFiles(
-        appId,
-        agentId,
-        currentConversationId
-      );
+      await transport.removeFile(currentConversationId, fileId);
+      const response = await transport.listFiles(currentConversationId);
       setPersistentFiles(response.files || []);
     } catch (error) {
       console.error(`Error removing file ${fileId}:`, error);
@@ -733,10 +869,10 @@ function ChatInterface({
     let convId = currentConversationId;
     if (!convId) {
       try {
-        const convResponse = await apiService.createConversation(agentId);
-        convId = convResponse.conversation_id;
+        const convResponse = await transport.createConversation();
+        convId = convResponse.conversationId;
         setCurrentConversationId(convId);
-        setCurrentSessionId(convResponse.session_id ?? null);
+        setCurrentSessionId(convResponse.sessionId ?? null);
         if (onConversationCreated && convId) {
           onConversationCreated(convId);
         }
@@ -751,10 +887,11 @@ function ChatInterface({
 
   const handleMediaUploadComplete = async () => {
     // Refresh playground media list after upload
-    if (!currentSessionId) return;
+    if (!currentSessionId || !transport.media) return;
+    const mediaApi = transport.media;
 
     const fetchMedia = async () => {
-      const media = await apiService.listPlaygroundMedia(appId, agentId, currentSessionId);
+      const media = await mediaApi.list(currentSessionId);
       return Array.isArray(media) ? media : [];
     };
 
@@ -772,9 +909,9 @@ function ChatInterface({
   };
 
   const handleDeletePlaygroundMedia = async () => {
-    if (!currentSessionId) return;
+    if (!currentSessionId || !transport.media) return;
     try {
-      await apiService.deletePlaygroundMedia(appId, agentId, currentSessionId);
+      await transport.media.remove(currentSessionId);
       setPlaygroundMedia([]);
     } catch (error) {
       console.error('Error deleting playground media:', error);
@@ -789,7 +926,8 @@ function ChatInterface({
   );
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // Enter that confirms an IME composition (CJK, etc.) must not send the message.
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (canSend) void handleSendMessage();
     }
@@ -818,7 +956,7 @@ function ChatInterface({
     (m) => m.status !== 'ready' && m.status !== 'error'
   );
   const canSend =
-    !isStreaming && !hasMediaProcessing && !approvalBlocksInput
+    !isStreaming && !hasMediaProcessing && !approvalBlocksInput && !sendBlockedReason
     && (inputMessage.trim().length > 0 || persistentFiles.length > 0);
 
   // ─── Video timestamp parsing ──────────────────────────────────────────────────
@@ -940,45 +1078,59 @@ function ChatInterface({
   const readyMediaIdsKey = readyVideoMedias.map((m) => m.media_id).join(',');
 
   const videoStreamUrls = useMemo<Record<number, string>>(() => {
-    if (!currentSessionId) return {};
+    const mediaApi = transport.media;
+    if (!currentSessionId || !mediaApi) return {};
     return readyVideoMedias.reduce<Record<number, string>>((map, media) => {
-      map[media.media_id] = apiService.getPlaygroundMediaStreamUrl(
-        appId,
-        agentId,
-        media.media_id,
-        currentSessionId,
-      );
+      map[media.media_id] = mediaApi.streamUrl(media.media_id, currentSessionId);
       return map;
     }, {});
-  }, [readyMediaIdsKey, currentSessionId, appId, agentId]);
+  }, [readyMediaIdsKey, currentSessionId, transport]);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4"
+      onKeyDown={(event) => {
+        // Esc stops a running turn. Layers that use Esc themselves (selector popover, modals) prevent default.
+        if (event.key === 'Escape' && isStreaming && !event.defaultPrevented) abortStream();
+      }}
+    >
+      {/* One polite status region for the whole chat: says once that a turn started / finished / failed.
+          Never carries streamed text. */}
+      <div role="status" className="sr-only">{statusMessage}</div>
       {/* Chat Interface + right column (info / filters) */}
-      <div className="grid grid-cols-1 items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className={`grid grid-cols-1 items-start gap-[22px] ${wide ? 'xl:grid-cols-[minmax(0,1fr)_280px]' : 'xl:grid-cols-[minmax(0,1fr)_360px]'}`}>
         {/* Chat card */}
-        <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col h-[calc(100vh-20rem)] min-h-[480px] overflow-hidden">
+        <div className={`min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col ${cardHeightClassName} sm:min-h-[480px] overflow-hidden`}>
           {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
-          <div className="flex items-center gap-2 px-6 pt-3 pb-1">
+          <div className="flex flex-wrap items-center gap-2 px-6 pt-3 pb-1">
             {toolbarStart}
-            <ButtonApp
-              className="ml-auto"
-              label={t('agentPlayground.chat.reset')}
-              variant="secondary"
-              size="compact"
-              onClick={handleResetConversation}
-              icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
-            />
+            {resetButtonTarget ? createPortal(resetButton, resetButtonTarget) : <div className="ml-auto">{resetButton}</div>}
           </div>
 
-          {/* Messages container */}
+          {resetFailed && (
+            <div className="px-6 pb-2">
+              <Alert
+                type="error"
+                message={t('agentPlayground.chat.resetFailed')}
+                onDismiss={() => setResetFailed(false)}
+                dismissAriaLabel={t('alert.dismissNamed', { name: t('agentPlayground.chat.reset') })}
+              />
+            </div>
+          )}
+
+          {/* Messages container. Focusable so a keyboard user can scroll it; it is not a live region (the
+              status region above announces turns, tokens are never read out as they arrive). On narrow
+              screens it has a bounded height of its own instead of sharing a fixed-height card. */}
           <div
             ref={messagesContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-[26px] space-y-[22px]
+            role="region"
+            aria-label={t('agentPlayground.chat.messagesRegion')}
+            tabIndex={0}
+            className="flex-1 min-h-[16rem] max-h-[60vh] sm:min-h-0 sm:max-h-none overflow-y-auto overscroll-contain px-6 py-[26px] space-y-[22px]
                        bg-canvas dark:bg-canvas-dark
-                       scroll-smooth"
+                       scroll-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus dark:focus-visible:ring-focus-dark"
           >
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-full">
@@ -1014,11 +1166,14 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4"
+                        className={`flex justify-end ${messageMaxWidth} mx-auto animate-slide-in-right gap-4`}
                       >
-                        <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
-                        <div className="max-w-[82%] min-w-0">
+                        <div aria-hidden="true">
+                          <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        </div>
+                        <div className={`${bubbleMaxWidth} min-w-0`}>
                           <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
+                            <span className="sr-only">{t('agentPlayground.chat.speakerYou')}</span>
                             <MessageContent
                               content={message.content}
                               resolveFileUrl={resolveFileUrl}
@@ -1051,11 +1206,8 @@ function ChatInterface({
                             )}
                           </div>
                           <div className="text-right mt-1">
-                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                            <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                              {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                           </div>
                         </div>
@@ -1067,10 +1219,10 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-start max-w-[760px] mx-auto animate-slide-in-left"
+                        className={`flex justify-start ${messageMaxWidth} mx-auto animate-slide-in-left`}
                       >
-                        <div className="max-w-[82%] min-w-0">
-                          <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
+                        <div className={`${bubbleMaxWidth} min-w-0`}>
+                          <div role="alert" className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                             <div className="flex items-center gap-2 mb-1">
                               <svg
                                 className="w-4 h-4 shrink-0"
@@ -1093,14 +1245,11 @@ function ChatInterface({
                             <p className="text-sm">{message.content}</p>
                           </div>
                           <div className="mt-1">
-                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                            <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                              {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
+                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
@@ -1117,12 +1266,15 @@ function ChatInterface({
                   return (
                     <div
                       key={message.id}
-                      className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+                      className={`flex justify-start ${messageMaxWidth} mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
-                      <div className="flex items-start gap-4 max-w-[82%] min-w-0">
-                        <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                      <div className={`flex items-start gap-4 ${bubbleMaxWidth} min-w-0`}>
+                        <div aria-hidden="true">
+                          <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
+                            <span className="sr-only">{t('agentPlayground.chat.speakerAssistant', { agent: agentName })}</span>
                             <MessageContent
                               content={stripTimestampLabels(message.content)}
                               resolveFileUrl={resolveFileUrl}
@@ -1147,19 +1299,17 @@ function ChatInterface({
                                 />
                               );
                             })}
-                          <div className="mt-1">
-                            <span className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
+                              {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-faint dark:text-fg-faint-dark">
+                              <span className="inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
                             )}
+                            {renderMessageMeta?.(message)}
                           </div>
                         </div>
                       </div>
@@ -1179,7 +1329,7 @@ function ChatInterface({
                     thinkingMessage={thinkingMessage}
                   />
                 )}
-                {pendingApproval && !isStreaming && (
+                {approvals && pendingApproval && !isStreaming && (
                   <HitlApprovalCard
                     approval={pendingApproval}
                     disabled={approvalBusy}
@@ -1242,7 +1392,7 @@ function ChatInterface({
                 />
               </div>
             )}
-            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark transition-colors duration-150">
+            <div className="flex items-end gap-2 bg-surface dark:bg-surface-dark border-[1.5px] border-line dark:border-line-dark rounded-xl py-2 pr-2 pl-2.5 shadow-sm focus-within:border-accent dark:focus-within:border-accent-dark focus-within:ring-2 focus-within:ring-focus dark:focus-within:ring-focus-dark transition-colors duration-150">
               {/* File attach button */}
               <div>
                 <input
@@ -1251,6 +1401,8 @@ function ChatInterface({
                   multiple
                   onChange={handleFileUpload}
                   className="hidden"
+                  aria-hidden="true"
+                  tabIndex={-1}
                   id="file-upload"
                   accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.doc,.docx"
                 />
@@ -1259,6 +1411,7 @@ function ChatInterface({
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming}
                   className="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                              text-fg-tertiary dark:text-fg-tertiary-dark
                              disabled:opacity-40 disabled:cursor-not-allowed
                              transition-colors duration-150"
@@ -1283,11 +1436,13 @@ function ChatInterface({
               </div>
 
               {/* Media attach button */}
+              {agentMedia && (
               <button
                 type="button"
                 onClick={handleMediaButtonClick}
                 disabled={isStreaming}
                 className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                            text-fg-tertiary dark:text-fg-tertiary-dark
                           disabled:opacity-40 disabled:cursor-not-allowed
                            transition-colors duration-150"
@@ -1309,6 +1464,7 @@ function ChatInterface({
                   />
                 </svg>
               </button>
+              )}
 
               {/* Textarea */}
               <textarea
@@ -1317,13 +1473,15 @@ function ChatInterface({
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                aria-label={t('agentPlayground.chat.messagePlaceholder', { agent: agentName })}
+                aria-describedby={sendBlockedReason ? sendBlockedReasonId : undefined}
                 placeholder={approvalBlocksInput
                   ? t('agentPlayground.chat.answerApprovalToContinue')
                   : t('agentPlayground.chat.messagePlaceholder', { agent: agentName })}
                 disabled={isStreaming || approvalBlocksInput}
                 className="flex-1 py-[9px] bg-transparent border-none outline-none resize-none
                            text-[14.5px] text-fg dark:text-fg-dark
-                           placeholder:text-fg-tertiary dark:placeholder:text-fg-tertiary-dark
+                           placeholder:text-fg-secondary dark:placeholder:text-fg-secondary-dark
                            disabled:opacity-50
                            focus:outline-none focus:ring-0 focus:border-accent dark:focus:border-accent
                            max-h-40 input-login"
@@ -1335,8 +1493,10 @@ function ChatInterface({
               {isStreaming ? (
                 <button
                   type="button"
+                  ref={stopButtonRef}
                   onClick={abortStream}
                   className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                              bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark
                              text-error dark:text-error-dark
                              hover:border-error dark:hover:border-error-dark transition-colors duration-150"
@@ -1348,9 +1508,12 @@ function ChatInterface({
               ) : (
                 <button
                   type="button"
+                  ref={sendButtonRef}
                   onClick={handleSendMessage}
                   disabled={!canSend}
+                  aria-describedby={sendBlockedReason ? sendBlockedReasonId : undefined}
                   className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark
                              bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
                              hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
                              transition-opacity duration-150"
@@ -1362,9 +1525,19 @@ function ChatInterface({
             </div>
 
             {/* Hint text */}
-            <p className="text-[11.5px] text-fg-faint dark:text-fg-faint-dark mt-[9px] text-center">
-              {t('agentPlayground.chat.sendKeyboardHint')}
+            {/* Persistent polite region: present even when empty so a change of reason is announced. */}
+            <p
+              id={sendBlockedReasonId}
+              role="status"
+              className={sendBlockedReason ? 'text-[12px] text-bronze dark:text-bronze-dark mt-[9px] text-center' : 'sr-only'}
+            >
+              {sendBlockedReason ?? ''}
             </p>
+            {!sendBlockedReason && (
+              <p className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark mt-[9px] text-center">
+                {t('agentPlayground.chat.sendKeyboardHint')}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1427,7 +1600,7 @@ function ChatInterface({
       </div>
 
       {/* Media Upload Modal */}
-      {mediaConversationId && currentSessionId && (
+      {agentMedia && agentId !== undefined && mediaConversationId && currentSessionId && (
         <MediaUploadModal
           isOpen={showMediaUploadModal}
           onClose={() => setShowMediaUploadModal(false)}

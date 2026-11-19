@@ -198,6 +198,7 @@ async def test_streaming_keeps_checkpoint_when_hitl_interrupt_is_pending():
 
     with (
         patch("services.agent_streaming_service.human_in_the_loop_config", return_value=MagicMock()),
+        patch("tools.middleware.factory.human_in_the_loop_config", return_value=MagicMock()),
         patch("services.agent_streaming_service.create_agent", create_agent),
         patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
         patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="hello")),
@@ -360,6 +361,7 @@ async def _run_hitl(chain, *, approvals_overrides=None, **kwargs):
     kwargs.setdefault("message", "hi")
     with (
         patch("services.agent_streaming_service.human_in_the_loop_config", return_value=MagicMock()),
+        patch("tools.middleware.factory.human_in_the_loop_config", return_value=MagicMock()),
         patch("services.agent_streaming_service.create_agent", AsyncMock(return_value=(chain, None, None))),
         patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
         patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="hi")),
@@ -473,3 +475,49 @@ async def test_failed_resume_gives_the_claim_back():
     fakes["release"].assert_called_once()
     fakes["finish"].assert_not_called()
     assert any('"error"' in e for e in events)
+
+
+async def _failing_stream(exc):
+    raise exc
+    if False:
+        yield None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [RuntimeError("model error"), TimeoutError("run timeout"), "cancel"])
+async def test_the_chat_turn_lease_is_released_on_every_exit_path(failure):
+    """success is covered above; tool/model error, timeout and cancellation all end in the same finally."""
+    import asyncio
+
+    from services.agent_streaming_service import AgentStreamingService
+
+    ctx = SimpleNamespace(
+        effective_conv_id=297, conversation=None, agent=SimpleNamespace(name="Agent", has_memory=True),
+        fresh_agent=SimpleNamespace(agent_id=1, has_memory=True), search_params={}, session_id_for_cache="297",
+        user_context={"user_id": "u1"}, working_dir="/tmp/work", sandbox_handle=MagicMock(),
+        sandbox_provider=MagicMock(), sandbox_session_key="conv_1_297", enhanced_message="hello",
+        image_files=[], processed_files=[],
+    )
+    execution_service = MagicMock()
+    execution_service._prepare_turn = AsyncMock(return_value=ctx)
+    execution_service._begin_sandbox_turn = MagicMock(return_value=False)  # lazy handle: no outer lease taken
+    agent_chain = MagicMock()
+    exc = asyncio.CancelledError() if failure == "cancel" else failure
+    agent_chain.astream.return_value = _failing_stream(exc)
+    service = AgentStreamingService()
+    service.execution_service = execution_service
+    with (
+        patch("services.agent_streaming_service.create_agent", AsyncMock(return_value=(agent_chain, None, None))),
+        patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
+        patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="hello")),
+    ):
+        try:
+            async for _ in service.stream_agent_chat(
+                agent_id=1, message="hello", file_references=[], user_context={"user_id": "u1"},
+                conversation_id=297, db=MagicMock(),
+            ):
+                pass
+        except BaseException:  # noqa: BLE001 - cancellation propagates; the lease must be released regardless
+            pass
+    execution_service._release_turn_lease.assert_called_once_with(ctx)
+    execution_service._end_sandbox_turn.assert_not_called()  # nothing was taken by _begin_sandbox_turn

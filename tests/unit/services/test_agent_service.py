@@ -35,6 +35,7 @@ def make_agent(
 ) -> MagicMock:
     """Create a mock Agent ORM object."""
     agent = MagicMock()
+    agent.is_internal_chat = False  # a bare MagicMock attribute would be truthy
     agent.agent_id = agent_id
     agent.name = name
     agent.app_id = app_id
@@ -1138,7 +1139,7 @@ class TestReferencedResourceIdValidation:
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
-            'repositories.silo_repository.SiloRepository.get_by_id',
+            'repositories.silo_repository.SiloRepository.get_visible_by_id',
             return_value=other_app_silo,
         )
 
@@ -1155,7 +1156,7 @@ class TestReferencedResourceIdValidation:
 
         mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
         mocker.patch(
-            'repositories.silo_repository.SiloRepository.get_by_id',
+            'repositories.silo_repository.SiloRepository.get_visible_by_id',
             return_value=same_app_silo,
         )
         created_agent = MagicMock()
@@ -1164,6 +1165,20 @@ class TestReferencedResourceIdValidation:
 
         result = service.create_or_update_agent(db, agent_data, agent_type='agent')
         assert result == 21
+
+    def test_rejects_the_hidden_temp_silo_of_a_conversation_like_a_missing_silo(self, mocker):
+        db = MagicMock()
+        service = AgentService()
+        agent_data = self._base_agent_data(silo_id=7)
+
+        temp_silo = MagicMock()
+        temp_silo.app_id = 1  # same app: only the temp marker makes it unselectable
+
+        mocker.patch('services.agent_service.AgentRepository.get_agent_by_id_and_type', return_value=None)
+        mocker.patch('repositories.silo_repository.SiloRepository.get_visible_by_id', return_value=None)  # temp: hidden
+
+        with pytest.raises(ValueError, match="silo_id does not exist or does not belong to this app"):
+            service.create_or_update_agent(db, agent_data, agent_type='agent')
 
     def test_rejects_output_parser_id_from_a_different_app(self, mocker):
         db = MagicMock()

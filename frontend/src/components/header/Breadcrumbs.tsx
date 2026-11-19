@@ -55,6 +55,7 @@ const NAVIGATION_LABELS: Record<string, { name: string; translationKey: string }
   '/apps': { name: 'My Apps', translationKey: 'breadcrumbs.navigation.myApps' },
   '/about': { name: 'About', translationKey: 'breadcrumbs.navigation.about' },
   '/apps/:appId': { name: 'Dashboard', translationKey: 'breadcrumbs.navigation.dashboard' },
+  '/apps/:appId/chat': { name: 'Chat', translationKey: 'breadcrumbs.navigation.chat' },
   '/apps/:appId/agents': { name: 'Agents', translationKey: 'breadcrumbs.navigation.agents' },
   '/apps/:appId/scheduled-tasks': { name: 'Scheduled Tasks', translationKey: 'breadcrumbs.navigation.scheduledTasks' },
   '/apps/:appId/data': { name: 'Data sources', translationKey: 'breadcrumbs.navigation.dataSources' },
@@ -67,6 +68,7 @@ const NAVIGATION_LABELS: Record<string, { name: string; translationKey: string }
   '/apps/:appId/skills': { name: 'Skills', translationKey: 'breadcrumbs.navigation.skills' },
   '/apps/:appId/middlewares': { name: 'Middlewares', translationKey: 'breadcrumbs.navigation.middlewares' },
   '/apps/:appId/settings': { name: 'App Settings', translationKey: 'breadcrumbs.navigation.appSettings' },
+  '/apps/:appId/settings/general': { name: 'General', translationKey: 'breadcrumbs.navigation.general' },
   '/apps/:appId/settings/output-destinations': { name: 'Output Channels', translationKey: 'breadcrumbs.navigation.outputChannels' },
   '/apps/:appId/settings/ai-services': { name: 'AI Services', translationKey: 'breadcrumbs.navigation.aiServices' },
   '/apps/:appId/settings/embedding-services': { name: 'Embedding Services', translationKey: 'breadcrumbs.navigation.embeddingServices' },
@@ -102,6 +104,8 @@ function getSuffixCrumbs(basePath: string, pathname: string): Crumb[] {
 
   if (crumbs.length > 0) return crumbs;
   if (remaining.length === 0) return [];
+  // `/chat/<conversationId>`: the conversation id is not a crumb and the page is not an edit form.
+  if (basePath.endsWith('/chat')) return [];
 
   return ['/scheduled-tasks', '/mcp-servers', '/sharepoint'].some((suffix) => basePath.endsWith(suffix))
     ? [{ label: 'Detail', translationKey: 'breadcrumbs.action.detail' }]

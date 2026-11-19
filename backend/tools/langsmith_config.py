@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Dict, Literal, Optional, Sequence, Tuple
 
 import langsmith as ls
 from langchain_core.tracers.langchain import LangChainTracer
@@ -261,6 +261,8 @@ def build_tracing_config(
     user_context: Optional[Dict[str, Any]] = None,
     conversation_id: Optional[int] = None,
     session_id: Optional[str] = None,
+    extra_metadata: Optional[Dict[str, Any]] = None,
+    extra_tags: Optional[Sequence[str]] = None,
 ) -> Tuple[LangChainTracer, Dict[str, Any]]:
     """Build the LangChainTracer and the RunnableConfig overrides for a turn.
 
@@ -271,6 +273,10 @@ def build_tracing_config(
           - ``run_name`` (str)
           - ``metadata`` (dict)
           - ``tags`` (list[str])
+
+    ``extra_metadata`` is merged into ``metadata`` without overriding the standard keys (a
+    clashing standard key wins); ``extra_tags`` are appended to ``tags``. Both must hold ids and
+    names only, never secrets.
 
     The caller is responsible for appending ``tracer`` to
     ``config["callbacks"]`` and merging the overrides.
@@ -292,6 +298,8 @@ def build_tracing_config(
         "session_id": session_id,
         "tracing_source": settings.source,
     }
+    if extra_metadata:
+        metadata = {**extra_metadata, **{k: v for k, v in metadata.items() if v is not None}}
     # Strip None values — LangSmith UI is cleaner without them.
     metadata = {k: v for k, v in metadata.items() if v is not None}
 
@@ -304,6 +312,9 @@ def build_tracing_config(
         tags.append(f"agent_type:{agent_type}")
         if agent_type == "ocr_agent":
             tags.append("ocr")
+
+    if extra_tags:
+        tags.extend(t for t in extra_tags if t not in tags)
 
     overrides: Dict[str, Any] = {
         "run_name": f"agent:{getattr(agent, 'name', None) or agent.agent_id}",

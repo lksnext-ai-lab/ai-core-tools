@@ -55,7 +55,8 @@ class SiloExportService(BaseExportService):
         """
         # Load silo
         silo = self.silo_repo.get_by_id(silo_id, self.session)
-        if not silo:
+        if not silo or self.silo_repo.is_temp_silo(silo_id, self.session):
+            # The hidden temp silo of a playground / Chat conversation is never exportable (same as missing).
             raise ValueError(f"Silo with ID {silo_id} not found")
 
         # Permission check

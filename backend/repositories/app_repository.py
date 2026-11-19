@@ -110,6 +110,10 @@ class AppRepository:
             app.enable_openai_api = data['enable_openai_api']
         if 'default_sandbox_service_id' in data:
             app.default_sandbox_service_id = data['default_sandbox_service_id']
+        if 'default_embedding_service_id' in data:
+            app.default_embedding_service_id = data['default_embedding_service_id']
+        if 'chat_code_interpreter_enabled' in data:
+            app.chat_code_interpreter_enabled = bool(data['chat_code_interpreter_enabled'])
         if 'onboarding_dismissed' in data:
             app.onboarding_dismissed = data['onboarding_dismissed']
     
@@ -120,25 +124,41 @@ class AppRepository:
         from models.agent import Agent
         return self.db.query(Agent).filter(Agent.app_id == app_id).all()
     
-    def get_repositories_by_app_id(self, app_id: int):
-        """Get all repositories for an app"""
+    def get_repositories_by_app_id(self, app_id: int, visible_only: bool = False):
+        """Get all repositories for an app.
+
+        The delete cascade needs every row (``visible_only=False``, including the temp repositories of
+        playground / Chat conversations); the export passes ``visible_only=True`` to leave those out.
+        """
         from models.repository import Repository
-        return self.db.query(Repository).filter(Repository.app_id == app_id).all()
+        from repositories.repository_repository import RepositoryRepository
+        query = self.db.query(Repository).filter(Repository.app_id == app_id)
+        if visible_only:
+            query = query.filter(RepositoryRepository.visible_clause())
+        return query.all()
     
     def get_domains_by_app_id(self, app_id: int):
         """Get all domains for an app"""
         from models.domain import Domain
         return self.db.query(Domain).filter(Domain.app_id == app_id).all()
     
-    def get_silos_by_app_id(self, app_id: int):
-        """Get all silos for an app"""
+    def get_silos_by_app_id(self, app_id: int, visible_only: bool = False):
+        """Get all silos for an app (``visible_only=True`` leaves out the temp silos of conversations; see above)."""
         from models.silo import Silo
-        return self.db.query(Silo).filter(Silo.app_id == app_id).all()
+        from repositories.silo_repository import SiloRepository
+        query = self.db.query(Silo).filter(Silo.app_id == app_id)
+        if visible_only:
+            query = query.filter(SiloRepository.visible_clause())
+        return query.all()
     
-    def get_output_parsers_by_app_id(self, app_id: int):
-        """Get all output parsers for an app"""
+    def get_output_parsers_by_app_id(self, app_id: int, visible_only: bool = False):
+        """Get all output parsers for an app (``visible_only=True`` leaves out the temp silos' metadata parsers)."""
         from models.output_parser import OutputParser
-        return self.db.query(OutputParser).filter(OutputParser.app_id == app_id).all()
+        from repositories.output_parser_repository import OutputParserRepository
+        query = self.db.query(OutputParser).filter(OutputParser.app_id == app_id)
+        if visible_only:
+            query = query.filter(OutputParserRepository.visible_clause())
+        return query.all()
     
     def get_mcp_configs_by_app_id(self, app_id: int):
         """Get all MCP configs for an app"""

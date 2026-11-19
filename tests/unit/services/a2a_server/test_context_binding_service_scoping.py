@@ -26,7 +26,7 @@ from utils.security import hash_api_key
 
 
 def _fake_agent(agent_id: int, app_id: int) -> SimpleNamespace:
-    return SimpleNamespace(agent_id=agent_id, app_id=app_id)
+    return SimpleNamespace(agent_id=agent_id, app_id=app_id, is_internal_chat=False)
 
 
 class TestLoadScopedAgent:

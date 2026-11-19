@@ -35,6 +35,11 @@ function removeModal(id: string) {
   stackListeners.forEach((l) => l());
 }
 
+/** True while any Modal is open: other overlays (e.g. a side panel) must leave Esc and Tab to it. */
+export function hasOpenModal(): boolean {
+  return openModalStack.length > 0;
+}
+
 function isTopModal(id: string): boolean {
   return openModalStack[openModalStack.length - 1] === id;
 }

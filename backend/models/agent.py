@@ -17,6 +17,11 @@ class MarketplaceVisibility(enum.Enum):
 
 AGENT_ID = 'Agent.agent_id'
 
+# Agent.kind: 'standard' for every user-visible agent; 'internal_chat' marks the single
+# hidden per-App agent that backs the flexible Chat (never exposed, see ck_agent_internal_chat_unexposed).
+AGENT_KIND_STANDARD = 'standard'
+AGENT_KIND_INTERNAL_CHAT = 'internal_chat'
+
 # Default temperature for agents
 DEFAULT_AGENT_TEMPERATURE = 0.7
 
@@ -149,11 +154,39 @@ class Agent(Base):
     a2a_skill_tags = Column(JSON, nullable=False, default=list, server_default='[]')
     a2a_examples = Column(JSON, nullable=False, default=list, server_default='[]')
 
+    # Hidden-agent marker (not the STI discriminator `type`).
+    kind = Column(String(32), nullable=False, default=AGENT_KIND_STANDARD, server_default=AGENT_KIND_STANDARD)
+
     __table_args__ = (
         CheckConstraint("a2a_card_visibility IN ('public','api_key')", name='ck_agent_a2a_card_visibility'),
+        CheckConstraint("kind IN ('standard','internal_chat')", name='ck_agent_kind'),
+        # DB-level belt and braces: the internal chat agent can never be exposed.
+        CheckConstraint(
+            "kind <> 'internal_chat' OR (is_tool IS NOT TRUE AND a2a_enabled = false "
+            "AND marketplace_visibility = 'UNPUBLISHED' AND enable_code_interpreter = false)",
+            name='ck_agent_internal_chat_unexposed',
+        ),
+        # Agent.app_id is nullable; the one-per-App index would not cover a NULL app_id.
+        CheckConstraint("kind <> 'internal_chat' OR app_id IS NOT NULL", name='ck_agent_internal_chat_has_app'),
+        # One and only one internal chat agent per App.
+        Index('uq_agent_internal_chat_per_app', 'app_id', unique=True, postgresql_where=text("kind = 'internal_chat'")),
         # Partial index: the A2A catalog/discovery query filters on app_id WHERE a2a_enabled.
         Index('ix_agent_a2a_enabled_app', 'app_id', postgresql_where=text('a2a_enabled')),
     )
+
+    @property
+    def is_internal_chat(self) -> bool:
+        return self.kind == AGENT_KIND_INTERNAL_CHAT
+
+    @classmethod
+    def visible_clause(cls):
+        """SQL clause for user-visible agents (excludes the hidden internal chat agent). Single definition."""
+        return cls.kind == AGENT_KIND_STANDARD
+
+    @classmethod
+    def internal_chat_clause(cls):
+        """SQL clause matching only the hidden internal chat agent."""
+        return cls.kind == AGENT_KIND_INTERNAL_CHAT
 
     ai_service = relationship('AIService',
                            foreign_keys=[service_id])

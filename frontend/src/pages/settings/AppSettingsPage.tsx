@@ -23,6 +23,12 @@ interface LangsmithTestResult {
   readonly projectName?: string | null;
 }
 
+interface EmbeddingServiceOption extends ServiceOptionLike {
+  readonly provider: string;
+  readonly model_name?: string;
+  readonly is_system?: boolean;
+}
+
 interface SandboxServiceOption extends ServiceOptionLike {
   readonly provider: string;
   readonly is_system?: boolean;
@@ -33,6 +39,8 @@ function AppSettingsPage() {
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
+  // The LangSmith API key stays owner-only: administrators edit the rest of the settings but never this key.
+  const canEditLangsmith = hasMinRole(AppRole.OWNER);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -42,6 +50,8 @@ function AppSettingsPage() {
     agent_cors_origins: '',
     enable_openai_api: false,
     default_sandbox_service_id: null as number | null,  // null = inherit system default
+    chat_code_interpreter_enabled: false,
+    default_embedding_service_id: null as number | null,  // null = none (Chat attachments are not indexed)
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,6 +69,9 @@ function AppSettingsPage() {
   // Saved (loaded) default sandbox: a retired service stays selectable only if it is this one (D-4).
   const [savedSandboxServiceId, setSavedSandboxServiceId] = useState<number | null>(null);
   const [sandboxServices, setSandboxServices] = useState<SandboxServiceOption[]>([]);
+  const [savedEmbeddingServiceId, setSavedEmbeddingServiceId] = useState<number | null>(null);
+  const [embeddingServices, setEmbeddingServices] = useState<EmbeddingServiceOption[]>([]);
+  const [embeddingServicesFailed, setEmbeddingServicesFailed] = useState(false);
 
   // Load app data on mount
   useEffect(() => {
@@ -66,6 +79,7 @@ function AppSettingsPage() {
       void loadAppData();
       void loadSlugData();
       void loadSandboxServices();
+      void loadEmbeddingServices();
     }
   }, [appId]);
 
@@ -76,6 +90,18 @@ function AppSettingsPage() {
       setSandboxServices(services ?? []);
     } catch (err) {
       console.error('Error loading sandbox services:', err);
+    }
+  }
+
+  async function loadEmbeddingServices() {
+    if (!appId) return;
+    try {
+      const services = await apiService.getEmbeddingServices(Number.parseInt(appId)) as EmbeddingServiceOption[];
+      setEmbeddingServices(services ?? []);
+      setEmbeddingServicesFailed(false);
+    } catch (err) {
+      setEmbeddingServicesFailed(true);
+      console.error('Error loading embedding services:', err);
     }
   }
 
@@ -95,8 +121,11 @@ function AppSettingsPage() {
         agent_cors_origins: app.agent_cors_origins || '',
         enable_openai_api: app.enable_openai_api || false,
         default_sandbox_service_id: app.default_sandbox_service_id ?? null,
+        chat_code_interpreter_enabled: app.chat_code_interpreter_enabled ?? false,
+        default_embedding_service_id: app.default_embedding_service_id ?? null,
       });
       setSavedSandboxServiceId(app.default_sandbox_service_id ?? null);
+      setSavedEmbeddingServiceId(app.default_embedding_service_id ?? null);
       setOriginalLangsmithKey(langsmithKey);
       setLangsmithKeyChanged(false);
     } catch (err) {
@@ -148,14 +177,20 @@ function AppSettingsPage() {
     try {
       await apiService.updateApp(Number.parseInt(appId), {
         name: formData.name,
-        langsmith_api_key: langsmithKeyChanged ? formData.langsmith_api_key : originalLangsmithKey,
+        // Non-owners never send the key (the backend refuses a change and keeps the stored one when it is omitted).
+        ...(canEditLangsmith
+          ? { langsmith_api_key: langsmithKeyChanged ? formData.langsmith_api_key : originalLangsmithKey }
+          : {}),
         agent_rate_limit: formData.agent_rate_limit,
         max_file_size_mb: formData.max_file_size_mb,
         agent_cors_origins: formData.agent_cors_origins,
         enable_openai_api: formData.enable_openai_api,
         default_sandbox_service_id: formData.default_sandbox_service_id,
+        chat_code_interpreter_enabled: formData.chat_code_interpreter_enabled,
+        default_embedding_service_id: formData.default_embedding_service_id,
       });
       setSavedSandboxServiceId(formData.default_sandbox_service_id);
+      setSavedEmbeddingServiceId(formData.default_embedding_service_id);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -313,7 +348,7 @@ function AppSettingsPage() {
                       autoComplete="off"
                       data-lpignore="true"
                       data-form-type="other"
-                      disabled={!canEdit}
+                      disabled={!canEditLangsmith}
                       placeholder={!langsmithKeyChanged && originalLangsmithKey
                         ? t('appSettingsPage.keepCurrentKeyPlaceholder')
                         : t('appSettingsPage.enterLangsmithKeyPlaceholder')}
@@ -323,10 +358,13 @@ function AppSettingsPage() {
                           <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_API_KEY</code>
                           {t('appSettingsPage.langsmithHelpBetweenKeys')}{' '}
                           <code className="mx-1 bg-gray-100 px-1 rounded text-xs">LANGSMITH_TRACING=true</code>).
+                          {!canEditLangsmith && (
+                            <span className="mt-1 block font-medium">{t('appSettingsPage.langsmithOwnerOnly')}</span>
+                          )}
                         </>
                       )}
                     />
-                    {canEdit && (
+                    {canEditLangsmith && (
                       <button
                         type="button"
                         onClick={handleTestLangsmith}
@@ -437,7 +475,7 @@ function AppSettingsPage() {
                         value: service.service_id,
                         label: serviceOptionLabel(
                           service,
-                          `${service.is_system ? `[System] ${service.name}` : service.name} (${service.provider})`,
+                          `${service.is_system ? t('appSettingsPage.systemServiceOption', { name: service.name }) : service.name} (${service.provider})`,
                         ),
                       })),
                     ]}
@@ -449,6 +487,53 @@ function AppSettingsPage() {
                     )}
                   />
                   <ServiceOptionStatus selectId="default_sandbox_service_id" options={sandboxServices} selectedId={formData.default_sandbox_service_id} />
+                </div>
+
+                {/* Code interpreter in the App Chat (uses the default sandbox service above) */}
+                <div>
+                  <FormCheckbox
+                    label={t('appSettingsPage.chatCodeInterpreter')}
+                    id="chat_code_interpreter_enabled"
+                    checked={formData.chat_code_interpreter_enabled}
+                    onChange={handleChange}
+                    disabled={!canEdit}
+                    helpText={t('appSettingsPage.chatCodeInterpreterHelp')}
+                  />
+                </div>
+
+                {/* Default embedding service (indexes files attached in the App Chat) */}
+                <div>
+                  <FormSelect
+                    label={t('appSettingsPage.embeddingService')}
+                    id="default_embedding_service_id"
+                    value={formData.default_embedding_service_id ?? ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      default_embedding_service_id: e.target.value ? Number.parseInt(e.target.value) : null,
+                    }))}
+                    disabled={!canEdit}
+                    ariaDescribedBy={serviceStatusId(embeddingServices, formData.default_embedding_service_id, 'default_embedding_service_id')}
+                    options={[
+                      { value: '', label: t('appSettingsPage.noDefaultEmbeddingService') },
+                      ...selectableServiceOptions(embeddingServices, savedEmbeddingServiceId).map((service) => ({
+                        value: service.service_id,
+                        label: serviceOptionLabel(
+                          service,
+                          `${service.is_system ? t('appSettingsPage.systemServiceOption', { name: service.name }) : service.name} (${service.provider})`,
+                        ),
+                      })),
+                    ]}
+                    helpText={(
+                      <>
+                        {t('appSettingsPage.embeddingServiceHelpBeforeSettings')}{' '}
+                        <span className="font-medium">{t('appSettingsPage.embeddingServicesSettings')}</span>.
+                      </>
+                    )}
+                  />
+                  <ServiceOptionStatus selectId="default_embedding_service_id" options={embeddingServices} selectedId={formData.default_embedding_service_id} />
+                  {embeddingServicesFailed && (
+                    <Alert type="warning" message={t('appSettingsPage.embeddingServicesLoadFailed')} className="mt-2" />
+                  )}
                 </div>
               </div>
 

@@ -30,6 +30,7 @@ from models.hitl_approval import (
     ApprovalStatus,
     HITLApproval,
 )
+from repositories.agent_repository import AgentRepository
 from repositories.hitl_approval_repository import HITLApprovalRepository
 from schemas.hitl_approval_schemas import (
     ApprovalActionSchema,
@@ -542,6 +543,14 @@ def cancel_pending_for_agents(db: Session, agent_ids: List[int], reason: str) ->
     those approvals can no longer be answered. Their paused turn is dropped by the chat's
     incomplete-checkpoint recovery on the next message. The caller commits.
     """
+    if agent_ids:
+        internal_ids = AgentRepository.get_internal_chat_ids(db, agent_ids)
+        if internal_ids:
+            # Must not happen: the internal chat agent has no approval rules. Never touch its approvals.
+            logger.warning(
+                "cancel_pending_for_agents ignored internal chat agent id(s) %s (%s)", sorted(internal_ids), reason
+            )
+            agent_ids = [agent_id for agent_id in agent_ids if agent_id not in internal_ids]
     approval_ids = HITLApprovalRepository.list_open_ids_for_agents(db, agent_ids)
     for approval_id in approval_ids:
         approval = HITLApprovalRepository.get(db, approval_id)

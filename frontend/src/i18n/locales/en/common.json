@@ -1,5 +1,6 @@
 {
   "save": "Save",
+  "confirm": "Confirm",
   "cancel": "Cancel",
   "delete": "Delete",
   "edit": "Edit",
@@ -81,6 +82,7 @@
       "about": "About",
       "dashboard": "Dashboard",
       "agents": "Agents",
+      "chat": "Chat",
       "scheduledTasks": "Scheduled Tasks",
       "dataSources": "Data sources",
       "silos": "Silos",
@@ -92,6 +94,7 @@
       "skills": "Skills",
       "middlewares": "Middlewares",
       "appSettings": "App Settings",
+      "general": "General",
       "outputChannels": "Output Channels",
       "aiServices": "AI Services",
       "embeddingServices": "Embedding Services",
@@ -272,7 +275,7 @@
     "appExportedSuccessfully": "App \"{{name}}\" exported successfully.",
     "appExportFailed": "Failed to export app \"{{name}}\".",
     "confirmLeaveTitle": "Leave app?",
-    "confirmLeaveMessage": "Are you sure you want to leave \"{{name}}\"? You will lose access to this app.",
+    "confirmLeaveMessage": "Are you sure you want to leave \"{{name}}\"? You will lose access to this app. Your Chat conversations and files in this app will be deleted.",
     "appLeftSuccessfully": "You left app \"{{name}}\".",
     "appLeaveFailed": "Failed to leave app \"{{name}}\".",
     "confirmDeleteTitle": "Delete app?",
@@ -329,6 +332,7 @@
     "slugSaved": "Slug saved successfully",
     "slugUpdateFailed": "Failed to update slug",
     "langsmithApiKey": "LangSmith API Key",
+    "langsmithOwnerOnly": "Only the App owner can change the LangSmith API key.",
     "keepCurrentKeyPlaceholder": "Leave empty to keep current key",
     "enterLangsmithKeyPlaceholder": "Enter LangSmith API key",
     "langsmithHelpBeforeKey": "Your LangSmith API key for monitoring and tracing. Leave empty to use the global",
@@ -351,8 +355,16 @@
     "enableOpenAiApiHelp": "Allow external applications to interact with your agents using the OpenAI API format. When enabled, your agents become compatible with tools and clients that expect OpenAI-compatible API endpoints.",
     "sandboxService": "Code Interpreter Sandbox Service",
     "inheritSystemDefault": "Inherit system default",
-    "sandboxServiceHelpBeforeSettings": "Default Sandbox Service used when agents in this app run the Code Interpreter capability. Leave at \"Inherit\" to use the system default. Manage available services under",
+    "chatCodeInterpreter": "Allow running code in the Chat",
+    "chatCodeInterpreterHelp": "Every member of this App, viewers included, will be able to run code in a sandbox from the Chat, using the default sandbox service of the App, or the system default when none is selected (its cost and network access apply). The Chat cannot ask for approval before running code. With a self-hosted OpenSandbox server, sandboxes are not isolated from each other: code run by one member can reach other members' sandboxes on the same server.",
+    "systemServiceOption": "[System] {{name}}",
+    "sandboxServiceHelpBeforeSettings": "Default Sandbox Service used when agents in this app run the Code Interpreter capability, and by the App Chat when running code in the Chat is allowed. Leave at \"Inherit\" to use the system default. Manage available services under",
     "sandboxServicesSettings": "Settings → Sandbox Services",
+    "embeddingService": "Default embedding service",
+    "noDefaultEmbeddingService": "None (attached files are not indexed)",
+    "embeddingServiceHelpBeforeSettings": "Used to index the files attached in the App Chat so the model can search them. Leave empty to send attached files whole to the model. Manage available services under",
+    "embeddingServicesSettings": "Embedding Services (in Settings)",
+    "embeddingServicesLoadFailed": "The embedding services could not be loaded, so the list may be incomplete. Reload the page to try again.",
     "saveErrorTitle": "Error Saving Settings",
     "settingsSaved": "Settings saved successfully",
     "saveChanges": "Save Changes",
@@ -649,7 +661,7 @@
       "automatic": "Automatic",
       "keepMessages": "Recent messages to keep",
       "maxTokens": "Max tokens to summarize",
-      "noLimit": "No limit",
+      "autoLimit": "Automatic (model context window)",
       "help": "Leave the trigger empty to summarize at 85% of the model's context window (at most 150,000 tokens), and the last field empty to summarize the whole older history. Agents with memory and no summarization middleware use these same defaults."
     },
     "pii": {
@@ -2411,8 +2423,8 @@
     },
     "remove": {
       "title": "Remove collaborator?",
-      "namedMessage": "Remove {{name}} from this app? They will lose access immediately.",
-      "message": "Remove this collaborator? They will lose access to this app."
+      "namedMessage": "Remove {{name}} from this app? They will lose access immediately. Their Chat conversations and files in this app will be deleted.",
+      "message": "Remove this collaborator? They will lose access to this app. Their Chat conversations and files in this app will be deleted."
     },
     "actions": {
       "remove": "Remove"
@@ -3952,6 +3964,7 @@
       "lastSeen": "{{count}} · last {{date}}",
       "latestFailures": "Latest failures",
       "agentFallback": "Agent #{{id}}",
+      "appChat": "Chat",
       "appFallback": "App #{{id}}"
     },
     "tools": {
@@ -4322,6 +4335,17 @@
     "conversations": "Conversations",
     "chat": {
       "reset": "Reset",
+      "generatingFor": "Generating for {{duration}}",
+      "statusAnswering": "{{agent}} is answering…",
+      "statusReady": "{{agent}} has answered. The answer is ready.",
+      "statusFailed": "The answer could not be completed. See the error message in the conversation.",
+      "statusReset": "Conversation reset.",
+      "speakerYou": "You:",
+      "speakerAssistant": "{{agent}}:",
+      "messagesRegion": "Conversation messages",
+      "resetConfirmTitle": "Reset conversation",
+      "resetConfirmMessage": "The messages and attached files of this conversation will be cleared. This cannot be undone.",
+      "resetFailed": "The conversation could not be reset. Try again.",
       "loadingConversation": "Loading conversation...",
       "startChatting": "Start chatting with {{agent}}",
       "starterPromptDescription": "Type a message below to begin",
@@ -4690,12 +4714,6 @@
     "renameConversation": "Rename conversation",
     "deleteConversation": "Delete conversation"
   },
-  "conversationSidebar": {
-    "retry": "Retry",
-    "emptyDescription": "Create a new conversation to get started.",
-    "close": "Close conversations",
-    "refresh": "Refresh"
-  },
   "homePage": {
     "title": "Welcome to AI Core Tools",
     "subtitle": "Hello! Manage your AI applications, agents, and data sources from one central location.",
@@ -5026,6 +5044,140 @@
       "invalidJson": "Arguments must be valid JSON.",
       "jsonObjectRequired": "Arguments must be a JSON object.",
       "editedArgumentsRequired": "This tool only accepts edited arguments."
+    }
+  },
+  "conversationSidebar": {
+    "retry": "Retry",
+    "new": "New",
+    "closeLabel": "Close conversations",
+    "refresh": "Refresh",
+    "loading": "Loading conversations...",
+    "loadError": "Failed to load conversations",
+    "empty": "No conversations yet",
+    "emptyHint": "Create a new one to get started",
+    "untitled": "New conversation",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages",
+    "justNow": "Now",
+    "minutesAgo": "{{value}}m ago",
+    "hoursAgo": "{{value}}h ago",
+    "daysAgo": "{{value}}d ago",
+    "confirmDeleteMessage": "Are you sure you want to delete this conversation? This action cannot be undone.",
+    "deleteFailed": "Failed to delete conversation",
+    "renameNamed": "Rename {{title}}",
+    "deleteNamed": "Delete {{title}}",
+    "renameFailed": "Failed to update the title"
+  },
+  "alert": {
+    "dismiss": "Dismiss",
+    "dismissNamed": "Dismiss: {{name}}"
+  },
+  "appChat": {
+    "page": {
+      "title": "Chat",
+      "subtitle": "Pick the model, source, skills and tools for each message",
+      "conversations": "Conversations",
+      "loading": "Loading chat...",
+      "loadErrorTitle": "Could not open the chat",
+      "optionsLoadFailed": "The chat options could not be loaded. Try again.",
+      "retry": "Try again",
+      "assistantName": "the assistant"
+    },
+    "selection": {
+      "groupLabel": "Settings for the next message",
+      "model": "Model",
+      "modelPlaceholder": "Select a model",
+      "modelRetired": "This model has reached end of service",
+      "noModels": "No models available",
+      "source": "Source",
+      "sourceNone": "None",
+      "unnamedSource": "Source #{{id}}",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "nonePlural": "None",
+      "nSelected_one": "{{count}} selected",
+      "nSelected_other": "{{count}} selected",
+      "added": "{{name}} selected",
+      "removed": "{{name}} removed",
+      "results_one": "{{count}} result",
+      "results_other": "{{count}} results",
+      "search": "Search",
+      "noResults": "No results"
+    },
+    "sourceTypes": {
+      "repository": "Repositories",
+      "domain": "Web domains",
+      "sharepoint": "SharePoint",
+      "silo": "Silos"
+    },
+    "siloDisabled": {
+      "embedding_service_retired": "Its embedding service is retired"
+    },
+    "skillGroups": {
+      "app": "App skills",
+      "system": "System skills"
+    },
+    "meta": {
+      "source": "Source",
+      "skills": "Skills",
+      "mcps": "MCP",
+      "deleted": "(deleted)",
+      "toggle": "Details of {{model}}"
+    },
+    "blocked": {
+      "loading": "Loading the chat settings...",
+      "noUsableModel": "Sending is disabled: this App has no model available for chat.",
+      "noSelection": "Sending is disabled: select a model first.",
+      "modelRetired": "Sending is disabled: the selected model is no longer available. Choose another model."
+    },
+    "empty": {
+      "title": "No model available for chat",
+      "messageAdmin": "This App has no active AI service that can be used for chat. Configure one to start chatting.",
+      "messageMember": "This App has no active AI service that can be used for chat. Ask an App administrator to configure one.",
+      "configureLink": "Configure AI services"
+    },
+    "notices": {
+      "conversationNotFound": "That conversation is not available. A new one is open.",
+      "serviceRetired": "The selected model has reached end of service. Choose another model and send your message again.",
+      "label": "Notice"
+    },
+    "warnings": {
+      "title": "Part of your selection was not used",
+      "ai_service": "The previous model is no longer available; another one was selected.",
+      "ai_serviceNamed": "The model \"{{name}}\" is no longer available; another one was selected.",
+      "silo": "The previous source is no longer available and was removed from the selection.",
+      "siloNamed": "The source \"{{name}}\" is no longer available and was removed from the selection.",
+      "skill": "A skill is no longer available and was removed from the selection.",
+      "skillNamed": "The skill \"{{name}}\" is no longer available and was removed from the selection.",
+      "mcp_config": "An MCP configuration could not be used (unavailable or removed); the message was answered without it.",
+      "mcp_configNamed": "The MCP configuration \"{{name}}\" could not be used (unavailable or removed); the message was answered without it.",
+      "sandbox_output_one": "{{count}} file created by the code could not be delivered (size, number or time limit).",
+      "sandbox_output_other": "{{count}} files created by the code could not be delivered (size, number or time limit)."
+    },
+    "attachmentIndexing": {
+      "title": "Attached files will not be indexed",
+      "noDefault": "This App has no default embedding service, so files attached in the Chat are sent whole to the model instead of being indexed. An embedding service must be defined at App level.",
+      "retired": "The default embedding service of this App has reached end of service, so files attached in the Chat are sent whole to the model instead of being indexed. Choose another embedding service at App level.",
+      "configureLink": "Open App settings",
+      "askAdmin": "Ask an administrator or owner of this App to set it up.",
+      "unavailable": "Files attached in the Chat cannot be indexed right now, so they are sent whole to the model instead of being indexed."
+    },
+    "codeInterpreter": {
+      "title": "Code cannot be run in this chat",
+      "disabled": "Skills that include scripts will load, but their scripts will not run, because running code in the Chat is turned off for this App.",
+      "retired": "Skills that include scripts will load, but their scripts will not run, because the default sandbox service of this App has reached end of service. Choose another sandbox service at App level.",
+      "providerUnavailable": "Skills that include scripts will load, but their scripts will not run, because the sandbox service that applies to this App (its default, or the system default) uses a provider that this installation does not allow. Contact the platform administrator.",
+      "unavailable": "Skills that include scripts will load, but their scripts cannot be run in this chat right now."
+    },
+    "transportErrors": {
+      "noSelection": "Select a model before sending a message.",
+      "noConversation": "This conversation is not available.",
+      "forbidden": "You cannot send messages in this App right now. It may be frozen, or your access may have changed.",
+      "notFound": "The conversation or one of the selected items is no longer available.",
+      "serviceRetired": "The selected model has reached end of service. Choose another model and try again.",
+      "conversationBusy": "This conversation is still answering a previous message. Wait for it to finish and try again. Your message was kept in the box.",
+      "stepLimitReached": "The assistant ran out of steps before finishing. Your conversation and any files created so far were kept: write \"continue\" to let it carry on.",
+      "tooManyFiles": "Too many files in one message. Send fewer files at a time."
     }
   }
 }

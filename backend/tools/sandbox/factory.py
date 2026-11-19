@@ -190,6 +190,91 @@ def _provider_class_for(provider_name: str) -> type[SandboxProvider]:
     return provider_class
 
 
+def _provider_for_service(
+    service: "SandboxService",
+    *,
+    resource_type: str,
+    resource_id: Any,
+    app_id: Any,
+    log_owner: Any = None,
+) -> tuple[SandboxProvider, int | None]:
+    """Build the provider of an explicit ``SandboxService`` (shared by every entry point).
+
+    Runs the end-of-service guard, the ``SANDBOX_ALLOWED_PROVIDERS`` check and the credential mapping.
+    Never falls back to another service or to the env default.
+    """
+    # get_service_call_context() returns {} when no context was set.
+    ctx = nullcontext() if get_service_call_context() else service_call_context(
+        channel="sandbox_resolution",
+        resource_type=resource_type,
+        resource_id=resource_id,
+        app_id=app_id,
+    )
+    try:
+        with ctx:
+            ensure_service_active(service, SERVICE_KIND_SANDBOX)
+    except ServiceRetiredError as exc:
+        # No fallback to the app or env default (D-10): the guard already logged the WARNING.
+        raise SandboxServiceRetiredError(exc.message) from exc
+    provider_name = (service.provider or "").strip().lower()
+    provider_class = _provider_class_for(provider_name)
+    credentials = _credentials_from_service(service)
+    service_id = getattr(service, "service_id", None)
+    logger.debug(
+        "Resolved sandbox provider: %s (owner=%s, sandbox_service_id=%s)",
+        provider_class.PROVIDER_NAME,
+        log_owner,
+        service_id,
+    )
+    return provider_class(credentials=credentials), service_id
+
+
+def provider_for_service(
+    service: "SandboxService",
+    *,
+    app_id: int | None = None,
+    resource_type: str = "app_chat",
+    resource_id: int | None = None,
+) -> tuple[SandboxProvider, int | None]:
+    """Return ``(provider, service_id)`` for an EXPLICIT ``SandboxService`` (Chat entry point).
+
+    Unlike :func:`resolve_provider_and_service_id` this never looks at an agent relationship and has no
+    env-var fallback: the caller decided which service applies (the App default). When the App has NO default,
+    the Chat uses the system default through :func:`resolve_provider_and_service_id` instead; a retired App
+    default disables the code interpreter (it never falls back to the system default).
+
+    Raises:
+        SandboxServiceRetiredError: the service is past its end of service.
+        SandboxProviderUnavailableError: provider not registered, or not in ``SANDBOX_ALLOWED_PROVIDERS``.
+    """
+    return _provider_for_service(
+        service, resource_type=resource_type, resource_id=resource_id, app_id=app_id, log_owner=None
+    )
+
+
+def _system_default_provider_class() -> type[SandboxProvider]:
+    """Provider class of ``SANDBOX_DEFAULT_PROVIDER`` (registered + allowed, or ``SandboxProviderUnavailableError``)."""
+    return _provider_class_for(os.getenv(_DEFAULT_PROVIDER_ENV, "opensandbox").lower())
+
+
+def system_default_is_available() -> bool:
+    """True when the system default provider (env) is registered and allowed. No client is built."""
+    try:
+        _system_default_provider_class()
+    except SandboxProviderUnavailableError:
+        return False
+    return True
+
+
+def provider_is_available(service: "SandboxService") -> bool:
+    """True when the provider of *service* is registered and allowed (cheap: no client is built)."""
+    try:
+        _provider_class_for((service.provider or "").strip().lower())
+    except SandboxProviderUnavailableError:
+        return False
+    return True
+
+
 def resolve_provider_and_service_id(
     agent: "Agent | None" = None,
 ) -> tuple[SandboxProvider, int | None]:
@@ -224,33 +309,15 @@ def resolve_provider_and_service_id(
     service = _resolve_sandbox_service(agent)
 
     if service is not None:
-        # get_service_call_context() returns {} when no context was set.
-        ctx = nullcontext() if get_service_call_context() else service_call_context(
-            channel="sandbox_resolution",
+        return _provider_for_service(
+            service,
             resource_type="agent",
             resource_id=getattr(agent, "agent_id", None),
             app_id=getattr(agent, "app_id", None),
+            log_owner=agent,
         )
-        try:
-            with ctx:
-                ensure_service_active(service, SERVICE_KIND_SANDBOX)
-        except ServiceRetiredError as exc:
-            # No fallback to the app or env default (D-10): the guard already logged the WARNING.
-            raise SandboxServiceRetiredError(exc.message) from exc
-        provider_name = (service.provider or "").strip().lower()
-        provider_class = _provider_class_for(provider_name)
-        credentials = _credentials_from_service(service)
-        service_id = getattr(service, "service_id", None)
-        logger.debug(
-            "Resolved sandbox provider: %s (agent=%s, sandbox_service_id=%s)",
-            provider_class.PROVIDER_NAME,
-            agent,
-            service_id,
-        )
-        return provider_class(credentials=credentials), service_id
 
-    system_default = os.getenv(_DEFAULT_PROVIDER_ENV, "opensandbox").lower()
-    provider_class = _provider_class_for(system_default)
+    provider_class = _system_default_provider_class()
 
     logger.debug("Resolved sandbox provider: %s (agent=%s)", provider_class.PROVIDER_NAME, agent)
     return provider_class(), None

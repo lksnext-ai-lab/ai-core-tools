@@ -39,6 +39,7 @@ from .user_credential import UserCredential
 from .refresh_token import RefreshToken
 from .scheduled_task import ScheduledTask, ScheduledTaskRun
 from .a2a_context_link import A2AContextLink
+from .internal_chat import ConversationTurn, ChatUserDefault, ChatConversationState
 from .output_delivery import OutputArtifact, OutputDestination, ScheduledTaskOutputBinding, OutputDelivery, OutputDeliveryAttempt
 
 __all__ = [
@@ -64,4 +65,5 @@ __all__ = [
     'AgentExecutionEvent',
     'AgentToolCall',
     'A2AContextLink',
+    'ConversationTurn', 'ChatUserDefault', 'ChatConversationState',
 ]

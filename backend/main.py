@@ -220,6 +220,12 @@ async def lifespan(app: FastAPI):
             logger.warning("File cleanup worker shutdown failed: %s", exc, exc_info=True)
 
         try:
+            from services.chat_attachment_service import shutdown_indexing_executor
+            shutdown_indexing_executor()  # wait=False, cancel_futures=True: a hung provider call must not block exit
+        except Exception as exc:
+            logger.warning("Chat indexing executor shutdown failed: %s", exc, exc_info=True)
+
+        try:
             sharepoint_tasks = getattr(app.state, 'sharepoint_tasks', None)
             if sharepoint_tasks:
                 from services.sharepoint.worker import stop_sharepoint_worker

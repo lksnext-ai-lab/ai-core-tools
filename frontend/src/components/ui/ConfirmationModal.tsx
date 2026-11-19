@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import Modal from './Modal';
 import ButtonApp, { type ButtonAppVariant } from './ButtonApp';
@@ -44,13 +45,14 @@ function ConfirmationModal({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'danger',
   isLoading = false,
   onConfirm,
   onCancel,
 }: ConfirmationModalProps) {
+  const { t } = useTranslation('common');
   const styles = variantStyles[variant];
 
   return (
@@ -65,14 +67,14 @@ function ConfirmationModal({
       </div>
       <div className="mt-6 flex justify-end gap-3">
         <ButtonApp
-          label={cancelLabel}
+          label={cancelLabel ?? t('cancel')}
           onClick={onCancel}
           disabled={isLoading}
           variant="secondary"
           size="medium"
         />
         <ButtonApp
-          label={confirmLabel}
+          label={confirmLabel ?? t('confirm')}
           onClick={onConfirm}
           loading={isLoading}
           variant={styles.button}

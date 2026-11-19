@@ -32,9 +32,17 @@ class ApprovalChannel(str, enum.Enum):
     MCP = "mcp"
     SCHEDULED = "scheduled"
     A2A = "a2a"
+    INTERNAL_CHAT = "internal_chat"
 
 
-INTERACTIVE_CHANNELS = (ApprovalChannel.PLAYGROUND, ApprovalChannel.MARKETPLACE, ApprovalChannel.PUBLIC_API)
+INTERACTIVE_CHANNELS = (
+    ApprovalChannel.PLAYGROUND,
+    ApprovalChannel.MARKETPLACE,
+    ApprovalChannel.PUBLIC_API,
+)
+# ApprovalChannel.INTERNAL_CHAT is deliberately NOT interactive: a paused turn's per-turn
+# config is not persisted, so resume/expiry could not rebuild it. The internal chat agent has
+# no HITL middlewares, so a pause is rejected on the spot like other non-interactive channels.
 
 
 def _utcnow() -> datetime:

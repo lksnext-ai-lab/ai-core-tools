@@ -25,6 +25,7 @@ const meta = {
   ],
   args: {
     message: 'Something happened that you should know about.',
+    dismissLabel: 'Dismiss',
   },
 } satisfies Meta<typeof Alert>;
 

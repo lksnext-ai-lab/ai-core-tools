@@ -18,8 +18,8 @@ Every member of an App has a role that controls what they can do:
 |------|-------------|
 | **Viewer** | Can view agents and conversations, but cannot create or edit anything |
 | **Editor** | Can create and edit agents, silos, skills, and other resources |
-| **Administrator** | Can manage collaborators and all resources |
-| **Owner** | Full control, including deleting the App |
+| **Administrator** | Can manage collaborators and all resources, and can save the App settings (except the LangSmith key) |
+| **Owner** | Full control, including deleting the App, transferring ownership and changing the LangSmith key |
 | **Omniadmin** | Platform-wide admin — can access all Apps and system settings |
 
 ## Inviting Collaborators
