@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -58,5 +59,16 @@ describe('Chat menu entry', () => {
     expect(screen.queryByRole('link', { name: tr('breadcrumbs.navigation.myApps') })).not.toBeInTheDocument();
     // And the App panel (not just the global rail) is what is showing.
     expect(screen.getByRole('link', { name: tr('breadcrumbs.navigation.agents') })).toBeInTheDocument();
+  });
+});
+
+describe('App settings menu', () => {
+  it('opens the general App settings page from the expanded submenu', async () => {
+    userState.current = { is_admin: false, platform_role: 'editor' };
+    renderSidebar();
+
+    await userEvent.click(await screen.findByRole('button', { name: tr('breadcrumbs.navigation.appSettings') }));
+    const general = await screen.findByRole('link', { name: tr('breadcrumbs.navigation.general') });
+    expect(general).toHaveAttribute('href', '/apps/7/settings/general');
   });
 });

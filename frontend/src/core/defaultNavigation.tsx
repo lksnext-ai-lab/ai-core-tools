@@ -154,6 +154,12 @@ export const defaultNavigation: NavigationConfig = {
   // Settings sub-navigation (rendered inside collapsible in sidebar)
   settingsNavigation: [
     {
+      path: '/apps/:appId/settings/general',
+      name: 'General',
+      icon: <Settings size={16} />,
+      section: 'settings'
+    },
+    {
       path: '/apps/:appId/settings/output-destinations',
       name: 'Output Channels',
       icon: <Webhook size={16} />,

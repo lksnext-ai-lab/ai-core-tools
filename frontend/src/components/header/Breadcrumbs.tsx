@@ -68,6 +68,7 @@ const NAVIGATION_LABELS: Record<string, { name: string; translationKey: string }
   '/apps/:appId/skills': { name: 'Skills', translationKey: 'breadcrumbs.navigation.skills' },
   '/apps/:appId/middlewares': { name: 'Middlewares', translationKey: 'breadcrumbs.navigation.middlewares' },
   '/apps/:appId/settings': { name: 'App Settings', translationKey: 'breadcrumbs.navigation.appSettings' },
+  '/apps/:appId/settings/general': { name: 'General', translationKey: 'breadcrumbs.navigation.general' },
   '/apps/:appId/settings/output-destinations': { name: 'Output Channels', translationKey: 'breadcrumbs.navigation.outputChannels' },
   '/apps/:appId/settings/ai-services': { name: 'AI Services', translationKey: 'breadcrumbs.navigation.aiServices' },
   '/apps/:appId/settings/embedding-services': { name: 'Embedding Services', translationKey: 'breadcrumbs.navigation.embeddingServices' },

@@ -94,6 +94,7 @@
       "skills": "Skills",
       "middlewares": "Middlewares",
       "appSettings": "Configuración App",
+      "general": "General",
       "outputChannels": "Canales de salida",
       "aiServices": "Servicios de IA",
       "embeddingServices": "Servicios de embeddings",
