@@ -2541,13 +2541,26 @@ class ApiService {
     signal?: AbortSignal,
   ): Promise<void> {
     const isFormData = body instanceof FormData;
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const send = () => fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
       credentials: 'include',
       headers: this.buildAuthHeaders('POST', isFormData),
       body: isFormData ? body : JSON.stringify(body),
       signal,
     });
+
+    let response = await send();
+    if (response.status === 401) {
+      // Same contract as request(): renew the session once and retry; only then expire it.
+      // The body is re-sent as is (FormData and JSON strings can be reused); headers are rebuilt with the new token.
+      if (await this.renewSession()) {
+        response = await send();
+      }
+      if (response.status === 401) {
+        this.expireSession();
+        throw new ApiError('Your session has expired. Please sign in again.', 401);
+      }
+    }
 
     if (!response.ok) {
       await this.handleResponseError(response);
