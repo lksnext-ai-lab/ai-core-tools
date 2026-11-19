@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, Bot, MessageCircle, RefreshCw, Square, Timer } from 'lucide-react';
 import { apiService } from '../../services/api';
@@ -63,6 +64,12 @@ interface ChatInterfaceBaseProps {
   vectorDbType?: string;
   /** Extra controls rendered at the start of the chat toolbar (left of "Reset"). */
   toolbarStart?: React.ReactNode;
+  /** When set, the "Reset" button is drawn inside this element (a page-level header slot) instead of the toolbar. */
+  resetButtonTarget?: HTMLElement | null;
+  /** Height classes of the chat card on `sm` and up. Defaults to the playground's `sm:h-[calc(100vh-20rem)]`. */
+  cardHeightClassName?: string;
+  /** Gives the conversation more room: a narrower side column and wider messages (App Chat). */
+  wide?: boolean;
   /** Extra content rendered under each agent message (e.g. the App Chat's per-turn badge). */
   renderMessageMeta?: (message: ChatMessageModel) => React.ReactNode;
   /** Translated reason why sending is blocked (e.g. no model selected). Disables sending and is shown under the composer. */
@@ -102,6 +109,9 @@ function ChatInterface({
   metadataFields,
   vectorDbType,
   toolbarStart,
+  resetButtonTarget,
+  cardHeightClassName = 'sm:h-[calc(100vh-20rem)]',
+  wide = false,
 }: Readonly<ChatInterfaceProps>) {
   const { t, i18n } = useTranslation('common');
   const confirm = useConfirm();
@@ -724,6 +734,19 @@ function ChatInterface({
     }
   };
 
+  const bubbleMaxWidth = wide ? 'max-w-[94%]' : 'max-w-[82%]';
+  const messageMaxWidth = wide ? 'max-w-none' : 'max-w-[760px]';
+
+  const resetButton = (
+    <ButtonApp
+      label={t('agentPlayground.chat.reset')}
+      variant="secondary"
+      size="compact"
+      onClick={handleResetConversation}
+      icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
+    />
+  );
+
   // ─── File upload ─────────────────────────────────────────────────────────────
 
   const uploadFiles = async (files: File[] | FileList) => {
@@ -1077,20 +1100,13 @@ function ChatInterface({
           Never carries streamed text. */}
       <div role="status" className="sr-only">{statusMessage}</div>
       {/* Chat Interface + right column (info / filters) */}
-      <div className="grid grid-cols-1 items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className={`grid grid-cols-1 items-start gap-[22px] ${wide ? 'xl:grid-cols-[minmax(0,1fr)_280px]' : 'xl:grid-cols-[minmax(0,1fr)_360px]'}`}>
         {/* Chat card */}
-        <div className="min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col sm:h-[calc(100vh-20rem)] sm:min-h-[480px] overflow-hidden">
+        <div className={`min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col ${cardHeightClassName} sm:min-h-[480px] overflow-hidden`}>
           {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
           <div className="flex flex-wrap items-center gap-2 px-6 pt-3 pb-1">
             {toolbarStart}
-            <ButtonApp
-              className="ml-auto"
-              label={t('agentPlayground.chat.reset')}
-              variant="secondary"
-              size="compact"
-              onClick={handleResetConversation}
-              icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
-            />
+            {resetButtonTarget ? createPortal(resetButton, resetButtonTarget) : <div className="ml-auto">{resetButton}</div>}
           </div>
 
           {resetFailed && (
@@ -1150,12 +1166,12 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4"
+                        className={`flex justify-end ${messageMaxWidth} mx-auto animate-slide-in-right gap-4`}
                       >
                         <div aria-hidden="true">
                           <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                         </div>
-                        <div className="max-w-[82%] min-w-0">
+                        <div className={`${bubbleMaxWidth} min-w-0`}>
                           <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                             <span className="sr-only">{t('agentPlayground.chat.speakerYou')}</span>
                             <MessageContent
@@ -1203,9 +1219,9 @@ function ChatInterface({
                     return (
                       <div
                         key={message.id}
-                        className="flex justify-start max-w-[760px] mx-auto animate-slide-in-left"
+                        className={`flex justify-start ${messageMaxWidth} mx-auto animate-slide-in-left`}
                       >
-                        <div className="max-w-[82%] min-w-0">
+                        <div className={`${bubbleMaxWidth} min-w-0`}>
                           <div role="alert" className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                             <div className="flex items-center gap-2 mb-1">
                               <svg
@@ -1250,9 +1266,9 @@ function ChatInterface({
                   return (
                     <div
                       key={message.id}
-                      className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+                      className={`flex justify-start ${messageMaxWidth} mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
                     >
-                      <div className="flex items-start gap-4 max-w-[82%] min-w-0">
+                      <div className={`flex items-start gap-4 ${bubbleMaxWidth} min-w-0`}>
                         <div aria-hidden="true">
                           <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                         </div>
@@ -1283,18 +1299,18 @@ function ChatInterface({
                                 />
                               );
                             })}
-                          <div className="mt-1">
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="text-[11.5px] text-fg-secondary dark:text-fg-secondary-dark">
                               {formatClockTime(message.timestamp, i18n.language)}
                             </span>
                             {message.elapsedMs !== undefined && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark">
+                              <span className="inline-flex items-center gap-1 text-[11.5px] tabular-nums text-fg-secondary dark:text-fg-secondary-dark">
                                 <Timer className="h-3 w-3" aria-hidden="true" />
                                 {formatDuration(message.elapsedMs)}
                               </span>
                             )}
+                            {renderMessageMeta?.(message)}
                           </div>
-                          {renderMessageMeta?.(message)}
                         </div>
                       </div>
                     </div>

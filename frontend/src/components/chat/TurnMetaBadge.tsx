@@ -33,7 +33,6 @@ function TurnMetaBadgeComponent({ turn, turnConfig }: Readonly<TurnMetaBadgeProp
 
   return (
     <MessageMetaBadge
-      className="mt-2"
       model={meta.model}
       source={meta.source}
       skills={meta.skills}

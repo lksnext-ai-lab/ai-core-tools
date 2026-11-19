@@ -55,6 +55,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   const [turnWarnings, setTurnWarnings] = useState<readonly ChatSelectionWarning[]>(NO_WARNINGS);
   const [notice, setNotice] = useState<'conversationNotFound' | 'serviceRetired' | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   // Dismissing the attachment-indexing notice lasts for this visit only (component state), so it comes back on
   // the next visit while the condition holds. The dismissed kind is stored, so a different notice still shows.
   const [dismissedIndexingNotice, setDismissedIndexingNotice] = useState<string | null>(null);
@@ -297,32 +298,35 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   );
 
   const toolbarStart = useMemo(
+    () =>
+      options ? (
+        <ChatSelectionBar
+          options={options}
+          selection={selection}
+          dispatch={userDispatch}
+          disabled={!selectionReady}
+        />
+      ) : null,
+    [options, selection, selectionReady, userDispatch],
+  );
+
+  const conversationsButton = useMemo(
     () => (
-      <>
-        <button
-          type="button"
-          aria-haspopup="dialog"
-          aria-expanded={panelOpen}
-          aria-controls={panelOpen ? CONVERSATION_PANEL_ID : undefined}
-          onClick={() => setPanelOpen(true)}
-          className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
-                      ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}
-                      ${panelOpen ? '!bg-surface-hover dark:!bg-surface-hover-dark' : ''}`}
-        >
-          <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
-          {t('appChat.page.conversations')}
-        </button>
-        {options && (
-          <ChatSelectionBar
-            options={options}
-            selection={selection}
-            dispatch={userDispatch}
-            disabled={!selectionReady}
-          />
-        )}
-      </>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={panelOpen}
+        aria-controls={panelOpen ? CONVERSATION_PANEL_ID : undefined}
+        onClick={() => setPanelOpen(true)}
+        className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
+                    ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}
+                    ${panelOpen ? '!bg-surface-hover dark:!bg-surface-hover-dark' : ''}`}
+      >
+        <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+        {t('appChat.page.conversations')}
+      </button>
     ),
-    [panelOpen, options, selection, selectionReady, userDispatch, t],
+    [panelOpen, t],
   );
 
   if (optionsFailed && !options) {
@@ -345,7 +349,7 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
 
   if (!options) {
     return (
-      <div className="mx-auto flex max-w-7xl flex-col gap-3">
+      <div className="mx-auto flex max-w-[1680px] flex-col gap-3">
         <Title variant="titSecundario" titulo={t('appChat.page.title')} />
         <LoadingState variant="page" message={t('appChat.page.loading')} />
       </div>
@@ -377,8 +381,21 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
   };
 
   return (
-    <div className="mx-auto flex max-w-7xl animate-fade-in flex-col gap-3">
-      <Title variant="titSecundario" titulo={t('appChat.page.title')} subtitulo={t('appChat.page.subtitle')} />
+    <div className="mx-auto flex max-w-[1680px] animate-fade-in flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        {/* Once a conversation exists the subtitle only takes room from the chat. */}
+        <Title
+          variant="titSecundario"
+          titulo={t('appChat.page.title')}
+          subtitulo={routeConversationId === null ? t('appChat.page.subtitle') : undefined}
+          subtitleMarginBottom={routeConversationId === null ? 20 : 0}
+        />
+        <div className="flex items-center gap-2">
+          {/* "Reset" belongs to the chat; it is drawn here through a portal (`display: contents` keeps the row flat). */}
+          <div ref={setHeaderActions} className="contents" />
+          {conversationsButton}
+        </div>
+      </div>
 
       {noUsableModel && (
         <Alert
@@ -507,6 +524,9 @@ function AppChatView({ appId }: Readonly<AppChatViewProps>) {
             onMessageSent={handleMessageSent}
             onDetachedTurnFinished={handleMessageSent}
             toolbarStart={toolbarStart}
+            resetButtonTarget={headerActions}
+            wide
+            cardHeightClassName={routeConversationId === null ? 'sm:h-[calc(100vh-15rem)]' : 'sm:h-[calc(100vh-12rem)]'}
             renderMessageMeta={renderMessageMeta}
             sendBlockedReason={sendBlockedReason}
             focusComposerSignal={view.focus}

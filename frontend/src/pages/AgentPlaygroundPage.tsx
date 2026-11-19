@@ -201,7 +201,7 @@ function AgentPlaygroundPage() {
   ];
   
   return (
-    <div className="flex flex-col gap-3 animate-fade-in mx-auto max-w-7xl">
+    <div className="flex flex-col gap-3 animate-fade-in mx-auto max-w-[1680px]">
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <Title
