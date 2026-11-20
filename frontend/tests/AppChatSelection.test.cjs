@@ -139,7 +139,7 @@ test('describeWarnings ignores a kind from a newer backend instead of showing a 
 });
 
 test('sandbox_output has plural forms in en and es', () => {
-  for (const language of ['en', 'es']) {
+  for (const language of ['en', 'es', 'eu']) {
     const w = require(`../src/i18n/locales/${language}/common.json`).appChat.warnings;
     assert.match(w.sandbox_output_one, /\{\{count\}\}/);
     assert.match(w.sandbox_output_other, /\{\{count\}\}/);
@@ -256,7 +256,7 @@ test('codeInterpreterNotice: not-set-up reasons need a selected skill; retired, 
 test('codeInterpreter notice and settings keys exist in en and es, and reused keys are not duplicated', () => {
   const kinds = ['title', 'disabled', 'retired', 'providerUnavailable', 'unavailable'];
   const texts = {};
-  for (const language of ['en', 'es']) {
+  for (const language of ['en', 'es', 'eu']) {
     const common = require(`../src/i18n/locales/${language}/common.json`);
     const appChat = common.appChat;
     for (const kind of kinds) assert.equal(typeof appChat.codeInterpreter[kind], 'string', `${language}.${kind}`);

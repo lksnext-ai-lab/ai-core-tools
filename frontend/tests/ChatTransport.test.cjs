@@ -303,7 +303,7 @@ test('transport errors carry a code that maps to translated text in both locales
     () => t.getFileDownloadUrl(null, 'f'),
     (error) => error.name === 'ChatTransportError' && error.code === 'noConversation',
   );
-  for (const language of ['en', 'es']) {
+  for (const language of ['en', 'es', 'eu']) {
     const keys = require(`../src/i18n/locales/${language}/common.json`).appChat.transportErrors;
     assert.equal(typeof keys.noSelection, 'string');
     assert.equal(typeof keys.noConversation, 'string');
