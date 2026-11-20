@@ -15,6 +15,8 @@ import type { SearchFilterMetadataField } from './SearchFilters';
 import AttachedFilesPanel from './AttachedFilesPanel';
 import type { PanelFile } from './AttachedFilesPanel';
 import BackgroundImage from '../ui/BackgroundImage';
+import UserAvatar from '../ui/UserAvatar';
+import { useOptionalUser } from '../../contexts/UserContext';
 import OrchestratorFilterDropdowns, { toSearchFilter } from './OrchestratorFilterDropdowns';
 import type { ChatFilterField, ChatFilterSelection } from './OrchestratorFilterDropdowns';
 import { SEARCH_RESULT_LIMIT } from './SearchableMultiSelect';
@@ -114,6 +116,7 @@ function ChatInterface({
   wide = false,
 }: Readonly<ChatInterfaceProps>) {
   const { t, i18n } = useTranslation('common');
+  const user = useOptionalUser()?.user;
   const confirm = useConfirm();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -1169,7 +1172,7 @@ function ChatInterface({
                         className={`flex justify-end ${messageMaxWidth} mx-auto animate-slide-in-right gap-4`}
                       >
                         <div aria-hidden="true">
-                          <BackgroundImage text={t('agentPlayground.chat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                          <UserAvatar name={user?.name} email={user?.email} size={38} className="mt-0.5" />
                         </div>
                         <div className={`${bubbleMaxWidth} min-w-0`}>
                           <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">

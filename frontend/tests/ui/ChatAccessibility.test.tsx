@@ -148,7 +148,7 @@ describe('Chat: one status announcement per turn (H2)', () => {
     expect(region).toHaveAttribute('tabindex', '0');
     expect(await within(region).findByText(tr('agentPlayground.chat.speakerYou'))).toBeInTheDocument();
     expect(within(region).getByText(tr('agentPlayground.chat.speakerAssistant', { agent: agent() }))).toBeInTheDocument();
-    expect(within(region).getByText(tr('agentPlayground.chat.youLabel')).closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(within(region).getByText('U').closest('[aria-hidden="true"]')).not.toBeNull();
   });
 });
 
