@@ -1107,10 +1107,13 @@ function ChatInterface({
         {/* Chat card */}
         <div className={`min-w-0 bg-canvas dark:bg-canvas-dark flex flex-col ${cardHeightClassName} sm:min-h-[480px] overflow-hidden`}>
           {/* Toolbar — optional start controls (e.g. conversations) + reset at the right */}
-          <div className="flex flex-wrap items-center gap-2 px-6 pt-3 pb-1">
-            {toolbarStart}
-            {resetButtonTarget ? createPortal(resetButton, resetButtonTarget) : <div className="ml-auto">{resetButton}</div>}
-          </div>
+          {resetButtonTarget && createPortal(resetButton, resetButtonTarget)}
+          {(toolbarStart || !resetButtonTarget) && (
+            <div className="flex flex-wrap items-center gap-2 px-6 pt-3 pb-1">
+              {toolbarStart}
+              {!resetButtonTarget && <div className="ml-auto">{resetButton}</div>}
+            </div>
+          )}
 
           {resetFailed && (
             <div className="px-6 pb-2">
