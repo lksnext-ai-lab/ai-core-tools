@@ -220,4 +220,19 @@ class APIKeyService:
         
         status_text = "activated" if api_key.is_active else "deactivated"
         logger.info(f"API key {key_id} {status_text} for app {app_id}")
-        return f"API key {status_text} successfully" 
+        return f"API key {status_text} successfully"
+
+    def set_status_for_user(
+        self,
+        db: Session,
+        user_id: int,
+        key_id: int,
+        is_active: bool,
+    ) -> Optional[bool]:
+        """Set key status when the key belongs to the specified user."""
+        api_key = self.api_key_repository.get_by_id_and_user(db, key_id, user_id)
+        if api_key is None:
+            return None
+
+        api_key.is_active = is_active
+        return self.api_key_repository.update(db, api_key).is_active

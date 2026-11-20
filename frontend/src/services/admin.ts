@@ -44,6 +44,7 @@ export interface UserDetailOwnedApp {
 }
 
 export interface UserDetailCollaboration {
+  readonly collaboration_id: number;
   readonly app_id: number;
   readonly app_name: string | null;
   readonly role: string;
@@ -69,6 +70,13 @@ export interface UserDetailUsage {
   readonly call_count: number;
   readonly billing_period_start: string;
 }
+
+export interface AdminAppOption {
+  readonly app_id: number;
+  readonly name: string | null;
+}
+
+export type AppAccessRole = 'administrator' | 'editor' | 'viewer';
 
 /** Expanded response from GET /internal/admin/users/{user_id}. */
 export interface UserDetail {
@@ -156,6 +164,30 @@ class AdminService {
 
   async getUser(userId: number): Promise<UserDetail> {
     return await apiService.request(`${this.baseUrl}/users/${userId}`);
+  }
+
+  async getApps(): Promise<AdminAppOption[]> {
+    return await apiService.request(`${this.baseUrl}/apps`);
+  }
+
+  async setUserAppRole(userId: number, appId: number, role: AppAccessRole): Promise<{ message: string; app_id: number; role: string }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/apps/${appId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async removeUserAppAccess(userId: number, appId: number): Promise<{ message: string; app_id: number }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/apps/${appId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async setUserAPIKeyStatus(userId: number, keyId: number, isActive: boolean): Promise<{ message: string; key_id: number; is_active: boolean }> {
+    return await apiService.request(`${this.baseUrl}/users/${userId}/api-keys/${keyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: isActive }),
+    });
   }
 
   async deleteUser(

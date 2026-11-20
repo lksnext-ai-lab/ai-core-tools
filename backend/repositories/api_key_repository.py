@@ -67,6 +67,14 @@ class APIKeyRepository:
             APIKey.key_id == key_id,
             APIKey.app_id == app_id
         ).first()
+
+    @staticmethod
+    def get_by_id_and_user(db: Session, key_id: int, user_id: int) -> Optional[APIKey]:
+        """Get an API key only when it belongs to the specified user."""
+        return db.query(APIKey).filter(
+            APIKey.key_id == key_id,
+            APIKey.user_id == user_id
+        ).first()
     
     @staticmethod
     def create(db: Session, api_key: APIKey) -> APIKey:

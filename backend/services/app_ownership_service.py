@@ -80,10 +80,10 @@ class AppOwnershipService:
 
         # Remove any pre-existing collaborator row for the new owner (FR-C5).
         collab_repo = AppCollaborationRepository(db)
-        existing_collab: AppCollaborator | None = (
-            collab_repo.get_collaboration_by_app_and_user(app.app_id, new_owner_id)
+        existing_collaborations = collab_repo.get_collaborations_by_app_and_user(
+            app.app_id, new_owner_id
         )
-        if existing_collab is not None:
+        for existing_collab in existing_collaborations:
             logger.info(
                 f"transfer_owner: removing pre-existing collaborator row "
                 f"collab_id={existing_collab.id} app_id={app.app_id} "

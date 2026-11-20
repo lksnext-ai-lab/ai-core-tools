@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, Index, text
 from sqlalchemy.orm import relationship
 from db.database import Base
 from datetime import datetime
@@ -19,6 +19,22 @@ class CollaborationStatus(enum.Enum):
 
 class AppCollaborator(Base):
     __tablename__ = 'AppCollaborator'
+    __table_args__ = (
+        Index(
+            'uq_app_collaborator_app_user_membership',
+            'app_id',
+            'user_id',
+            unique=True,
+            postgresql_where=text("role <> 'OWNER'"),
+        ),
+        Index(
+            'uq_app_collaborator_app_user_pending_owner_offer',
+            'app_id',
+            'user_id',
+            unique=True,
+            postgresql_where=text("role = 'OWNER' AND status = 'PENDING'"),
+        ),
+    )
     
     id = Column(Integer, primary_key=True)
     app_id = Column(Integer, ForeignKey('App.app_id'), nullable=False)

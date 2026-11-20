@@ -35,6 +35,7 @@ class UserDetailOwnedApp(BaseModel):
 
 
 class UserDetailCollaboration(BaseModel):
+    collaboration_id: int
     app_id: int
     app_name: Optional[str] = None
     role: str
@@ -77,6 +78,31 @@ class UserDetailResponse(BaseModel):
     usage: UserDetailUsage
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminAppOption(BaseModel):
+    app_id: int
+    name: Optional[str] = None
+
+
+class SetUserAppRoleRequest(BaseModel):
+    role: Literal["administrator", "editor", "viewer"]
+
+
+class UserAppAccessResponse(BaseModel):
+    message: str
+    app_id: int
+    role: Optional[str] = None
+
+
+class SetUserAPIKeyStatusRequest(BaseModel):
+    is_active: bool
+
+
+class UserAPIKeyStatusResponse(BaseModel):
+    message: str
+    key_id: int
+    is_active: bool
 
 
 class SetPlatformRoleRequest(BaseModel):

@@ -13,12 +13,15 @@ from models.api_key import APIKey
 from models.app import App
 from routers.internal.auth_utils import get_current_user_oauth
 from schemas.admin_schemas import (
+    AdminAppOption,
     AppTransferSummary,
     DeleteUserRequest,
     MarketplaceQuotaResetResponse,
     OwnedAppsConflictResponse,
     OwnedAppConflictItem,
     SetPlatformRoleRequest,
+    SetUserAPIKeyStatusRequest,
+    SetUserAppRoleRequest,
     SystemStatsResponse,
     TransferOwnerRequest,
     UserDetailAPIKey,
@@ -28,10 +31,14 @@ from schemas.admin_schemas import (
     UserDetailResponse,
     UserDetailUsage,
     UserListResponse,
+    UserAPIKeyStatusResponse,
+    UserAppAccessResponse,
 )
 from schemas.system_setting_schemas import SystemSettingRead, SystemSettingUpdate
 from services.marketplace_quota_service import MarketplaceQuotaService
 from services.admin_user_detail_service import AdminUserDetailService
+from services.api_key_service import APIKeyService
+from services.app_collaboration_service import AppCollaborationService
 from schemas.service_lifecycle_schemas import ServiceUsageSchema
 from services.service_lifecycle_service import ServiceLifecycleService
 from services.system_settings_service import SystemSettingsService
@@ -51,7 +58,7 @@ SYSTEM_SANDBOX_SERVICE_NOT_FOUND = "System sandbox service not found"
 SYSTEM_SKILL_NOT_FOUND = "System skill not found"
 
 
-async def require_admin(
+def require_admin(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -142,6 +149,7 @@ async def get_user(
         ],
         collaborations=[
             UserDetailCollaboration(
+                collaboration_id=collaboration.collaboration_id,
                 app_id=collaboration.app_id,
                 app_name=collaboration.app_name,
                 role=collaboration.role.value,
@@ -168,6 +176,150 @@ async def get_user(
             call_count=detail.call_count,
             billing_period_start=detail.billing_period_start,
         )
+    )
+
+
+@router.get("/apps")
+async def list_admin_apps(
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[AdminAppOption]:
+    """List apps available to platform admins when assigning user access."""
+    apps = await run_in_threadpool(AdminUserDetailService.get_apps, db)
+    return [AdminAppOption(app_id=app_id, name=name) for app_id, name in apps]
+
+
+@router.put(
+    "/users/{user_id}/apps/{app_id}",
+    responses={
+        400: {"description": "The target user already owns this app or cannot hold the requested role"},
+        403: {"description": "The target account is protected"},
+        404: {"description": "User or app not found"},
+    },
+)
+async def set_user_app_role(
+    user_id: int,
+    app_id: int,
+    body: SetUserAppRoleRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UserAppAccessResponse:
+    """Grant immediate app access or update an existing collaborator role."""
+    try:
+        target_user = await run_in_threadpool(
+            AdminUserDetailService.get_manageable_user,
+            db,
+            user_id,
+            int(auth_context.identity.id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if target_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+    try:
+        collaboration = await run_in_threadpool(
+            lambda: AppCollaborationService(db).grant_access_directly(
+                app_id,
+                user_id,
+                body.role,
+                int(auth_context.identity.id),
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if collaboration is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User or app not found")
+    return UserAppAccessResponse(
+        message="App access granted.",
+        app_id=app_id,
+        role=collaboration.role.value,
+    )
+
+
+@router.delete(
+    "/users/{user_id}/apps/{app_id}",
+    responses={
+        400: {"description": "App ownership cannot be removed here"},
+        403: {"description": "The target account is protected"},
+        404: {"description": "Membership not found"},
+    },
+)
+async def remove_user_app_access(
+    user_id: int,
+    app_id: int,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UserAppAccessResponse:
+    """Remove a user's app collaboration, including pending invitations."""
+    try:
+        target_user = await run_in_threadpool(
+            AdminUserDetailService.get_manageable_user,
+            db,
+            user_id,
+            int(auth_context.identity.id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if target_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+    try:
+        removed = await run_in_threadpool(
+            lambda: AppCollaborationService(db).remove_user_access_directly(
+                app_id,
+                user_id,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+    return UserAppAccessResponse(message="App access removed.", app_id=app_id)
+
+
+@router.patch(
+    "/users/{user_id}/api-keys/{key_id}",
+    responses={
+        403: {"description": "The target account is protected"},
+        404: {"description": "API key not found for this user"},
+    },
+)
+async def set_user_api_key_status(
+    user_id: int,
+    key_id: int,
+    body: SetUserAPIKeyStatusRequest,
+    auth_context: Annotated[AuthContext, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UserAPIKeyStatusResponse:
+    """Activate or deactivate one API key belonging to the selected user."""
+    try:
+        target_user = await run_in_threadpool(
+            AdminUserDetailService.get_manageable_user,
+            db,
+            user_id,
+            int(auth_context.identity.id),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if target_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+    is_active = await run_in_threadpool(
+        lambda: APIKeyService().set_status_for_user(
+            db,
+            user_id,
+            key_id,
+            body.is_active,
+        )
+    )
+    if is_active is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found for this user",
+        )
+    status_text = "activated" if is_active else "deactivated"
+    return UserAPIKeyStatusResponse(
+        message=f"API key {status_text}.",
+        key_id=key_id,
+        is_active=is_active,
     )
 
 
@@ -297,12 +449,12 @@ async def delete_user(
 
 @router.post(
     "/apps/{app_id}/transfer",
-    response_model=AppTransferSummary,
     status_code=status.HTTP_200_OK,
     responses={
         400: {"description": "Recipient user is invalid (inactive, same as current owner, or does not exist)"},
         404: {"description": "App not found"},
         409: {"description": "Transfer would exceed the recipient's SaaS app-count limit"},
+        500: {"description": "Internal server error"},
     },
 )
 async def transfer_app_ownership(
@@ -1220,6 +1372,7 @@ async def set_system_skill_enabled(
 @router.post(
     "/system-ai-services/list-models",
     response_model=ListProviderModelsResponse,
+    responses={500: {"description": "Internal server error"}},
 )
 async def list_system_ai_service_provider_models(
     body: ListProviderModelsRequest,
@@ -1247,6 +1400,7 @@ async def list_system_ai_service_provider_models(
 @router.post(
     "/system-embedding-services/list-models",
     response_model=ListProviderModelsResponse,
+    responses={500: {"description": "Internal server error"}},
 )
 async def list_system_embedding_service_provider_models(
     body: ListProviderModelsRequest,
@@ -1271,7 +1425,10 @@ async def list_system_embedding_service_provider_models(
         raise HTTPException(status_code=500, detail="Failed to list provider models")
 
 
-@router.post("/system-ai-services/test-connection")
+@router.post(
+    "/system-ai-services/test-connection",
+    responses={500: {"description": "Internal server error"}},
+)
 async def test_system_ai_service_connection_with_config(
     config: CreateUpdateAIServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1478,7 +1635,10 @@ async def delete_system_sandbox_service(
     SandboxServiceRepository.delete(db, svc)
 
 
-@router.post("/system-sandbox-services/test-connection")
+@router.post(
+    "/system-sandbox-services/test-connection",
+    responses={500: {"description": "Internal server error"}},
+)
 async def test_system_sandbox_service_connection_with_config(
     config: CreateUpdateSandboxServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1583,8 +1743,8 @@ class _SessionsRevokedResponse(BaseModel):
 
 @router.post(
     "/users/local",
-    response_model=_LocalUserCreatedResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={500: {"description": "Internal server error"}},
     summary="Create LOCAL auth user (admin)",
     description=(
         "Create a new LOCAL auth user account and return a one-time set-password "
@@ -1635,7 +1795,6 @@ async def create_local_user(
 
 @router.post(
     "/users/{user_id}/set-password",
-    response_model=_PasswordUpdatedResponse,
     status_code=status.HTTP_200_OK,
     summary="Admin: forcibly set user password",
     description=(
@@ -1676,7 +1835,6 @@ async def admin_set_user_password(
 
 @router.post(
     "/users/{user_id}/reset-link",
-    response_model=_ResetLinkResponse,
     status_code=status.HTTP_200_OK,
     summary="Admin: issue set-password reset link",
     description=(
@@ -1715,7 +1873,6 @@ async def issue_reset_link(
 
 @router.post(
     "/users/{user_id}/revoke-sessions",
-    response_model=_SessionsRevokedResponse,
     status_code=status.HTTP_200_OK,
     summary="Admin: revoke all sessions for a user",
     description="Revoke all refresh tokens for a user, forcing re-authentication on all devices.",
@@ -1745,7 +1902,10 @@ async def admin_revoke_sessions(
     return _SessionsRevokedResponse(message=f"All sessions revoked for user {user_id}.")
 
 
-@router.post("/system-embedding-services/test-connection")
+@router.post(
+    "/system-embedding-services/test-connection",
+    responses={500: {"description": "Internal server error"}},
+)
 async def test_system_embedding_service_connection_with_config(
     config: CreateUpdateEmbeddingServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],

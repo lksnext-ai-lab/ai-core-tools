@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,22 @@ class AdminUserDetailService:
     """Orchestrate the targeted data reads for an admin user detail request."""
 
     @staticmethod
+    def get_manageable_user(
+        db: Session,
+        user_id: int,
+        actor_user_id: int,
+    ) -> Optional[User]:
+        """Return a target user unless the action targets the actor or an omniadmin."""
+        user = AdminUserDetailRepository(db).get_user(user_id)
+        if user is None:
+            return None
+        if user.user_id == actor_user_id:
+            raise ValueError("Administrators cannot change their own account through this screen.")
+        if is_omniadmin(user.email):
+            raise ValueError("Omniadmin accounts cannot be changed through this screen.")
+        return user
+
+    @staticmethod
     def get_user_detail(db: Session, user_id: int) -> Optional[AdminUserDetailData]:
         """Return details for one user, or ``None`` if that user does not exist.
 
@@ -59,3 +75,7 @@ class AdminUserDetailService:
             ),
             is_omniadmin=is_omniadmin(user.email),
         )
+
+    @staticmethod
+    def get_apps(db: Session) -> List[Tuple[int, Optional[str]]]:
+        return AdminUserDetailRepository(db).get_apps()

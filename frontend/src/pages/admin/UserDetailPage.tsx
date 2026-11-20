@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -20,7 +20,7 @@ import { errorMessage } from '../../constants/messages';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { ApiError } from '../../services/api';
 import { adminService, OwnedAppsError } from '../../services/admin';
-import type { User, UserDetail } from '../../services/admin';
+import type { AdminAppOption, AppAccessRole, User, UserDetail } from '../../services/admin';
 
 type DetailState =
   | { readonly userId: number | null; readonly status: 'loading' }
@@ -31,6 +31,16 @@ type DetailState =
 interface ResetLinkState {
   readonly token: string;
   readonly expiresAt: string;
+}
+
+const appAccessRoles: AppAccessRole[] = ['administrator', 'editor', 'viewer'];
+
+function isAppAccessRole(role: string): role is AppAccessRole {
+  return role === 'administrator' || role === 'editor' || role === 'viewer';
+}
+
+function getAllowedAppRoles(platformRole: string | null | undefined): AppAccessRole[] {
+  return platformRole === 'viewer' ? ['viewer'] : appAccessRoles;
 }
 
 export interface SectionCardProps {
@@ -47,6 +57,10 @@ function formatDate(value: string | null | undefined): string {
 
 function unavailable(value: string | null | undefined): string {
   return value ?? 'Unavailable';
+}
+
+function appLabel(appName: string | null, appId: number): string {
+  return appName || `app ${appId}`;
 }
 
 function SectionCard({ title, description, children }: SectionCardProps) {
@@ -76,6 +90,10 @@ function UserDetailPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [resetLinkState, setResetLinkState] = useState<ResetLinkState | null>(null);
   const [deleteDialogUser, setDeleteDialogUser] = useState<User | null>(null);
+  const [adminApps, setAdminApps] = useState<AdminAppOption[]>([]);
+  const [adminAppsError, setAdminAppsError] = useState<string | null>(null);
+  const [selectedAppId, setSelectedAppId] = useState('');
+  const [selectedAppRole, setSelectedAppRole] = useState<AppAccessRole>('editor');
   const requestIdRef = useRef(0);
   const actionLockRef = useRef(false);
   const routeUserIdRef = useRef(userId);
@@ -139,6 +157,20 @@ function UserDetailPage() {
       requestIdRef.current += 1;
     };
   }, [loadDetail, userId]);
+
+  useEffect(() => {
+    let active = true;
+    void adminService.getApps()
+      .then((apps) => {
+        if (active) setAdminApps(apps);
+      })
+      .catch((error: unknown) => {
+        if (active) setAdminAppsError(errorMessage(error, 'Unable to load apps.'));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const visibleState: DetailState =
     detailState?.userId === userId ? detailState : { userId, status: userId === null ? 'not-found' : 'loading' };
@@ -206,6 +238,61 @@ function UserDetailPage() {
           : `Change ${displayName}'s platform role to ${roleLabels[role]}?`,
         variant: downgradeWarning ? 'warning' : undefined,
         confirmLabel: 'Confirm',
+      },
+    );
+  }
+
+  async function handleGrantAppAccess(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!identity || !selectedAppId) return;
+    const role = identity.platform_role === 'viewer' ? 'viewer' : selectedAppRole;
+    await runMutation(
+      identity.user_id,
+      'Granting app access',
+      () => adminService.setUserAppRole(identity.user_id, Number(selectedAppId), role),
+      'App access granted.',
+    );
+  }
+
+  async function handleSetAppRole(appId: number, role: AppAccessRole): Promise<void> {
+    if (!identity) return;
+    await runMutation(
+      identity.user_id,
+      'Updating app role',
+      () => adminService.setUserAppRole(identity.user_id, appId, role),
+      'App role updated.',
+    );
+  }
+
+  async function handleRemoveAppAccess(appId: number, appName: string | null): Promise<void> {
+    if (!identity) return;
+    const targetAppLabel = appLabel(appName, appId);
+    await runMutation(
+      identity.user_id,
+      'Removing app access',
+      () => adminService.removeUserAppAccess(identity.user_id, appId),
+      'App access removed.',
+      {
+        title: 'Remove app access?',
+        message: `Remove ${displayName}'s access to ${targetAppLabel}?`,
+        variant: 'warning',
+        confirmLabel: 'Remove access',
+      },
+    );
+  }
+
+  async function handleSetAPIKeyStatus(keyId: number, keyName: string, isActive: boolean): Promise<void> {
+    if (!identity) return;
+    await runMutation(
+      identity.user_id,
+      isActive ? 'Reactivating API key' : 'Deactivating API key',
+      () => adminService.setUserAPIKeyStatus(identity.user_id, keyId, isActive),
+      isActive ? 'API key reactivated.' : 'API key deactivated.',
+      isActive ? undefined : {
+        title: 'Deactivate API key?',
+        message: `Deactivate "${keyName}"? Applications using it will no longer be able to authenticate.`,
+        variant: 'warning',
+        confirmLabel: 'Deactivate key',
       },
     );
   }
@@ -414,6 +501,17 @@ function UserDetailPage() {
   const valueClass = 'mt-1 break-words text-sm font-medium text-gray-900 dark:text-slate-100';
   const hasFrozenApps = detail.owned_apps.some((app) => app.is_frozen);
   const hasFrozenCollaborations = detail.collaborations.some((membership) => membership.is_frozen);
+  const memberAppIds = new Set(
+    detail.collaborations
+      .filter((membership) => membership.role !== 'owner' && membership.status === 'accepted')
+      .map((membership) => membership.app_id),
+  );
+  const ownedAppIds = new Set(detail.owned_apps.map((app) => app.app_id));
+  const selectableApps = adminApps.filter(
+    (app) => !memberAppIds.has(app.app_id) && !ownedAppIds.has(app.app_id),
+  );
+  const allowedAppRoles = getAllowedAppRoles(identity.platform_role);
+  const selectedGrantRole = allowedAppRoles.includes(selectedAppRole) ? selectedAppRole : 'viewer';
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -551,12 +649,75 @@ function UserDetailPage() {
         title={`App memberships (${detail.collaborations.length})`}
         description="Roles here apply only to the named app; they do not change platform access."
       >
+        {actionsRestricted ? (
+          <p className="mb-4 text-sm text-gray-700 dark:text-slate-300" role="status">
+            App access cannot be changed for your own or a protected omniadmin account.
+          </p>
+        ) : (
+          <>
+            {identity.platform_role === 'viewer' && (
+              <Alert
+                type="warning"
+                title="Viewer platform role"
+                message="This user has the Viewer platform role, so only Viewer app access can be granted. Change their platform role to Editor or Admin first to assign Editor or Administrator app access."
+                className="mb-4"
+              />
+            )}
+            <form onSubmit={(event) => { void handleGrantAppAccess(event); }} className="mb-5 flex flex-wrap items-end gap-3 rounded-lg bg-gray-50 p-4 dark:bg-slate-900/50">
+              <label className="min-w-48 flex-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+                App
+                <select
+                  value={selectedAppId}
+                  onChange={(event) => setSelectedAppId(event.target.value)}
+                  disabled={pendingAction !== null || selectableApps.length === 0}
+                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  <option value="">Select an app</option>
+                  {selectableApps.map((app) => (
+                    <option key={app.app_id} value={app.app_id}>
+                      {app.name || `App ${app.app_id}`} (ID {app.app_id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                Role
+                <select
+                  value={selectedGrantRole}
+                  onChange={(event) => {
+                    if (isAppAccessRole(event.target.value)) setSelectedAppRole(event.target.value);
+                  }}
+                  disabled={pendingAction !== null}
+                  className="mt-1 block rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  {allowedAppRoles.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="submit"
+                disabled={pendingAction !== null || selectedAppId === ''}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Grant access
+              </button>
+              {adminAppsError && <p className="w-full text-sm text-red-700 dark:text-red-300" role="alert">{adminAppsError}</p>}
+              {!adminAppsError && adminApps.length === 0 && (
+                <p className="w-full text-sm text-gray-600 dark:text-slate-400">No apps are available.</p>
+              )}
+              {!adminAppsError && adminApps.length > 0 && selectableApps.length === 0 && (
+                <p className="w-full text-sm text-gray-600 dark:text-slate-400">This user already owns or has access to every app.</p>
+              )}
+            </form>
+          </>
+        )}
         {detail.collaborations.length === 0 ? (
           <p className="text-sm text-gray-600 dark:text-slate-400">This user has no app collaborations.</p>
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {detail.collaborations.map((membership) => (
-              <li key={membership.app_id} className="rounded-lg border border-gray-200 p-4 dark:border-slate-700">
+              <li key={membership.collaboration_id} className="rounded-lg border border-gray-200 p-4 dark:border-slate-700">
                 <h3 className="font-semibold text-gray-900 dark:text-slate-100">{unavailable(membership.app_name)}</h3>
                 <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{membership.app_id}</dd></div>
@@ -573,6 +734,39 @@ function UserDetailPage() {
                   <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
                     This member's access is paused because the app has exceeded its plan's collaborator limit.
                   </p>
+                )}
+                {!actionsRestricted && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3 dark:border-slate-700">
+                    <label className="text-sm text-gray-700 dark:text-slate-300">
+                      <span className="mr-2">Set role</span>
+                      <select
+                        aria-label={`Role for ${appLabel(membership.app_name, membership.app_id)}`}
+                        value={membership.role}
+                        onChange={(event) => {
+                          if (isAppAccessRole(event.target.value) && allowedAppRoles.includes(event.target.value)) {
+                            void handleSetAppRole(membership.app_id, event.target.value);
+                          }
+                        }}
+                        disabled={pendingAction !== null}
+                        className="ml-2 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        {!allowedAppRoles.some((role) => role === membership.role) && (
+                          <option value={membership.role}>{membership.role} (legacy)</option>
+                        )}
+                        {allowedAppRoles.map((role) => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { void handleRemoveAppAccess(membership.app_id, membership.app_name); }}
+                      disabled={pendingAction !== null}
+                      className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+                    >
+                      Remove access
+                    </button>
+                  </div>
                 )}
               </li>
             ))}
@@ -591,7 +785,7 @@ function UserDetailPage() {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
               <thead className="bg-gray-50 dark:bg-slate-700">
                 <tr>
-                  {['Name', 'Key ID', 'App', 'Status', 'Created', 'Last used'].map((heading) => (
+                  {['Name', 'Key ID', 'App', 'Status', 'Created', 'Last used', 'Actions'].map((heading) => (
                     <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">{heading}</th>
                   ))}
                 </tr>
@@ -605,6 +799,21 @@ function UserDetailPage() {
                     <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.is_active ? 'Active' : 'Inactive'}</td>
                     <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{formatDate(key.created_at)}</td>
                     <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.last_used_at ? formatDate(key.last_used_at) : 'Never used'}</td>
+                    <td className="px-3 py-3 text-sm">
+                      {actionsRestricted ? (
+                        <span className="text-gray-500 dark:text-slate-400">Unavailable</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { void handleSetAPIKeyStatus(key.key_id, key.name, !key.is_active); }}
+                          disabled={pendingAction !== null}
+                          aria-label={`${key.is_active ? 'Deactivate' : 'Reactivate'} API key ${key.name}`}
+                          className="rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                        >
+                          {key.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

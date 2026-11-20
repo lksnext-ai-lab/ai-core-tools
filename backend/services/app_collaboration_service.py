@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from models.app_collaborator import AppCollaborator, CollaborationRole, CollaborationStatus
 from models.app import App
 from repositories.app_collaboration_repository import AppCollaborationRepository
+from repositories.app_repository import AppRepository
 from utils.logger import get_logger
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
 
 logger = get_logger(__name__)
 
@@ -62,7 +64,7 @@ class AppCollaborationService:
             if self.repo.can_user_manage_app(user.user_id, app_id):
                 raise ValueError("Cannot invite the app owner as a collaborator")
 
-            existing_collab = self.repo.get_collaboration_by_app_and_user(app_id, user.user_id)
+            existing_collab = self.repo.get_membership_by_app_and_user(app_id, user.user_id)
 
             if existing_collab:
                 if existing_collab.status == CollaborationStatus.PENDING:
@@ -90,7 +92,24 @@ class AppCollaborationService:
                 'status': CollaborationStatus.PENDING
             }
 
-            collaboration = self.repo.create_collaboration(collaboration_data)
+            try:
+                collaboration = self.repo.create_collaboration(collaboration_data)
+            except IntegrityError:
+                self.db.rollback()
+                existing_collab = self.repo.get_membership_by_app_and_user(app_id, user.user_id)
+                if existing_collab is None:
+                    raise
+                if existing_collab.status == CollaborationStatus.PENDING:
+                    raise ValueError(f"User {user_email} already has a pending invitation")
+                if existing_collab.status == CollaborationStatus.ACCEPTED:
+                    raise ValueError(f"User {user_email} is already a collaborator")
+                return self.repo.update_collaboration(existing_collab, {
+                    'status': CollaborationStatus.PENDING,
+                    'role': CollaborationRole(role.lower()),
+                    'invited_by': invited_by_user_id,
+                    'invited_at': datetime.now(),
+                    'accepted_at': None,
+                })
 
             logger.info(f"Invited user {user_email} to app {app_id} with role {role}")
             return collaboration
@@ -105,7 +124,7 @@ class AppCollaborationService:
             if not self.repo.can_user_manage_app(updated_by_user_id, app_id):
                 raise ValueError("Only app owners can update collaborator roles")
 
-            collaboration = self.repo.get_collaboration_by_app_and_user(app_id, user_id)
+            collaboration = self.repo.get_membership_by_app_and_user(app_id, user_id)
             if not collaboration:
                 raise ValueError("Collaboration not found")
 
@@ -128,7 +147,7 @@ class AppCollaborationService:
             if not self.repo.can_user_manage_app(removed_by_user_id, app_id):
                 raise ValueError("Only app owners can remove collaborators")
 
-            collaboration = self.repo.get_collaboration_by_app_and_user(app_id, user_id)
+            collaboration = self.repo.get_membership_by_app_and_user(app_id, user_id)
             if not collaboration:
                 raise ValueError("Collaboration not found")
 
@@ -142,6 +161,58 @@ class AppCollaborationService:
         except Exception as e:
             logger.error(f"Error removing user {user_id} from app {app_id}: {str(e)}")
             raise
+
+    def grant_access_directly(
+        self,
+        app_id: int,
+        user_id: int,
+        role: str,
+        granted_by_user_id: int,
+    ) -> Optional[AppCollaborator]:
+        """Grant accepted app access for an already-existing platform user."""
+        app = AppRepository(self.db).get_by_id(app_id)
+        user = self.repo.get_user_by_id(user_id)
+        if app is None or user is None:
+            return None
+        if app.owner_id == user_id:
+            raise ValueError("The app owner already has access and cannot be changed here.")
+        if user.platform_role == "viewer" and role.lower() != "viewer":
+            raise ValueError("Users with viewer platform role can only be assigned the viewer app role.")
+
+        now = datetime.now()
+        update_data = {
+            "role": CollaborationRole(role.lower()),
+            "invited_by": granted_by_user_id,
+            "invited_at": now,
+            "accepted_at": now,
+            "status": CollaborationStatus.ACCEPTED,
+        }
+        collaboration = self.repo.get_membership_by_app_and_user(app_id, user_id)
+        if collaboration is not None:
+            return self.repo.update_collaboration(collaboration, update_data)
+
+        try:
+            return self.repo.create_collaboration({
+                **update_data,
+                "app_id": app_id,
+                "user_id": user_id,
+            })
+        except IntegrityError:
+            self.db.rollback()
+            collaboration = self.repo.get_membership_by_app_and_user(app_id, user_id)
+            if collaboration is None:
+                raise
+            return self.repo.update_collaboration(collaboration, update_data)
+
+    def remove_user_access_directly(self, app_id: int, user_id: int) -> bool:
+        """Remove collaborator access without changing app ownership."""
+        app = AppRepository(self.db).get_by_id(app_id)
+        if app is None:
+            return False
+        if app.owner_id == user_id:
+            raise ValueError("App ownership cannot be removed here.")
+
+        return self.repo.delete_user_collaborations(app_id, user_id) > 0
 
     def leave_app_collaboration(self, app_id: int, user_id: int) -> bool:
         """Allow a collaborator to leave an app collaboration themselves."""
@@ -167,93 +238,92 @@ class AppCollaborationService:
             logger.error(f"Error leaving app {app_id} for user {user_id}: {str(e)}")
             raise
 
-    def respond_to_invitation(self, invitation_id: int, user_id: int, action: str) -> bool:
-        """Respond to a collaboration invitation (accept or decline).
+    def _get_pending_invitation(
+        self,
+        invitation_id: int,
+        user_id: int,
+    ) -> Optional[AppCollaborator]:
+        collaboration = self.repo.get_collaboration_by_id(invitation_id)
+        if collaboration is None:
+            logger.warning(f"Invitation {invitation_id} not found")
+            return None
+        if int(collaboration.user_id) != int(user_id):
+            logger.warning(
+                f"Invitation {invitation_id} belongs to user {collaboration.user_id}, not {user_id}"
+            )
+            return None
+        if collaboration.status != CollaborationStatus.PENDING:
+            logger.warning(
+                f"Invitation {invitation_id} status is {collaboration.status}, not PENDING"
+            )
+            return None
+        return collaboration
 
-        Ownership-transfer offers (role=OWNER, status=PENDING) delegate to
-        ``AppOwnershipService`` so that accept runs ``_reassign_owner`` + previous-owner
-        demotion atomically (AD-5 / FR-D5). Regular invitations follow the existing
-        status-update path.
+    def _respond_to_ownership_offer(
+        self,
+        invitation_id: int,
+        user_id: int,
+        action: str,
+    ) -> bool:
+        from services.app_ownership_service import AppOwnershipService
+        from services.app_ownership_errors import (
+            NotOfferRecipientError,
+            OwnershipOfferNotFoundError,
+        )
 
-        Args:
-            invitation_id: PK of the ``AppCollaborator`` row.
-            user_id: PK of the acting user (must be the invitation recipient).
-            action: ``'accept'`` or ``'decline'``.
+        if action not in {"accept", "decline"}:
+            logger.warning(
+                f"Invalid action '{action}' for ownership offer {invitation_id}"
+            )
+            return False
 
-        Returns:
-            ``True`` on success, ``False`` on any validation failure.
-        """
         try:
-            collaboration = self.repo.get_collaboration_by_id(invitation_id)
-
-            if not collaboration:
-                logger.warning(f"Invitation {invitation_id} not found")
-                return False
-
-            if int(collaboration.user_id) != int(user_id):
-                logger.warning(
-                    f"Invitation {invitation_id} belongs to user {collaboration.user_id}, not {user_id}"
+            if action == "accept":
+                AppOwnershipService.accept(
+                    self.db, invitation_id, actor_user_id=user_id
                 )
-                return False
-
-            if collaboration.status != CollaborationStatus.PENDING:
-                logger.warning(
-                    f"Invitation {invitation_id} status is {collaboration.status}, not PENDING"
+            else:
+                AppOwnershipService.decline(
+                    self.db, invitation_id, actor_user_id=user_id
                 )
+            return True
+        except (OwnershipOfferNotFoundError, NotOfferRecipientError) as exc:
+            logger.warning(
+                f"respond_to_invitation: ownership {action} rejected "
+                f"invitation_id={invitation_id} user_id={user_id} — {exc}"
+            )
+            return False
+
+    @staticmethod
+    def _invitation_response_update(action: str) -> Optional[dict]:
+        if action == "accept":
+            return {
+                "status": CollaborationStatus.ACCEPTED,
+                "accepted_at": datetime.now(),
+            }
+        if action == "decline":
+            return {"status": CollaborationStatus.DECLINED}
+        return None
+
+    def respond_to_invitation(self, invitation_id: int, user_id: int, action: str) -> bool:
+        """Respond to an invitation or ownership offer as its intended recipient."""
+        try:
+            collaboration = self._get_pending_invitation(invitation_id, user_id)
+            if collaboration is None:
                 return False
 
             if collaboration.role == CollaborationRole.OWNER:
-                from services.app_ownership_service import AppOwnershipService
-                from services.app_ownership_errors import (
-                    NotOfferRecipientError,
-                    OwnershipOfferNotFoundError,
+                return self._respond_to_ownership_offer(
+                    invitation_id, user_id, action
                 )
 
-                if action == 'accept':
-                    try:
-                        AppOwnershipService.accept(
-                            self.db, invitation_id, actor_user_id=user_id
-                        )
-                        return True
-                    except (OwnershipOfferNotFoundError, NotOfferRecipientError) as exc:
-                        logger.warning(
-                            f"respond_to_invitation: ownership accept rejected "
-                            f"invitation_id={invitation_id} user_id={user_id} — {exc}"
-                        )
-                        return False
-                elif action == 'decline':
-                    try:
-                        AppOwnershipService.decline(
-                            self.db, invitation_id, actor_user_id=user_id
-                        )
-                        return True
-                    except (OwnershipOfferNotFoundError, NotOfferRecipientError) as exc:
-                        logger.warning(
-                            f"respond_to_invitation: ownership decline rejected "
-                            f"invitation_id={invitation_id} user_id={user_id} — {exc}"
-                        )
-                        return False
-                else:
-                    logger.warning(
-                        f"Invalid action '{action}' for ownership offer {invitation_id}"
-                    )
-                    return False
-
-            update_data: dict = {}
-            if action == 'accept':
-                update_data = {
-                    'status': CollaborationStatus.ACCEPTED,
-                    'accepted_at': datetime.now(),
-                }
-            elif action == 'decline':
-                update_data = {'status': CollaborationStatus.DECLINED}
-            else:
+            update_data = self._invitation_response_update(action)
+            if update_data is None:
                 logger.warning(f"Invalid action {action} for invitation {invitation_id}")
                 return False
 
             self.repo.update_collaboration(collaboration, update_data)
             return True
-
         except Exception as e:
             logger.error(f"Error responding to invitation: {str(e)}")
             return False

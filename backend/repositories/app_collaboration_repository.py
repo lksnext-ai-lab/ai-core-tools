@@ -118,6 +118,21 @@ class AppCollaborationRepository:
             AppCollaborator.app_id == app_id,
             AppCollaborator.user_id == user_id
         ).first()
+
+    def get_collaborations_by_app_and_user(self, app_id: int, user_id: int) -> List[AppCollaborator]:
+        """Get every collaboration row for one app/user pair."""
+        return self.db.query(AppCollaborator).filter(
+            AppCollaborator.app_id == app_id,
+            AppCollaborator.user_id == user_id
+        ).all()
+
+    def get_membership_by_app_and_user(self, app_id: int, user_id: int) -> Optional[AppCollaborator]:
+        """Get a regular membership, excluding ownership-transfer offers."""
+        return self.db.query(AppCollaborator).filter(
+            AppCollaborator.app_id == app_id,
+            AppCollaborator.user_id == user_id,
+            AppCollaborator.role != CollaborationRole.OWNER,
+        ).first()
     
     def get_collaboration_by_id(self, collaboration_id: int) -> Optional[AppCollaborator]:
         """Get collaboration by ID"""
@@ -126,6 +141,10 @@ class AppCollaborationRepository:
     def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
         return self.db.query(User).filter(User.email == email.lower().strip()).first()
+
+    def get_user_by_id(self, user_id: int) -> Optional[User]:
+        """Get user by ID."""
+        return self.db.query(User).filter(User.user_id == user_id).first()
     
     def create_collaboration(self, collaboration_data: dict) -> AppCollaborator:
         """Create a new collaboration"""
@@ -156,6 +175,15 @@ class AppCollaborationRepository:
             logger.error(f"Error deleting collaboration {collaboration.id}: {e}")
             self.db.rollback()
             return False
+
+    def delete_user_collaborations(self, app_id: int, user_id: int) -> int:
+        """Delete every collaboration row for one app/user pair."""
+        deleted = self.db.query(AppCollaborator).filter(
+            AppCollaborator.app_id == app_id,
+            AppCollaborator.user_id == user_id,
+        ).delete(synchronize_session=False)
+        self.db.commit()
+        return deleted
     
     def get_user_pending_invitations(self, user_id: int) -> List[AppCollaborator]:
         """Get all pending invitations for a user"""

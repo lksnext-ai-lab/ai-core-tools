@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,6 +26,7 @@ class OwnedAppDetailRecord:
 class CollaborationDetailRecord:
     """Whitelisted collaboration and associated app metadata."""
 
+    collaboration_id: int
     app_id: int
     app_name: Optional[str]
     role: CollaborationRole
@@ -54,6 +55,14 @@ class AdminUserDetailRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def get_apps(self) -> List[Tuple[int, Optional[str]]]:
+        """Return app IDs and names for the admin access-management selector."""
+        return list(
+            self.db.execute(
+                select(App.app_id, App.name).order_by(App.app_id)
+            ).all()
+        )
+
     def get_user(self, user_id: int) -> Optional[User]:
         """Return a user by ID, or ``None`` if it does not exist."""
         return self.db.execute(
@@ -73,6 +82,7 @@ class AdminUserDetailRepository:
         """Return the requested user's collaboration rows and their app metadata."""
         rows = self.db.execute(
             select(
+                AppCollaborator.id,
                 AppCollaborator.app_id,
                 App.name,
                 AppCollaborator.role,
