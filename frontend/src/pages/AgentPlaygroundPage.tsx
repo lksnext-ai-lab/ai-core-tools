@@ -64,6 +64,7 @@ function AgentPlaygroundPage() {
   const [activeTab, setActiveTab] = useState('playground');
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [isConversationPanelOpen, setIsConversationPanelOpen] = useState(false);
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(() => {
     const value = searchParams.get('conversation_id');
     return value ? Number.parseInt(value, 10) : null;
@@ -194,6 +195,7 @@ function AgentPlaygroundPage() {
   }
 
   const isOCRAgent = agent.type === 'ocr_agent';
+  const showChatActions = activeTab === 'playground' && !isOCRAgent;
 
   const tabs = [
     { id: 'playground', label: t('agentPlayground.tabs.playground') },
@@ -220,7 +222,27 @@ function AgentPlaygroundPage() {
           )}
           subtitleMarginBottom={0}
         />
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {showChatActions && (
+            <>
+              <div ref={setHeaderActions} className="contents" />
+              {agent.has_memory && (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={isConversationPanelOpen}
+                  aria-controls={isConversationPanelOpen ? CONVERSATION_PANEL_ID : undefined}
+                  onClick={() => setIsConversationPanelOpen(true)}
+                  className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
+                              ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}
+                              ${isConversationPanelOpen ? '!bg-surface-hover dark:!bg-surface-hover-dark' : ''}`}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t('agentPlayground.conversations')}
+                </button>
+              )}
+            </>
+          )}
           <ButtonApp
             label={t('agentPlayground.editPrompts')}
             variant="primary"
@@ -278,21 +300,7 @@ function AgentPlaygroundPage() {
                     onMessageSent={handleMessageSent}
                     metadataFields={agent.silo?.metadata_definition?.fields}
                     vectorDbType={agent.silo?.vector_db_type}
-                    toolbarStart={agent.has_memory ? (
-                      <button
-                        type="button"
-                        aria-haspopup="dialog"
-                        aria-expanded={isConversationPanelOpen}
-                        aria-controls={isConversationPanelOpen ? CONVERSATION_PANEL_ID : undefined}
-                        onClick={() => setIsConversationPanelOpen(true)}
-                        className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-display font-normal tracking-[-0.02em] transition-colors
-                                    ${buttonAppSizeClasses.compact} ${buttonAppVariantClasses.secondary}
-                                    ${isConversationPanelOpen ? '!bg-surface-hover dark:!bg-surface-hover-dark' : ''}`}
-                      >
-                        <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
-                        {t('agentPlayground.conversations')}
-                      </button>
-                    ) : undefined}
+                    resetButtonTarget={headerActions}
                   />
                 )}
               </>

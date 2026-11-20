@@ -8,6 +8,7 @@ const ts = require('typescript');
 const locales = {
   en: require('../src/i18n/locales/en/common.json'),
   es: require('../src/i18n/locales/es/common.json'),
+  eu: require('../src/i18n/locales/eu/common.json'),
 };
 const source = fs.readFileSync(path.join(__dirname, '../src/components/playground/ConversationSidebar.tsx'), 'utf8');
 const compiled = ts.transpileModule(source, {
@@ -134,7 +135,7 @@ async function renderLoaded(language, extraProps = {}, api = {}) {
   return { sidebar, view: sidebar.render() };
 }
 
-for (const language of ['en', 'es']) {
+for (const language of ['en', 'es', 'eu']) {
   test(`sidebar renders every label in ${language} and accepts Chat conversations (no agent_id / session_id)`, async () => {
     const { view } = await renderLoaded(language);
     const t = makeT(language);
@@ -163,7 +164,7 @@ for (const language of ['en', 'es']) {
 }
 
 test('relative dates are translated', async () => {
-  for (const language of ['en', 'es']) {
+  for (const language of ['en', 'es', 'eu']) {
     const recent = new Date(Date.now() - 5 * 60000).toISOString();
     const sidebar = mount(language, {
       loadConversations: async () => ({ conversations: [{ ...chatConversation, updated_at: recent }] }),
@@ -175,7 +176,7 @@ test('relative dates are translated', async () => {
 });
 
 test('load errors and the empty state are translated and use the injected loader', async () => {
-  for (const language of ['en', 'es']) {
+  for (const language of ['en', 'es', 'eu']) {
     const t = makeT(language);
     const failing = mount(language, { loadConversations: async () => { throw new Error('boom'); } });
     failing.render();

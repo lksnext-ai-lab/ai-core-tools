@@ -3,8 +3,9 @@ import { initReactI18next } from 'react-i18next';
 
 import enCommon from './locales/en/common.json';
 import esCommon from './locales/es/common.json';
+import euCommon from './locales/eu/common.json';
 
-export const supportedLanguages = ['en', 'es'] as const;
+export const supportedLanguages = ['en', 'es', 'eu'] as const;
 
 export type AppLanguage =
   (typeof supportedLanguages)[number];
@@ -15,6 +16,7 @@ export const DEFAULT_LANGUAGE: AppLanguage = 'en';
 export const languageNames: Record<AppLanguage, string> = {
   en: 'English',
   es: 'Español',
+  eu: 'Euskara',
 };
 
 export const LANGUAGE_STORAGE_KEY = 'mattin.language';
@@ -47,6 +49,7 @@ void i18n
     resources: {
       en: { common: enCommon },
       es: { common: esCommon },
+      eu: { common: euCommon },
     },
     lng: readStoredLanguage() ?? DEFAULT_LANGUAGE,
     fallbackLng: DEFAULT_LANGUAGE,

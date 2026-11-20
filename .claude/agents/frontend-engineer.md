@@ -40,8 +40,14 @@ forms, or other user-facing UI elements:
 1. Read and follow the internationalization rules in: `.github/instructions/react-conventions.instructions.md`
 2. Reuse existing translation keys before creating new ones.
 3. Follow the existing i18n naming conventions and namespaces.
-4. Ensure new translation keys exist in all supported locales.
+4. Ensure new translation keys exist in **all** supported locales: `en`, `es` and `eu` (Basque) under
+   `frontend/src/i18n/locales/<lang>/common.json`, same key path and same `{{placeholders}}`. Write real
+   translations, never copy English/Spanish into `eu`. Basque conventions: "zu" register, product/technical
+   terms kept as in `en` (MCP, RAG, embedding, sandbox, middleware, API, SharePoint, Teams), plural keys
+   `_one`/`_other`. Details: the i18n section of `CLAUDE.md`.
 5. Verify that no new hardcoded user-facing text remains.
+6. Run `npm test` (includes `tests/I18nLocales.test.cjs`, which fails if any locale misses a key or changes a
+   placeholder) and fix before reporting done. Mention in your report that the `eu` strings need native review.
 
 These rules apply to all frontend development tasks,
 including new features and modifications to existing UI.

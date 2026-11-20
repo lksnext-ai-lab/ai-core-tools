@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import PendingInvitationsNotification from '../PendingInvitationsNotification';
 import type { NavigationConfig, OrganizationConfig } from '../../core/types';
 import LanguageSelector from '../ui/LanguageSelector';
+import UserAvatar from '../ui/UserAvatar';
 
 interface HeaderProps {
   navigationConfig?: NavigationConfig;
@@ -39,16 +40,6 @@ export const Header: React.FC<HeaderProps> = ({
   // Header search is visual only for now (design v3 placeholder) — shown on Home, no behaviour.
   const isHome = location.pathname === '/home';
   const hasBreadcrumb = Boolean(appId) || ['/apps', '/marketplace'].includes(location.pathname) || location.pathname.startsWith('/admin/');
-
-  const getUserInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase();
-    }
-    return 'U';
-  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -144,11 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-expanded={isUserMenuOpen}
               aria-haspopup="true"
             >
-              <div className="w-8 h-8 bg-ink rounded-full flex items-center justify-center flex-shrink-0 dark:bg-ink-dark">
-                <span className="font-display text-ink-on text-xs font-medium dark:text-ink-on-dark">
-                  {getUserInitials(user?.name, user?.email)}
-                </span>
-              </div>
+              <UserAvatar name={user?.name} email={user?.email} size={32} />
               <div className="hidden lg:block text-left">
                 <p className="text-[13px] font-medium text-fg leading-tight whitespace-nowrap dark:text-fg-dark">
                   {user?.name || t('header.userFallback')}

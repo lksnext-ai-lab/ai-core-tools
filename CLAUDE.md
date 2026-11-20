@@ -257,6 +257,17 @@ In particular:
 - Follow the existing i18n naming conventions and namespaces.
 - Verify internationalization before completing UI changes.
 
+Supported languages: `en` (source of truth), `es` and `eu` (Basque), one
+`frontend/src/i18n/locales/<lang>/common.json` each, registered in
+`frontend/src/i18n/index.ts`. Every new key goes into all three with the same
+key path and the same `{{placeholders}}`; `frontend/tests/I18nLocales.test.cjs`
+(run by `npm test`) fails on any difference. Basque (`eu`) conventions: "zu"
+register, technical product terms kept as in `en` (MCP, RAG, embedding, sandbox,
+middleware, API, SharePoint, Teams), plural keys `_one`/`_other`. Never leave
+English or Spanish text in `eu`. Adding a new language = new locale folder +
+`supportedLanguages`/`languageNames`/`resources` in `index.ts` + extend the
+parity test.
+
 These rules apply to all frontend UI development tasks,
 not only explicit translation requests.
 

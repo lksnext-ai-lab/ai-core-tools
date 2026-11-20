@@ -18,6 +18,8 @@ import { SEARCH_RESULT_LIMIT } from '../components/playground/SearchableMultiSel
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import BackgroundImage from '../components/ui/BackgroundImage';
+import UserAvatar from '../components/ui/UserAvatar';
+import { useOptionalUser } from '../contexts/UserContext';
 import { SidePanel } from '../components/ui/SidePanel';
 import { StreamingChatError, useStreamingChat, type StreamFnOptions } from '../hooks/useStreamingChat';
 import { useApprovalExpiryWatch } from '../hooks/useApprovalExpiryWatch';
@@ -100,6 +102,7 @@ export default function MarketplaceChatPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation('common');
+  const user = useOptionalUser()?.user;
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const numericId = Number(conversationId);
 
@@ -907,7 +910,7 @@ export default function MarketplaceChatPage() {
             if (message.type === 'user') {
               return (
                 <div key={message.id} className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4">
-                  <BackgroundImage text={t('marketplaceChat.youLabel')} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
+                  <UserAvatar name={user?.name} email={user?.email} size={38} className="mt-0.5" />
                   
                   <div className="max-w-[82%]">
                     <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">

@@ -40,6 +40,9 @@ export const useUser = () => {
   return context;
 };
 
+/** Like `useUser` but returns `undefined` outside a provider; for presentational use (e.g. an avatar) that can degrade. */
+export const useOptionalUser = () => useContext(UserContext);
+
 interface UserProviderProps {
   children: ReactNode;
 }
