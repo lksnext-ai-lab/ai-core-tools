@@ -525,13 +525,18 @@ class AgentStreamingService:
                                     and "structured_response" in chunk["model"]
                                 ):
                                     structured_response = chunk["model"]["structured_response"]
-                                if chat_turn and isinstance(chunk, dict):
+                                if isinstance(chunk, dict):
                                     # Only the model node's own output: other nodes (e.g.
                                     # summarization) re-emit preserved messages of earlier turns.
                                     node_update = chunk.get("model")
                                     new_messages = node_update.get("messages") if isinstance(node_update, dict) else None
-                                    if isinstance(new_messages, list):
-                                        run_ai_messages.extend(m for m in new_messages if isinstance(m, AIMessage))
+                                    for message in new_messages if isinstance(new_messages, list) else ():
+                                        if not isinstance(message, AIMessage):
+                                            continue
+                                        if chat_turn:
+                                            run_ai_messages.append(message)
+                                        # Token events carry text only: images the model generated would be lost.
+                                        self.execution_service.save_generated_images(message.content, ctx.working_dir)
 
                             events = map_stream_event(mode, chunk)
                             if events:

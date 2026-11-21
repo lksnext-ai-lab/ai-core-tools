@@ -2959,16 +2959,47 @@ class AgentExecutionService:
             logger.error("Failed to save generated image: %s", exc)
             return "[Image generated but could not be saved]"
 
+    @staticmethod
+    def _generated_image(block: dict) -> Optional[tuple[str, str]]:
+        """``(base64 data, stable id)`` of an image a model generated, else ``None`` (data may be empty).
+
+        - ``image_generation_call`` (OpenAI/Azure): the id is the provider's block id.
+        - ``image_url`` data URI (Gemini native generation): the id is a content hash, so a history
+          reload recomputes the same id and resolves the file via ``_resolve_image_placeholders``.
+        """
+        block_type = block.get("type", "")
+        if block_type == "image_generation_call":
+            return block.get("result", ""), block.get("id", "")
+        if block_type == "image_url":
+            url = (block.get("image_url") or {}).get("url", "")
+            if url.startswith("data:image/") and ";base64," in url:
+                import base64
+                import hashlib
+                b64_data = url.split(";base64,", 1)[1]
+                return b64_data, hashlib.sha256(base64.b64decode(b64_data)).hexdigest()[:16]
+        return None
+
+    def save_generated_images(self, blocks: Any, working_dir: Optional[str]) -> None:
+        """Save the images a model generated in ``blocks`` to the output folder of ``working_dir``.
+
+        ``sync_output_files`` registers them afterwards and ``_inject_file_markers`` appends them to the
+        answer. Used by the streaming path, which only forwards text tokens.
+        """
+        if not working_dir or not isinstance(blocks, list):
+            return
+        for block in blocks:
+            image = self._generated_image(block) if isinstance(block, dict) else None
+            if image and image[0]:
+                self._save_generated_image(image[0], working_dir, image[1])
+
     def _extract_content_blocks(self, blocks: list, working_dir: Optional[str] = None) -> str:
         """
         Extract a plain-text response from a multimodal content block list.
 
         Handles:
         - text blocks           → concatenated as-is
-        - image_generation_call → base64 result decoded and saved to working_dir;
+        - generated images      → saved to working_dir (see ``_generated_image``);
                                    sync_output_files will register the file afterwards
-        - image_url (data URI)  → Gemini native image generation; decoded and saved to
-                                   working_dir the same way as image_generation_call
         - anything else         → silently ignored (tool call artefacts, etc.)
         """
         text_parts = []
@@ -2976,29 +3007,19 @@ class AgentExecutionService:
         for block in blocks:
             if not isinstance(block, dict):
                 continue
-            block_type = block.get("type", "")
-            if block_type == "text":
+            if block.get("type", "") == "text":
                 text = block.get("text", "").strip()
                 if text:
                     text_parts.append(text)
-            elif block_type == "image_generation_call":
-                b64_data = block.get("result", "")
-                block_id = block.get("id", "")
-                label = self._save_generated_image(b64_data, working_dir, block_id) if b64_data and working_dir else "[Image generated]"
-                text_parts.append(label)
-            elif block_type == "image_url":
-                # Gemini native image generation returns inline images as data URIs:
-                # {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
-                url = (block.get("image_url") or {}).get("url", "")
-                if url.startswith("data:image/") and ";base64," in url:
-                    import hashlib as _hl
-                    import base64 as _b64
-                    b64_data = url.split(";base64,", 1)[1]
-                    # Use a content hash as stable block_id so history reload can
-                    # recompute the same ID and resolve the file via _resolve_image_placeholders
-                    img_hash = _hl.sha256(_b64.b64decode(b64_data)).hexdigest()[:16]
-                    label = self._save_generated_image(b64_data, working_dir, block_id=img_hash) if working_dir else "[Image generated]"
-                    text_parts.append(label)
+                continue
+            image = self._generated_image(block)
+            if image:
+                b64_data, block_id = image
+                text_parts.append(
+                    self._save_generated_image(b64_data, working_dir, block_id)
+                    if b64_data and working_dir
+                    else "[Image generated]"
+                )
 
         return " ".join(text_parts) if text_parts else str(blocks)
 

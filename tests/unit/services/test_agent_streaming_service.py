@@ -87,6 +87,64 @@ async def test_streaming_agent_passes_sandbox_session_key_to_tool_builder():
     )
 
 
+async def _model_update_stream(*messages):
+    yield "updates", {"model": {"messages": list(messages)}}
+    yield "updates", {"summarization": {"messages": [messages[0]]}}
+
+
+@pytest.mark.asyncio
+async def test_streaming_saves_the_images_the_model_generated():
+    """Token events carry text only, so generated images are saved from the model node's messages."""
+    from langchain_core.messages import AIMessage
+
+    from services.agent_streaming_service import AgentStreamingService
+
+    ctx = SimpleNamespace(
+        effective_conv_id=297,
+        conversation=None,
+        agent=SimpleNamespace(name="Agent", has_memory=False),
+        fresh_agent=SimpleNamespace(agent_id=1, has_memory=False),
+        search_params={},
+        session_id_for_cache=None,
+        user_context={"user_id": "u1"},
+        working_dir="/tmp/work",
+        sandbox_handle=None,
+        sandbox_provider=None,
+        sandbox_session_key=None,
+        enhanced_message="draw",
+        image_files=[],
+        processed_files=[],
+    )
+    blocks = [{"type": "image_generation_call", "id": "ig_1", "result": "aGk="}]
+
+    execution_service = MagicMock()
+    execution_service._prepare_turn = AsyncMock(return_value=ctx)
+    execution_service._finalize_turn = AsyncMock(
+        return_value={"parsed_response": "done", "effective_conv_id": 297, "files_data": []}
+    )
+    agent_chain = MagicMock()
+    agent_chain.astream.return_value = _model_update_stream(AIMessage(content=blocks))
+    create_agent = AsyncMock(return_value=(agent_chain, None, None))
+
+    service = AgentStreamingService()
+    service.execution_service = execution_service
+    with (
+        patch("services.agent_streaming_service.create_agent", create_agent),
+        patch("services.agent_streaming_service.prepare_agent_config", return_value={"configurable": {}}),
+        patch("services.agent_streaming_service.build_human_message", return_value=SimpleNamespace(content="draw")),
+    ):
+        _ = [
+            event
+            async for event in service.stream_agent_chat(
+                agent_id=1, message="draw", file_references=[], user_context={"user_id": "u1"},
+                conversation_id=297, db=MagicMock(),
+            )
+        ]
+
+    # Only the model node's output is saved: the summarization re-emission is ignored.
+    execution_service.save_generated_images.assert_called_once_with(blocks, "/tmp/work")
+
+
 @pytest.mark.asyncio
 async def test_streaming_resets_stale_tool_call_checkpoint_and_retries():
     from services.agent_streaming_service import AgentStreamingService
