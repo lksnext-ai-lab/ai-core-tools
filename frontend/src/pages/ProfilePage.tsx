@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Mail, Handshake, Crown, BarChart2, LogOut } from 'lucide-react';
+import { Mail, Handshake, Crown, BarChart2, LogOut, Camera, Trash2 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { useConfirm } from '../contexts/ConfirmContext';
-import { apiService } from '../services/api';
+import { apiService, ApiError } from '../services/api';
 import Alert from '../components/ui/Alert';
 import type { MarketplaceQuotaUsage } from '../types/marketplace';
 import { LoadingState } from '../components/ui/LoadingState';
@@ -13,6 +13,7 @@ import CardApp from '../components/ui/CardApp';
 import ButtonApp from '../components/ui/ButtonApp';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { Badge, StatusBadge, type BadgeVariant } from '../components/ui/Badge';
+import UserAvatar from '../components/ui/UserAvatar';
 
 interface App {
   app_id: number;
@@ -37,6 +38,20 @@ const ROLE_BADGE_VARIANTS: Record<string, BadgeVariant> = {
   viewer: 'default',
 };
 
+// Same limits as the backend (services/user_avatar_service.py), checked first to skip a doomed upload.
+const AVATAR_ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+const AVATAR_ERROR_KEYS: Record<string, string> = {
+  AVATAR_TOO_LARGE: 'profilePage.avatar.tooLarge',
+  AVATAR_INVALID_TYPE: 'profilePage.avatar.invalidType',
+};
+
+function avatarErrorCode(err: unknown): string | undefined {
+  if (!(err instanceof ApiError) || !err.detail || typeof err.detail !== 'object') return undefined;
+  const code = (err.detail as Record<string, unknown>)['code'];
+  return typeof code === 'string' ? code : undefined;
+}
+
 const LIST_CLASSES = 'divide-y divide-line dark:divide-line-dark';
 const LIST_ITEM_CLASSES = 'py-3 first:pt-0 last:pb-0';
 
@@ -57,7 +72,9 @@ function EmptyList({ icon, message }: EmptyListProps) {
 const ProfilePage: React.FC = () => {
   const { t, i18n } = useTranslation('common');
   const confirm = useConfirm();
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading, avatarUrl, setUser } = useUser();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [collaborations, setCollaborations] = useState<App[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,15 +151,56 @@ const ProfilePage: React.FC = () => {
     }
   }
 
-  const getUserInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  function showError(message: string) {
+    setError(message);
+    setTimeout(() => setError(null), 3000);
+  }
+
+  function showSuccess(message: string) {
+    setSuccess(message);
+    setTimeout(() => setSuccess(null), 3000);
+  }
+
+  async function handleAvatarSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';  // choosing the same file again must fire onChange
+    if (!file || !user) return;
+    if (!AVATAR_ACCEPTED_TYPES.includes(file.type)) {
+      showError(t('profilePage.avatar.invalidType'));
+      return;
     }
-    if (email) {
-      return email[0].toUpperCase().slice(0, 2);
+    if (file.size > AVATAR_MAX_BYTES) {
+      showError(t('profilePage.avatar.tooLarge'));
+      return;
     }
-    return 'U';
-  };
+    setAvatarBusy(true);
+    try {
+      const { avatar_updated_at } = await apiService.uploadMyAvatar(file);
+      setUser({ ...user, avatar_updated_at });
+      showSuccess(t('profilePage.avatar.uploadSuccess'));
+    } catch (err) {
+      console.error(err);
+      const key = AVATAR_ERROR_KEYS[avatarErrorCode(err) ?? ''];
+      showError(t(key ?? 'profilePage.avatar.uploadFailed'));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function handleAvatarRemove() {
+    if (!user) return;
+    setAvatarBusy(true);
+    try {
+      await apiService.deleteMyAvatar();
+      setUser({ ...user, avatar_updated_at: null });
+      showSuccess(t('profilePage.avatar.removeSuccess'));
+    } catch (err) {
+      console.error(err);
+      showError(t('profilePage.avatar.removeFailed'));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
 
   const getRoleLabel = (role: string) => t(`collaborationPage.roles.${role.toLowerCase()}`, {
     defaultValue: role.charAt(0).toUpperCase() + role.slice(1),
@@ -217,16 +275,46 @@ const ProfilePage: React.FC = () => {
 
       {/* Profile Header */}
       <CardApp className="p-6">
-        <div className="flex items-center gap-4">
-          <span
-            aria-hidden="true"
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-bronze-bg-soft font-display text-xl text-bronze dark:bg-bronze-bg-soft-dark dark:text-bronze-dark"
-          >
-            {getUserInitials(user.name, user.email)}
-          </span>
-          <div className="min-w-0">
-            <h2 className="truncate font-display text-xl font-medium text-fg dark:text-fg-dark">{user.name || t('header.userFallback')}</h2>
-            <p className="truncate text-sm text-fg-secondary dark:text-fg-secondary-dark">{user.email}</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <UserAvatar name={user.name} email={user.email} src={avatarUrl} size={64} />
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-xl font-medium text-fg dark:text-fg-dark">{user.name || t('header.userFallback')}</h2>
+              <p className="truncate text-sm text-fg-secondary dark:text-fg-secondary-dark">{user.email}</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5 sm:items-end">
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept={AVATAR_ACCEPTED_TYPES.join(',')}
+                aria-label={t('profilePage.avatar.inputLabel')}
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(event) => void handleAvatarSelected(event)}
+              />
+              <ButtonApp
+                label={user.avatar_updated_at ? t('profilePage.avatar.change') : t('profilePage.avatar.upload')}
+                variant="secondary"
+                size="small"
+                icon={<Camera className="h-3.5 w-3.5" aria-hidden="true" />}
+                loading={avatarBusy}
+                disabled={avatarBusy}
+                onClick={() => avatarInputRef.current?.click()}
+              />
+              {user.avatar_updated_at && (
+                <ButtonApp
+                  label={t('profilePage.avatar.remove')}
+                  variant="secondary"
+                  size="small"
+                  icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                  disabled={avatarBusy}
+                  onClick={() => void handleAvatarRemove()}
+                />
+              )}
+            </div>
+            <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('profilePage.avatar.hint')}</p>
           </div>
         </div>
 

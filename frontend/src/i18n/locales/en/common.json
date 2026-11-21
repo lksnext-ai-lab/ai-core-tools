@@ -3638,6 +3638,19 @@
     "title": "Profile",
     "subtitle": "Your account details, marketplace usage and collaborations.",
     "userNotFound": "User not found. Please log in.",
+    "avatar": {
+      "inputLabel": "Choose a profile picture",
+      "upload": "Upload picture",
+      "change": "Change picture",
+      "remove": "Remove picture",
+      "hint": "PNG, JPEG, WebP or GIF, up to 5 MB.",
+      "uploadSuccess": "Profile picture updated.",
+      "uploadFailed": "Could not update the profile picture.",
+      "removeSuccess": "Profile picture removed.",
+      "removeFailed": "Could not remove the profile picture.",
+      "tooLarge": "The picture must be 5 MB or smaller.",
+      "invalidType": "Use a PNG, JPEG, WebP or GIF picture."
+    },
     "account": {
       "userId": "User ID",
       "type": "Account type",

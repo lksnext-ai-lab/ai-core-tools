@@ -102,7 +102,9 @@ export default function MarketplaceChatPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation('common');
-  const user = useOptionalUser()?.user;
+  const userContext = useOptionalUser();
+  const user = userContext?.user;
+  const avatarUrl = userContext?.avatarUrl ?? null;
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const numericId = Number(conversationId);
 
@@ -910,7 +912,7 @@ export default function MarketplaceChatPage() {
             if (message.type === 'user') {
               return (
                 <div key={message.id} className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4">
-                  <UserAvatar name={user?.name} email={user?.email} size={38} className="mt-0.5" />
+                  <UserAvatar name={user?.name} email={user?.email} src={avatarUrl} size={38} className="mt-0.5" />
                   
                   <div className="max-w-[82%]">
                     <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">

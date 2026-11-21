@@ -36,6 +36,7 @@ from .subscription import Subscription, SubscriptionTier, BillingStatus
 from .tier_config import TierConfig
 from .usage_record import UsageRecord
 from .user_credential import UserCredential
+from .user_avatar import UserAvatar
 from .refresh_token import RefreshToken
 from .scheduled_task import ScheduledTask, ScheduledTaskRun
 from .a2a_context_link import A2AContextLink
@@ -58,6 +59,7 @@ __all__ = [
     'TierConfig',
     'UsageRecord',
     'UserCredential',
+    'UserAvatar',
     'RefreshToken',
     'SandboxService',
     'ScheduledTask', 'ScheduledTaskRun',

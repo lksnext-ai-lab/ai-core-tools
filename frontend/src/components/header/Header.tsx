@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { t } = useTranslation('common');
   const { appId } = useParams();
-  const { user } = useUser();
+  const { user, avatarUrl } = useUser();
   const { logout } = useAuth();
   const { isSaasMode, authMode, isLoading: modeLoading } = useDeploymentMode();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -135,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-expanded={isUserMenuOpen}
               aria-haspopup="true"
             >
-              <UserAvatar name={user?.name} email={user?.email} size={32} />
+              <UserAvatar name={user?.name} email={user?.email} src={avatarUrl} size={32} />
               <div className="hidden lg:block text-left">
                 <p className="text-[13px] font-medium text-fg leading-tight whitespace-nowrap dark:text-fg-dark">
                   {user?.name || t('header.userFallback')}
