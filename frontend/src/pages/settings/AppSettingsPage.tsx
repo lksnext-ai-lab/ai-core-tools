@@ -12,6 +12,9 @@ import { ButtonApp } from '../../components/ui/ButtonApp';
 import { Spinner } from '../../components/ui/Spinner';
 import { FormCheckbox, FormField, FormSelect } from '../../components/ui/FormField';
 import Title from '../../components/ui/Title';
+import AppAvatar from '../../components/ui/AppAvatar';
+import ImageUploadControl from '../../components/ui/ImageUploadControl';
+import { useAuthenticatedImage } from '../../hooks/useAuthenticatedImage';
 import { ServiceOptionStatus, serviceStatusId } from '../../components/ui/ServiceOptionStatus';
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../../utils/serviceLifecycle';
 
@@ -67,6 +70,10 @@ function AppSettingsPage() {
   const [slugSaved, setSlugSaved] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   // Saved (loaded) default sandbox: a retired service stays selectable only if it is this one (D-4).
+  const [imageVersion, setImageVersion] = useState<string | null>(null);
+  const [imageMessage, setImageMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const imageUrl = useAuthenticatedImage(appId ?? null, imageVersion, (version) =>
+    apiService.getAppImage(Number.parseInt(appId ?? ''), version));
   const [savedSandboxServiceId, setSavedSandboxServiceId] = useState<number | null>(null);
   const [sandboxServices, setSandboxServices] = useState<SandboxServiceOption[]>([]);
   const [savedEmbeddingServiceId, setSavedEmbeddingServiceId] = useState<number | null>(null);
@@ -124,6 +131,7 @@ function AppSettingsPage() {
         chat_code_interpreter_enabled: app.chat_code_interpreter_enabled ?? false,
         default_embedding_service_id: app.default_embedding_service_id ?? null,
       });
+      setImageVersion(app.image_updated_at ?? null);
       setSavedSandboxServiceId(app.default_sandbox_service_id ?? null);
       setSavedEmbeddingServiceId(app.default_embedding_service_id ?? null);
       setOriginalLangsmithKey(langsmithKey);
@@ -134,6 +142,16 @@ function AppSettingsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function uploadImage(file: File) {
+    const { image_updated_at } = await apiService.uploadAppImage(Number.parseInt(appId ?? ''), file);
+    setImageVersion(image_updated_at);
+  }
+
+  async function removeImage() {
+    await apiService.deleteAppImage(Number.parseInt(appId ?? ''));
+    setImageVersion(null);
   }
 
   async function loadSlugData() {
@@ -282,6 +300,33 @@ function AppSettingsPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div >
               <div className="grid grid-cols-1 gap-6">
+                {/* App Image */}
+                <div>
+                  <span className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">{t('appSettingsPage.image.label')}</span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <AppAvatar name={formData.name} src={imageUrl} size={64} />
+                    {canEdit && (
+                      <ImageUploadControl
+                        hasImage={Boolean(imageVersion)}
+                        inputLabel={t('appSettingsPage.image.inputLabel')}
+                        onUpload={uploadImage}
+                        onRemove={removeImage}
+                        onSuccess={(text) => setImageMessage({ type: 'success', text })}
+                        onError={(text) => setImageMessage({ type: 'error', text })}
+                      />
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('appSettingsPage.image.help')}</p>
+                  {imageMessage && (
+                    <Alert
+                      type={imageMessage.type}
+                      message={imageMessage.text}
+                      onDismiss={() => setImageMessage(null)}
+                      className="mt-2"
+                    />
+                  )}
+                </div>
+
                 {/* App Name */}
                 <FormField
                   label={t('appSettingsPage.appName')}

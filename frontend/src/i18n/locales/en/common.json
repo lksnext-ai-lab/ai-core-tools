@@ -322,6 +322,11 @@
     "loadErrorTitle": "Error Loading Settings",
     "generalSettings": "General Settings",
     "subtitle": "Configure basic app settings and integrations",
+    "image": {
+      "label": "App image",
+      "help": "Shown on the App's card in the Apps list.",
+      "inputLabel": "Choose an App image"
+    },
     "appName": "App Name",
     "appNamePlaceholder": "Enter app name",
     "appSlug": "App Slug",
@@ -3634,22 +3639,24 @@
     "signIn": "Already have an account? Sign in",
     "socialLoginComingSoon": "Social login (Google, GitHub) ? coming soon"
   },
+  "imageUpload": {
+    "upload": "Upload image",
+    "change": "Change image",
+    "remove": "Remove image",
+    "hint": "PNG, JPEG, WebP or GIF, up to 5 MB.",
+    "uploadSuccess": "Image updated.",
+    "uploadFailed": "Could not update the image.",
+    "removeSuccess": "Image removed.",
+    "removeFailed": "Could not remove the image.",
+    "tooLarge": "The image must be 5 MB or smaller.",
+    "invalidType": "Use a PNG, JPEG, WebP or GIF image."
+  },
   "profilePage": {
     "title": "Profile",
     "subtitle": "Your account details, marketplace usage and collaborations.",
     "userNotFound": "User not found. Please log in.",
     "avatar": {
-      "inputLabel": "Choose a profile picture",
-      "upload": "Upload picture",
-      "change": "Change picture",
-      "remove": "Remove picture",
-      "hint": "PNG, JPEG, WebP or GIF, up to 5 MB.",
-      "uploadSuccess": "Profile picture updated.",
-      "uploadFailed": "Could not update the profile picture.",
-      "removeSuccess": "Profile picture removed.",
-      "removeFailed": "Could not remove the profile picture.",
-      "tooLarge": "The picture must be 5 MB or smaller.",
-      "invalidType": "Use a PNG, JPEG, WebP or GIF picture."
+      "inputLabel": "Choose a profile picture"
     },
     "account": {
       "userId": "User ID",

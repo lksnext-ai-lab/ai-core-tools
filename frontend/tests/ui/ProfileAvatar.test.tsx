@@ -49,33 +49,33 @@ describe('ProfilePage picture', () => {
   });
 
   it('uploads a picture and stores its new version on the user', async () => {
-    apiMock.uploadMyAvatar.mockResolvedValue({ avatar_updated_at: '2026-11-21T10:00:00Z' } as never);
+    apiMock.uploadMyAvatar.mockResolvedValue({ image_updated_at: '2026-11-21T10:00:00Z' } as never);
     const { user } = renderWithProviders(<ProfilePage />);
     const file = new File(['png'], 'me.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(tr('profilePage.avatar.inputLabel')), file);
     await waitFor(() => expect(apiMock.uploadMyAvatar).toHaveBeenCalledWith(file));
     expect(userState.setUser).toHaveBeenCalledWith(expect.objectContaining({ avatar_updated_at: '2026-11-21T10:00:00Z' }));
-    expect(await screen.findByText(tr('profilePage.avatar.uploadSuccess'))).toBeInTheDocument();
+    expect(await screen.findByText(tr('imageUpload.uploadSuccess'))).toBeInTheDocument();
   });
 
   it('rejects a file over 5 MB without uploading it', async () => {
     const { user } = renderWithProviders(<ProfilePage />);
     const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(tr('profilePage.avatar.inputLabel')), file);
-    expect(await screen.findByText(tr('profilePage.avatar.tooLarge'))).toBeInTheDocument();
+    expect(await screen.findByText(tr('imageUpload.tooLarge'))).toBeInTheDocument();
     expect(apiMock.uploadMyAvatar).not.toHaveBeenCalled();
   });
 
   it('shows the backend reason when the server rejects the picture', async () => {
     apiMock.uploadMyAvatar.mockRejectedValue(
-      new ApiError('bad', 400, { code: 'AVATAR_INVALID_TYPE', message: 'bad' }) as never,
+      new ApiError('bad', 400, { code: 'IMAGE_INVALID_TYPE', message: 'bad' }) as never,
     );
     const { user } = renderWithProviders(<ProfilePage />);
     await user.upload(
       screen.getByLabelText(tr('profilePage.avatar.inputLabel')),
       new File(['x'], 'x.png', { type: 'image/png' }),
     );
-    expect(await screen.findByText(tr('profilePage.avatar.invalidType'))).toBeInTheDocument();
+    expect(await screen.findByText(tr('imageUpload.invalidType'))).toBeInTheDocument();
   });
 
   it('removes the picture', async () => {
@@ -83,8 +83,8 @@ describe('ProfilePage picture', () => {
     userState.avatarUrl = 'blob:avatar';
     apiMock.deleteMyAvatar.mockResolvedValue(null as never);
     const { user } = renderWithProviders(<ProfilePage />);
-    expect(screen.queryByRole('button', { name: tr('profilePage.avatar.upload') })).toBeNull();
-    await user.click(screen.getByRole('button', { name: tr('profilePage.avatar.remove') }));
+    expect(screen.queryByRole('button', { name: tr('imageUpload.upload') })).toBeNull();
+    await user.click(screen.getByRole('button', { name: tr('imageUpload.remove') }));
     await waitFor(() => expect(apiMock.deleteMyAvatar).toHaveBeenCalled());
     expect(userState.setUser).toHaveBeenCalledWith(expect.objectContaining({ avatar_updated_at: null }));
   });

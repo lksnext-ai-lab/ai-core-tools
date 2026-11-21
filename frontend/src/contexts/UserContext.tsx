@@ -5,6 +5,7 @@ import { OIDCContext } from '../auth/OIDCProvider';
 import { resolveCurrentUser } from '../auth/resolveCurrentUser';
 import { clearPlatformChatbotStorage } from '../utils/platformChatbotStorage';
 import { apiService } from '../services/api';
+import { useAuthenticatedImage } from '../hooks/useAuthenticatedImage';
 
 export interface User {
   user_id: number;
@@ -72,7 +73,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   const [resolvedIdentity, setResolvedIdentity] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<SessionError | null>(null);
   const requestIdRef = useRef(0);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const oidcContext = useContext(OIDCContext);
   const isOidc = oidcContext !== undefined;
@@ -151,38 +151,11 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   const refreshUser = useCallback(() => resolveUser(), [resolveUser]);
 
-  // Reloaded only when the picture's version changes; a failed load falls back to initials.
-  // The previous object URL is revoked once its replacement is set, so no broken image shows in between.
-  const avatarUrlRef = useRef<string | null>(null);
-  const replaceAvatarUrl = useCallback((next: string | null) => {
-    if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
-    avatarUrlRef.current = next;
-    setAvatarUrl(next);
-  }, []);
-  useEffect(() => () => {
-    if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
-  }, []);
-
-  const avatarUserId = user?.user_id ?? null;
-  const avatarVersion = user?.avatar_updated_at ?? null;
-  useEffect(() => {
-    if (avatarUserId === null || !avatarVersion) {
-      replaceAvatarUrl(null);
-      return;
-    }
-    let cancelled = false;
-    apiService.getMyAvatar()
-      .then((blob) => {
-        if (!cancelled) replaceAvatarUrl(blob ? URL.createObjectURL(blob) : null);
-      })
-      .catch((err: unknown) => {
-        console.error('Failed to load the profile picture', err);
-        if (!cancelled) replaceAvatarUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [avatarUserId, avatarVersion, replaceAvatarUrl]);
+  const avatarUrl = useAuthenticatedImage(
+    user?.user_id ?? null,
+    user?.avatar_updated_at,
+    (version) => apiService.getMyAvatar(version),
+  );
 
   const logout = useCallback(async () => {
     requestIdRef.current++;
