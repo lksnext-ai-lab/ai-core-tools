@@ -133,6 +133,13 @@ export interface App {
   silo_count: number;
   collaborator_count: number;
   onboarding_dismissed?: boolean;
+  /** Version of the App image (GET /internal/apps/{id}/image); null/absent = no image. */
+  image_updated_at?: string | null;
+}
+
+/** Answer of the picture uploads (user avatar, App image). */
+export interface ImageUpdatedResponse {
+  image_updated_at: string;
 }
 
 /** RAG retrieval-time filter applied on top of an agent's fixed silo. Mirrors RagConfigSection's RagFixedFilter shape. */
@@ -911,9 +918,13 @@ class ApiService {
     return this.request(`/internal/usage-stats/${appId}`);
   }
 
-  /** The current user's profile picture, or null when they have none. */
-  async getMyAvatar(): Promise<Blob | null> {
-    const response = await fetch(`${this.baseURL}/internal/me/avatar`, {
+  /**
+   * A stored picture (user avatar, App image), or null when there is none. Passing its `version` makes the
+   * URL immutable, so the browser's HTTP cache can answer the next load.
+   */
+  private async fetchImage(path: string, version?: string | null): Promise<Blob | null> {
+    const query = version ? `?v=${encodeURIComponent(version)}` : '';
+    const response = await fetch(`${this.baseURL}${path}${query}`, {
       credentials: 'include',
       headers: this.buildAuthHeaders('GET', true),
     });
@@ -924,14 +935,34 @@ class ApiService {
     return response.blob();
   }
 
-  async uploadMyAvatar(file: File): Promise<{ avatar_updated_at: string }> {
+  private async uploadImage(path: string, file: File): Promise<ImageUpdatedResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    return this.request('/internal/me/avatar', { method: 'PUT', body: formData });
+    return this.request(path, { method: 'PUT', body: formData });
+  }
+
+  async getMyAvatar(version?: string | null): Promise<Blob | null> {
+    return this.fetchImage('/internal/me/avatar', version);
+  }
+
+  async uploadMyAvatar(file: File): Promise<ImageUpdatedResponse> {
+    return this.uploadImage('/internal/me/avatar', file);
   }
 
   async deleteMyAvatar(): Promise<void> {
     return this.request('/internal/me/avatar', { method: 'DELETE' });
+  }
+
+  async getAppImage(appId: number, version?: string | null): Promise<Blob | null> {
+    return this.fetchImage(`/internal/apps/${appId}/image`, version);
+  }
+
+  async uploadAppImage(appId: number, file: File): Promise<ImageUpdatedResponse> {
+    return this.uploadImage(`/internal/apps/${appId}/image`, file);
+  }
+
+  async deleteAppImage(appId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/image`, { method: 'DELETE' });
   }
 
   async getPendingInvitations(): Promise<PendingInvitation[]> {

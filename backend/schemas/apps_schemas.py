@@ -33,6 +33,8 @@ class AppListItemSchema(BaseModel):
     silo_count: int = 0
     collaborator_count: int = 0
     is_frozen: bool = False
+    # Version of the App image (GET /apps/{id}/image?v=...); null = no image, show initials.
+    image_updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -60,6 +62,7 @@ class AppDetailSchema(BaseModel):
     default_sandbox_service_id: Optional[int] = None  # None = inherit system default
     default_embedding_service_id: Optional[int] = None  # None = Chat attachments are not indexed
     chat_code_interpreter_enabled: bool = False  # App Chat code interpreter opt-in
+    image_updated_at: Optional[datetime] = None  # App image version; null = no image
     # Deprecated / retired services behind the App's defaults (GET only).
     lifecycle_warnings: List[ServiceLifecycleWarningSchema] = []
 

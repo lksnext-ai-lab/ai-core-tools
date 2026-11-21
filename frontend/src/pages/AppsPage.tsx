@@ -14,7 +14,8 @@ import ButtonApp from '../components/ui/ButtonApp';
 import { LoadingState } from '../components/ui/LoadingState';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useTranslation } from 'react-i18next';
-import { getAppInitials } from '../utils/appInitials';
+import AppAvatar from '../components/ui/AppAvatar';
+import { useAuthenticatedImage } from '../hooks/useAuthenticatedImage';
 
 interface App {
   app_id: number;
@@ -31,6 +32,14 @@ interface App {
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
+  image_updated_at?: string | null;
+}
+
+/** The card's tile: the App image when it has one (cached per version), else its initials. */
+function AppCardAvatar({ app }: Readonly<{ app: App }>) {
+  const src = useAuthenticatedImage(app.app_id, app.image_updated_at, (version) =>
+    apiService.getAppImage(app.app_id, version));
+  return <AppAvatar name={app.name} src={src} size={40} />;
 }
 
 function getAppRoleTranslationKey(role: string) {
@@ -244,9 +253,7 @@ function AppsPage() {
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border-[1.5px] border-accent bg-surface font-display text-[15px] font-medium text-ink dark:border-accent-dark dark:bg-surface-dark dark:text-ink-dark">
-                    {getAppInitials(app.name)}
-                  </div>
+                  <AppCardAvatar app={app} />
                   <div className="flex min-w-0 flex-col items-start">
                     <span className="min-w-0 font-display text-[18px] leading-[1.3] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] dark:text-ink-dark">{app.name}</span>
                     <p className="mt-0.5 whitespace-pre-line text-[12px] leading-[1.45] text-fg-tertiary dark:text-fg-tertiary-dark">

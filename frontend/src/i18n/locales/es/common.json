@@ -322,6 +322,11 @@
     "loadErrorTitle": "Error al cargar la configuración",
     "generalSettings": "Configuración general",
     "subtitle": "Configura los ajustes básicos y las integraciones de la aplicación",
+    "image": {
+      "label": "Imagen de la App",
+      "help": "Se muestra en la tarjeta de la App, en la lista de Apps.",
+      "inputLabel": "Elige una imagen para la App"
+    },
     "appName": "Nombre de la aplicación",
     "appNamePlaceholder": "Introduce el nombre de la aplicación",
     "appSlug": "Slug de la aplicación",
@@ -3634,22 +3639,24 @@
     "signIn": "?Ya tienes una cuenta? Inicia sesi?n",
     "socialLoginComingSoon": "Inicio de sesi?n con redes sociales (Google, GitHub): pr?ximamente"
   },
+  "imageUpload": {
+    "upload": "Subir imagen",
+    "change": "Cambiar imagen",
+    "remove": "Quitar imagen",
+    "hint": "PNG, JPEG, WebP o GIF, hasta 5 MB.",
+    "uploadSuccess": "Imagen actualizada.",
+    "uploadFailed": "No se pudo actualizar la imagen.",
+    "removeSuccess": "Imagen eliminada.",
+    "removeFailed": "No se pudo eliminar la imagen.",
+    "tooLarge": "La imagen debe ocupar 5 MB o menos.",
+    "invalidType": "Usa una imagen PNG, JPEG, WebP o GIF."
+  },
   "profilePage": {
     "title": "Perfil",
     "subtitle": "Los datos de tu cuenta, el uso del marketplace y tus colaboraciones.",
     "userNotFound": "No se encontró el usuario. Inicia sesión.",
     "avatar": {
-      "inputLabel": "Elige una foto de perfil",
-      "upload": "Subir foto",
-      "change": "Cambiar foto",
-      "remove": "Quitar foto",
-      "hint": "PNG, JPEG, WebP o GIF, hasta 5 MB.",
-      "uploadSuccess": "Foto de perfil actualizada.",
-      "uploadFailed": "No se pudo actualizar la foto de perfil.",
-      "removeSuccess": "Foto de perfil eliminada.",
-      "removeFailed": "No se pudo eliminar la foto de perfil.",
-      "tooLarge": "La foto debe ocupar 5 MB o menos.",
-      "invalidType": "Usa una imagen PNG, JPEG, WebP o GIF."
+      "inputLabel": "Elige una foto de perfil"
     },
     "account": {
       "userId": "ID de usuario",

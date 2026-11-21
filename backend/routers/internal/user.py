@@ -4,22 +4,24 @@ User endpoints for getting current user information.
 from datetime import datetime
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends, Query, UploadFile, File, Response
-from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 from db.database import get_db
 from models.user import User
 from services.user_service import UserService
-from services.user_avatar_service import (
-    MAX_UPLOAD_BYTES,
-    AvatarValidationError,
-    UserAvatarService,
-    normalize_avatar_image,
-)
+from services.stored_image_service import StoredImageService
 from utils.config import is_omniadmin
 from utils.logger import get_logger
 from .auth_utils import get_current_user_oauth
+from .stored_image_endpoints import (
+    IMAGE_GET_RESPONSES,
+    IMAGE_UPLOAD_DESCRIPTION,
+    ImageUpdatedResponse,
+    delete_image,
+    image_response,
+    store_uploaded_image,
+)
 
 logger = get_logger(__name__)
 
@@ -35,10 +37,6 @@ class CurrentUserResponse(BaseModel):
     platform_role: str
     # Version of the profile picture (GET /me/avatar); null = no picture, show initials.
     avatar_updated_at: Optional[datetime] = None
-
-
-class AvatarUpdatedResponse(BaseModel):
-    avatar_updated_at: datetime
 
 
 def _get_db_user(auth_context: AuthContext, db: Session) -> User:
@@ -87,36 +85,31 @@ async def get_current_user(
         name=user.name or "",
         is_admin=is_omniadmin(user.email),
         platform_role=user.platform_role or 'editor',
-        avatar_updated_at=UserAvatarService(db).get_updated_at(user.user_id),
+        avatar_updated_at=StoredImageService.user_avatars(db).get_updated_at(user.user_id),
     )
 
 
 @router.get(
     "/me/avatar",
     summary="Get my profile picture",
+    description="Pass `v` (the `avatar_updated_at` of /me) to get a response the browser may cache.",
     response_class=Response,
-    responses={200: {"content": {"image/webp": {}}}, 404: {"description": "No profile picture"}},
+    responses=IMAGE_GET_RESPONSES,
 )
 async def get_my_avatar(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
+    v: Annotated[Optional[str], Query(max_length=64)] = None,
 ):
     user = _get_db_user(auth_context, db)
-    avatar = UserAvatarService(db).get(user.user_id)
-    if avatar is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No profile picture")
-    return Response(
-        content=avatar.content,
-        media_type=avatar.content_type,
-        headers={"Cache-Control": "private, no-cache", "X-Content-Type-Options": "nosniff"},
-    )
+    return image_response(StoredImageService.user_avatars(db), user.user_id, v)
 
 
 @router.put(
     "/me/avatar",
-    response_model=AvatarUpdatedResponse,
+    response_model=ImageUpdatedResponse,
     summary="Upload my profile picture",
-    description="PNG, JPEG, WebP or GIF up to 5 MB. Stored center-cropped as a 256x256 WebP.",
+    description=IMAGE_UPLOAD_DESCRIPTION,
 )
 async def upload_my_avatar(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
@@ -124,15 +117,8 @@ async def upload_my_avatar(
     file: Annotated[UploadFile, File(...)],
 ):
     user = _get_db_user(auth_context, db)
-    data = await file.read(MAX_UPLOAD_BYTES + 1)
-    try:
-        normalized = await run_in_threadpool(normalize_avatar_image, data)
-    except AvatarValidationError as exc:
-        code = (status.HTTP_413_REQUEST_ENTITY_TOO_LARGE if exc.code == "AVATAR_TOO_LARGE"
-                else status.HTTP_400_BAD_REQUEST)
-        raise HTTPException(status_code=code, detail={"code": exc.code, "message": exc.message}) from exc
-    avatar = UserAvatarService(db).save(user.user_id, normalized)
-    return AvatarUpdatedResponse(avatar_updated_at=avatar.updated_at)
+    updated_at = await store_uploaded_image(StoredImageService.user_avatars(db), user.user_id, file)
+    return ImageUpdatedResponse(image_updated_at=updated_at)
 
 
 @router.delete(
@@ -145,8 +131,7 @@ async def delete_my_avatar(
     db: Annotated[Session, Depends(get_db)],
 ):
     user = _get_db_user(auth_context, db)
-    UserAvatarService(db).delete(user.user_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return delete_image(StoredImageService.user_avatars(db), user.user_id)
 
 
 class UserSearchResultItem(BaseModel):

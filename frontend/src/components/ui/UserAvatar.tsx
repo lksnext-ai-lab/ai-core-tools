@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useImageFallback } from '../../hooks/useImageFallback';
 import { getUserInitials } from '../../utils/userInitials';
 
 export interface UserAvatarProps {
@@ -13,9 +13,7 @@ export interface UserAvatarProps {
 
 /** Round avatar: the profile picture, else the person's initials. Decorative: callers label the speaker. */
 export function UserAvatar({ name, email, src, size = 32, className = '' }: UserAvatarProps) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  useEffect(() => setFailedSrc(null), [src]);
-  const showImage = Boolean(src) && failedSrc !== src;
+  const { showImage, onError } = useImageFallback(src);
 
   return (
     <span
@@ -28,7 +26,7 @@ export function UserAvatar({ name, email, src, size = 32, className = '' }: User
           src={src ?? undefined}
           alt=""
           className="h-full w-full object-cover"
-          onError={() => setFailedSrc(src ?? null)}
+          onError={onError}
         />
       ) : (
         <span

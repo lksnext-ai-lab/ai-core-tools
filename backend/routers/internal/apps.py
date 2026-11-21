@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from db.database import get_db
 
 from services.app_service import AppService
+from services.stored_image_service import StoredImageService
 from services.service_lifecycle_service import ServiceLifecycleService
 from services.app_collaboration_service import AppCollaborationService
 
@@ -29,6 +30,7 @@ from routers.controls.role_authorization import require_min_role, AppRole
 from utils.secret_utils import mask_api_key, is_masked_key, normalize_credential_map
 
 from .agents import agents_router
+from .app_images import app_images_router
 from .silos import silos_router
 from .ai_services import ai_services_router
 from .api_keys import api_keys_router
@@ -486,6 +488,7 @@ async def cancel_app_ownership_offer(
 
 
 apps_router.include_router(agents_router, prefix="/{app_id}/agents", tags=["Agents"])
+apps_router.include_router(app_images_router, prefix="/{app_id}/image", tags=["Apps"])
 apps_router.include_router(silos_router, prefix="/{app_id}/silos", tags=["Silos"])
 apps_router.include_router(ai_services_router, prefix="/{app_id}/ai-services", tags=["AI Services"])
 apps_router.include_router(api_keys_router, prefix="/{app_id}/api-keys", tags=["API Keys"])
@@ -588,6 +591,7 @@ async def list_apps(
     user_id = int(auth_context.identity.id)
     app_service, collaboration_service = get_services(db)
     apps = app_service.get_apps(user_id)
+    image_versions = StoredImageService.app_images(db).get_versions(app.app_id for app in apps)
     app_list = []
     for app in apps:
         role = collaboration_service.get_user_app_role(user_id, app.app_id) or "owner"
@@ -609,6 +613,7 @@ async def list_apps(
             agent_rate_limit=app.agent_rate_limit or DEFAULT_AGENT_RATE_LIMIT,
             max_file_size_mb=app.max_file_size_mb or DEFAULT_MAX_FILE_SIZE_MB,
             agent_cors_origins=app.agent_cors_origins,
+            image_updated_at=image_versions.get(app.app_id),
             **counts
         )
         app_list.append(app_item)
@@ -665,6 +670,7 @@ async def get_app(
         default_sandbox_service_id=app.default_sandbox_service_id,
         default_embedding_service_id=app.default_embedding_service_id,
         chat_code_interpreter_enabled=bool(app.chat_code_interpreter_enabled),
+        image_updated_at=StoredImageService.app_images(db).get_updated_at(app.app_id),
         lifecycle_warnings=ServiceLifecycleService.warnings_for_app(
             ServiceLifecycleService.build_context(db, app_id)
         ) if (app.default_embedding_service_id is not None or app.default_sandbox_service_id is not None) else [],
@@ -739,6 +745,7 @@ async def create_app(
         default_sandbox_service_id=app.default_sandbox_service_id,
         default_embedding_service_id=app.default_embedding_service_id,
         chat_code_interpreter_enabled=bool(app.chat_code_interpreter_enabled),
+        image_updated_at=StoredImageService.app_images(db).get_updated_at(app.app_id),
     )
 
 
@@ -831,6 +838,7 @@ async def update_app(
         default_sandbox_service_id=updated_app.default_sandbox_service_id,
         default_embedding_service_id=updated_app.default_embedding_service_id,
         chat_code_interpreter_enabled=bool(updated_app.chat_code_interpreter_enabled),
+        image_updated_at=StoredImageService.app_images(db).get_updated_at(updated_app.app_id),
     )
 
 

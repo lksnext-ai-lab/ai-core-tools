@@ -322,6 +322,11 @@
     "loadErrorTitle": "Errorea ezarpenak kargatzean",
     "generalSettings": "Ezarpen orokorrak",
     "subtitle": "Konfiguratu aplikazioaren oinarrizko ezarpenak eta integrazioak",
+    "image": {
+      "label": "Apparen irudia",
+      "help": "Appen zerrendan, Apparen txartelean erakusten da.",
+      "inputLabel": "Aukeratu Apparen irudi bat"
+    },
     "appName": "Aplikazioaren izena",
     "appNamePlaceholder": "Sartu aplikazioaren izena",
     "appSlug": "Aplikazioaren slug-a",
@@ -3658,22 +3663,24 @@
     "signIn": "Baduzu konturik? Hasi saioa",
     "socialLoginComingSoon": "Sare sozialen bidezko saio-hasiera (Google, GitHub) ? laster"
   },
+  "imageUpload": {
+    "upload": "Igo irudia",
+    "change": "Aldatu irudia",
+    "remove": "Kendu irudia",
+    "hint": "PNG, JPEG, WebP edo GIF, gehienez 5 MB.",
+    "uploadSuccess": "Irudia eguneratu da.",
+    "uploadFailed": "Ezin izan da irudia eguneratu.",
+    "removeSuccess": "Irudia kendu da.",
+    "removeFailed": "Ezin izan da irudia kendu.",
+    "tooLarge": "Irudiak gehienez 5 MB izan ditzake.",
+    "invalidType": "Erabili PNG, JPEG, WebP edo GIF irudi bat."
+  },
   "profilePage": {
     "title": "Profila",
     "subtitle": "Zure kontuaren xehetasunak, marketplace-aren erabilera eta lankidetzak.",
     "userNotFound": "Ez da erabiltzailea aurkitu. Hasi saioa.",
     "avatar": {
-      "inputLabel": "Aukeratu profileko argazki bat",
-      "upload": "Igo argazkia",
-      "change": "Aldatu argazkia",
-      "remove": "Kendu argazkia",
-      "hint": "PNG, JPEG, WebP edo GIF, gehienez 5 MB.",
-      "uploadSuccess": "Profileko argazkia eguneratu da.",
-      "uploadFailed": "Ezin izan da profileko argazkia eguneratu.",
-      "removeSuccess": "Profileko argazkia kendu da.",
-      "removeFailed": "Ezin izan da profileko argazkia kendu.",
-      "tooLarge": "Argazkiak gehienez 5 MB izan ditzake.",
-      "invalidType": "Erabili PNG, JPEG, WebP edo GIF irudi bat."
+      "inputLabel": "Aukeratu profileko argazki bat"
     },
     "account": {
       "userId": "Erabiltzaile IDa",
