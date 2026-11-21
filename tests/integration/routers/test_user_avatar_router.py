@@ -31,7 +31,7 @@ def test_me_has_no_avatar_by_default(client, auth_headers):
 def test_upload_then_get_returns_the_normalised_picture(client, auth_headers):
     response = _upload(client, auth_headers, _png())
     assert response.status_code == 200, response.text
-    updated_at = response.json()["avatar_updated_at"]
+    updated_at = response.json()["image_updated_at"]
     assert updated_at
 
     me = client.get("/internal/me", headers=auth_headers).json()
@@ -46,8 +46,8 @@ def test_upload_then_get_returns_the_normalised_picture(client, auth_headers):
 
 
 def test_upload_replaces_the_previous_picture(client, auth_headers, db, fake_user):
-    first = _upload(client, auth_headers, _png()).json()["avatar_updated_at"]
-    second = _upload(client, auth_headers, _png((50, 50))).json()["avatar_updated_at"]
+    first = _upload(client, auth_headers, _png()).json()["image_updated_at"]
+    second = _upload(client, auth_headers, _png((50, 50))).json()["image_updated_at"]
     assert second >= first
     assert db.query(UserAvatar).filter(UserAvatar.user_id == fake_user.user_id).count() == 1
 
@@ -56,14 +56,14 @@ def test_invalid_upload_is_rejected_and_keeps_the_current_picture(client, auth_h
     _upload(client, auth_headers, _png())
     response = _upload(client, auth_headers, b"not an image", filename="x.png")
     assert response.status_code == 400
-    assert response.json()["detail"]["code"] == "AVATAR_INVALID_IMAGE"
+    assert response.json()["detail"]["code"] == "IMAGE_INVALID_IMAGE"
     assert client.get("/internal/me/avatar", headers=auth_headers).status_code == 200
 
 
 def test_too_large_upload_gets_413(client, auth_headers):
     response = _upload(client, auth_headers, b"\x00" * (5 * 1024 * 1024 + 10))
     assert response.status_code == 413
-    assert response.json()["detail"]["code"] == "AVATAR_TOO_LARGE"
+    assert response.json()["detail"]["code"] == "IMAGE_TOO_LARGE"
 
 
 def test_delete_removes_the_picture_and_is_idempotent(client, auth_headers):
