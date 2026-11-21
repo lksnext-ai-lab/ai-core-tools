@@ -3638,6 +3638,19 @@
     "title": "Perfil",
     "subtitle": "Los datos de tu cuenta, el uso del marketplace y tus colaboraciones.",
     "userNotFound": "No se encontró el usuario. Inicia sesión.",
+    "avatar": {
+      "inputLabel": "Elige una foto de perfil",
+      "upload": "Subir foto",
+      "change": "Cambiar foto",
+      "remove": "Quitar foto",
+      "hint": "PNG, JPEG, WebP o GIF, hasta 5 MB.",
+      "uploadSuccess": "Foto de perfil actualizada.",
+      "uploadFailed": "No se pudo actualizar la foto de perfil.",
+      "removeSuccess": "Foto de perfil eliminada.",
+      "removeFailed": "No se pudo eliminar la foto de perfil.",
+      "tooLarge": "La foto debe ocupar 5 MB o menos.",
+      "invalidType": "Usa una imagen PNG, JPEG, WebP o GIF."
+    },
     "account": {
       "userId": "ID de usuario",
       "type": "Tipo de cuenta",

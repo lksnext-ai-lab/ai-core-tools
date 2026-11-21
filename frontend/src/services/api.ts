@@ -911,6 +911,29 @@ class ApiService {
     return this.request(`/internal/usage-stats/${appId}`);
   }
 
+  /** The current user's profile picture, or null when they have none. */
+  async getMyAvatar(): Promise<Blob | null> {
+    const response = await fetch(`${this.baseURL}/internal/me/avatar`, {
+      credentials: 'include',
+      headers: this.buildAuthHeaders('GET', true),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.blob();
+  }
+
+  async uploadMyAvatar(file: File): Promise<{ avatar_updated_at: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request('/internal/me/avatar', { method: 'PUT', body: formData });
+  }
+
+  async deleteMyAvatar(): Promise<void> {
+    return this.request('/internal/me/avatar', { method: 'DELETE' });
+  }
+
   async getPendingInvitations(): Promise<PendingInvitation[]> {
     return this.request('/internal/auth/pending-invitations');
   }

@@ -9,6 +9,8 @@ export interface CurrentUserPayload {
   is_admin?: boolean;
   is_omniadmin?: boolean;
   platform_role?: 'viewer' | 'editor' | 'admin';
+  /** Version of the profile picture; null/absent = no picture. */
+  avatar_updated_at?: string | null;
 }
 
 /** `unauthorized`: the backend rejected the credentials. `unavailable`: network or server failure. */

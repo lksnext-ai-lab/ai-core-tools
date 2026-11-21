@@ -116,7 +116,9 @@ function ChatInterface({
   wide = false,
 }: Readonly<ChatInterfaceProps>) {
   const { t, i18n } = useTranslation('common');
-  const user = useOptionalUser()?.user;
+  const userContext = useOptionalUser();
+  const user = userContext?.user;
+  const avatarUrl = userContext?.avatarUrl ?? null;
   const confirm = useConfirm();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -1175,7 +1177,7 @@ function ChatInterface({
                         className={`flex justify-end ${messageMaxWidth} mx-auto animate-slide-in-right gap-4`}
                       >
                         <div aria-hidden="true">
-                          <UserAvatar name={user?.name} email={user?.email} size={38} className="mt-0.5" />
+                          <UserAvatar name={user?.name} email={user?.email} src={avatarUrl} size={38} className="mt-0.5" />
                         </div>
                         <div className={`${bubbleMaxWidth} min-w-0`}>
                           <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
