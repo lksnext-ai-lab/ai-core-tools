@@ -83,3 +83,37 @@ def test_huge_dimensions_are_rejected_without_decoding():
     with pytest.raises(AvatarValidationError) as exc:
         normalize_avatar_image(data)
     assert exc.value.code == "AVATAR_INVALID_DIMENSIONS"
+
+
+class TestUserAvatarService:
+    def _service(self):
+        from unittest.mock import MagicMock
+
+        from services.user_avatar_service import UserAvatarService
+
+        db = MagicMock()
+        service = UserAvatarService(db)
+        service.repository = MagicMock()
+        return service, db
+
+    def test_save_stores_webp_and_commits(self):
+        from services.user_avatar_service import AVATAR_CONTENT_TYPE
+
+        service, db = self._service()
+        service.repository.upsert.return_value = "avatar"
+        assert service.save(3, b"img") == "avatar"
+        service.repository.upsert.assert_called_once_with(3, b"img", AVATAR_CONTENT_TYPE)
+        db.commit.assert_called_once()
+
+    def test_delete_commits_and_reports_whether_a_row_existed(self):
+        service, db = self._service()
+        service.repository.delete.return_value = False
+        assert service.delete(3) is False
+        db.commit.assert_called_once()
+
+    def test_reads_are_delegated(self):
+        service, _ = self._service()
+        service.repository.get.return_value = "avatar"
+        service.repository.get_updated_at.return_value = "version"
+        assert service.get(3) == "avatar"
+        assert service.get_updated_at(3) == "version"
