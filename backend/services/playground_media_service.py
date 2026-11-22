@@ -562,7 +562,9 @@ class PlaygroundMediaService:
             return False
         ext = os.path.splitext(filename)[1].lower()
         try:
-            docs = SiloService.extract_documents_from_file(abs_path, ext, base_metadata)
+            docs = SiloService.extract_documents_from_file(
+                abs_path, ext, base_metadata, SiloService.indexing_config(silo_id, db)
+            )
             if not docs:
                 return False
             SiloService.index_multiple_content(
