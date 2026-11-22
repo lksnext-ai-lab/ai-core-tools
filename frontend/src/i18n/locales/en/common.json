@@ -3328,6 +3328,41 @@
       "noVideoAnalysis": "None (no visual analysis)",
       "videoAnalysisHelp": "Optional. Adds a description of what is seen in the video to each transcribed chunk."
     },
+    "indexing": {
+      "title": "Indexing",
+      "chunkSize": "Chunk size (characters)",
+      "chunkSizeHelp": "Maximum length of each indexed fragment, between {{min}} and {{max}}. Larger chunks give more context per result; stay around 2000 or below with embedding models limited to 512 tokens.",
+      "chunkOverlap": "Chunk overlap (characters)",
+      "chunkOverlapHelp": "Text repeated between consecutive chunks so an idea is not cut in half. At most half of the chunk size.",
+      "pdfLoader": "PDF loader",
+      "pdfLoaders": {
+        "pymupdf": {
+          "label": "Fast (PyMuPDF)",
+          "description": "Plain text of each page, about 0.01 s per page. Chunks do not cross pages and carry no section information."
+        },
+        "pymupdf4llm": {
+          "label": "Structured (pymupdf4llm)",
+          "description": "Keeps headings, tables and the reading order of multi-column pages, and labels each chunk with its section. About 0.5 s per page."
+        }
+      },
+      "loaderOptions": {
+        "section_prefix": {
+          "label": "Add the section to each chunk",
+          "help": "Starts every chunk with its section path, for example [1 Plan > 1.2 Phases], so search also takes the heading into account."
+        },
+        "remove_headers_footers": {
+          "label": "Remove page headers and footers",
+          "help": "Drops the text repeated at the top and bottom of every page."
+        }
+      },
+      "appliesToNewContentRepository": "Changes apply to documents uploaded or reindexed from now on. Documents already indexed keep their chunks until you reindex them.",
+      "appliesToNewContentSilo": "Changes apply to content indexed from now on. Content already indexed keeps its chunks until it is indexed again.",
+      "validation": {
+        "chunkSizeRange": "Enter a whole number between {{min}} and {{max}}.",
+        "chunkOverlapRange": "Enter a whole number between 0 and {{max}}.",
+        "invalid": "Review the indexing settings."
+      }
+    },
     "about": {
       "title": "About custom silos",
       "description": "Custom silos are vector storage containers that enable semantic search and retrieval. They store document embeddings and allow AI agents to find relevant information quickly.",
