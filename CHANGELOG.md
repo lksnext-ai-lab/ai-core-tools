@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Library / client-project mode**: the frontend is no longer packaged or published as the `@lksnext/ai-core-tools-base` npm library. Removed `deploy/` (client-project scripts and template), the `build:lib` / `publish:npm` scripts and the library Vite/TypeScript build, `src/index.ts`, and the client-setup and plugin-development guides. The last published npm version (0.3.0) is left untouched. The frontend app shell `ExtensibleBaseApp` is now `AppRoot` and `LibraryConfig` is `AppConfig`; the extra-routes and navigation-merging extension points (`extraRoutes`, `NavigationMerger`) were removed.
 
+### Fixed
+
+- **Silo playground "neighbouring chunks"** always came back empty: the id from the query string was compared as a string against the integer `resource_id`/`media_id` stored on each chunk. A non-integer `source_id` now returns 400. Moving a file or media between folders in a Qdrant silo now also updates its chunks' folder metadata (same mismatch; PGVector was not affected).
+
 ## [0.5.1] - 2026-11-18
 
 ### Breaking Changes
