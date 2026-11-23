@@ -984,7 +984,7 @@ class SiloService:
 
             updated = _get_vector_store(silo).update_documents_metadata(
                 collection_name,
-                filter_metadata={"resource_id": {"$eq": str(resource.resource_id)}},
+                filter_metadata={"resource_id": {"$eq": resource.resource_id}},
                 metadata_updates=base_metadata,
                 replace=True,
             )
@@ -1042,7 +1042,7 @@ class SiloService:
             updated = _get_vector_store(silo).update_documents_metadata(
                 collection_name,
                 filter_metadata={
-                    "media_id": {"$eq": str(media.media_id)},
+                    "media_id": {"$eq": media.media_id},
                     "content_type": {"$eq": "media_chunk"},
                 },
                 metadata_updates=metadata_updates,
@@ -2104,23 +2104,29 @@ class SiloService:
         Return all chunks from the same source document, ordered by position.
 
         source_type: "media" or "resource"
-        source_id:   str value of media_id or resource_id (as stored in metadata)
+        source_id:   media_id or resource_id (an integer, possibly as a string)
 
-        Raises ValueError for unsupported source_type.
+        Raises ValueError for unsupported source_type or a non-integer source_id.
 
         Known limitation: this calls ``find_docs_in_collection("")``, which embeds a blank query,
         so it is blocked (``ServiceRetiredError``) for silos whose embedding service is retired.
         """
         if source_type not in ("media", "resource"):
             raise ValueError(f"Unsupported source_type '{source_type}'. Must be 'media' or 'resource'.")
+        # Chunks store media_id/resource_id as integers; the backends compare typed
+        # JSON values, so a string id ("61") would never match.
+        try:
+            numeric_id = int(source_id)
+        except (TypeError, ValueError):
+            raise ValueError(f"source_id must be an integer, got '{source_id}'.") from None
 
         if source_type == "media":
             filter_metadata = {
-                "media_id": {"$eq": source_id},
+                "media_id": {"$eq": numeric_id},
                 "content_type": {"$eq": "media_chunk"},
             }
         else:
-            filter_metadata = {"resource_id": {"$eq": source_id}}
+            filter_metadata = {"resource_id": {"$eq": numeric_id}}
 
         docs = SiloService.find_docs_in_collection(
             silo_id,
