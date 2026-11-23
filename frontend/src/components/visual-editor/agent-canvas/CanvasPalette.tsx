@@ -2,7 +2,7 @@ import { useId, useState, type CSSProperties, type DragEvent } from 'react';
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PIECE_VISUALS } from '../nodeKindConfig';
-import { BackgroundImage } from '../../ui/BackgroundImage';
+import { KindIcon } from './KindIcon';
 import { ServiceOptionStatus, serviceStatusId } from '../../ui/ServiceOptionStatus';
 import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
 import { portsFor, type AgentType, type PieceKind } from './agentPorts';
@@ -121,7 +121,8 @@ function PaletteItem({ piece, canEdit, selected, onSelect, onDraggingChange }: P
         aria-describedby={describedBy}
         aria-pressed={onSelect ? selected : undefined}
         title={isAgentPiece && !piece.isTool ? t('agentCanvas.palette.connectTurnsTool') : undefined}
-        className={`group flex items-start gap-2 rounded-md border px-2 py-1.5 transition-colors ${
+        style={{ borderLeftColor: visual.accentHex }}
+        className={`group flex items-start gap-2 rounded-md border border-l-[3px] px-2 py-1.5 transition-colors ${
           selected
             ? 'border-2 border-bg-soft bg-surface-hover dark:border-bronze-border-dark dark:bg-btCard-hover'
             : 'border-line bg-surface hover:bg-surface-hover dark:border-btCard-border-dark dark:bg-surface-dark dark:hover:bg-surface-hover-dark'
@@ -129,7 +130,7 @@ function PaletteItem({ piece, canEdit, selected, onSelect, onDraggingChange }: P
           draggable ? 'cursor-grab active:cursor-grabbing' : onSelect ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
         }`}
       >
-        <BackgroundImage icon={Icon} size={28} iconSize={14} />
+        <KindIcon icon={Icon} color={visual.accentHex} size={28} iconSize={14} />
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-medium text-fg dark:text-fg-dark">
             <span className="min-w-0 break-words" title={piece.name}>

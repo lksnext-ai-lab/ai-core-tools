@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FormCheckbox, FormField, FormTextArea } from '../../ui/FormField';
-import { BackgroundImage } from '../../ui/BackgroundImage';
+import { KindIcon } from './KindIcon';
 import { Badge } from '../../ui/Badge';
 import { buttonAppSizeClasses, buttonAppVariantClasses } from '../../ui/ButtonApp';
 import RagConfigSection, { type RagConfigValue, type RagFixedFilter } from '../../forms/RagConfigSection';
@@ -619,7 +619,7 @@ function PieceDetails({ appId, piece, connection, canEditShared, onEditService, 
   return (
     <div className="space-y-4">
       <div className="group flex items-center gap-3">
-        <BackgroundImage icon={visual.icon} size={34} iconSize={17} />
+        <KindIcon icon={visual.icon} color={visual.accentHex} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p className="text-xs font-medium text-fg-tertiary dark:text-fg-tertiary-dark">{t(`agentCanvas.kinds.${captionKey}`)}</p>

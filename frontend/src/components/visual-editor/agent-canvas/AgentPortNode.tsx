@@ -1,6 +1,6 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
-import BackgroundImage from '../../ui/BackgroundImage';
+import { KindIcon } from './KindIcon';
 import { NODE_KIND_VISUALS, PIECE_VISUALS } from '../nodeKindConfig';
 import type { PieceKind, PortDef } from './agentPorts';
 import type { CanvasPiece } from './useAgentCanvasData';
@@ -129,7 +129,7 @@ export function AgentPortNode({ data, isConnectable }: NodeProps<CanvasFlowNode>
       className={`relative min-w-[300px] rounded-md border-2 border-ink bg-surface px-3 py-2.5 dark:border-fg-dark dark:bg-surface-dark`}
     >
       <div className="flex items-center gap-3">
-        <BackgroundImage icon={visual.icon} size={40} iconSize={20} variant="marron" />
+        <KindIcon icon={visual.icon} color={visual.accentHex} size={40} iconSize={20} />
         <div className="min-w-0 flex-1">
           {/* Keep the name clear of the absolute Tool badge on the top-right corner. */}
           <p
