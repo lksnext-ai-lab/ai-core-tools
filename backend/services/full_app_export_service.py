@@ -215,7 +215,7 @@ class FullAppExportService(BaseExportService):
         Returns:
             List of output parser export schemas
         """
-        parsers = self.app_repo.get_output_parsers_by_app_id(app_id)
+        parsers = self.app_repo.get_output_parsers_by_app_id(app_id, visible_only=True)
         logger.info(f"Found {len(parsers)} output parsers for app {app_id}")
         exported = []
         for parser in parsers:
@@ -267,7 +267,7 @@ class FullAppExportService(BaseExportService):
         Returns:
             List of silo export schemas
         """
-        silos = self.app_repo.get_silos_by_app_id(app_id)
+        silos = self.app_repo.get_silos_by_app_id(app_id, visible_only=True)
         logger.info(f"Found {len(silos)} silos for app {app_id}")
         exported = []
         for silo in silos:
@@ -294,7 +294,7 @@ class FullAppExportService(BaseExportService):
             List of repository export schemas
         """
         repositories = self.app_repo.get_repositories_by_app_id(
-            app_id
+            app_id, visible_only=True
         )
         logger.info(
             f"Found {len(repositories)} repositories "
@@ -367,7 +367,8 @@ class FullAppExportService(BaseExportService):
         Returns:
             List of agent export schemas
         """
-        agents = self.app_repo.get_agents_by_app_id(app_id)
+        # The hidden internal chat agent is never part of an export (FR-13.4).
+        agents = [a for a in self.app_repo.get_agents_by_app_id(app_id) if not a.is_internal_chat]
         logger.info(f"Found {len(agents)} agents for app {app_id}")
         
         # Filter out agents without AI service (data inconsistency); System One agents have none by design

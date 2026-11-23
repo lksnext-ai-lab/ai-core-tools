@@ -4,6 +4,12 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
+import { Title } from '../../components/ui/Title';
+import { useTranslation } from 'react-i18next';
+import { Users } from 'lucide-react';
+import Table, { type TableColumn } from '../../components/ui/Table';
+import BackgroundImage from '../../components/ui/BackgroundImage';
+import { FormSelect } from '../../components/ui/FormField';
 
 interface SaasUser {
   readonly user_id: number;
@@ -20,6 +26,7 @@ interface SaasUser {
 const TIERS = ['free', 'starter', 'pro'] as const;
 
 const SaasUserListPage: React.FC = () => {
+  const { t } = useTranslation('common');
   const mutate = useApiMutation();
   const [users, setUsers] = useState<SaasUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,11 +40,11 @@ const SaasUserListPage: React.FC = () => {
       const data = (await apiService.getAdminSaasUsers()) as SaasUser[];
       setUsers(data);
     } catch (err) {
-      setError(errorMessage(err, 'Failed to load users'));
+      setError(errorMessage(err, t('saasUserListPage.loadFailed')));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void fetchUsers();
@@ -48,9 +55,9 @@ const SaasUserListPage: React.FC = () => {
     const result = await mutate(
       () => apiService.overrideUserTier(userId, tier),
       {
-        loading: 'Updating tier…',
-        success: 'Tier updated',
-        error: (err) => errorMessage(err, 'Failed to override tier'),
+        loading: t('saasUserListPage.notifications.updatingTier'),
+        success: t('saasUserListPage.notifications.tierUpdated'),
+        error: (err) => errorMessage(err, t('saasUserListPage.notifications.overrideFailed')),
       },
     );
     setOverridingUserId(null);
@@ -58,83 +65,80 @@ const SaasUserListPage: React.FC = () => {
     await fetchUsers();
   };
 
-  if (isLoading) return <LoadingState message="Loading users..." />;
+  const tierLabel = (tier: string | null) => {
+    const value = tier || 'free';
+    return t(`saasUserListPage.tiers.${value}`, { defaultValue: value });
+  };
+  const billingStatusLabel = (status: string | null) => {
+    const value = status || 'none';
+    return t(`saasUserListPage.billingStatuses.${value}`, { defaultValue: value });
+  };
+
+  const columns: TableColumn<SaasUser>[] = [
+    {
+      header: t('saasUserListPage.columns.email'),
+      accessor: 'email',
+      className: 'px-6 py-4 whitespace-nowrap text-sm font-medium text-fg dark:text-fg-dark',
+    },
+    {
+      header: t('saasUserListPage.columns.tier'),
+      render: (user) => tierLabel(user.tier),
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+    },
+    {
+      header: t('saasUserListPage.columns.billing'),
+      render: (user) => billingStatusLabel(user.billing_status),
+      className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+    },
+    {
+      header: t('saasUserListPage.columns.llmUsage'),
+      render: (user) => `${user.call_count} / ${user.call_limit}`,
+      headerClassName: 'text-right',
+      className: 'px-6 py-4 whitespace-nowrap text-right text-xs text-fg-secondary dark:text-fg-secondary-dark',
+    },
+    {
+      header: t('saasUserListPage.columns.apps'),
+      accessor: 'owned_apps_count',
+      headerClassName: 'text-right',
+      className: 'px-6 py-4 whitespace-nowrap text-right text-xs text-fg-secondary dark:text-fg-secondary-dark',
+    },
+    {
+      header: t('saasUserListPage.columns.overrideTier'),
+      sticky: 'right',
+      className: 'px-4 py-4 min-w-40',
+      render: (user) => (
+        <FormSelect
+          id={`saas-user-tier-${user.user_id}`}
+          label={t('saasUserListPage.actions.overrideTierForUser', { email: user.email })}
+          labelClassName="sr-only"
+          value={user.tier || 'free'}
+          disabled={overridingUserId === user.user_id}
+          onChange={(event) => {
+            void handleTierOverride(user.user_id, event.target.value);
+          }}
+          options={TIERS.map((tier) => ({ value: tier, label: tierLabel(tier) }))}
+        />
+      ),
+    },
+  ];
+
+  if (isLoading) return <LoadingState message={t('saasUserListPage.loading')} />;
   if (error) return <ErrorState error={error} onRetry={fetchUsers} />;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">SaaS Users</h1>
-        <p className="text-gray-600">Manage tiers and quotas for SaaS-mode users</p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Tier
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Billing
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                LLM usage
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Apps
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Override tier
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
-                  No SaaS users found.
-                </td>
-              </tr>
-            ) : (
-              users.map((user) => (
-                <tr key={user.user_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.email}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm capitalize text-gray-700">
-                    {user.tier || 'free'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm capitalize text-gray-700">
-                    {user.billing_status || 'none'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700">
-                    {user.call_count} / {user.call_limit}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700">
-                    {user.owned_apps_count}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                      defaultValue={user.tier || 'free'}
-                      disabled={overridingUserId === user.user_id}
-                      onChange={(e) => handleTierOverride(user.user_id, e.target.value)}
-                    >
-                      {TIERS.map((tier) => (
-                        <option key={tier} value={tier}>
-                          {tier}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Title
+        titulo={t('saasUserListPage.title')}
+        subtitulo={t('saasUserListPage.subtitle')}
+      />
+      <Table
+        columns={columns}
+        data={users}
+        keyExtractor={(user) => user.user_id}
+        stickyEdgeColumns
+        emptyIcon={<BackgroundImage icon={Users} size={64} iconSize={32} />}
+        emptyMessage={t('saasUserListPage.empty')}
+      />
     </div>
   );
 };

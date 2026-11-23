@@ -45,6 +45,10 @@ Responses appear word by word as the LLM generates them (streaming). You can sto
 If the agent is configured with memory, it remembers previous messages in the conversation. To start a fresh session:
 - Click **New Conversation** to create a new thread. The old conversation is preserved in history.
 
+## The App Chat
+
+Besides agent Playgrounds, every App has a **Chat** entry in its menu where any member (including Viewers) picks the model, knowledge source, skills and MCP tools per message, without an agent. See [Chat in an App](app-chat.md).
+
 ## The Platform Chatbot
 
 The floating chat button in the bottom-right corner of the platform (if enabled by your administrator) is the **Platform Chatbot** — a special agent available on every page. It works just like the Playground but is always accessible. Your conversation with it persists across page navigations. Click **New conversation** in its header to start fresh.

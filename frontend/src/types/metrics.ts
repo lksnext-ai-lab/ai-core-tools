@@ -102,7 +102,8 @@ export interface RecentError {
   started_at: string;
   app_id: number;
   app_name: string | null;
-  agent_id: number;
+  /** null for runs of the App Chat (no agent is exposed). */
+  agent_id: number | null;
   agent_name: string | null;
   caller_type: string;
   error_code: string | null;

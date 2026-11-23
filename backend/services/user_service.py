@@ -361,11 +361,22 @@ class UserService:
 
             db.flush()
 
+            # The user's App Chat conversations would be orphaned by ON DELETE SET NULL (nobody could open or delete
+            # them again, with their files and temp silo): remove their rows in this same transaction, and their
+            # storage after the commit.
+            from services.internal_chat.user_cleanup import (
+                finish_user_chat_conversations,
+                stage_user_chat_conversations,
+            )
+            staged_chats = stage_user_chat_conversations(db, user_id)
+            db.flush()
+
             # Class A (credentials, tokens, subscription) handled by DB ON DELETE CASCADE.
             # Class D (invited_by, Conversation.user_id, etc.) handled by DB ON DELETE SET NULL.
             # passive_deletes=True on all mapped relationships prevents ORM interference.
             db.delete(user)
             db.commit()
+            finish_user_chat_conversations(db, user_id, staged_chats)  # best effort, never raises
 
             logger.info(
                 f"delete_user: complete — user_id={user_id} mode={mode} actor_user_id={actor_user_id}"

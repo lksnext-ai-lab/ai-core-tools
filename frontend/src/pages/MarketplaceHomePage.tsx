@@ -1,25 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, MessageCircle, Pencil, Store, ArrowRight, Trash2 } from 'lucide-react';
+import {  MessageCircle, Store, ArrowRight, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { errorMessage, MESSAGES } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import type { MarketplaceConversation } from '../types/marketplace';
+import Title from '../components/ui/Title';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import ButtonApp from '../components/ui/ButtonApp';
+import ButtonTab from '../components/ui/ButtonTab';
+import ButtonTabItem from '../components/ui/ButtonTabItem';
+import { CardApp } from '../components/ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 /** Simple relative-time formatter — no external dependency needed. */
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, locale: string, justNowLabel: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return justNowLabel;
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  if (minutes < 60) return formatter.format(-minutes, 'minute');
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return formatter.format(-hours, 'hour');
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return formatter.format(-days, 'day');
 }
 
 /**
@@ -30,6 +38,7 @@ export default function MarketplaceHomePage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const mutate = useApiMutation();
+  const { t, i18n } = useTranslation('common');
 
   const [conversations, setConversations] = useState<MarketplaceConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +59,7 @@ export default function MarketplaceHomePage() {
         }
       } catch (err) {
         if (isMounted) {
-          setError(errorMessage(err, 'Failed to load conversations'));
+          setError(errorMessage(err, t('marketplaceHome.loadConversationsFailed')));
         }
       } finally {
         if (isMounted) {
@@ -66,22 +75,21 @@ export default function MarketplaceHomePage() {
     };
   }, []);
 
-  async function handleDeleteConversation(e: React.MouseEvent, conv: MarketplaceConversation) {
-    e.stopPropagation();
+  async function handleDeleteConversation(conv: MarketplaceConversation) {
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('conversation'),
-      message: `Delete the conversation with ${conv.agent_display_name}? This action cannot be undone.`,
+      title: t('marketplaceHome.confirmDeleteTitle'),
+      message: t('marketplaceHome.confirmDeleteMessage', { agent: conv.agent_display_name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteConversation(conv.conversation_id),
       {
-        loading: MESSAGES.DELETING('conversation'),
-        success: MESSAGES.DELETED('conversation'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('conversation')),
+        loading: t('marketplaceHome.deletingConversation'),
+        success: t('marketplaceHome.conversationDeleted'),
+        error: (err) => errorMessage(err, t('marketplaceHome.deleteConversationFailed')),
       },
     );
     if (result === undefined) return;
@@ -89,8 +97,7 @@ export default function MarketplaceHomePage() {
     setConversations((prev) => prev.filter((c) => c.conversation_id !== conv.conversation_id));
   }
 
-  function handleRenameStart(e: React.MouseEvent, conv: MarketplaceConversation) {
-    e.stopPropagation();
+  function handleRenameStart(conv: MarketplaceConversation) {
     setEditingConvId(conv.conversation_id);
     setEditingTitle(conv.title || conv.agent_display_name);
   }
@@ -108,22 +115,12 @@ export default function MarketplaceHomePage() {
         ),
       );
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to rename conversation'));
-    }
-  }
-
-  function handleRenameKeyDown(e: React.KeyboardEvent, conversationId: number) {
-    e.stopPropagation();
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      void handleRenameSave(conversationId);
-    } else if (e.key === 'Escape') {
-      setEditingConvId(null);
+      toast.error(errorMessage(err, t('marketplaceHome.renameConversationFailed')));
     }
   }
 
   if (loading) {
-    return <LoadingState message="Loading your dashboard..." />;
+    return <LoadingState message={t('marketplaceHome.loadingDashboard')} />;
   }
 
   if (error) {
@@ -132,160 +129,90 @@ export default function MarketplaceHomePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      {/* Page header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Welcome back</h1>
-        <p className="text-gray-600 mt-1">Your AI agent dashboard</p>
-      </div>
+      <Title
+        titulo={t('marketplaceHome.welcomeBack')}
+        subtitulo={t('marketplaceHome.dashboardSubtitle')}
+        variant="titPrincipal"
+        subtitleMarginBottom={0}
+      />  
 
       {/* Browse agents CTA */}
       <button
         type="button"
         onClick={() => navigate('/marketplace')}
-        className="w-full text-left bg-white rounded-2xl shadow-sm border border-blue-200 p-6 hover:border-blue-400 hover:shadow-md transition-all duration-200 group"
+        className="w-full text-left bg-btCard dark:bg-btCard-dark rounded-2xl shadow-sm border border-btCard-border dark:border-btCard-border-dark p-6 hover:border-btCard-hover dark:hover:bg-btCard-hover transition-all duration-200 group"
       >
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-blue-200 transition-colors duration-200">
-            <Store className="w-7 h-7 text-blue-600" aria-hidden="true" />
-          </div>
+          <BackgroundImage
+            icon={Store}
+            size={56}
+            variant="marron"
+            className="rounded-2xl"
+          />
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-semibold text-gray-900 group-hover:text-blue-700 transition-colors duration-200">
-              Browse Agents
+            <h2 className="text-xl font-semibold text-fg dark:text-fg-dark ">
+              {t('marketplaceHome.browseAgents')}
             </h2>
-            <p className="text-gray-500 text-sm mt-0.5">
-              Discover and chat with AI agents published by your organisation
+            <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mt-0.5">
+              {t('marketplaceHome.discoverAgentsDescription')}
             </p>
           </div>
-          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" aria-hidden="true" />
+          <ArrowRight className="w-5 h-5 text-fg-tertiary dark:text-fg-tertiary-dark group-hover:text-fg-tertiary-hover dark:group-hover:text-fg-tertiary-hover transition-colors duration-200" aria-hidden="true" />
         </div>
       </button>
 
       {/* Recent conversations */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">My Recent Conversations</h2>
+        <h2 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-fg dark:text-fg-dark">{t('marketplaceHome.recentConversations')}</h2>
 
         {conversations.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-gray-400" aria-hidden="true" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
-            <p className="text-gray-500 text-sm mb-6">
-              You haven't chatted with any agents yet. Browse the marketplace to get started!
+          <CardApp className="p-10 flex items-center justify-center ">
+            <BackgroundImage icon={MessageCircle} size={64} iconSize={32} variant="marron" className="mx-auto mb-4"></BackgroundImage>
+            <h3 className="mb-4 block h-[23px] font-display text-[18px] font-normal tracking-[-0.36px] text-fg dark:text-fg-dark">{t('marketplaceHome.noConversations')}</h3>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mt-0.5 mb-6">
+              {t('marketplaceHome.noConversationsDescription')}
             </p>
-            <button
-              type="button"
+            <ButtonApp
+              label={t('marketplaceHome.browseAgents')}
+              variant="primary"
+              size="spacious"
+              icon={<Store className="h-4 w-4" aria-hidden="true" />}
               onClick={() => navigate('/marketplace')}
-              className="inline-flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors duration-200"
-            >
-              <Store className="w-4 h-4 mr-2" aria-hidden="true" />
-              Browse Agents
-            </button>
-          </div>
+            />
+          </CardApp>
         ) : (
-          <ul className="space-y-3">
+          <ButtonTab ariaLabel={t('marketplaceHome.recentConversations')}>
             {conversations.map((conv) => (
-              <li key={conv.conversation_id} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    if (editingConvId === conv.conversation_id) return;
-                    if ((e.target as HTMLElement).closest('button[data-action]')) return;
-                    navigate(`/marketplace/chat/${conv.conversation_id}`);
-                  }}
-                  className="flex-1 min-w-0 text-left bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 overflow-hidden">
-                      {conv.agent_icon_url ? (
-                        <img
-                          src={conv.agent_icon_url}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                      ) : (
-                        <Bot className="w-5 h-5 text-blue-400" aria-hidden="true" />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1 min-w-0 flex-1">
-                          {editingConvId === conv.conversation_id ? (
-                            <input
-                              autoFocus
-                              type="text"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              onBlur={() => handleRenameSave(conv.conversation_id)}
-                              onKeyDown={(e) => handleRenameKeyDown(e, conv.conversation_id)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-sm font-semibold text-gray-900 border-b border-blue-500 outline-none bg-transparent w-full"
-                            />
-                          ) : (
-                            <>
-                              <span className="text-sm font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors duration-200">
-                                {conv.title || conv.agent_display_name}
-                              </span>
-                              <button
-                                type="button"
-                                data-action="rename"
-                                onClick={(e) => handleRenameStart(e, conv)}
-                                className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-blue-500 transition-all"
-                                title="Rename conversation"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        <time
-                          dateTime={conv.updated_at}
-                          className="text-xs text-gray-400 shrink-0"
-                        >
-                          {formatRelativeTime(conv.updated_at)}
-                        </time>
-                      </div>
-                      <p className="text-xs text-gray-400 truncate mt-0.5">
-                        {[conv.app_name, conv.agent_display_name].filter(Boolean).join(' · ')}
-                      </p>
-                      {conv.last_message ? (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{conv.last_message}</p>
-                      ) : (
-                        <p className="text-xs text-gray-400 italic mt-0.5">No messages yet</p>
-                      )}
-                    </div>
-
-                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors duration-200" aria-hidden="true" />
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  data-action="delete"
-                  onClick={(e) => handleDeleteConversation(e, conv)}
-                  title="Delete conversation"
-                  className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors duration-200"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </li>
+              <ButtonTabItem
+                key={conv.conversation_id}
+                title={conv.title || conv.agent_display_name}
+                description={`${[conv.app_name, conv.agent_display_name].filter(Boolean).join(' · ')}\n${conv.last_message || t('marketplaceHome.noMessages')}`}
+                dateTime={conv.updated_at}
+                dateLabel={formatRelativeTime(conv.updated_at, i18n.resolvedLanguage ?? i18n.language, t('marketplaceHome.justNow'))}
+                onClick={() => navigate(`/marketplace/chat/${conv.conversation_id}`)}
+                icon={conv.agent_icon_url ? (
+                  <img
+                    src={conv.agent_icon_url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <BackgroundImage icon={MessageSquare} variant="marron" />
+                )}
+                variant="edit"
+                isEditing={editingConvId === conv.conversation_id}
+                editingTitle={editingTitle}
+                onEdit={() => handleRenameStart(conv)}
+                onDelete={() => handleDeleteConversation(conv)}
+                onTitleChange={setEditingTitle}
+                onSaveTitle={() => void handleRenameSave(conv.conversation_id)}
+                onCancelEdit={() => setEditingConvId(null)}
+              />
             ))}
-          </ul>
+          </ButtonTab>
         )}
 
-        {conversations.length > 0 && (
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/marketplace')}
-              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200"
-            >
-              Browse more agents <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
       </section>
     </div>
   );

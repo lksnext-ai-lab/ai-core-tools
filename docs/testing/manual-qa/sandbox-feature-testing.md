@@ -58,7 +58,9 @@ immediately instead of configuring agents by hand.
 1. In `docker/.env`, explicitly set `SANDBOX_DEFAULT_PROVIDER=opensandbox`
    (don't rely on the old compose default — it was broken and has since been
    fixed, but double-check your `.env` doesn't override it back to
-   `subprocess`).
+   `subprocess`) and set `OPENSANDBOX_API_KEY` (at least 32 characters, e.g.
+   `python -c "import secrets; print(secrets.token_hex(32))"`). The
+   `opensandbox` profile refuses to start without it.
 2. Bring up the base stack **and** the sandbox profile:
    ```bash
    cd docker
@@ -75,8 +77,9 @@ immediately instead of configuring agents by hand.
 ## Step 2 — Configure a Sandbox Service and attach it
 
 1. As an app ADMINISTRATOR+, go to **App Settings → Sandbox Services**.
-2. Create an **OpenSandbox** service (base URL `opensandbox:8080`, no API
-   key needed for local/insecure-mode testing). Click **Test Connection** —
+2. Create an **OpenSandbox** service (base URL `opensandbox:8080`, API key =
+   the `OPENSANDBOX_API_KEY` of `docker/.env`, or empty to fall back to the
+   backend's environment value). Click **Test Connection** —
    it should succeed.
    - If it fails with `"Invalid or disallowed endpoint"`: this is the new
      SSRF guard working as intended for a self-hosted internal hostname.
@@ -179,14 +182,11 @@ where the bug lived):
 
 ### A6. Concurrency / capacity (best-effort — hard to fully exercise manually)
 
-- [ ] If you can script it: fire several concurrent chat requests for
-      **different** conversations with code-interpreter agents, more than
-      `SANDBOX_MAX_CONCURRENT_SESSIONS` (default 50 — lower it via env var
-      for this test, e.g. to 2). Confirm the excess requests get a clean
-      "Maximum concurrent sandbox sessions reached" error rather than all
-      succeeding (this was a real race: the cap could previously be
-      overshot by concurrent requests for different conversations, not just
-      the same one).
+- [ ] The process-wide cap of 50 live sandboxes is a code default and **cannot
+      be lowered through an environment variable** (`SANDBOX_MAX_CONCURRENT_SESSIONS`
+      is not read from the environment), so it is impractical to exercise by
+      hand; it is covered by the automated tests. The per-user / per-App
+      limits of the App Chat (Part C) are configurable and can be tested.
 
 ### A7. Graceful degradation
 
@@ -294,13 +294,98 @@ assumptions above, not just a flaky test.
 
 ---
 
+## Part C — App Chat code interpreter
+
+The Chat runs code in a sandbox per conversation when the App opts in
+(`App.chat_code_interpreter_enabled`). Automated tests use fake providers, so
+this part is the only check against a real sandbox. Prerequisites: Step 1 done,
+an App with at least one AI service, a system or App skill that ships scripts
+(see the [Skills guide](../../guides/skills.md)), and two users who
+are members of the App (include a VIEWER). The sandbox registry and the
+session limits are per backend process and the default deployment runs 2
+workers (`UVICORN_WORKERS`, default 2), so run the backend with a single
+worker (`UVICORN_WORKERS=1`) for C3 and C4.
+
+### C1. Switch and service selection
+
+- [ ] With the switch off (default), open **Chat**, select a skill with scripts:
+      the notice "Code cannot be run in this chat" appears. Without a skill
+      selected, no notice.
+- [ ] As an ADMINISTRATOR, open **App Settings** and turn on **Allow running
+      code in the Chat**; as a VIEWER/EDITOR the checkbox is read-only.
+- [ ] With the App's default sandbox service set to your OpenSandbox service,
+      ask the Chat to compute something with code. It runs. `turn_config.code_interpreter`
+      is not shown in the UI: observe it in the browser DevTools (Network tab),
+      in the `/messages` response (`metadata.turn_config`) or the `/stream`
+      `metadata` event; it should be `true`.
+- [ ] Set the App default back to "Inherit": the system default
+      (`SANDBOX_DEFAULT_PROVIDER`) is used. Stop the `opensandbox` profile and
+      repeat: no notice is shown (the options still say enabled), the model still
+      gets the code tools, the first call returns an error and the answer is
+      written without code. `turn_config.code_interpreter` is `false` on
+      `/messages` (on `/stream` the early `metadata` event still says `true`).
+- [ ] First select the sandbox service as the App default, then give that
+      service an end-of-service date in the past (a retired service stays
+      saved but cannot be newly selected): the notice for a retired service
+      appears and the Chat answers without code (no fallback to the system
+      default).
+
+### C2. Skills with scripts and output files
+
+- [ ] Select a skill with scripts, ask for a result file (for example a CSV
+      or chart in `output/`). The script runs and the file appears with the
+      answer.
+- [ ] Ask for more than 20 files, or one larger than `SANDBOX_PULL_MAX_FILE_BYTES`
+      (lower it in `.env` and restart the backend). The remaining files are skipped and the
+      warning "N files created by the code could not be delivered" shows; the
+      answer text is unchanged.
+- [ ] Ask for 6+ code executions in one message: `[Execution budget exceeded: 5
+      executions per turn]` (REPL and shell commands share the count). Ask for
+      a shell command longer than 60 s: it is cut off. Ask for a background
+      shell: refused.
+
+### C3. Two users and isolation
+
+- [ ] User A and User B (one a VIEWER) each run code in their own Chat
+      conversation. In the UI each sees only its own files and the conversations
+      are invisible to each other. That is all the UI shows: with a self-hosted
+      OpenSandbox server the exec daemon of each sandbox stays reachable from
+      the others (accepted risk, see Known residual risk below), so this does
+      not prove isolation between the sandboxes.
+- [ ] Reset A's conversation, then delete it: its sandbox is destroyed (check
+      `docker ps` for the sandbox container) and B's keeps running.
+- [ ] Wait past `SANDBOX_IDLE_TIMEOUT_S`, then ask again: a fresh sandbox, with
+      working files and installed packages gone and only the current message's
+      attachments present.
+
+### C4. Limits
+
+- [ ] Set `SANDBOX_MAX_SESSIONS_PER_USER=2` (restart the backend). As one user,
+      run code in three conversations: after the idle minimum
+      (`SANDBOX_EVICT_MIN_IDLE_S`) the oldest idle sandbox is removed to make
+      room; before it, the third conversation's code tool returns a capacity
+      error.
+- [ ] Set `SANDBOX_MAX_SESSIONS_PER_APP=2` and have two users hold a sandbox
+      each: a third conversation of either user cannot get one until their own
+      idle sandbox qualifies, and neither user's sandbox is removed for the
+      other.
+- [ ] While a long answer is streaming, send a second message in the same
+      conversation from a second browser tab or an API client (the Send button
+      is replaced by Stop in the same tab): 409 "still answering"; the sandbox
+      keeps running.
+
+---
+
 ## Known residual risk (don't expect these to be airtight)
 
-- **OpenSandbox server has no API key** by default — network isolation
-  (sandboxes can no longer reach `backend`/`postgres`/`qdrant`) is the
-  primary defense instead. Wiring a real `server.api_key` needs a
-  Dockerfile change that wasn't safe to make blind without a live
-  OpenSandbox instance to validate against.
+- **OpenSandbox sandboxes are not isolated from each other.** The control
+  plane now requires `OPENSANDBOX_API_KEY` and is not reachable from
+  sandboxes, but the exec daemon of every sandbox on the same server stays
+  reachable from the others (cross-user, cross-App), and by default sandboxes
+  have outbound network (internet, host ports, LAN). The optional hardened
+  override (`docker/docker-compose.sandbox-hardened.yaml`) removes egress but
+  not sandbox-to-sandbox access. See `docker/README.md`, "OpenSandbox:
+  exposición y mitigaciones".
 - **DNS rebinding** on the SSRF guards (test-connection, save-time endpoint
   check, `download_url_to_workspace`): validation resolves a hostname once,
   then the actual connection resolves it again — a small window for a

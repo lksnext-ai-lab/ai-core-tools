@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from utils.security import generate_signature
 import os
 from typing import Annotated, Any, AsyncGenerator, List, Optional
 from lks_idprovider import AuthContext
@@ -32,8 +31,9 @@ from schemas.marketplace_schemas import (
 from services.agent_execution_service import AgentExecutionService
 from services.agent_streaming_service import AgentStreamingService
 from tools.stream_guard import guard_agent_stream
-from services.file_management_service import FileManagementService, FileReference
-from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
+from services.chat_attachment_service import ChatAttachmentService
+from services.file_management_service import FileManagementService
+from services.playground_media_service import PlaygroundMediaService
 from routers.internal.auth_utils import get_current_user_oauth
 from routers.controls.file_size_limit import enforce_file_size_limit
 from routers.controls.role_authorization import require_min_role, AppRole
@@ -335,6 +335,7 @@ async def export_agent(
     - include_mcp_configs: Bundle all MCP configurations
     - include_agent_tools: Bundle all agent tool (other agents) configurations
     """
+    _get_agent_or_404(db, agent_id, app_id)
     try:
         export_service = AgentExportService(db)
         export_data = export_service.export_agent(
@@ -561,7 +562,7 @@ async def get_available_chat_filter_fields(
     agent itself need not exist yet (e.g. this endpoint is also called while
     still creating a new agent, using the "new agent" sentinel agent_id=0).
     """
-    fields = agent_service.get_available_chat_filter_fields(db, tool_ids, silo_id)
+    fields = agent_service.get_available_chat_filter_fields(db, tool_ids, silo_id, app_id=app_id)
     return {"fields": fields}
 
 
@@ -821,6 +822,9 @@ async def chat_with_agent(
             "token": jwt_token,
         }
 
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
         all_file_references = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,
@@ -905,6 +909,9 @@ async def chat_with_agent_stream(
         }
 
         fms = FileManagementService()
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
         all_file_references = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,
@@ -1096,66 +1103,31 @@ async def upload_file_for_chat(
             "app_id": app_id
         }
 
-        # Use unified service layer
-        file_service = FileManagementService()
-        file_ref = await file_service.upload_file(
-            file=file,
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(getattr(agent, "has_memory", False))
+        )
+
+        def _conversation_session_id() -> Optional[str]:
+            from services.conversation_service import ConversationService
+            conversation = ConversationService.get_conversation(db, conversation_id, user_context, agent_id)
+            return conversation.session_id if conversation else None
+
+        payload = await ChatAttachmentService.upload(
+            db,
+            file,
             agent_id=agent_id,
+            app_id=app_id,
             user_context=user_context,
             conversation_id=conversation_id,
             has_memory=bool(getattr(agent, "has_memory", False)),
+            resolve_session_id=_conversation_session_id,
         )
+        logger.info(
+            f"File uploaded for agent {agent_id} by user {auth_context.identity.id} "
+            f"(vectorized={payload['vectorized']})"
+        )
+        return payload
 
-        # Vectorize at upload time: derive session_id from conversation.
-        # Ownership is validated (user + agent + app) so a caller cannot inject
-        # document content into another user's / app's conversation silo (IDOR).
-        vectorized = False
-        if (
-            agent.has_memory
-            and conversation_id
-            and is_vectorizable_file(file_ref.file_type, file_ref.filename)
-            and file_ref.content
-        ):
-            from services.conversation_service import ConversationService
-            conversation = ConversationService.get_conversation(
-                db, conversation_id, user_context, agent_id
-            )
-            if conversation and conversation.session_id:
-                try:
-                    vectorized = PlaygroundMediaService.vectorize_uploaded_file(
-                        app_id=app_id,
-                        agent_id=agent_id,
-                        session_id=conversation.session_id,
-                        file_id=file_ref.file_id,
-                        filename=file_ref.filename,
-                        file_path=file_ref.file_path,
-                        content=file_ref.content,
-                        db=db,
-                    )
-                except ServiceRetiredError:
-                    await file_service.discard_uploaded_file(
-                        file_ref.file_id, agent_id, user_context, conversation_id
-                    )
-                    raise
-                except Exception as vec_err:
-                    logger.warning(f"File vectorization at upload failed: {vec_err}")
-
-        logger.info(f"File uploaded for agent {agent_id} by user {auth_context.identity.id} (vectorized={vectorized})")
-        return {
-            "success": True,
-            "file_id": file_ref.file_id,
-            "filename": file_ref.filename,
-            "file_type": file_ref.file_type,
-            "vectorized": vectorized,
-            # Visual feedback fields
-            "file_size_bytes": file_ref.file_size_bytes,
-            "file_size_display": FileReference.format_file_size(file_ref.file_size_bytes),
-            "processing_status": file_ref.processing_status,
-            "content_preview": file_ref.content_preview,
-            "has_extractable_content": file_ref.has_extractable_content,
-            "mime_type": file_ref.mime_type
-        }
-        
     except (HTTPException, ServiceRetiredError):
         raise
     except Exception as e:
@@ -1186,7 +1158,7 @@ async def list_attached_files(
     """
     try:
         # Verify agent belongs to this app
-        _get_agent_or_404(db, agent_id, app_id)
+        agent = _get_agent_or_404(db, agent_id, app_id)
 
         # Create user context for OAuth user
         user_context = {
@@ -1195,23 +1167,13 @@ async def list_attached_files(
             "app_id": app_id
         }
 
-        # Use unified service layer
-        file_service = FileManagementService()
-        files = await file_service.list_attached_files(
-            agent_id=agent_id,
-            user_context=user_context,
-            conversation_id=str(conversation_id) if conversation_id else None
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
         )
-        
-        # Calculate total size for visual feedback
-        total_size = sum(f.get('file_size_bytes', 0) or 0 for f in files)
-        
-        return {
-            "files": files,
-            "total_size_bytes": total_size,
-            "total_size_display": FileReference.format_file_size(total_size)
-        }
-        
+        return await ChatAttachmentService.list_files(agent_id, user_context, conversation_id)
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in list files endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list files")
@@ -1240,7 +1202,7 @@ async def remove_attached_file(
     """
     try:
         # Verify agent belongs to this app
-        _get_agent_or_404(db, agent_id, app_id)
+        agent = _get_agent_or_404(db, agent_id, app_id)
 
         # Create user context for OAuth user
         user_context = {
@@ -1249,21 +1211,19 @@ async def remove_attached_file(
             "app_id": app_id
         }
 
-        # Use unified service layer
-        file_service = FileManagementService()
-        success = await file_service.remove_file(
-            file_id=file_id,
-            agent_id=agent_id,
-            user_context=user_context,
-            conversation_id=str(conversation_id) if conversation_id else None
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
         )
-        
+        success = await ChatAttachmentService.remove(file_id, agent_id, user_context, conversation_id)
+
         if success:
             logger.info(f"File {file_id} removed for agent {agent_id} by user {auth_context.identity.id}")
             return {"success": True, "message": "File removed successfully"}
         else:
             return {"success": False, "message": "File not found or already removed"}
-            
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in remove file endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to remove file") 
@@ -1293,7 +1253,7 @@ async def download_file(
     """
     try:
         # Verify agent belongs to this app
-        _get_agent_or_404(db, agent_id, app_id)
+        agent = _get_agent_or_404(db, agent_id, app_id)
 
         user_context = {
             "user_id": int(auth_context.identity.id),
@@ -1301,43 +1261,21 @@ async def download_file(
             "app_id": app_id
         }
 
-        file_service = FileManagementService()
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
 
         # Try with conversation_id first, then fall back to the global session so that
         # files registered before the conversation was known (first-message auto-create)
         # are still resolved correctly.
-        file_data = None
         conv_ids_to_try = [str(conversation_id), None] if conversation_id else [None]
-        for try_conv_id in conv_ids_to_try:
-            files = await file_service.list_attached_files(
-                agent_id=agent_id,
-                user_context=user_context,
-                conversation_id=try_conv_id,
-            )
-            file_data = next((f for f in files if f.get("file_id") == file_id), None)
-            if file_data:
-                break
-
-        if not file_data or not file_data.get("file_path"):
-            raise HTTPException(status_code=404, detail="File not found")
-
-        file_path = file_data["file_path"].lstrip("/")
-        filename = file_data.get("filename", os.path.basename(file_path))
-        user_email = auth_context.identity.email
-
-        # Build absolute base URL: prefer explicit env var, fall back to request origin
-        aict_base_url = os.getenv("AICT_BASE_URL", "").rstrip("/")
-        if not aict_base_url:
-            aict_base_url = str(request.base_url).rstrip("/")
-
-        sig = generate_signature(file_path, user_email)
-        download_url = (
-            f"{aict_base_url}/static/{file_path}"
-            f"?user={user_email}&sig={sig}"
-            f"&filename={filename}"
+        file_data = await ChatAttachmentService.find(file_id, agent_id, user_context, conv_ids_to_try)
+        download = ChatAttachmentService.build_download(
+            file_data, auth_context.identity.email, str(request.base_url)
         )
-
-        return {"download_url": download_url, "filename": filename}
+        if download is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return download
 
     except HTTPException:
         raise
@@ -1361,6 +1299,7 @@ async def update_marketplace_visibility(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Update an agent's marketplace visibility (unpublished/private/public)."""
+    _get_agent_or_404(db, agent_id, app_id)
     try:
         agent = MarketplaceService.update_marketplace_visibility(
             db=db,
@@ -1385,6 +1324,7 @@ async def get_marketplace_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Get the marketplace profile for an agent (EDITOR+ management view)."""
+    _get_agent_or_404(db, agent_id, app_id)
     profile = MarketplaceService.get_marketplace_profile(db, agent_id, app_id)
     if not profile:
         raise HTTPException(
@@ -1407,6 +1347,7 @@ async def update_marketplace_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Create or update the marketplace profile for an agent."""
+    _get_agent_or_404(db, agent_id, app_id)
     try:
         profile = MarketplaceService.create_or_update_marketplace_profile(
             db=db,

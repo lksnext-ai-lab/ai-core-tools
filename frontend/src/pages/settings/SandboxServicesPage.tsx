@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Pencil, ClipboardCopy, Trash2, Users } from 'lucide-react';
 import ServiceWizard from '../../components/services/wizard/ServiceWizard';
 import CompactServiceEditor from '../../components/services/CompactServiceEditor';
@@ -10,7 +11,6 @@ import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
 import { useServicesManager } from '../../hooks/useServicesManager';
-import { getProviderBadgeColor } from '../../components/ui/providerBadges';
 import { AppRole } from '../../types/roles';
 import type { ServiceLifecycleFields } from '../../types/services';
 import ServiceStatusBadge from '../../components/ui/ServiceStatusBadge';
@@ -19,6 +19,12 @@ import SystemServiceBadge from '../../components/services/SystemServiceBadge';
 import ServiceUsageModal from '../../components/services/ServiceUsageModal';
 import { useServiceConnectionTest } from '../../components/services/useServiceConnectionTest';
 import { SERVICE_USAGE_STRINGS } from '../../utils/serviceLifecycle';
+import Title from '../../components/ui/Title';
+import LoadingState from '../../components/ui/LoadingState';
+import ButtonApp from '../../components/ui/ButtonApp';
+import BackgroundImage from '../../components/ui/BackgroundImage';
+import SidePanel from '../../components/ui/SidePanel';
+import { ProviderBadge } from '../../components/ui/Badge';
 
 interface SandboxService extends Partial<ServiceLifecycleFields> {
   service_id: number;
@@ -31,6 +37,7 @@ interface SandboxService extends Partial<ServiceLifecycleFields> {
 
 function SandboxServicesPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const settingsCache = useSettingsCache();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -65,7 +72,7 @@ function SandboxServicesPage() {
     forceReload,
     setIsModalOpen,
     setEditingService,
-  } = useServicesManager<SandboxService>(appId, api as any, cache as any, { entity: 'sandbox service' });
+  } = useServicesManager<SandboxService>(appId, api as any, cache as any, { entity: t('sandboxServicesPage.entity') });
 
   const [usageService, setUsageService] = useState<{
     id: number;
@@ -75,20 +82,25 @@ function SandboxServicesPage() {
   const { testAction, modal: connectionTestModal } = useServiceConnectionTest('sandbox');
 
   async function testConnection(serviceId: number) {
-    if (!appId) throw new Error('App ID not found');
+    if (!appId) throw new Error(t('sandboxServicesPage.appIdNotFound'));
     const apiService = (await import('../../services/api')).apiService;
     return apiService.testSandboxServiceConnection(Number.parseInt(appId, 10), serviceId) as Promise<any>;
   }
 
   if (loading) return (
-    <div className="p-6 text-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-2 text-gray-600">Loading sandbox services...</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Title variant='titSecundario' titulo={t('sandboxServicesPage.title')} subtitulo={t('sandboxServicesPage.subtitle')} />
+      </div>
+      <LoadingState variant="page" message={t('sandboxServicesPage.loading')} />
     </div>
   );
 
   if (error) return (
     <div className="p-6">
+      <div className="flex items-center justify-between">
+        <Title variant='titSecundario' titulo={t('sandboxServicesPage.title')} subtitulo={t('sandboxServicesPage.subtitle')} />
+      </div>
       <Alert type="error" message={error} onDismiss={() => { setIsModalOpen(false); setEditingService(null); }} />
     </div>
   );
@@ -97,18 +109,16 @@ function SandboxServicesPage() {
     <div className="p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Sandbox Services</h2>
-          <p className="text-gray-600">Manage isolated code-execution environments used by the Code Interpreter capability</p>
-        </div>
+        <Title variant='titSecundario' titulo={t('sandboxServicesPage.title')} subtitulo={t('sandboxServicesPage.subtitle')} />
         {canEdit && (
           <div className="flex gap-2">
-            <button
+            <ButtonApp
+              label={t('sandboxServicesPage.addService')}
               onClick={handleCreate}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>Add Sandbox Service
-            </button>
+              icon={<span aria-hidden="true">+</span>}
+              variant="primary"
+              size="medium"
+            />
           </div>
         )}
       </div>
@@ -117,75 +127,79 @@ function SandboxServicesPage() {
 
       <Table
         data={services}
+        stickyEdgeColumns
         keyExtractor={(service) => (service as any).service_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('sandboxServicesPage.columns.name'),
             render: (service: SandboxService) => (
               <span className="flex items-center gap-1.5">
+                <BackgroundImage icon={Box} size={34} iconSize={17} variant="marron" className="mr-2" />
                 {canEdit && !service.is_system ? (
-                  <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
+                  <button type="button" className="text-sm font-medium text-fg dark:text-fg-dark transition-colors text-left" onClick={() => handleEdit(service.service_id)}>
                     {service.name}
                   </button>
                 ) : (
-                  <span className="text-sm font-medium text-gray-900">{service.name}</span>
+                  <span className="text-sm font-medium text-fg dark:text-fg-dark">{service.name}</span>
                 )}
                 {service.is_system && <SystemServiceBadge />}
               </span>
             )
           },
-          { header: 'Provider', render: (service: SandboxService) => (
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getProviderBadgeColor(service.provider)}`}>
-              {service.provider}
-            </span>
+          { header: t('sandboxServicesPage.columns.provider'), render: (service: SandboxService) => (
+            <ProviderBadge provider={service.provider} />
+            
           )},
-          { header: 'Status', render: (service: SandboxService) => (
+          { header: t('sandboxServicesPage.columns.status'), render: (service: SandboxService) => (
             <ServiceStatusBadge needsApiKey={service.needs_api_key} lifecycleStatus={service.lifecycle_status} endOfServiceAt={service.end_of_service_at} deprecationNotice={service.deprecation_notice} />
           )},
-          { header: 'Created', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
-          { header: 'Actions', className: 'relative', render: (service: SandboxService) => (
-            service.is_system ? (
-              // System services are managed by platform admins; the app can only see where they are used.
-              <span className="inline-flex items-center gap-3">
-                <span className="text-gray-400 text-sm">System</span>
-                <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
-              </span>
-            ) : canEdit ? (
-              <ActionDropdown triggerAriaLabel={`Actions for ${service.name}`} actions={[
+          { header: t('sandboxServicesPage.columns.created'), className:'text-xs text-fg-secondary dark:text-fg-secondary-dark align-center px-6 py-3', render: (service: any) => (service.created_at ? new Date(service.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('sandboxServicesPage.notAvailable')) },
+          { header: t('sandboxServicesPage.columns.actions'), sticky: 'right', className: 'relative', render: (service: SandboxService) => {
+            if (service.is_system) {
+              return (
+                <span className="flex flex-col items-center gap-1">
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">{t('sandboxServicesPage.system')}</span>
+                  <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
+                </span>
+              );
+            }
+            if (!canEdit) {
+              return <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />;
+            }
+            return (
+              <ActionDropdown actions={[
                 { label: SERVICE_USAGE_STRINGS.action, onClick: () => setUsageService({ id: service.service_id, name: service.name }), icon: <Users className="w-4 h-4" /> },
                 testAction(service.service_id, service.name, () => testConnection(service.service_id)),
-                { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
-                { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
-                { label: 'Delete', onClick: () => setUsageService({ id: service.service_id, name: service.name, deleteRequested: true }), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
-              ]} size="sm" />
-            ) : (
-              <UsedByButton serviceName={service.name} onClick={() => setUsageService({ id: service.service_id, name: service.name })} />
-            )
-          ) }
+                { label: t('sandboxServicesPage.actions.edit'), onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
+                { label: t('sandboxServicesPage.actions.copy'), onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
+                { label: t('sandboxServicesPage.actions.delete'), onClick: () => setUsageService({ id: service.service_id, name: service.name, deleteRequested: true }), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const }
+              ]} size="sm" triggerAriaLabel={t('sandboxServicesPage.actions.menuForService', { name: service.name })} />
+            );
+          } }
         ]}
-        emptyIcon={<Box className="w-10 h-10 text-gray-300" />}
-        emptyMessage="No Sandbox Services"
-        emptySubMessage="Add a sandbox service to let agents run the Code Interpreter capability."
+        emptyIcon={<BackgroundImage icon={Box} size={64} iconSize={32} />}
+        emptyMessage={t('sandboxServicesPage.empty.title')}
+        emptySubMessage={t('sandboxServicesPage.empty.subtitle')}
         loading={loading}
       />
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Add First Sandbox Service</button>
+          <ButtonApp
+            label={t('sandboxServicesPage.addFirstService')}
+            onClick={handleCreate}
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0"><Box className="w-5 h-5 text-blue-400" /></div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">About Sandbox Services</h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>Sandbox Services configure the isolated environment where agents execute Python code when the Code Interpreter capability is enabled. Configure OpenSandbox (self-hosted container), Daytona, or E2B (managed cloud sandboxes).</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="info"
+        title={t('sandboxServicesPage.about.title')}
+        className="mt-6"
+        message={t('sandboxServicesPage.about.message')}
+      />
 
       {isModalOpen && !editingService && (
         <ServiceWizard
@@ -202,6 +216,7 @@ function SandboxServicesPage() {
       {isModalOpen && editingService && (
         <CompactServiceEditor
           isOpen
+          variant="panel"
           kind="sandbox"
           scope="app"
           appId={appId ? Number.parseInt(appId) : undefined}
@@ -212,19 +227,37 @@ function SandboxServicesPage() {
         />
       )}
 
+      {/* Service usage side panel — fixed wrapper that starts below the 56px (h-14) app header */}
       {usageService && appId && (
-        <ServiceUsageModal
-          kind="sandbox"
-          scope="app"
-          canNavigate={hasMinRole(AppRole.EDITOR)}
-          appId={Number.parseInt(appId, 10)}
-          serviceId={usageService.id}
-          serviceName={usageService.name}
-          canMove={canEdit}
-          onMoved={() => void forceReload()}
-          onDelete={usageService.deleteRequested ? () => handleDelete(usageService.id) : undefined}
-          onClose={() => setUsageService(null)}
-        />
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={() => setUsageService(null)}
+            title={t('sandboxServicesPage.title')}
+            headerActions={(
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+                {SERVICE_USAGE_STRINGS.action}
+              </span>
+            )}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <ServiceUsageModal
+              key={usageService.id}
+              variant="panel"
+              kind="sandbox"
+              scope="app"
+              canNavigate={hasMinRole(AppRole.EDITOR)}
+              appId={Number.parseInt(appId, 10)}
+              serviceId={usageService.id}
+              serviceName={usageService.name}
+              canMove={canEdit}
+              onMoved={() => void forceReload()}
+              onDelete={usageService.deleteRequested ? () => handleDelete(usageService.id) : undefined}
+              onClose={() => setUsageService(null)}
+            />
+          </SidePanel>
+        </div>
       )}
 
       {connectionTestModal}

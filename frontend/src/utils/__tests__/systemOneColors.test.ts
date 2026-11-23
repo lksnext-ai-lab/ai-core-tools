@@ -69,7 +69,7 @@ describe('toPayload keeps a chosen option color and drops an empty one', () => {
   it('keeps #hex and omits empty', () => {
     const payload = toPayload([{ _id: 'c', key: 'area', type: 'choice', instructions: 'Which?', criteria: [
       { key: 'billing', description: 'Invoices', color: '#112233' }, { key: 'tech', description: '', color: '' }] } as never]);
-    const options = (payload[0] as { criteria: Array<Record<string, string>> }).criteria;
+    const options = (payload[0] as unknown as { criteria: Array<Record<string, string>> }).criteria;
     expect(options[0]).toEqual({ key: 'billing', description: 'Invoices', color: '#112233' });
     expect(options[1]).toEqual({ key: 'tech' });
   });

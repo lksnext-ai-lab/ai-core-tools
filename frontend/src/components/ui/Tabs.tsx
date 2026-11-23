@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Interface defining the structure of a tab item
@@ -6,7 +7,8 @@ import React, { useRef, useEffect } from 'react';
 export interface TabItem {
   id: string;
   label: string;
-  icon?: string;
+  icon?: React.ReactNode;
+  description?: string;
   /** When true, the tab is shown but cannot be activated (e.g. "save first"). */
   disabled?: boolean;
   /** Tooltip/accessible hint shown when the tab is disabled. */
@@ -50,6 +52,7 @@ export function Tabs({
   onChange,
   className = ''
 }: Readonly<TabsProps>): React.ReactElement {
+  const { t } = useTranslation('common');
   const tabListRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -105,12 +108,12 @@ export function Tabs({
   }, [activeTab, tabs]);
 
   return (
-    <div className={`border-b border-gray-200 dark:border-gray-700 ${className}`}>
+    <div className={`border-b border-line dark:border-line-dark ${className}`}>
       <div
         ref={tabListRef}
         role="tablist"
-        className="flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide"
-        aria-label="Tab navigation"
+        className="flex flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        aria-label={t('tabs.navigation')}
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeTab;
@@ -118,17 +121,18 @@ export function Tabs({
           const disabledReasonId = `${tab.id}-disabled-reason`;
           let tabStateClasses: string;
           if (isDisabled) {
-            tabStateClasses = 'cursor-not-allowed text-gray-400 dark:text-gray-600';
+            tabStateClasses = 'cursor-not-allowed text-fg-tertiary dark:text-fg-tertiary-dark';
           } else if (isActive) {
-            tabStateClasses = 'border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400';
+            tabStateClasses = 'text-fg-primary dark:text-fg-dark  border-b-2  border-fg text-fg dark:border-fg-dark';
           } else {
-            tabStateClasses = 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100';
+            tabStateClasses = 'border-transparent text-fg-secondary hover:text-fg-primary dark:text-fg-secondary-dark dark:hover:text-fg-primary-dark';
           }
 
           return (
             <React.Fragment key={tab.id}>
               <button
                 type="button"
+                id={tab.id}
                 ref={(el) => {
                   tabRefs.current[index] = el;
                 }}
@@ -150,8 +154,15 @@ export function Tabs({
                   ${tabStateClasses}
                 `}
               >
-                {tab.icon && <span className="mr-2">{tab.icon}</span>}
-                {tab.label}
+                <span className="flex items-center justify-center gap-2">
+                  {tab.icon}
+                  {tab.label}
+                </span>
+                {tab.description && (
+                  <span className="mt-1 block text-xs font-normal text-fg-secondary dark:text-fg-secondary-dark">
+                    {tab.description}
+                  </span>
+                )}
               </button>
               {isDisabled && tab.disabledReason && (
                 <span id={disabledReasonId} className="sr-only">

@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
@@ -29,15 +29,37 @@ class AgentRepository:
     """Repository class for Agent database operations"""
     
     # ==================== BASIC AGENT OPERATIONS ====================
-    
+
+    @staticmethod
+    def visible_agents_clause():
+        """SQL clause selecting user-visible agents (excludes the hidden internal chat agent).
+
+        Apply to every listing / lookup that must never expose the internal chat agent.
+        """
+        return Agent.visible_clause()
+
+    @staticmethod
+    def get_internal_chat_ids(db: Session, agent_ids: List[int]) -> Set[int]:
+        """Return the subset of ``agent_ids`` that are hidden internal chat agents."""
+        if not agent_ids:
+            return set()
+        rows = db.query(Agent.agent_id).filter(
+            Agent.agent_id.in_(list(agent_ids)), Agent.internal_chat_clause()
+        ).all()
+        return {agent_id for (agent_id,) in rows}
+
     @staticmethod
     def get_by_id(db: Session, agent_id: int) -> Optional[Agent]:
-        """Get agent by ID from Agent table"""
+        """Get agent by ID from Agent table.
+
+        Raw lookup: it INCLUDES internal chat agents. Only for cascade deletion and code that
+        is already protected by a visibility guard; prefer ``get_agent_by_id_and_type``.
+        """
         return db.query(Agent).filter(Agent.agent_id == agent_id).first()
     
     @staticmethod
     def get_ocr_agent_by_id(db: Session, agent_id: int) -> Optional[OCRAgent]:
-        """Get OCR agent by ID from OCRAgent table"""
+        """Get OCR agent by ID from OCRAgent table (raw; the internal chat agent is never an OCR agent)"""
         return db.query(OCRAgent).filter(OCRAgent.agent_id == agent_id).first()
 
     @staticmethod
@@ -65,20 +87,36 @@ class AgentRepository:
         return db.query(SystemOneAgent).filter(SystemOneAgent.agent_id == agent_id).first()
 
     @staticmethod
-    def get_agent_by_id_and_type(db: Session, agent_id: int, agent_type: str = 'basic') -> Agent | OCRAgent | SystemOneAgent:
-        """Get agent by ID and type"""
+    def get_agent_by_id_and_type(
+        db: Session, agent_id: int, agent_type: str = 'basic', include_internal: bool = False
+    ) -> Agent | OCRAgent | SystemOneAgent:
+        """Get agent by ID and type.
+
+        Args:
+            include_internal: when False (default) the internal chat agent is treated as not found
+                (filtered in SQL, for both the Agent and the OCRAgent lookups).
+        """
+        def _basic() -> Optional[Agent]:
+            query = db.query(Agent).filter(Agent.agent_id == agent_id)
+            if not include_internal:
+                query = query.filter(Agent.visible_clause())
+            return query.first()
+
+        def _ocr() -> Optional[OCRAgent]:
+            query = db.query(OCRAgent).filter(OCRAgent.agent_id == agent_id)
+            if not include_internal:
+                query = query.filter(OCRAgent.visible_clause())
+            return query.first()
+
         if agent_type == 'ocr' or agent_type == 'ocr_agent':
-            return AgentRepository.get_ocr_agent_by_id(db, agent_id)
-        elif agent_type == 'system_one' or agent_type == 'system_one_agent':
+            return _ocr()
+        if agent_type == 'system_one' or agent_type == 'system_one_agent':
+            # ponytail: the internal chat agent is never a System One agent, no visibility filter needed
             return AgentRepository.get_system_one_agent_by_id(db, agent_id)
-        elif agent_type == 'basic' or agent_type == 'agent':
-            return AgentRepository.get_by_id(db, agent_id)
-        else:
-            agent = AgentRepository.get_by_id(db, agent_id)
-            if not agent:
-                agent = AgentRepository.get_ocr_agent_by_id(db, agent_id)
-            return agent
-    
+        if agent_type == 'basic' or agent_type == 'agent':
+            return _basic()
+        return _basic() or _ocr()
+
     @staticmethod
     def get_by_app_id(db: Session, app_id: int, with_subclasses: bool = False) -> List[Agent]:
         """Get all agents for a specific app.
@@ -92,14 +130,19 @@ class AgentRepository:
                 selectin_polymorphic(Agent, [OCRAgent, SystemOneAgent]),
                 selectinload(SystemOneAgent.system_one_service),
             )
-        return query.filter(Agent.app_id == app_id).order_by(Agent.create_date.desc()).all()
+        return (
+            query.filter(Agent.app_id == app_id, AgentRepository.visible_agents_clause())
+            .order_by(Agent.create_date.desc())
+            .all()
+        )
 
     @staticmethod
     def get_tool_agents_by_app_id(db: Session, app_id: int, exclude_agent_id: Optional[int] = None) -> List[Agent]:
         """Get agents that are marked as tools for a specific app"""
         query = db.query(Agent).filter(
             Agent.app_id == app_id,
-            Agent.is_tool == True
+            Agent.is_tool == True,
+            AgentRepository.visible_agents_clause(),
         )
         if exclude_agent_id:
             query = query.filter(Agent.agent_id != exclude_agent_id)
@@ -243,7 +286,8 @@ class AgentRepository:
         tools_query = db.query(Agent.agent_id).filter(
             Agent.agent_id.in_(tool_ids),
             Agent.is_tool == True,
-            Agent.app_id == app_id
+            Agent.app_id == app_id,
+            AgentRepository.visible_agents_clause(),
         )
         return [id for (id,) in tools_query]
     

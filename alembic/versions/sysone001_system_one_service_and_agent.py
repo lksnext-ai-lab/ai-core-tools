@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "sysone001"
-down_revision = "chatfiltmerge003"
+down_revision = "appimage001"
 branch_labels = None
 depends_on = None
 

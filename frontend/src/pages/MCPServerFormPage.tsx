@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import type { MCPServer, ToolAgent } from '../core/types';
+import { LoadingState } from '../components/ui/LoadingState';
+import { FormActions } from '../components/ui/FormActions';
+import Alert from '../components/ui/Alert';
+import Title from '../components/ui/Title';
+import { FormCheckbox, FormField, FormTextArea } from '../components/ui/FormField';
+import { CardApp } from '../components/ui/CardApp';
+import { ButtonCard } from '../components/ui/ButtonCard';
+import { Bot } from 'lucide-react';
+import BackgroundImage from '../components/ui/BackgroundImage';
 
 function resolveInputValue(type: string, value: string, checked: boolean): string | number | boolean {
   if (type === 'checkbox') return checked;
@@ -14,6 +24,7 @@ function resolveInputValue(type: string, value: string, checked: boolean): strin
 function MCPServerFormPage() {
   const { appId, serverId } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
   const mutate = useApiMutation();
 
   const [loading, setLoading] = useState(true);
@@ -66,7 +77,7 @@ function MCPServerFormPage() {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      setError(errorMessage(err, t('mcpServerFormPage.loadFailed')));
       console.error('Error loading data:', err);
     } finally {
       setLoading(false);
@@ -104,9 +115,9 @@ function MCPServerFormPage() {
           ? apiService.updateMCPServer(Number.parseInt(appId), Number.parseInt(serverId), formData)
           : apiService.createMCPServer(Number.parseInt(appId), formData),
       {
-        loading: isEditing ? MESSAGES.UPDATING('MCP server') : MESSAGES.CREATING('MCP server'),
-        success: isEditing ? MESSAGES.UPDATED('MCP server') : MESSAGES.CREATED('MCP server'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('MCP server')),
+        loading: t(isEditing ? 'mcpServerFormPage.notifications.updating' : 'mcpServerFormPage.notifications.creating'),
+        success: t(isEditing ? 'mcpServerFormPage.notifications.updated' : 'mcpServerFormPage.notifications.created'),
+        error: (err) => errorMessage(err, t('mcpServerFormPage.notifications.saveFailed')),
       },
     );
     setSaving(false);
@@ -120,224 +131,138 @@ function MCPServerFormPage() {
     navigate(`/apps/${appId}/mcp-servers`);
   }
 
-  const submitLabel = isEditing ? 'Update MCP Server' : 'Create MCP Server';
+  const submitLabel = t(isEditing ? 'mcpServerFormPage.actions.update' : 'mcpServerFormPage.actions.create');
 
   if (loading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEditing ? 'Edit MCP Server' : 'Create MCP Server'}
-            </h1>
-            <p className="text-gray-600">Configure your MCP server settings</p>
-          </div>
+          <Title variant="titPrincipal" titulo={t(isEditing ? 'mcpServerFormPage.editTitle' : 'mcpServerFormPage.createTitle')} subtitulo={t('mcpServerFormPage.subtitle')} ></Title>
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading...</span>
-        </div>
+        <LoadingState variant="page" message={t('mcpServerFormPage.loading')} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isEditing ? 'Edit MCP Server' : 'Create MCP Server'}
-          </h1>
-          <p className="text-gray-600">Configure your MCP server to expose agents as tools</p>
-        </div>
-        <button
-          onClick={handleCancel}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-        >
-          Back
-        </button>
+        <Title variant="titPrincipal" titulo={t(isEditing ? 'mcpServerFormPage.editTitle' : 'mcpServerFormPage.createTitle')} subtitulo={t('mcpServerFormPage.subtitle')} subtitleMarginBottom={20}></Title>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 text-xl mr-3">!</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
-
+        <CardApp titulo={t('mcpServerFormPage.sections.basicInformation')}>
           <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                Name *
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                placeholder="My MCP Server"
-              />
-            </div>
+            <FormField
+              label={t('mcpServerFormPage.fields.name')}
+              id="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              required
+              placeholder={t('mcpServerFormPage.fields.namePlaceholder')}
+            />
 
             <div>
-              <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
-                URL Slug
+              <label htmlFor="slug" className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
+                {t('mcpServerFormPage.fields.slug')}
               </label>
               <div className="flex items-center">
-                <span className="text-gray-500 text-sm mr-2">/mcp/v1/app-slug/</span>
-                <input
-                  type="text"
+                <span className="bg-surface-hover dark:bg-surface-dark border border-line-strong dark:border-line-strong-dark rounded-l-lg border-r-0 px-3 py-2 text-fg-tertiary dark:text-fg-tertiary-dark text-sm">/mcp/v1/app-slug/</span>
+                <FormField
+                  label={t('mcpServerFormPage.fields.slug')}
+                  labelClassName="hidden"
                   id="slug"
-                  name="slug"
                   value={formData.slug}
                   onChange={handleInputChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                  placeholder="my-server (auto-generated if empty)"
+                  className="flex-1 min-w-0"
+                  inputClassName="rounded-l-none"
+                  placeholder={t('mcpServerFormPage.fields.slugPlaceholder')}
                   pattern="[a-z0-9-]+"
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                URL-safe identifier. Use lowercase letters, numbers, and hyphens only.
+              <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
+                {t('mcpServerFormPage.help.slug')}
               </p>
             </div>
 
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                placeholder="Describe what this MCP server does..."
-              />
-            </div>
+            <FormTextArea
+              label={t('mcpServerFormPage.fields.description')}
+              id="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              rows={3}
+              placeholder={t('mcpServerFormPage.fields.descriptionPlaceholder')}
+            />
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  name="is_active"
-                  checked={formData.is_active}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
-                />
-                <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
-                  Active (server accepts requests)
-                </label>
-              </div>
-            </div>
+            <FormCheckbox
+              label={t('mcpServerFormPage.fields.active')}
+              id="is_active"
+              checked={formData.is_active}
+              onChange={handleInputChange}
+            />
 
-            <div>
-              <label htmlFor="rate_limit" className="block text-sm font-medium text-gray-700 mb-1">
-                Rate Limit (requests per minute)
-              </label>
-              <input
-                type="number"
-                id="rate_limit"
-                name="rate_limit"
-                value={formData.rate_limit}
-                onChange={handleInputChange}
-                min={0}
-                className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                0 = unlimited
-              </p>
-            </div>
+            <FormField
+              label={t('mcpServerFormPage.fields.rateLimit')}
+              id="rate_limit"
+              type="number"
+              value={formData.rate_limit}
+              onChange={handleInputChange}
+              min={0}
+              className="w-[250px]"
+              helpText={t('mcpServerFormPage.help.rateLimit')}
+            />
           </div>
-        </div>
+        </CardApp>
 
         {/* Agent Selection */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Agents to Expose</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Choose which agents (marked as tools) to expose through this MCP server.
-            These agents will be available as MCP tools for external clients.
-          </p>
+          <CardApp titulo={t('mcpServerFormPage.sections.selectAgents')} subtitulo={t('mcpServerFormPage.sections.selectAgentsDescription')}>
+          <span className="ml-auto block w-fit shrink-0 text-right text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+            {t('mcpServerFormPage.selectedAgents', { count: formData.agent_ids.length })}
+            </span>
+          
+
+            
 
           {toolAgents.length === 0 ? (
-            <div className="text-center py-8 bg-gray-50 rounded-lg">
-              <div className="text-4xl mb-2">o</div>
-              <p className="text-gray-600">No agents marked as tools available.</p>
-              <p className="text-sm text-gray-500 mt-1">
-                Create an agent and enable "Use as Tool" to expose it via MCP.
+            <CardApp className="text-center py-8 ">
+              <BackgroundImage icon={Bot} size={64} iconSize={32} className="mx-auto" />
+              <p className="text-fg-secondary dark:text-fg-secondary-dark">{t('mcpServerFormPage.emptyAgentsTitle')}</p>
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
+                {t('mcpServerFormPage.emptyAgentsDescription')}
               </p>
-            </div>
+            </CardApp>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {toolAgents.map(agent => (
-                <label
+              {toolAgents.map((agent) => (
+                <ButtonCard
                   key={agent.agent_id}
-                  className={`flex items-start p-3 rounded-lg border cursor-pointer transition-colors ${
-                    formData.agent_ids.includes(agent.agent_id)
-                      ? 'bg-purple-50 border-purple-300'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.agent_ids.includes(agent.agent_id)}
-                    onChange={() => handleAgentToggle(agent.agent_id)}
-                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded mt-1"
-                  />
-                  <div className="ml-3">
-                    <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                    {agent.description && (
-                      <div className="text-xs text-gray-500 mt-1">{agent.description}</div>
-                    )}
-                  </div>
-                </label>
+                  onClick={() => handleAgentToggle(agent.agent_id)}
+                  ariaLabel={t('mcpServerFormPage.selectAgent', { name: agent.name })}
+                  variant="selectable-check"
+                  selected={formData.agent_ids.includes(agent.agent_id)}
+                  checkboxLabel={agent.name}
+                  checkboxHelpText={agent.description}
+                />
               ))}
             </div>
           )}
 
-          <div className="mt-4 text-sm text-gray-500">
-            {formData.agent_ids.length} agent{formData.agent_ids.length === 1 ? '' : 's'} selected
-          </div>
-        </div>
+        </CardApp>
 
         {/* Form Actions */}
-        <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-6 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving || !formData.name}
-            className="px-6 py-2 text-white bg-yellow-600 hover:bg-yellow-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Saving...
-              </>
-            ) : submitLabel}
-          </button>
-        </div>
+        <FormActions
+          onCancel={handleCancel}
+          isSubmitting={saving}
+          submitLabel={submitLabel}
+          submittingLabel={t('mcpServerFormPage.actions.saving')}
+          cancelLabel={t('mcpServerFormPage.actions.cancel')}
+          submitDisabled={!formData.name}
+        />
       </form>
     </div>
   );

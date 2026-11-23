@@ -67,8 +67,8 @@ class AgentExportService(BaseExportService):
         Raises:
             ValueError: If agent not found or permission denied
         """
-        # Load agent
-        agent = AgentRepository.get_by_id(self.session, agent_id)
+        # Load agent with the filtered lookup: the hidden internal chat agent is "not found" (FR-13.4).
+        agent = AgentRepository.get_agent_by_id_and_type(self.session, agent_id, 'any')
         if not agent:
             raise ValueError(f"Agent with ID {agent_id} not found")
 

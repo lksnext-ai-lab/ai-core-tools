@@ -68,7 +68,9 @@ class ScheduledTaskService:
             raise ValueError(f"Schedule interval must be at least {self.minimum_interval_seconds} seconds")
 
     def _agent(self, agent_id: int, app_id: int) -> Agent:
-        agent = self.db.query(Agent).filter(Agent.agent_id == agent_id, Agent.app_id == app_id).one_or_none()
+        agent = self.db.query(Agent).filter(
+            Agent.agent_id == agent_id, Agent.app_id == app_id, Agent.visible_clause()
+        ).one_or_none()
         if not agent:
             raise ValueError("Agent not found")
         return agent

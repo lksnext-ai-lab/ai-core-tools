@@ -12,7 +12,7 @@ from typing import Optional
 
 import sqlalchemy as sa
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from models.agent import Agent
@@ -118,7 +118,9 @@ class MetricsQueryService:
 
     @staticmethod
     def check_agent_in_app(db: Session, app_id: int, agent_id: int) -> None:
-        exists = db.query(Agent.agent_id).filter(Agent.agent_id == agent_id, Agent.app_id == app_id).first()
+        exists = db.query(Agent.agent_id).filter(
+            Agent.agent_id == agent_id, Agent.app_id == app_id, Agent.visible_clause()
+        ).first()
         if not exists:
             raise HTTPException(status_code=404, detail="Agent not found in this app.")
 
@@ -236,7 +238,7 @@ class MetricsQueryService:
     @staticmethod
     def breakdown(db: Session, scope: MetricsScope, range_str: str, dimension: str) -> BreakdownResponse:
         since, until, _, _ = parse_range(range_str)
-        query_columns, joins, group_by, to_labels = _dimension(dimension)
+        query_columns, joins, group_by, to_labels, extra_filters = _dimension(dimension)
         runs = func.count(AEE.event_id)
         query = db.query(
             *query_columns,
@@ -252,9 +254,8 @@ class MetricsQueryService:
         )
         for target, condition in joins:
             query = query.outerjoin(target, condition)
-        rows = query.filter(
-            *scope.filters(), AEE.started_at >= since, AEE.started_at < until,
-        ).group_by(*group_by).order_by(runs.desc()).limit(BREAKDOWN_LIMIT).all()
+        window = [*scope.filters(), AEE.started_at >= since, AEE.started_at < until, *extra_filters]
+        rows = query.filter(*window).group_by(*group_by).order_by(runs.desc()).limit(BREAKDOWN_LIMIT).all()
 
         items = []
         for r in rows:
@@ -323,8 +324,11 @@ class MetricsQueryService:
         ).filter(*window).group_by(code).order_by(count.desc()).limit(BREAKDOWN_LIMIT).all()
 
         recent = db.query(
-            AEE.started_at, AEE.app_id, App.name.label("app_name"), AEE.agent_id,
-            Agent.name.label("agent_name"), AEE.caller_type, AEE.error_code, AEE.error_message,
+            AEE.started_at, AEE.app_id, App.name.label("app_name"),
+            # The internal chat agent's identity is never exposed: keep the row, blank the agent.
+            sa.case((Agent.internal_chat_clause(), None), else_=AEE.agent_id).label("agent_id"),
+            sa.case((Agent.internal_chat_clause(), None), else_=Agent.name).label("agent_name"),
+            AEE.caller_type, AEE.error_code, AEE.error_message,
         ).outerjoin(App, App.app_id == AEE.app_id).outerjoin(Agent, Agent.agent_id == AEE.agent_id).filter(
             *window
         ).order_by(AEE.started_at.desc()).limit(RECENT_ERRORS_LIMIT).all()
@@ -361,13 +365,15 @@ def _enum_value(value) -> str:
 
 
 def _dimension(dimension: str):
-    """Columns, outer joins, GROUP BY and a row -> (key, label, secondary) mapper for a breakdown."""
+    """Columns, outer joins, GROUP BY, a row -> (key, label, secondary) mapper and the extra WHERE filters
+    that belong to the joins of a breakdown."""
     if dimension == "app":
         return (
             [AEE.app_id, App.name.label("name")],
             [(App, App.app_id == AEE.app_id)],
             [AEE.app_id, App.name],
             lambda r: (str(r.app_id), r.name or f"App #{r.app_id}", None),
+            [],
         )
     if dimension == "agent":
         return (
@@ -375,6 +381,8 @@ def _dimension(dimension: str):
             [(Agent, Agent.agent_id == AEE.agent_id), (App, App.app_id == AEE.app_id)],
             [AEE.agent_id, Agent.name, App.name],
             lambda r: (str(r.agent_id), r.name or f"Agent #{r.agent_id}", r.app_name),
+            # The hidden internal chat agent is not a listable agent (its runs still count in app totals).
+            [or_(Agent.agent_id.is_(None), Agent.visible_clause())],
         )
     if dimension == "user":
         return (
@@ -386,6 +394,7 @@ def _dimension(dimension: str):
                 r.email or ("API key / MCP" if r.user_id is None else f"User #{r.user_id}"),
                 None,
             ),
+            [],
         )
     if dimension == "channel":
         return (
@@ -393,8 +402,9 @@ def _dimension(dimension: str):
             [],
             [AEE.caller_type],
             lambda r: (_enum_value(r.caller_type), _enum_value(r.caller_type), None),
+            [],
         )
     if dimension in ("model", "provider"):
         column = func.coalesce(AEE.model_name if dimension == "model" else AEE.provider, "unknown").label("value")
-        return ([column], [], [column], lambda r: (r.value, r.value, None))
+        return ([column], [], [column], lambda r: (r.value, r.value, None), [])
     raise ValueError(f"Invalid dimension: {dimension}")

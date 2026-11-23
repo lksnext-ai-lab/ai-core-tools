@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, XCircle, Plug } from 'lucide-react';
-import FormActions from './FormActions';
+import { useTranslation } from 'react-i18next';
+import { FormActions } from '../ui/FormActions';
+import { FormCheckbox, FormField, FormTextArea } from '../ui/FormField';
+import Alert from '../ui/Alert';
+import ButtonApp from '../ui/ButtonApp';
 import { apiService } from '../../services/api';
 
 interface MCPConfigFormData {
@@ -28,6 +31,7 @@ interface MCPConfigFormProps {
 
 function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigFormProps>) {
   const { appId } = useParams();
+  const { t } = useTranslation('common');
   const [formData, setFormData] = useState<MCPConfigFormData>({
     name: '',
     description: '',
@@ -68,7 +72,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     try {
       JSON.parse(formData.config);
     } catch {
-      setError('Invalid JSON format in config');
+      setError(t('mcpConfigsPage.form.invalidJson'));
       return;
     }
     
@@ -85,7 +89,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       });
       setTestResult(result);
     } catch (err) {
-      setTestResult({ status: 'error', message: err instanceof Error ? err.message : 'Failed to test connection' });
+      setTestResult({ status: 'error', message: err instanceof Error ? err.message : t('mcpConfigsPage.form.testFailed') });
     } finally {
       setIsTesting(false);
     }
@@ -96,12 +100,12 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     
     // Basic validation
     if (!formData.name.trim()) {
-      setError('Config name is required');
+      setError(t('mcpConfigsPage.form.nameRequired'));
       return;
     }
     
     if (!formData.config.trim()) {
-      setError('Config is required');
+      setError(t('mcpConfigsPage.form.configRequired'));
       return;
     }
 
@@ -109,7 +113,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
     try {
       JSON.parse(formData.config);
     } catch {
-      setError('Invalid JSON format in config');
+      setError(t('mcpConfigsPage.form.invalidJson'));
       return;
     }
 
@@ -118,7 +122,7 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
       setError(null);
       await onSubmit(formData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save MCP config');
+      setError(err instanceof Error ? err.message : t('mcpConfigsPage.form.saveFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -128,111 +132,71 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
 
       {/* Config Name */}
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-          Configuration Name *
-        </label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          placeholder="e.g., Playwright MCP, Filesystem Server"
-          required
-        />
-      </div>
+      <FormField
+        id="name"
+        label={t('mcpConfigsPage.form.configurationName')}
+        value={formData.name}
+        onChange={handleChange}
+        placeholder={t('mcpConfigsPage.form.namePlaceholder')}
+        required
+      />
 
       {/* Description */}
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-          Description
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          placeholder="Optional description of this MCP configuration"
-        />
-      </div>
+      <FormTextArea
+        id="description"
+        label={t('mcpConfigsPage.form.description')}
+        value={formData.description}
+        onChange={handleChange}
+        rows={2}
+        placeholder={t('mcpConfigsPage.form.descriptionPlaceholder')}
+      />
 
       {/* Config JSON */}
-      <div>
-        <label htmlFor="config" className="block text-sm font-medium text-gray-700 mb-2">
-          MCP Server Configuration (JSON) *
-        </label>
-        <textarea
-          id="config"
-          name="config"
-          value={formData.config}
-          onChange={handleChange}
-          rows={12}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
-          placeholder='{&#10;  "playwright": {&#10;    "command": "npx",&#10;    "args": ["@playwright/mcp@latest", "--isolated"]&#10;  }&#10;}'
-          required
-        />
-        <p className="mt-2 text-xs text-gray-500">
-          Full MCP server configuration in JSON format. This matches the structure used in your <code className="bg-gray-100 px-1 py-0.5 rounded">mcp.json</code> file.
-        </p>
-      </div>
+      <FormTextArea
+        id="config"
+        label={t('mcpConfigsPage.form.configurationJson')}
+        value={formData.config}
+        onChange={handleChange}
+        rows={12}
+        textareaClassName="font-mono"
+        placeholder={'{\n  "playwright": {\n    "command": "npx",\n    "args": ["@playwright/mcp@latest", "--isolated"]\n  }\n}'}
+        required
+        helpText={t('mcpConfigsPage.form.configurationHelp')}
+      />
 
       {/* SSL Verify */}
-      <div className="flex items-center gap-3">
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={formData.ssl_verify}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, ssl_verify: e.target.checked }))
-            }
-            className="sr-only peer"
-            aria-label="Verify SSL Certificates"
-          />
-          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-        </label>
-        <div>
-          <span className="text-sm font-medium text-gray-700">Verify SSL Certificates</span>
-          <p className="text-xs text-gray-500">
-            Disable this if the MCP server uses a self-signed certificate.
-          </p>
-        </div>
-      </div>
+      <FormCheckbox
+        id="ssl_verify"
+        label={t('mcpConfigsPage.form.verifySsl')}
+        checked={formData.ssl_verify}
+        onChange={(e) =>
+          setFormData((prev) => ({ ...prev, ssl_verify: e.target.checked }))
+        }
+        variant="toggle"
+        helpText={t('mcpConfigsPage.form.verifySslHelp')}
+      />
 
       {/* Test Result */}
       {testResult && (
-        <div className={`p-3 rounded-lg border ${testResult.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {testResult.status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
-            </div>
-            <div className="ml-3 w-full">
-              <h3 className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>
-                {testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
-              </h3>
-              <div className={`mt-1 text-sm ${testResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-                {testResult.message}
-              </div>
+        <Alert
+          type={testResult.status === 'success' ? 'success' : 'error'}
+          title={testResult.status === 'success' ? t('mcpConfigsPage.form.connectionSuccessful') : t('mcpConfigsPage.form.connectionFailed')}
+          message={(
+            <>
+              {testResult.message}
               {testResult.tools && testResult.tools.length > 0 && (
                 <div className="mt-3">
-                  <h4 className="text-xs font-semibold text-green-800 uppercase tracking-wider mb-2">Available Tools</h4>
-                  <div className="bg-white rounded border border-green-200 max-h-40 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <tbody className="divide-y divide-gray-200">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider mb-2">{t('mcpConfigsPage.form.availableTools')}</h4>
+                  <div className="bg-surface dark:bg-surface-dark rounded border border-success-border dark:border-success-border-dark max-h-40 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-line dark:divide-line-dark">
+                      <tbody className="divide-y divide-line dark:divide-line-dark">
                         {testResult.tools.map((tool: any) => (
                           <tr key={tool.name}>
-                            <td className="px-3 py-2 text-xs font-medium text-gray-900">{tool.name}</td>
-                            <td className="px-3 py-2 text-xs text-gray-500">{tool.description}</td>
+                            <td className="px-3 py-2 text-xs font-medium text-fg dark:text-fg-dark">{tool.name}</td>
+                            <td className="px-3 py-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{tool.description}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -240,60 +204,50 @@ function MCPConfigForm({ mcpConfig, onSubmit, onCancel }: Readonly<MCPConfigForm
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       )}
 
       {/* MCP Info Box */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Plug className="w-4 h-4 text-blue-400" />
+      <Alert
+        type="info"
+        title={t('mcpConfigsPage.form.aboutTitle')}
+        message={(
+          <div className="text-xs space-y-2">
+            <p>
+              {t('mcpConfigsPage.form.aboutDescription')}
+            </p>
+            <p className="font-mono bg-surface-ash dark:bg-surface-hover-dark p-2 rounded text-xs">
+              {t('mcpConfigsPage.form.stdioExample')}<br/>
+              &#123;"server-name": &#123;"command": "npx", "args": ["package@latest"]&#125;&#125;
+            </p>
+            <p className="font-mono bg-surface-ash dark:bg-surface-hover-dark p-2 rounded text-xs">
+              {t('mcpConfigsPage.form.sseExample')}<br/>
+              &#123;"server-name": &#123;"url": "https://server.com", "transport": "sse"&#125;&#125;
+            </p>
           </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">
-              About Model Context Protocol (MCP)
-            </h3>
-            <div className="mt-2 text-xs text-blue-700 space-y-2">
-              <p>
-                MCP enables AI agents to connect to external tools and data sources securely.
-              </p>
-              <p className="font-mono bg-blue-100 p-2 rounded text-xs">
-                Example stdio config:<br/>
-                &#123;"server-name": &#123;"command": "npx", "args": ["package@latest"]&#125;&#125;
-              </p>
-              <p className="font-mono bg-blue-100 p-2 rounded text-xs">
-                Example SSE config:<br/>
-                &#123;"server-name": &#123;"url": "https://server.com", "transport": "sse"&#125;&#125;
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+        )}
+      />
 
-      <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+      <div className="flex justify-between items-center pt-4 border-t border-line dark:border-line-dark">
         <div>
-          <button
+          <ButtonApp
             type="button"
+            label={isTesting ? t('mcpConfigsPage.form.testing') : t('mcpConfigsPage.form.testConnection')}
             onClick={handleTestConnection}
             disabled={isTesting || isSubmitting}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border ${
-              isTesting 
-                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {isTesting ? 'Testing...' : 'Test Connection'}
-          </button>
+            loading={isTesting}
+            variant="muted"
+            size="medium"
+          />
         </div>
         <FormActions
           onCancel={onCancel}
           isSubmitting={isSubmitting}
           isEditing={isEditing}
-          submitLabel={isEditing ? 'Update Config' : 'Create Config'}
-          submitButtonColor="purple"
-          disabled={!isValid}
+          submitDisabled={!isValid}
+          containerClassName="!border-t-0 !pt-0"
         />
       </div>
     </form>

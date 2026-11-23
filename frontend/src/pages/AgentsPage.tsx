@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, FileText, ArrowUp, ArrowDownToLine, Gamepad2, AlertTriangle, Pencil, Trash2, CalendarClock, Gauge } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, FileText, ArrowUpRight, Gauge } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { agentRowStatus } from '../utils/systemOneStatus';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
@@ -13,10 +14,18 @@ import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import AgentImportStepper from '../components/import/AgentImportStepper';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import type { AgentMCPUsage } from '../core/types';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
+import Title from '../components/ui/Title';
+import LoadingState from '../components/ui/LoadingState';
+import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import Modal from '../components/ui/Modal';
+import { FormCheckbox } from '../components/ui/FormField';
+import { useTranslation } from 'react-i18next';
+
 
 // Define the Agent type
 interface Agent {
@@ -52,6 +61,7 @@ interface App {
 function AgentsPage() {
   const { appId } = useParams();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation('common');
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
   const confirm = useConfirm();
@@ -100,12 +110,12 @@ function AgentsPage() {
         // Keep the agent list usable when the scheduled-task API is unavailable.
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      setError(err instanceof Error ? err.message : i18n.t('agentsPage.loadFailed'));
       console.error('Error loading data:', err);
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, i18n]);
 
   useEffect(() => {
     void loadData();
@@ -137,40 +147,42 @@ function AgentsPage() {
 
     const message = (
       <div className="space-y-3">
-        <p>Are you sure you want to delete &quot;{agent.name}&quot;? This action cannot be undone.</p>
+        <p>{t('agentsPage.delete.confirmText', { name: agent.name })}</p>
         {mcpUsage && mcpUsage.mcp_servers.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="font-medium text-amber-900 text-sm">
-              This agent is used in {mcpUsage.mcp_servers.length} MCP server
-              {mcpUsage.mcp_servers.length === 1 ? '' : 's'}:
-            </p>
-            <ul className="mt-1 text-amber-800 text-sm list-disc list-inside">
-              {mcpUsage.mcp_servers.map((s) => (
-                <li key={s.server_id}>{s.server_name}</li>
-              ))}
-            </ul>
-            <p className="mt-2 text-amber-700 text-sm">
-              Deleting this agent will make it unavailable in those MCP servers.
-            </p>
-          </div>
+          <Alert
+            type="warning"
+            title={t('agentsPage.delete.usedInMcpServers', { count: mcpUsage.mcp_servers.length })}
+            message={(
+              <>
+                <ul className="list-disc list-inside">
+                  {mcpUsage.mcp_servers.map((s) => (
+                    <li key={s.server_id}>{s.server_name}</li>
+                  ))}
+                </ul>
+                <p className="mt-2">
+                  {t('agentsPage.delete.mcpWarning')}
+                </p>
+              </>
+            )}
+          />
         )}
       </div>
     );
 
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('agent'),
+      title: t('agentsPage.delete.confirmTitle'),
       message,
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteAgent(Number.parseInt(appId), agent.agent_id),
       {
-        loading: MESSAGES.DELETING('agent'),
-        success: MESSAGES.DELETED('agent'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('agent')),
+        loading: t('agentsPage.delete.loading'),
+        success: t('agentsPage.delete.success'),
+        error: (err) => errorMessage(err, t('agentsPage.delete.failed')),
       },
     );
     if (result === undefined) return;
@@ -181,6 +193,11 @@ function AgentsPage() {
   const handleExportClick = (agent: Agent) => {
     setAgentToExport(agent);
     setShowExportDialog(true);
+  };
+
+  const handleCloseExportDialog = () => {
+    setShowExportDialog(false);
+    setAgentToExport(null);
   };
 
   const handleExport = async () => {
@@ -214,46 +231,46 @@ function AgentsPage() {
 
       setShowExportDialog(false);
       setAgentToExport(null);
-      toast.warning('Agent exported successfully. Note: Conversation history excluded.', {
+      toast.info(t('agentsPage.export.successWarning'), {
         duration: 7000,
       });
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('agent')));
+      toast.error(errorMessage(err, t('agentsPage.export.failed')));
       console.error('Error exporting agent:', err);
     }
   };
 
   const handleImportComplete = () => {
     setShowImportModal(false);
-    toast.success(MESSAGES.IMPORTED('agent'));
+    toast.success(t('agentsPage.import.success'));
     void loadData();
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString(i18n.resolvedLanguage);
   };
 
-  const getAgentTypeIcon = (type: string) => {
+  const getAgentTypeIcon = (type: string): LucideIcon => {
     switch (type) {
       case 'ocr_agent':
-        return <FileText className="w-4 h-4" />;
+        return FileText;
       case 'system_one_agent':
-        return <Gauge className="w-4 h-4" />;
+        return Gauge;
       case 'agent':
       default:
-        return <Bot className="w-4 h-4" />;
+        return Bot;
     }
   };
 
   const getAgentTypeLabel = (type: string) => {
     switch (type) {
       case 'ocr_agent':
-        return 'OCR Agent';
+        return t('agentsPage.agentTypes.ocr');
       case 'system_one_agent':
-        return 'System One Agent';
+        return t('agentsPage.agentTypes.systemOne');
       case 'agent':
       default:
-        return 'AI Agent';
+        return t('agentsPage.agentTypes.ai');
     }
   };
 
@@ -262,16 +279,16 @@ function AgentsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-            <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
-          </div>
+         <Title
+            titulo={t('agentsPage.title')}
+            subtitulo={t('agentsPage.subtitle', { app: app?.name || appId })}
+            variant="titSecundario"
+            titleMarginBottom={6}
+            subtitleMarginBottom={0}
+          />
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2">Loading agents...</span>
-        </div>
+        <LoadingState variant="page" message={t('agentsPage.loading')} />
       </div>
     );
   }
@@ -280,28 +297,30 @@ function AgentsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
-          <p className="text-gray-600">Manage your AI agents for app {app?.name || appId}</p>
-        </div>
+        <Title
+          titulo={t('agentsPage.title')}
+          subtitulo={t('agentsPage.subtitle', { app: app?.name || appId })}
+          variant="titSecundario"
+          titleMarginBottom={6}
+          subtitleMarginBottom={0}
+        />
         <div className="flex items-center space-x-3">
           {hasMinRole(AppRole.ADMINISTRATOR) && (
-            <button
+            <ButtonApp
+              label={t('agentsPage.importAgent')}
+              variant="secondary"
+              size="medium"
+              icon={<ArrowUp className="h-4 w-4" aria-hidden="true" />}
               onClick={() => setShowImportModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <ArrowUp className="w-4 h-4 mr-2" aria-hidden="true" />
-              <span>Import Agent</span>
-            </button>
+            />
           )}
           {canEdit && (
-            <button 
+            <ButtonApp
+              label={`+ ${t('agentsPage.createAgent')}`}
+              variant="primary"
+              size="medium"
               onClick={handleCreateAgent}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}Create Agent
-            </button>
+            />
           )}
         </div>
       </div>
@@ -313,28 +332,31 @@ function AgentsPage() {
 
       <Table
         data={agents}
+        stickyEdgeColumns
         keyExtractor={(agent) => agent.agent_id.toString()}
         columns={[
           {
-            header: 'Agent',
+            header: t('agentsPage.columns.agent'),
             render: (agent) => (
               <div className="flex items-center">
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <span className="text-blue-600 text-lg">{getAgentTypeIcon(agent.type)}</span>
-                  </div>
-                </div>
+                <BackgroundImage
+                  icon={getAgentTypeIcon(agent.type)}
+                  size={34}
+                  iconSize={17}
+                  variant="marron"
+                  className="rounded-lg"
+                />
                 <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-fg dark:text-fg-dark">
                     {canEdit ? (
                       <Link 
                         to={`/apps/${appId}/agents/${agent.agent_id}`} 
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                        className="text-sm font-medium text-fg dark:text-fg-dark"
                       >
                         {agent.name}
                       </Link>
                     ) : (
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-fg dark:text-fg-dark">
                         {agent.name}
                       </span>
                     )}
@@ -342,13 +364,13 @@ function AgentsPage() {
                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
                     {agent.is_tool && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200">
-                        Tool
+                        {t('agentsPage.tool')}
                       </span>
                     )}
                     {agent.a2a_enabled && (
                       <span
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200"
-                        aria-label="Exposed via A2A"
+                        aria-label={t('agentsPage.exposedViaA2A')}
                       >
                         A2A
                       </span>
@@ -360,103 +382,105 @@ function AgentsPage() {
             )
           },
           {
-            header: 'Description',
+            header: t('agentsPage.columns.description'),
             render: (agent) => (
-              <div className="text-sm text-gray-900 max-w-xs">
+              <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs">
                 {agent.description ? (
                   <div className="truncate" title={agent.description}>
                     {agent.description}
                   </div>
                 ) : (
-                  <span className="text-gray-400 italic">No description</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark italic">{t('agentsPage.noDescription')}</span>
                 )}
               </div>
             ),
             className: 'px-6 py-4'
           },
           {
-            header: 'Type',
+            header: t('agentsPage.columns.type'),
             render: (agent) => (
-              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+              <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                 {getAgentTypeLabel(agent.type)}
               </span>
             )
           },
           {
             // One column for both kinds: an LLM agent's AI service, a System One agent's S1 service.
-            header: hasSystemOneAgents ? 'AI/S1 Service' : 'AI Service',
+            header: hasSystemOneAgents ? t('agentsPage.columns.aiOrSystemOneService') : t('agentsPage.columns.aiService'),
             render: (agent) => {
               if (agent.type === 'system_one_agent') {
                 return agent.system_one_service ? (
                   <div className="text-sm">
-                    <div className="font-medium text-gray-900">{agent.system_one_service.name}</div>
-                    <div className="text-xs text-gray-500">{agent.system_one_service.model} • System One</div>
+                    <div className="font-medium text-fg dark:text-fg-dark">{agent.system_one_service.name}</div>
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{agent.system_one_service.model} • System One</div>
                   </div>
                 ) : (
-                  <span className="text-gray-400 italic text-sm">No System One service</span>
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark italic text-sm">{t('agentsPage.noSystemOneService')}</span>
                 );
               }
               return agent.ai_service ? (
                 <div className="text-sm">
-                  <div className="font-medium text-gray-900">
+                  <div className="font-medium text-fg dark:text-fg-dark">
                     {agent.ai_service.name}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
                     {agent.ai_service.model_name} • {agent.ai_service.provider}
                   </div>
                 </div>
               ) : (
-                <span className="text-gray-400 italic text-sm">No AI Service</span>
+                <span className="text-fg-secondary dark:text-fg-secondary-dark italic text-sm">{t('agentsPage.noAIService')}</span>
               );
             }
           },
           {
-            header: 'Status',
+            header: t('agentsPage.columns.status'),
             render: (agent) => {
-              const status = agentRowStatus(agent);
-              const inoperative = status.kind === 'inoperative';
+              // A System One agent whose service was deleted cannot evaluate anything.
+              const inoperative = agentRowStatus(agent).kind === 'inoperative';
               return (
-                <span title={status.detail}
-                      className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${inoperative ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                  <span className={`w-2 h-2 rounded-full mr-2 ${inoperative ? 'bg-yellow-500' : 'bg-green-400'}`} />
-                  {' '}{status.label}
+                <span
+                  title={inoperative ? t('agentsPage.inoperativeDetail') : undefined}
+                  className={`inline-flex items-center justify-center px-[9px] py-[3px] text-[11.5px] rounded-[200px] w-24 ${inoperative ? 'bg-bronze-bg text-bronze-strong dark:bg-bronze-bg-dark dark:text-bronze-strong-dark' : 'bg-success-bg text-success'}`}
+                >
+                  {' '}{inoperative ? t('agentsPage.inoperative') : t('agentsPage.active')}
                 </span>
               );
             }
           },
           {
-            header: 'Scheduling',
+            header: t('agentsPage.columns.scheduling'),
             render: (agent) => {
               const count = scheduledTaskCounts[agent.agent_id] ?? 0;
-              if (!count) return <span className="text-gray-400 text-sm">—</span>;
+              if (!count) return <span className="text-fg-secondary dark:text-fg-secondary-dark text-xs">—</span>;
               return (
                 <button
                   type="button"
                   onClick={() => navigate(`/apps/${appId}/scheduled-tasks?agent_id=${agent.agent_id}`)}
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800"
-                  title="Abrir las tareas programadas que usan este agente"
+                  className="text-xs text-bronze  dark:text-bronze-dark inline-block"
+                  title={t('agentsPage.scheduling.openTitle')}
                 >
-                  <CalendarClock className="w-3 h-3" />
-                  Usado por {count} tarea{count === 1 ? '' : 's'} programada{count === 1 ? '' : 's'}
+                  {t('agentsPage.scheduling.usedByTask', { count })}
+                  {''}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+
                 </button>
               );
             }
           },
           {
-            header: 'Usage',
+            header: t('agentsPage.columns.usage'),
             render: (agent) => (
-              <div className="text-sm text-gray-900">
+              <div className="text-fg-secondary dark:text-fg-secondary-dark text-sm">
                 <div className="flex items-center">
                   <span className="font-medium">{agent.request_count}</span>
-                  <span className="text-gray-500 ml-1">requests</span>
+                  <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark ml-1">{t('agentsPage.requests')}</span>
                 </div>
                 {agent.last_used_date && (
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark>
                     Last used: {formatDate(agent.last_used_date)}
                   </div>
                 )}
                 {!agent.last_used_date && (
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark>
                     Created on {formatDate(agent.created_at)} (Never used)
                   </div>
                 )}
@@ -464,38 +488,39 @@ function AgentsPage() {
             )
           },
           {
-            header: 'Created',
+            header: t('agentsPage.columns.created'),
             render: (agent) => formatDate(agent.created_at),
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Actions',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+            header: t('agentsPage.columns.actions'),
+            sticky: 'right',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
             render: (agent) => (
               <ActionDropdown
+                triggerText={t('agentsPage.columns.actions')}
                 actions={[
                   {
-                    label: 'Playground',
+                    label: t('agentsPage.actions.playground'),
                     onClick: () => handlePlayground(agent.agent_id),
                     icon: <Gamepad2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
-                      label: 'Export',
+                      label: t('agentsPage.actions.export'),
                       onClick: () => handleExportClick(agent),
                       icon: <ArrowDownToLine className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
-                      label: 'Edit',
+                      label: t('edit'),
                       onClick: () => handleEditAgent(agent.agent_id),
                       icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
-                      label: 'Delete',
+                      label: t('delete'),
                       onClick: () => { void handleDeleteAgent(agent); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
@@ -507,109 +532,92 @@ function AgentsPage() {
             )
           }
         ]}
-        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
-        emptyMessage="No Agents Yet"
-        emptySubMessage="Create your first AI agent to get started with intelligent automation."
+        emptyIcon={<BackgroundImage icon={Bot} size={64} iconSize={32} />}
+        emptyMessage={t('agentsPage.empty.title')}
+        emptySubMessage={t('agentsPage.empty.subtitle')}
         loading={loading}
       />
 
       {!loading && canEdit && agents.length === 0 && (
         <div className="text-center py-6">
-          <button 
+          <ButtonApp
+            label={t('agentsPage.empty.createFirstAgent')}
             onClick={handleCreateAgent}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First Agent
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 
       {/* Export Dialog */}
-      {showExportDialog && agentToExport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Agent</h3>
-            <p className="text-gray-600 mb-4">
-              Exporting "{agentToExport.name}". Select which components to bundle:
+      {agentToExport && (
+        <Modal
+          isOpen={showExportDialog}
+          onClose={handleCloseExportDialog}
+          title={t('agentsPage.export.title')}
+          size="medium"
+        >
+            <p className="text-fg-secondary dark:text-fg-secondary-dark mb-4">
+              {t('agentsPage.export.description', { name: agentToExport.name })}
             </p>
 
             {/* Export Options */}
             <div className="space-y-3 mb-4">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={exportOptions.includeAIService}
-                  onChange={(e) => setExportOptions({...exportOptions, includeAIService: e.target.checked})}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">Include AI Service</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={exportOptions.includeSilo}
-                  onChange={(e) => setExportOptions({...exportOptions, includeSilo: e.target.checked})}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">Include Silo (Knowledge Base)</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={exportOptions.includeOutputParser}
-                  onChange={(e) => setExportOptions({...exportOptions, includeOutputParser: e.target.checked})}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">Include Output Parser</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={exportOptions.includeMCPConfigs}
-                  onChange={(e) => setExportOptions({...exportOptions, includeMCPConfigs: e.target.checked})}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">Include MCP Configs</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={exportOptions.includeAgentTools}
-                  onChange={(e) => setExportOptions({...exportOptions, includeAgentTools: e.target.checked})}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">Include Agent Tools</span>
-              </label>
+              <FormCheckbox
+                id="include-ai-service"
+                label={t('agentsPage.export.includeAIService')}
+                checked={exportOptions.includeAIService}
+                onChange={(e) => setExportOptions({ ...exportOptions, includeAIService: e.target.checked })}
+              />
+              <FormCheckbox
+                id="include-silo"
+                label={t('agentsPage.export.includeSilo')}
+                checked={exportOptions.includeSilo}
+                onChange={(e) => setExportOptions({ ...exportOptions, includeSilo: e.target.checked })}
+              />
+              <FormCheckbox
+                id="include-output-parser"
+                label={t('agentsPage.export.includeOutputParser')}
+                checked={exportOptions.includeOutputParser}
+                onChange={(e) => setExportOptions({ ...exportOptions, includeOutputParser: e.target.checked })}
+              />
+              <FormCheckbox
+                id="include-mcp-configs"
+                label={t('agentsPage.export.includeMCPConfigs')}
+                checked={exportOptions.includeMCPConfigs}
+                onChange={(e) => setExportOptions({ ...exportOptions, includeMCPConfigs: e.target.checked })}
+              />
+              <FormCheckbox
+                id="include-agent-tools"
+                label={t('agentsPage.export.includeAgentTools')}
+                checked={exportOptions.includeAgentTools}
+                onChange={(e) => setExportOptions({ ...exportOptions, includeAgentTools: e.target.checked })}
+              />
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-              <div className="flex items-start">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mr-2 shrink-0" />
-                <p className="text-sm text-amber-800">
-                  Conversation history is NOT exported. Only configuration is included.
-                </p>
-              </div>
-            </div>
+            <Alert
+              type="warning"
+              className="mb-4"
+              message={t('agentsPage.export.historyNotIncluded')}
+            />
 
             <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowExportDialog(false);
-                  setAgentToExport(null);
-                }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
+              <ButtonApp
+                label={t('cancel')}
+                variant="secondary"
+                size="medium"
+                onClick={handleCloseExportDialog}
+                className="flex-1"
+              />
+              <ButtonApp
+                label={t('agentsPage.actions.export')}
+                variant="primary"
+                size="medium"
                 onClick={handleExport}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
-              >
-                Export
-              </button>
+                className="flex-1"
+              />
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Import Stepper */}

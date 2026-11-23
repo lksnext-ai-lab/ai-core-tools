@@ -4,6 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
+const translations = require('../src/i18n/locales/es/common.json');
 
 const source = fs.readFileSync(path.join(__dirname, '../src/pages/ScheduledTaskFormPage.tsx'), 'utf8');
 const compiled = ts.transpileModule(source, {
@@ -49,6 +50,7 @@ function mount(overrides = {}) {
         if (!(index in states)) states[index] = initial;
         return [states[index], (next) => { states[index] = typeof next === 'function' ? next(states[index]) : next; }];
       },
+      useCallback(callback) { return callback; },
       useEffect(callback, deps) {
         const index = effectIndex++;
         const old = effects[index];
@@ -59,12 +61,25 @@ function mount(overrides = {}) {
       },
     },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
-    'react-router-dom': { useNavigate: () => () => {}, useParams: () => params },
+    'react-router-dom': {
+      Link: 'Link', useNavigate: () => () => {}, useParams: () => params,
+      useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
+    },
+    'react-i18next': { useTranslation: () => ({ t: (key) => key.split('.').reduce((value, part) => value?.[part], translations) ?? key }) },
     sonner: { toast: { error() {}, success() {} } },
     'lucide-react': { Trash2: () => null },
+    '../components/ui/Title': { __esModule: true, default: 'Title' },
+    '../components/ui/ButtonApp': { __esModule: true, default: 'button' },
+    '../components/ui/FormField': {
+      FormCheckbox: 'FormCheckbox', FormField: 'FormField', FormRadio: 'FormRadio',
+      FormSelect: 'FormSelect', FormTextArea: 'FormTextArea',
+    },
+    '../components/ui/CardApp': { __esModule: true, default: 'CardApp' },
     '../services/api': { apiService },
     '../utils/systemOneStatus': { canBeScheduled: (agent) => agent.type !== 'system_one_agent' },
     '../components/ui/ConfirmationModal': () => null,
+    '../components/ui/SidePanel': { SidePanel: 'SidePanel' },
+    './ScheduledTaskDetailPage': { __esModule: true, default: 'ScheduledTaskDetailPage' },
   };
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: (name) => {
@@ -94,7 +109,7 @@ function elements(node) {
   if (!node || typeof node !== 'object') return [];
   return [node, ...elements(node.props?.children)];
 }
-const button = (view, label) => elements(view).find((node) => node.type === 'button' && node.props.children === label);
+const button = (view, label) => elements(view).find((node) => node.type === 'button' && (node.props.label === label || node.props.children === label));
 const save = (view) => button(view, 'Guardar y activar');
 
 test('waits for channel bindings and saves only the selected channel references', async () => {

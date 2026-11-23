@@ -1,139 +1,588 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { toast } from 'sonner';
-import { canBeScheduled } from '../utils/systemOneStatus';
-import { apiService, type OutputDestination, type ScheduledTask, type ScheduledTaskVisibility } from '../services/api';
+import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { canBeScheduled } from "../utils/systemOneStatus";
+import {
+  apiService,
+  type OutputDestination,
+  type ScheduledTask,
+  type ScheduledTaskVisibility,
+} from "../services/api";
+import Title from "../components/ui/Title";
+import ButtonApp from "../components/ui/ButtonApp";
+import {
+  FormCheckbox,
+  FormField,
+  FormRadio,
+  FormSelect,
+  FormTextArea,
+} from "../components/ui/FormField";
+import CardApp from "../components/ui/CardApp";
+import { SidePanel } from "../components/ui/SidePanel";
+import ScheduledTaskDetailPage from "./ScheduledTaskDetailPage";
 
-interface AgentOption { agent_id: number; name: string; }
-type Frequency = 'interval' | 'daily' | 'weekly' | 'monthly';
+interface AgentOption {
+  agent_id: number;
+  name: string;
+}
+type Frequency = "interval" | "daily" | "weekly" | "monthly";
 
-function applyCronToSimpleSchedule(cronExpression: string, setFrequency: (value: Frequency) => void, setInterval: (value: number) => void, setTime: (value: string) => void, setWeekday: (value: string) => void, setMonthDay: (value: string) => void) {
+function applyCronToSimpleSchedule(
+  cronExpression: string,
+  setFrequency: (value: Frequency) => void,
+  setInterval: (value: number) => void,
+  setTime: (value: string) => void,
+  setWeekday: (value: string) => void,
+  setMonthDay: (value: string) => void,
+) {
   const fields = cronExpression.trim().split(/\s+/);
   if (fields.length !== 5) return;
   const [minute, hour, dayOfMonth, , dayOfWeek] = fields;
   const hourValue = Number(hour);
   const minuteValue = Number(minute);
-  if (minute.startsWith('*/') && hour === '*') {
-    setFrequency('interval'); setInterval(Number(minute.slice(2))); return;
+  if (minute.startsWith("*/") && hour === "*") {
+    setFrequency("interval");
+    setInterval(Number(minute.slice(2)));
+    return;
   }
-  if (minute === '0' && hour.startsWith('*/')) {
-    setFrequency('interval'); setInterval(Number(hour.slice(2)) * 60); return;
+  if (minute === "0" && hour.startsWith("*/")) {
+    setFrequency("interval");
+    setInterval(Number(hour.slice(2)) * 60);
+    return;
   }
   if (Number.isInteger(hourValue) && Number.isInteger(minuteValue)) {
-    setTime(`${String(hourValue).padStart(2, '0')}:${String(minuteValue).padStart(2, '0')}`);
+    setTime(
+      `${String(hourValue).padStart(2, "0")}:${String(minuteValue).padStart(2, "0")}`,
+    );
   }
-  if (dayOfWeek !== '*') { setFrequency('weekly'); setWeekday(dayOfWeek); return; }
-  if (dayOfMonth !== '*') { setFrequency('monthly'); setMonthDay(dayOfMonth); return; }
-  setFrequency('daily');
+  if (dayOfWeek !== "*") {
+    setFrequency("weekly");
+    setWeekday(dayOfWeek);
+    return;
+  }
+  if (dayOfMonth !== "*") {
+    setFrequency("monthly");
+    setMonthDay(dayOfMonth);
+    return;
+  }
+  setFrequency("daily");
 }
 
 export default function ScheduledTaskFormPage() {
+  const { t } = useTranslation("common");
   const { appId, taskId } = useParams();
   const navigate = useNavigate();
-  const numericAppId = Number.parseInt(appId ?? '0', 10);
-  const editing = taskId !== undefined && taskId !== 'new';
+  const location = useLocation();
+  const numericAppId = Number.parseInt(appId ?? "0", 10);
+  const editing = taskId !== undefined && taskId !== "new";
+  // Detail side panel opened after "Save and activate"; the form stays on screen.
+  const [panelOpen, setPanelOpen] = useState(
+    Boolean((location.state as { openPanel?: boolean } | null)?.openPanel),
+  );
+  const [panelVersion, setPanelVersion] = useState(0);
+  const handleClosePanel = useCallback(() => setPanelOpen(false), []);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [task, setTask] = useState<ScheduledTask | null>(null);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [maxRunsRetained, setMaxRunsRetained] = useState(10);
-  const [visibility, setVisibility] = useState<ScheduledTaskVisibility>('unpublished');
-  const [agentId, setAgentId] = useState('');
-  const [input, setInput] = useState('');
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
-  const [mode, setMode] = useState<'new_per_run' | 'continuous'>('new_per_run');
-  const [frequency, setFrequency] = useState<Frequency>('daily');
+  const [visibility, setVisibility] =
+    useState<ScheduledTaskVisibility>("unpublished");
+  const [agentId, setAgentId] = useState("");
+  const [input, setInput] = useState("");
+  const [timezone, setTimezone] = useState(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  );
+  const [mode, setMode] = useState<"new_per_run" | "continuous">("new_per_run");
+  const [frequency, setFrequency] = useState<Frequency>("daily");
   const [interval, setInterval] = useState(60);
-  const [time, setTime] = useState('08:00');
-  const [weekday, setWeekday] = useState('1');
-  const [monthDay, setMonthDay] = useState('1');
+  const [time, setTime] = useState("08:00");
+  const [weekday, setWeekday] = useState("1");
+  const [monthDay, setMonthDay] = useState("1");
   const [saving, setSaving] = useState(false);
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [destinations, setDestinations] = useState<OutputDestination[]>([]);
-  const [outputDestinationIds, setOutputDestinationIds] = useState<number[]>([]);
+  const [outputDestinationIds, setOutputDestinationIds] = useState<number[]>(
+    [],
+  );
 
   useEffect(() => {
     let active = true;
     setTask(null);
     setOutputDestinationIds([]);
-    setLoadState('loading');
-    void apiService.getAgents(numericAppId).then((items) => {
-      if (active) setAgents(items.filter(canBeScheduled).map((item) => ({ agent_id: item.agent_id, name: item.name })));
-    }).catch(() => { if (active) toast.error('No se pudieron cargar los agentes'); });
+    setLoadState("loading");
+    void apiService
+      .getAgents(numericAppId)
+      .then((items) => {
+        if (active)
+          setAgents(
+            items.filter(canBeScheduled).map((item) => ({ agent_id: item.agent_id, name: item.name })),
+          );
+      })
+      .catch(() => {
+        if (active) toast.error(t("scheduledTaskFormPage.agentsLoadFailed"));
+      });
     const destinationsRequest = apiService.getOutputDestinations(numericAppId);
     if (editing) {
       void Promise.all([
         apiService.getScheduledTask(numericAppId, Number(taskId)),
         apiService.getScheduledTaskOutputs(numericAppId, Number(taskId)),
         destinationsRequest,
-      ]).then(([found, result, loadedDestinations]) => {
-        if (!active) return;
-        setTask(found);
-        setDestinations(loadedDestinations);
-        setOutputDestinationIds(result.bindings.map((binding) => binding.destination_id));
-        setName(found.name); setDescription(found.description ?? ''); setMaxRunsRetained(found.max_runs_retained); setVisibility(found.marketplace_visibility); setAgentId(String(found.agent_id)); setInput(found.input?.message ? String(found.input.message) : JSON.stringify(found.input ?? {}, null, 2)); setTimezone(found.timezone); setMode(found.conversation_mode === 'continuous' ? 'continuous' : 'new_per_run');
-        applyCronToSimpleSchedule(found.cron_expression, setFrequency, setInterval, setTime, setWeekday, setMonthDay);
-        setLoadState('ready');
-      }).catch(() => {
-        if (active) setLoadState('error');
-      });
+      ])
+        .then(([found, result, loadedDestinations]) => {
+          if (!active) return;
+          setTask(found);
+          setDestinations(loadedDestinations);
+          setOutputDestinationIds(
+            result.bindings.map((binding) => binding.destination_id),
+          );
+          setName(found.name);
+          setDescription(found.description ?? "");
+          setMaxRunsRetained(found.max_runs_retained);
+          setVisibility(found.marketplace_visibility);
+          setAgentId(String(found.agent_id));
+          setInput(
+            found.input?.message
+              ? String(found.input.message)
+              : JSON.stringify(found.input ?? {}, null, 2),
+          );
+          setTimezone(found.timezone);
+          setMode(
+            found.conversation_mode === "continuous"
+              ? "continuous"
+              : "new_per_run",
+          );
+          applyCronToSimpleSchedule(
+            found.cron_expression,
+            setFrequency,
+            setInterval,
+            setTime,
+            setWeekday,
+            setMonthDay,
+          );
+          setLoadState("ready");
+        })
+        .catch(() => {
+          if (active) setLoadState("error");
+        });
     } else {
-      void destinationsRequest.then((loadedDestinations) => {
-        if (active) { setDestinations(loadedDestinations); setLoadState('ready'); }
-      }).catch(() => { if (active) setLoadState('error'); });
+      void destinationsRequest
+        .then((loadedDestinations) => {
+          if (active) {
+            setDestinations(loadedDestinations);
+            setLoadState("ready");
+          }
+        })
+        .catch(() => {
+          if (active) setLoadState("error");
+        });
     }
-    return () => { active = false; };
-  }, [editing, numericAppId, taskId, loadAttempt]);
+    return () => {
+      active = false;
+    };
+  }, [editing, numericAppId, taskId, loadAttempt, t]);
 
   const simpleCron = () => {
-    const [hour, minute] = time.split(':').map(Number);
-    if (frequency === 'interval') {
-      return interval >= 60 && interval % 60 === 0 ? `0 */${interval / 60} * * *` : `*/${interval} * * * *`;
+    const [hour, minute] = time.split(":").map(Number);
+    if (frequency === "interval") {
+      return interval >= 60 && interval % 60 === 0
+        ? `0 */${interval / 60} * * *`
+        : `*/${interval} * * * *`;
     }
-    if (frequency === 'weekly') return `${minute} ${hour} * * ${weekday}`;
-    if (frequency === 'monthly') return `${minute} ${hour} ${monthDay} * *`;
+    if (frequency === "weekly") return `${minute} ${hour} * * ${weekday}`;
+    if (frequency === "monthly") return `${minute} ${hour} ${monthDay} * *`;
     return `${minute} ${hour} * * *`;
   };
 
   const save = async () => {
-    if (loadState !== 'ready' || (editing && task?.id !== Number(taskId))) {
-      toast.error('Espera a que se carguen la tarea y sus canales antes de guardar');
+    if (loadState !== "ready" || (editing && task?.id !== Number(taskId))) {
+      toast.error(
+        t("scheduledTaskFormPage.waitForLoad"),
+      );
       return;
     }
     const effectiveCron = simpleCron();
-    if (!name.trim() || !agentId || !effectiveCron) { toast.error('Completa el nombre, el agente y la programación'); return; }
+    if (!name.trim() || !agentId || !effectiveCron) {
+      toast.error(t("scheduledTaskFormPage.requiredFields"));
+      return;
+    }
     let parsedInput: Record<string, unknown> = {};
     if (input.trim()) {
-      try { parsedInput = JSON.parse(input) as Record<string, unknown>; }
-      catch { parsedInput = { message: input.trim() }; }
+      try {
+        parsedInput = JSON.parse(input) as Record<string, unknown>;
+      } catch {
+        parsedInput = { message: input.trim() };
+      }
     }
     setSaving(true);
     try {
-      const common = { name, description: description.trim() || null, input: parsedInput, cron_expression: effectiveCron, timezone, max_runs_retained: maxRunsRetained, marketplace_visibility: visibility };
+      const common = {
+        name,
+        description: description.trim() || null,
+        input: parsedInput,
+        cron_expression: effectiveCron,
+        timezone,
+        max_runs_retained: maxRunsRetained,
+        marketplace_visibility: visibility,
+      };
       const outputBindings = outputDestinationIds.map((destination_id) => ({
-        destination_id, enabled: true,
+        destination_id,
+        enabled: true,
       }));
       const saved = task
         ? await apiService.updateScheduledTask(numericAppId, task.id, common)
-        : await apiService.createScheduledTask(numericAppId, { ...common, agent_id: Number(agentId), conversation_mode: mode, max_concurrent_runs: 1, output_bindings: outputBindings });
-      if (task) await apiService.setScheduledTaskOutputs(numericAppId, saved.id, outputBindings);
-      toast.success(task ? 'Tarea actualizada' : 'Tarea creada');
-      navigate(`/apps/${appId}/scheduled-tasks/${saved.id}`);
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la tarea'); }
-    finally { setSaving(false); }
+        : await apiService.createScheduledTask(numericAppId, {
+            ...common,
+            agent_id: Number(agentId),
+            conversation_mode: mode,
+            max_concurrent_runs: 1,
+            output_bindings: outputBindings,
+          });
+      if (task)
+        await apiService.setScheduledTaskOutputs(
+          numericAppId,
+          saved.id,
+          outputBindings,
+        );
+      toast.success(task ? t("scheduledTaskFormPage.updated") : t("scheduledTaskFormPage.created"));
+      if (task) {
+        setPanelVersion((version) => version + 1);
+        setPanelOpen(true);
+      } else {
+        // Created: continue in the edit form of the new task, with the panel open.
+        navigate(`/apps/${appId}/scheduled-tasks/${saved.id}/edit`, {
+          replace: true,
+          state: { openPanel: true },
+        });
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("scheduledTaskFormPage.saveFailed"),
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loadState !== 'ready' || (editing && task?.id !== Number(taskId))) {
-    return <div className="mx-auto max-w-3xl space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900">{editing ? 'Editar tarea programada' : 'Nueva tarea programada'}</h1>
-      {loadState === 'error' ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
-        <p>No se pudieron cargar la tarea y sus canales. Reintenta la carga para poder guardar.</p>
-        <button type="button" onClick={() => { setLoadState('loading'); setLoadAttempt((attempt) => attempt + 1); }} className="mt-3 rounded-lg border px-3 py-2">Reintentar carga</button>
-      </div> : <p role="status">Cargando configuración de la tarea y sus canales…</p>}
-      <button type="button" onClick={() => navigate(`/apps/${appId}/scheduled-tasks`)} className="rounded-lg border px-4 py-2">Cancelar</button>
-    </div>;
+  if (loadState !== "ready" || (editing && task?.id !== Number(taskId))) {
+    return (
+    <div className="mx-auto max-w-4xl space-y-4">
+      <h1 className="text-2xl font-bold text-fg dark:text-fg-dark">
+        {editing ? t("scheduledTaskFormPage.title.edit") : t("scheduledTaskFormPage.title.create")}
+      </h1>
+      {loadState === "error" ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-4"
+        >
+          <p>
+            {t("scheduledTaskFormPage.loadFailedMessage")}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadState("loading");
+              setLoadAttempt((attempt) => attempt + 1);
+            }}
+            className="mt-3 rounded-lg border px-3 py-2"
+          >
+            {t("scheduledTaskFormPage.retry")}
+          </button>
+        </div>
+      ) : (
+        <p role="status">{t("scheduledTaskFormPage.loading")}</p>
+      )}
+      <button
+        type="button"
+        onClick={() => navigate(`/apps/${appId}/scheduled-tasks`)}
+        className="rounded-lg border px-4 py-2"
+      >
+        {t("scheduledTaskFormPage.cancel")}
+      </button>
+    </div>
+    );
   }
 
-  return <div className="mx-auto max-w-3xl space-y-6"><div><h1 className="text-2xl font-bold text-gray-900">{task ? 'Editar tarea programada' : 'Nueva tarea programada'}</h1><p className="text-gray-600">Configura qué agente ejecutar y con qué periodicidad.</p></div><div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6"><div><label htmlFor="task-name" className="mb-1 block text-sm font-medium text-gray-700">Nombre de la tarea</label><input id="task-name" value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border px-3 py-2" placeholder="Informe diario" /></div><div><label htmlFor="task-description" className="mb-1 block text-sm font-medium text-gray-700">Descripción <span className="font-normal text-gray-500">(opcional, visible en el marketplace)</span></label><textarea id="task-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={2} maxLength={4000} className="w-full rounded-lg border px-3 py-2" placeholder="Qué produce esta tarea y para quién" /></div><div><label htmlFor="task-agent" className="mb-1 block text-sm font-medium text-gray-700">Agente</label><select id="task-agent" value={agentId} disabled={Boolean(task)} onChange={(event) => setAgentId(event.target.value)} className="w-full rounded-lg border px-3 py-2"><option value="">Selecciona un agente</option>{agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.name}</option>)}</select></div><div><label htmlFor="task-input" className="mb-1 block text-sm font-medium text-gray-700">Input de la tarea</label><textarea id="task-input" value={input} onChange={(event) => setInput(event.target.value)} rows={5} className="w-full rounded-lg border px-3 py-2" placeholder="Escribe el mensaje inicial o un objeto JSON…" /></div><fieldset disabled={Boolean(task)}><legend className="mb-2 text-sm font-medium text-gray-700">Modo de conversación</legend><label className="mb-2 flex gap-2 text-sm"><input type="radio" checked={mode === 'new_per_run'} onChange={() => setMode('new_per_run')} />Cada ejecución empieza una conversación nueva</label><label className="flex gap-2 text-sm"><input type="radio" checked={mode === 'continuous'} onChange={() => setMode('continuous')} />Todas las ejecuciones continúan la misma conversación</label>{mode === 'continuous' && <p className="mt-1 text-xs text-gray-500">El agente verá lo ocurrido en ejecuciones anteriores, como en una conversación normal. Requiere un agente con memoria.</p>}{task && <p className="mt-1 text-xs text-gray-500">El modo no se puede cambiar una vez creada la tarea.</p>}</fieldset><section className="rounded-lg border border-blue-100 bg-blue-50/40 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-gray-800">Programación</h2><p className="text-xs text-gray-500">Define la frecuencia sin tener que escribir CRON.</p></div><div className="space-y-3"><div><label htmlFor="task-frequency" className="mb-1 block text-sm font-medium text-gray-700">Frecuencia</label><select id="task-frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as Frequency)} className="w-full rounded-lg border px-3 py-2"><option value="interval">Cada X minutos/horas</option><option value="daily">Diariamente</option><option value="weekly">Semanalmente</option><option value="monthly">Mensualmente</option></select></div>{frequency === 'interval' && <div><label htmlFor="task-interval" className="mb-1 block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input id="task-interval" type="number" min="1" max="1440" value={interval} onChange={(event) => setInterval(Number(event.target.value))} className="w-full rounded-lg border px-3 py-2" /></div>}{frequency !== 'interval' && <div><label htmlFor="task-time" className="mb-1 block text-sm font-medium text-gray-700">Hora</label><input id="task-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div>}{frequency === 'weekly' && <div><label htmlFor="task-weekday" className="mb-1 block text-sm font-medium text-gray-700">Día de la semana</label><select id="task-weekday" value={weekday} onChange={(event) => setWeekday(event.target.value)} className="w-full rounded-lg border px-3 py-2"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></div>}{frequency === 'monthly' && <div><label htmlFor="task-month-day" className="mb-1 block text-sm font-medium text-gray-700">Día del mes</label><input id="task-month-day" type="number" min="1" max="28" value={monthDay} onChange={(event) => setMonthDay(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div>}<p className="text-xs text-gray-500">Se guardará como <code className="rounded bg-white px-1 font-mono">{simpleCron()}</code>.</p></div></section><section className="rounded-lg border border-gray-200 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-gray-800">Canales de salida</h2><p className="text-xs text-gray-500">Selecciona los canales registrados en App Settings para esta tarea.</p></div>{destinations.length === 0 ? <div className="space-y-2"><p className="text-sm text-gray-500">Todavía no hay canales registrados para esta aplicación.</p><Link to={`/apps/${appId}/settings/output-destinations`} className="inline-block text-sm text-blue-700 hover:underline">Ir a App Settings para registrar canales</Link></div> : <><div className="space-y-2">{destinations.map((destination) => <label key={destination.id} htmlFor={`output-destination-${destination.id}`} className="flex items-center gap-2 rounded-lg border p-3 text-sm"><input id={`output-destination-${destination.id}`} type="checkbox" checked={outputDestinationIds.includes(destination.id)} onChange={(event) => setOutputDestinationIds((items) => event.target.checked ? [...items, destination.id] : items.filter((id) => id !== destination.id))} /><span className="min-w-0 flex-1">{destination.name}</span><span className="text-xs text-gray-500">{destination.provider_key === 'webhook' ? 'Webhook' : 'Teams'}</span></label>)}</div><Link to={`/apps/${appId}/settings/output-destinations`} className="mt-3 inline-block text-xs text-blue-700 hover:underline">Administrar canales en App Settings</Link></>}</section><div><label htmlFor="task-timezone" className="mb-1 block text-sm font-medium text-gray-700">Zona horaria</label><input id="task-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></div><div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="task-retention" className="mb-1 block text-sm font-medium text-gray-700">Ejecuciones a conservar</label><input id="task-retention" type="number" min="1" max="100" value={maxRunsRetained} onChange={(event) => setMaxRunsRetained(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} className="w-full rounded-lg border px-3 py-2" aria-describedby="task-retention-help" /><p id="task-retention-help" className="mt-1 text-xs text-gray-500">Al superar el límite se borran las más antiguas, con sus archivos. Las que tengan notificaciones vigentes se conservan hasta que caduquen.</p></div><div><label htmlFor="task-visibility" className="mb-1 block text-sm font-medium text-gray-700">Visibilidad en el marketplace</label><select id="task-visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as ScheduledTaskVisibility)} className="w-full rounded-lg border px-3 py-2"><option value="unpublished">No publicada</option><option value="private">Privada · miembros de la app</option><option value="public">Pública · todos los usuarios</option></select><p className="mt-1 text-xs text-gray-500">En el marketplace solo se muestran los resultados, nunca el input.</p></div></div><div className="flex justify-end gap-3"><button type="button" onClick={() => navigate(task ? `/apps/${appId}/scheduled-tasks/${task.id}` : `/apps/${appId}/scheduled-tasks`)} className="rounded-lg border px-4 py-2">Cancelar</button><button type="button" disabled={saving} onClick={() => { void save(); }} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar y activar'}</button></div></div></div>;
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <Title variant="titPrincipal" titulo={task ? t("scheduledTaskFormPage.title.edit") : t("scheduledTaskFormPage.title.create")} subtitulo={t("scheduledTaskFormPage.subtitle")} />
+      <div className="space-y-5">
+        <FormField
+          label={t("scheduledTaskFormPage.fields.name")}
+          id="task-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={t("scheduledTaskFormPage.fields.namePlaceholder")}
+        />
+        <FormTextArea
+          label={t("scheduledTaskFormPage.fields.description")}
+          id="task-description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          rows={2}
+          maxLength={4000}
+          placeholder={t("scheduledTaskFormPage.fields.descriptionPlaceholder")}
+        />
+        <FormSelect
+          label={t("scheduledTaskFormPage.fields.agent")}
+          id="task-agent"
+          value={agentId}
+          disabled={Boolean(task)}
+          onChange={(event) => setAgentId(event.target.value)}
+          options={[
+            { value: "", label: t("scheduledTaskFormPage.fields.selectAgent") },
+            ...agents.map((agent) => ({
+              value: agent.agent_id,
+              label: agent.name,
+            })),
+          ]}
+        />
+        <FormTextArea
+          label={t("scheduledTaskFormPage.fields.taskInput")}
+          id="task-input"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          rows={5}
+          placeholder={t("scheduledTaskFormPage.fields.taskInputPlaceholder")}
+        />
+        <fieldset disabled={Boolean(task)}>
+          <legend className="mb-2 text-sm font-medium text-fg dark:text-fg-dark">
+            {t("scheduledTaskFormPage.conversation.title")}
+          </legend>
+          <FormRadio
+            label={t("scheduledTaskFormPage.conversation.newPerRun")}
+            checked={mode === "new_per_run"}
+            onChange={() => setMode("new_per_run")}
+            className="mb-2 flex gap-2 text-sm"
+          />
+          <FormRadio
+            label={t("scheduledTaskFormPage.conversation.continuous")}
+            checked={mode === "continuous"}
+            onChange={() => setMode("continuous")}
+            className="flex gap-2 text-sm"
+          />
+          {mode === "continuous" && (
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
+              {t("scheduledTaskFormPage.conversation.continuousHelp")}
+            </p>
+          )}
+          {task && (
+            <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
+              {t("scheduledTaskFormPage.conversation.immutable")}
+            </p>
+          )}
+        </fieldset>
+        <CardApp titulo= {t("scheduledTaskFormPage.schedule.title")} subtitulo={t("scheduledTaskFormPage.schedule.description")}>
+          <div className="space-y-3">
+            <FormSelect
+              label={t("scheduledTaskFormPage.schedule.frequency")}
+              id="task-frequency"
+              value={frequency}
+              onChange={(event) =>
+                setFrequency(event.target.value as Frequency)
+              }
+              options={[
+                { value: "interval", label: t("scheduledTaskFormPage.schedule.interval") },
+                { value: "daily", label: t("scheduledTaskFormPage.schedule.daily") },
+                { value: "weekly", label: t("scheduledTaskFormPage.schedule.weekly") },
+                { value: "monthly", label: t("scheduledTaskFormPage.schedule.monthly") },
+              ]}
+            />
+            {frequency === "interval" && (
+              <FormField
+                label={t("scheduledTaskFormPage.schedule.intervalMinutes")}
+                id="task-interval"
+                type="number"
+                min={1}
+                max={1440}
+                value={interval}
+                onChange={(event) => setInterval(Number(event.target.value))}
+              />
+            )}
+            {frequency !== "interval" && (
+              <FormField
+                label={t("scheduledTaskFormPage.schedule.time")}
+                id="task-time"
+                type="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+                inputClassName="dark:[color-scheme:dark] [&::-webkit-datetime-edit-hour-field:focus]:bg-[var(--color-bronze-bg-sof)] [&::-webkit-datetime-edit-hour-field:focus]:text-[var(--text-bronze)] [&::-webkit-datetime-edit-minute-field:focus]:bg-[var(--color-bronze-bg-sof)] [&::-webkit-datetime-edit-minute-field:focus]:text-[var(--text-bronze)] dark:[&::-webkit-datetime-edit-hour-field:focus]:bg-bronze-bg-dark dark:[&::-webkit-datetime-edit-hour-field:focus]:text-bronze-dark dark:[&::-webkit-datetime-edit-minute-field:focus]:bg-bronze-bg-dark dark:[&::-webkit-datetime-edit-minute-field:focus]:text-bronze-dark [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+              />
+            )}
+            {frequency === "weekly" && (
+              <FormSelect
+                label={t("scheduledTaskFormPage.schedule.weekday")}
+                id="task-weekday"
+                value={weekday}
+                onChange={(event) => setWeekday(event.target.value)}
+                options={[
+                  { value: "1", label: t("scheduledTaskFormPage.schedule.days.monday") },
+                  { value: "2", label: t("scheduledTaskFormPage.schedule.days.tuesday") },
+                  { value: "3", label: t("scheduledTaskFormPage.schedule.days.wednesday") },
+                  { value: "4", label: t("scheduledTaskFormPage.schedule.days.thursday") },
+                  { value: "5", label: t("scheduledTaskFormPage.schedule.days.friday") },
+                  { value: "6", label: t("scheduledTaskFormPage.schedule.days.saturday") },
+                  { value: "0", label: t("scheduledTaskFormPage.schedule.days.sunday") },
+                ]}
+              />
+            )}
+            {frequency === "monthly" && (
+              <FormField
+                label={t("scheduledTaskFormPage.schedule.monthDay")}
+                id="task-month-day"
+                type="number"
+                min={1}
+                max={28}
+                value={monthDay}
+                onChange={(event) => setMonthDay(event.target.value)}
+              />
+            )}
+            <p className="text-sm text-tertiary dark:text-tertiary-dark">
+              {t("scheduledTaskFormPage.schedule.savedAs")}{" "}
+              <code className="px-1 font-mono">
+                {simpleCron()}
+              </code>.
+            </p>
+          </div>
+        </CardApp>
+        <CardApp titulo={t("scheduledTaskFormPage.destinations.title")} subtitulo={t("scheduledTaskFormPage.destinations.description")}>
+          {destinations.length === 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                {t("scheduledTaskFormPage.destinations.empty")}
+              </p>
+              <Link
+                to={`/apps/${appId}/settings/output-destinations`}
+                className="inline-block text-xs font-medium text-bronze dark:text-bronze-dark transition-colors"
+              >
+                {t("scheduledTaskFormPage.destinations.registerLink")}
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                {destinations.map((destination) => (
+                  <div
+                    key={destination.id}
+                    className="flex items-center gap-2 rounded-lg border p-3 text-sm"
+                  >
+                    <FormCheckbox
+                      id={`output-destination-${destination.id}`}
+                      label={destination.name}
+                      checked={outputDestinationIds.includes(destination.id)}
+                      onChange={(event) =>
+                        setOutputDestinationIds((items) =>
+                          event.target.checked
+                            ? [...items, destination.id]
+                            : items.filter((id) => id !== destination.id),
+                        )
+                      }
+                      className="min-w-0 flex-1"
+                    />
+                    <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                      {destination.provider_key === "webhook"
+                        ? t("scheduledTaskFormPage.destinations.webhook")
+                        : t("scheduledTaskFormPage.destinations.teams")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                to={`/apps/${appId}/settings/output-destinations`}
+                className="mt-3 inline-block text-xs  text-bronze dark:text-bronze-dark transition-colors"
+              >
+                {t("scheduledTaskFormPage.destinations.manageLink")}
+              </Link>
+            </>
+          )}
+        </CardApp>
+        <FormField
+          label={t("scheduledTaskFormPage.fields.timezone")}
+          id="task-timezone"
+          value={timezone}
+          onChange={(event) => setTimezone(event.target.value)}
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            label={t("scheduledTaskFormPage.retention.label")}
+            id="task-retention"
+            type="number"
+            min={1}
+            max={100}
+            value={maxRunsRetained}
+            onChange={(event) =>
+              setMaxRunsRetained(
+                Math.min(100, Math.max(1, Number(event.target.value) || 1)),
+              )
+            }
+            helpText={t("scheduledTaskFormPage.retention.help")}
+          />
+          <div>
+            <FormSelect
+              label={t("scheduledTaskFormPage.visibility.label")}
+              id="task-visibility"
+              value={visibility}
+              onChange={(event) =>
+                setVisibility(event.target.value as ScheduledTaskVisibility)
+              }
+              options={[
+                { value: "unpublished", label: t("scheduledTaskFormPage.visibility.unpublished") },
+                { value: "private", label: t("scheduledTaskFormPage.visibility.private") },
+                { value: "public", label: t("scheduledTaskFormPage.visibility.public") },
+              ]}
+              helpText={t("scheduledTaskFormPage.visibility.help")}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3">
+          <ButtonApp
+            label={t("scheduledTaskFormPage.cancel")}
+            type="button"
+            variant="secondary"
+            size="medium"
+            onClick={() => navigate(`/apps/${appId}/scheduled-tasks`)}
+          />
+          <ButtonApp
+            label={saving ? t("scheduledTaskFormPage.saving") : t("scheduledTaskFormPage.saveAndActivate")}
+            type="button"
+            variant="primary"
+            size="medium"
+            disabled={saving}
+            loading={saving}
+            onClick={() => {
+              void save();
+            }}
+          />
+        </div>
+      </div>
+
+      {panelOpen && task && (
+        <div className="fixed inset-x-0 bottom-0 top-14 z-30 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title={t("scheduledTasksPage.title")}
+            headerActions={(
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] normal-case tracking-normal text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+                {t("scheduledTasksPage.detailView")}
+              </span>
+            )}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <ScheduledTaskDetailPage
+              key={`${task.id}-${panelVersion}`}
+              taskId={task.id}
+              variant="panel"
+              primaryAction="runNow"
+            />
+          </SidePanel>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -200,7 +200,9 @@ def _is_meaningful_chunk(text: str) -> bool:
     return True
 
 
-def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> tuple[dict, dict]:
+def resolve_search_params(
+    agent: Any, caller_search_params: Optional[dict], *, silo: Any = None
+) -> tuple[dict, dict]:
     """Materialize RAG precedence: caller > agent > system.
 
     Returns ``(search_params, pinned_filter)`` where:
@@ -223,7 +225,8 @@ def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> t
             site (e.g. the public API chat endpoint).
     """
     caller: dict = caller_search_params or {}
-    silo = getattr(agent, "silo", None)
+    # ``silo`` overrides ``agent.silo`` (flexible chat: per-turn silo, never set on the ORM agent).
+    silo = silo if silo is not None else getattr(agent, "silo", None)
 
     # ---- Tuning params (caller > agent > server_default) ----
     resolved: dict = {}
@@ -431,15 +434,22 @@ class SiloService:
             session.close()
     
     @staticmethod
+    def is_temp_silo(silo_id: int, db: Session) -> bool:
+        """Whether ``silo_id`` is the hidden temp silo of a playground / Chat conversation (never user-addressable)."""
+        return SiloRepository.is_temp_silo(silo_id, db)
+
+    @staticmethod
     def get_silos_by_app_id(app_id: int, db: Session) -> List[Silo]:
         """
-        Retrieve all silos by app_id
+        Retrieve the user-visible silos by app_id (the hidden temp silos of conversations are excluded)
         """
         return SiloRepository.get_by_app_id(app_id, db)
     
     @staticmethod
     @handle_database_errors("create_or_update_silo")
-    def create_or_update_silo(silo_data: dict, silo_type: Optional[SiloType] = None, db: Session = None) -> Silo:
+    def create_or_update_silo(
+        silo_data: dict, silo_type: Optional[SiloType] = None, db: Session = None, enforce_quota: bool = True
+    ) -> Silo:
         """
         Create a new silo or update an existing one
         
@@ -447,6 +457,7 @@ class SiloService:
             silo_data: Dictionary containing silo data
             silo_type: Optional silo type to set
             db: Database session to use
+            enforce_quota: False only for the hidden temp silos of conversations (never counted against the tier)
             
         Returns:
             Created or updated Silo instance
@@ -517,7 +528,7 @@ class SiloService:
             else:
                 # Enforce per-app silo limit before creation (SaaS mode only)
                 app_id = silo_data.get('app_id')
-                if app_id:
+                if app_id and enforce_quota:
                     from services.tier_enforcement_service import TierEnforcementService
                     TierEnforcementService.check_resource_limit(session, int(app_id), 'silos')
 

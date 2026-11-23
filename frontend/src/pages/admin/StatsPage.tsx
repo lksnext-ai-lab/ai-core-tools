@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Users, AppWindow, Bot, KeyRound } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { SystemStats } from '../../services/admin';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { errorMessage } from '../../constants/messages';
+import { Title } from '../../components/ui/Title';
+import Table from '../../components/ui/Table';
+import CardApp from '../../components/ui/CardApp';
+import { BackgroundImage } from '../../components/ui/BackgroundImage';
 
 function StatsPage() {
+  const { t, i18n } = useTranslation('common');
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,216 +24,231 @@ function StatsPage() {
       const data = await adminService.getSystemStats();
       setStats(data);
     } catch (err) {
-      setError(errorMessage(err, 'Unable to load system statistics'));
+      setError(errorMessage(err, t('systemStatsPage.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadStats();
   }, [loadStats]);
 
   if (loading) {
-    return <LoadingState message="Loading statistics..." />;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <Title variant='titPrincipal' titulo={t('systemStatsPage.title')} subtitulo={t('systemStatsPage.subtitle')}></Title>
+        </div>
+        <LoadingState variant="page" message={t('systemStatsPage.loading')} />
+      </div>
+    )
   }
 
   if (error || !stats) {
-    return <ErrorState error={error ?? 'Unable to load system statistics'} onRetry={loadStats} />;
+    return <ErrorState error={error ?? t('systemStatsPage.loadFailed')} onRetry={loadStats} />;
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">System Statistics</h1>
-        <p className="text-gray-600">Overview of system usage and activity</p>
-      </div>
+      <Title variant='titPrincipal' titulo={t('systemStatsPage.title')} subtitulo={t('systemStatsPage.subtitle')}></Title>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Users */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="w-6 h-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Users</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total_users}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {stats.active_users} active · {stats.inactive_users} inactive
-              </p>
-            </div>
+        <CardApp variant="white">
+          {/* Icon + Count */}
+          <div className="flex items-start justify-between mb-4">
+            <BackgroundImage icon={Users} size={44}
+                  variant="marron" className="rounded-xl transition-all duration-200"
+            />
+            {stats.total_users !== null && (
+              <div className="text-right">
+                <p className="text-2xl font-bold text-ink dark:dark:text-ink-dark">
+                  {stats.total_users}
+                </p>
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">{t('systemStatsPage.total')}</p>
+              </div>
+            )}
           </div>
-        </div>
+          {/* Title + Subtitle */}
+          <h3 className="font-semibold text-ink dark:dark:text-ink-dark text-sm mb-0.5">{t('systemStatsPage.users')}</h3>
+          <p className="text-fg-secondary dark:text-fg-secondary-dark text-xs mb-4 flex-1">{t('systemStatsPage.activeInactiveUsers', { active: stats.active_users, inactive: stats.inactive_users })}</p>
+        </CardApp>
 
         {/* Total Apps */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <AppWindow className="w-6 h-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Apps</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total_apps}</p>
-            </div>
+        <CardApp variant="white">
+          {/* Icon + Count */}
+          <div className="flex items-start justify-between mb-4">
+            <BackgroundImage icon={AppWindow} size={44}
+                  variant="marron" className="rounded-xl transition-all duration-200"
+            />
+            {stats.total_apps !== null && (
+              <div className="text-right">
+                <p className="text-2xl font-bold text-ink dark:dark:text-ink-dark">
+                  {stats.total_apps}
+                </p>
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">{t('systemStatsPage.total')}</p>
+              </div>
+            )}
           </div>
-        </div>
+          {/* Title + Subtitle */}
+          <h3 className="font-semibold text-ink dark:dark:text-ink-dark text-sm mb-0.5">{t('systemStatsPage.apps')}</h3>
+        </CardApp>
 
         {/* Total Agents */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Bot className="w-6 h-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Agents</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total_agents}</p>
-            </div>
+        <CardApp variant="white">
+          {/* Icon + Count */}
+          <div className="flex items-start justify-between mb-4">
+            <BackgroundImage icon={Bot} size={44}
+                  variant="marron" className="rounded-xl transition-all duration-200"
+            />
+            {stats.total_agents !== null && (
+              <div className="text-right">
+                <p className="text-2xl font-bold text-ink dark:dark:text-ink-dark">
+                  {stats.total_agents}
+                </p>
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">{t('systemStatsPage.total')}</p>
+              </div>
+            )}
           </div>
-        </div>
+          {/* Title + Subtitle */}
+          <h3 className="font-semibold text-ink dark:dark:text-ink-dark text-sm mb-0.5">{t('systemStatsPage.agents')}</h3>
+        </CardApp>
 
         {/* API Keys */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <KeyRound className="w-6 h-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">API Keys</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total_api_keys}</p>
-            </div>
+        <CardApp variant="white">
+          {/* Icon + Count */}
+          <div className="flex items-start justify-between mb-4">
+            <BackgroundImage icon={KeyRound} size={44}
+                  variant="marron" className="rounded-xl transition-all duration-200"
+            />
+            {stats.total_api_keys !== null && (
+              <div className="text-right">
+                <p className="text-2xl font-bold text-ink dark:dark:text-ink-dark">
+                  {stats.total_api_keys}
+                </p>
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark leading-none">{t('systemStatsPage.total')}</p>
+              </div>
+            )}
           </div>
-        </div>
+          {/* Title + Subtitle */}
+          <h3 className="font-semibold text-ink dark:dark:text-ink-dark text-sm mb-0.5">{t('systemStatsPage.apiKeys')}</h3>
+        </CardApp>
       </div>
 
       {/* Detailed Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* User Status Breakdown */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Status</h3>
+        <CardApp className="p-6">
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('systemStatsPage.userStatus')}</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Active Users</span>
+              <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.activeUsers')}</span>
               <span className="text-sm font-medium text-green-600">{stats.active_users}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Inactive Users</span>
+              <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.inactiveUsers')}</span>
               <span className="text-sm font-medium text-red-600">{stats.inactive_users}</span>
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-line dark:border-line-dark">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-900">Total Users</span>
-                <span className="text-sm font-medium text-gray-900">{stats.total_users}</span>
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('systemStatsPage.totalUsers')}</span>
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{stats.total_users}</span>
               </div>
             </div>
             <div className="pt-2">
-              <div className="flex justify-between items-center text-xs text-gray-500">
-                <span>Active Rate</span>
+              <div className="flex justify-between items-center text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                <span>{t('systemStatsPage.activeRate')}</span>
                 <span>{stats.total_users > 0 ? Math.round((stats.active_users / stats.total_users) * 100) : 0}%</span>
               </div>
             </div>
           </div>
-        </div>
+        </CardApp>
 
         {/* API Keys Breakdown */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">API Keys Status</h3>
+        <CardApp className="p-6">
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('systemStatsPage.apiKeysStatus')}</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Active Keys</span>
+              <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.activeKeys')}</span>
               <span className="text-sm font-medium text-green-600">{stats.active_api_keys}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Inactive Keys</span>
+              <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.inactiveKeys')}</span>
               <span className="text-sm font-medium text-red-600">{stats.inactive_api_keys}</span>
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-line dark:border-line-dark">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-900">Total</span>
-                <span className="text-sm font-medium text-gray-900">{stats.total_api_keys}</span>
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('systemStatsPage.total')}</span>
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{stats.total_api_keys}</span>
               </div>
             </div>
           </div>
-        </div>
+        </CardApp>
       </div>
 
       {/* Additional Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* User Activity */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Activity</h3>
+        <CardApp className="p-6">
+          <h3 className="text-lg font-semibold text-fg dark:text-fg-dark mb-4">{t('systemStatsPage.userActivity')}</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Users with Apps</span>
+              <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.usersWithApps')}</span>
               <span className="text-sm font-medium text-blue-600">{stats.users_with_apps}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Recent Users (30 days)</span>
+              <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('systemStatsPage.recentUsers30Days')}</span>
               <span className="text-sm font-medium text-green-600">{stats.recent_users.length}</span>
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-line dark:border-line-dark">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-900">Active Users</span>
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('systemStatsPage.activeUsers')}</span>
+                <span className="text-sm font-medium text-fg dark:text-fg-dark">
                   {Math.round((stats.users_with_apps / stats.total_users) * 100)}%
                 </span>
               </div>
             </div>
           </div>
-        </div>
+        </CardApp>
       </div>
 
       {/* Recent Users */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Users</h3>
-          <p className="text-sm text-gray-600">Users who joined in the last 30 days</p>
+      <div className="">
+        <div className="py-4 ">
+          <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">{t('systemStatsPage.recentUsers')}</h3>
+          <p className="text-sm mt-1text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">{t('systemStatsPage.recentUsersDescription')}</p>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  User
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Joined
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {stats.recent_users.map((user) => (
-                <tr key={user.user_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {user.name || 'No name'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-              {stats.recent_users.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No recent users
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          data={stats.recent_users}
+          keyExtractor={(user) => user.user_id}
+          columns={[
+            {
+              header: t('systemStatsPage.user'),
+              render: (user) => (
+                <div className="text-sm font-medium text-fg dark:text-fg-dark">
+                  {user.name || t('systemStatsPage.noName')}
+                </div>
+              ),
+            },
+            {
+              header: t('systemStatsPage.email'),
+              accessor: 'email',
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+            },
+            {
+              header: t('systemStatsPage.joined'),
+              render: (user) => new Date(user.created_at).toLocaleDateString(i18n.language),
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+            },
+          ]}
+          rowClassName=""
+          emptyMessage={t('systemStatsPage.noRecentUsers')}
+        />
       </div>
     </div>
   );

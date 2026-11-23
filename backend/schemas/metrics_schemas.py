@@ -112,7 +112,8 @@ class RecentError(BaseModel):
     started_at: str
     app_id: int
     app_name: Optional[str] = None
-    agent_id: int
+    # None for runs of the App Chat (internal chat agent): never exposed by id/name.
+    agent_id: Optional[int] = None
     agent_name: Optional[str] = None
     caller_type: str
     error_code: Optional[str] = None

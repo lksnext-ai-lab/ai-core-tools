@@ -9,6 +9,7 @@ from models.domain_url import DomainUrl
 from models.enums.domain_url_status import DomainUrlStatus
 from models.enums.discovery_source import DiscoverySource
 from models.silo import Silo
+from repositories.silo_repository import SiloRepository
 from services.crawl.normalization import normalize_url
 from schemas.export_schemas import DomainExportFileSchema
 from schemas.import_schemas import (
@@ -94,6 +95,7 @@ class DomainImportService:
                         Silo.name
                         == export_data.domain.silo_name,
                         Silo.app_id == app_id,
+                        SiloRepository.visible_clause(),
                     )
                     .first()
                 )
@@ -342,6 +344,7 @@ class DomainImportService:
             .filter(
                 Silo.name == silo_name,
                 Silo.app_id == app_id,
+                SiloRepository.visible_clause(),
             )
             .first()
         )

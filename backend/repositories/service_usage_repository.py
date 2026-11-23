@@ -18,6 +18,8 @@ from models.embedding_service import EmbeddingService
 from models.middleware import AgentMiddleware, Middleware, MiddlewareType
 from models.ocr_agent import OCRAgent
 from models.repository import Repository
+from repositories.repository_repository import RepositoryRepository
+from repositories.silo_repository import SiloRepository
 from models.sandbox_service import SandboxService
 from models.scheduled_task import ScheduledTask
 from models.silo import Silo
@@ -111,6 +113,30 @@ class ServiceUsageRepository:
         return db.execute(select(App.default_sandbox_service_id).where(App.app_id == app_id)).scalar_one_or_none()
 
     @staticmethod
+    def app_default_sandbox_in_use(db: Session, app_id: int) -> bool:
+        """Whether the App default sandbox service is used: the Chat switch is on, or an agent that has the code
+        interpreter on has no sandbox service of its own (it inherits the App default). One query."""
+        agent_uses = (
+            select(Agent.agent_id)
+            .where(
+                Agent.app_id == app_id,
+                Agent.enable_code_interpreter.is_(True),
+                Agent.sandbox_service_id.is_(None),
+            )
+            .exists()
+        )
+        return bool(
+            db.execute(
+                select(or_(App.chat_code_interpreter_enabled.is_(True), agent_uses)).where(App.app_id == app_id)
+            ).scalar_one_or_none()
+        )
+
+    @staticmethod
+    def app_default_embedding_service_id(db: Session, app_id: int) -> Optional[int]:
+        """The app's ``default_embedding_service_id`` (Chat attachment indexing). One query."""
+        return db.execute(select(App.default_embedding_service_id).where(App.app_id == app_id)).scalar_one_or_none()
+
+    @staticmethod
     def silo_refs(db: Session, app_id: int) -> Dict[int, SiloRefs]:
         """The app's silos with the services they use, keyed by silo id. One query."""
         stmt = select(
@@ -145,7 +171,7 @@ class ServiceUsageRepository:
         stmt = (
             select(AgentMiddleware.agent_id, AgentMiddleware.middleware_id)
             .join(Agent, Agent.agent_id == AgentMiddleware.agent_id)
-            .where(Agent.app_id == app_id)
+            .where(Agent.app_id == app_id, Agent.visible_clause())
         )
         if agent_ids is not None:
             stmt = stmt.where(AgentMiddleware.agent_id.in_(list(agent_ids)))
@@ -176,7 +202,7 @@ class ServiceUsageRepository:
             .select_from(Agent)
             .outerjoin(ocr, ocr.c.agent_id == Agent.agent_id)
             .outerjoin(s1, s1.c.agent_id == Agent.agent_id)
-            .where(Agent.app_id == app_id)
+            .where(Agent.app_id == app_id, Agent.visible_clause())
         )
         if ids is not None:
             stmt = stmt.where(Agent.agent_id.in_(ids))
@@ -274,7 +300,7 @@ class ServiceUsageQueries:
             .select_from(Agent)
             .join(App, App.app_id == Agent.app_id)
             .outerjoin(ocr, ocr.c.agent_id == Agent.agent_id)
-            .where(condition)
+            .where(condition, Agent.visible_clause())
             .order_by(Agent.agent_id)
         )
         return [UsageAgentRow(*r) for r in db.execute(ServiceUsageQueries._scope(stmt, Agent, app_id))]
@@ -287,7 +313,7 @@ class ServiceUsageQueries:
                 Silo.transcription_service_id, Silo.video_ai_service_id,
             )
             .join(App, App.app_id == Silo.app_id)
-            .where(condition)
+            .where(condition, SiloRepository.visible_clause())  # "used by" never lists conversation temp silos
             .order_by(Silo.silo_id)
         )
         return [UsageSiloRow(*r) for r in db.execute(ServiceUsageQueries._scope(stmt, Silo, app_id))]
@@ -299,14 +325,14 @@ class ServiceUsageQueries:
             select(Repository.repository_id, Repository.name, Repository.silo_id, Repository.app_id,
                    App.name.label("app_name"))
             .join(App, App.app_id == Repository.app_id)
-            .where(Repository.silo_id.in_(silo_ids))
+            .where(Repository.silo_id.in_(silo_ids), RepositoryRepository.visible_clause())
             .order_by(Repository.repository_id)
         )
         return [UsageRepositoryRow(*r) for r in db.execute(ServiceUsageQueries._scope(stmt, Repository, app_id))]
 
     @staticmethod
     def _tasks(db: Session, agent_condition, app_id: Optional[int]) -> List[UsageTaskRow]:
-        agent_ids = ServiceUsageQueries._scope(select(Agent.agent_id).where(agent_condition), Agent, app_id)
+        agent_ids = ServiceUsageQueries._scope(select(Agent.agent_id).where(agent_condition, Agent.visible_clause()), Agent, app_id)
         stmt = (
             select(ScheduledTask.id, ScheduledTask.name, ScheduledTask.agent_id, ScheduledTask.app_id,
                    App.name.label("app_name"))
@@ -380,6 +406,14 @@ class ServiceUsageQueries:
     def embedding_tasks(db: Session, service_id: int, app_id: Optional[int]) -> List[UsageTaskRow]:
         return ServiceUsageQueries._tasks(db, ServiceUsageQueries._embedding_agent_condition(service_id, app_id), app_id)
 
+    @staticmethod
+    def embedding_apps(db: Session, service_id: int, app_id: Optional[int]) -> List[UsageAppRow]:
+        """Apps whose ``default_embedding_service_id`` is this service (only ``app_id`` in app scope)."""
+        stmt = select(App.app_id, App.name).where(App.default_embedding_service_id == service_id).order_by(App.app_id)
+        if app_id is not None:
+            stmt = stmt.where(App.app_id == app_id)
+        return [UsageAppRow(*r) for r in db.execute(stmt)]
+
     # ---- Sandbox service ----
 
     @staticmethod
@@ -419,7 +453,7 @@ class ServiceUsageQueries:
         stmt = (
             select(AgentMiddleware.middleware_id, AgentMiddleware.agent_id)
             .join(Agent, Agent.agent_id == AgentMiddleware.agent_id)
-            .where(Agent.app_id == app_id, AgentMiddleware.middleware_id.in_(list(middleware_ids)))
+            .where(Agent.app_id == app_id, Agent.visible_clause(), AgentMiddleware.middleware_id.in_(list(middleware_ids)))
             .order_by(AgentMiddleware.agent_id)
         )
         for middleware_id, agent_id in db.execute(stmt):
@@ -432,7 +466,9 @@ class ServiceUsageQueries:
     def count_agents_on_ai_service(db: Session, app_id: int, service_id: int) -> int:
         """Agents of the app whose text model (``Agent.service_id``) is this service."""
         return db.execute(
-            select(func.count()).select_from(Agent).where(Agent.app_id == app_id, Agent.service_id == service_id)
+            select(func.count()).select_from(Agent).where(
+                Agent.app_id == app_id, Agent.service_id == service_id, Agent.visible_clause()
+            )
         ).scalar_one()
 
     @staticmethod
@@ -443,7 +479,7 @@ class ServiceUsageQueries:
         """
         stmt = (
             update(Agent)
-            .where(Agent.app_id == app_id, Agent.service_id == source_id)
+            .where(Agent.app_id == app_id, Agent.service_id == source_id, Agent.visible_clause())
             .values(service_id=target_id)
             .returning(Agent.agent_id)
             .execution_options(synchronize_session=False)
@@ -457,7 +493,7 @@ class ServiceUsageQueries:
         """Repoint direct agent sandbox references and the app default in one transaction."""
         move_agents = (
             update(Agent)
-            .where(Agent.app_id == app_id, Agent.sandbox_service_id == source_id)
+            .where(Agent.app_id == app_id, Agent.sandbox_service_id == source_id, Agent.visible_clause())
             .values(sandbox_service_id=target_id)
             .returning(Agent.agent_id)
             .execution_options(synchronize_session=False)

@@ -196,6 +196,25 @@ LANGSMITH_PROJECT=mattin-ai-production
 
 **Per-app tracing**: Each app can store its own LangSmith API key (`App.langsmith_api_key`). This takes priority over the global env vars. Test connectivity via `POST /internal/apps/{id}/langsmith/test`.
 
+### Embedding Requests
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_EMBEDDING_REQUEST_TIMEOUT_SECONDS` | No | `120` | Client-side timeout (seconds) of embedding calls; retries are unchanged. Applies to OpenAI, MistralAI, Custom/HuggingFace, Ollama and AWS Bedrock embedding services. Azure AI and Google (AI Studio, Vertex AI) clients have no timeout parameter, so it does not apply to them |
+
+See [App Chat](../ai/app-chat.md#attachment-indexing).
+
+### Agent and Chat Execution Limits
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AICT_AGENT_RECURSION_LIMIT` | No | `50` | Graph step limit of an agent run (every model call and tool call is a step). Not an integer or below 1: warning and default |
+| `AICT_CHAT_RECURSION_LIMIT` | No | `100` | Same, for App Chat turns only (they spend more steps). Reaching it ends the Chat turn with `STEP_LIMIT_REACHED` and keeps the conversation. Same fallback rule |
+| `CHAT_MAX_FILES_PER_TURN` | No | `10` | App Chat: files (uploads plus references) per message; `0` = unlimited; HTTP 422 `TOO_MANY_FILES` beyond it (`/messages` and `/stream`) |
+| `ATTACHMENT_INDEXING_TURN_BUDGET_S` | No | `120` | App Chat: total seconds of attachment indexing per turn; `0` = unlimited; keep well below `AICT_AGENT_RUN_TIMEOUT_SECONDS` |
+
+Sizing: the Chat's middleware chain costs about 3 graph steps per tool-using model call, so 100 allows about 33 such calls per Chat turn and the agent default of 50 about 16. See [App Chat](../ai/app-chat.md#step-limit).
+
 ### Application Settings
 
 | Variable | Required | Default | Description |
@@ -255,8 +274,8 @@ See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 | `SANDBOX_DEFAULT_PROVIDER` | No | `opensandbox` | Default code interpreter sandbox provider: `opensandbox`, `daytona`, or `e2b` |
 | `SANDBOX_ALLOWED_PROVIDERS` | No | `opensandbox,daytona,e2b` | Comma-separated provider names apps may select |
 | `OPENSANDBOX_DOMAIN` | OpenSandbox | `localhost:8080` | OpenSandbox server host and port |
-| `OPENSANDBOX_API_KEY` | No | — | OpenSandbox server API key |
-| `OPENSANDBOX_CODE_INTERPRETER_IMAGE` | No | `opensandbox/code-interpreter:v1.0.2` | OpenSandbox code interpreter image |
+| `OPENSANDBOX_API_KEY` | OpenSandbox | — | OpenSandbox server API key, sent by the backend in the `OPEN-SANDBOX-API-KEY` header. **Mandatory when the `opensandbox` compose profile is enabled** (at least 32 characters, see [OpenSandbox server](#opensandbox-server-docker-compose-profile)) |
+| `OPENSANDBOX_CODE_INTERPRETER_IMAGE` | No | `opensandbox/code-interpreter:v1.0.2` (code default, `backend/config.py`); `ghcr.io/lksnext-ai-lab/mattinai-code-interpreter:${IMAGE_TAG:-develop}` in `docker/docker-compose.yaml` | OpenSandbox code interpreter image |
 | `DAYTONA_API_KEY` | Daytona | — | Daytona API key |
 | `DAYTONA_API_URL` | No | SDK default | Daytona API URL |
 | `DAYTONA_TARGET` | No | org default | Daytona target/region |
@@ -275,6 +294,58 @@ See [SaaS Mode Guide](../guides/saas-mode.md) for complete setup instructions.
 | `SANDBOX_SESSION_TTL_H` | No | `2` | Max sandbox lifetime in hours for providers that enforce TTL |
 | `SANDBOX_IDLE_TIMEOUT_S` | No | `120` | Max idle time before cached sandboxes are stopped/destroyed |
 | `SANDBOX_REAPER_INTERVAL_S` | No | `30` | How often the backend checks for idle sandboxes |
+| `SANDBOX_CREATE_TIMEOUT_S` | No | `60` | Timeout for creating or reconnecting a sandbox |
+| `SANDBOX_MAX_OUTPUT_CHARS` | No | `20000` | Maximum characters returned by one code execution (truncated beyond it) |
+| `SANDBOX_MAX_EXECUTIONS_PER_TURN` | No | `5` | Code execution budget **per turn** (not per process). For agents it counts REPL executions; in the App Chat one budget is shared by the REPL tools and `Bash`. `0` is **not** unlimited: it refuses every execution |
+| `SANDBOX_RENEW_MINUTES` | No | `30` | Minutes before a sandbox's TTL is proactively renewed |
+| `SANDBOX_TEST_CONNECTION_ALLOW_PRIVATE` | No | `false` | `true` lets the Sandbox Services "Test connection" probe loopback, link-local and private addresses (needed to test the bundled `opensandbox:8080`). Leave `false` if untrusted tenants can configure their own sandbox endpoints |
+| `SANDBOX_TEST_CONNECTION_TIMEOUT_S` | No | `20` | Bound of the create/run/destroy probe of "Test connection" |
+| `OPENSANDBOX_SUPPORTED_LANGUAGES` | No | `python,bash` | Languages exposed through the OpenSandbox provider (comma-separated) |
+| `OPENSANDBOX_MAX_CONTEXTS_PER_LANGUAGE` | No | `4` | Parallel code contexts per language inside one OpenSandbox sandbox (the compose file default is also `4`; `docker/.env.example` sets `6`) |
+
+The Chat code interpreter, its limits and the output delivery caps below are described in [App Chat](../ai/app-chat.md#code-interpreter).
+
+#### App Chat sandbox limits
+
+`SANDBOX_MAX_SESSIONS_PER_USER` and `SANDBOX_MAX_SESSIONS_PER_APP` are counted **per backend process**, not across workers; `0` = unlimited. `SANDBOX_EVICT_MIN_IDLE_S` and `SANDBOX_CHAT_BASH_MAX_TIMEOUT_S` apply to the Chat only.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SANDBOX_MAX_SESSIONS_PER_USER` | No | `3` | Live sandboxes per user, App Chat only |
+| `SANDBOX_MAX_SESSIONS_PER_APP` | No | `10` | Live sandboxes per App, App Chat only |
+| `SANDBOX_EVICT_MIN_IDLE_S` | No | `60` | Minimum idle seconds before the Chat may evict one of the requester's own sandboxes to make room (`0` = no minimum). Another user's sandbox is never evicted |
+| `SANDBOX_CHAT_BASH_MAX_TIMEOUT_S` | No | `60` | Ceiling of one `Bash` call in the Chat, seconds (minimum `1`) |
+
+#### Sandbox output files (agents and App Chat)
+
+The caps apply **per turn** (`0` = no cap, except where noted); only the pull concurrency is per process.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SANDBOX_PULL_MAX_FILES` | No | `20` | Output files delivered per turn (`0` = no cap) |
+| `SANDBOX_PULL_MAX_FILE_BYTES` | No | `52428800` (50 MB) | Size of one file (`0` = no cap). Do not set this and `SANDBOX_PULL_MAX_TOTAL_BYTES` both to `0`: the pull then reads files without a bound |
+| `SANDBOX_PULL_MAX_TOTAL_BYTES` | No | `104857600` (100 MB) | Total bytes per turn (`0` = no cap) |
+| `SANDBOX_PULL_TIME_BUDGET_S` | No | `20` | Time budget of one turn's pull, seconds (`0` = no budget) |
+| `SANDBOX_PULL_MAX_CONCURRENT` | No | `2` | Pulls running at once per process (a value below 1 is treated as 1) |
+
+All these values are clamped to `>= 0`. `SANDBOX_MAX_CONCURRENT_SESSIONS` is **not** an environment variable: the process-wide cap of 50 live sandboxes is a code default (`backend/services/sandbox_session_service.py`) that `backend/config.py` does not read.
+
+#### OpenSandbox server (Docker compose profile)
+
+Variables of the bundled `opensandbox` profile in `docker/docker-compose.yaml` (`docker/opensandbox/entrypoint.py`). Operations, exposure and mitigations: `docker/README.md`, section "OpenSandbox: exposición y mitigaciones".
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `OPENSANDBOX_API_KEY` | **Yes** (profile) | — | `>= 32` characters of `[A-Za-z0-9._~+/=-]`, not a known placeholder. A preflight service makes `docker compose --profile opensandbox up` fail without a valid key. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. The backend uses the same variable |
+| `OPENSANDBOX_INSECURE_SERVER` | No | — | Dev only. `YES` alone no longer lets the server start without a key |
+| `OPENSANDBOX_ALLOW_INSECURE_DEV` | No | — | Dev only. `1`, together with `OPENSANDBOX_INSECURE_SERVER=YES` and an empty key, starts the control plane **without authentication** (logged as ERROR on every start). Never where untrusted code can run |
+| `OPENSANDBOX_LOG_LEVEL` | No | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`. `DEBUG` may log proxied frame payloads: not for shared deployments |
+| `OPENSANDBOX_BIND_HOST` | No | auto-detected | IP the API listens on (never `0.0.0.0` or `::`). By default the server binds to its address on the control network only, so sandbox code cannot reach the API. The shipped compose file does not forward this variable to the container; it is read by the entrypoint if you pass it through an override |
+| `SANDBOX_NETWORK_NAME` | No | `docker_sandbox-workloads` | Name of the Docker network sandboxes run on; also rendered into the server config. Use a different name for a second OpenSandbox server on the same host |
+| `OPENSANDBOX_SERVER_VERSION` | No | `0.1.11` | Build argument: `opensandbox-server` pip version packaged in the image |
+| `COMPOSE_FILE` | No | — | Docker Compose variable. Set to `docker-compose.yaml:docker-compose.sandbox-hardened.yaml` for the **hardened mode** (no egress from sandboxes; Docker Engine >= 28; `pip install` in sandboxes stops working) |
+
+Breaking change for existing deployments of the profile: set `OPENSANDBOX_API_KEY`, remove `OPENSANDBOX_INSECURE_SERVER=YES` from `.env`, pull or rebuild the images and recreate the network with `docker compose --profile opensandbox down` followed by `up -d` (live sandboxes are lost; the backend recreates them on demand). Never publish port 8080 of `opensandbox` on `0.0.0.0`.
 
 ### Service End of Service
 

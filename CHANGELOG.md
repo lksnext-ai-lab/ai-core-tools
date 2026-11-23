@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Library / client-project mode**: the frontend is no longer packaged or published as the `@lksnext/ai-core-tools-base` npm library. Removed `deploy/` (client-project scripts and template), the `build:lib` / `publish:npm` scripts and the library Vite/TypeScript build, `src/index.ts`, and the client-setup and plugin-development guides. The last published npm version (0.3.0) is left untouched. The frontend app shell `ExtensibleBaseApp` is now `AppRoot` and `LibraryConfig` is `AppConfig`; the extra-routes and navigation-merging extension points (`extraRoutes`, `NavigationMerger`) were removed.
+
+## [0.5.1] - 2026-11-18
+
 ### Breaking Changes
 
 - **Public API `/call` with human approval**: agents with a human-approval middleware no longer return `409` from `/chat/{agent_id}/call`; the response carries `status: "requires_approval"` and a `pending_approval` to answer through the new `/approvals/{approval_id}/decisions` endpoints. `/call` responses now always include `status`.
@@ -19,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Human approvals with expiry**: every human-in-the-loop pause is recorded with its owner and an expiry (`approval_timeout_seconds`, default 1 h). Unanswered approvals are rejected (never approved) by a background sweep, so conversations never stay paused. Answers are accepted once (compare-and-set) and only from the requester.
 - **Approvals in the marketplace chat**, with countdown, cancel and a locked composer while waiting; channels that cannot ask a person (MCP, scheduled tasks, OpenAI-compatible API, platform chatbot) reject the pause and return `409 approval_not_supported_in_channel`.
 - **Agent stream heartbeats and run timeout**: SSE `: ping` comments every 15 s and `AICT_AGENT_RUN_TIMEOUT_SECONDS` (default 600) per turn.
+- **A2A agent server**: agents can be exposed over the Agent2Agent protocol v1.0 (JSON-RPC) with a per-agent opt-in (`a2a_enabled`, new A2A tab in the agent form), per-agent and per-app discovery cards, `X-API-KEY` auth and tasks mapped to conversations. Configured through the `A2A_*` variables (kill switch `A2A_ENABLED`), storage in new `a2a_*` tables (migration `a2a001`). See `docs/ai/a2a-integration.md`.
+- **Scheduled task output channels**: results of scheduled tasks can be delivered to Microsoft Teams and webhooks, with delivery tracking, retries and attachments (migration `output001_output_channels`).
+- **Agent middlewares with human approvals**: summarization, PII and human-approval middlewares can be attached to agents (migrations `mw001` to `mw008`, `hitl001`).
+- **Video and audio through the public silo API**: `POST /silos/{id}/docs/index-file` queues video/audio (202 + `media_id`), plus `POST /silos/{id}/media/youtube` and `GET /silos/{id}/media/{media_id}`; the transcription and video services now live on the silo (migration `mediasilo001_media_services_on_silo`).
+- **Indexing failures are visible**: documents record `status` and `error_message`, uploads return `indexing_failures`, the repository page shows an "indexing failed" badge, and AI/embedding services record `last_error` / `last_error_at` when the provider rejects the key or quota (migration `indexerr001_indexing_error_visibility`).
+- **Test connection for services**: AI, embedding and sandbox services (app and system) can be tested on creation, and sandbox service usage can be moved to another service before deleting.
+- **Metadata dropdown filters in chat**: an agent designer can expose shared metadata fields as end-user dropdown filters in the playground and marketplace chat; values propagate to sub-agents whose silo declares the field (migration `chatfilt001_add_agent_exposed_chat_filters`).
+- **Structure-aware PDF loader**: silo indexing reconstructs paragraphs and section headings in PDFs so chunks follow the document structure, with the previous loader as fallback.
+- **Tesseract OCR in the sandbox**: the code-interpreter image and the `pdf` system skill OCR pages without a text layer (eng, spa, eus, cat, fra). The code-interpreter image must be republished; existing `pdf` skills are refreshed only when not admin-edited.
+- **Per-agent usage statistics**: new per-agent usage endpoint and dashboard replacing the aggregate usage display.
+- **Agent last-used date** (migration `agentlast001_add_agent_last_used_date`).
 
 ### Changed
 
@@ -26,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Middleware export/import**: middlewares can be exported and imported on their own and travel with agent and full-app exports (AI services by name). `Middleware.is_frozen`, never applied, is dropped.
 - **Agents used as tools run their middlewares**; the tools their approval rules gate are withheld because a sub-agent cannot pause. Renaming an agent moves the approval rules that name it.
 - **Conversation summarization defaults**: agents with memory now summarize at 85% of the model's input window (at most 150,000 tokens; 32,000 for models without a profile), keep the last 20 messages and summarize the whole older history. The summarization middleware uses the same values when its trigger or token limit is left empty. The agent form no longer shows the memory management fields.
+- **Rate limiting is per agent**: request budgets are tracked independently for each app-agent pair across the public, OpenAI-compatible, OCR, A2A and marketplace flows, instead of one budget per app. The aggregate usage statistics were removed from the app listing.
+- **Media embedding service optional**: the agent's media embedding service is only required for conversational agents; otherwise documents are sent in full in the prompt. Existing conversational agents without one need it on their next save.
+- **Database pools and errors**: async, checkpointer and DBOS pools are sized independently (`DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_ASYNC_POOL_SIZE`, `DB_ASYNC_MAX_OVERFLOW`, `CHECKPOINTER_POOL_MIN`, `CHECKPOINTER_POOL_MAX`, `DBOS_SYS_DB_POOL_SIZE`) and each pool sets an `application_name`; authentication returns `503` with `Retry-After` instead of `401` when the database is unavailable. `ENTRA_LEEWAY` now defaults to 300 s. Size the pools against your Postgres `max_connections`.
+- **System services in imports and the UI**: system AI and embedding services are resolved when importing agents and silos and are marked in app settings; structured responses with date fields serialize correctly.
+- **Dependencies and tooling**: Vite upgraded from 4.5 to 7.3, `source-map-js` 1.2.2, `uri-js` replaced by `fast-uri`; Dockerfiles install Poetry from a hash-locked requirements file; the real project version is sent to SonarCloud; the `.gitignore` was reorganised (`backend/app` and `backend/data` ignored, see `.env.example`).
+- **Documentation and process**: new Git workflow and release guide (`docs/guides/git-workflow.md`), signed commits required, quality gate badge in the README.
+- **Upgrade notes (from 0.5.0)**: migrations run automatically at container start (`ALEMBIC_LOCK_TIMEOUT`). New revisions: `a2a001`, `output001_output_channels`, `mw001` to `mw008`, `mwrag001`, `hitl001`, `svceos001`, `mediasilo001_media_services_on_silo`, `indexerr001_indexing_error_visibility`, `siloparser001` (clears cross-app output parser links), `agentdel001` (conversations cascade with their agent), `chatfilt001_add_agent_exposed_chat_filters`, `agentlast001_add_agent_last_used_date` and several merge revisions. New variables (all optional): the `A2A_*` set, `HITL_MAX_APPROVAL_TTL_SECONDS`, `HITL_EXPIRY_SWEEP_SECONDS`, `AICT_AGENT_RUN_TIMEOUT_SECONDS`, the pool variables above, `ALEMBIC_LOCK_TIMEOUT`, `UVICORN_GRACEFUL_SHUTDOWN_SECONDS`, `UVICORN_FORWARDED_ALLOW_IPS` and `CADDY_TRUSTED_PROXIES`. Republish the code-interpreter image to get Tesseract.
 
 ### Fixed
 
@@ -38,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full-app import lost tool agents**: agents were imported in name order, so an agent sorted before its tool agent lost the tool silently, and `is_tool` was not exported. Tool agents now import first and keep `is_tool`.
 - **Memory could be turned off under a human-approval middleware** when an agent update omitted `middleware_ids`.
 - **Summaries lost older context**: the default summarization trimmed the history it summarized to 20 tokens (`memory_summarize_threshold`), so each summary only saw the latest message and dropped the previous summary.
+- **Internal agent, OCR and domain routes scoped to their app**: agent detail/create/update no longer accept another app's agent, referenced services/silos/parsers/MCP configs must belong to the agent's app, the internal OCR route requires the viewer role and ownership, and all `/internal/apps/{app_id}/domains/{domain_id}/...` routes return `404` for another app's domain (before, an editor could modify or delete it and a viewer could read it).
+- **Usage statistics leak**: internal usage statistics only cover apps the user owns or collaborates on, and the per-app endpoint requires at least `VIEWER`.
+- **Raw API keys no longer logged**: the no-op agent access check that logged the full user context was removed.
+- **Chatbot history isolated per user** and markdown URLs are sanitized in the frontend.
+- **Agents used as tools ignored their output parser**; they now return the structured response as JSON.
+- **Daytona sandbox**: generated files now reach the chat as attachments, Python errors are no longer swallowed and the working directory no longer nests; system skills (pptx, word, charts) save under `output/`, and existing YAML system skills are refreshed when their package changes.
+- **Anthropic models that reject `temperature`** (Claude 5 family, Opus 4.7+) no longer fail with HTTP 400.
+- **Security and maintenance (SonarCloud)**: blocker/major findings resolved across backend, frontend, Dockerfiles and the SharePoint Graph client (path injection), worker cancellation propagated and file I/O kept off the event loop, floating promises handled, and the reasoning-model regex made non-overlapping.
 
 ## [0.5.0] - 2026-10-01
 

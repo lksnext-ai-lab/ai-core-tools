@@ -69,6 +69,9 @@ class LifecycleContext:
     agent_middlewares: Dict[int, List[int]] = field(default_factory=dict)
     agent_refs: Dict[int, AgentRefs] = field(default_factory=dict)
     app_default_sandbox_service_id: Optional[int] = None
+    app_default_embedding_service_id: Optional[int] = None
+    # The App default sandbox service is in use (Chat switch on, or an agent inherits it).
+    app_default_sandbox_in_use: bool = False
 
 
 class ServiceLifecycleService:
@@ -165,6 +168,8 @@ class ServiceLifecycleService:
                 SERVICE_KIND_SYSTEM_ONE: ServiceUsageRepository.system_one_service_snapshots(db, app_id),
             },
             app_default_sandbox_service_id=ServiceUsageRepository.app_default_sandbox_service_id(db, app_id),
+            app_default_embedding_service_id=ServiceUsageRepository.app_default_embedding_service_id(db, app_id),
+            app_default_sandbox_in_use=ServiceUsageRepository.app_default_sandbox_in_use(db, app_id),
             silos=ServiceUsageRepository.silo_refs(db, app_id),
             middlewares=middlewares,
             agent_middlewares=(
@@ -253,6 +258,21 @@ class ServiceLifecycleService:
         entries.append(entry(
             ctx, SERVICE_KIND_SYSTEM_ONE, getattr(agent_row, "system_one_service_id", None), "system_one"))
         entries.append(entry(ctx, ai, getattr(agent_row, "summarization_service_id", None), "summarization"))
+        return ServiceLifecycleService._finish(entries)
+
+    @staticmethod
+    def warnings_for_app(ctx: LifecycleContext) -> List[ServiceLifecycleWarningSchema]:
+        """Warnings for the App-level defaults: the embedding service the Chat indexes attachments with, and the
+        default sandbox service (only while the Chat switch is on or an agent inherits it)."""
+        entries = [
+            ServiceLifecycleService._entry(
+                ctx, SERVICE_KIND_EMBEDDING, ctx.app_default_embedding_service_id, "embedding", "app default"
+            )
+        ]
+        if ctx.app_default_sandbox_in_use:
+            entries.append(ServiceLifecycleService._entry(
+                ctx, SERVICE_KIND_SANDBOX, ctx.app_default_sandbox_service_id, "sandbox", "app default"
+            ))
         return ServiceLifecycleService._finish(entries)
 
     @staticmethod
@@ -360,6 +380,10 @@ class ServiceLifecycleService:
             agents, silos = q.embedding_agents(db, service_id, app_id), q.embedding_silos(db, service_id, app_id)
             repos, tasks = q.embedding_repositories(db, service_id, app_id), q.embedding_tasks(db, service_id, app_id)
             embedding_silo_ids = {s.silo_id for s in silos}
+            apps_default = [
+                ServiceUsageAppSchema(app_id=a.app_id, app_name=a.app_name)
+                for a in q.embedding_apps(db, service_id, app_id)
+            ]
 
         admin = app_id is None
 

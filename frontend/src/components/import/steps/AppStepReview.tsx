@@ -5,8 +5,11 @@ import type {
 } from '../../../types/import';
 import {
   COMPONENT_TYPE_ICONS,
-  COMPONENT_TYPE_LABELS,
 } from '../../../types/import';
+import Table, { type TableColumn } from '../../ui/Table';
+import { Badge } from '../../ui/Badge';
+import CardApp from '../../ui/CardApp';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   preview: AppImportPreview;
@@ -20,7 +23,7 @@ type ReviewSelectedItem = {
   icon: string;
   type: string;
   name: string;
-  apiKeyStatus?: string;
+  apiKeyStatus?: 'provided' | 'placeholder';
 };
 
 type ReviewSkippedItem = {
@@ -29,19 +32,32 @@ type ReviewSkippedItem = {
   name: string;
 };
 
+const COMPONENT_TYPE_TRANSLATION_KEYS: Record<string, string> = {
+  ai_service: 'aiServices',
+  embedding_service: 'embeddingServices',
+  output_parser: 'outputParsers',
+  mcp_config: 'mcpConfigs',
+  silo: 'silos',
+  repository: 'repositories',
+  domain: 'domains',
+  agent: 'agents',
+  app: 'apps',
+};
+
 function getApiKeyStatus(
   needsApiKey: boolean,
   componentName: string,
   apiKeys: Record<string, string>
-): string | undefined {
+): ReviewSelectedItem['apiKeyStatus'] {
   if (!needsApiKey) return undefined;
-  return apiKeys[componentName] ? 'Provided' : 'CHANGE_ME';
+  return apiKeys[componentName] ? 'provided' : 'placeholder';
 }
 
 function buildReviewRows(
   preview: AppImportPreview,
   selection: Record<string, boolean>,
-  apiKeys: Record<string, string>
+  apiKeys: Record<string, string>,
+  translateComponentType: (type: string) => string,
 ): { selectedItems: ReviewSelectedItem[]; skippedItems: ReviewSkippedItem[] } {
   const categories = [
     { type: 'ai_service', items: preview.ai_services },
@@ -62,7 +78,7 @@ function buildReviewRows(
     for (const item of cat.items) {
       const key = `${cat.type}:${item.component_name}`;
       const icon = COMPONENT_TYPE_ICONS[cat.type] || '';
-      const typeLabel = COMPONENT_TYPE_LABELS[cat.type] || cat.type;
+      const typeLabel = translateComponentType(cat.type);
 
       if (selection[key]) {
         const apiKeyStatus = getApiKeyStatus(
@@ -87,96 +103,93 @@ function AppStepReview({
   selection,
   apiKeys,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+  const translateComponentType = (type: string) => {
+    const translationKey = COMPONENT_TYPE_TRANSLATION_KEYS[type];
+    return translationKey
+      ? t(`importModal.appUpload.components.${translationKey}`, { count: 1 })
+      : t('importModal.unknown');
+  };
   const { selectedItems, skippedItems } = buildReviewRows(
     preview,
     selection,
-    apiKeys
+    apiKeys,
+    translateComponentType,
   );
+  const selectedColumns: TableColumn<ReviewSelectedItem>[] = [
+    {
+      header: t('importModal.agentReview.columns.component'),
+      render: (row) => (
+        <>
+          <span className="mr-1 text-sm">{row.icon}</span>
+          {row.type}
+        </>
+      ),
+    },
+    {
+      header: t('importModal.agentReview.columns.name'),
+      accessor: 'name',
+      className: 'px-6 py-4 text-xs text-fg-secondary dark:text-fg-secondary-dark',
+    },
+    {
+      header: t('importModal.agentReview.columns.action'),
+      render: (row) => (
+        <>
+          <Badge label={t('importModal.actions.import')} variant="success" />
+          {row.apiKeyStatus && (
+            <Badge
+              label={t('importModal.appReview.apiKeyLabel', {
+                status: t(`importModal.appReview.apiKeyStatus.${row.apiKeyStatus}`),
+              })}
+              variant={row.apiKeyStatus === 'provided' ? 'info' : 'warning'}
+              className="ml-1"
+            />
+          )}
+        </>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-gray-900">
-        Import Summary
+      <h4 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+        {t('importModal.result.summary')}
       </h4>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <p className="text-sm text-blue-900">
-          <span className="font-medium">App Name:</span>{' '}
-          {appName}
+      <CardApp variant="canvas" className="p-3">
+        <p >
+          <span className="text-sm uppercase text-bronze-dark">{t('importModal.appReview.appName')}:</span>{' '}
+          <span className="text-sm text-fg dark:text-fg-dark">{appName}</span>
         </p>
-        <p className="text-sm text-blue-900">
-          <span className="font-medium">Conflict Mode:</span>{' '}
-          {conflictMode}
+        <p >
+          <span className="text-sm uppercase text-bronze-dark">{t('importModal.appReview.conflictMode')}:</span>{' '}
+          <span className="text-sm text-fg dark:text-fg-dark">
+            {t(`importModal.conflict.options.${conflictMode}`)}
+          </span>
         </p>
-        <p className="text-sm text-blue-900">
-          <span className="font-medium">
-            Components to Import:
+        <p >
+          <span className="text-sm uppercase text-bronze-dark">{t('importModal.appReview.componentsToImport')}:
           </span>{' '}
-          {selectedItems.length}
+          <span className="text-sm text-fg dark:text-fg-dark">{selectedItems.length}</span>
         </p>
-      </div>
+      </CardApp>
 
       {/* Selected components table */}
       {selectedItems.length > 0 && (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Component
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Name
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {selectedItems.map((row) => (
-                <tr
-                  key={`${row.type}:${row.name}`}
-                >
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <span className="mr-1">
-                      {row.icon}
-                    </span>
-                    {row.type}
-                  </td>
-                  <td className="px-4 py-2 font-medium text-gray-900">
-                    {row.name}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="inline-flex px-2 py-0.5 text-xs rounded-full font-medium bg-green-100 text-green-700">
-                      Import
-                    </span>
-                    {row.apiKeyStatus && (
-                      <span
-                        className={`ml-1 inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${
-                          row.apiKeyStatus === 'Provided'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        Key: {row.apiKeyStatus}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          columns={selectedColumns}
+          data={selectedItems}
+          keyExtractor={(row) => `${row.type}:${row.name}`}
+        />
       )}
 
       {/* Skipped components */}
       {skippedItems.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">
-            Skipped ({skippedItems.length})
+          <p className="text-xs font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1">
+            {t('importModal.appReview.skipped', { count: skippedItems.length })}
           </p>
-          <div className="text-xs text-gray-400 space-y-0.5">
+          <div className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark space-y-0.5">
             {skippedItems.map((row) => (
               <p key={`${row.type}:${row.name}`}>
                 {row.icon} {row.type}: {row.name}
@@ -189,7 +202,7 @@ function AppStepReview({
       {preview.global_warnings.length > 0 && (
         <Alert
           type="warning"
-          title="Warnings"
+          title={t('importModal.result.warnings')}
           message={
             <ul className="list-disc list-inside space-y-1">
               {preview.global_warnings.map((w) => (

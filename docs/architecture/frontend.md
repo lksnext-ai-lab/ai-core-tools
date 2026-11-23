@@ -4,28 +4,13 @@
 
 ## Overview
 
-The frontend is a **React 18 + TypeScript** application built using **Vite** as the build tool. It follows a **library + client** architecture:
-
-- **Base Library** (`@lksnext/ai-core-tools-base`): Core reusable components, hooks, contexts, and services
-- **Client Projects** (`clients/*`): Custom branded applications that consume the base library with client-specific themes and configurations
-
-This architecture enables **single codebase, multiple brands** — one set of core components powers multiple client applications.
+The frontend is a **React 18 + TypeScript** single-page application built with **Vite**. It is built and shipped as a regular app (Docker image served by Nginx behind Caddy); it is not published as a library.
 
 ## Architecture Pattern
 
 ```
 ┌─────────────────────────────────────────────┐
-│          Client Project (e.g., LKS)         │
-│  ┌──────────────┐  ┌─────────────────┐     │
-│  │ clientConfig │  │  Custom Theme   │     │
-│  │   (branding) │  │  (colors, logo) │     │
-│  └──────────────┘  └─────────────────┘     │
-└─────────────────────────────────────────────┘
-                    │
-                    │ imports
-                    ▼
-┌─────────────────────────────────────────────┐
-│   @lksnext/ai-core-tools-base (Library)     │
+│                Frontend (SPA)               │
 │  ┌──────────────┐  ┌─────────────────┐     │
 │  │    Core      │  │   Components    │     │
 │  │ (BaseApp)    │  │  (Playground,   │     │
@@ -43,28 +28,20 @@ This architecture enables **single codebase, multiple brands** — one set of co
             Backend API (/internal/*)
 ```
 
-## Base Library Structure
+Branding, theme, auth and API URL are configured in `src/App.tsx` (an `AppConfig` object, type in `src/core/AppConfig.ts`) and through runtime config (`window.__RUNTIME_CONFIG__`, injected at container start).
+
+## Structure
 
 ### Core (`src/core/`)
 
-**Entry point**: `ExtensibleBaseApp` component
+**Entry point**: `AppRoot` component, mounted by `src/App.tsx`.
 
-The base app provides:
+The app shell provides:
 - **Routing** (React Router)
 - **Authentication** (OIDC or LOCAL mode)
 - **Theme management** (light/dark mode)
 - **Global contexts** (user, theme, apps)
 - **Layout** (header, sidebar, footer)
-
-**Usage in client projects**:
-```tsx
-import { ExtensibleBaseApp } from '@lksnext/ai-core-tools-base';
-import clientConfig from './config/clientConfig';
-
-function App() {
-  return <ExtensibleBaseApp config={clientConfig} />;
-}
-```
 
 ### Pages (`src/pages/`)
 
@@ -169,7 +146,7 @@ React Context API for global state:
 
 **Usage**:
 ```tsx
-import { useUser } from '@lksnext/ai-core-tools-base';
+import { useUser } from '../contexts/UserContext';
 
 function MyComponent() {
   const { user, isAuthenticated } = useUser();
@@ -201,7 +178,7 @@ Custom React hooks for common patterns:
 All backend communication goes through the `api` service:
 
 ```typescript
-import api from '@lksnext/ai-core-tools-base/services/api';
+import { apiService as api } from '../services/api';
 
 // Agents
 const agents = await api.agents.list(appId);
@@ -232,7 +209,7 @@ Additional service modules:
 ```
 
 **Base theme** (`baseTheme`): Default Mattin AI theme
-**Custom themes**: Override base theme via `clientConfig`
+**Custom themes**: pass `themeProps.customThemes` in the config mounted by `src/App.tsx`
 
 ```typescript
 const customTheme = {
@@ -258,7 +235,7 @@ const customTheme = {
 **AuthContext** provides authentication state and utilities:
 
 ```tsx
-import { useAuth } from '@lksnext/ai-core-tools-base';
+import { useAuth } from '../auth/AuthContext';
 
 function MyComponent() {
   const { user, login, logout, isAuthenticated } = useAuth();
@@ -296,55 +273,7 @@ const defaultNavigation = [
 ];
 ```
 
-**NavigationMerger**: Merges default navigation with client-specific or plugin navigation items
-
-**Plugin System** (extensibility point):
-Client projects can extend the base app with:
-- **Custom pages**: Add new routes
-- **Custom navigation items**: Add to sidebar
-- **Custom components**: Override base components
-- **Custom themes**: Full theming control
-
-## Client Project Structure
-
-Example: `clients/lks/`
-
-```
-clients/lks/
-├── src/
-│   ├── config/
-│   │   └── clientConfig.ts     # Client-specific config
-│   ├── themes/
-│   │   └── lksTheme.ts         # Custom LKS theme
-│   ├── assets/
-│   │   └── logo.svg            # LKS logo
-│   ├── App.tsx                 # App entry (uses ExtensibleBaseApp)
-│   └── main.tsx                # Vite entry point
-├── public/
-│   └── favicon.ico             # LKS favicon
-├── package.json                # Dependencies (includes base library)
-└── vite.config.ts              # Vite configuration
-```
-
-### Client Configuration
-
-`clientConfig.ts` customizes the base app:
-
-```typescript
-import { ClientConfig } from '@lksnext/ai-core-tools-base';
-import lksTheme from '../themes/lksTheme';
-import logo from '../assets/logo.svg';
-
-const config: ClientConfig = {
-  client_id: 'lks',
-  client_name: 'LKS Next',
-  theme: lksTheme,
-  logo: logo,
-  // Custom pages, routes, components (optional)
-};
-
-export default config;
-```
+The navigation comes from `defaultNavigation` (`src/core/defaultNavigation.tsx`) unless the config provides `navigationConfig`.
 
 ## Build & Development
 
@@ -361,12 +290,6 @@ npm run dev       # Start Vite dev server on http://localhost:5173
 ```bash
 npm run build     # Build for production (output to dist/)
 npm run preview   # Preview production build
-```
-
-### Library Build
-
-```bash
-npm run build:lib # Build base library for npm publishing
 ```
 
 ## Testing
@@ -427,6 +350,4 @@ const [name, setName] = useState('');
 
 - [Architecture Overview](overview.md)
 - [Backend Architecture](backend.md)
-- [Client Project Setup](../guides/client-setup.md)
 - [Authentication Guide](../guides/authentication.md)
-- [Plugin Development](../guides/plugin-development.md)

@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { isolatedPointIndexes } from '../../utils/chartPoints';
+import { useTranslation } from 'react-i18next';
 import {
   Area,
   AreaChart,
@@ -15,6 +16,7 @@ import {
 import type { TimeseriesResponse } from '../../types/metrics';
 import { formatBucket, formatCount, formatMs } from './format';
 import { useChartPalette, type ChartPalette } from './palette';
+import CardApp from '../ui/CardApp';
 
 interface ChartProps {
   data: TimeseriesResponse;
@@ -22,13 +24,13 @@ interface ChartProps {
 
 export function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <CardApp className="min-w-0">
       <header className="mb-3">
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>}
+        <h3 className="text-sm font-semibold text-fg dark:text-fg-dark">{title}</h3>
+        {subtitle && <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{subtitle}</p>}
       </header>
       {children}
-    </section>
+    </CardApp>
   );
 }
 
@@ -65,9 +67,10 @@ const CHART_HEIGHT = 220;
 
 /** Executions, sub-agent calls and errors per bucket (counts share one axis). */
 export function ActivityChart({ data }: ChartProps) {
+  const { t } = useTranslation('common');
   const palette = useChartPalette();
   return (
-    <ChartCard title="Activity" subtitle="Executions, sub-agent calls and failed executions">
+    <ChartCard title={t('metricsDashboard.charts.activity')} subtitle={t('metricsDashboard.charts.activityDescription')}>
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <LineChart data={data.points} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={palette.grid} />
@@ -75,9 +78,9 @@ export function ActivityChart({ data }: ChartProps) {
           <YAxis allowDecimals={false} width={44} tickFormatter={formatCount} {...axisProps(palette)} />
           <Tooltip {...tooltipProps(palette, data, formatCount)} />
           <Legend {...legendProps} />
-          <Line type="monotone" dataKey="executions" name="Executions" stroke={palette.primary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-          <Line type="monotone" dataKey="subagent_calls" name="Sub-agent calls" stroke={palette.secondary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-          <Line type="monotone" dataKey="errors" name="Errors" stroke={palette.critical} strokeWidth={2} strokeDasharray="4 3" dot={false} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="executions" name={t('metricsDashboard.kpi.executions')} stroke={palette.primary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="subagent_calls" name={t('metricsDashboard.charts.subAgentCalls')} stroke={palette.secondary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="errors" name={t('metricsDashboard.charts.errors')} stroke={palette.critical} strokeWidth={2} strokeDasharray="4 3" dot={false} activeDot={{ r: 4 }} />
         </LineChart>
       </ResponsiveContainer>
     </ChartCard>
@@ -86,9 +89,10 @@ export function ActivityChart({ data }: ChartProps) {
 
 /** Input vs output tokens per bucket, stacked (the stack height is the total). */
 export function TokensChart({ data }: ChartProps) {
+  const { t } = useTranslation('common');
   const palette = useChartPalette();
   return (
-    <ChartCard title="Token usage" subtitle="Input and output tokens across all LLM calls">
+    <ChartCard title={t('metricsDashboard.charts.tokenUsage')} subtitle={t('metricsDashboard.charts.tokenUsageDescription')}>
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <AreaChart data={data.points} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={palette.grid} />
@@ -96,8 +100,8 @@ export function TokensChart({ data }: ChartProps) {
           <YAxis width={44} tickFormatter={formatCount} {...axisProps(palette)} />
           <Tooltip {...tooltipProps(palette, data, formatCount)} />
           <Legend {...legendProps} />
-          <Area type="monotone" dataKey="input_tokens" name="Input" stackId="tokens" stroke={palette.primary} strokeWidth={2} fill={palette.primary} fillOpacity={0.25} />
-          <Area type="monotone" dataKey="output_tokens" name="Output" stackId="tokens" stroke={palette.secondary} strokeWidth={2} fill={palette.secondary} fillOpacity={0.25} />
+          <Area type="monotone" dataKey="input_tokens" name={t('metricsDashboard.charts.input')} stackId="tokens" stroke={palette.primary} strokeWidth={2} fill={palette.primary} fillOpacity={0.25} />
+          <Area type="monotone" dataKey="output_tokens" name={t('metricsDashboard.charts.output')} stackId="tokens" stroke={palette.secondary} strokeWidth={2} fill={palette.secondary} fillOpacity={0.25} />
         </AreaChart>
       </ResponsiveContainer>
     </ChartCard>
@@ -106,6 +110,7 @@ export function TokensChart({ data }: ChartProps) {
 
 /** p50 and p95 duration of top-level executions per bucket. */
 export function LatencyChart({ data }: ChartProps) {
+  const { t } = useTranslation('common');
   const palette = useChartPalette();
   // A single bucket with data (a new agent, a quiet week) has no segment to draw: show those points as dots.
   const lonely50 = isolatedPointIndexes(data.points.map((p) => p.latency_p50_ms));
@@ -115,7 +120,7 @@ export function LatencyChart({ data }: ChartProps) {
       ? <circle key={`dot-${index}`} cx={cx} cy={cy} r={4} fill={color} />
       : <g key={`dot-${index}`} />;
   return (
-    <ChartCard title="Latency" subtitle="Execution duration, median and 95th percentile">
+    <ChartCard title={t('metricsDashboard.charts.latency')} subtitle={t('metricsDashboard.charts.latencyDescription')}>
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <LineChart data={data.points} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={palette.grid} />

@@ -64,6 +64,31 @@ class AppService:
             )
         ensure_assignable(sandbox_service, current_id, "default_sandbox_service_id", SERVICE_KIND_SANDBOX)
 
+    def validate_default_embedding_service(
+        self, app_id: int, embedding_service_id: Optional[int], current_id: Optional[int]
+    ) -> None:
+        """Validate an app's ``default_embedding_service_id`` (``None`` = no default, always valid).
+
+        The service must exist and be system-scoped (``app_id`` NULL) or owned by this app (checked first, so a
+        foreign service id and a missing one are indistinguishable); then a retired service can only be kept
+        (``current_id``), not newly selected.
+
+        Raises:
+            ValueError: the service is not valid for this app, or is retired and not the current one.
+        """
+        if embedding_service_id is None:
+            return
+        from repositories.embedding_service_repository import EmbeddingServiceRepository
+        from utils.service_lifecycle import SERVICE_KIND_EMBEDDING, ensure_assignable
+
+        service = EmbeddingServiceRepository.get_by_id(self.db, embedding_service_id)
+        if service is None or (service.app_id is not None and service.app_id != app_id):
+            raise ValueError(
+                f"default_embedding_service_id '{embedding_service_id}' does not "
+                "reference a valid embedding service for this app."
+            )
+        ensure_assignable(service, current_id, "default_embedding_service_id", SERVICE_KIND_EMBEDDING)
+
     def create_or_update_app(self, app_data: dict, user_id: int = None) -> App:
         """Create a new app or update an existing one.
 

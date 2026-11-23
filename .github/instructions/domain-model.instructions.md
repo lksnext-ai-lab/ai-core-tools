@@ -154,12 +154,9 @@ User message (+ optional files)
 - **Config per agent**: `has_memory`, `memory_max_messages` (default 20), `memory_max_tokens` (default 4000), `memory_summarize_threshold` (default 10)
 - **Strategies**: token counting (tiktoken), message trimming (keeps recent N, preserves system messages), tool message cleanup
 
-## Client Deployment Model
+## Frontend Deployment
 
-Frontend is a **reusable npm library** (`@lksnext/ai-core-tools-base`):
-- Base library provides all pages, components, contexts, auth, themes
-- Client projects (`clients/<name>/`) import it and customize via `clientConfig.ts`: theme, branding, auth config, API URL, feature flags, custom routes
-- All clients share the same backend
+The frontend is a single React SPA shipped as a Docker image (Nginx behind Caddy); it is not published as an npm library. Configuration comes from `VITE_*` variables or runtime config injected at container start.
 
 ## Notable Features
 

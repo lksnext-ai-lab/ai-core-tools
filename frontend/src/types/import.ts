@@ -127,14 +127,14 @@ export const COMPONENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export const COMPONENT_TYPE_ICONS: Record<string, string> = {
-  ai_service: 'AI',
-  system_one_service: 'S1',
-  embedding_service: 'Embed',
-  output_parser: 'Parser',
-  mcp_config: 'MCP',
-  silo: 'Silo',
-  repository: 'Repo',
-  domain: 'Domain',
-  agent: 'Agent',
-  app: 'App',
+  ai_service: 'Bot',
+  system_one_service: 'Gauge',
+  embedding_service: 'Globe',
+  output_parser: 'Webhook',
+  mcp_config: 'Plug',
+  silo: 'Database',
+  repository: 'FolderOpen',
+  domain: 'Globe',
+  agent: 'Bot',
+  app: 'Layers',
 };
