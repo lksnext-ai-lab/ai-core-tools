@@ -1,7 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { Loader2, CheckCircle2, XCircle, Ban, Clock } from 'lucide-react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { CheckCircle2, XCircle, Ban, Clock } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { CrawlJob, CrawlJobStatus } from '../../types/crawl';
+import { Spinner } from '../ui/Spinner';
+import { Badge, type BadgeVariant } from '../ui/Badge';
+import { ButtonApp } from '../ui/ButtonApp';
+import CardApp from '../ui/CardApp';
+import Alert from '../ui/Alert';
 
 interface CrawlJobProgressPanelProps {
   appId: number;
@@ -14,32 +21,38 @@ interface CrawlJobProgressPanelProps {
 const ACTIVE_STATUSES: CrawlJobStatus[] = ['QUEUED', 'RUNNING'];
 const POLL_INTERVAL_MS = 2000;
 
-function statusBadge(status: CrawlJobStatus) {
+function statusBadge(status: CrawlJobStatus): { text: string; variant: BadgeVariant; icon: ReactNode } {
   switch (status) {
     case 'QUEUED':
-      return { text: 'Queued', className: 'bg-yellow-100 text-yellow-800', icon: <Clock className="w-3 h-3" /> };
+      return { text: 'queued', variant: 'warning', icon: <Clock className="w-3 h-3" /> };
     case 'RUNNING':
-      return { text: 'Running', className: 'bg-blue-100 text-blue-800', icon: <Loader2 className="w-3 h-3 animate-spin" /> };
+      return { text: 'running', variant: 'info', icon: <Spinner size="xs" tone="current" /> };
     case 'COMPLETED':
-      return { text: 'Completed', className: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="w-3 h-3" /> };
+      return { text: 'completed', variant: 'success', icon: <CheckCircle2 className="w-3 h-3" /> };
     case 'FAILED':
-      return { text: 'Failed', className: 'bg-red-100 text-red-800', icon: <XCircle className="w-3 h-3" /> };
+      return { text: 'failed', variant: 'error', icon: <XCircle className="w-3 h-3" /> };
     case 'CANCELLED':
-      return { text: 'Cancelled', className: 'bg-gray-100 text-gray-600', icon: <Ban className="w-3 h-3" /> };
+      return { text: 'cancelled', variant: 'default', icon: <Ban className="w-3 h-3" /> };
     default:
-      return { text: status, className: 'bg-gray-100 text-gray-600', icon: null };
+      return { text: status, variant: 'default', icon: null };
   }
 }
 
-function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+function formatDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+  t: TFunction<'common'>,
+): string {
   if (!startedAt) return '—';
   const start = new Date(startedAt).getTime();
   const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
   const seconds = Math.round((end - start) / 1000);
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return t('domainDetailPage.crawlProgress.seconds', { count: seconds });
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}m ${secs}s`;
+  return t('domainDetailPage.crawlProgress.minutesAndSeconds', {
+    minutes: mins,
+    seconds: seconds % 60,
+  });
 }
 
 export default function CrawlJobProgressPanel({
@@ -49,6 +62,7 @@ export default function CrawlJobProgressPanel({
   canEdit,
   onJobUpdate,
 }: Readonly<CrawlJobProgressPanelProps>) {
+  const { t, i18n } = useTranslation('common');
   const [currentJob, setCurrentJob] = useState<CrawlJob | null>(initialJob ?? null);
   const [cancelling, setCancelling] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,8 +123,8 @@ export default function CrawlJobProgressPanel({
 
   if (!currentJob) {
     return (
-      <div className="text-center py-8 text-gray-500 text-sm">
-        No crawl jobs yet. Use "Run crawl now" to start the first crawl.
+      <div className="text-center py-8 text-fg-secondary dark:text-fg-secondary-dark text-sm">
+        {t('domainDetailPage.crawlProgress.noJobs', { action: t('domainDetailPage.runCrawl.runNow') })}
       </div>
     );
   }
@@ -119,29 +133,27 @@ export default function CrawlJobProgressPanel({
   const isActive = ACTIVE_STATUSES.includes(currentJob.status);
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+    <div className=" p-4 space-y-4">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
-            {badge.icon}
-            {badge.text}
-          </span>
-          <span className="text-xs text-gray-500">Job #{currentJob.id}</span>
-          <span className="text-xs text-gray-400">
-            {currentJob.triggered_by === 'MANUAL' ? 'Manual trigger' : 'Scheduled'}
+          <Badge label={t(`domainDetailPage.jobStatuses.${badge.text}`, { defaultValue: badge.text })} variant={badge.variant} icon={badge.icon} />
+          <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('domainDetailPage.crawlProgress.job', { id: currentJob.id })}</span>
+          <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+            {currentJob.triggered_by === 'MANUAL' ? t('domainDetailPage.crawlProgress.manualTrigger') : t('domainDetailPage.crawlProgress.scheduled')}
           </span>
         </div>
 
+        
+
         {canEdit && isActive && (
-          <button
-            type="button"
+          <ButtonApp
+            label={cancelling ? t('domainDetailPage.crawlProgress.cancelling') : t('domainDetailPage.crawlProgress.cancel')}
+            variant="danger"
+            size="medium"
             onClick={() => { void handleCancel(); }}
             disabled={cancelling}
-            className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 border border-red-300 rounded px-2 py-0.5"
-          >
-            {cancelling ? 'Cancelling...' : 'Cancel'}
-          </button>
+          />
         )}
       </div>
 
@@ -149,33 +161,31 @@ export default function CrawlJobProgressPanel({
       <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-center">
         {(
           [
-            { label: 'Discovered', value: currentJob.discovered_count },
-            { label: 'Indexed', value: currentJob.indexed_count },
-            { label: 'Skipped', value: currentJob.skipped_count },
-            { label: 'Failed', value: currentJob.failed_count },
-            { label: 'Removed', value: currentJob.removed_count },
+            { label: t('domainDetailPage.crawlProgress.discovered'), value: currentJob.discovered_count },
+            { label: t('domainDetailPage.crawlProgress.indexed'), value: currentJob.indexed_count },
+            { label: t('domainDetailPage.crawlProgress.skipped'), value: currentJob.skipped_count },
+            { label: t('domainDetailPage.crawlProgress.failed'), value: currentJob.failed_count },
+            { label: t('domainDetailPage.crawlProgress.removed'), value: currentJob.removed_count },
           ] as const
         ).map(({ label, value }) => (
-          <div key={label} className="bg-gray-50 rounded p-2">
-            <p className="text-lg font-semibold text-gray-800">{value}</p>
-            <p className="text-xs text-gray-500">{label}</p>
-          </div>
+          <CardApp variant="white" key={label} className=" p-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-fg dark:text-fg-dark">{label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-fg dark:text-fg-dark">{value}</p>
+          </CardApp>
         ))}
       </div>
 
       {/* Timing */}
-      <div className="text-xs text-gray-500 flex gap-4">
-        <span>Duration: {formatDuration(currentJob.started_at, currentJob.finished_at)}</span>
+      <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark flex gap-4">
+        <span>{t('domainDetailPage.crawlProgress.duration')}: {formatDuration(currentJob.started_at, currentJob.finished_at, t)}</span>
         {currentJob.started_at && (
-          <span>Started: {new Date(currentJob.started_at).toLocaleString()}</span>
+          <span>{t('domainDetailPage.crawlProgress.started')}: {new Date(currentJob.started_at).toLocaleString(i18n.resolvedLanguage)}</span>
         )}
       </div>
-
+        
       {/* Error log (terminal failure only) */}
       {currentJob.status === 'FAILED' && currentJob.error_log && (
-        <div className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
-          {currentJob.error_log}
-        </div>
+        <Alert type="error" title="" message={currentJob.error_log} />
       )}
     </div>
   );

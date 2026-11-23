@@ -164,7 +164,7 @@ class MCPServerHandler:
 
             for assoc in mcp_server.agent_associations:
                 agent = assoc.agent
-                if not agent:
+                if not agent or agent.is_internal_chat:
                     continue
 
                 # Filter out agents that are no longer marked as tools
@@ -205,7 +205,7 @@ class MCPServerHandler:
         """Find the agent associated to a given tool name in an MCP server."""
         for assoc in mcp_server.agent_associations:
             assoc_agent = assoc.agent
-            if not assoc_agent:
+            if not assoc_agent or assoc_agent.is_internal_chat:
                 continue
             expected_name = assoc.tool_name_override or self._generate_tool_name(assoc_agent.name)
             if expected_name == tool_name:

@@ -23,7 +23,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from db.database import SessionLocal, engine
-from models.hitl_approval import ApprovalStatus
+from models.hitl_approval import ApprovalChannel, ApprovalStatus
 from repositories.hitl_approval_repository import HITLApprovalRepository
 from tools.stream_guard import AGENT_RUN_TIMEOUT_SECONDS
 from utils.config import Config
@@ -52,8 +52,14 @@ async def _recover_stuck(db) -> None:
             continue
         session_id = approval.thread_id.removeprefix(f"thread_{approval.agent_id}_")
         still_paused = bool(await CheckpointerCacheService.get_pending_tool_calls_async(approval.agent_id, session_id))
-        if still_paused:
+        if still_paused and approval.channel != ApprovalChannel.INTERNAL_CHAT.value:
             approval.status = ApprovalStatus.PENDING.value
+        elif still_paused:
+            # Chat: its per-turn config is not persisted, so nobody can resume or expire it (a re-pended row
+            # would never be answerable). The thread stays as the crashed process left it.
+            approval.status = ApprovalStatus.CANCELLED.value
+            approval.resolution_reason = "channel_not_interactive"
+            approval.decided_at = datetime.now(timezone.utc)
         else:
             approval.status = ApprovalStatus.CANCELLED.value
             approval.resolution_reason = "interrupted"

@@ -643,6 +643,39 @@ class E2BProvider(SandboxProvider):
             self._reset_idle_timeout(sandbox, suppress_errors=True)
         return bytes(data)
 
+    def read_file_limited(self, handle: SandboxHandle, filename: str, max_bytes: int) -> bytes:
+        """Streamed HTTP read that stops at ``max_bytes + 1`` bytes.
+
+        The public ``files.read`` buffers the whole body, so this goes through the SDK's envd HTTP client with a
+        streaming request (and a ``Range`` header). If that client is not available in the installed SDK the
+        provider refuses (``NotImplementedError``) rather than reading an unbounded file.
+        """
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"E2BProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+        files = getattr(sandbox, "files", None)
+        api = getattr(files, "_envd_api", None)
+        if api is None or not hasattr(api, "stream"):
+            raise NotImplementedError("E2B SDK exposes no streaming read")
+        from e2b.envd.api import ENVD_API_FILES_ROUTE  # noqa: PLC0415
+
+        self._reset_idle_timeout(sandbox)
+        try:
+            with api.stream(
+                "GET",
+                ENVD_API_FILES_ROUTE,
+                params={"path": _workspace_path(filename)},
+                headers={"Range": f"bytes=0-{max_bytes}"},
+                timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S,
+            ) as response:
+                if response.status_code >= 300:
+                    raise RuntimeError(f"E2B read failed with status {response.status_code}")
+                return self._collect_bounded(response.iter_bytes(), max_bytes)
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
+
     def list_files(self, handle: SandboxHandle) -> list[str]:
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:

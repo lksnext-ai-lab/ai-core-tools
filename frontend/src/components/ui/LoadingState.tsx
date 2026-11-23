@@ -1,27 +1,52 @@
-import React from 'react';
+import { Spinner, type SpinnerSize } from './Spinner';
 
-interface LoadingStateProps {
+export type LoadingStateVariant = 'inline' | 'section' | 'page' | 'fullScreen' | 'indicator';
+
+export interface LoadingStateProps {
   readonly message?: string;
+  /**
+   * - `inline`: spinner and message side by side (table bodies, small panels)
+   * - `section`: stacked, for a card or panel area (default)
+   * - `page`: stacked and larger, replaces a whole page's content
+   * - `fullScreen`: covers the viewport (session checks, auth redirects)
+   */
+  readonly variant?: LoadingStateVariant;
   readonly className?: string;
-  readonly spinnerColor?: string;
 }
+
+const variantClasses: Record<LoadingStateVariant, string> = {
+  inline: 'flex items-center justify-center gap-2 py-6',
+  section: 'flex flex-col items-center justify-center gap-2 p-6',
+  page: 'flex min-h-64 flex-col items-center justify-center gap-3 py-12',
+  fullScreen: 'flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas dark:bg-canvas-dark',
+  indicator: 'flex items-center justify-center',
+};
+
+const spinnerSizes: Record<LoadingStateVariant, SpinnerSize> = {
+  inline: 'md',
+  section: 'lg',
+  page: 'xl',
+  fullScreen: 'xl',
+  indicator: 'xl',
+};
 
 /**
  * Reusable loading state component
  * Shows a spinner with an optional message
  */
-export function LoadingState({ 
-  message = "Loading...",
+export function LoadingState({
+  message = 'Loading...',
+  variant = 'section',
   className = '',
-  spinnerColor = 'border-blue-600'
 }: LoadingStateProps) {
   return (
-    <div className={`p-6 text-center ${className}`}>
-      <div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${spinnerColor} mx-auto`}></div>
-      <p className="mt-2 text-gray-600">{message}</p>
-    </div>
+    <output aria-live="polite" className={`${variantClasses[variant]} ${className}`}>
+      <Spinner size={spinnerSizes[variant]} />
+      {variant !== 'indicator' && (
+        <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{message}</span>
+      )}
+    </output>
   );
 }
 
 export default LoadingState;
-

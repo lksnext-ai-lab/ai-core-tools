@@ -267,7 +267,7 @@ Role authorization returns specific HTTP status codes:
 React hook to get user's role in current app:
 
 ```typescript
-import { useAppRole } from '@lksnext/ai-core-tools-base';
+import { useAppRole } from '../hooks/useAppRole';
 
 function MyComponent() {
   const { role, isOwner, isAdmin, isEditor, isViewer } = useAppRole(appId);
@@ -287,7 +287,7 @@ function MyComponent() {
 Require authentication to access route:
 
 ```typescript
-import { ProtectedRoute } from '@lksnext/ai-core-tools-base';
+import ProtectedRoute from '../components/ProtectedRoute';
 
 <Route path="/playground" element={
   <ProtectedRoute>
@@ -303,7 +303,7 @@ import { ProtectedRoute } from '@lksnext/ai-core-tools-base';
 Require admin/omniadmin role:
 
 ```typescript
-import { AdminRoute } from '@lksnext/ai-core-tools-base';
+import AdminRoute from '../components/AdminRoute';
 
 <Route path="/admin/*" element={
   <AdminRoute>
@@ -319,7 +319,7 @@ import { AdminRoute } from '@lksnext/ai-core-tools-base';
 Utility functions for role checks:
 
 ```typescript
-import { hasMinRole, getRoleLevel } from '@lksnext/ai-core-tools-base/roleUtils';
+import { hasMinRole, getRoleLevel } from '../utils/roleUtils';
 
 // Check if user has minimum role
 if (hasMinRole(userRole, 'editor')) {
@@ -348,7 +348,7 @@ def can_modify_resource(db: Session, app_id: int, user_id: int, email: str) -> b
 ### Frontend: Conditional Rendering
 
 ```typescript
-import { useAppRole } from '@lksnext/ai-core-tools-base';
+import { useAppRole } from '../hooks/useAppRole';
 
 function AgentList({ appId }) {
   const { role, isEditor } = useAppRole(appId);
@@ -374,14 +374,19 @@ function AgentList({ appId }) {
 |-----------|----------|----------|
 | View agents | viewer | `GET /internal/agents` |
 | Execute agent | viewer | `POST /internal/agents/{id}/chat` |
+| Use the App Chat (own conversations only) | viewer | `/internal/apps/{id}/chat/...` |
 | Create agent | editor | `POST /internal/agents` |
 | Update agent | editor | `PUT /internal/agents/{id}` |
 | Delete agent | editor | `DELETE /internal/agents/{id}` |
-| Invite collaborator | administrator | `POST /internal/collaboration/apps/{id}/invite` |
-| Manage app settings | administrator | `PUT /internal/apps/{id}` |
+| Invite collaborator | administrator | `POST /internal/collaboration/invite?app_id={id}` |
+| Remove a collaborator, or leave an App (not the owner) | unchanged (removal: `can_user_manage_app`; leaving: any accepted collaborator who is not the owner) | `DELETE /internal/collaboration/{user_id}?app_id={id}`, `POST /internal/apps/{id}/leave`. Deletes the member's App Chat data in that App (see below) |
+| Manage app settings (including the default embedding service) | administrator | `PUT /internal/apps/{id}` |
+| Change or clear the app's LangSmith API key | owner | `PUT /internal/apps/{id}` (403 for administrators; omitting the key keeps it) |
 | Generate API key | owner | `POST /internal/api_keys` |
 | Delete app | owner | `DELETE /internal/apps/{id}` |
 | Admin operations | omniadmin | `GET /internal/admin/users` |
+
+**Removing a member and App Chat data.** When a collaborator is removed from an App or leaves it, that member's [App Chat](../ai/app-chat.md#member-removal) data in that App (conversations, LangGraph threads, files, temp silo/repository/vectors, sandboxes) is deleted with the removal. A failure of that cleanup never blocks the removal. The owner cannot leave their own App. The member's Chat data in other Apps and other members' data are untouched. Nobody, whatever the role, can read another member's Chat conversations through the platform (see [Privacy of content](../ai/app-chat.md#privacy-of-content) for what this does not protect against).
 
 ## See Also
 

@@ -1,25 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { Layers, Pencil, Trash2, Lightbulb, Upload, ArrowDownToLine } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Layers, Pencil, Trash2, Upload, ArrowDownToLine, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import Modal from '../../components/ui/Modal';
+import { SidePanel } from '../../components/ui/SidePanel';
 import MiddlewareForm from '../../components/forms/MiddlewareForm';
 import { apiService } from '../../services/api';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import { useAppRole } from '../../hooks/useAppRole';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import type { Middleware, MiddlewarePayload } from '../../core/types';
-import { MIDDLEWARE_TYPES, MIDDLEWARE_TYPE_INFO, middlewareTypeLabel } from '../../constants/middlewares';
+import { MIDDLEWARE_TYPES } from '../../constants/middlewares';
 import Alert from '../../components/ui/Alert';
+import { Badge } from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
+import ButtonApp from '../../components/ui/ButtonApp';
 import ImportModal, { type ConflictMode, type ImportResponse } from '../../components/ui/ImportModal';
 import { AppRole } from '../../types/roles';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../../constants/messages';
+import { errorMessage } from '../../constants/messages';
+import { BackgroundImage } from '../../components/ui/BackgroundImage';
+import { LoadingState } from '../../components/ui/LoadingState';
+import Title from '../../components/ui/Title';
 
 function MiddlewaresPage() {
     const { appId } = useParams();
+    const { t, i18n } = useTranslation('common');
     const { hasMinRole, userRole } = useAppRole(appId);
     const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
     const confirm = useConfirm();
@@ -31,6 +38,8 @@ function MiddlewaresPage() {
     const [editingMiddleware, setEditingMiddleware] = useState<Middleware | null>(null);
     const [showImportModal, setShowImportModal] = useState(false);
     const [exportingId, setExportingId] = useState<number | null>(null);
+    const [isFormDirty, setIsFormDirty] = useState(false);
+    const isConfirmingCloseRef = useRef(false);
 
     useEffect(() => {
         void loadMiddlewares();
@@ -45,7 +54,7 @@ function MiddlewaresPage() {
             const response = await apiService.getMiddlewares(Number.parseInt(appId));
             setMiddlewares(response);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load middlewares');
+            setError(err instanceof Error ? err.message : t('middlewaresPage.loadFailed'));
             console.error('Error loading middlewares:', err);
         } finally {
             setLoading(false);
@@ -57,21 +66,21 @@ function MiddlewaresPage() {
 
         const target = middlewares.find((m) => m.middleware_id === middlewareId);
         const ok = await confirm({
-            title: MESSAGES.CONFIRM_DELETE_TITLE('middleware'),
+            title: t('middlewaresPage.confirmDeleteTitle'),
             message: target
-                ? `Are you sure you want to delete "${target.name}"? Agents using it will lose this middleware.`
-                : MESSAGES.CONFIRM_DELETE_MESSAGE('middleware'),
+                ? t('middlewaresPage.confirmDeleteMessage', { name: target.name })
+                : t('middlewaresPage.confirmDeleteFallback'),
             variant: 'danger',
-            confirmLabel: 'Delete',
+            confirmLabel: t('delete'),
         });
         if (!ok) return;
 
         const result = await mutate(
             () => apiService.deleteMiddleware(Number.parseInt(appId), middlewareId),
             {
-                loading: MESSAGES.DELETING('middleware'),
-                success: MESSAGES.DELETED('middleware'),
-                error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('middleware')),
+                loading: t('middlewaresPage.deleting'),
+                success: t('middlewaresPage.deleted'),
+                error: (err) => errorMessage(err, t('middlewaresPage.deleteFailed')),
             },
         );
         if (result === undefined) return;
@@ -92,7 +101,7 @@ function MiddlewaresPage() {
             setEditingMiddleware(mw);
             setIsModalOpen(true);
         } catch (err) {
-            toast.error(errorMessage(err, 'Failed to load middleware'));
+            toast.error(errorMessage(err, t('middlewaresPage.loadItemFailed')));
         }
     }
 
@@ -102,21 +111,34 @@ function MiddlewaresPage() {
         const editing = editingMiddleware;
         const isUpdate = editing !== null;
 
+        // useApiMutation shows the error toast but swallows the error; keep it so the form can
+        // also show it as a banner inside the panel.
+        let saveError: unknown = null;
         const result = await mutate<Middleware>(
-            () =>
-                editing
-                    ? apiService.updateMiddleware(Number.parseInt(appId), editing.middleware_id, data)
-                    : apiService.createMiddleware(Number.parseInt(appId), data),
+            async () => {
+                try {
+                    return await (editing
+                        ? apiService.updateMiddleware(Number.parseInt(appId), editing.middleware_id, data)
+                        : apiService.createMiddleware(Number.parseInt(appId), data));
+                } catch (err) {
+                    saveError = err;
+                    throw err;
+                }
+            },
             {
-                loading: isUpdate ? MESSAGES.UPDATING('middleware') : MESSAGES.CREATING('middleware'),
-                success: isUpdate ? MESSAGES.UPDATED('middleware') : MESSAGES.CREATED('middleware'),
-                error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('middleware')),
+                loading: isUpdate ? t('middlewaresPage.updating') : t('middlewaresPage.creating'),
+                success: isUpdate ? t('middlewaresPage.updated') : t('middlewaresPage.created'),
+                error: (err) => errorMessage(err, t('middlewaresPage.saveFailed')),
             },
         );
-        if (result === undefined) return;
+        if (result === undefined) {
+            // The panel stays open; the form turns this into the in-panel error banner.
+            throw new Error(errorMessage(saveError, t('middlewaresPage.saveFailed')));
+        }
 
         setIsModalOpen(false);
         setEditingMiddleware(null);
+        setIsFormDirty(false);
         await loadMiddlewares();
     }
 
@@ -135,21 +157,21 @@ function MiddlewaresPage() {
             a.click();
             globalThis.URL.revokeObjectURL(url);
             a.remove();
-            toast.success(MESSAGES.EXPORTED('middleware'));
+            toast.success(t('middlewaresPage.exported'));
         } catch (err) {
-            toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('middleware')));
+            toast.error(errorMessage(err, t('middlewaresPage.exportFailed')));
         } finally {
             setExportingId(null);
         }
     }
 
     async function handleImport(file: File, conflictMode: ConflictMode, newName?: string): Promise<ImportResponse> {
-        if (!appId) throw new Error('App ID not found');
+        if (!appId) throw new Error(t('middlewaresPage.appIdMissing'));
         try {
             const result = await apiService.importMiddleware(Number.parseInt(appId), file, conflictMode, newName);
             if (result.success) {
                 setShowImportModal(false);
-                toast.success(result.message || MESSAGES.IMPORTED('middleware'));
+                toast.success(result.message || t('middlewaresPage.imported'));
                 // e.g. the AI service it used does not exist here: the user must act on it.
                 for (const warning of result.summary?.warnings ?? []) {
                     toast.warning(warning);
@@ -158,7 +180,7 @@ function MiddlewaresPage() {
             }
             return result;
         } catch (err) {
-            toast.error(errorMessage(err, MESSAGES.IMPORT_FAILED('middleware')));
+            toast.error(errorMessage(err, t('middlewaresPage.importFailed')));
             throw err;
         }
     }
@@ -166,13 +188,45 @@ function MiddlewaresPage() {
     function handleCloseModal() {
         setIsModalOpen(false);
         setEditingMiddleware(null);
+        setIsFormDirty(false);
+    }
+
+    /**
+     * Every way out of the edit panel (Cancel, X, Esc, backdrop) goes through here: with
+     * unsaved changes it asks before discarding them.
+     */
+    async function requestClosePanel() {
+        // Esc reaches both the confirm dialog and the panel; ignore the panel's close meanwhile.
+        if (isConfirmingCloseRef.current) return;
+        if (!isFormDirty) {
+            handleCloseModal();
+            return;
+        }
+
+        isConfirmingCloseRef.current = true;
+        const discard = await confirm({
+            title: t('middlewaresPage.discardTitle'),
+            message: editingMiddleware
+                ? t('middlewaresPage.discardMessage', { name: editingMiddleware.name })
+                : t('middlewaresPage.discardMessageNew'),
+            confirmLabel: t('middlewaresPage.discardConfirm'),
+            cancelLabel: t('middlewaresPage.keepEditing'),
+            variant: 'danger',
+        });
+        // Released on the next tick so the same Esc keypress can't reopen the question.
+        setTimeout(() => { isConfirmingCloseRef.current = false; }, 0);
+        if (discard) handleCloseModal();
     }
 
     if (loading) {
         return (
-            <div className="p-6 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-2 text-gray-600">Loading middlewares...</p>
+            <div className="space-y-6">
+                <Title
+                    variant="titPrincipal"
+                    titulo={t('middlewaresPage.title')}
+                    subtitulo={t('middlewaresPage.subtitle')}
+                />
+                <LoadingState variant="page" message={t('middlewaresPage.loading')} />
             </div>
         );
     }
@@ -189,27 +243,27 @@ function MiddlewaresPage() {
         <div className="p-6">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Middlewares</h2>
-                    <p className="text-gray-600">Reusable safety, approval and cost controls for your agents</p>
-                </div>
+                <Title
+                    variant="titPrincipal"
+                    titulo={t('middlewaresPage.title')}
+                    subtitulo={t('middlewaresPage.subtitle')}
+                />
                 {canEdit && (
                     <div className="flex gap-2">
-                        <button
-                            type="button"
+                        <ButtonApp
+                            label={t('middlewaresPage.import')}
                             onClick={() => setShowImportModal(true)}
-                            className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center"
-                        >
-                            <Upload className="w-4 h-4 mr-2" aria-hidden="true" />Import
-                        </button>
-                        <button
-                            type="button"
+                            variant="secondary"
+                            size="medium"
+                            icon={<Upload className="w-4 h-4" aria-hidden="true" />}
+                        />
+                        <ButtonApp
+                            label={t('middlewaresPage.add')}
                             onClick={handleCreateMiddleware}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center"
-                        >
-                            <span className="mr-2">+</span>
-                            {' '}Add Middleware
-                        </button>
+                            variant="primary"
+                            size="medium"
+                            icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+                        />
                     </div>
                 )}
             </div>
@@ -220,23 +274,24 @@ function MiddlewaresPage() {
             {/* Middlewares Table */}
             <Table
                 data={middlewares}
+                stickyEdgeColumns
                 keyExtractor={(mw) => mw.middleware_id.toString()}
                 columns={[
                     {
-                        header: 'Name',
+                        header: t('middlewaresPage.columns.name'),
                         render: (mw) => (
-                            <div className="flex items-center">
-                                <Layers className="w-5 h-5 text-indigo-400 mr-3 shrink-0" />
+                            <div className="flex min-w-0 items-center">
+                                <BackgroundImage icon={Layers} variant='marron' className="mr-2 shrink-0" size={34} iconSize={17} />
                                 {canEdit ? (
                                     <button
                                         type="button"
-                                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left"
+                                        className="min-w-0 text-sm font-medium text-fg dark:text-fg-dark text-left [overflow-wrap:anywhere]"
                                         onClick={() => void handleEditMiddleware(mw.middleware_id)}
                                     >
                                         {mw.name}
                                     </button>
                                 ) : (
-                                    <span className="text-sm font-medium text-gray-900">
+                                    <span className="min-w-0 text-sm font-medium text-fg dark:text-fg-dark [overflow-wrap:anywhere]">
                                         {mw.name}
                                     </span>
                                 )}
@@ -244,49 +299,52 @@ function MiddlewaresPage() {
                         )
                     },
                     {
-                        header: 'Type',
+                        header: t('middlewaresPage.columns.type'),
                         render: (mw) => (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                {middlewareTypeLabel(mw.middleware_type)}
-                            </span>
+                            <Badge label={t(`middlewaresPage.types.${mw.middleware_type}.label`)} variant="info" />
                         ),
                         className: 'px-6 py-4'
                     },
                     {
-                        header: 'Description',
+                        header: t('middlewaresPage.columns.description'),
                         render: (mw) => (
-                            <div className="text-sm text-gray-600 max-w-xs truncate">
-                                {mw.description || <span className="text-gray-400 italic">No description</span>}
+                            <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark max-w-xs truncate">
+                                {mw.description || <span className="italic text-fg-tertiary dark:text-fg-tertiary-dark">{t('middlewaresPage.noDescription')}</span>}
                             </div>
                         ),
                         className: 'px-6 py-4'
                     },
                     {
-                        header: 'Created',
-                        render: (mw) => mw.created_at ? new Date(mw.created_at).toLocaleDateString() : 'N/A',
-                        className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+                        header: t('middlewaresPage.columns.created'),
+                        render: (mw) => mw.created_at
+                            ? new Date(mw.created_at).toLocaleDateString(i18n.resolvedLanguage)
+                            : t('middlewaresPage.notAvailable'),
+                        className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
                     },
                     {
-                        header: 'Actions',
+                        header: t('middlewaresPage.columns.actions'),
+                        sticky: 'right',
                         className: 'relative',
                         render: (mw) => (
                             canEdit ? (
                                 <ActionDropdown
                                     actions={[
                                         {
-                                            label: 'Edit',
+                                            label: t('middlewaresPage.edit'),
                                             onClick: () => { void handleEditMiddleware(mw.middleware_id); },
                                             icon: <Pencil className="w-4 h-4" />,
                                             variant: 'primary'
                                         },
                                         {
-                                            label: exportingId === mw.middleware_id ? 'Exporting...' : 'Export',
+                                            label: t(exportingId === mw.middleware_id
+                                                ? 'middlewaresPage.exporting'
+                                                : 'middlewaresPage.export'),
                                             onClick: () => { void handleExport(mw); },
                                             icon: <ArrowDownToLine className="w-4 h-4" />,
                                             variant: 'primary'
                                         },
                                         {
-                                            label: 'Delete',
+                                            label: t('middlewaresPage.delete'),
                                             onClick: () => { void handleDelete(mw.middleware_id); },
                                             icon: <Trash2 className="w-4 h-4" />,
                                             variant: 'danger'
@@ -295,66 +353,64 @@ function MiddlewaresPage() {
                                     size="sm"
                                 />
                             ) : (
-                                <span className="text-gray-400 text-sm">View only</span>
+                                <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{t('middlewaresPage.viewOnly')}</span>
                             )
                         )
                     }
                 ]}
-                emptyIcon={<Layers className="w-10 h-10 text-gray-300" />}
-                emptyMessage="No Middlewares"
-                emptySubMessage="Create one, then turn it on from an agent's Advanced tab."
+                emptyIcon={<BackgroundImage icon={Layers} size={64} iconSize={32} />}
+                emptyMessage={t('middlewaresPage.emptyTitle')}
+                emptySubMessage={t('middlewaresPage.emptyDescription')}
                 loading={loading}
             />
 
-            {/* Info Box */}
-            <div className="mt-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <div className="flex">
-                    <div className="flex-shrink-0">
-                        <Lightbulb className="w-5 h-5 text-indigo-400" />
-                    </div>
-                    <div className="ml-3">
-                        <h3 className="text-sm font-medium text-indigo-800">
-                            About Middlewares
-                        </h3>
-                        <div className="mt-2 text-sm text-indigo-700">
-                            <p>
-                                Middlewares run around every model and tool call of the agents that use them.
-                                Create them here once, then select them in each agent&apos;s <strong>Advanced</strong> tab.
-                                An agent can use one middleware of each type.
-                            </p>
-                            <ul className="list-disc list-inside mt-2 space-y-1">
-                                {MIDDLEWARE_TYPES.map((type) => (
-                                    <li key={type}>
-                                        <strong>{MIDDLEWARE_TYPE_INFO[type].label}</strong> — {MIDDLEWARE_TYPE_INFO[type].description}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <Alert
+                type="info"
+                title={t('middlewaresPage.aboutTitle')}
+                className="mt-6"
+                message={(
+                    <>
+                        <p>
+                            {t('middlewaresPage.aboutDescriptionBeforeAdvanced')}{' '}
+                            <strong>{t('middlewaresPage.advancedTab')}</strong>{' '}
+                            {t('middlewaresPage.aboutDescriptionAfterAdvanced')}
+                        </p>
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                            {MIDDLEWARE_TYPES.map((type) => (
+                                <li key={type}>
+                                    <strong>{t(`middlewaresPage.types.${type}.label`)}</strong>{' '}
+                                    {t(`middlewaresPage.types.${type}.description`)}
+                                </li>
+                            ))}
+                        </ul>
+                    </>
+                )}
+            />
 
-            {/* Create/Edit Modal */}
-            <Modal
-                isOpen={isModalOpen}
-                onClose={handleCloseModal}
-                title={editingMiddleware ? 'Edit Middleware' : 'Create New Middleware'}
-                size="large"
+            {/* Create/Edit side panel (edit panel, 640 px, fixed footer inside the form) */}
+            <SidePanel
+                open={isModalOpen}
+                onClose={() => { void requestClosePanel(); }}
+                side="right"
+                title={t('middlewaresPage.title')}
+                closeLabel={t('middlewaresPage.closePanel')}
+                widthClassName="w-[640px] max-w-full"
             >
                 <MiddlewareForm
                     middleware={editingMiddleware}
                     appId={Number.parseInt(appId ?? '0')}
                     onSubmit={handleSaveMiddleware}
-                    onCancel={handleCloseModal}
+                    onCancel={() => { void requestClosePanel(); }}
+                    onDirtyChange={setIsFormDirty}
                 />
-            </Modal>
+            </SidePanel>
 
             <ImportModal
                 isOpen={showImportModal}
                 onClose={() => setShowImportModal(false)}
                 onImport={handleImport}
                 componentType="middleware"
-                componentLabel="Middleware"
+                componentLabel={t('middlewaresPage.entity')}
             />
         </div>
     );

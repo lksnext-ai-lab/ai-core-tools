@@ -12,12 +12,16 @@ Files (PDFs, text) are chunked and indexed directly into the same silo.
 
 import os
 import logging
-from typing import Optional, List, Dict, Any
+import threading
+from contextlib import contextmanager
+from typing import Iterator, Optional, List, Dict, Any
 
 from fastapi import UploadFile, BackgroundTasks
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models.repository import Repository
+from db.database import engine
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, TEMP_REPO_PREFIX, Repository
 from models.media import Media
 from models.agent import Agent
 from services.repository_service import RepositoryService
@@ -28,7 +32,6 @@ from utils.service_lifecycle import ServiceRetiredError
 
 logger = logging.getLogger(__name__)
 
-TEMP_REPO_PREFIX = "_playground_"
 
 # File types that should be vectorized instead of injected into context
 VECTORIZABLE_FILE_TYPES = {"pdf", "text"}
@@ -46,6 +49,42 @@ def is_vectorizable_file(file_type: Optional[str], filename: Optional[str]) -> b
 
 def _temp_repo_name(agent_id: int, session_id: str) -> str:
     return f"{TEMP_REPO_PREFIX}{agent_id}_{session_id}"
+
+
+# How long a creator waits for another one that is creating the same conversation's temp repository. Short: the
+# inline playground paths wait on the event loop, and the caller degrades to "not indexed" when it expires.
+_CREATE_LOCK_TIMEOUT = "5s"
+_CREATE_LOCK_WAIT_SECONDS = 5
+# At most this many extra connections are ever checked out for creation locks at once, however many first uploads
+# arrive together: a burst cannot take the whole pool while its sessions already hold one connection each.
+_CREATE_LOCK_CONNECTIONS = threading.BoundedSemaphore(4)
+
+
+class TempSessionGone(Exception):
+    """The conversation no longer binds this session id (deleted or reset while an upload was in flight)."""
+
+
+@contextmanager
+def _temp_repo_creation_lock(app_id: int, agent_id: int, session_id: str) -> Iterator[None]:
+    """Serialise the creation of ONE conversation's temp repository across threads and processes.
+
+    A transaction-scoped advisory lock (``pg_advisory_xact_lock``) keyed by (app, agent, session), taken on a
+    DEDICATED connection: creating the repository commits several times (parser, silo, repository), and a lock owned
+    by the caller's session would be released by the first of those commits, while a competitor could still not see
+    the new repository. The lock lives as long as this context (the connection's transaction is rolled back on exit,
+    which also releases it if anything goes wrong). Waiting is bounded by ``lock_timeout``.
+    """
+    key = f"playground_temp_repo:{app_id}:{agent_id}:{session_id}"
+    if not _CREATE_LOCK_CONNECTIONS.acquire(timeout=_CREATE_LOCK_WAIT_SECONDS):
+        raise TimeoutError("too many temp repositories are being created at once")
+    try:
+        with engine.connect() as lock_conn:
+            lock_conn.execute(text(f"SET LOCAL lock_timeout = '{_CREATE_LOCK_TIMEOUT}'"))
+            lock_conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": key})
+            yield
+            lock_conn.rollback()
+    finally:
+        _CREATE_LOCK_CONNECTIONS.release()
 
 
 class PlaygroundMediaService:
@@ -115,6 +154,7 @@ class PlaygroundMediaService:
         return (
             db.query(Repository)
             .filter(Repository.app_id == app_id, Repository.name == name)
+            .order_by(Repository.repository_id)  # deterministic if a race ever left two: the oldest one wins
             .first()
         )
 
@@ -169,6 +209,18 @@ class PlaygroundMediaService:
         existing = PlaygroundMediaService.get_temp_repository(
             app_id, agent_id, session_id, db
         )
+        if existing is None:
+            # Two simultaneous uploads of one conversation must not both create it (the second one's repository
+            # would be invisible to every lookup and never cleaned): the loser of the lock re-reads and reuses.
+            with _temp_repo_creation_lock(app_id, agent_id, session_id):
+                existing = PlaygroundMediaService.get_temp_repository(app_id, agent_id, session_id, db)
+                if existing is None:
+                    if not PlaygroundMediaService._session_is_live(app_id, agent_id, session_id, db):
+                        raise TempSessionGone()
+                    return PlaygroundMediaService._create_temp_repository(
+                        app_id, agent_id, session_id, db,
+                        transcription_service_id, video_ai_service_id, embedding_service_id,
+                    )
         if existing:
             # Keep the temp repo in sync with the latest resolved media config
             # (e.g. the agent's transcription/video services were configured
@@ -207,6 +259,34 @@ class PlaygroundMediaService:
                 )
             return existing
 
+    @staticmethod
+    def _session_is_live(app_id: int, agent_id: int, session_id: str, db: Session) -> bool:
+        """Whether a temp repository may still be created for this session (checked under the creation lock).
+
+        For the hidden App Chat agent the conversation must still exist with THIS session id (a delete or a reset
+        rotates it), otherwise the new repository would be unreachable and never cleaned. Other agents' sessions are
+        not provably tied to a conversation row (marketplace / API flows), so they are not checked.
+        """
+        from models.conversation import Conversation
+
+        kind = db.query(Agent.kind).filter(Agent.agent_id == agent_id, Agent.app_id == app_id).scalar()
+        if kind != "internal_chat":
+            return True
+        return db.query(Conversation.conversation_id).filter(
+            Conversation.agent_id == agent_id, Conversation.session_id == session_id
+        ).first() is not None
+
+    @staticmethod
+    def _create_temp_repository(
+        app_id: int,
+        agent_id: int,
+        session_id: str,
+        db: Session,
+        transcription_service_id: Optional[int],
+        video_ai_service_id: Optional[int],
+        embedding_service_id: Optional[int],
+    ) -> Repository:
+        """Create the temp repository + silo (call under ``_temp_repo_creation_lock``, after a miss)."""
         # Resolve embedding service: explicit request value > the agent's
         # configured media embedding service. There is NO arbitrary app/system
         # fallback — the embedding service is required on the agent so media is
@@ -226,7 +306,7 @@ class PlaygroundMediaService:
 
         repo = Repository(
             name=_temp_repo_name(agent_id, session_id),
-            type="playground_media",
+            type=PLAYGROUND_MEDIA_REPO_TYPE,
             status="active",
             app_id=app_id,
         )

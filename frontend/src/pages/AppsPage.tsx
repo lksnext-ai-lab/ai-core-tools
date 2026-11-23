@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUser } from '../contexts/UserContext';
-import { Download, Crown, Shield, LayoutDashboard, Bot, Settings, Upload, LogOut, Trash2, FolderOpen, Globe, Database, Users, Check } from 'lucide-react';
+import { Download, Bot, Settings, Upload, LogOut, Trash2 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import AppForm from '../components/forms/AppForm';
-import ActionDropdown from '../components/ui/ActionDropdown';
+import ActionDropdown, { type ActionItem } from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
-import Table from '../components/ui/Table';
 import AppImportStepper from '../components/import/AppImportStepper';
+import Title from '../components/ui/Title';
+import ButtonCard from '../components/ui/ButtonCard';
+import { Badge } from '../components/ui/Badge';
+import ButtonApp from '../components/ui/ButtonApp';
+import { LoadingState } from '../components/ui/LoadingState';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useTranslation } from 'react-i18next';
+import AppAvatar from '../components/ui/AppAvatar';
+import { useAuthenticatedImage } from '../hooks/useAuthenticatedImage';
 
 interface App {
   app_id: number;
@@ -17,36 +24,48 @@ interface App {
   owner_id: number;
   owner_name?: string;
   owner_email?: string;
-  role: string; // "owner" or "editor"
+  role: string;
   langsmith_configured: boolean;
   agent_rate_limit: number;
-  // Entity counts for display
   agent_count: number;
   repository_count: number;
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
+  image_updated_at?: string | null;
 }
 
-// React Component = Function that returns HTML-like JSX
+/** The card's tile: the App image when it has one (cached per version), else its initials. */
+function AppCardAvatar({ app }: Readonly<{ app: App }>) {
+  const src = useAuthenticatedImage(app.app_id, app.image_updated_at, (version) =>
+    apiService.getAppImage(app.app_id, version));
+  return <AppAvatar name={app.name} src={src} size={40} />;
+}
+
+function getAppRoleTranslationKey(role: string) {
+  if (role === 'owner') return 'appsPage.roles.owner';
+  if (role === 'administrator') return 'appsPage.roles.administrator';
+  if (role === 'editor') return 'appsPage.roles.editor';
+  if (role === 'viewer') return 'appsPage.roles.viewer';
+  return null;
+}
+
 function AppsPage() {
   const { user } = useUser();
   const isEditor = user?.is_admin || (user?.is_editor ?? false);
-
-  // State = variables that trigger re-renders when they change
-  const [apps, setApps] = useState<App[]>([]);           // Like self.apps = []
-  const [loading, setLoading] = useState(true);          // Like self.loading = True
+  const [apps, setApps] = useState<App[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const { t, i18n } = useTranslation('common');
+  const confirm = useConfirm();
 
-  // useEffect = runs when component mounts (like __init__)
   useEffect(() => {
     void loadApps();
   }, []);
 
-  // Function to load apps from API
   async function loadApps() {
     try {
       setLoading(true);
@@ -55,20 +74,76 @@ function AppsPage() {
       const response = await apiService.getApps();
       setApps(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load apps');
+      setError(err instanceof Error ? err.message : t('appsPage.loadFailed'));
     } finally {
       setLoading(false);
     }
   }
 
-  // Function to refresh apps without showing loading spinner (for after create/import)
   async function refreshApps() {
     try {
       const response = await apiService.getApps();
       setApps(response);
     } catch (err) {
-      // Silently fail to avoid disrupting user experience
       console.error('Failed to refresh apps:', err);
+    }
+  }
+
+  async function handleExportApp(app: App) {
+    try {
+      setError(null);
+      const blob = await apiService.exportFullApp(app.app_id);
+      const url = globalThis.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().split('T')[0];
+      const sanitizedName = app.name.replaceAll(/[^a-z0-9]/gi, '_').toLowerCase();
+      link.href = url;
+      link.download = `app-${sanitizedName}-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      globalThis.URL.revokeObjectURL(url);
+      setSuccess(t('appsPage.appExportedSuccessfully', { name: app.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('appsPage.appExportFailed', { name: app.name }));
+    }
+  }
+
+  async function handleLeaveApp(app: App) {
+    const confirmed = await confirm({
+      title: t('appsPage.confirmLeaveTitle'),
+      message: t('appsPage.confirmLeaveMessage', { name: app.name }),
+      confirmLabel: t('appsPage.actions.leaveApp'),
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiService.leaveApp(app.app_id);
+      setApps((currentApps) => currentApps.filter((currentApp) => currentApp.app_id !== app.app_id));
+      setError(null);
+      setSuccess(t('appsPage.appLeftSuccessfully', { name: app.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('appsPage.appLeaveFailed', { name: app.name }));
+    }
+  }
+
+  async function handleDeleteApp(app: App) {
+    const confirmed = await confirm({
+      title: t('appsPage.confirmDeleteTitle'),
+      message: t('appsPage.confirmDeleteMessage', { name: app.name }),
+      confirmLabel: t('appsPage.actions.deleteApp'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiService.deleteApp(app.app_id);
+      setApps((currentApps) => currentApps.filter((currentApp) => currentApp.app_id !== app.app_id));
+      setError(null);
+      setSuccess(t('appsPage.appDeletedSuccessfully', { name: app.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('appsPage.appDeleteFailed', { name: app.name }));
     }
   }
 
@@ -76,121 +151,24 @@ function AppsPage() {
   async function handleCreateApp(data: { name: string }) {
     await apiService.createApp(data);
     setShowCreateModal(false);
-    setSuccess(`App "${data.name}" created successfully!`);
+    setSuccess(t('appsPage.appCreatedSuccessfully', { name: data.name }));
     setError(null);
-    void refreshApps(); // Refresh the list without loading spinner
-    // Auto-dismiss notification after 5 seconds
+    void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
-  }
-
-  // Function to leave an app (for editors only)
-  async function handleLeaveApp(app: App) {
-    if (!globalThis.confirm(`Are you sure you want to leave "${app.name}"?`)) {
-      return;
-    }
-
-    try {
-      setError(null);
-      setSuccess(null);
-      await apiService.leaveApp(app.app_id);
-      setSuccess(`Successfully left "${app.name}"`);
-      void refreshApps(); // Refresh the list without loading spinner
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to leave app');
-    }
-  }
-
-  // Function to delete an app (for owners only)
-  async function handleDeleteApp(app: App) {
-    const confirmMessage = `⚠️ DELETE APP: "${app.name}"
-
-This will permanently delete:
-• All agents and configurations
-• All repositories and uploaded files
-• All domains and URLs
-• All silos and vector data
-• All API keys and settings
-• All collaborations
-
-This action cannot be undone!
-
-Type the app name to confirm: "${app.name}"`;
-
-    const userInput = globalThis.prompt(confirmMessage);
-    
-    if (userInput !== app.name) {
-      if (userInput !== null) { // User didn't cancel
-        setError('App name does not match. Deletion cancelled.');
-        setSuccess(null);
-      }
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-      await apiService.deleteApp(app.app_id);
-      setSuccess(`App "${app.name}" has been successfully deleted.`);
-      void refreshApps(); // Refresh the list without loading spinner
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete app');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Function to export full app
-  async function handleExportApp(app: App) {
-    try {
-      setError(null);
-      setSuccess(null);
-      const blob = await apiService.exportFullApp(app.app_id);
-      
-      // Create download link
-      const url = globalThis.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const date = new Date().toISOString().split('T')[0];
-      a.download = `${app.name.replaceAll(/\s+/g, '-')}-full-export-${date}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      globalThis.URL.revokeObjectURL(url);
-      
-      setSuccess(`Full app "${app.name}" exported successfully!`);
-      setTimeout(() => setSuccess(null), 5000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export app');
-    }
   }
 
   // Function to handle import completion
   function handleImportComplete() {
     setShowImportModal(false);
-    setSuccess('App imported successfully!');
+    setSuccess(t('appsPage.appImportedSuccessfully'));
     void refreshApps();
     setTimeout(() => setSuccess(null), 5000);
   }
 
-  // Function to get user initials for avatar
-  const getUserInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase();
-    }
-    return 'U';
-  };
-
   // Show loading spinner while fetching data
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading apps...</span>
-      </div>
+      <LoadingState variant="page" message={t('appsPage.loading')} />
     );
   }
 
@@ -202,241 +180,140 @@ Type the app name to confirm: "${app.name}"`;
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Apps</h1>
-          <p className="text-gray-600">Manage your AI applications and workspaces</p>
-        </div>
+        <Title
+          titulo={t('appsPage.title')}
+          subtitulo={t('appsPage.subtitle')}
+          variant="titPrincipal"
+        />
         {isEditor && (
           <div className="flex gap-3">
-            <button
+            <ButtonApp
+              label={t('appsPage.importApp')}
+              variant="secondary"
+              size="medium"
+              icon={<Download className="h-4 w-4" aria-hidden="true" />}
+              className="h-[41px] !py-2"
               onClick={() => setShowImportModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Import App
-            </button>
-            <button
+            />
+            <ButtonApp
+              label={`+ ${t('appsPage.newApp')}`}
+              variant="primary"
+              size="spacious"
+              className="h-[41px] !py-2"
               onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-            >
-              <span className="mr-2">+</span>
-              {' '}New App
-            </button>
+            />
           </div>
         )}
       </div>
 
-      {/* Apps Table */}
-      <Table
-        data={apps}
-        keyExtractor={(app) => app.app_id.toString()}
-        columns={[
-          {
-            header: 'App Name',
-            render: (app) => (
-              <Link
-                to={`/apps/${app.app_id}`}
-                className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
-              >
-                {app.name}
-              </Link>
-            )
-          },
-          {
-            header: 'Role',
-            render: (app) => {
-              if (app.role === 'owner') {
-                return (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    <Crown className="w-3 h-3 mr-1" />
-                    {' '}Owner
-                  </span>
-                );
-              }
-              if (app.role === 'administrator') {
-                return (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    <Shield className="w-3 h-3 mr-1" />
-                    {' '}Administrator
-                  </span>
-                );
-              }
-              if (app.role === 'editor') {              
-                return (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    {' '}Editor
-                </span>
-                );
-              }
-              if (app.role === 'viewer') {              
-                return (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    {' '}Viewer
-                </span>
-                );
-              }
-              return null;
-            }
-          },
-          {
-            header: 'Agents',
-            headerContent: <span className="flex items-center gap-1 justify-center"><Bot className="w-3 h-3" /> Agents</span>,
-            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => (
-              <span className={`text-sm font-medium ${app.agent_count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                {app.agent_count}
-              </span>
-            )
-          },
-          {
-            header: 'Repos',
-            headerContent: <span className="flex items-center gap-1 justify-center"><FolderOpen className="w-3 h-3" /> Repos</span>,
-            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => (
-              <span className={`text-sm font-medium ${app.repository_count > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                {app.repository_count}
-              </span>
-            )
-          },
-          {
-            header: 'Domains',
-            headerContent: <span className="flex items-center gap-1 justify-center"><Globe className="w-3 h-3" /> Domains</span>,
-            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => (
-              <span className={`text-sm font-medium ${app.domain_count > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
-                {app.domain_count}
-              </span>
-            )
-          },
-          {
-            header: 'Silos',
-            headerContent: <span className="flex items-center gap-1 justify-center"><Database className="w-3 h-3" /> Silos</span>,
-            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => (
-              <span className={`text-sm font-medium ${app.silo_count > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                {app.silo_count}
-              </span>
-            )
-          },
-          {
-            header: 'Collabs',
-            headerContent: <span className="flex items-center gap-1 justify-center"><Users className="w-3 h-3" /> Collabs</span>,
-            headerClassName: 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-4 py-4 whitespace-nowrap text-center',
-            render: (app) => {
-              const ownerBonus = app.role === 'owner' ? 1 : 0;
-              const totalCollaborators = app.collaborator_count + ownerBonus;
-              const textColor = totalCollaborators > 1 ? 'text-indigo-600' : 'text-gray-400';
-              return (
-                <span className={`text-sm font-medium ${textColor}`}>
-                  {totalCollaborators}
-                </span>
-              );
-            }
-          },
-          {
-            header: 'Owner',
-            render: (app) => (
-              app.role === 'owner' ? (
-                <span className="text-sm text-gray-500">You</span>
-              ) : (
-                <div className="flex items-center">
-                  <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center mr-2">
-                    <span className="text-xs font-medium text-gray-600">
-                      {getUserInitials(app.owner_name, app.owner_email)}
-                    </span>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {apps.map((app) => {
+          const ownerBonus = app.role === 'owner' ? 1 : 0;
+          const totalCollaborators = app.collaborator_count + ownerBonus;
+          const actions: ActionItem[] = [
+            {
+              label: t('appsPage.actions.manageAgents'),
+              onClick: () => { globalThis.location.href = `/apps/${app.app_id}/agents`; },
+              icon: <Bot className="w-4 h-4" />,
+              variant: 'secondary',
+            },
+            {
+              label: t('appsPage.actions.appSettings'),
+              onClick: () => { globalThis.location.href = `/apps/${app.app_id}/settings`; },
+              icon: <Settings className="w-4 h-4" />,
+              variant: 'secondary',
+            },
+            {
+              label: t('appsPage.actions.exportApp'),
+              onClick: () => { void handleExportApp(app); },
+              icon: <Upload className="w-4 h-4" />,
+              variant: 'secondary',
+            },
+            ...(app.role === 'owner'
+              ? [{
+                  label: t('appsPage.actions.deleteApp'),
+                  onClick: () => { void handleDeleteApp(app); },
+                  icon: <Trash2 className="w-4 h-4" />,
+                  variant: 'danger' as const,
+                }]
+              : [{
+                  label: t('appsPage.actions.leaveApp'),
+                  onClick: () => { void handleLeaveApp(app); },
+                  icon: <LogOut className="w-4 h-4" />,
+                  variant: 'danger' as const,
+                }]),
+          ];
+
+          return (
+            <ButtonCard
+              key={app.app_id}
+              ariaLabel={t('appsPage.openApp', { name: app.name })}
+              onClick={() => { globalThis.location.href = `/apps/${app.app_id}`; }}
+              interactiveChildren
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <AppCardAvatar app={app} />
+                  <div className="flex min-w-0 flex-col items-start">
+                    <span className="min-w-0 font-display text-[18px] leading-[1.3] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] dark:text-ink-dark">{app.name}</span>
+                    <p className="mt-0.5 whitespace-pre-line text-[12px] leading-[1.45] text-fg-tertiary dark:text-fg-tertiary-dark">
+                      {app.created_at ? new Date(app.created_at).toLocaleDateString(i18n.resolvedLanguage) : '-'}
+                    </p>
                   </div>
-                  <span className="text-sm text-gray-900">
-                    {app.owner_name || app.owner_email}
-                  </span>
                 </div>
-              )
-            )
-          },
-          {
-            header: 'Status',
-            render: (app) => (
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                app.langsmith_configured 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-gray-100 text-gray-600'
-              }`}>
-                {app.langsmith_configured ? <span className="flex items-center gap-1"><Check className="w-3 h-3" /> Configured</span> : 'Not configured'}
-              </span>
-            )
-          },
-          {
-            header: 'Created',
-            render: (app) => app.created_at ? new Date(app.created_at).toLocaleDateString() : '-',
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
-          },
-          {
-            header: 'Actions',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
-            render: (app) => (
-              <ActionDropdown
-                actions={[
-                  {
-                    label: 'Open Dashboard',
-                    onClick: () => { globalThis.location.href = `/apps/${app.app_id}`; },
-                    icon: <LayoutDashboard className="w-4 h-4" />,
-                    variant: 'primary'
-                  },
-                  {
-                    label: 'Manage Agents',
-                    onClick: () => { globalThis.location.href = `/apps/${app.app_id}/agents`; },
-                    icon: <Bot className="w-4 h-4" />,
-                    variant: 'secondary'
-                  },
-                  {
-                    label: 'App Settings',
-                    onClick: () => { globalThis.location.href = `/apps/${app.app_id}/settings`; },
-                    icon: <Settings className="w-4 h-4" />,
-                    variant: 'secondary'
-                  },
-                  {
-                    label: 'Export Full App',
-                    onClick: () => { void handleExportApp(app); },
-                    icon: <Upload className="w-4 h-4" />,
-                    variant: 'secondary'
-                  },
-                  ...(app.role === 'owner' ? [] : [{
-                    label: 'Leave App',
-                    onClick: () => handleLeaveApp(app),
-                    icon: <LogOut className="w-4 h-4" />,
-                    variant: 'danger' as const
-                  }]),
-                  ...(app.role === 'owner' ? [{
-                    label: 'Delete App',
-                    onClick: () => handleDeleteApp(app),
-                    icon: <Trash2 className="w-4 h-4" />,
-                    variant: 'danger' as const
-                  }] : [])
-                ]}
-                size="sm"
-              />
-            )
-          }
-        ]}
-        emptyIcon={<Bot className="w-10 h-10 text-gray-300" />}
-        emptyMessage="No apps yet"
-        emptySubMessage="Create your first AI application to get started"
-        loading={loading}
-      />
+                <div className="flex shrink-0 items-center gap-2">
+                  
+                  <ActionDropdown
+                    actions={actions}
+                    size="sm"
+                    triggerText={t('appsPage.actions.menu')}
+                    triggerAriaLabel={t('appsPage.actions.menuForApp', { name: app.name })}
+                    className="pointer-events-auto relative z-10"
+                  />
+                </div>
+              </div>
+              
+              <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <span className="whitespace-nowrap rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-fg-secondary dark:bg-surface-dark dark:text-fg-secondary-dark">
+                  {getAppRoleTranslationKey(app.role)
+                    ? t(getAppRoleTranslationKey(app.role)!)
+                    : app.role}
+                </span>
+                <Badge
+                  key="langsmith-configuration"
+                  label={app.langsmith_configured ? t('appsPage.configured') : t('appsPage.notConfigured')}
+                  variant={app.langsmith_configured ? 'success' : 'warning'}
+                />
+              </div>
+              <dl className="pointer-events-none relative z-0 mt-auto grid grid-cols-5 gap-x-2 gap-y-2.5 border-t border-line pt-3 dark:border-line-dark">
+                {[
+                  { label: t('appsPage.stats.agents'), value: app.agent_count },
+                  { label: t('appsPage.stats.repositories'), value: app.repository_count },
+                  { label: t('appsPage.stats.domains'), value: app.domain_count },
+                  { label: t('appsPage.stats.silos'), value: app.silo_count },
+                  { label: t('appsPage.stats.collaborators'), value: totalCollaborators },
+                ].map((stat) => (
+                  <div key={stat.label} className="flex min-w-0 flex-col-reverse gap-px">
+                    <dt className="truncate text-[11.5px] text-fg-tertiary dark:text-fg-tertiary-dark">{stat.label}</dt>
+                    <dd className={`font-display text-[18px] font-medium leading-[1.2] ${stat.value === 0 ? 'text-fg-tertiary dark:text-fg-tertiary-dark' : 'text-ink dark:text-ink-dark'}`}>
+                      {stat.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </ButtonCard>
+          );
+        })}
+      </div>
 
       {!loading && apps.length === 0 && isEditor && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label={t('appsPage.createApp')}
             onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create App
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
 
@@ -444,7 +321,7 @@ Type the app name to confirm: "${app.name}"`;
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Create New App"
+        title={t('appsPage.createNewApp')}
       >
         <AppForm
           onSubmit={handleCreateApp}

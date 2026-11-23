@@ -32,6 +32,7 @@ def make_agent(
 ) -> MagicMock:
     """Create a minimal Agent mock."""
     agent = MagicMock()
+    agent.is_internal_chat = False  # a bare MagicMock attribute would be truthy
     agent.agent_id = agent_id
     agent.name = name
     agent.type = agent_type

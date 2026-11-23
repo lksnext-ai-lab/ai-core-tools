@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   ChevronDown,
@@ -8,17 +9,17 @@ import {
   FileText,
   Folder,
   Info,
-  Loader2,
   X,
 } from 'lucide-react';
-import FormActions from './FormActions';
+import { FormActions } from '../ui/FormActions';
 import { FormField, FormTextArea, FormCheckbox } from '../ui/FormField';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { Badge } from '../ui/Badge';
 import ReadOnlyBanner from '../ui/ReadOnlyBanner';
 import { apiService, ApiError } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
 import type { Skill, SkillFileInfo } from '../../core/types';
+import { Spinner } from '../ui/Spinner';
 
 export interface SkillFormSubmitData {
   readonly name: string;
@@ -104,6 +105,14 @@ function stateFromSkill(skill: Skill | null | undefined): SkillFormState {
   };
 }
 
+function hasRuntimeConfigIn(state: SkillFormState): boolean {
+  return (
+    state.runtime.trim() !== '' ||
+    state.bootstrap_script_path.trim() !== '' ||
+    state.runtime_options_text.trim() !== ''
+  );
+}
+
 // ==================== Allowed tools chip input (case-preserving; TagInput lowercases, which
 // would silently corrupt tool names like "WebSearch") ====================
 
@@ -114,6 +123,7 @@ interface AllowedToolsInputProps {
 }
 
 function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps) {
+  const { t } = useTranslation('common');
   const [draft, setDraft] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -127,17 +137,17 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
         return;
       }
       onChange([...tools, trimmed]);
-      setAnnouncement(`Added tool ${trimmed}`);
+      setAnnouncement(t('skillForm.allowedTools.added', { tool: trimmed }));
       setDraft('');
     },
-    [tools, onChange],
+    [tools, onChange, t],
   );
 
   const removeTool = useCallback(
     (index: number) => {
       const removed = tools[index];
       onChange(tools.filter((_, i) => i !== index));
-      if (removed) setAnnouncement(`Removed tool ${removed}`);
+      if (removed) setAnnouncement(t('skillForm.allowedTools.removed', { tool: removed }));
       // Move focus to the previous chip's remove button, or back to the input if none remain —
       // otherwise focus falls to <body> when the removed button unmounts.
       requestAnimationFrame(() => {
@@ -146,7 +156,7 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
         else inputRef.current?.focus();
       });
     },
-    [tools, onChange],
+    [tools, onChange, t],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -163,11 +173,17 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
       <span role="status" aria-live="polite" className="sr-only">
         {announcement}
       </span>
-      <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-300 dark:border-gray-600 rounded-xl min-h-[44px] bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500 transition-all">
+      <div
+        className={`flex flex-wrap items-center gap-2 p-2 border dark:border-line-strong-dark rounded-md min-h-[44px] transition-all duration-200 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${
+          disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : ''
+        }`}
+      >
         {tools.map((tool, idx) => (
           <span
             key={tool}
-            className="inline-flex items-center gap-1 text-sm font-mono bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 px-2.5 py-1 rounded-full"
+            className={`inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full ${
+              disabled ? 'bg-surface-hover text-fg-tertiary cursor-not-allowed dark:bg-surface-hover-dark dark:text-fg-tertiary-dark' : 'text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark'
+            }`}
           >
             {tool}
             {!disabled && (
@@ -175,8 +191,8 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
                 type="button"
                 ref={(el) => { removeButtonRefs.current[idx] = el; }}
                 onClick={() => removeTool(idx)}
-                className="ml-0.5 text-purple-600 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-100 font-medium"
-                aria-label={`Remove allowed tool ${tool}`}
+                className="ml-0.5 text-bronze dark:text-bronze-dark font-medium bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark"
+                aria-label={t('skillForm.allowedTools.remove', { tool })}
               >
                 <X className="w-3 h-3" aria-hidden="true" />
               </button>
@@ -192,20 +208,20 @@ function AllowedToolsInput({ tools, onChange, disabled }: AllowedToolsInputProps
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={() => addTool(draft)}
-            placeholder={tools.length === 0 ? 'e.g. Bash, WebSearch — Enter or comma to add' : ''}
+            placeholder={tools.length === 0 ? t('skillForm.allowedTools.placeholder') : ''}
             aria-describedby="allowed_tools_help"
-            className="flex-1 min-w-[140px] border-none outline-none text-sm bg-transparent py-1 px-1 dark:text-gray-100"
+            className="flex-1 min-w-[120px] border-none outline-none text-sm bg-transparent py-1 px-1 text-fg dark:text-fg-dark placeholder:text-fg-faint dark:placeholder:text-fg-faint-dark disabled:cursor-not-allowed disabled:text-fg-tertiary dark:disabled:text-fg-tertiary-dark read-only:cursor-default"
           />
         )}
         {disabled && tools.length === 0 && (
-          <span className="text-sm text-gray-400 dark:text-gray-500 italic">No allowed tools declared</span>
+          <span className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark italic">{t('skillForm.allowedTools.noneDeclared')}</span>
         )}
       </div>
-      <p id="allowed_tools_help" className="mt-1 flex items-start gap-1 text-xs text-gray-500 dark:text-gray-400">
+      <p id="allowed_tools_help" className="mt-1 flex items-start gap-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
         <span>
-          Informational metadata only — stored, imported/exported and displayed, but <strong>not enforced</strong>{' '}
-          against the agent&apos;s tool set.
+          {t('skillForm.allowedTools.metadataBefore')} <strong>{t('skillForm.allowedTools.notEnforced')}</strong>{' '}
+          {t('skillForm.allowedTools.metadataAfter')}
         </span>
       </p>
     </div>
@@ -308,6 +324,8 @@ function FileTreeView({
   previews,
   onToggleFile,
 }: FileTreeViewProps) {
+  const { t, i18n } = useTranslation('common');
+
   return (
     <ul className="space-y-0.5">
       {nodes.map((node) => {
@@ -321,15 +339,15 @@ function FileTreeView({
                 onClick={() => onToggleFolder(node.path)}
                 aria-expanded={isOpen}
                 aria-controls={contentId}
-                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
+                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-fg-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 {isOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 )}
-                <Folder className="w-4 h-4 shrink-0 text-amber-500" aria-hidden="true" />
+                <Folder className="w-4 h-4 shrink-0 text-bronze dark:text-bronze-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
               </button>
               {isOpen && node.children.length > 0 && (
@@ -353,8 +371,9 @@ function FileTreeView({
         const isText = info?.is_text ?? false;
         const isOpen = expandedFiles.has(node.path);
         const preview = previews[node.path] ?? { status: 'idle' };
-        const sizeLabel =
-          info?.size_bytes !== undefined ? `${info.size_bytes.toLocaleString()} bytes` : undefined;
+        const sizeLabel = info?.size_bytes !== undefined
+          ? t('skillForm.files.bytes', { size: info.size_bytes.toLocaleString(i18n.resolvedLanguage) })
+          : undefined;
 
         const previewId = domIdForPath('skill-file-preview', node.path);
 
@@ -366,30 +385,32 @@ function FileTreeView({
                 onClick={() => onToggleFile(node)}
                 aria-expanded={isOpen}
                 aria-controls={previewId}
-                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 ${paddingClassForDepth(depth)}`}
+                className={`w-full flex items-center gap-2 rounded py-1 pr-2 text-sm text-fg dark:text-fg-dark hover:bg-surface-hover dark:hover:bg-surface-hover-dark ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 {isOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDown className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 )}
-                <FileText className="w-4 h-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
                 {sizeLabel && (
-                  <span className="ml-auto shrink-0 text-xs text-gray-400">{sizeLabel}</span>
+                  <span className="ml-auto shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{sizeLabel}</span>
                 )}
               </button>
             ) : (
               <div
-                className={`flex items-center gap-2 py-1 pr-2 text-sm text-gray-500 dark:text-gray-400 ${paddingClassForDepth(depth)}`}
+                className={`flex items-center gap-2 py-1 pr-2 text-sm text-fg-secondary dark:text-fg-secondary-dark ${paddingClassForDepth(depth)}`}
                 title={node.path}
               >
                 <span className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                <File className="w-4 h-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <File className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
                 <span className="min-w-0 truncate font-mono text-xs">{node.name}</span>
-                <span className="ml-auto shrink-0 text-xs text-gray-400 italic">
-                  binary — {info?.size_bytes?.toLocaleString() ?? 0} bytes
+                <span className="ml-auto shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark italic">
+                  {t('skillForm.files.binarySize', {
+                    size: (info?.size_bytes ?? 0).toLocaleString(i18n.resolvedLanguage),
+                  })}
                 </span>
               </div>
             )}
@@ -402,19 +423,19 @@ function FileTreeView({
                 className={`${paddingClassForDepth(Math.min(depth + 1, PADDING_CLASSES.length - 1))} pb-2`}
               >
                 {preview.status === 'loading' && (
-                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 py-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                    Loading preview…
+                  <div className="flex items-center gap-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark py-2">
+                    <Spinner size="xs" tone="muted" />
+                    {t('skillForm.files.loadingPreview')}
                   </div>
                 )}
                 {preview.status === 'error' && (
-                  <p className="flex items-start gap-1 text-xs text-red-600 dark:text-red-400 py-1">
+                  <p className="flex items-start gap-1 text-xs text-error dark:text-error-dark py-1">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
                     <span>{preview.message}</span>
                   </p>
                 )}
                 {preview.status === 'loaded' && (
-                  <pre className="max-h-56 overflow-auto rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-mono text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+                  <pre className="max-h-56 overflow-auto rounded border border-line dark:border-line-dark bg-black p-2 text-xs font-mono text-white whitespace-pre-wrap break-words">
                     {preview.content}
                   </pre>
                 )}
@@ -431,6 +452,7 @@ function FileTreeView({
 
 function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<SkillFormProps>) {
   const { appId } = useParams();
+  const { t } = useTranslation('common');
   const [formState, setFormState] = useState<SkillFormState>(() => stateFromSkill(skill));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -519,12 +541,12 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         .catch((err: unknown) => {
           const message =
             err instanceof ApiError && err.status === 404
-              ? 'Preview is not available for this file.'
-              : errorMessage(err, 'Failed to load file preview');
+              ? t('skillForm.files.previewUnavailable')
+              : errorMessage(err, t('skillForm.files.previewFailed'));
           applyIfStillCurrent((prev) => ({ ...prev, [path]: { status: 'error', message } }));
         });
     },
-    [appId, skill, expandedFiles, previews],
+    [appId, skill, expandedFiles, previews, t],
   );
 
   const runtimeOptionsValidation = useMemo((): { valid: true; value: Record<string, unknown> | null } | { valid: false; error: string } => {
@@ -534,13 +556,23 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
     try {
       parsed = JSON.parse(text);
     } catch (err) {
-      return { valid: false, error: err instanceof Error ? `Invalid JSON: ${err.message}` : 'Invalid JSON' };
+      return {
+        valid: false,
+        error: err instanceof Error
+          ? t('skillForm.validation.invalidJsonWithMessage', { message: err.message })
+          : t('skillForm.validation.invalidJson'),
+      };
     }
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return { valid: false, error: 'Runtime options must be a JSON object, e.g. {"key": "value"}' };
+      return { valid: false, error: t('skillForm.validation.runtimeOptionsObject') };
     }
     return { valid: true, value: parsed as Record<string, unknown> };
-  }, [formState.runtime_options_text]);
+  }, [formState.runtime_options_text, t]);
+
+  const hasRuntimeConfig = hasRuntimeConfigIn(formState);
+  // Open state follows the loaded skill only — tying it to live values would collapse the
+  // section under the user while they clear a field.
+  const startsWithRuntimeConfig = useMemo(() => hasRuntimeConfigIn(stateFromSkill(skill)), [skill]);
 
   const isValid =
     formState.name.trim() !== '' &&
@@ -553,15 +585,15 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
     if (isReadOnly) return;
 
     if (!formState.name.trim()) {
-      setError('Skill name is required');
+      setError(t('skillForm.validation.nameRequired'));
       return;
     }
     if (!formState.description.trim()) {
-      setError('Skill description is required');
+      setError(t('skillForm.validation.descriptionRequired'));
       return;
     }
     if (!formState.content.trim()) {
-      setError('Skill content is required');
+      setError(t('skillForm.validation.contentRequired'));
       return;
     }
     if ('error' in runtimeOptionsValidation) {
@@ -587,7 +619,7 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
       };
       await onSubmit(payload);
     } catch (err) {
-      setError(errorMessage(err, 'Failed to save skill'));
+      setError(errorMessage(err, t('skillForm.validation.saveFailed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -595,71 +627,80 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {isReadOnly && <ReadOnlyBanner userRole={userRole ?? 'viewer'} minRole="platform administrators" />}
+      {isReadOnly && <ReadOnlyBanner userRole={userRole ?? 'viewer'} minRole={t('skillForm.platformAdministrators')} />}
 
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
+      <div className="max-w-[720px] space-y-6">
       <FormField
-        label="Name"
+        label={t('skillForm.fields.name')}
         id="name"
         value={formState.name}
         onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
-        placeholder="e.g., code_review_guidelines"
+        placeholder={t('skillForm.fields.namePlaceholder')}
         disabled={disabled}
         required
-        helpText="Short, unique identifier for the skill."
+        helpText={t('skillForm.help.name')}
       />
 
       <FormField
-        label="Display Name"
+        label={t('skillForm.fields.displayName')}
         id="display_name"
         value={formState.display_name}
         onChange={(e) => setFormState((prev) => ({ ...prev, display_name: e.target.value }))}
-        placeholder="e.g., Code Review Guidelines"
+        placeholder={t('skillForm.fields.displayNamePlaceholder')}
         disabled={disabled}
-        helpText="Human-friendly label shown in the UI. Defaults to the name if left blank."
-      />
-
-      <FormField
-        label="Description"
-        id="description"
-        value={formState.description}
-        onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
-        placeholder="e.g., Best practices for reviewing code quality"
-        disabled={disabled}
-        required
-        helpText="The agent sees this description to decide when the skill is relevant."
+        helpText={t('skillForm.help.displayName')}
       />
 
       <FormTextArea
-        label="When to Use"
+        label={t('skillForm.fields.description')}
+        id="description"
+        value={formState.description}
+        onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
+        placeholder={t('skillForm.fields.descriptionPlaceholder')}
+        disabled={disabled}
+        required
+        rows={3}
+        textareaClassName="max-sm:min-h-[3.625rem] resize-y"
+        helpText={t('skillForm.help.description')}
+      />
+
+      <FormTextArea
+        label={t('skillForm.fields.whenToUse')}
         id="when_to_use"
         value={formState.when_to_use}
         onChange={(e) => setFormState((prev) => ({ ...prev, when_to_use: e.target.value }))}
         rows={3}
         disabled={disabled}
-        placeholder="e.g., Use when the user asks to generate or edit a Word document."
-        helpText="Extra routing guidance for the skill selector — kept separate from the description."
+        placeholder={t('skillForm.fields.whenToUsePlaceholder')}
+        helpText={t('skillForm.help.whenToUse')}
       />
 
-      <FormTextArea
-        label="Skill Instructions"
-        id="content"
-        value={formState.content}
-        onChange={(e) => setFormState((prev) => ({ ...prev, content: e.target.value }))}
-        rows={12}
-        disabled={disabled}
-        required
-        textareaClassName="font-mono text-sm"
-        helpText="Markdown-formatted instructions loaded when the agent activates this skill."
-      />
+      <div className="relative">
+        <span className="absolute right-0 top-0 rounded-lg bg-surface-hover px-2 py-0.5 text-[11px] text-fg-secondary dark:bg-surface-hover-dark dark:text-fg-secondary-dark">
+          markdown
+        </span>
+        <FormTextArea
+          label={t('skillForm.fields.instructions')}
+          id="content"
+          value={formState.content}
+          onChange={(e) => setFormState((prev) => ({ ...prev, content: e.target.value }))}
+          rows={12}
+          disabled={disabled}
+          required
+          labelClassName="block text-sm font-medium text-fg dark:text-fg-dark mb-1.5 pr-24"
+          textareaClassName="font-mono text-[13px] leading-relaxed"
+          helpText={t('skillForm.help.instructions')}
+        />
+      </div>
 
       <div>
         <label
           htmlFor={disabled ? undefined : 'allowed_tools'}
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          className="block text-sm font-medium text-fg dark:text-fg-dark mb-1"
         >
-          Allowed Tools
+          {t('skillForm.fields.allowedTools')}
         </label>
         <AllowedToolsInput
           tools={formState.allowed_tools}
@@ -668,85 +709,84 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField
-          label="Runtime"
-          id="runtime"
-          value={formState.runtime}
-          onChange={(e) => setFormState((prev) => ({ ...prev, runtime: e.target.value }))}
-          placeholder="e.g., python3.11"
-          disabled={disabled}
-          helpText="Sandbox runtime this skill expects, if any."
-        />
+      {/* Execution environment (advanced): starts open only when the skill already has something configured */}
+      <details
+        open={startsWithRuntimeConfig}
+        className="group rounded-lg border border-line dark:border-line-dark"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-left [&::-webkit-details-marker]:hidden">
+          <span className="text-sm font-medium text-fg dark:text-fg-dark">{t('skillForm.advanced.title')}</span>
+          <span className="flex items-center gap-1.5 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+            {hasRuntimeConfig ? t('skillForm.advanced.configured') : t('skillForm.advanced.notConfigured')}
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </span>
+        </summary>
+        <div className="space-y-6 border-t border-line px-3.5 pb-4 pt-4 dark:border-line-dark">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField
+              label={t('skillForm.fields.runtime')}
+              id="runtime"
+              value={formState.runtime}
+              onChange={(e) => setFormState((prev) => ({ ...prev, runtime: e.target.value }))}
+              placeholder={t('skillForm.fields.runtimePlaceholder')}
+              disabled={disabled}
+              helpText={t('skillForm.help.runtime')}
+            />
 
-        <FormField
-          label="Bootstrap Script Path"
-          id="bootstrap_script_path"
-          value={formState.bootstrap_script_path}
-          onChange={(e) => setFormState((prev) => ({ ...prev, bootstrap_script_path: e.target.value }))}
-          placeholder="scripts/bootstrap.sh"
-          disabled={disabled}
-          inputClassName="font-mono text-sm"
-          helpText="Package-root-relative path to a script that runs after resources are copied into the sandbox."
-        />
-      </div>
+            <FormField
+              label={t('skillForm.fields.bootstrapScriptPath')}
+              id="bootstrap_script_path"
+              value={formState.bootstrap_script_path}
+              onChange={(e) => setFormState((prev) => ({ ...prev, bootstrap_script_path: e.target.value }))}
+              placeholder="scripts/bootstrap.sh"
+              disabled={disabled}
+              inputClassName="font-mono text-sm"
+              helpText={t('skillForm.help.bootstrapScriptPath')}
+            />
+          </div>
 
-      <div>
-        <label htmlFor="runtime_options" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Runtime Options (JSON)
-        </label>
-        <textarea
-          id="runtime_options"
-          name="runtime_options"
-          value={formState.runtime_options_text}
-          onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
-          disabled={disabled}
-          rows={6}
-          aria-invalid={!runtimeOptionsValidation.valid}
-          aria-describedby="runtime_options_help"
-          placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
-          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors font-mono text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${
-            !runtimeOptionsValidation.valid
-              ? 'border-red-300 dark:border-red-600 focus:ring-red-500 focus:border-red-500'
-              : 'border-gray-300 dark:border-gray-600 focus:ring-purple-500 focus:border-purple-500'
-          } ${disabled ? 'bg-gray-100 dark:bg-gray-900 cursor-not-allowed' : ''}`}
-        />
-        {'error' in runtimeOptionsValidation ? (
-          <p id="runtime_options_help" className="mt-1 flex items-start gap-1 text-xs text-red-600 dark:text-red-400">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-            <span>{runtimeOptionsValidation.error}</span>
-          </p>
-        ) : (
-          <p id="runtime_options_help" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Optional JSON object passed to the sandbox runtime. Leave blank for none.
-          </p>
-        )}
-      </div>
+          <FormTextArea
+            label={t('skillForm.fields.runtimeOptions')}
+            id="runtime_options"
+            value={formState.runtime_options_text}
+            onChange={(e) => setFormState((prev) => ({ ...prev, runtime_options_text: e.target.value }))}
+            disabled={disabled}
+            rows={6}
+            error={'error' in runtimeOptionsValidation ? runtimeOptionsValidation.error : undefined}
+            helpText={runtimeOptionsValidation.valid ? t('skillForm.help.runtimeOptions') : undefined}
+            placeholder={'{\n  "pip_packages": ["pandas"]\n}'}
+            textareaClassName="font-mono text-[13px]"
+          />
+        </div>
+      </details>
 
       <FormCheckbox
-        label="Enabled"
+        label={t('skillForm.fields.enabled')}
         id="is_enabled"
         checked={formState.is_enabled}
         onChange={(e) => setFormState((prev) => ({ ...prev, is_enabled: e.target.checked }))}
         disabled={disabled}
-        helpText="Disabled skills are ignored at execution time until re-enabled."
+        helpText={t('skillForm.help.enabled')}
       />
+      </div>
 
       {isEditing && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">Package Resources</span>
-            <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-              {skill?.is_system && <Badge label="System" variant="secondary" />}
-              {skill?.is_enabled === false && <Badge label="Disabled" variant="warning" />}
-              {files.length === 0 ? 'SKILL.md only' : `${files.length} bundled ${files.length === 1 ? 'file' : 'files'}`}
+            <span className="block text-sm font-medium text-fg dark:text-fg-dark">{t('skillForm.resources.title')}</span>
+            <span className="flex items-center gap-1.5 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+              {skill?.is_system && <Badge label={t('skillsPage.statuses.system')} variant="secondary" />}
+              {skill?.is_enabled === false && <Badge label={t('skillsPage.statuses.disabled')} variant="warning" />}
+              {files.length === 0
+                ? t('skillForm.resources.skillFileOnly')
+                : t('skillForm.resources.bundledFiles', { count: files.length })}
             </span>
           </div>
-          <div className="border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900">
-              <FileText className="w-4 h-4 shrink-0 text-purple-500" aria-hidden="true" />
+          <div className="border border-line dark:border-line-dark rounded-md bg-surface dark:bg-surface-dark overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-line dark:border-line-dark px-3 py-2 text-sm text-fg dark:text-fg-dark bg-surface-tint dark:bg-surface-tint-dark">
+              <FileText className="w-4 h-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
               <span className="font-mono text-xs">SKILL.md</span>
-              <span className="ml-auto text-xs text-gray-400">instructions</span>
+              <span className="ml-auto text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('skillForm.resources.instructions')}</span>
             </div>
             {fileTree.length > 0 ? (
               <div className="max-h-72 overflow-y-auto py-1">
@@ -760,25 +800,25 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
                 />
               </div>
             ) : (
-              <p className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-                This skill does not include bundled resources.
+              <p className="px-3 py-4 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+                {t('skillForm.resources.none')}
               </p>
             )}
           </div>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Read-only. Text file previews are fetched only when a file is expanded.
+          <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+            {t('skillForm.resources.readOnlyDescription')}
           </p>
         </div>
       )}
 
       {isReadOnly ? (
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end pt-4 border-t border-line dark:border-line-dark">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-fg dark:text-fg-dark bg-surface-hover dark:bg-surface-hover-dark hover:bg-surface-ash dark:hover:bg-line-dark rounded-lg transition-colors"
           >
-            Close
+            {t('skillForm.actions.close')}
           </button>
         </div>
       ) : (
@@ -786,9 +826,10 @@ function SkillForm({ skill, readOnly, userRole, onSubmit, onCancel }: Readonly<S
           onCancel={onCancel}
           isSubmitting={isSubmitting}
           isEditing={isEditing}
-          submitLabel={isEditing ? 'Update Skill' : 'Create Skill'}
-          submitButtonColor="purple"
-          disabled={!isValid}
+          submitLabel={t(isEditing ? 'skillForm.actions.update' : 'skillForm.actions.create')}
+          submittingLabel={t('skillForm.actions.saving')}
+          cancelLabel={t('skillForm.actions.cancel')}
+          submitDisabled={!isValid}
         />
       )}
     </form>

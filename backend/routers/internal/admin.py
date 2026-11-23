@@ -478,7 +478,7 @@ async def get_system_stats(
         active_users = UserService.get_active_users_count(db)
         inactive_users = UserService.get_inactive_users_count(db)
         total_apps = db.query(App).count()
-        total_agents = db.query(Agent).count()
+        total_agents = db.query(Agent).filter(Agent.visible_clause()).count()
         total_api_keys = db.query(APIKey).count()
         active_api_keys = db.query(APIKey).filter(APIKey.is_active == True).count()
         

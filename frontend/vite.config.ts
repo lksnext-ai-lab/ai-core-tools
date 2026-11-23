@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 
 // Backend path prefixes served by the API. Kept in sync with docker/Caddyfile
 // so local terminal dev (Vite proxy below) and the Docker deployment (Caddy)
@@ -20,50 +19,6 @@ const BACKEND_PATHS = [
 ];
 
 export default defineConfig(({ mode }) => {
-  if (mode === 'library') {
-    return {
-      plugins: [react()],
-      build: {
-        lib: {
-          entry: path.resolve(__dirname, 'src/index.ts'),
-          name: 'AICoreToolsBase',
-          formats: ['es', 'cjs'],
-          fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`
-        },
-        rollupOptions: {
-          external: [
-            'react', 
-            'react-dom', 
-            'react-router-dom',
-            'axios',
-            'oidc-client-ts',
-            'react-markdown'
-          ],
-          output: {
-            globals: {
-              react: 'React',
-              'react-dom': 'ReactDOM',
-              'react-router-dom': 'ReactRouterDOM',
-              'axios': 'axios',
-              'oidc-client-ts': 'oidc-client-ts',
-              'react-markdown': 'ReactMarkdown'
-            },
-            assetFileNames: (assetInfo) => {
-              if (assetInfo.name?.endsWith('.css')) {
-                return 'style.css';
-              }
-              return assetInfo.name || 'asset';
-            }
-          }
-        },
-        cssCodeSplit: false,
-        minify: 'terser',
-        sourcemap: true,
-        target: 'es2020'
-      }
-    };
-  }
-
   // Default dev/build config
   const env = loadEnv(mode, process.cwd(), '');
   // Backend target for the dev-server proxy (local terminal dev only).

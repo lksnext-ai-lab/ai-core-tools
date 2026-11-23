@@ -63,14 +63,7 @@ See [Backend Architecture](backend.md) for detailed information.
 
 ### Frontend (React/TypeScript)
 
-The frontend is split into two parts:
-
-- **Base Library** (`@lksnext/ai-core-tools-base`): Core React components, hooks, contexts, and services
-- **Client Projects**: Customized applications consuming the base library with custom themes and configurations
-
-This architecture allows for a **single codebase** powering multiple branded client applications.
-
-See [Frontend Architecture](frontend.md) for detailed information.
+The frontend is a single React SPA (Vite), built into the `mattinai-frontend` Docker image. See [Frontend Architecture](frontend.md) for detailed information.
 
 ### Database (PostgreSQL + pgvector)
 

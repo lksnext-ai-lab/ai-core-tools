@@ -44,7 +44,8 @@ def _validate_silo_app_ownership(silo_id: int, app_id: int, db: Session) -> Silo
     Raises HTTPException(403) if silo belongs to a different app.
     """
     silo = SiloService.get_silo(silo_id, db)
-    if not silo:
+    if not silo or (silo.app_id == app_id and SiloService.is_temp_silo(silo_id, db)):
+        # The hidden temp silo of a playground / Chat conversation answers like a missing silo.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=SILO_NOT_FOUND_MSG

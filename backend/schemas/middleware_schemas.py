@@ -31,7 +31,8 @@ class SummarizationConfig(_StrictConfig):
     # None = derived from the agent model's context window (see tools/middleware/factory.py).
     trigger_tokens: Optional[int] = Field(None, ge=500, le=1_000_000)
     keep_messages: int = Field(20, ge=1, le=500)
-    # None = summarize the whole older history (bounded by the trigger), as Deep Agents does.
+    # None = bounded by the summary model's context window (minus a prompt overhead) and never trimmed
+    # for a conversation that stayed on one model; the earlier summary is kept when trimming (tools/middleware/factory.py).
     trim_tokens: Optional[int] = Field(None, ge=500, le=1_000_000)
 
 

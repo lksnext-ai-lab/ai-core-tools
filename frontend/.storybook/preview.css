@@ -1,0 +1,16 @@
+html,
+body,
+#storybook-root {
+  min-height: 100%;
+}
+
+body {
+  background-color: #ffffff;
+}
+
+html.dark,
+body.dark,
+html.dark body,
+body:has(.dark) {
+  background-color: #1f1d17;
+}

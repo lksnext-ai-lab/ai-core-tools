@@ -55,8 +55,6 @@ The project aims to simplify the integration and use of AI technologies within L
 - [Public API](api/public-api.md) — External programmatic API (API key auth, rate limiting)
 
 ### Guides
-- [Client Project Setup](guides/client-setup.md) — Creating and customizing client frontends
-- [Plugin Development](guides/plugin-development.md) — Building plugins for client projects
 - [Deployment Guide](guides/deployment.md) — Docker, Docker Compose, and Kubernetes deployment
 - [Authentication Guide](guides/authentication.md) — OIDC (Entra ID) and LOCAL (admin-provisioned email+password) modes, cookie transport, provisioning workflow, and FAKE-mode migration
 - [App Export and Import](guides/app-export-import.md) — Export app configuration and import into a new workspace

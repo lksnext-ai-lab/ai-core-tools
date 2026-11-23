@@ -3,6 +3,19 @@ import { authService } from './auth';
 import { getCsrfToken } from './cookies';
 import type { HitlCancelResult, HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
 import type {
+  ChatActionResult,
+  ChatConversation,
+  ChatConversationCreateRequest,
+  ChatConversationDetail,
+  ChatConversationList,
+  ChatFileDownload,
+  ChatFileList,
+  ChatFileUploadResult,
+  ChatOptions,
+  ChatSelection,
+  ChatStreamRequest,
+} from '../types/appChat';
+import type {
   ExistingSandboxService,
   ExistingService,
   MoveAgentsResult,
@@ -15,7 +28,13 @@ import type {
 /** Non-2xx HTTP error; callers can branch on `.status` without string-sniffing. */
 export class ApiError extends Error {
   /** Raw `detail` from the JSON error body (e.g. FastAPI's 422 validation array), when present. */
-  constructor(message: string, readonly status: number, readonly detail?: unknown) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly detail?: unknown,
+    /** Machine-readable `error_code` of the JSON error body (e.g. `SERVICE_RETIRED`), when present. */
+    readonly errorCode?: string,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -106,12 +125,21 @@ export interface App {
   agent_cors_origins?: string;
   enable_openai_api?: boolean;
   default_sandbox_service_id?: number | null;
+  chat_code_interpreter_enabled?: boolean;
+  default_embedding_service_id?: number | null;
   agent_count: number;
   repository_count: number;
   domain_count: number;
   silo_count: number;
   collaborator_count: number;
   onboarding_dismissed?: boolean;
+  /** Version of the App image (GET /internal/apps/{id}/image); null/absent = no image. */
+  image_updated_at?: string | null;
+}
+
+/** Answer of the picture uploads (user avatar, App image). */
+export interface ImageUpdatedResponse {
+  image_updated_at: string;
 }
 
 /** RAG retrieval-time filter applied on top of an agent's fixed silo. Mirrors RagConfigSection's RagFixedFilter shape. */
@@ -753,6 +781,7 @@ class ApiService {
   private async handleResponseError(response: Response): Promise<never> {
     let message = `API Error: ${response.status} ${response.statusText}`;
     let detail: unknown;
+    let errorCode: string | undefined;
 
     try {
       const errorData: unknown = await response.json();
@@ -763,6 +792,12 @@ class ApiService {
       if (errorData && typeof errorData === 'object' && 'detail' in (errorData as Record<string, unknown>)) {
         detail = (errorData as Record<string, unknown>)['detail'];
       }
+      const rawCode = errorData && typeof errorData === 'object'
+        ? (errorData as Record<string, unknown>)['error_code']
+        : undefined;
+      if (typeof rawCode === 'string') {
+        errorCode = rawCode;
+      }
     } catch (error) {
       console.debug('Failed to parse error response JSON:', error);
       if (response.status === 403) {
@@ -770,7 +805,7 @@ class ApiService {
       }
     }
 
-    throw new ApiError(message, response.status, detail);
+    throw new ApiError(message, response.status, detail, errorCode);
   }
 
   async request<T = unknown>(
@@ -841,7 +876,7 @@ class ApiService {
     });
   }
 
-  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean; default_sandbox_service_id?: number | null }): Promise<App> {
+  async updateApp(appId: number, data: { name: string; langsmith_api_key?: string; agent_rate_limit?: number; max_file_size_mb?: number; agent_cors_origins?: string; enable_openai_api?: boolean; default_sandbox_service_id?: number | null; chat_code_interpreter_enabled?: boolean; default_embedding_service_id?: number | null }): Promise<App> {
     return this.request(`/internal/apps/${appId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -881,6 +916,53 @@ class ApiService {
 
   async getAppAgentUsageStats(appId: number): Promise<AgentRateLimitUsage[]> {
     return this.request(`/internal/usage-stats/${appId}`);
+  }
+
+  /**
+   * A stored picture (user avatar, App image), or null when there is none. Passing its `version` makes the
+   * URL immutable, so the browser's HTTP cache can answer the next load.
+   */
+  private async fetchImage(path: string, version?: string | null): Promise<Blob | null> {
+    const query = version ? `?v=${encodeURIComponent(version)}` : '';
+    const response = await fetch(`${this.baseURL}${path}${query}`, {
+      credentials: 'include',
+      headers: this.buildAuthHeaders('GET', true),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      await this.handleResponseError(response);
+    }
+    return response.blob();
+  }
+
+  private async uploadImage(path: string, file: File): Promise<ImageUpdatedResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(path, { method: 'PUT', body: formData });
+  }
+
+  async getMyAvatar(version?: string | null): Promise<Blob | null> {
+    return this.fetchImage('/internal/me/avatar', version);
+  }
+
+  async uploadMyAvatar(file: File): Promise<ImageUpdatedResponse> {
+    return this.uploadImage('/internal/me/avatar', file);
+  }
+
+  async deleteMyAvatar(): Promise<void> {
+    return this.request('/internal/me/avatar', { method: 'DELETE' });
+  }
+
+  async getAppImage(appId: number, version?: string | null): Promise<Blob | null> {
+    return this.fetchImage(`/internal/apps/${appId}/image`, version);
+  }
+
+  async uploadAppImage(appId: number, file: File): Promise<ImageUpdatedResponse> {
+    return this.uploadImage(`/internal/apps/${appId}/image`, file);
+  }
+
+  async deleteAppImage(appId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/image`, { method: 'DELETE' });
   }
 
   async getPendingInvitations(): Promise<PendingInvitation[]> {
@@ -2513,13 +2595,26 @@ class ApiService {
     signal?: AbortSignal,
   ): Promise<void> {
     const isFormData = body instanceof FormData;
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const send = () => fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
       credentials: 'include',
       headers: this.buildAuthHeaders('POST', isFormData),
       body: isFormData ? body : JSON.stringify(body),
       signal,
     });
+
+    let response = await send();
+    if (response.status === 401) {
+      // Same contract as request(): renew the session once and retry; only then expire it.
+      // The body is re-sent as is (FormData and JSON strings can be reused); headers are rebuilt with the new token.
+      if (await this.renewSession()) {
+        response = await send();
+      }
+      if (response.status === 401) {
+        this.expireSession();
+        throw new ApiError('Your session has expired. Please sign in again.', 401);
+      }
+    }
 
     if (!response.ok) {
       await this.handleResponseError(response);
@@ -2864,6 +2959,109 @@ class ApiService {
     return this.request(`/internal/conversations/${conversationId}`, {
       method: 'DELETE',
     });
+  }
+
+  // ─── App Chat (`/internal/apps/{appId}/chat`) ────────────────────────────────
+
+  async getAppChatOptions(appId: number): Promise<ChatOptions> {
+    return this.request(`/internal/apps/${appId}/chat/options`);
+  }
+
+  /** The caller's default selection; null when the App has no usable model. */
+  async getAppChatDefaults(appId: number): Promise<ChatSelection | null> {
+    return this.request(`/internal/apps/${appId}/chat/defaults`);
+  }
+
+  async listAppChatConversations(appId: number, limit = 50, offset = 0): Promise<ChatConversationList> {
+    return this.request(`/internal/apps/${appId}/chat/conversations?limit=${limit}&offset=${offset}`);
+  }
+
+  async createAppChatConversation(
+    appId: number,
+    data: ChatConversationCreateRequest = {},
+  ): Promise<ChatConversation> {
+    return this.request(`/internal/apps/${appId}/chat/conversations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAppChatConversation(appId: number, conversationId: number): Promise<ChatConversationDetail> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}`);
+  }
+
+  async renameAppChatConversation(appId: number, conversationId: number, title: string): Promise<ChatConversation> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  async deleteAppChatConversation(appId: number, conversationId: number): Promise<void> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async resetAppChatConversation(appId: number, conversationId: number): Promise<ChatActionResult> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}/reset`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Send one Chat turn and consume its SSE response (same mechanism as the playground stream).
+   * Without `conversationId` the backend creates the conversation and reports it in the `metadata` event.
+   * 403/404/409/422 are real HTTP errors raised before the stream starts (`ApiError`, with `errorCode`).
+   */
+  async streamAppChatMessage(
+    appId: number,
+    request: ChatStreamRequest,
+    options: { onEvent: (event: StreamEvent) => void; signal?: AbortSignal },
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('message', request.message);
+    formData.append('selection', JSON.stringify(request.selection));
+    if (request.conversationId) {
+      formData.append('conversation_id', request.conversationId.toString());
+    }
+    request.files?.forEach((file) => formData.append('files', file));
+    if (request.fileReferences && request.fileReferences.length > 0) {
+      formData.append('file_references', JSON.stringify(request.fileReferences));
+    }
+    if (request.searchParams) {
+      formData.append('search_params', JSON.stringify(request.searchParams));
+    }
+
+    await this.postSSE(`/internal/apps/${appId}/chat/stream`, formData, options.onEvent, options.signal);
+  }
+
+  async uploadAppChatFile(appId: number, conversationId: number, file: File): Promise<ChatFileUploadResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}/files`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async listAppChatFiles(appId: number, conversationId: number): Promise<ChatFileList> {
+    return this.request(`/internal/apps/${appId}/chat/conversations/${conversationId}/files`);
+  }
+
+  /** Unlike the playground, an unknown file id is a 404 (not `success: false`). */
+  async removeAppChatFile(appId: number, conversationId: number, fileId: string): Promise<ChatActionResult> {
+    return this.request(
+      `/internal/apps/${appId}/chat/conversations/${conversationId}/files/${encodeURIComponent(fileId)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  /** Signed link that expires after 5 minutes: request it on click, never cache it. */
+  async getAppChatFileDownload(appId: number, conversationId: number, fileId: string): Promise<ChatFileDownload> {
+    return this.request(
+      `/internal/apps/${appId}/chat/conversations/${conversationId}/files/${encodeURIComponent(fileId)}/download`,
+    );
   }
 
   async getMarketplaceCatalog(

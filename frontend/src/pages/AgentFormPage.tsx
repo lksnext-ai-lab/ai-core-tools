@@ -1,19 +1,22 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Settings, FileText, MessageSquare, Lightbulb, Info, Zap, Search, Image, Terminal, FolderSearch, Wrench, Plug, Target, Store, Plus, Tv } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { AlertTriangle, Settings, FileText, Lightbulb, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
 import { DEFAULT_AGENT_TEMPERATURE, DEFAULT_PROMPT_TEMPLATE } from '../constants/agentConstants';
 import Alert from '../components/ui/Alert';
 import AgentMiddlewaresCard, { type AgentMiddlewareOption } from '../components/forms/AgentMiddlewaresCard';
-import { Badge } from '../components/ui/Badge';
+import { Badge,ProviderBadge } from '../components/ui/Badge';
 import { TagInput } from '../components/ui/TagInput';
 import { Tabs } from '../components/ui/Tabs';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../components/ui/ServiceOptionStatus';
-import type { ServiceOptionLike } from '../utils/serviceLifecycle';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 import type { TabItem } from '../components/ui/Tabs';
-import RagConfigSection, { SCORE_THRESHOLD_REQUIRED_MSG } from '../components/forms/RagConfigSection';
+import { FormCheckbox, FormField, FormSelect, FormTextArea } from '../components/ui/FormField';
+import ButtonCard from '../components/ui/ButtonCard';
+import RagConfigSection from '../components/forms/RagConfigSection';
 import type { RagConfigValue, RagFixedFilter, RagSearchType } from '../components/forms/RagConfigSection';
 import ExposedChatFiltersSection from '../components/forms/ExposedChatFiltersSection';
 import type { SearchFilterMetadataField } from '../components/playground/SearchFilters';
@@ -26,17 +29,18 @@ import type { A2ACardVisibility, AgentA2AFieldErrors, AgentA2AValue } from '../c
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import { randomId } from '../utils/randomId';
+import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
+import { FormActions } from '../components/ui/FormActions';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { CardApp } from '../components/ui/CardApp';
+import { LoadingState } from '../components/ui/LoadingState';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { AgentCanvas } from '../components/visual-editor/agent-canvas/AgentCanvas';
 import { useConfirm } from '../contexts/ConfirmContext';
 
 type AgentView = 'form' | 'visual';
-
-const VIEW_OPTIONS: ReadonlyArray<{ readonly id: AgentView; readonly label: string }> = [
-  { id: 'form', label: 'Form' },
-  { id: 'visual', label: 'Visual' },
-];
 
 // Define the Agent types
 interface Agent {
@@ -161,12 +165,13 @@ const OutputParserField = ({
   formData: AgentFormData;
   handleInputChange: (field: keyof AgentFormData, value: any) => void;
   agent: Agent | null;
-}) => (
-  <div>
-    <div className="flex items-center mb-2">
-      <input
+}) => {
+  const { t } = useTranslation('common');
+  return (
+    <div>
+      <FormCheckbox
         id="output_parser_toggle"
-        type="checkbox"
+        label={t('agentFormPage.outputParser.dataStructure')}
         checked={showOutputParser}
         onChange={(e) => {
           setShowOutputParser(e.target.checked);
@@ -174,33 +179,32 @@ const OutputParserField = ({
             handleInputChange('output_parser_id', undefined);
           }
         }}
-        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        className="mb-2"
       />
-      <label htmlFor="output_parser_toggle" className="ml-2 text-sm font-medium text-gray-700">Data Structure</label>
-    </div>
 
-    {showOutputParser && (
-      <select
-        id="output_parser"
-        value={formData.output_parser_id || ''}
-        onChange={(e) =>
-          handleInputChange(
-            'output_parser_id',
-            e.target.value ? Number.parseInt(e.target.value) : undefined
-          )
-        }
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-      >
-        <option value="">-- Select a Data Structure --</option>
-        {agent?.output_parsers.map((parser) => (
-          <option key={parser.parser_id} value={parser.parser_id}>
-            {parser.name}
-          </option>
-        ))}
-      </select>
-    )}
-  </div>
-);
+      {showOutputParser && (
+        <FormSelect
+          label={t('agentFormPage.outputParser.dataStructure')}
+          id="output_parser"
+          value={formData.output_parser_id || ''}
+          onChange={(e) =>
+            handleInputChange(
+              'output_parser_id',
+              e.target.value ? Number.parseInt(e.target.value) : undefined
+            )
+          }
+          options={[
+            { value: '', label: t('agentFormPage.outputParser.select') },
+            ...(agent?.output_parsers.map((parser) => ({
+              value: parser.parser_id,
+              label: parser.name,
+            })) ?? []),
+          ]}
+        />
+      )}
+    </div>
+  );
+};
 
 /**
  * Pull per-field messages for a2a_* keys out of a FastAPI 422 `detail` array
@@ -226,18 +230,6 @@ function extractA2AFieldErrors(err: unknown): AgentA2AFieldErrors | null {
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
-function getPageTitle(type: string, isNewAgent: boolean): string {
-  if (type === 'ocr_agent') return 'OCR agent';
-  if (isNewAgent) return 'Create Agent';
-  return 'Edit Agent';
-}
-
-function getPageDescription(type: string, isNewAgent: boolean, agentName?: string): string {
-  if (type === 'ocr_agent') return 'Configure OCR agent for document processing';
-  if (isNewAgent) return 'Configure a new AI agent with advanced capabilities';
-  return `Modify agent: ${agentName}`;
-}
-
 const EMPTY_MARKETPLACE_PROFILE: MarketplaceProfileUpdate = {
   display_name: null,
   short_description: null,
@@ -255,12 +247,34 @@ function serializeEditorState(formData: AgentFormData, marketplaceProfile: Marke
 }
 
 function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: number }) {
+  const { t } = useTranslation('common');
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   useEffect(() => { void apiService.getScheduledTasks(appId, agentId).then(setTasks).catch(() => undefined); }, [appId, agentId]);
-  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold text-gray-900">Scheduled tasks using this agent</h3><p className="text-sm text-gray-500">Scheduling is managed independently from the agent.</p></div><button type="button" onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Create scheduled task</button></div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"><span>{task.name}</span><span className="text-gray-500">{task.status === 'active' ? 'Active' : 'Paused'}</span></a>)}</div>}</section>;
+  return <section className="mb-6 rounded-md border border-line bg-surface dark:border-line-dark dark:bg-surface-dark p-6 "><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-display text-2xl font-normal tracking-[-0.02em] text-ink dark:text-ink-dark">{t('agentFormPage.scheduledTasks.title')}</h3><p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('agentFormPage.scheduledTasks.description')}</p></div>
+    <ButtonApp
+      type="button"
+      onClick={() => globalThis.location.assign(`/apps/${appId}/scheduled-tasks/new`)}
+      variant="primary"
+      label={t('agentFormPage.scheduledTasks.create')}
+    ></ButtonApp>
+    
+    </div>{tasks.length > 0 && <div className="mt-4 space-y-2">{tasks.map((task) => <a key={task.id} href={`/apps/${appId}/scheduled-tasks/${task.id}`} className="flex items-center justify-between rounded-md bg-surface dark:bg-surface-dark border border-line dark:border-btCard-border-dark px-3 py-2 text-sm"><span>{task.name}</span><span className="text-fg-tertiary dark:text-fg-tertiary-dark">{t(task.status === 'active' ? 'agentFormPage.scheduledTasks.active' : 'agentFormPage.scheduledTasks.paused')}</span></a>)}</div>}</section>;
 }
 
+/** Fields validated before saving: the tab each lives in and the id of its control. */
+const AGENT_FIELDS = {
+  name: { tab: 'basic', id: 'name' },
+  prompt_template: { tab: 'prompts', id: 'prompt_template' },
+  service_id: { tab: 'configuration', id: 'ai_service' },
+  rag_score_threshold: { tab: 'configuration', id: 'rag_score_threshold' },
+  media_embedding_service_id: { tab: 'configuration', id: 'media_embedding_service' },
+} as const;
+type AgentFieldKey = keyof typeof AGENT_FIELDS;
+/** Field -> message. Insertion order follows tab order, then visual order within the tab. */
+type AgentFieldErrors = Partial<Record<AgentFieldKey, string>>;
+
 function AgentFormPage() {
+  const { t } = useTranslation('common');
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -285,36 +299,52 @@ function AgentFormPage() {
   // Helper function to render the "No AI Services" warning banner
   const renderNoAIServicesWarning = (isOcrAgent: boolean) => {
     const message = isOcrAgent
-      ? 'You need to configure at least one AI service before creating an OCR agent. AI services define which models your agent will use for vision and text processing.'
-      : 'You need to configure at least one AI service before creating an agent. AI services define which language model your agent will use.';
+      ? t('agentFormPage.noAiServices.ocrMessage')
+      : t('agentFormPage.noAiServices.agentMessage');
 
     return (
-      <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6">
-        <div className="flex items-start">
-          <AlertTriangle className="w-5 h-5 text-amber-500 mr-3 shrink-0" />
-          <div className="flex-1">
-            <h4 className="text-sm font-semibold text-amber-900 mb-2">No AI Services Configured</h4>
-            <p className="text-sm text-amber-800 mb-3">
-              {message}
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
-              className="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              {' '}
-              Configure AI Services
-            </button>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="warning"
+        title={t('agentFormPage.noAiServices.title')}
+        className="mb-6"
+        message={(
+          <>
+            {message}
+            <span className="mt-3 block">
+              <ButtonApp
+                label={t('agentFormPage.noAiServices.configure')}
+                variant="secondary"
+                size="small"
+                icon={<Settings className="w-4 h-4" />}
+                onClick={() => navigate(`/apps/${appId}/settings/ai-services`)}
+              />
+            </span>
+          </>
+        )}
+      />
     );
   };
   const [saving, setSaving] = useState(false);
+  /** Load / server errors (not field validation) — banner at the top of the page. */
   const [error, setError] = useState<string | null>(null);
   // JSON of formData as loaded from (or last saved to) the backend; used to detect unsaved changes.
   const [snapshot, setSnapshot] = useState<string | null>(null);
+  const errorBannerRef = useRef<HTMLDivElement>(null);
+  /** Field validation shows only after the first save attempt; from then on it updates live. */
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  /** Field to focus once its tab has rendered (fields of other tabs aren't in the DOM). */
+  const [pendingFocusField, setPendingFocusField] = useState<AgentFieldKey | null>(null);
+
+  // Bring the error banner into view and move focus to it, so it can't go unnoticed.
+  useEffect(() => {
+    if (error) errorBannerRef.current?.focus();
+  }, [error]);
+
+  useEffect(() => {
+    if (!pendingFocusField) return;
+    document.getElementById(AGENT_FIELDS[pendingFocusField].id)?.focus();
+    setPendingFocusField(null);
+  }, [pendingFocusField, activeTab]);
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
     description: '',
@@ -526,7 +556,7 @@ function AgentFormPage() {
       setSnapshot(serializeEditorState(loadedFormData, loadedProfile));
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agent data');
+      setError(err instanceof Error ? err.message : t('agentFormPage.errors.loadFailed'));
       console.error('Error loading agent data:', err);
       return false;
     } finally {
@@ -589,9 +619,9 @@ function AgentFormPage() {
       setMarketplaceVisibility(previous);
       setShowMarketplace(previous !== 'unpublished');
       console.error('Error updating marketplace visibility:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update visibility');
+      setError(err instanceof Error ? err.message : t('agentFormPage.errors.visibilityUpdateFailed'));
     }
-  }, [appId, agentId, marketplaceVisibility]);
+  }, [appId, agentId, marketplaceVisibility, t]);
 
   const handleMarketplaceProfileChange = useCallback(
     (field: keyof MarketplaceProfileUpdate, value: string | string[] | null) => {
@@ -626,9 +656,9 @@ function AgentFormPage() {
           profileToSave,
         ),
       {
-        loading: MESSAGES.SAVING('marketplace profile'),
-        success: 'Marketplace profile saved',
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('marketplace profile')),
+        loading: t('agentFormPage.marketplace.savingProfile'),
+        success: t('agentFormPage.marketplace.profileSaved'),
+        error: (err) => errorMessage(err, t('agentFormPage.marketplace.profileSaveFailed')),
       },
     );
 
@@ -644,7 +674,42 @@ function AgentFormPage() {
       cover_image_url: saved.cover_image_url || null,
       conversation_starters: saved.conversation_starters?.map(s => s.prompt) || [],
     });
-  }, [appId, agentId, marketplaceProfile, mutate]);
+  }, [appId, agentId, marketplaceProfile, mutate, t]);
+
+  /** All field errors at once, each on its field (tab order). */
+  const validateAgent = (): AgentFieldErrors => {
+    const errors: AgentFieldErrors = {};
+    // Same as the `required` on the field, but checked even when its tab isn't open.
+    if (!formData.name.trim()) errors.name = t('agentFormPage.validation.nameRequired');
+    // The template is formatted with the user message; without {question} the message is lost.
+    if (!formData.prompt_template.includes(DEFAULT_PROMPT_TEMPLATE)) {
+      errors.prompt_template = t('agentFormPage.validation.promptTemplateQuestion');
+    }
+    // Same as the `required` AI service select, which only regular (non-OCR) agents show.
+    if (formData.type !== 'ocr_agent' && !formData.service_id) {
+      errors.service_id = t('agentFormPage.validation.aiServiceRequired');
+    }
+    // Mirror the backend invariant: a threshold strategy needs a threshold value.
+    if (formData.rag_search_type === 'similarity_score_threshold' && formData.rag_score_threshold == null) {
+      errors.rag_score_threshold = t('agentFormPage.validation.scoreThresholdRequired');
+    }
+    // Mirror the backend invariant: conversational agents keep uploaded documents in a
+    // per-conversation temp silo, which needs an embedding service.
+    if (formData.has_memory && !formData.media_embedding_service_id) {
+      errors.media_embedding_service_id = t('agentFormPage.validation.mediaEmbeddingRequired');
+    }
+    return errors;
+  };
+
+  const validationErrors = validateAgent();
+  const fieldErrors: AgentFieldErrors = submitAttempted ? validationErrors : {};
+  const errorFields = Object.keys(fieldErrors) as AgentFieldKey[];
+
+  /** Switch to the field's tab and focus it once the tab has rendered. */
+  const goToField = (field: AgentFieldKey) => {
+    setActiveTab(AGENT_FIELDS[field].tab);
+    setPendingFocusField(field);
+  };
 
   // Saves the agent. Returns true on success. Navigates away unless `stay` is set, in which
   // case the agent is reloaded so the form matches what the backend stored, and the result
@@ -655,25 +720,11 @@ function AgentFormPage() {
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
 
-    // The template is formatted with the user message; without {question} the message is lost.
-    if (!formData.prompt_template.includes(DEFAULT_PROMPT_TEMPLATE)) {
-      setActiveTab('prompts');
-      setError('The Prompt Template must include {question} before saving.');
-      return false;
-    }
-
-    // Mirror the backend invariant: a threshold strategy needs a threshold value.
-    if (usesThreshold && formData.rag_score_threshold == null) {
-      setActiveTab('configuration');
-      setError(SCORE_THRESHOLD_REQUIRED_MSG);
-      return false;
-    }
-
-    // Mirror the backend invariant: conversational agents keep uploaded documents in a
-    // per-conversation temp silo, which needs an embedding service.
-    if (formData.has_memory && !formData.media_embedding_service_id) {
-      setActiveTab('configuration');
-      setError('Conversational agents require a media embedding service in Media Processing.');
+    setSubmitAttempted(true);
+    const firstInvalid = (Object.keys(validationErrors) as AgentFieldKey[])[0];
+    if (firstInvalid) {
+      // Take the user to the first field to fix, in its tab.
+      goToField(firstInvalid);
       return false;
     }
 
@@ -757,9 +808,9 @@ function AgentFormPage() {
       : apiService.updateAgent(Number.parseInt(appId), Number.parseInt(agentId), submitData);
 
     const result = await mutate(() => submitPromise, {
-      loading: isNew ? MESSAGES.CREATING('agent') : MESSAGES.UPDATING('agent'),
-      success: isNew ? MESSAGES.CREATED('agent') : MESSAGES.UPDATED('agent'),
-      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('agent')),
+      loading: isNew ? t('agentFormPage.saving.creating') : t('agentFormPage.saving.updating'),
+      success: isNew ? t('agentFormPage.saving.created') : t('agentFormPage.saving.updated'),
+      error: (err) => errorMessage(err, t('agentFormPage.saving.failed')),
     });
     setSaving(false);
 
@@ -780,7 +831,7 @@ function AgentFormPage() {
         setA2aFieldErrors(a2aErrors);
       }
       // Keep the existing top-level banner in addition to the per-field messages.
-      setError(errorMessage(err, MESSAGES.SAVE_FAILED('agent')));
+      setError(errorMessage(err, t('agentFormPage.saving.failed')));
     }
     return false;
   }
@@ -837,10 +888,10 @@ function AgentFormPage() {
         // Closing the dialog without choosing keeps the form and its edits.
         let dismissed = false;
         const saveFirst = await confirm({
-          title: 'Unsaved changes',
-          message: 'Save your changes before opening the visual editor?',
-          confirmLabel: 'Save and continue',
-          cancelLabel: 'Discard',
+          title: t('agentFormPage.unsaved.title'),
+          message: t('agentFormPage.unsaved.message'),
+          confirmLabel: t('agentFormPage.unsaved.save'),
+          cancelLabel: t('agentFormPage.unsaved.discard'),
           onDismiss: () => {
             dismissed = true;
           },
@@ -861,102 +912,138 @@ function AgentFormPage() {
     changeView('form');
   };
 
+  const viewOptions: ReadonlyArray<{ id: AgentView; label: string }> = [
+    { id: 'form', label: t('agentFormPage.view.form') },
+    { id: 'visual', label: t('agentFormPage.view.visual') },
+  ];
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2 text-gray-600">Loading agent...</span>
-        </div>
-      </div>
+      <LoadingState variant="page" message={t('agentFormPage.loading')} />
     );
   }
 
-  const pageTitle = getPageTitle(formData.type, isNewAgent);
-  const pageDescription = getPageDescription(formData.type, isNewAgent, agent?.name);
+  const pageTitle = formData.type === 'ocr_agent'
+    ? t('agentFormPage.title.ocr')
+    : isNewAgent ? t('agentFormPage.title.create') : t('agentFormPage.title.edit');
+  const pageDescription = formData.type === 'ocr_agent'
+    ? t('agentFormPage.description.ocr')
+    : isNewAgent
+      ? t('agentFormPage.description.create')
+      : t('agentFormPage.description.edit', { name: agent?.name ?? '' });
+  let submitButtonLabel: string;
+  if (saving) {
+    submitButtonLabel = t('agentFormPage.saving.inProgress');
+  } else if (isNewAgent) {
+    submitButtonLabel = t('agentFormPage.saving.create');
+  } else {
+    submitButtonLabel = t('agentFormPage.saving.saveChanges');
+  }
+
+  // Per-tab error counter (spec): "Configuración (2)" while that tab has fields to fix.
+  const tabErrorCount = (tabId: string) =>
+    errorFields.filter((field) => AGENT_FIELDS[field].tab === tabId).length;
+  const tabLabel = (tabId: string, label: string) => {
+    const count = tabErrorCount(tabId);
+    return count > 0 ? `${label} (${count})` : label;
+  };
 
   const tabs: TabItem[] = [
-    { id: 'basic', label: 'Basic' },
-    { id: 'prompts', label: 'Prompts' },
-    { id: 'configuration', label: 'Configuration' },
-    { id: 'advanced', label: 'Advanced' },
-    { id: 'marketplace', label: 'Marketplace' },
+    { id: 'basic', label: tabLabel('basic', t('agentFormPage.tabs.basic')) },
+    { id: 'prompts', label: tabLabel('prompts', t('agentFormPage.tabs.prompts')) },
+    { id: 'configuration', label: tabLabel('configuration', t('agentFormPage.tabs.configuration')) },
+    { id: 'advanced', label: t('agentFormPage.tabs.advanced') },
+    { id: 'marketplace', label: t('agentFormPage.tabs.marketplace') },
     {
       id: 'a2a',
       label: 'A2A',
       disabled: isNewAgent,
-      disabledReason: isNewAgent ? 'Save the agent first to configure A2A settings' : undefined,
+      disabledReason: isNewAgent ? t('agentFormPage.tabs.saveBeforeA2a') : undefined,
     },
-    ...(!isNewAgent ? [{ id: 'metrics', label: 'Metrics' }] : []),
+    ...(!isNewAgent ? [{ id: 'metrics', label: t('agentFormPage.tabs.metrics') }] : []),
   ];
 
   const videoServiceOptions = agent?.ai_services?.filter((service) => service.supports_video);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+    <div className="min-h-screen px-6">
       {/* The visual editor uses the full width; the form keeps the centred column. */}
-      <div className={view === 'visual' ? 'mx-auto' : 'max-w-6xl mx-auto'}>
+      <div className={view === 'visual' ? 'mx-auto' : 'max-w-4xl mx-auto'}>
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {pageTitle}
-            </h1>
-            <p className="text-gray-600 mt-2">
-              {pageDescription}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {!isNewAgent && (
-              <div
-                role="group"
-                aria-label="Editor view"
-                className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-              >
-                {VIEW_OPTIONS.map((option) => {
-                  const active = view === option.id;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      aria-pressed={active}
-                      disabled={saving}
-                      onClick={() => void handleViewChange(option.id)}
-                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        active
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <button
-              onClick={() => navigate(`/apps/${appId}/agents`)}
-              className="flex items-center px-6 py-3 bg-white hover:bg-gray-50 rounded-xl text-gray-700 shadow-sm border border-gray-200 transition-all duration-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+          <Title
+            titulo={pageTitle}
+            subtitulo={pageDescription}
+            variant="titPrincipal"
+            subtitleMarginBottom={0}
+          />
+          {!isNewAgent && (
+            <div
+              role="group"
+              aria-label={t('agentFormPage.view.label')}
+              className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface p-1 shadow-sm dark:border-line-dark dark:bg-surface-dark"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              {' '}
-              Back to Agents
-            </button>
-          </div>
+              {viewOptions.map((option) => {
+                const active = view === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={saving}
+                    onClick={() => void handleViewChange(option.id)}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${
+                      active
+                        ? 'bg-ink text-surface dark:bg-ink-dark dark:text-surface-dark'
+                        : 'text-fg-secondary hover:bg-line dark:text-fg-secondary-dark dark:hover:bg-line-dark'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {agent && (
           <ServiceLifecycleAlert warnings={agent.lifecycle_warnings} variant="full" className="mb-6" />
         )}
 
-        {/* Error Message */}
+        {/* Load / server error */}
         {error && (
+          <div ref={errorBannerRef} tabIndex={-1} className="mb-6 scroll-mt-4 rounded-lg outline-none">
+            <Alert
+              type="error"
+              title={t('agentFormPage.errors.title')}
+              message={error}
+              onDismiss={() => setError(null)}
+            />
+          </div>
+        )}
+
+        {/* Validation summary: with 2+ errors, or when the field isn't on screen (threshold
+            without a silo hides the RAG section). Each item opens its tab and focuses the field. */}
+        {(errorFields.length >= 2 || (fieldErrors.rag_score_threshold && !formData.silo_id)) && (
           <Alert
             type="error"
-            title="Error"
-            message={error}
+            title={t('agentFormPage.validation.summaryTitle', { count: errorFields.length })}
             className="mb-6"
-            onDismiss={() => setError(null)}
+            message={(
+              <ul className="list-disc space-y-1 pl-4">
+                {errorFields.map((field) => (
+                  <li key={field}>
+                    <button
+                      type="button"
+                      onClick={() => goToField(field)}
+                      className="text-left underline underline-offset-2"
+                    >
+                      {fieldErrors[field]}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           />
         )}
 
@@ -982,694 +1069,154 @@ function AgentFormPage() {
             />
             {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
 
-            {/* TAB 1: BASIC */}
-            {activeTab === 'basic' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                <div className="flex items-center mb-6">
-                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
-                </div>
-              
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                      Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      required
-                      placeholder="Name..."
-                    />
-                  </div>
+          {/* TAB 1: BASIC */}
+          {activeTab === 'basic' && (
+            <section className="">
+              <div className="grid grid-cols-1 gap-y-5">
+                <div className="w-full">
+                <FormField
+                  label={t('agentFormPage.fields.name')}
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  required
+                  error={fieldErrors.name}
+                  placeholder={t('agentFormPage.fields.namePlaceholder')}
+                  className="mb-4"
+                />
 
-                  <div>
-                    <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
-                      Agent Type
-                    </label>
-                    <select
-                      id="type"
-                      value={formData.type}
-                      onChange={(e) => handleInputChange('type', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    >
-                      <option value="agent">AI Agent</option>
-                      <option value="ocr_agent">OCR Agent</option>
-                    </select>
-                  </div>
+                <FormSelect
+                  label={t('agentFormPage.fields.agentType')}
+                  id="type"
+                  value={formData.type}
+                  onChange={(e) => handleInputChange('type', e.target.value)}
+                  options={[
+                    { value: 'agent', label: t('agentFormPage.fields.aiAgent') },
+                    { value: 'ocr_agent', label: t('agentFormPage.fields.ocrAgent') },
+                  ]}
+                  className="mb-4"
+                />
 
-                  <div className="md:col-span-2">
-                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
-                    <input
-                      type="text"
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => handleInputChange('description', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      placeholder="Description..."
-                    />
-                  </div>
-                </div>
+                <FormField
+                  label={t('agentFormPage.fields.description')}
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  placeholder={t('agentFormPage.fields.descriptionPlaceholder')}
+                  className="md:col-span-2"
+                />
               </div>
-            )}
-
-            {/* TAB 2: PROMPTS */}
-            {activeTab === 'prompts' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                <div className="flex items-center mb-6">
-                  <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                    <MessageSquare className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900">Prompts & Instructions</h3>
-                </div>
-              
-                <div className="space-y-6">
-                  <div>
-                    <label htmlFor="system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
-                      System Prompt
-                    </label>
-                    <textarea
-                      id="system_prompt"
-                      value={formData.system_prompt}
-                      onChange={(e) => handleInputChange('system_prompt', e.target.value)}
-                      rows={4}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      placeholder="Define the agent's behavior and capabilities..."
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="prompt_template" className="block text-sm font-medium text-gray-700 mb-2">
-                      Prompt Template
-                    </label>
-                    <textarea
-                      id="prompt_template"
-                      value={formData.prompt_template}
-                      onChange={(e) => handleInputChange('prompt_template', e.target.value)}
-                      rows={4}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      placeholder="Template for user interactions (must include {question})..."
-                    />
-                    <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> The template must include {'{question}'} to work properly</p>
-                  </div>
-                </div>
               </div>
-            )}
+            </section>
+          )}
 
-            {/* TAB 3: CONFIGURATION */}
-            {activeTab === 'configuration' && (
+          {/* TAB 2: PROMPTS */}
+          {activeTab === 'prompts' && (
+            <CardApp variant="white" icon={MessageSquare} titulo={t('agentFormPage.prompts.title')}>
               <div className="space-y-6">
-                {/* Configuration for regular agents */}
-                {formData.type !== 'ocr_agent' && (
-                  <>
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                      <div className="flex items-center mb-6">
-                        <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center mr-4">
-                          <Settings className="w-5 h-5 text-orange-600" />
-                        </div>
-                        <h3 className="text-xl font-semibold text-gray-900">Configuration</h3>
-                      </div>
-                    
-                      {/* No AI Services Warning */}
-                      {agent?.ai_services.length === 0 && renderNoAIServicesWarning(false)}
+                <FormTextArea
+                  label={t('agentFormPage.prompts.systemPrompt')}
+                  id="system_prompt"
+                  value={formData.system_prompt}
+                  onChange={(e) => handleInputChange('system_prompt', e.target.value)}
+                  rows={4}
+                  placeholder={t('agentFormPage.prompts.systemPromptPlaceholder')}
+                />
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label htmlFor="ai_service" className="block text-sm font-medium text-gray-700 mb-2">
-                            AI Service *
-                          </label>
-                          <select
-                            id="ai_service"
-                            aria-describedby={serviceStatusId(agent?.ai_services, formData.service_id, "ai_service")}
-                            value={formData.service_id || ''}
-                            onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                            required
-                          >
-                            <option value="">Select AI Service</option>
-                            <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.service_id} />
-                          </select>
-                          <ServiceOptionStatus selectId="ai_service" options={agent?.ai_services} selectedId={formData.service_id} />
-                        </div>
+                <div>
+                  <FormTextArea
+                    label={t('agentFormPage.prompts.template')}
+                    id="prompt_template"
+                    value={formData.prompt_template}
+                    onChange={(e) => handleInputChange('prompt_template', e.target.value)}
+                    rows={4}
+                    error={fieldErrors.prompt_template}
+                    placeholder={t('agentFormPage.prompts.templatePlaceholder')}
+                  />
+                  <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-2 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> {t('agentFormPage.prompts.templateHint', { question: '{question}' })}</p>
+                </div>
+              </div>
+            </CardApp>
+          )}
 
-                        <div>
-                          <label htmlFor="silo" className="block text-sm font-medium text-gray-700 mb-2">
-                            Knowledge Base (Silo)
-                          </label>
-                          <select
-                            id="silo"
-                            value={formData.silo_id || ''}
-                            onChange={(e) => handleInputChange('silo_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          >
-                            <option value="">Select Knowledge Base</option>
-                            {agent?.silos.map((silo) => (
-                              <option key={silo.silo_id} value={silo.silo_id}>
-                                {silo.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label htmlFor="temperature" className="block text-sm font-medium text-gray-700 mb-2">
-                            Temperature
-                          </label>
-                          <div className="flex items-center space-x-4">
-                            <input
-                              type="range"
-                              id="temperature"
-                              min="0"
-                              max="2"
-                              step="0.1"
-                              value={formData.temperature}
-                              onChange={(e) => handleInputChange('temperature', Number.parseFloat(e.target.value))}
-                              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <span className="text-sm font-medium text-gray-600 w-12">
-                              {formData.temperature.toFixed(1)}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Controls randomness: 0 = deterministic, 2 = very creative
-                          </p>
-                        </div>
-
-                        <div>
-                          <OutputParserField
-                            showOutputParser={showOutputParser}
-                            setShowOutputParser={setShowOutputParser}
-                            formData={formData}
-                            handleInputChange={handleInputChange}
-                            agent={agent}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* RAG retrieval config — only meaningful when a silo is selected */}
-                    {formData.silo_id && (
-                      <RagConfigSection
-                        value={{
-                          rag_k: formData.rag_k,
-                          rag_search_type: formData.rag_search_type,
-                          rag_score_threshold: formData.rag_score_threshold,
-                          rag_max_retrieval_calls: formData.rag_max_retrieval_calls,
-                          rag_fixed_filters: formData.rag_fixed_filters,
-                        }}
-                        onChange={(patch: Partial<RagConfigValue>) =>
-                          setFormData((prev) => ({ ...prev, ...patch }))
-                        }
-                        metadataFields={siloMetadataFields}
-                        loadingMetadata={loadingSiloMetadata}
-                      />
-                    )}
-
-                    {/* Agent Capabilities Card */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                      <div className="flex items-center mb-6">
-                        <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                          <Zap className="w-5 h-5 text-green-600" />
-                        </div>
-                        <h3 className="text-xl font-semibold text-gray-900">Capabilities</h3>
-                      </div>
-
-                      {/* MCP Warning Dialog */}
-                      {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
-                        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                          <div className="flex items-start">
-                            <span className="text-amber-500 text-xl mr-3">!</span>
-                            <div className="flex-1">
-                              <h4 className="text-sm font-semibold text-amber-900 mb-2">
-                                This agent is used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                              </h4>
-                              <p className="text-sm text-amber-800 mb-2">
-                                Unmarking this agent as a tool will make it unavailable in the following MCP servers:
-                              </p>
-                              <ul className="text-sm text-amber-700 list-disc list-inside mb-3">
-                                {mcpUsage.mcp_servers.map(s => (
-                                  <li key={s.server_id}>{s.server_name}</li>
-                                ))}
-                              </ul>
-                              <div className="flex space-x-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleInputChange('is_tool', false);
-                                    setShowMcpWarning(false);
-                                  }}
-                                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
-                                >
-                                  Unmark as Tool Anyway
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowMcpWarning(false)}
-                                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium rounded-lg transition-colors"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <input
-                            id="is_tool"
-                            type="checkbox"
-                            checked={formData.is_tool}
-                            onChange={(e) => {
-                              // If unmarking as tool and agent is used in MCP servers, show warning
-                              if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
-                                setShowMcpWarning(true);
-                              } else {
-                                handleInputChange('is_tool', e.target.checked);
-                              }
-                            }}
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="is_tool" className="text-sm font-medium text-gray-900">Tool Agent</label>
-                            <p className="text-xs text-gray-500">Can be used by other agents</p>
-                            {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                              <p className="text-xs text-purple-600 mt-1">
-                                Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <input
-                            id="has_memory"
-                            type="checkbox"
-                            checked={formData.has_memory}
-                            onChange={(e) => handleInputChange('has_memory', e.target.checked)}
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="has_memory" className="text-sm font-medium text-gray-900">Conversational</label>
-                            <p className="text-xs text-gray-500">Maintains conversation memory</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <input
-                            id="enable_code_interpreter"
-                            type="checkbox"
-                            checked={formData.enable_code_interpreter}
-                            onChange={(e) => handleInputChange('enable_code_interpreter', e.target.checked)}
-                            aria-describedby="enable_code_interpreter_help"
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="enable_code_interpreter" className="text-sm font-medium text-gray-900">Code Interpreter</label>
-                            <p id="enable_code_interpreter_help" className="text-xs text-gray-500">Allows the agent to execute Python code (pandas, openpyxl, numpy)</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <input
-                            id="skill_router_enabled"
-                            type="checkbox"
-                            checked={formData.skill_router_enabled}
-                            onChange={(e) => handleInputChange('skill_router_enabled', e.target.checked)}
-                            aria-describedby="skill_router_enabled_help"
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="skill_router_enabled" className="text-sm font-medium text-gray-900">Skill Router</label>
-                            <p id="skill_router_enabled_help" className="text-xs text-gray-500">Let the model pre-select at most 2 skills per turn; off by default.</p>
-                          </div>
-                        </div>
-
-                        {formData.enable_code_interpreter && (
-                          <div className="md:col-span-2">
-                            <label htmlFor="sandbox_service" className="block text-sm font-medium text-gray-700 mb-2">
-                              Sandbox Service
-                            </label>
-                            <select
-                              id="sandbox_service"
-                              aria-describedby={serviceStatusId(agent?.sandbox_services, formData.sandbox_service_id, 'sandbox_service')}
-                              value={formData.sandbox_service_id || ''}
-                              onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                            >
-                              <option value="">Use app/system default</option>
-                              <ServiceSelectOptions options={agent?.sandbox_services} savedValue={agent?.sandbox_service_id} />
-                            </select>
-                            <ServiceOptionStatus selectId="sandbox_service" options={agent?.sandbox_services} selectedId={formData.sandbox_service_id} />
-                            <p className="text-xs text-gray-500 mt-1">
-                              Overrides the sandbox environment used to run this agent's Python code. Leave unset to use the app's default Sandbox Service.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Provider-side Tools */}
-                      <div className="mt-6 pt-6 border-t border-gray-100">
-                        <div className="mb-3">
-                          <h4 className="text-sm font-semibold text-gray-800">Provider-side Tools</h4>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            These tools run on the AI provider's infrastructure — no extra backend setup needed.
-                            Only tools supported by the agent's selected provider will be active.
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {[
-                            {
-                              id: 'web_search',
-                              icon: <Search className="w-4 h-4" />,
-                              label: 'Web Search',
-                              description: 'Real-time internet search',
-                              providers: ['OpenAI', 'Anthropic', 'Google', 'Azure'],
-                            },
-                            {
-                              id: 'image_generation',
-                              icon: <Image className="w-4 h-4" />,
-                              label: 'Image Generation',
-                              description: 'Generate images with DALL-E',
-                              providers: ['OpenAI', 'Azure'],
-                            },
-                            {
-                              id: 'code_interpreter',
-                              icon: <Terminal className="w-4 h-4" />,
-                              label: 'Code Interpreter',
-                              description: 'Provider-sandboxed code execution',
-                              providers: ['OpenAI', 'Anthropic', 'Azure'],
-                            },
-                            {
-                              id: 'file_search',
-                              icon: <FolderSearch className="w-4 h-4" />,
-                              label: 'File Search',
-                              description: 'Vector search over uploaded files',
-                              providers: ['OpenAI', 'Azure'],
-                            },
-                          ].map((tool) => {
-                            const active = formData.server_tools.includes(tool.id);
-                            const toggle = () => handleInputChange(
-                              'server_tools',
-                              active
-                                ? formData.server_tools.filter(t => t !== tool.id)
-                                : [...formData.server_tools, tool.id]
-                            );
-                            return (
-                              <button
-                                key={tool.id}
-                                type="button"
-                                onClick={toggle}
-                                className={`text-left p-3 rounded-xl border-2 transition-colors ${
-                                  active
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-base">{tool.icon}</span>
-                                  <span className={`text-sm font-medium ${active ? 'text-blue-800' : 'text-gray-800'}`}>
-                                    {tool.label}
-                                  </span>
-                                  {active && (
-                                    <span className="ml-auto text-xs font-medium text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">ON</span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-gray-500 mb-2">{tool.description}</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {tool.providers.map(p => (
-                                    <span key={p} className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{p}</span>
-                                  ))}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <p className="text-xs text-amber-600 mt-3 flex items-start gap-1">
-                          <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> Some tools require specific models — e.g. Image Generation needs gpt-image-1 (OpenAI Responses API).
-                          Unsupported tools for the selected provider are silently ignored.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Media Processing Card */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                      <div className="flex items-center mb-6">
-                        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                          <Tv className="w-5 h-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-900">Media Processing</h3>
-                          <p className="text-sm text-gray-500">
-                            Default configuration used when uploading audio/video or YouTube URLs in the playground.
-                            Set it here once so uploads only require choosing the file or URL.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mb-6">
-                        <label htmlFor="media_embedding_service" className="block text-sm font-medium text-gray-700 mb-2">
-                          Embedding Service {formData.has_memory && <span className="text-red-500">*</span>}
-                        </label>
-                        <select
-                          id="media_embedding_service"
-                          aria-describedby={serviceStatusId(embeddingServices, formData.media_embedding_service_id, "media_embedding_service")}
-                          required={formData.has_memory}
-                          value={formData.media_embedding_service_id || ''}
-                          onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">None (no temporary knowledge base)</option>
-                          <ServiceSelectOptions options={embeddingServices} savedValue={agent?.media_embedding_service_id} />
-                        </select>
-                        <ServiceOptionStatus selectId="media_embedding_service" options={embeddingServices} selectedId={formData.media_embedding_service_id} />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Model used to vectorize uploaded media/documents into the conversation's temporary
-                          knowledge base for retrieval. Required for conversational agents; optional otherwise
-                          (documents are then sent in full to the agent, and audio/video uploads are unavailable).
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label htmlFor="transcription_service" className="block text-sm font-medium text-gray-700 mb-2">
-                            Transcription Service
-                          </label>
-                          <select
-                            id="transcription_service"
-                            aria-describedby={serviceStatusId(agent?.ai_services, formData.transcription_service_id, "transcription_service")}
-                            value={formData.transcription_service_id || ''}
-                            onChange={(e) => handleInputChange('transcription_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          >
-                            <option value="">Select Transcription Service</option>
-                            <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.transcription_service_id} />
-                          </select>
-                          <ServiceOptionStatus selectId="transcription_service" options={agent?.ai_services} selectedId={formData.transcription_service_id} />
-                          <p className="text-xs text-gray-500 mt-1">Speech-to-text model used to transcribe media.</p>
-                        </div>
-
-                        <div>
-                          <label htmlFor="video_ai_service" className="block text-sm font-medium text-gray-700 mb-2">
-                            Video Analysis Service (optional)
-                          </label>
-                          <select
-                            id="video_ai_service"
-                            aria-describedby={serviceStatusId(videoServiceOptions, formData.video_ai_service_id, "video_ai_service")}
-                            value={formData.video_ai_service_id || ''}
-                            onChange={(e) => handleInputChange('video_ai_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          >
-                            <option value="">None (audio only)</option>
-                            <ServiceSelectOptions options={videoServiceOptions} savedValue={agent?.video_ai_service_id} />
-                          </select>
-                          <ServiceOptionStatus selectId="video_ai_service" options={videoServiceOptions} selectedId={formData.video_ai_service_id} />
-                          <p className="text-xs text-gray-500 mt-1">Enables multimodal analysis (visual descriptions from video frames).</p>
-                        </div>
-
-                        <div>
-                          <label htmlFor="media_forced_language" className="block text-sm font-medium text-gray-700 mb-2">
-                            Language
-                          </label>
-                          <select
-                            id="media_forced_language"
-                            value={formData.media_forced_language || ''}
-                            onChange={(e) => handleInputChange('media_forced_language', e.target.value || undefined)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          >
-                            <option value="">Auto-detect</option>
-                            <option value="es">Spanish</option>
-                            <option value="en">English</option>
-                            <option value="eu">Basque</option>
-                            <option value="fr">French</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                        <div>
-                          <label htmlFor="media_chunk_min_duration" className="block text-sm font-medium text-gray-700 mb-2">
-                            Min Chunk (s)
-                          </label>
-                          <input
-                            id="media_chunk_min_duration"
-                            type="number"
-                            min={10}
-                            max={60}
-                            value={formData.media_chunk_min_duration}
-                            onChange={(e) => handleInputChange('media_chunk_min_duration', Number.parseInt(e.target.value) || 30)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="media_chunk_max_duration" className="block text-sm font-medium text-gray-700 mb-2">
-                            Max Chunk (s)
-                          </label>
-                          <input
-                            id="media_chunk_max_duration"
-                            type="number"
-                            min={60}
-                            max={300}
-                            value={formData.media_chunk_max_duration}
-                            onChange={(e) => handleInputChange('media_chunk_max_duration', Number.parseInt(e.target.value) || 120)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="media_chunk_overlap" className="block text-sm font-medium text-gray-700 mb-2">
-                            Overlap (s)
-                          </label>
-                          <input
-                            id="media_chunk_overlap"
-                            type="number"
-                            min={0}
-                            max={20}
-                            value={formData.media_chunk_overlap}
-                            onChange={(e) => handleInputChange('media_chunk_overlap', Number.parseInt(e.target.value) || 5)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
-                {/* Configuration for OCR agents */}
-                {formData.type === 'ocr_agent' && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                        <FileText className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">OCR Configuration</h3>
-                    </div>
-
-                    {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
-                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 mb-6">
-                      <div className="flex items-center mb-4">
-                        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                          <Zap className="w-4 h-4 text-green-600" />
-                        </div>
-                        <h4 className="text-base font-semibold text-gray-900">Capabilities</h4>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="flex items-center p-3 bg-white rounded-lg border border-gray-200">
-                          <input
-                            id="is_tool_ocr"
-                            type="checkbox"
-                            checked={formData.is_tool}
-                            onChange={(e) => {
-                              if (!e.target.checked && mcpUsage && mcpUsage.mcp_servers.length > 0) {
-                                setShowMcpWarning(true);
-                              } else {
-                                handleInputChange('is_tool', e.target.checked);
-                              }
-                            }}
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <div className="ml-3">
-                            <label htmlFor="is_tool_ocr" className="text-sm font-medium text-gray-900">Tool Agent</label>
-                            <p className="text-xs text-gray-500">Can be used by other agents (including OCR tools)</p>
-                            {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
-                              <p className="text-xs text-purple-600 mt-1">
-                                Used in {mcpUsage.mcp_servers.length} MCP server{mcpUsage.mcp_servers.length === 1 ? '' : 's'}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
+          {/* TAB 3: CONFIGURATION */}
+          {activeTab === 'configuration' && (
+            <div className="space-y-6">
+              {/* Configuration for regular agents */}
+              {formData.type !== 'ocr_agent' && (
+                <>
+                  <CardApp variant="white" icon={Settings} titulo={t('agentFormPage.configuration.title')}>
                     {/* No AI Services Warning */}
-                    {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
+                    {agent?.ai_services.length === 0 && renderNoAIServicesWarning(false)}
 
-                    <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label htmlFor="vision_service" className="block text-sm font-medium text-gray-700 mb-2">
-                          Modelo de Visión
-                        </label>
-                        <select
-                          id="vision_service"
-                          aria-describedby={serviceStatusId(agent?.ai_services, formData.vision_service_id, "vision_service")}
-                          value={formData.vision_service_id || ''}
-                          onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">-- Seleccionar modelo de visión --</option>
-                          <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.vision_service_id} />
-                        </select>
-                        <ServiceOptionStatus selectId="vision_service" options={agent?.ai_services} selectedId={formData.vision_service_id} />
+                        <FormSelect
+                          label={t('agentFormPage.configuration.aiService')}
+                          id="ai_service"
+                          ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.service_id, "ai_service")}
+                          value={formData.service_id || ''}
+                          onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                          required
+                          error={fieldErrors.service_id}
+                          options={[
+                            { value: '', label: t('agentFormPage.configuration.selectAiService') },
+                            ...selectableServiceOptions(agent?.ai_services, agent?.service_id).map((service) => ({
+                              value: service.service_id,
+                              label: serviceOptionLabel(service),
+                            })),
+                          ]}
+                        />
+                        <ServiceOptionStatus selectId="ai_service" options={agent?.ai_services} selectedId={formData.service_id} />
                       </div>
 
                       <div>
-                        <label htmlFor="vision_system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
-                          System Prompt (Visión)
-                        </label>
-                        <textarea
-                          id="vision_system_prompt"
-                          value={formData.vision_system_prompt || ''}
-                          onChange={(e) => handleInputChange('vision_system_prompt', e.target.value)}
-                          rows={2}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          placeholder="Añade el system prompt para el modelo de visión..."
+                        <FormSelect
+                          label={t('agentFormPage.configuration.knowledgeBase')}
+                          id="silo"
+                          value={formData.silo_id || ''}
+                          onChange={(e) => handleInputChange('silo_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                          options={[
+                            { value: '', label: t('agentFormPage.configuration.selectKnowledgeBase') },
+                            ...(agent?.silos.map((silo) => ({
+                              value: silo.silo_id,
+                              label: silo.name,
+                            })) ?? []),
+                          ]}
                         />
                       </div>
 
                       <div>
-                        <label htmlFor="text_service" className="block text-sm font-medium text-gray-700 mb-2">
-                          Modelo de Texto
+                        <label htmlFor="temperature" className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-2">
+                          {t('agentFormPage.configuration.temperature')}
                         </label>
-                        <select
-                          id="text_service"
-                          aria-describedby={serviceStatusId(agent?.ai_services, formData.service_id, "text_service")}
-                          value={formData.service_id || ''}
-                          onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        >
-                          <option value="">-- Seleccionar modelo de texto --</option>
-                          <ServiceSelectOptions options={agent?.ai_services} savedValue={agent?.service_id} />
-                        </select>
-                        <ServiceOptionStatus selectId="text_service" options={agent?.ai_services} selectedId={formData.service_id} />
+                        <div className="flex items-center space-x-4">
+                          <input
+                            type="range"
+                            id="temperature"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={formData.temperature}
+                            onChange={(e) => handleInputChange('temperature', Number.parseFloat(e.target.value))}
+                            className="flex-1 h-2 bg-line dark:bg-line-dark rounded-lg appearance-none accent-accent cursor-pointer"
+                          />
+                          <span className="text-sm font-medium text-fg-tertiary dark:text-fg-tertiary-dark w-12">
+                            {formData.temperature.toFixed(1)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
+                          {t('agentFormPage.configuration.temperatureHelp')}
+                        </p>
                       </div>
 
                       <div>
-                        <label htmlFor="text_system_prompt" className="block text-sm font-medium text-gray-700 mb-2">
-                          System Prompt (Texto)
-                        </label>
-                        <textarea
-                          id="text_system_prompt"
-                          value={formData.text_system_prompt || ''}
-                          onChange={(e) => handleInputChange('text_system_prompt', e.target.value)}
-                          rows={2}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                          placeholder="Añade el system prompt para el modelo de texto..."
+                        <OutputParserField
+                          showOutputParser={showOutputParser}
+                          setShowOutputParser={setShowOutputParser}
+                          formData={formData}
+                          handleInputChange={handleInputChange}
+                          agent={agent}
                         />
                       </div>
 
@@ -1681,530 +1228,844 @@ function AgentFormPage() {
                         agent={agent}
                       />
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  </CardApp>
 
-            {/* TAB 4: ADVANCED */}
-            {activeTab === 'advanced' && (
-              <div className="space-y-6">
-                {/* Tools Card - Only for regular agents */}
-                {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
-                        <Wrench className="w-5 h-5 text-yellow-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">Available Tools</h3>
-                    </div>
-                  
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {agent.tools.map((tool) => (
-                        <label
-                          key={tool.agent_id}
-                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full block ${
-                            formData.tool_ids.includes(tool.agent_id)
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={formData.tool_ids.includes(tool.agent_id)}
-                                onChange={() => handleToolToggle(tool.agent_id)}
-                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  {/* RAG retrieval config — only meaningful when a silo is selected */}
+                  {formData.silo_id && (
+                    <RagConfigSection
+                      value={{
+                        rag_k: formData.rag_k,
+                        rag_search_type: formData.rag_search_type,
+                        rag_score_threshold: formData.rag_score_threshold,
+                        rag_max_retrieval_calls: formData.rag_max_retrieval_calls,
+                        rag_fixed_filters: formData.rag_fixed_filters,
+                      }}
+                      onChange={(patch: Partial<RagConfigValue>) =>
+                        setFormData((prev) => ({ ...prev, ...patch }))
+                      }
+                      metadataFields={siloMetadataFields}
+                      loadingMetadata={loadingSiloMetadata}
+                    />
+                  )}
+
+                  {/* Agent Capabilities Card */}
+                  <CardApp variant="white" icon={Zap} titulo={t('agentFormPage.capabilities.title')}>
+                    {/* MCP Warning Dialog */}
+                    {showMcpWarning && mcpUsage && mcpUsage.mcp_servers.length > 0 && (
+                      <Alert
+                        type="warning"
+                        title={t('agentFormPage.capabilities.mcpWarningTitle', { count: mcpUsage.mcp_servers.length })}
+                        className="mb-6"
+                        message={(
+                          <>
+                            <span className="mb-2 block">
+                              {t('agentFormPage.capabilities.mcpWarningMessage')}
+                            </span>
+                            <ul className="list-disc list-inside mb-3">
+                              {mcpUsage.mcp_servers.map(s => (
+                                <li key={s.server_id}>{s.server_name}</li>
+                              ))}
+                            </ul>
+                            <span className="flex space-x-3">
+                              <ButtonApp
+                                label={t('agentFormPage.capabilities.unmarkTool')}
+                                variant="primary"
+                                size="control"
+                                onClick={() => {
+                                  handleInputChange('is_tool', false);
+                                  setShowMcpWarning(false);
+                                }}
                               />
-                              <span className="ml-3 text-sm font-medium text-gray-900">
-                                {tool.name}
-                              </span>
-                            </div>
-                            <div 
-                              className={`w-2 h-2 rounded-full ${
-                              formData.tool_ids.includes(tool.agent_id)
-                                ? 'bg-blue-500'
-                                : 'bg-gray-300'
-                              }`}
-                            />
-                          </div>
-                        </label>
-                      ))}
+                              <ButtonApp
+                                label={t('agentFormPage.cancel')}
+                                variant="secondary"
+                                size="control"
+                                onClick={() => setShowMcpWarning(false)}
+                              />
+                            </span>
+                          </>
+                        )}
+                      />
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <ButtonCard
+                        variant="selectable-check"
+                        selected={formData.is_tool}
+                        ariaLabel={t('agentFormPage.capabilities.toggle', { item: t('agentFormPage.capabilities.toolAgent') })}
+                        checkboxLabel={t('agentFormPage.capabilities.toolAgent')}
+                        checkboxHelpText={t('agentFormPage.capabilities.toolAgentHelp')}
+                        onClick={() => {
+                          if (formData.is_tool && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                            setShowMcpWarning(true);
+                          } else {
+                            handleInputChange('is_tool', !formData.is_tool);
+                          }
+                        }}
+                      >
+                        {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                          <p className="ml-7 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                            {t('agentFormPage.capabilities.usedInMcpServers', { count: mcpUsage.mcp_servers.length })}
+                          </p>
+                        )}
+                      </ButtonCard>
+
+                      <ButtonCard
+                        variant="selectable-check"
+                        selected={formData.has_memory}
+                        ariaLabel={t('agentFormPage.capabilities.toggle', { item: t('agentFormPage.capabilities.conversational') })}
+                        checkboxLabel={t('agentFormPage.capabilities.conversational')}
+                        checkboxHelpText={t('agentFormPage.capabilities.conversationalHelp')}
+                        onClick={() => handleInputChange('has_memory', !formData.has_memory)}
+                      />
+
+                      <ButtonCard
+                        variant="selectable-check"
+                        selected={formData.enable_code_interpreter}
+                        ariaLabel={t('agentFormPage.capabilities.toggle', { item: t('agentFormPage.capabilities.codeInterpreter') })}
+                        checkboxLabel={t('agentFormPage.capabilities.codeInterpreter')}
+                        checkboxHelpText={t('agentFormPage.capabilities.codeInterpreterHelp')}
+                        onClick={() => handleInputChange('enable_code_interpreter', !formData.enable_code_interpreter)}
+                      />
+
+                      <ButtonCard
+                        variant="selectable-check"
+                        selected={formData.skill_router_enabled}
+                        ariaLabel={t('agentFormPage.capabilities.toggle', { item: t('agentFormPage.capabilities.skillRouter') })}
+                        checkboxLabel={t('agentFormPage.capabilities.skillRouter')}
+                        checkboxHelpText={t('agentFormPage.capabilities.skillRouterHelp')}
+                        onClick={() => handleInputChange('skill_router_enabled', !formData.skill_router_enabled)}
+                      />
+
+                      {formData.enable_code_interpreter && (
+                        <div className="md:col-span-2">
+                          <FormSelect
+                            label={t('agentFormPage.capabilities.sandboxService')}
+                            id="sandbox_service"
+                            ariaDescribedBy={serviceStatusId(agent?.sandbox_services, formData.sandbox_service_id, 'sandbox_service')}
+                            value={formData.sandbox_service_id || ''}
+                            onChange={(e) => handleInputChange('sandbox_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                            options={[
+                              { value: '', label: t('agentFormPage.capabilities.useDefaultSandbox') },
+                              ...selectableServiceOptions(agent?.sandbox_services, agent?.sandbox_service_id).map((service) => ({
+                                value: service.service_id,
+                                label: serviceOptionLabel(service),
+                              })),
+                            ]}
+                            helpText={t('agentFormPage.capabilities.sandboxHelp')}
+                          />
+                          <ServiceOptionStatus selectId="sandbox_service" options={agent?.sandbox_services} selectedId={formData.sandbox_service_id} />
+                        </div>
+                      )}
                     </div>
-                  
-                    {formData.tool_ids.length > 0 && (
-                      <div className="mt-4 p-4 bg-blue-50 rounded-xl">
-                        <p className="text-sm text-blue-800">
-                          <span className="font-medium">{formData.tool_ids.length}</span> tool{formData.tool_ids.length === 1 ? '' : 's'} selected
+
+                    {/* Provider-side Tools */}
+                    <div className="mt-6 pt-6 border-t border-line dark:border-btCard-border-dark">
+                      <div className="mb-3">
+                        <h4 className="text-sm font-semibold text-fg dark:text-fg-dark">{t('agentFormPage.providerTools.title')}</h4>
+                        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-0.5">
+                          {t('agentFormPage.providerTools.description')}
                         </p>
                       </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Chat filters — designer picks which metadata fields end users can filter on.
-                    Mounted unconditionally (not gated behind silo_id): an orchestrator commonly
-                    has no own silo and delegates entirely to subagents' silos via tool_ids. */}
-                <ExposedChatFiltersSection
-                  appId={Number.parseInt(appId ?? '0')}
-                  agentId={Number.parseInt(agentId ?? '0')}
-                  toolIds={formData.tool_ids}
-                  siloId={formData.silo_id}
-                  value={formData.exposed_chat_filters}
-                  onChange={(fields) => handleInputChange('exposed_chat_filters', fields)}
-                />
-
-                {/* MCP Configs Card - Only for regular agents */}
-                {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <div className="flex items-center mb-6">
-                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                        <Plug className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900">MCP Servers</h3>
-                      <div className="ml-3 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
-                        Model Context Protocol
-                      </div>
-                    </div>
-                  
-                    {agent.mcp_configs.length > 0 ? (
-                      <>
-                        <div className="mb-4 p-4 bg-purple-50 rounded-xl">
-                          <div className="flex items-start">
-                            <Info className="w-5 h-5 text-purple-500 mr-3 shrink-0" />
-                            <div>
-                              <p className="text-sm text-purple-800 font-medium">What are MCP Servers?</p>
-                              <p className="text-xs text-purple-700 mt-1">
-                                MCP (Model Context Protocol) servers allow agents to connect to external tools and data sources. 
-                                Select the servers this agent should have access to.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {agent.mcp_configs.map((mcp) => (
-                            <label
-                              key={mcp.config_id}
-                              className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
-                                formData.mcp_config_ids.includes(mcp.config_id)
-                                  ? 'border-purple-500 bg-purple-50'
-                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                              }`}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          {
+                            id: 'web_search',
+                            icon: <Search className="w-4 h-4" />,
+                            label: t('agentFormPage.providerTools.webSearch'),
+                            description: t('agentFormPage.providerTools.webSearchDescription'),
+                            providers: ['OpenAI', 'Anthropic', 'Google', 'Azure'],
+                          },
+                          {
+                            id: 'image_generation',
+                            icon: <Image className="w-4 h-4" />,
+                            label: t('agentFormPage.providerTools.imageGeneration'),
+                            description: t('agentFormPage.providerTools.imageGenerationDescription'),
+                            providers: ['OpenAI', 'Azure'],
+                          },
+                          {
+                            id: 'code_interpreter',
+                            icon: <Terminal className="w-4 h-4" />,
+                            label: t('agentFormPage.capabilities.codeInterpreter'),
+                            description: t('agentFormPage.providerTools.codeInterpreterDescription'),
+                            providers: ['OpenAI', 'Anthropic', 'Azure'],
+                          },
+                          {
+                            id: 'file_search',
+                            icon: <FolderSearch className="w-4 h-4" />,
+                            label: t('agentFormPage.providerTools.fileSearch'),
+                            description: t('agentFormPage.providerTools.fileSearchDescription'),
+                            providers: ['OpenAI', 'Azure'],
+                          },
+                        ].map((tool) => {
+                          const active = formData.server_tools.includes(tool.id);
+                          const toggle = () => handleInputChange(
+                            'server_tools',
+                            active
+                              ? formData.server_tools.filter(t => t !== tool.id)
+                              : [...formData.server_tools, tool.id]
+                          );
+                          return (
+                            <ButtonCard
+                              key={tool.id}
+                              variant="selectable"
+                              selected={active}
+                              ariaLabel={t('agentFormPage.capabilities.toggle', { item: tool.label })}
+                              onClick={toggle}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.mcp_config_ids.includes(mcp.config_id)}
-                                    onChange={() => handleMCPToggle(mcp.config_id)}
-                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                  />
-                                  <span className="ml-3 text-sm font-medium text-gray-900">{mcp.name}</span>
-                                </div>
-                                <div className={`w-2 h-2 rounded-full ${
-                                  formData.mcp_config_ids.includes(mcp.config_id) ? 'bg-purple-500' : 'bg-gray-300'
-                                }`} />
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-base">{tool.icon}</span>
+                                <span className={`text-sm font-medium ${active ? 'text-fg-primary dark:text-fg-primary-dark' : 'text-fg-tertiary dark:text-fg-tertiary-dark'}`}>
+                                  {tool.label}
+                                </span>
+                                {active && (
+                                  <span className="ml-auto text-xs font-medium bg-fg dark:bg-fg-dark text-ink-on dark:text-ink-on-dark shadow-sm px-1.5 py-0.5 rounded-full">{t('agentFormPage.providerTools.on')}</span>
+                                )}
                               </div>
-                            </label>
-                          ))}
-                        </div>
-                      
-                        {formData.mcp_config_ids.length > 0 && (
-                          <div className="mt-4 p-4 bg-purple-50 rounded-xl">
-                            <p className="text-sm text-purple-800">
-                              <span className="font-medium">{formData.mcp_config_ids.length}</span> MCP server{formData.mcp_config_ids.length === 1 ? '' : 's'} selected
-                            </p>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Plug className="w-8 h-8 text-gray-400" />
-                        </div>
-                        <h4 className="text-lg font-medium text-gray-900 mb-2">No MCP Servers Available</h4>
-                        <p className="text-gray-500 mb-4">
-                          You haven't configured any MCP servers yet. Create MCP configurations in the settings to enable external tool access.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/apps/${appId}/settings/mcp-configs`)}
-                          className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
-                        >
-                          <Settings className="w-4 h-4 mr-2" />
-                          {' '}Configure MCP Servers
-                        </button>
+                              <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mb-2">{tool.description}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {tool.providers.map(p => (
+                                  <ProviderBadge key={p} provider={p} />
+                                ))}
+                              </div>
+                            </ButtonCard>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
-                )}
+                      <Alert
+                        type="warning"
+                        title={t('agentFormPage.providerTools.compatibilityTitle')}
+                        className="my-1"
+                        message={t('agentFormPage.providerTools.compatibilityMessage')}
+                      />
+                    </div>
+                  </CardApp>
 
-                {/* Middlewares Card - Only for regular agents */}
-                {agent?.middlewares && formData.type !== 'ocr_agent' && (
-                  <AgentMiddlewaresCard
-                    middlewares={agent.middlewares}
-                    selectedIds={formData.middleware_ids}
-                    hasMemory={formData.has_memory}
-                    onChange={(ids) => setFormData((prev) => ({ ...prev, middleware_ids: ids }))}
-                    onRequireMemory={() => setFormData((prev) => ({ ...prev, has_memory: true }))}
-                    onManage={() => navigate(`/apps/${appId}/middlewares`)}
-                  />
-                )}
+                  {/* Media Processing Card */}
+                  <CardApp
+                    icon={Tv}
+                    titulo={t('agentFormPage.media.title')}
+                    subtitulo={t('agentFormPage.media.description')}
+                  >
+                    <div className="mb-6">
+                      <FormSelect
+                        label={t('agentFormPage.media.embeddingService')}
+                        id="media_embedding_service"
+                        ariaDescribedBy={serviceStatusId(embeddingServices, formData.media_embedding_service_id, "media_embedding_service")}
+                        required={formData.has_memory}
+                        value={formData.media_embedding_service_id || ''}
+                        onChange={(e) => handleInputChange('media_embedding_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                        options={[
+                          { value: '', label: t('agentFormPage.media.noTemporaryKnowledgeBase') },
+                          ...selectableServiceOptions(embeddingServices, agent?.media_embedding_service_id).map((service) => ({
+                            value: service.service_id,
+                            label: serviceOptionLabel(service),
+                          })),
+                        ]}
+                        helpText={t('agentFormPage.media.embeddingServiceHelp')}
+                        error={fieldErrors.media_embedding_service_id}
+                      />
+                      <ServiceOptionStatus selectId="media_embedding_service" options={embeddingServices} selectedId={formData.media_embedding_service_id} />
+                    </div>
 
-                {/* Skills Card - Only for regular agents */}
-                {agent?.skills && formData.type !== 'ocr_agent' && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-                          <Target className="w-5 h-5 mr-3" />
-                          {' '}Skills
-                        </h3>
-                        <p className="text-gray-600 mt-1">Assign specialized behaviors that the agent can activate on-demand</p>
+                        <FormSelect
+                          label={t('agentFormPage.media.transcriptionService')}
+                          id="transcription_service"
+                          ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.transcription_service_id, "transcription_service")}
+                          value={formData.transcription_service_id || ''}
+                          onChange={(e) => handleInputChange('transcription_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                          options={[
+                            { value: '', label: t('agentFormPage.media.selectTranscriptionService') },
+                            ...selectableServiceOptions(agent?.ai_services, agent?.transcription_service_id).map((service) => ({
+                              value: service.service_id,
+                              label: serviceOptionLabel(service),
+                            })),
+                          ]}
+                          helpText={t('agentFormPage.media.transcriptionHelp')}
+                        />
+                        <ServiceOptionStatus selectId="transcription_service" options={agent?.ai_services} selectedId={formData.transcription_service_id} />
+                      </div>
+
+                      <div>
+                        <FormSelect
+                          label={t('agentFormPage.media.videoAnalysisService')}
+                          id="video_ai_service"
+                          ariaDescribedBy={serviceStatusId(videoServiceOptions, formData.video_ai_service_id, "video_ai_service")}
+                          value={formData.video_ai_service_id || ''}
+                          onChange={(e) => handleInputChange('video_ai_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                          options={[
+                            { value: '', label: t('agentFormPage.media.audioOnly') },
+                            ...selectableServiceOptions(videoServiceOptions, agent?.video_ai_service_id).map((service) => ({
+                              value: service.service_id,
+                              label: serviceOptionLabel(service),
+                            })),
+                          ]}
+                          helpText={t('agentFormPage.media.videoAnalysisHelp')}
+                        />
+                        <ServiceOptionStatus selectId="video_ai_service" options={videoServiceOptions} selectedId={formData.video_ai_service_id} />
+                      </div>
+
+                      <div>
+                        <FormSelect
+                          label={t('agentFormPage.media.language')}
+                          id="media_forced_language"
+                          value={formData.media_forced_language || ''}
+                          onChange={(e) => handleInputChange('media_forced_language', e.target.value || undefined)}
+                          options={[
+                            { value: '', label: t('agentFormPage.media.autoDetect') },
+                            { value: 'es', label: t('agentFormPage.media.languages.spanish') },
+                            { value: 'en', label: t('agentFormPage.media.languages.english') },
+                            { value: 'eu', label: t('agentFormPage.media.languages.basque') },
+                            { value: 'fr', label: t('agentFormPage.media.languages.french') },
+                          ]}
+                        />
                       </div>
                     </div>
 
-                    {agent.skills.length > 0 ? (
-                      <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {agent.skills.map((skill) => {
-                            const descriptionId = skill.description ? `skill-desc-${skill.skill_id}` : undefined;
-                            const disabledBadgeId = skill.is_enabled === false ? `skill-disabled-${skill.skill_id}` : undefined;
-                            const systemBadgeId = skill.is_system ? `skill-system-${skill.skill_id}` : undefined;
-                            const describedBy = [systemBadgeId, disabledBadgeId, descriptionId].filter(Boolean).join(' ') || undefined;
-                            return (
-                              <label
-                                key={skill.skill_id}
-                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full ${
-                                  formData.skill_ids.includes(skill.skill_id)
-                                    ? 'border-purple-500 bg-purple-50'
-                                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={formData.skill_ids.includes(skill.skill_id)}
-                                      onChange={() => handleSkillToggle(skill.skill_id)}
-                                      aria-label={skill.name}
-                                      aria-describedby={describedBy}
-                                      className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                    />
-                                    <span className="ml-3 text-sm font-medium text-gray-900">{skill.name}</span>
-                                  </div>
-                                  <div className={`w-2 h-2 rounded-full ${
-                                    formData.skill_ids.includes(skill.skill_id) ? 'bg-purple-500' : 'bg-gray-300'
-                                  }`} />
-                                </div>
-                                {skill.is_system && (
-                                  <p id={systemBadgeId} className="mt-2 ml-7">
-                                    <Badge label="System" variant="secondary" />
-                                  </p>
-                                )}
-                                {skill.is_enabled === false && (
-                                  <p id={disabledBadgeId} className="mt-2 ml-7 inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
-                                    <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                                    Disabled — ignored at execution until re-enabled
-                                  </p>
-                                )}
-                                {skill.description && (
-                                  <p id={descriptionId} className="mt-2 ml-7 text-xs text-gray-500 truncate">{skill.description}</p>
-                                )}
-                              </label>
-                            );
-                          })}
-                        </div>
-
-                        {formData.skill_ids.length > 0 && (
-                          <div className="mt-4 p-4 bg-purple-50 rounded-xl">
-                            <p className="text-sm text-purple-800">
-                              <span className="font-medium">{formData.skill_ids.length}</span> skill{formData.skill_ids.length === 1 ? '' : 's'} selected.
-                              The agent will have a <code className="bg-purple-100 px-1 rounded">load_skill</code> tool to activate these skills.
-                            </p>
-                          </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                      <FormField
+                        label={t('agentFormPage.media.minChunk')}
+                        id="media_chunk_min_duration"
+                        type="number"
+                        min={10}
+                        max={60}
+                        value={formData.media_chunk_min_duration}
+                        onChange={(e) => handleInputChange('media_chunk_min_duration', Number.parseInt(e.target.value) || 30)}
+                      />
+                      <FormField
+                        label={t('agentFormPage.media.maxChunk')}
+                        id="media_chunk_max_duration"
+                        type="number"
+                        min={60}
+                        max={300}
+                        value={formData.media_chunk_max_duration}
+                        onChange={(e) => handleInputChange('media_chunk_max_duration', Number.parseInt(e.target.value) || 120)}
+                      />
+                      <FormField
+                        label={t('agentFormPage.media.overlap')}
+                        id="media_chunk_overlap"
+                        type="number"
+                        min={0}
+                        max={20}
+                        value={formData.media_chunk_overlap}
+                        onChange={(e) => handleInputChange('media_chunk_overlap', Number.parseInt(e.target.value) || 5)}
+                      />
+                    </div>
+                  </CardApp>
+                </>
+              )}
+              {/* Configuration for OCR agents */}
+              {formData.type === 'ocr_agent' && (
+                <CardApp titulo={t('agentFormPage.ocr.title')} icon={FileText}>
+                  
+                  {/* Agent Capabilities Card for OCR agents — Tool Agent checkbox */}
+                  <CardApp variant="canvas" icon={Zap} titulo={t('agentFormPage.capabilities.title')} className="p-6">
+                    <div className="space-y-4">
+                      <ButtonCard
+                        variant="selectable-check"
+                        selected={formData.is_tool}
+                        ariaLabel={t('agentFormPage.capabilities.toggle', { item: t('agentFormPage.capabilities.toolAgent') })}
+                        checkboxLabel={t('agentFormPage.capabilities.toolAgent')}
+                        checkboxHelpText={t('agentFormPage.ocr.toolAgentHelp')}
+                        onClick={() => {
+                          if (formData.is_tool && mcpUsage && mcpUsage.mcp_servers.length > 0) {
+                            setShowMcpWarning(true);
+                          } else {
+                            handleInputChange('is_tool', !formData.is_tool);
+                          }
+                        }}
+                        className="w-full"
+                      >
+                        {mcpUsage && mcpUsage.mcp_servers.length > 0 && formData.is_tool && (
+                          <p className="ml-7 mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                            {t('agentFormPage.capabilities.usedInMcpServers', { count: mcpUsage.mcp_servers.length })}
+                          </p>
                         )}
-                      </>
-                    ) : (
-                      <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Target className="w-8 h-8 text-gray-400" />
-                        </div>
-                        <h4 className="text-lg font-medium text-gray-900 mb-2">No Skills Available</h4>
-                        <p className="text-gray-500 mb-4">
-                          You haven't created any skills yet. Create skills in the settings to enable specialized agent behaviors.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/apps/${appId}/skills`)}
-                          className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
-                        >
-                          <Target className="w-4 h-4 mr-2" />
-                          {' '}Manage Skills
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                      </ButtonCard>
+                    </div>
+                  </CardApp>
 
-            {/* TAB 5: MARKETPLACE */}
-            {activeTab === 'marketplace' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 mb-8">
-                <div className="flex items-center mb-6">
-                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                    <Store className="w-5 h-5 text-blue-600" aria-hidden="true" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900">Marketplace Publishing</h3>
-                </div>
+                  {/* No AI Services Warning */}
+                  {agent?.ai_services.length === 0 && renderNoAIServicesWarning(true)}
 
-                {/* New agent: prompt user to save first */}
-                {isNewAgent ? (
-                  <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
-                    <Info className="w-4 h-4 shrink-0" aria-hidden="true" />
-                    <span>Save the agent first to configure marketplace publishing.</span>
-                  </div>
-                ) : (
-                <>
-                {/* Visibility Control */}
-                <div className="mb-6">
-                  <label htmlFor="marketplace-visibility" className="block text-sm font-medium text-gray-700 mb-2">Marketplace Visibility</label>
-                  <div className="flex items-center gap-4">
-                    <select
-                      id="marketplace-visibility"
-                      value={marketplaceVisibility}
-                      onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
-                      disabled={formData.is_tool}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    >
-                      <option value="unpublished">Unpublished (not listed)</option>
-                      <option value="private">Private (visible to app members only)</option>
-                      <option value="public">Public (visible to all users)</option>
-                    </select>
-                    {formData.is_tool && (
-                      <span className="text-xs text-gray-500 ml-2">Tool agents cannot be published to the marketplace</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Profile Metadata (expandable) */}
-                {showMarketplace && (
                   <div className="space-y-6">
                     <div>
-                      <label htmlFor="marketplace-display-name" className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
-                      <input
-                        id="marketplace-display-name"
-                        type="text"
-                        value={marketplaceProfile.display_name ?? ''}
-                        onChange={(e) => handleMarketplaceProfileChange('display_name', e.target.value)}
-                        maxLength={255}
-                        placeholder="Defaults to agent name if empty"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                      <FormSelect
+                        label={t('agentFormPage.ocr.visionModel')}
+                        id="vision_service"
+                        ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.vision_service_id, "vision_service")}
+                        value={formData.vision_service_id || ''}
+                        onChange={(e) => handleInputChange('vision_service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                        options={[
+                          { value: '', label: t('agentFormPage.ocr.selectVisionModel') },
+                          ...selectableServiceOptions(agent?.ai_services, agent?.vision_service_id).map((service) => ({
+                            value: service.service_id,
+                            label: serviceOptionLabel(service),
+                          })),
+                        ]}
                       />
+                      <ServiceOptionStatus selectId="vision_service" options={agent?.ai_services} selectedId={formData.vision_service_id} />
                     </div>
+
                     <div>
-                      <label htmlFor="marketplace-short-description" className="block text-sm font-medium text-gray-700 mb-2">Short Description</label>
-                      <textarea
-                        id="marketplace-short-description"
-                        value={marketplaceProfile.short_description ?? ''}
-                        onChange={(e) => handleMarketplaceProfileChange('short_description', e.target.value)}
-                        maxLength={200}
+                      <FormTextArea
+                        label={t('agentFormPage.ocr.visionPrompt')}
+                        id="vision_system_prompt"
+                        value={formData.vision_system_prompt || ''}
+                        onChange={(e) => handleInputChange('vision_system_prompt', e.target.value)}
                         rows={2}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        {marketplaceProfile.short_description?.length ?? 0}/200 characters
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="marketplace-long-description" className="block text-sm font-medium text-gray-700 mb-2">Long Description</label>
-                      <textarea
-                        id="marketplace-long-description"
-                        value={marketplaceProfile.long_description ?? ''}
-                        onChange={(e) => handleMarketplaceProfileChange('long_description', e.target.value)}
-                        rows={4}
-                        placeholder="Supports Markdown"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        placeholder={t('agentFormPage.ocr.visionPromptPlaceholder')}
                       />
                     </div>
+
                     <div>
-                      <label htmlFor="marketplace-category" className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                      <select
-                        id="marketplace-category"
-                        value={marketplaceProfile.category ?? ''}
-                        onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      >
-                        <option value="">-- Select a category --</option>
-                        {MARKETPLACE_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
+                      <FormSelect
+                        label={t('agentFormPage.ocr.textModel')}
+                        id="text_service"
+                        ariaDescribedBy={serviceStatusId(agent?.ai_services, formData.service_id, "text_service")}
+                        value={formData.service_id || ''}
+                        onChange={(e) => handleInputChange('service_id', e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                        options={[
+                          { value: '', label: t('agentFormPage.ocr.selectTextModel') },
+                          ...selectableServiceOptions(agent?.ai_services, agent?.service_id).map((service) => ({
+                            value: service.service_id,
+                            label: serviceOptionLabel(service),
+                          })),
+                        ]}
+                      />
+                      <ServiceOptionStatus selectId="text_service" options={agent?.ai_services} selectedId={formData.service_id} />
                     </div>
+
                     <div>
-                      <label htmlFor="marketplace-tags" className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                      <TagInput
-                        id="marketplace-tags"
-                        tags={marketplaceProfile.tags ?? []}
-                        onChange={(tags) => handleMarketplaceProfileChange('tags', tags)}
-                        maxTags={5}
-                        placeholder="Add up to 5 tags"
+                      <FormTextArea
+                        label={t('agentFormPage.ocr.textPrompt')}
+                        id="text_system_prompt"
+                        value={formData.text_system_prompt || ''}
+                        onChange={(e) => handleInputChange('text_system_prompt', e.target.value)}
+                        rows={2}
+                        placeholder={t('agentFormPage.ocr.textPromptPlaceholder')}
                       />
                     </div>
-                    <div>
-                      <label htmlFor="marketplace-icon-url" className="block text-sm font-medium text-gray-700 mb-2">Icon URL</label>
-                      <input
-                        id="marketplace-icon-url"
-                        type="text"
-                        value={marketplaceProfile.icon_url ?? ''}
-                        onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
-                        placeholder="https://..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      />
-                      {marketplaceProfile.icon_url && (
-                        <img
-                          src={marketplaceProfile.icon_url}
-                          alt="Icon preview"
-                          className="mt-2 w-10 h-10 rounded"
-                          onError={(e) => (e.currentTarget.style.display = 'none')}
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <label htmlFor="marketplace-cover-image-url" className="block text-sm font-medium text-gray-700 mb-2">Cover Image URL</label>
-                      <input
-                        id="marketplace-cover-image-url"
-                        type="text"
-                        value={marketplaceProfile.cover_image_url ?? ''}
-                        onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
-                        placeholder="https://..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      />
-                      {marketplaceProfile.cover_image_url && (
-                        <img
-                          src={marketplaceProfile.cover_image_url}
-                          alt="Cover preview"
-                          className="mt-2 w-32 h-16 rounded object-cover"
-                          onError={(e) => (e.currentTarget.style.display = 'none')}
-                        />
-                      )}
-                    </div>
-                     <div>
-                       <label className="block text-sm font-medium text-gray-700 mb-3">Conversation Starters</label>
-                       <p className="text-xs text-gray-500 mb-4">
-                         Suggested opening messages for users. These only appear at the start of a new conversation.
-                       </p>
-                       <div className="space-y-3">
-                         {marketplaceProfile.conversation_starters?.map((starter, idx) => (
-                           <div key={idx} className="flex items-center gap-2">
-                             <input
-                               ref={(el) => {
-                                 starterRefs.current[idx] = el;
-                               }}
-                               type="text"
-                               value={starter}
-                               onChange={(e) => {
-                                 const newStarters = [...(marketplaceProfile.conversation_starters || [])];
-                                 newStarters[idx] = e.target.value;
-                                 handleMarketplaceProfileChange('conversation_starters', newStarters);
-                               }}
-                               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all"
-                               placeholder="Enter a starter prompt..."
-                             />
-                             <button
-                               type="button"
-                               onClick={() => {
-                                 const newStarters = marketplaceProfile.conversation_starters?.filter((_, i) => i !== idx) || [];
-                                 handleMarketplaceProfileChange('conversation_starters', newStarters);
-                               }}
-                               className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                             >
-                               <span className="text-xs font-bold">✕</span>
-                             </button>
-                           </div>
-                         ))}
-                         <button
-                           type="button"
-                           onClick={() => {
-                             const newStarters = [...(marketplaceProfile.conversation_starters || []), ''];
-                             handleMarketplaceProfileChange('conversation_starters', newStarters);
-                             requestAnimationFrame(() => {
-                               starterRefs.current[newStarters.length - 1]?.focus();
-                             });
-                           }}
-                           className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                         >
-                           <Plus className="w-4 h-4 mr-1" /> Add Starter
-                         </button>
-                       </div>
-                     </div>
+
+                    <OutputParserField
+                      showOutputParser={showOutputParser}
+                      setShowOutputParser={setShowOutputParser}
+                      formData={formData}
+                      handleInputChange={handleInputChange}
+                      agent={agent}
+                    />
                   </div>
-                )}
-                </>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'a2a' && !isNewAgent && (
-              <AgentA2ASettings
-                appId={Number.parseInt(appId ?? '0')}
-                value={{
-                  a2a_enabled: formData.a2a_enabled,
-                  a2a_card_visibility: formData.a2a_card_visibility,
-                  a2a_name_override: formData.a2a_name_override,
-                  a2a_description_override: formData.a2a_description_override,
-                  a2a_skill_tags: formData.a2a_skill_tags,
-                  a2a_examples: formData.a2a_examples,
-                }}
-                onChange={handleA2AChange}
-                cardUrl={a2aCardUrl}
-                rpcUrl={a2aRpcUrl}
-                disabled={!canEdit}
-                fieldErrors={a2aFieldErrors}
-              />
-            )}
-
-            {activeTab === 'metrics' && !isNewAgent && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
-                <AgentMetricsTab
-                  appId={Number(appId)}
-                  agentId={Number(agentId)}
-                />
-              </div>
-            )}
-
-            {/* Form Actions */}
-            <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => navigate(`/apps/${appId}/agents`)}
-                className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-medium transition-all duration-200"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50"
-                disabled={saving}
-              >
-                {(() => {
-                  if (saving) {
-                    return (
-                      <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Saving...
-                      </div>
-                    );
-                  }
-                  return isNewAgent ? 'Create Agent' : 'Save Changes';
-                })()}
-              </button>
+                </CardApp>
+              )}
             </div>
-          </form>
+          )}
+
+          {/* TAB 4: ADVANCED */}
+          {activeTab === 'advanced' && (
+            <div className="space-y-6">
+              {/* Tools Card - Only for regular agents */}
+              {agent && agent.tools.length > 0 && formData.type !== 'ocr_agent' && (
+                <CardApp
+                  icon={Wrench}
+                  titulo={t('agentFormPage.advanced.availableTools')}
+                  headerExtra={formData.tool_ids.length > 0 && (
+                      <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                        {t('agentFormPage.advanced.toolsSelected', { count: formData.tool_ids.length })}
+                      </span>
+                  )}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {agent.tools.map((tool) => {
+                      const selected = formData.tool_ids.includes(tool.agent_id);
+                      return (
+                        <ButtonCard
+                          key={tool.agent_id}
+                          variant="selectable-check"
+                          selected={selected}
+                          ariaLabel={t('agentFormPage.capabilities.toggle', { item: tool.name })}
+                          checkboxLabel={tool.name}
+                          onClick={() => handleToolToggle(tool.agent_id)}
+                          className="w-full"
+                        />
+                      );
+                    })}
+                  </div>
+                </CardApp>
+              )}
+
+              {/* Chat filters — designer picks which metadata fields end users can filter on.
+                  Mounted unconditionally (not gated behind silo_id): an orchestrator commonly
+                  has no own silo and delegates entirely to subagents' silos via tool_ids. */}
+              <ExposedChatFiltersSection
+                appId={Number.parseInt(appId ?? '0')}
+                agentId={Number.parseInt(agentId ?? '0')}
+                toolIds={formData.tool_ids}
+                siloId={formData.silo_id}
+                value={formData.exposed_chat_filters}
+                onChange={(fields) => handleInputChange('exposed_chat_filters', fields)}
+              />
+
+              {/* MCP Configs Card - Only for regular agents */}
+              {agent?.mcp_configs && formData.type !== 'ocr_agent' && (
+                <CardApp
+                  variant="white"
+                  icon={Plug}
+                  titulo={t('agentFormPage.advanced.mcpServers')}
+                  headerExtra={(
+                    <div className="flex items-center gap-3">
+                      {formData.mcp_config_ids.length > 0 && (
+                        <span className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                          {t('agentFormPage.advanced.mcpServersSelected', { count: formData.mcp_config_ids.length })}
+                        </span>
+                      )}
+                      <Badge variant="primary" label={t('agentFormPage.advanced.mcpProtocol')} />
+                    </div>
+                  )}
+                >
+                  {agent.mcp_configs.length > 0 ? (
+                    <>
+                      <Alert
+                        type="info"
+                        title={t('agentFormPage.advanced.mcpInfoTitle')}
+                        message={t('agentFormPage.advanced.mcpInfoMessage')}
+                        className="mb-4"
+                      />
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {agent.mcp_configs.map((mcp) => (
+                          <ButtonCard
+                            key={mcp.config_id}
+                            variant="selectable-check"
+                            selected={formData.mcp_config_ids.includes(mcp.config_id)}
+                            ariaLabel={`Toggle ${mcp.name}`}
+                            checkboxLabel={mcp.name}
+                            onClick={() => handleMCPToggle(mcp.config_id)}
+                            className="w-full"
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <BackgroundImage icon={Plug} size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
+                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">{t('agentFormPage.advanced.noMcpServers')}</h4>
+                      <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
+                        {t('agentFormPage.advanced.noMcpServersDescription')}
+                      </p>
+                      <ButtonApp
+                        label={t('agentFormPage.advanced.configureMcpServers')}
+                        onClick={() => navigate(`/apps/${appId}/settings/mcp-configs`)}
+                        variant="primary"
+                        size="medium"
+                        icon={<Settings className="w-4 h-4" />}
+                      />
+                    </div>
+                  )}
+                </CardApp>
+              )}
+
+              {/* Middlewares Card - Only for regular agents */}
+              {agent?.middlewares && formData.type !== 'ocr_agent' && (
+                <AgentMiddlewaresCard
+                  middlewares={agent.middlewares}
+                  selectedIds={formData.middleware_ids}
+                  hasMemory={formData.has_memory}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, middleware_ids: ids }))}
+                  onRequireMemory={() => setFormData((prev) => ({ ...prev, has_memory: true }))}
+                  onManage={() => navigate(`/apps/${appId}/middlewares`)}
+                />
+              )}
+
+              {/* Skills Card - Only for regular agents */}
+              {agent?.skills && formData.type !== 'ocr_agent' && (
+                <CardApp
+                  icon={Target}
+                  titulo={t('agentFormPage.advanced.skills')}
+                  subtitulo={t('agentFormPage.advanced.skillsDescription')}
+                >
+                  {agent.skills.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {agent.skills.map((skill) => {
+                          const selected = formData.skill_ids.includes(skill.skill_id);
+                          const checkboxHelpText = [
+                            skill.description,
+                            skill.is_system ? t('agentFormPage.advanced.systemSkill') : undefined,
+                            skill.is_enabled === false ? t('agentFormPage.advanced.disabledSkillHelp') : undefined,
+                          ].filter(Boolean).join(' ') || undefined;
+                          return (
+                            <ButtonCard
+                              key={skill.skill_id}
+                              onClick={() => handleSkillToggle(skill.skill_id)}
+                              ariaLabel={t('agentFormPage.capabilities.toggle', { item: skill.name })}
+                              variant="selectable-check"
+                              selected={selected}
+                              checkboxLabel={skill.name}
+                              checkboxHelpText={checkboxHelpText}
+                              className="w-full"
+                            >
+                              {skill.is_system && (
+                                <Badge label={t('agentFormPage.advanced.system')} variant="info" className="mt-2 self-start" />
+                              )}
+                              {skill.is_enabled === false && (
+                                <Badge
+                                  label={t('agentFormPage.advanced.disabledSkillBadge')}
+                                  variant="warning"
+                                  icon={<AlertTriangle className="w-3 h-3" aria-hidden="true" />}
+                                  className="mt-2 self-start"
+                                />
+                              )}
+                            </ButtonCard>
+                          );
+                        })}
+                      </div>
+
+                      {formData.skill_ids.length > 0 && (
+                        <div className="mt-4 rounded-md border border-line bg-surface-hover p-4 dark:border-line-dark dark:bg-surface-hover-dark">
+                          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                            {t('agentFormPage.advanced.skillsSelected', { count: formData.skill_ids.length })}{' '}
+                            {t('agentFormPage.advanced.skillActivationPrefix')}{' '}
+                            <code className="rounded bg-surface-ash px-1 dark:bg-surface-dark">load_skill</code>{' '}
+                            {t('agentFormPage.advanced.skillActivationSuffix')}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <BackgroundImage icon={Target} size={64} rounded="rounded-full" className=' flex items-center justify-center mx-auto mb-4'/>
+                      <h4 className="text-lg font-medium text-fg dark:text-fg-dark mb-2">{t('agentFormPage.advanced.noSkills')}</h4>
+                      <p className="text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
+                        {t('agentFormPage.advanced.noSkillsDescription')}
+                      </p>
+                      <ButtonApp
+                        label={t('agentFormPage.advanced.manageSkills')}
+                        onClick={() => navigate(`/apps/${appId}/skills`)}
+                        variant="primary"
+                        size="medium"
+                        icon={<Target className="w-4 h-4" />}
+                      />
+                    </div>
+                  )}
+                </CardApp>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: MARKETPLACE */}
+          {activeTab === 'marketplace' && (
+            <CardApp icon={Store} titulo={t('agentFormPage.marketplace.title')}>
+              {/* New agent: prompt user to save first */}
+              {isNewAgent ? (
+                <Alert
+                  type="info"
+                  title={t('agentFormPage.marketplace.agentNotSaved')}
+                  className="mb-8"
+                  message={t('agentFormPage.marketplace.saveFirstMessage')}
+                />
+              ) : (
+              <>
+              {/* Visibility Control */}
+              <div className="mb-6">
+                <div className="flex items-center gap-4">
+                  <FormSelect
+                    label={t('agentFormPage.marketplace.visibility')}
+                    id="marketplace-visibility"
+                    value={marketplaceVisibility}
+                    onChange={(e) => handleVisibilityChange(e.target.value as MarketplaceVisibility)}
+                    disabled={formData.is_tool}
+                    options={[
+                      { value: 'unpublished', label: t('agentFormPage.marketplace.unpublished') },
+                      { value: 'private', label: t('agentFormPage.marketplace.private') },
+                      { value: 'public', label: t('agentFormPage.marketplace.public') },
+                    ]}
+                    className="w-fit"
+                    
+                  />
+                  {formData.is_tool && (
+                    <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark ml-2">{t('agentFormPage.marketplace.toolCannotPublish')}</span>
+                  )}
+                </div>
+              </div>
+              {/* Profile Metadata (expandable) */}
+              {showMarketplace && (
+                <div className="space-y-6">
+                  <FormField
+                    label={t('agentFormPage.marketplace.displayName')}
+                    id="marketplace-display-name"
+                    value={marketplaceProfile.display_name ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('display_name', e.target.value)}
+                    maxLength={255}
+                    placeholder={t('agentFormPage.marketplace.displayNamePlaceholder')}
+                  />
+                  <FormTextArea
+                    label={t('agentFormPage.marketplace.shortDescription')}
+                    id="marketplace-short-description"
+                    value={marketplaceProfile.short_description ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('short_description', e.target.value)}
+                    maxLength={200}
+                    rows={2}
+                    helpText={t('agentFormPage.marketplace.charactersCount', { count: marketplaceProfile.short_description?.length ?? 0, max: 200 })}
+                  />
+                  <FormTextArea
+                    label={t('agentFormPage.marketplace.longDescription')}
+                    id="marketplace-long-description"
+                    value={marketplaceProfile.long_description ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('long_description', e.target.value)}
+                    rows={4}
+                    placeholder={t('agentFormPage.marketplace.markdownPlaceholder')}
+                  />
+                  <FormSelect
+                    label={t('agentFormPage.marketplace.category')}
+                    id="marketplace-category"
+                    value={marketplaceProfile.category ?? ''}
+                    onChange={(e) => handleMarketplaceProfileChange('category', e.target.value)}
+                    options={[
+                      { value: '', label: t('agentFormPage.marketplace.selectCategory') },
+                      ...MARKETPLACE_CATEGORIES.map((category) => ({
+                        value: category,
+                        label: t(`agentFormPage.marketplace.categories.${category.replace(/\s/g, '')}`, { defaultValue: category }),
+                      })),
+                    ]}
+                  />
+                  <div>
+                    <label htmlFor="marketplace-tags" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">{t('agentFormPage.marketplace.tags')}</label>
+                    <TagInput
+                      id="marketplace-tags"
+                      tags={marketplaceProfile.tags ?? []}
+                      onChange={(tags) => handleMarketplaceProfileChange('tags', tags)}
+                      maxTags={5}
+                      placeholder={t('agentFormPage.marketplace.tagsPlaceholder')}
+                    />
+                  </div>
+                    <FormField
+                      label={t('agentFormPage.marketplace.iconUrl')}
+                      id="marketplace-icon-url"
+                      value={marketplaceProfile.icon_url ?? ''}
+                      onChange={(e) => handleMarketplaceProfileChange('icon_url', e.target.value)}
+                      placeholder="https://..."
+                    />
+                    {marketplaceProfile.icon_url && (
+                      <img
+                        src={marketplaceProfile.icon_url}
+                        alt={t('agentFormPage.marketplace.iconPreview')}
+                        className="mt-2 w-10 h-10 rounded"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    )}
+                    <FormField
+                      label={t('agentFormPage.marketplace.coverImageUrl')}
+                      id="marketplace-cover-image-url"
+                      value={marketplaceProfile.cover_image_url ?? ''}
+                      onChange={(e) => handleMarketplaceProfileChange('cover_image_url', e.target.value)}
+                      placeholder="https://..."
+                    />
+                    {marketplaceProfile.cover_image_url && (
+                      <img
+                        src={marketplaceProfile.cover_image_url}
+                        alt={t('agentFormPage.marketplace.coverPreview')}
+                        className="mt-2 w-32 h-16 rounded object-cover"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    )}
+                   <div>
+                     <label className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-3">{t('agentFormPage.marketplace.conversationStarters')}</label>
+                     <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mb-4">
+                       {t('agentFormPage.marketplace.conversationStartersDescription')}
+                     </p>
+                     <div className="space-y-3">
+                       {marketplaceProfile.conversation_starters?.map((starter, idx) => (
+                         <div key={idx} className="flex items-center gap-2">
+                           <FormField
+                             ref={(el) => {
+                               starterRefs.current[idx] = el;
+                             }}
+                             label={t('agentFormPage.marketplace.conversationStarterLabel', { number: idx + 1 })}
+                             id={`marketplace-conversation-starter-${idx}`}
+                             value={starter}
+                             onChange={(e) => {
+                               const newStarters = [...(marketplaceProfile.conversation_starters || [])];
+                               newStarters[idx] = e.target.value;
+                               handleMarketplaceProfileChange('conversation_starters', newStarters);
+                             }}
+                             className="flex-1"
+                             labelClassName="sr-only"
+                             inputClassName="px-4 py-2"
+                             placeholder={t('agentFormPage.marketplace.starterPlaceholder')}
+                           />
+                           <button
+                             type="button"
+                             aria-label={t('agentFormPage.marketplace.removeStarter')}
+                             onClick={() => {
+                               const newStarters = marketplaceProfile.conversation_starters?.filter((_, i) => i !== idx) || [];
+                               handleMarketplaceProfileChange('conversation_starters', newStarters);
+                             }}
+                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                           >
+                             <span className="text-xs font-bold">✕</span>
+                           </button>
+                         </div>
+                       ))}
+                       <ButtonApp
+                         label={t('agentFormPage.marketplace.addStarter')}
+                         onClick={() => {
+                           const newStarters = [...(marketplaceProfile.conversation_starters || []), ''];
+                           handleMarketplaceProfileChange('conversation_starters', newStarters);
+                           requestAnimationFrame(() => {
+                             starterRefs.current[newStarters.length - 1]?.focus();
+                           });
+                         }}
+                         variant="secondary"
+                         size="medium"
+                         icon={<Plus className="w-4 h-4" />}
+                       />
+                     </div>
+                   </div>
+                </div>
+              )}
+              </>
+              )}
+            </CardApp>
+          )}
+
+          {activeTab === 'a2a' && !isNewAgent && (
+            <AgentA2ASettings
+              appId={Number.parseInt(appId ?? '0')}
+              value={{
+                a2a_enabled: formData.a2a_enabled,
+                a2a_card_visibility: formData.a2a_card_visibility,
+                a2a_name_override: formData.a2a_name_override,
+                a2a_description_override: formData.a2a_description_override,
+                a2a_skill_tags: formData.a2a_skill_tags,
+                a2a_examples: formData.a2a_examples,
+              }}
+              onChange={handleA2AChange}
+              cardUrl={a2aCardUrl}
+              rpcUrl={a2aRpcUrl}
+              disabled={!canEdit}
+              fieldErrors={a2aFieldErrors}
+            />
+          )}
+
+          {activeTab === 'metrics' && !isNewAgent && (
+            <div>
+              <AgentMetricsTab
+                appId={Number(appId)}
+                agentId={Number(agentId)}
+              />
+            </div>
+          )}
+
+          {/* Form Actions */}
+          <FormActions
+            onCancel={() => navigate(`/apps/${appId}/agents`)}
+            isSubmitting={saving}
+            submitLabel={submitButtonLabel}
+            containerClassName="mt-8 pt-6"
+          />
+        </form>
         )}
       </div>
     </div>

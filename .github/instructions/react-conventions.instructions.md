@@ -1,31 +1,25 @@
 ---
-description: Project-specific conventions for the Mattin AI React frontend — Vite library bundle, ExtensibleBaseApp, centralized api.ts, per-client extension via clientConfig.ts, and constants sync with the backend.
+description: Project-specific conventions for the Mattin AI React frontend — AppRoot app shell, centralized api.ts, and constants sync with the backend.
 applyTo: "frontend/**"
 ---
 
 # Mattin AI Frontend Conventions
 
-These rules auto-apply whenever you edit any file under `frontend/`. Agents like `@react-expert` provide generic React 19 / TypeScript / Tailwind expertise; this file pins down the **Mattin-specific** paths, patterns and library/client extension model.
+These rules auto-apply whenever you edit any file under `frontend/`. Agents like `@react-expert` provide generic React 19 / TypeScript / Tailwind expertise; this file pins down the **Mattin-specific** paths and patterns.
 
-## Distribution Model: Library + Per-Client Apps
+## Distribution Model
 
-The frontend is built and **published as a reusable npm library** (`@lksnext/ai-core-tools-base`). Client deployments live in `clients/<name>/` and consume that library.
+The frontend is a single React SPA built with Vite and shipped as the `mattinai-frontend` Docker image. It is **not** published as an npm library and there are no per-client frontend projects.
 
-- **Base library** = `frontend/` — every page, component, context, theme, hook.
-- **Client project** = `clients/<name>/` — imports the library and customizes ONLY via `src/config/clientConfig.ts` (theme, branding, auth config, API URL, feature flags, custom routes).
-- **Never modify the base library to support a client-specific need** — extend via `clientConfig.ts` instead. If `clientConfig.ts` cannot express what the client needs, add the extension hook to the library API surface, not a hardcoded branch.
+## Entry Point: `AppRoot`
 
-When working on a client project: read `clients/<name>/src/config/clientConfig.ts` first to understand what is overridden.
-
-## Entry Point: `ExtensibleBaseApp`
-
-`frontend/src/core/ExtensibleBaseApp.tsx` is the library's root component. Every client imports and renders it with their `clientConfig`. New top-level structural changes go through this component.
+`frontend/src/core/AppRoot.tsx` is the root component (providers + router), mounted by `frontend/src/App.tsx` with an `AppConfig` (name, logo, theme, auth, API URL). New top-level structural changes go through this component.
 
 ## File Structure (real paths)
 
 ```
 frontend/src/
-├── core/                # ExtensibleBaseApp (library entry) and config primitives
+├── core/                # AppRoot (app shell) and config primitives
 ├── components/
 │   ├── ui/              # Generic, reusable UI elements
 │   ├── forms/           # Form components
@@ -94,6 +88,28 @@ Do not introduce Redux/Jotai/Recoil for new features — the project standardize
 - **Accessibility (WCAG 2.1)**: semantic HTML, keyboard-navigable controls, visible focus rings, `aria-label` for icon-only buttons, no color-only signaling.
 - **Icons**: use the project's chosen icon library — do NOT introduce new icon libraries. Import individual icons, not the whole library.
 
+## Frontend Design System
+
+The Mattin AI frontend redesign is complete. The current UI is
+the visual reference for all future frontend development.
+
+When creating or modifying React components, pages, forms,
+or other visual elements, read and follow:
+
+`.github/instructions/frontend-design.instructions.md`
+
+These design rules apply to all frontend development tasks,
+not only explicit redesign requests.
+
+Before implementing UI changes:
+- Check `frontend/src/components/ui` for reusable components.
+- Reuse existing components and their props or variants whenever possible.
+- Follow the existing design tokens and CSS variables.
+- Preserve visual consistency across new and existing features.
+- Do not redesign unrelated components.
+- Follow the project's Storybook conventions for reusable UI components.
+
+
 ## Auth Flows (mirror the backend)
 
 `frontend/src/auth/` implements three modes that line up with backend `AICT_LOGIN`:
@@ -112,8 +128,7 @@ Route protection uses `ProtectedRoute` / `AdminRoute` components — wrap routes
 cd frontend
 npm install
 npm run dev                # Dev server on port 5173
-npm run build:lib          # Build the publishable library bundle
-npm run build:lib:watch    # Watch mode for library development
+npm run build              # Type-check + production build
 npm run lint               # ESLint
 ```
 
@@ -132,10 +147,38 @@ npm run lint               # ESLint
 ## Anti-Patterns (project-specific)
 
 - ❌ Direct `fetch()` or `axios` calls from components — route through `services/api.ts`
-- ❌ Modifying the base library to support a single client — extend via `clientConfig.ts`
-- ❌ Hardcoded API URLs — they come from `clientConfig.ts`
+- ❌ Hardcoded API URLs — they come from `VITE_API_BASE_URL` / runtime config
 - ❌ Hardcoded user-facing strings when translations matter — use i18n keys
 - ❌ New icon library introduced ad-hoc — use the project's existing one
 - ❌ Forgetting the dark-mode variant on a new screen
 - ❌ Adding a `useEffect` to derive state from props — compute inline or `useMemo`
 - ❌ Drifting `agentConstants.ts` from backend defaults
+
+
+## Internationalization (i18n)
+
+All user-facing text in React components must use the
+existing internationalization system.
+
+This rule applies to both new components and modifications
+to existing components.
+
+- Never hardcode user-facing text in JSX or TypeScript.
+- Use the project's existing i18n library and conventions.
+- Before adding translations, inspect how i18n is implemented
+  in similar components.
+- Reuse existing translation keys whenever appropriate.
+- Do not create duplicate keys for equivalent texts.
+- When new keys are necessary, follow the existing naming
+  conventions and namespaces.
+- Add new translation keys to all supported locale files.
+- Keep translation keys consistent across all languages.
+- Translate labels, placeholders, buttons, validation messages,
+  tooltips, modal titles, and accessibility text.
+- Do not replace existing translation keys unnecessarily.
+- Do not introduce a new internationalization library.
+- Do not modify unrelated translations.
+
+Before completing a UI task, verify that all newly introduced
+user-facing text is internationalized and that the required
+translation keys exist in all supported locales.

@@ -334,13 +334,17 @@ class CheckpointerCacheService:
         return []
 
     @classmethod
-    async def get_conversation_history_async(cls, agent_id: int, session_id: str = "default"):
+    async def get_conversation_history_async(
+        cls, agent_id: int, session_id: str = "default", include_message_ids: bool = False
+    ):
         """
         Retrieve conversation history from PostgreSQL checkpointer.
 
         Args:
             agent_id: Agent ID
             session_id: Session ID
+            include_message_ids: add ``message_id`` (LangChain message id) to each entry. Off by
+                default so existing consumers (public API, marketplace) keep their payload.
 
         Returns:
             List of message dicts with role and content
@@ -396,10 +400,13 @@ class CheckpointerCacheService:
                         if not content_str or not content_str.strip():
                             continue
 
-                        history.append({
+                        entry = {
                             "role": role,
                             "content": content_str
-                        })
+                        }
+                        if include_message_ids:
+                            entry["message_id"] = getattr(msg, "id", None)
+                        history.append(entry)
 
                 logger.info(f"Retrieved {len(history)} messages from thread {thread_id}")
                 return history

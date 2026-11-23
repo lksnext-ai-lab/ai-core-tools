@@ -8,8 +8,6 @@ export interface ClientConfig {
   branding: BrandingConfig;
   api?: ApiConfig;
   navigation?: NavigationConfig;
-  features?: FeatureConfig;
-  homePage?: React.ComponentType; // Allow client to override home page
 }
 
 export interface ThemeConfig {
@@ -50,27 +48,6 @@ export interface BrandingConfig {
   logo: string;
   favicon: string;
   headerTitle?: string;
-}
-
-export interface ExtraRoute {
-  path: string;
-  element: React.ReactNode;
-  name?: string;
-  protected?: boolean;
-  adminOnly?: boolean;  // Requires admin privileges (is_admin === true)
-}
-
-export interface FeatureConfig {
-  enabledModules?: string[];
-  customPages?: CustomPage[];
-  extraRoutes?: ExtraRoute[];
-}
-
-export interface CustomPage {
-  path: string;
-  component: React.ComponentType;
-  name: string;
-  protected?: boolean;
 }
 
 export interface MCPConfig {
@@ -262,34 +239,4 @@ export interface NavigationConfig {
   custom?: NavigationItem[];
 }
 
-// New extensible navigation types
-export interface NavigationOverride {
-  path: string;
-  name?: string;
-  icon?: React.ReactNode;
-  section?: string;
-  protected?: boolean;
-  adminOnly?: boolean;
-  hidden?: boolean; // Hide this navigation item
-}
-
-export interface NavigationAdditions {
-  mainFeatures?: NavigationItem[];
-  appNavigation?: NavigationItem[];
-  settingsNavigation?: NavigationItem[];
-  settings?: NavigationItem[];
-  admin?: NavigationItem[];
-  custom?: NavigationItem[];
-}
-
-export interface ExtensibleNavigationConfig {
-  // Add new navigation items
-  add?: NavigationAdditions;
-  // Override existing navigation items
-  override?: NavigationOverride[];
-  // Remove navigation items by path
-  remove?: string[];
-}
-
-// Re-export LibraryConfig from LibraryConfig.ts
-export type { LibraryConfig } from './LibraryConfig';
+export type { AppConfig, OrganizationConfig } from './AppConfig';
