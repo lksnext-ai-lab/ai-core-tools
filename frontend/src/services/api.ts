@@ -864,13 +864,11 @@ class ApiService {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-    } else {
-      if (MUTATING_METHODS.has(effectiveMethod)) {
+    } else if (MUTATING_METHODS.has(effectiveMethod)) {
         const csrf = getCsrfToken();
         if (csrf) {
           headers['X-CSRF-Token'] = csrf;
         }
-      }
     }
 
     return headers;
@@ -1038,6 +1036,10 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  getSCIMBaseUrl(connectionKey: string): string {
+    return `${this.baseURL.replace(/\/+$/, '')}/scim/v2/${encodeURIComponent(connectionKey)}`;
   }
 
   async configureKeycloakSCIMTarget(
@@ -2588,7 +2590,7 @@ class ApiService {
       await this.handleResponseError(response);
     }
     const serverMsHeader = response.headers.get('x-server-time-ms');
-    const serverMs = serverMsHeader !== null ? parseInt(serverMsHeader, 10) : null;
+    const serverMs = serverMsHeader !== null ? Number.parseInt(serverMsHeader, 10) : null;
     const data: { results: SearchResult[] } = await response.json();
     return { data, serverMs };
   }

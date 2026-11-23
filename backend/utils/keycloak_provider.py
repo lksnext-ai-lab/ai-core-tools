@@ -152,21 +152,35 @@ class KeycloakProvider:
         )
 
     @staticmethod
-    def _roles(claims: dict[str, Any]) -> list[Role]:
-        roles: list[Role] = []
+    def _realm_roles(claims: dict[str, Any]) -> list[Role]:
         realm_access = claims.get("realm_access", {})
-        for role in realm_access.get("roles", []) if isinstance(realm_access, dict) else []:
-            if isinstance(role, str):
-                roles.append(Role(name=role))
+        if not isinstance(realm_access, dict):
+            return []
+        return [
+            Role(name=role)
+            for role in realm_access.get("roles", [])
+            if isinstance(role, str)
+        ]
+
+    @staticmethod
+    def _resource_roles(claims: dict[str, Any]) -> list[Role]:
         resource_access = claims.get("resource_access", {})
-        if isinstance(resource_access, dict):
-            for client, access in resource_access.items():
-                if not isinstance(client, str) or not isinstance(access, dict):
-                    continue
-                for role in access.get("roles", []):
-                    if isinstance(role, str):
-                        roles.append(Role(name=role, client=client))
+        if not isinstance(resource_access, dict):
+            return []
+        roles: list[Role] = []
+        for client, access in resource_access.items():
+            if not isinstance(client, str) or not isinstance(access, dict):
+                continue
+            roles.extend(
+                Role(name=role, client=client)
+                for role in access.get("roles", [])
+                if isinstance(role, str)
+            )
         return roles
+
+    @classmethod
+    def _roles(cls, claims: dict[str, Any]) -> list[Role]:
+        return cls._realm_roles(claims) + cls._resource_roles(claims)
 
     async def validate_token(self, token: str) -> TokenValidationResult:
         try:
@@ -190,7 +204,8 @@ class KeycloakProvider:
             token_info=token_info,
         )
 
-    async def health_check(self) -> dict[str, Any]:
+    # IdentityProvider requires async health checks; this method reads cached state.
+    async def health_check(self) -> dict[str, Any]:  # NOSONAR
         return {
             "status": "healthy" if self._jwks else "unhealthy",
             "issuer": self.issuer,

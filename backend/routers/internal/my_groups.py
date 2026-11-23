@@ -15,7 +15,7 @@ from services.my_groups_service import MyGroupNotFoundError, MyGroupsService
 router = APIRouter(tags=["My Groups"])
 
 
-@router.get("/my-groups", response_model=MyGroupsPage)
+@router.get("/my-groups")
 async def list_my_groups(
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
     db: Annotated[Session, Depends(get_db)],
@@ -31,7 +31,7 @@ async def list_my_groups(
     )
 
 
-@router.get("/my-groups/{group_id}/apps", response_model=MyGroupAppsPage)
+@router.get("/my-groups/{group_id}/apps")
 async def list_my_group_apps(
     group_id: int,
     auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],

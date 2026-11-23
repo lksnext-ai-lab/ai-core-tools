@@ -9,6 +9,8 @@ from datetime import datetime
 
 logger = get_logger(__name__)
 
+_COLLABORATION_NOT_FOUND = "Collaboration not found"
+
 class AppCollaborationService:
 
     def __init__(self, db: Session):
@@ -119,7 +121,7 @@ class AppCollaborationService:
 
             collaboration = self.repo.get_collaboration_by_app_and_user(app_id, user_id)
             if not collaboration:
-                raise ValueError("Collaboration not found")
+                raise ValueError(_COLLABORATION_NOT_FOUND)
 
             if collaboration.status != CollaborationStatus.ACCEPTED:
                 raise ValueError("Can only update roles for accepted collaborations")
@@ -142,7 +144,7 @@ class AppCollaborationService:
 
             collaboration = self.repo.get_collaboration_by_app_and_user(app_id, user_id)
             if not collaboration:
-                raise ValueError("Collaboration not found")
+                raise ValueError(_COLLABORATION_NOT_FOUND)
 
             success = self.repo.delete_collaboration(collaboration)
 
@@ -160,7 +162,7 @@ class AppCollaborationService:
         try:
             collaboration = self.repo.get_collaboration_by_app_and_user(app_id, user_id)
             if not collaboration:
-                raise ValueError("Collaboration not found")
+                raise ValueError(_COLLABORATION_NOT_FOUND)
 
             if self.repo.can_user_manage_app(user_id, app_id):
                 raise ValueError("App owners cannot leave their own apps")

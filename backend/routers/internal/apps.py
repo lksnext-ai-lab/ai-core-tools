@@ -235,7 +235,6 @@ async def import_full_app(
 
 @apps_router.post(
     "/{app_id}/ownership/offer",
-    response_model=OwnershipOfferResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Offer app ownership to another user",
     tags=["Apps", "Ownership"],
@@ -305,7 +304,6 @@ async def offer_app_ownership(
 
 @apps_router.post(
     "/{app_id}/ownership/accept/{collaboration_id}",
-    response_model=OwnershipAcceptResponse,
     status_code=status.HTTP_200_OK,
     summary="Accept an ownership offer (recipient only)",
     tags=["Apps", "Ownership"],
@@ -382,7 +380,6 @@ async def accept_app_ownership_offer(
 
 @apps_router.post(
     "/{app_id}/ownership/decline/{collaboration_id}",
-    response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
     summary="Decline an ownership offer (recipient only)",
     tags=["Apps", "Ownership"],
@@ -444,7 +441,6 @@ async def decline_app_ownership_offer(
 
 @apps_router.delete(
     "/{app_id}/ownership/offer",
-    response_model=MessageResponseSchema,
     status_code=status.HTTP_200_OK,
     summary="Cancel pending ownership offer",
     tags=["Apps", "Ownership"],

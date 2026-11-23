@@ -39,8 +39,11 @@ from services.keycloak_scim_setup_service import (
 
 router = APIRouter(tags=["admin"])
 
+_SCIM_CONNECTION_NOT_FOUND_DETAIL = "SCIM connection not found."
+_KEYCLOAK_SETUP_DISABLED_DETAIL = "Local Keycloak auto-setup is disabled."
 
-@router.get("/keycloak-local-setup/status", response_model=KeycloakLocalSetupStatus)
+
+@router.get("/keycloak-local-setup/status")
 async def keycloak_local_setup_status(
     _: Annotated[AuthContext, Depends(require_admin)],
 ) -> KeycloakLocalSetupStatus:
@@ -50,7 +53,7 @@ async def keycloak_local_setup_status(
     )
 
 
-@router.get("", response_model=list[SCIMConnectionListItem])
+@router.get("")
 async def list_connections(
     _: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
@@ -59,7 +62,7 @@ async def list_connections(
     return await run_in_threadpool(scim_connection_admin_service.list_connections, db)
 
 
-@router.get("/{connection_id}", response_model=SCIMConnectionDetail)
+@router.get("/{connection_id}")
 async def get_connection(
     connection_id: int,
     _: Annotated[AuthContext, Depends(require_admin)],
@@ -73,13 +76,12 @@ async def get_connection(
     except SCIMConnectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SCIM connection not found.",
+            detail=_SCIM_CONNECTION_NOT_FOUND_DETAIL,
         ) from exc
 
 
 @router.post(
     "",
-    response_model=SCIMConnectionCredentialResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_connection(
@@ -99,10 +101,7 @@ async def create_connection(
         ) from exc
 
 
-@router.post(
-    "/{connection_id}/keycloak-target",
-    response_model=KeycloakTargetSetupResponse,
-)
+@router.post("/{connection_id}/keycloak-target")
 async def configure_keycloak_target(
     connection_id: int,
     payload: KeycloakTargetSetupRequest,
@@ -117,7 +116,7 @@ async def configure_keycloak_target(
     except KeycloakLocalSetupDisabledError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Local Keycloak auto-setup is disabled.",
+            detail=_KEYCLOAK_SETUP_DISABLED_DETAIL,
         ) from exc
     except KeycloakTargetSetupError as exc:
         raise HTTPException(
@@ -126,10 +125,7 @@ async def configure_keycloak_target(
         ) from exc
 
 
-@router.post(
-    "/{connection_id}/keycloak-reconciliation/dry-run",
-    response_model=KeycloakReconciliationResponse,
-)
+@router.post("/{connection_id}/keycloak-reconciliation/dry-run")
 async def keycloak_reconciliation_dry_run(
     connection_id: int,
     payload: KeycloakReconciliationRequest,
@@ -142,10 +138,7 @@ async def keycloak_reconciliation_dry_run(
     )
 
 
-@router.post(
-    "/{connection_id}/keycloak-reconciliation/run",
-    response_model=KeycloakReconciliationResponse,
-)
+@router.post("/{connection_id}/keycloak-reconciliation/run")
 async def keycloak_reconciliation_run(
     connection_id: int,
     payload: KeycloakReconciliationRequest,
@@ -171,7 +164,7 @@ async def _run_keycloak_reconciliation(
     except KeycloakLocalSetupDisabledError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Local Keycloak auto-setup is disabled.",
+            detail=_KEYCLOAK_SETUP_DISABLED_DETAIL,
         ) from exc
     except KeycloakTargetSetupError as exc:
         raise HTTPException(
@@ -180,7 +173,7 @@ async def _run_keycloak_reconciliation(
         ) from exc
 
 
-@router.post("/{connection_id}/rotate-token", response_model=SCIMConnectionCredentialResponse)
+@router.post("/{connection_id}/rotate-token")
 async def rotate_token(
     connection_id: int,
     _: Annotated[AuthContext, Depends(require_admin)],
@@ -194,7 +187,7 @@ async def rotate_token(
     except SCIMConnectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SCIM connection not found.",
+            detail=_SCIM_CONNECTION_NOT_FOUND_DETAIL,
         ) from exc
     except SCIMConnectionConflictError as exc:
         raise HTTPException(
@@ -203,7 +196,7 @@ async def rotate_token(
         ) from exc
 
 
-@router.post("/{connection_id}/activate", response_model=SCIMConnectionStatusResponse)
+@router.post("/{connection_id}/activate")
 async def activate_connection(
     connection_id: int,
     _: Annotated[AuthContext, Depends(require_admin)],
@@ -213,7 +206,7 @@ async def activate_connection(
     return await _set_connection_active(db, connection_id, True)
 
 
-@router.post("/{connection_id}/deactivate", response_model=SCIMConnectionStatusResponse)
+@router.post("/{connection_id}/deactivate")
 async def deactivate_connection(
     connection_id: int,
     _: Annotated[AuthContext, Depends(require_admin)],
@@ -237,7 +230,7 @@ async def _set_connection_active(
     except SCIMConnectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SCIM connection not found.",
+            detail=_SCIM_CONNECTION_NOT_FOUND_DETAIL,
         ) from exc
     except SCIMConnectionConflictError as exc:
         raise HTTPException(
@@ -246,7 +239,7 @@ async def _set_connection_active(
         ) from exc
 
 
-@router.put("/{connection_id}", response_model=SCIMConnectionDetail)
+@router.put("/{connection_id}")
 async def update_connection(
     connection_id: int,
     payload: SCIMConnectionUpdate,
@@ -261,7 +254,7 @@ async def update_connection(
     except KeycloakLocalSetupDisabledError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Local Keycloak auto-setup is disabled.",
+            detail=_KEYCLOAK_SETUP_DISABLED_DETAIL,
         ) from exc
     except KeycloakTargetSetupError as exc:
         raise HTTPException(
@@ -271,7 +264,7 @@ async def update_connection(
     except SCIMConnectionNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SCIM connection not found.",
+            detail=_SCIM_CONNECTION_NOT_FOUND_DETAIL,
         ) from exc
     except SCIMConnectionConflictError as exc:
         raise HTTPException(
@@ -287,7 +280,6 @@ async def update_connection(
 
 @router.post(
     "/{connection_id}/oidc-identity-links",
-    response_model=OIDCIdentityLinkResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_oidc_identity_link(

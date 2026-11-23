@@ -13,6 +13,7 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import AnyHttpUrl
 from sqlalchemy.orm import Session
 
+from models.provisioning_connection import ProvisioningConnection
 from repositories.scim_connection_admin_repository import SCIMConnectionAdminRepository
 from schemas.scim_connection_schemas import SCIMConnectionDetail, SCIMConnectionUpdate
 from schemas.keycloak_scim_setup_schemas import (
@@ -32,6 +33,9 @@ _LOCAL_HOSTS = {"localhost", "host.docker.internal"}
 _REQUEST_TIMEOUT_SECONDS = 10.0
 _RECONCILIATION_PREVIEW_MAX_AGE_SECONDS = 300
 _RECONCILIATION_PREVIEW_SALT = "scim-reconciliation-preview-v1"
+_INVALID_TARGET_LIST_ERROR = "Keycloak returned an invalid target list."
+_KEYCLOAK_ADMIN_URL_LABEL = "Keycloak Admin URL"
+_LOCAL_KEYCLOAK_UNREACHABLE_ERROR = "Could not reach the local Keycloak server."
 
 
 class KeycloakLocalSetupDisabledError(Exception):
@@ -274,9 +278,7 @@ class KeycloakSCIMSetupService:
         else:
             targets = None
         if targets is None or any(not isinstance(item, dict) for item in targets):
-            raise KeycloakTargetSetupError(
-                "Keycloak returned an invalid target list."
-            )
+            raise KeycloakTargetSetupError(_INVALID_TARGET_LIST_ERROR)
         return targets
 
     async def _find_target_id(
@@ -294,9 +296,7 @@ class KeycloakSCIMSetupService:
         try:
             targets = self._target_list(response.json())
         except ValueError as exc:
-            raise KeycloakTargetSetupError(
-                "Keycloak returned an invalid target list."
-            ) from exc
+            raise KeycloakTargetSetupError(_INVALID_TARGET_LIST_ERROR) from exc
         matches = [
             item
             for item in targets
@@ -348,15 +348,81 @@ class KeycloakSCIMSetupService:
         try:
             targets = self._target_list(response.json())
         except ValueError as exc:
-            raise KeycloakTargetSetupError(
-                "Keycloak returned an invalid target list."
-            ) from exc
+            raise KeycloakTargetSetupError(_INVALID_TARGET_LIST_ERROR) from exc
         return any(
             isinstance(item.get("baseUrl"), str)
             and urlsplit(item["baseUrl"]).path.rstrip("/").rsplit("/", 1)[-1]
             == connection_key
             for item in targets
         )
+
+    async def _verify_realm_change(
+        self,
+        connection: ProvisioningConnection,
+        payload: SCIMConnectionUpdate,
+    ) -> None:
+        if not self.is_enabled():
+            raise KeycloakLocalSetupDisabledError
+        if (
+            payload.keycloak_admin_base_url is None
+            or payload.keycloak_admin_username is None
+            or payload.keycloak_admin_password is None
+        ):
+            raise KeycloakTargetSetupError(
+                "Keycloak admin URL and credentials are required to verify a realm change.",
+                status_code=400,
+            )
+        keycloak_url = self._local_url(
+            payload.keycloak_admin_base_url, _KEYCLOAK_ADMIN_URL_LABEL
+        )
+        admin_realm = quote(payload.keycloak_admin_realm, safe="")
+        try:
+            async with httpx.AsyncClient(
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
+                access_token = await self._admin_access_token(
+                    client,
+                    keycloak_url,
+                    admin_realm,
+                    payload.keycloak_admin_username.get_secret_value(),
+                    payload.keycloak_admin_password.get_secret_value(),
+                )
+                headers = self._admin_headers(access_token)
+                realms = tuple(
+                    dict.fromkeys(
+                        realm
+                        for realm in (
+                            connection.external_directory_id,
+                            payload.external_directory_id,
+                        )
+                        if realm
+                    )
+                )
+                for realm in realms:
+                    if await self._realm_has_target(
+                        client,
+                        keycloak_url,
+                        realm,
+                        headers,
+                        connection.connection_key,
+                    ):
+                        raise KeycloakTargetSetupError(
+                            "The realm cannot be changed while a Keycloak target for this connection exists. "
+                            "Remove the target first, or edit only the connection name.",
+                            status_code=409,
+                        )
+        except KeycloakTargetSetupError:
+            raise
+        except httpx.TimeoutException as exc:
+            raise KeycloakTargetSetupError(
+                "Timed out while checking the Keycloak realms."
+            ) from exc
+        except httpx.RequestError as exc:
+            raise KeycloakTargetSetupError(
+                _LOCAL_KEYCLOAK_UNREACHABLE_ERROR
+            ) from exc
 
     async def update_connection(
         self,
@@ -381,68 +447,7 @@ class KeycloakSCIMSetupService:
                 != payload.external_directory_id
             )
             if realm_changed and locked_connection.provider_type.lower() == "keycloak":
-                if not self.is_enabled():
-                    raise KeycloakLocalSetupDisabledError
-                if (
-                    payload.keycloak_admin_base_url is None
-                    or payload.keycloak_admin_username is None
-                    or payload.keycloak_admin_password is None
-                ):
-                    raise KeycloakTargetSetupError(
-                        "Keycloak admin URL and credentials are required to verify a realm change.",
-                        status_code=400,
-                    )
-                keycloak_url = self._local_url(
-                    payload.keycloak_admin_base_url, "Keycloak Admin URL"
-                )
-                admin_realm = quote(payload.keycloak_admin_realm, safe="")
-                try:
-                    async with httpx.AsyncClient(
-                        timeout=_REQUEST_TIMEOUT_SECONDS,
-                        follow_redirects=False,
-                        trust_env=False,
-                    ) as client:
-                        access_token = await self._admin_access_token(
-                            client,
-                            keycloak_url,
-                            admin_realm,
-                            payload.keycloak_admin_username.get_secret_value(),
-                            payload.keycloak_admin_password.get_secret_value(),
-                        )
-                        headers = self._admin_headers(access_token)
-                        realms = tuple(
-                            dict.fromkeys(
-                                realm
-                                for realm in (
-                                    locked_connection.external_directory_id,
-                                    payload.external_directory_id,
-                                )
-                                if realm
-                            )
-                        )
-                        for realm in realms:
-                            if await self._realm_has_target(
-                                client,
-                                keycloak_url,
-                                realm,
-                                headers,
-                                locked_connection.connection_key,
-                            ):
-                                raise KeycloakTargetSetupError(
-                                    "The realm cannot be changed while a Keycloak target for this connection exists. "
-                                    "Remove the target first, or edit only the connection name.",
-                                    status_code=409,
-                                )
-                except KeycloakTargetSetupError:
-                    raise
-                except httpx.TimeoutException as exc:
-                    raise KeycloakTargetSetupError(
-                        "Timed out while checking the Keycloak realms."
-                    ) from exc
-                except httpx.RequestError as exc:
-                    raise KeycloakTargetSetupError(
-                        "Could not reach the local Keycloak server."
-                    ) from exc
+                await self._verify_realm_change(locked_connection, payload)
 
             return await run_in_threadpool(
                 scim_connection_admin_service.update_connection,
@@ -559,6 +564,61 @@ class KeycloakSCIMSetupService:
             status_code=504,
         )
 
+    @staticmethod
+    async def _previous_reconciliation_timestamp(
+        client: httpx.AsyncClient,
+        status_url: str,
+        headers: dict[str, str],
+    ) -> int:
+        previous_status = await client.get(status_url, headers=headers)
+        if previous_status.status_code != 200:
+            raise KeycloakTargetSetupError(
+                f"Could not read Keycloak target status (HTTP {previous_status.status_code})."
+            )
+        try:
+            previous_document = previous_status.json()
+        except ValueError as exc:
+            raise KeycloakTargetSetupError(
+                "Keycloak returned an invalid target status."
+            ) from exc
+        previous_reconcile_at = (
+            previous_document.get("lastReconcileAt", 0)
+            if isinstance(previous_document, dict)
+            else 0
+        )
+        return previous_reconcile_at if isinstance(previous_reconcile_at, int) else 0
+
+    async def _submit_reconciliation(
+        self,
+        client: httpx.AsyncClient,
+        targets_url: str,
+        status_url: str,
+        headers: dict[str, str],
+        target_id: str,
+        dry_run: bool,
+        previous_reconcile_at: int,
+    ) -> KeycloakReconciliationResponse:
+        reconcile_response = await client.post(
+            f"{targets_url}/{quote(target_id, safe='')}/reconcile"
+            f"?dryRun={str(dry_run).lower()}",
+            headers=headers,
+        )
+        if reconcile_response.status_code not in {200, 202}:
+            raise KeycloakTargetSetupError(
+                f"Keycloak rejected the reconciliation request (HTTP {reconcile_response.status_code}).",
+                status_code=(
+                    409 if reconcile_response.status_code == 409 else 502
+                ),
+            )
+        return await self._wait_for_reconciliation(
+            client,
+            status_url,
+            headers,
+            target_id,
+            dry_run,
+            previous_reconcile_at,
+        )
+
     async def reconcile(
         self,
         db: Session,
@@ -578,7 +638,7 @@ class KeycloakSCIMSetupService:
         )
         db.rollback()
         keycloak_url = self._local_url(
-            payload.keycloak_admin_base_url, "Keycloak Admin URL"
+            payload.keycloak_admin_base_url, _KEYCLOAK_ADMIN_URL_LABEL
         )
         admin_realm = quote(payload.keycloak_admin_realm, safe="")
         target_realm_path = quote(target_realm, safe="")
@@ -612,41 +672,14 @@ class KeycloakSCIMSetupService:
                         target_realm,
                     )
                 status_url = f"{targets_url}/{quote(target_id, safe='')}/status"
-                previous_status = await client.get(status_url, headers=headers)
-                if previous_status.status_code != 200:
-                    raise KeycloakTargetSetupError(
-                        f"Could not read Keycloak target status (HTTP {previous_status.status_code})."
-                    )
-                try:
-                    previous_document = previous_status.json()
-                except ValueError as exc:
-                    raise KeycloakTargetSetupError(
-                        "Keycloak returned an invalid target status."
-                    ) from exc
-                previous_reconcile_at = (
-                    previous_document.get("lastReconcileAt", 0)
-                    if isinstance(previous_document, dict)
-                    else 0
-                )
-                if not isinstance(previous_reconcile_at, int):
-                    previous_reconcile_at = 0
-
-                reconcile_response = await client.post(
-                    f"{targets_url}/{quote(target_id, safe='')}/reconcile"
-                    f"?dryRun={str(dry_run).lower()}",
-                    headers=headers,
-                )
-                if reconcile_response.status_code not in {200, 202}:
-                    raise KeycloakTargetSetupError(
-                        f"Keycloak rejected the reconciliation request (HTTP {reconcile_response.status_code}).",
-                        status_code=(
-                            409
-                            if reconcile_response.status_code == 409
-                            else 502
-                        ),
-                    )
-                response = await self._wait_for_reconciliation(
+                previous_reconcile_at = await self._previous_reconciliation_timestamp(
                     client,
+                    status_url,
+                    headers,
+                )
+                response = await self._submit_reconciliation(
+                    client,
+                    targets_url,
                     status_url,
                     headers,
                     target_id,
@@ -670,8 +703,91 @@ class KeycloakSCIMSetupService:
             ) from exc
         except httpx.RequestError as exc:
             raise KeycloakTargetSetupError(
-                "Could not reach the local Keycloak server."
+                _LOCAL_KEYCLOAK_UNREACHABLE_ERROR
             ) from exc
+
+    async def _create_target(
+        self,
+        client: httpx.AsyncClient,
+        target_path: str,
+        headers: dict[str, str],
+        payload: KeycloakTargetSetupRequest,
+        target_url: str,
+    ) -> str:
+        create_response = await client.post(
+            target_path,
+            headers=headers,
+            json={
+                "name": payload.target_name,
+                "enabled": True,
+                "baseUrl": target_url,
+                "auth": {
+                    "type": "BEARER",
+                    "token": payload.bearer_token.get_secret_value(),
+                },
+                "syncGroups": payload.sync_groups,
+            },
+        )
+        if create_response.status_code not in {200, 201}:
+            message = (
+                "Keycloak rejected the target configuration. For local testing, "
+                "verify the outbound SCIM extension and its plaintext-secret setting."
+                if create_response.status_code == 400
+                else f"Keycloak target creation returned HTTP {create_response.status_code}."
+            )
+            raise KeycloakTargetSetupError(
+                message,
+                status_code=409 if create_response.status_code == 409 else 502,
+            )
+        try:
+            target_body = create_response.json()
+        except ValueError as exc:
+            raise KeycloakTargetSetupError(
+                "Keycloak created the target but returned an invalid response."
+            ) from exc
+        target_id = target_body.get("id") if isinstance(target_body, dict) else None
+        if not isinstance(target_id, str) or not target_id:
+            raise KeycloakTargetSetupError(
+                "Keycloak created the target but returned no target ID."
+            )
+        return target_id
+
+    @staticmethod
+    async def _test_target(
+        client: httpx.AsyncClient,
+        target_path: str,
+        headers: dict[str, str],
+        target_id: str,
+        target_name: str,
+        target_url: str,
+    ) -> KeycloakTargetSetupResponse:
+        test_response = await client.post(
+            f"{target_path}/{quote(target_id, safe='')}/test",
+            headers=headers,
+        )
+        test_body: dict[str, Any] = {}
+        if test_response.status_code == 200:
+            try:
+                body = test_response.json()
+            except ValueError:
+                body = None
+            if isinstance(body, dict):
+                test_body = body
+        return KeycloakTargetSetupResponse(
+            target_id=target_id,
+            target_name=target_name,
+            target_url=target_url,
+            test_ok=(
+                test_response.status_code == 200 and test_body.get("ok") is True
+            ),
+            test_status=(
+                test_body.get("status")
+                if isinstance(test_body.get("status"), int)
+                else test_response.status_code
+            ),
+            patch_supported=test_body.get("patchSupported") is True,
+            filter_supported=test_body.get("filterSupported") is True,
+        )
 
     async def configure_target(
         self,
@@ -683,7 +799,7 @@ class KeycloakSCIMSetupService:
             raise KeycloakLocalSetupDisabledError
 
         keycloak_url = self._local_url(
-            payload.keycloak_admin_base_url, "Keycloak Admin URL"
+            payload.keycloak_admin_base_url, _KEYCLOAK_ADMIN_URL_LABEL
         )
         mattin_url = self._local_url(
             payload.mattin_scim_base_url, "Mattin SCIM URL"
@@ -705,118 +821,27 @@ class KeycloakSCIMSetupService:
                 follow_redirects=False,
                 trust_env=False,
             ) as client:
-                token_response = await client.post(
-                    f"{keycloak_url}/realms/{admin_realm}/protocol/openid-connect/token",
-                    data={
-                        "grant_type": "password",
-                        "client_id": "admin-cli",
-                        "username": payload.keycloak_admin_username.get_secret_value(),
-                        "password": payload.keycloak_admin_password.get_secret_value(),
-                    },
+                access_token = await self._admin_access_token(
+                    client,
+                    keycloak_url,
+                    admin_realm,
+                    payload.keycloak_admin_username.get_secret_value(),
+                    payload.keycloak_admin_password.get_secret_value(),
                 )
-                if token_response.status_code != 200:
-                    if token_response.status_code in {400, 401}:
-                        raise KeycloakTargetSetupError(
-                            "Keycloak rejected the admin credentials. Check the username, password, admin realm, and Direct Access Grants setting.",
-                            status_code=401,
-                        )
-                    raise KeycloakTargetSetupError(
-                        f"Keycloak token endpoint returned HTTP {token_response.status_code}."
-                    )
-
-                try:
-                    token_body = token_response.json()
-                except ValueError as exc:
-                    raise KeycloakTargetSetupError(
-                        "Keycloak returned an invalid token response."
-                    ) from exc
-                access_token = (
-                    token_body.get("access_token")
-                    if isinstance(token_body, dict)
-                    else None
-                )
-                if not isinstance(access_token, str) or not access_token:
-                    raise KeycloakTargetSetupError(
-                        "Keycloak did not return an admin access token."
-                    )
-
                 headers = self._admin_headers(access_token)
                 target_path = (
                     f"{keycloak_url}/admin/realms/{target_realm}/scim-outbound/targets"
                 )
-                create_response = await client.post(
+                target_id = await self._create_target(
+                    client, target_path, headers, payload, target_url
+                )
+                return await self._test_target(
+                    client,
                     target_path,
-                    headers=headers,
-                    json={
-                        "name": payload.target_name,
-                        "enabled": True,
-                        "baseUrl": target_url,
-                        "auth": {
-                            "type": "BEARER",
-                            "token": payload.bearer_token.get_secret_value(),
-                        },
-                        "syncGroups": payload.sync_groups,
-                    },
-                )
-                if create_response.status_code not in {200, 201}:
-                    message = (
-                        "Keycloak rejected the target configuration. For local testing, "
-                        "verify the outbound SCIM extension and its plaintext-secret setting."
-                        if create_response.status_code == 400
-                        else f"Keycloak target creation returned HTTP {create_response.status_code}."
-                    )
-                    raise KeycloakTargetSetupError(
-                        message,
-                        status_code=(
-                            409
-                            if create_response.status_code == 409
-                            else 502
-                        ),
-                    )
-
-                try:
-                    target_body = create_response.json()
-                except ValueError as exc:
-                    raise KeycloakTargetSetupError(
-                        "Keycloak created the target but returned an invalid response."
-                    ) from exc
-                target_id = (
-                    target_body.get("id")
-                    if isinstance(target_body, dict)
-                    else None
-                )
-                if not isinstance(target_id, str) or not target_id:
-                    raise KeycloakTargetSetupError(
-                        "Keycloak created the target but returned no target ID."
-                    )
-
-                test_response = await client.post(
-                    f"{target_path}/{quote(target_id, safe='')}/test",
-                    headers=headers,
-                )
-                test_body: dict[str, Any] = {}
-                if test_response.status_code == 200:
-                    try:
-                        body = test_response.json()
-                    except ValueError:
-                        body = None
-                    if isinstance(body, dict):
-                        test_body = body
-                return KeycloakTargetSetupResponse(
-                    target_id=target_id,
-                    target_name=payload.target_name,
-                    target_url=target_url,
-                    test_ok=(
-                        test_response.status_code == 200
-                        and test_body.get("ok") is True
-                    ),
-                    test_status=(
-                        test_body.get("status")
-                        if isinstance(test_body.get("status"), int)
-                        else test_response.status_code
-                    ),
-                    patch_supported=test_body.get("patchSupported") is True,
-                    filter_supported=test_body.get("filterSupported") is True,
+                    headers,
+                    target_id,
+                    payload.target_name,
+                    target_url,
                 )
         except KeycloakTargetSetupError:
             raise
@@ -826,7 +851,7 @@ class KeycloakSCIMSetupService:
             ) from exc
         except httpx.RequestError as exc:
             raise KeycloakTargetSetupError(
-                "Could not reach the local Keycloak server."
+                _LOCAL_KEYCLOAK_UNREACHABLE_ERROR
             ) from exc
         finally:
             await run_in_threadpool(db.rollback)

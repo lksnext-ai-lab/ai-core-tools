@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import {
   apiService,
   type KeycloakReconciliationRequest,
@@ -18,6 +18,32 @@ const managementButtonFocusClassName =
 const isKeycloakConnection = (item: SCIMConnection) =>
   item.provider_type.toLowerCase() === 'keycloak';
 
+const isEntraConnection = (item: SCIMConnection) =>
+  item.provider_type.toLowerCase() === 'entra';
+
+const getDirectoryLabel = (item: SCIMConnection): string => {
+  if (isKeycloakConnection(item)) return 'Keycloak realm';
+  if (isEntraConnection(item)) return 'Entra tenant ID';
+  return 'External directory ID';
+};
+
+const getReconciliationAnnouncement = (
+  response: KeycloakReconciliationResponse,
+): string => {
+  const operation = response.dry_run ? 'Dry-run' : 'Real reconciliation';
+  let outcome = 'completed';
+  if (response.summary.blocked) {
+    outcome = 'is blocked';
+  } else if (response.dry_run) {
+    outcome = 'completed; confirmation is available';
+  }
+  return `${operation} ${outcome}. ${response.summary.user_creates} users to create, `
+    + `${response.summary.user_updates} to update, ${response.summary.user_removals} to remove; `
+    + `${response.summary.group_upserts} groups to upsert and ${response.summary.group_removals} to remove.`;
+};
+
+type SCIMProvider = 'keycloak' | 'entra';
+
 function SCIMConnectionsPage() {
   const [setupEnabled, setSetupEnabled] = useState<boolean | null>(null);
   const [connections, setConnections] = useState<SCIMConnection[]>([]);
@@ -30,8 +56,10 @@ function SCIMConnectionsPage() {
   const [editAdminPassword, setEditAdminPassword] = useState('');
   const [connection, setConnection] = useState<SCIMConnectionCredential | null>(null);
   const [result, setResult] = useState<KeycloakTargetSetupResponse | null>(null);
-  const [realm, setRealm] = useState('');
+  const [providerType, setProviderType] = useState<SCIMProvider>('keycloak');
+  const [directoryId, setDirectoryId] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [copiedField, setCopiedField] = useState<'url' | 'token' | null>(null);
   const [mattinBaseUrl, setMattinBaseUrl] = useState('http://host.docker.internal:8000/scim/v2');
   const [keycloakBaseUrl, setKeycloakBaseUrl] = useState('http://localhost:8080');
   const [adminRealm, setAdminRealm] = useState('master');
@@ -75,21 +103,24 @@ function SCIMConnectionsPage() {
     };
   }, []);
 
-  const handleCreateConnection = async (event: FormEvent<HTMLFormElement>) => {
+  const handleCreateConnection = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setResult(null);
+    setCopiedField(null);
     setBusy(true);
     try {
       const created = await apiService.createSCIMConnection({
-        provider_type: 'keycloak',
-        external_directory_id: realm.trim(),
+        provider_type: providerType,
+        external_directory_id: directoryId.trim(),
         display_name: displayName.trim(),
         auth_mode: 'static_bearer',
       });
       setConnection(created);
       setConnections((current) => [created, ...current]);
-      setTargetName(`mattin-${realm.trim()}`);
+      if (providerType === 'keycloak') {
+        setTargetName(`mattin-${directoryId.trim()}`);
+      }
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not create the SCIM connection.');
     } finally {
@@ -97,7 +128,17 @@ function SCIMConnectionsPage() {
     }
   };
 
-  const handleConfigureTarget = async (event: FormEvent<HTMLFormElement>) => {
+  const handleCopy = async (value: string, field: 'url' | 'token') => {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+    } catch {
+      setError('Could not copy to the clipboard. Select and copy the value manually.');
+    }
+  };
+
+  const handleConfigureTarget = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!connection) return;
     setError(null);
@@ -111,7 +152,7 @@ function SCIMConnectionsPage() {
         keycloak_admin_username: adminUsername.trim(),
         keycloak_admin_password: adminPassword,
         bearer_token: connection.bearer_token,
-        keycloak_realm: realm.trim(),
+        keycloak_realm: directoryId.trim(),
         target_name: targetName.trim(),
         sync_groups: syncGroups,
       });
@@ -139,7 +180,7 @@ function SCIMConnectionsPage() {
     setEditAdminPassword('');
   };
 
-  const handleUpdateConnection = async (event: FormEvent<HTMLFormElement>) => {
+  const handleUpdateConnection = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingConnection) return;
     const updatedRealm = editDirectoryId.trim();
@@ -216,7 +257,7 @@ function SCIMConnectionsPage() {
     confirm_real_reconcile: confirmRealReconcileValue,
   });
 
-  const handleReconciliationDryRun = async (event: FormEvent<HTMLFormElement>) => {
+  const handleReconciliationDryRun = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!reconcileConnectionId) return;
     setError(null);
@@ -287,6 +328,170 @@ function SCIMConnectionsPage() {
     </div>
   );
 
+  const renderCreatedConnection = () => {
+    if (!connection) return null;
+
+    return (
+      <div className="mt-5 rounded-md border border-green-300 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/20">
+        <h3 className="font-medium text-green-900 dark:text-green-200">
+          Connection created: {connection.display_name}
+        </h3>
+        <label htmlFor="scim-bearer-token" className={`${labelClassName} mt-3`}>
+          Mattin SCIM bearer token (shown once)
+        </label>
+        <input
+          id="scim-bearer-token"
+          className={fieldClassName}
+          type="password"
+          readOnly
+          value={connection.bearer_token}
+          autoComplete="new-password"
+        />
+        {providerType === 'keycloak' ? (
+          <p className="mt-2 text-xs text-green-900 dark:text-green-200">
+            Keep this page open until Keycloak is configured. The token exists only in this page's memory.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-4">
+            <div>
+              <label htmlFor="entra-scim-url" className={labelClassName}>Mattin SCIM base URL</label>
+              <input
+                id="entra-scim-url"
+                className={fieldClassName}
+                readOnly
+                value={apiService.getSCIMBaseUrl(connection.connection_key)}
+              />
+              <button
+                type="button"
+                onClick={() => void handleCopy(
+                  apiService.getSCIMBaseUrl(connection.connection_key),
+                  'url',
+                )}
+                className={`mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
+              >
+                {copiedField === 'url' ? 'URL copied' : 'Copy URL'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopy(connection.bearer_token, 'token')}
+              className={`rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
+            >
+              {copiedField === 'token' ? 'Token copied' : 'Copy token'}
+            </button>
+            <div className="space-y-2 text-sm text-green-950 dark:text-green-100">
+              <h3 className="font-semibold">Configure provisioning in Microsoft Entra</h3>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>In Entra admin center, create an Enterprise application for a non-gallery app.</li>
+                <li>Open <strong>Provisioning</strong>, create a configuration, and enter the SCIM URL and bearer token above.</li>
+                <li>Run <strong>Test Connection</strong>, then save the configuration.</li>
+                <li>Set the scope to assigned users and groups, and assign a small pilot group first.</li>
+                <li>Map <code>userName</code> to <code>userPrincipalName</code> and use it as the user matching attribute. Map <code>externalId</code> to the stable user object ID.</li>
+                <li>If provisioning groups, map <code>displayName</code> and <code>externalId</code> (group object ID), then test membership changes.</li>
+              </ol>
+              <p>
+                Keep the default <code>active</code> mapping and verify that disabling and re-enabling a pilot user
+                changes the Mattin account status as expected. Configure only mappings supported by Mattin.
+              </p>
+              <p>
+                The URL and token are held only in this page&apos;s memory. Copy the token before leaving; if it is lost,
+                rotate the connection token and update Entra.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderKeycloakResult = () => {
+    if (!result) return null;
+
+    return (
+      <>
+        {result.test_ok && (
+          <output className="sr-only" aria-live="polite">
+            Keycloak target created and tested. Target: {result.target_name}; HTTP {result.test_status ?? 'unknown'}.
+            PATCH: {result.patch_supported ? 'supported' : 'not reported'}; filters: {result.filter_supported ? 'supported' : 'not reported'}.
+          </output>
+        )}
+        <section
+          role={result.test_ok ? undefined : 'alert'}
+          className={`rounded-lg border p-4 ${
+            result.test_ok
+              ? 'border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950/20 dark:text-green-200'
+              : 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200'
+          }`}
+        >
+          <h2 className="font-semibold">
+            {result.test_ok ? 'Keycloak target created and tested' : 'Target created, but its connection test failed'}
+          </h2>
+          <p className="mt-1 text-sm">
+            Target: {result.target_name} ({result.target_id}); HTTP {result.test_status ?? 'unknown'}.
+          </p>
+          {result.test_ok && (
+            <p className="mt-1 text-sm">
+              PATCH: {result.patch_supported ? 'supported' : 'not reported'}; filters: {result.filter_supported ? 'supported' : 'not reported'}.
+            </p>
+          )}
+        </section>
+      </>
+    );
+  };
+
+  const renderReconciliationResults = () => (
+    <>
+      <output className="sr-only" aria-live="polite" aria-atomic="true">
+        {reconciliationStatus ? getReconciliationAnnouncement(reconciliationStatus) : ''}
+      </output>
+      {reconcilePreview && renderReconciliationSummary(reconcilePreview)}
+      {reconcilePreview && !reconcilePreview.summary.blocked && (
+        <div className="mt-4 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+          <h3 className="font-semibold">Confirm real reconciliation</h3>
+          <p>Review the preview carefully. This will apply the changes shown above to Mattin.</p>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={confirmRealReconcile}
+              onChange={(event) => setConfirmRealReconcile(event.target.checked)}
+              disabled={busy}
+            />
+            <span>I understand and want to apply these changes to Mattin.</span>
+          </label>
+          <div>
+            <label htmlFor="confirm-reconcile-password" className={labelClassName}>Re-enter Keycloak admin password</label>
+            <input
+              id="confirm-reconcile-password"
+              className={fieldClassName}
+              type="password"
+              value={reconcileAdminPassword}
+              onChange={(event) => setReconcileAdminPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+              disabled={busy}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleRealReconciliation}
+            disabled={
+              busy
+              || !reconcilePreview.preview_token
+              || !confirmRealReconcile
+              || !reconcileAdminPassword
+            }
+            className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? 'Running reconciliation…' : 'Confirm and run real reconciliation'}
+          </button>
+        </div>
+      )}
+      {reconcileResult && renderReconciliationSummary(reconcileResult)}
+    </>
+  );
+
+  const reconciliationStatus = reconcilePreview ?? reconcileResult;
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <header>
@@ -294,10 +499,11 @@ function SCIMConnectionsPage() {
           SCIM connections
         </h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-          Create a Mattin connection and configure a local Keycloak outbound target without using the terminal.
+          Create a provider-specific Mattin SCIM connection. Keycloak has a local setup wizard; Entra provides guided configuration.
         </p>
       </header>
 
+      {providerType === 'keycloak' && (
       <section
         aria-labelledby="local-test-warning"
         className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100"
@@ -309,12 +515,13 @@ function SCIMConnectionsPage() {
           bearer token. Do not use this flow for production.
         </p>
       </section>
+      )}
 
-      {setupEnabled === false && (
-        <div role="status" className="rounded-md border border-gray-300 p-4 text-sm dark:border-gray-700">
+      {providerType === 'keycloak' && setupEnabled === false && (
+        <output className="block rounded-md border border-gray-300 p-4 text-sm dark:border-gray-700">
           Auto-setup is disabled. The operator must set{' '}
           <code className="font-mono">SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true</code> and restart the backend.
-        </div>
+        </output>
       )}
 
       {error && (
@@ -326,19 +533,39 @@ function SCIMConnectionsPage() {
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">1. Create a Mattin connection</h2>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-          The bearer token is generated by Mattin and shown only once.
+          Mattin generates the connection URL and bearer token. The token is shown only once.
         </p>
         <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleCreateConnection}>
           <div>
-            <label htmlFor="scim-realm" className={labelClassName}>Keycloak realm</label>
-            <input
-              id="scim-realm"
+            <label htmlFor="scim-provider" className={labelClassName}>Provider</label>
+            <select
+              id="scim-provider"
               className={fieldClassName}
-              value={realm}
-              onChange={(event) => setRealm(event.target.value)}
+              value={providerType}
+              onChange={(event) => {
+                const nextProvider = event.target.value;
+                if (nextProvider === 'keycloak' || nextProvider === 'entra') {
+                  setProviderType(nextProvider);
+                }
+              }}
+              disabled={busy || Boolean(connection)}
+            >
+              <option value="keycloak">Keycloak</option>
+              <option value="entra">Microsoft Entra ID</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="scim-directory-id" className={labelClassName}>
+              {providerType === 'keycloak' ? 'Keycloak realm' : 'Entra tenant ID'}
+            </label>
+            <input
+              id="scim-directory-id"
+              className={fieldClassName}
+              value={directoryId}
+              onChange={(event) => setDirectoryId(event.target.value)}
               required
               maxLength={255}
-              disabled={busy || setupEnabled === false || Boolean(connection)}
+              disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
             />
           </div>
           <div>
@@ -350,14 +577,14 @@ function SCIMConnectionsPage() {
               onChange={(event) => setDisplayName(event.target.value)}
               required
               maxLength={255}
-              placeholder="Keycloak test realm"
-              disabled={busy || setupEnabled === false || Boolean(connection)}
+              placeholder={providerType === 'keycloak' ? 'Keycloak test realm' : 'Entra tenant'}
+              disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
             />
           </div>
           <div className="sm:col-span-2">
             <button
               type="submit"
-              disabled={busy || setupEnabled !== true || Boolean(connection)}
+              disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Create SCIM connection
@@ -365,30 +592,10 @@ function SCIMConnectionsPage() {
           </div>
         </form>
 
-        {connection && (
-          <div className="mt-5 rounded-md border border-green-300 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/20">
-            <h3 className="font-medium text-green-900 dark:text-green-200">
-              Connection created: {connection.display_name}
-            </h3>
-            <label htmlFor="scim-bearer-token" className={`${labelClassName} mt-3`}>
-              Mattin SCIM bearer token (shown once)
-            </label>
-            <input
-              id="scim-bearer-token"
-              className={fieldClassName}
-              type="password"
-              readOnly
-              value={connection.bearer_token}
-              autoComplete="new-password"
-            />
-            <p className="mt-2 text-xs text-green-900 dark:text-green-200">
-              Keep this page open until Keycloak is configured. The token exists only in this page's memory.
-            </p>
-          </div>
-        )}
+        {renderCreatedConnection()}
       </section>
 
-      {connection && (
+      {connection && providerType === 'keycloak' && (
         <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">2. Configure and test Keycloak</h2>
           <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleConfigureTarget}>
@@ -464,7 +671,7 @@ function SCIMConnectionsPage() {
                 checked={syncGroups}
                 onChange={(event) => setSyncGroups(event.target.checked)}
               />
-              Synchronize groups
+              <span>Synchronize groups</span>
             </label>
             <div className="sm:col-span-2">
               <button
@@ -479,28 +686,7 @@ function SCIMConnectionsPage() {
         </section>
       )}
 
-      {result && (
-        <section
-          role={result.test_ok ? 'status' : 'alert'}
-          className={`rounded-lg border p-4 ${
-            result.test_ok
-              ? 'border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950/20 dark:text-green-200'
-              : 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/20 dark:text-red-200'
-          }`}
-        >
-          <h2 className="font-semibold">
-            {result.test_ok ? 'Keycloak target created and tested' : 'Target created, but its connection test failed'}
-          </h2>
-          <p className="mt-1 text-sm">
-            Target: {result.target_name} ({result.target_id}); HTTP {result.test_status ?? 'unknown'}.
-          </p>
-          {result.test_ok && (
-            <p className="mt-1 text-sm">
-              PATCH: {result.patch_supported ? 'supported' : 'not reported'}; filters: {result.filter_supported ? 'supported' : 'not reported'}.
-            </p>
-          )}
-        </section>
-      )}
+      {renderKeycloakResult()}
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">3. Preview and run reconciliation</h2>
@@ -592,64 +778,7 @@ function SCIMConnectionsPage() {
           </div>
         </form>
 
-        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {(reconcilePreview ?? reconcileResult) && (() => {
-            const response = reconcilePreview ?? reconcileResult;
-            if (!response) return '';
-            const operation = response.dry_run ? 'Dry-run' : 'Real reconciliation';
-            const outcome = response.summary.blocked
-              ? 'is blocked'
-              : response.dry_run
-                ? 'completed; confirmation is available'
-                : 'completed';
-            return `${operation} ${outcome}. ${response.summary.user_creates} users to create, `
-              + `${response.summary.user_updates} to update, ${response.summary.user_removals} to remove; `
-              + `${response.summary.group_upserts} groups to upsert and ${response.summary.group_removals} to remove.`;
-          })()}
-        </div>
-        {reconcilePreview && renderReconciliationSummary(reconcilePreview)}
-        {reconcilePreview && !reconcilePreview.summary.blocked && (
-          <div className="mt-4 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
-            <h3 className="font-semibold">Confirm real reconciliation</h3>
-            <p>Review the preview carefully. This will apply the changes shown above to Mattin.</p>
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={confirmRealReconcile}
-                onChange={(event) => setConfirmRealReconcile(event.target.checked)}
-                disabled={busy}
-              />
-              <span>I understand and want to apply these changes to Mattin.</span>
-            </label>
-            <div>
-              <label htmlFor="confirm-reconcile-password" className={labelClassName}>Re-enter Keycloak admin password</label>
-              <input
-                id="confirm-reconcile-password"
-                className={fieldClassName}
-                type="password"
-                value={reconcileAdminPassword}
-                onChange={(event) => setReconcileAdminPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-                disabled={busy}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleRealReconciliation}
-              disabled={
-                busy
-                || !reconcilePreview.preview_token
-                || !confirmRealReconcile
-                || !reconcileAdminPassword
-              }
-              className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? 'Running reconciliation…' : 'Confirm and run real reconciliation'}
-            </button>
-          </div>
-        )}
-        {reconcileResult && renderReconciliationSummary(reconcileResult)}
+        {renderReconciliationResults()}
       </section>
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -664,7 +793,7 @@ function SCIMConnectionsPage() {
                   <div>
                     <span className="font-medium text-gray-900 dark:text-gray-100">{item.display_name}</span>
                     <span className="ml-2 text-gray-600 dark:text-gray-300">
-                      {isKeycloakConnection(item) ? 'Realm' : 'Directory'}: {item.external_directory_id ?? '—'} · {item.is_active ? 'Active' : 'Inactive'}
+                      {getDirectoryLabel(item)}: {item.external_directory_id ?? '—'} · {item.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -707,7 +836,7 @@ function SCIMConnectionsPage() {
                     </div>
                     <div>
                       <label htmlFor="edit-scim-directory" className={labelClassName}>
-                        {isKeycloakConnection(item) ? 'Keycloak realm' : 'External directory ID'}
+                      {getDirectoryLabel(item)}
                       </label>
                       <input
                         id="edit-scim-directory"
@@ -727,9 +856,9 @@ function SCIMConnectionsPage() {
                           the realm change will be rejected. Target configuration is not moved.
                         </p>
                         {setupEnabled === false && (
-                          <p role="status">
+                          <output className="block">
                             Realm changes require <code>SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true</code>.
-                          </p>
+                          </output>
                         )}
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>

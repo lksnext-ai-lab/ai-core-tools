@@ -73,206 +73,237 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
     try:
-        validate_secret_key()
-
-        from scheduling.periodic_agent_task import initialize_dbos
-        app.state.dbos_enabled = await initialize_dbos()
-
-        if is_saas_mode():
-            validate_saas_env()
-            logger.info("SaaS mode: environment validation passed")
-            from db.database import SessionLocal
-            from services.tier_config_seeder import seed_default_tier_configs
-            _db = SessionLocal()
-            try:
-                seed_default_tier_configs(_db)
-            finally:
-                _db.close()
-
-        # Unconditional (not SaaS-only): system skills are seeded in every deployment mode.
-        from db.database import SessionLocal
-        from services.system_skills_seeder import seed_system_skills
-        _db = SessionLocal()
-        try:
-            seed_system_skills(_db)
-        except Exception:
-            logger.error("system_skills_seeder: failed to seed system skills at startup", exc_info=True)
-        finally:
-            _db.close()
-
-        AuthConfig.load_config()
-
-        if AuthConfig.LOGIN_MODE == "OIDC":
-            logger.info("🔐 Initializing %s provider for OIDC authentication", AuthConfig.OAUTH_PROVIDER)
-            await initialize_provider()
-            
-            # Override the default provider dependency
-            app.dependency_overrides[get_default_provider] = get_provider
-            logger.info("✅ %s provider initialized successfully", AuthConfig.OAUTH_PROVIDER)
-        else:
-            logger.warning(
-                f"⚠️  Running in {AuthConfig.LOGIN_MODE} mode - "
-                "OIDC provider NOT initialized (development/testing only)"
-            )
-        
-        if AuthConfig.LOGIN_MODE == "LOCAL":
-            from db.database import SessionLocal as _SessionLocal
-            from services.auth.omniadmin_bootstrap import bootstrap_omniadmins
-            _bootstrap_db = _SessionLocal()
-            try:
-                await bootstrap_omniadmins(_bootstrap_db)
-            except Exception as _bootstrap_exc:
-                logger.error(
-                    "omniadmin_bootstrap: unexpected error during startup bootstrap — %s",
-                    _bootstrap_exc,
-                    exc_info=True,
-                )
-            finally:
-                _bootstrap_db.close()
-
-        from services.agent_cache_service import CheckpointerCacheService
-        await CheckpointerCacheService.initialize_pool()
-
-        # A2A (step_017): build the process-wide runtime unconditionally --
-        # even when A2A_ENABLED=false, since the kill switch is per request
-        # (routers/a2a_server/router.py) and the maintenance worker (step_018)
-        # needs a handler to drive cancellation through.
-        # Imported before the try so the except path can always consult it.
-        from utils.a2a_config import get_a2a_config
-
-        try:
-            from services.a2a_server.executor import MattinAgentExecutor
-            from services.a2a_server.runtime import (
-                build_a2a_runtime,
-                configure_sdk_logging,
-                set_runtime,
-            )
-
-            configure_sdk_logging()
-            # get_a2a_config() itself logs a warning if A2A_ROOT_AGENT is set
-            # but malformed (utils/a2a_config.py's _get_root_agent), and
-            # clamps/warns if the worker stream cap is >= uvicorn's own
-            # --limit-concurrency (fix round 1, HIGH-3).
-            a2a_cfg = get_a2a_config()
-            set_runtime(build_a2a_runtime(MattinAgentExecutor()))
-            logger.info("A2A runtime initialized (enabled=%s)", a2a_cfg.enabled)
-        except Exception:
-            logger.exception("Failed to initialize the A2A runtime at startup")
-            # LOW (fix round 1): A2A is opt-in; a build failure while it is
-            # globally disabled (A2A_ENABLED=false) must never take the rest
-            # of the application down with it. `get_runtime()` stays `None`
-            # in that case -- every A2A route already treats that the same
-            # as the kill switch (uniform 404).
-            if get_a2a_config().enabled:
-                raise
-
-        # Start crawl workers (job executor + scheduler)
-        from services.crawl.worker import start_crawl_workers, stop_crawl_workers
-        crawl_tasks = await start_crawl_workers(app)
-        app.state.crawl_tasks = crawl_tasks
-
-        from services.file_cleanup_worker import start_file_cleanup_worker
-        app.state.file_cleanup_task = start_file_cleanup_worker()
-
-        # A2A maintenance worker (step_018, AD-10): always runs, even when
-        # A2A_ENABLED=false, so retention keeps happening regardless of the
-        # per-request kill switch.
-        from services.a2a_server.maintenance_worker import start_a2a_maintenance_worker
-        app.state.a2a_maintenance_task = start_a2a_maintenance_worker()
-
-        from services.sharepoint.worker import start_sharepoint_worker
-        app.state.sharepoint_tasks = await start_sharepoint_worker()
-
-        from services.hitl_expiry_worker import start_hitl_expiry_worker
-        app.state.hitl_expiry_task = start_hitl_expiry_worker()
-
-        print("✅ Application startup complete")
+        await _initialize_startup(app)
     except Exception as e:
         logger.error(f"❌ Error during startup: {e}", exc_info=True)
         print(f"❌ Error during startup: {e}")
         raise
 
-    yield
+    try:
+        yield
+    finally:
+        await _shutdown_application(app)
+
+
+async def _initialize_startup(app: FastAPI) -> None:
+    validate_secret_key()
+    await _initialize_database_and_defaults(app)
+    await _initialize_authentication(app)
+    await _initialize_runtime()
+    await _start_background_workers(app)
+    print("✅ Application startup complete")
+
+
+async def _initialize_database_and_defaults(app: FastAPI) -> None:
+    from scheduling.periodic_agent_task import initialize_dbos
+
+    app.state.dbos_enabled = await initialize_dbos()
+
+    if is_saas_mode():
+        validate_saas_env()
+        logger.info("SaaS mode: environment validation passed")
+        from db.database import SessionLocal
+        from services.tier_config_seeder import seed_default_tier_configs
+
+        db = SessionLocal()
+        try:
+            seed_default_tier_configs(db)
+        finally:
+            db.close()
+
+    # Unconditional (not SaaS-only): system skills are seeded in every deployment mode.
+    from db.database import SessionLocal
+    from services.system_skills_seeder import seed_system_skills
+
+    db = SessionLocal()
+    try:
+        seed_system_skills(db)
+    except Exception:
+        logger.error(
+            "system_skills_seeder: failed to seed system skills at startup",
+            exc_info=True,
+        )
+    finally:
+        db.close()
+
+
+async def _initialize_authentication(app: FastAPI) -> None:
+    AuthConfig.load_config()
+
+    if AuthConfig.LOGIN_MODE == "OIDC":
+        logger.info(
+            "🔐 Initializing %s provider for OIDC authentication",
+            AuthConfig.OAUTH_PROVIDER,
+        )
+        await initialize_provider()
+        app.dependency_overrides[get_default_provider] = get_provider
+        logger.info("✅ %s provider initialized successfully", AuthConfig.OAUTH_PROVIDER)
+    else:
+        logger.warning(
+            f"⚠️  Running in {AuthConfig.LOGIN_MODE} mode - "
+            "OIDC provider NOT initialized (development/testing only)"
+        )
+
+    if AuthConfig.LOGIN_MODE == "LOCAL":
+        from db.database import SessionLocal
+        from services.auth.omniadmin_bootstrap import bootstrap_omniadmins
+
+        db = SessionLocal()
+        try:
+            await bootstrap_omniadmins(db)
+        except Exception as exc:
+            logger.error(
+                "omniadmin_bootstrap: unexpected error during startup bootstrap — %s",
+                exc,
+                exc_info=True,
+            )
+        finally:
+            db.close()
+
+
+async def _initialize_runtime() -> None:
+    from services.agent_cache_service import CheckpointerCacheService
+
+    await CheckpointerCacheService.initialize_pool()
+
+    # Build the A2A runtime unconditionally; the kill switch is per request.
+    from utils.a2a_config import get_a2a_config
 
     try:
-        # LOW (fix round 1): each shutdown step gets its own try/except, so
-        # one failing step (e.g. a hung worker) never skips the rest --
-        # previously these shared one outer try, with only a handful of
-        # steps individually guarded.
-        try:
-            from scheduling.periodic_agent_task import shutdown_dbos
-            shutdown_dbos()
-        except Exception as exc:
-            logger.warning("DBOS shutdown failed: %s", exc, exc_info=True)
+        from services.a2a_server.executor import MattinAgentExecutor
+        from services.a2a_server.runtime import (
+            build_a2a_runtime,
+            configure_sdk_logging,
+            set_runtime,
+        )
 
-        try:
-            crawl_tasks = getattr(app.state, 'crawl_tasks', None)
-            if crawl_tasks:
-                from services.crawl.worker import stop_crawl_workers
-                await stop_crawl_workers(crawl_tasks)
-        except Exception as exc:
-            logger.warning("Crawl worker shutdown failed: %s", exc, exc_info=True)
+        configure_sdk_logging()
+        a2a_cfg = get_a2a_config()
+        set_runtime(build_a2a_runtime(MattinAgentExecutor()))
+        logger.info("A2A runtime initialized (enabled=%s)", a2a_cfg.enabled)
+    except Exception:
+        logger.exception("Failed to initialize the A2A runtime at startup")
+        if get_a2a_config().enabled:
+            raise
 
-        try:
-            file_cleanup_task = getattr(app.state, 'file_cleanup_task', None)
-            if file_cleanup_task is not None:
-                from services.file_cleanup_worker import stop_file_cleanup_worker
-                await stop_file_cleanup_worker(file_cleanup_task)
-        except Exception as exc:
-            logger.warning("File cleanup worker shutdown failed: %s", exc, exc_info=True)
 
-        try:
-            sharepoint_tasks = getattr(app.state, 'sharepoint_tasks', None)
-            if sharepoint_tasks:
-                from services.sharepoint.worker import stop_sharepoint_worker
-                await stop_sharepoint_worker(sharepoint_tasks)
-        except Exception as exc:
-            logger.warning("SharePoint worker shutdown failed: %s", exc, exc_info=True)
+async def _start_background_workers(app: FastAPI) -> None:
+    from services.crawl.worker import start_crawl_workers
 
-        try:
-            from services.hitl_expiry_worker import stop_hitl_expiry_worker
-            await stop_hitl_expiry_worker(getattr(app.state, 'hitl_expiry_task', None))
-        except Exception as exc:
-            logger.warning("HITL expiry worker shutdown failed: %s", exc, exc_info=True)
+    app.state.crawl_tasks = await start_crawl_workers(app)
 
-        try:
-            a2a_maintenance_task = getattr(app.state, 'a2a_maintenance_task', None)
-            if a2a_maintenance_task is not None:
-                from services.a2a_server.maintenance_worker import stop_a2a_maintenance_worker
-                await stop_a2a_maintenance_worker(a2a_maintenance_task)
-        except Exception as exc:
-            logger.warning("A2A maintenance worker shutdown failed: %s", exc, exc_info=True)
+    from services.file_cleanup_worker import start_file_cleanup_worker
 
-        try:
-            from services.a2a_server.runtime import close_runtime
+    app.state.file_cleanup_task = start_file_cleanup_worker()
 
-            await close_runtime()
-        except Exception as exc:
-            logger.warning("A2A runtime shutdown (close_runtime) failed: %s", exc, exc_info=True)
+    from services.a2a_server.maintenance_worker import (
+        start_a2a_maintenance_worker,
+    )
 
-        try:
-            from services.agent_cache_service import CheckpointerCacheService
-            await CheckpointerCacheService.close_pool()
-        except Exception as exc:
-            logger.warning("Checkpointer pool shutdown failed: %s", exc, exc_info=True)
+    app.state.a2a_maintenance_task = start_a2a_maintenance_worker()
 
-        try:
-            from tools.langsmith_config import flush_langsmith_clients, clear_client_cache
-            flush_langsmith_clients()
-            clear_client_cache()
-        except Exception as exc:
-            logger.warning("LangSmith flush during shutdown failed: %s", exc)
+    from services.sharepoint.worker import start_sharepoint_worker
 
-        try:
-            if AuthConfig.LOGIN_MODE == "OIDC":
-                await shutdown_provider()
-                logger.info("✅ %s provider shutdown complete", AuthConfig.OAUTH_PROVIDER)
-        except Exception as exc:
-            logger.warning("OIDC provider shutdown failed: %s", exc, exc_info=True)
+    app.state.sharepoint_tasks = await start_sharepoint_worker()
+
+    from services.hitl_expiry_worker import start_hitl_expiry_worker
+
+    app.state.hitl_expiry_task = start_hitl_expiry_worker()
+
+
+async def _shutdown_application(app: FastAPI) -> None:
+    try:
+        await _shutdown_workers(app)
+        await _shutdown_shared_services()
         print("✅ Application shutdown complete")
-    except Exception as e:
-        logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
-        print(f"❌ Error during shutdown: {e}")
+    except Exception as exc:
+        logger.error(f"❌ Error during shutdown: {exc}", exc_info=True)
+        print(f"❌ Error during shutdown: {exc}")
+
+
+async def _shutdown_workers(app: FastAPI) -> None:
+    try:
+        from scheduling.periodic_agent_task import shutdown_dbos
+
+        shutdown_dbos()
+    except Exception as exc:
+        logger.warning("DBOS shutdown failed: %s", exc, exc_info=True)
+
+    try:
+        crawl_tasks = getattr(app.state, "crawl_tasks", None)
+        if crawl_tasks:
+            from services.crawl.worker import stop_crawl_workers
+
+            await stop_crawl_workers(crawl_tasks)
+    except Exception as exc:
+        logger.warning("Crawl worker shutdown failed: %s", exc, exc_info=True)
+
+    try:
+        file_cleanup_task = getattr(app.state, "file_cleanup_task", None)
+        if file_cleanup_task is not None:
+            from services.file_cleanup_worker import stop_file_cleanup_worker
+
+            await stop_file_cleanup_worker(file_cleanup_task)
+    except Exception as exc:
+        logger.warning("File cleanup worker shutdown failed: %s", exc, exc_info=True)
+
+    try:
+        sharepoint_tasks = getattr(app.state, "sharepoint_tasks", None)
+        if sharepoint_tasks:
+            from services.sharepoint.worker import stop_sharepoint_worker
+
+            await stop_sharepoint_worker(sharepoint_tasks)
+    except Exception as exc:
+        logger.warning("SharePoint worker shutdown failed: %s", exc, exc_info=True)
+
+    try:
+        from services.hitl_expiry_worker import stop_hitl_expiry_worker
+
+        await stop_hitl_expiry_worker(getattr(app.state, "hitl_expiry_task", None))
+    except Exception as exc:
+        logger.warning("HITL expiry worker shutdown failed: %s", exc, exc_info=True)
+
+    try:
+        a2a_maintenance_task = getattr(app.state, "a2a_maintenance_task", None)
+        if a2a_maintenance_task is not None:
+            from services.a2a_server.maintenance_worker import (
+                stop_a2a_maintenance_worker,
+            )
+
+            await stop_a2a_maintenance_worker(a2a_maintenance_task)
+    except Exception as exc:
+        logger.warning("A2A maintenance worker shutdown failed: %s", exc, exc_info=True)
+
+
+async def _shutdown_shared_services() -> None:
+    try:
+        from services.a2a_server.runtime import close_runtime
+
+        await close_runtime()
+    except Exception as exc:
+        logger.warning("A2A runtime shutdown (close_runtime) failed: %s", exc, exc_info=True)
+
+    try:
+        from services.agent_cache_service import CheckpointerCacheService
+
+        await CheckpointerCacheService.close_pool()
+    except Exception as exc:
+        logger.warning("Checkpointer pool shutdown failed: %s", exc, exc_info=True)
+
+    try:
+        from tools.langsmith_config import flush_langsmith_clients, clear_client_cache
+
+        flush_langsmith_clients()
+        clear_client_cache()
+    except Exception as exc:
+        logger.warning("LangSmith flush during shutdown failed: %s", exc)
+
+    try:
+        if AuthConfig.LOGIN_MODE == "OIDC":
+            await shutdown_provider()
+            logger.info("✅ %s provider shutdown complete", AuthConfig.OAUTH_PROVIDER)
+    except Exception as exc:
+        logger.warning("OIDC provider shutdown failed: %s", exc, exc_info=True)
 
 
 app = FastAPI(
@@ -289,7 +320,13 @@ app_config = get_app_config()
 tmp_base_folder = app_config.get('TMP_BASE_FOLDER', 'data/tmp')
 os.makedirs(tmp_base_folder, exist_ok=True)
 
-@app.get("/static/{file_path:path}")
+@app.get(
+    "/static/{file_path:path}",
+    responses={
+        403: {"description": "Invalid signature, missing parameters, or invalid path."},
+        404: {"description": "File not found."},
+    },
+)
 async def get_static_file(
     file_path: str,
     user: str = None,

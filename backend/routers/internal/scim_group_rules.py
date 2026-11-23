@@ -24,6 +24,13 @@ from services.group_app_access_service import (
 
 router = APIRouter(tags=["Apps", "SCIM group access"])
 
+_GROUP_POLICY_PERMISSION_DETAIL = (
+    "Insufficient permissions to manage this app's group policies."
+)
+_ACTIVE_PROVISIONING_IDENTITY_REQUIRED_DETAIL = (
+    "An active linked provisioning identity is required."
+)
+
 
 def _service(db: Session) -> GroupAppAccessService:
     return GroupAppAccessService(db)
@@ -40,13 +47,12 @@ def require_group_app_manager(
     except GroupAppAccessForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to manage this app's group policies.",
+            detail=_GROUP_POLICY_PERMISSION_DETAIL,
         ) from exc
 
 
 @router.get(
     "",
-    response_model=list[GroupAppAccessRuleListItem],
     dependencies=[Depends(require_group_app_manager)],
 )
 async def list_group_rules(
@@ -68,7 +74,7 @@ async def list_group_rules(
     except GroupAppAccessForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to manage this app's group policies.",
+            detail=_GROUP_POLICY_PERMISSION_DETAIL,
         ) from exc
     except GroupAppAccessNotFoundError as exc:
         raise HTTPException(
@@ -78,7 +84,6 @@ async def list_group_rules(
 
 @router.get(
     "/eligible-groups",
-    response_model=EligibleGroupsPage,
     dependencies=[Depends(require_group_app_manager)],
 )
 async def list_eligible_groups(
@@ -100,7 +105,7 @@ async def list_eligible_groups(
     except GroupAppAccessForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to manage this app's group policies.",
+            detail=_GROUP_POLICY_PERMISSION_DETAIL,
         ) from exc
     except GroupAppAccessNotFoundError as exc:
         raise HTTPException(
@@ -110,7 +115,6 @@ async def list_eligible_groups(
 
 @router.post(
     "",
-    response_model=GroupAppAccessRuleListItem,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_group_app_manager)],
 )
@@ -132,7 +136,7 @@ async def create_group_rule(
     except GroupAppAccessForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active linked provisioning identity is required.",
+            detail=_ACTIVE_PROVISIONING_IDENTITY_REQUIRED_DETAIL,
         ) from exc
     except GroupAppAccessInvalidRoleError as exc:
         raise HTTPException(
@@ -148,7 +152,6 @@ async def create_group_rule(
 
 @router.patch(
     "/{rule_id}",
-    response_model=GroupAppAccessRuleListItem,
     dependencies=[Depends(require_group_app_manager)],
 )
 async def update_group_rule(
@@ -171,7 +174,7 @@ async def update_group_rule(
     except GroupAppAccessForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active linked provisioning identity is required.",
+            detail=_ACTIVE_PROVISIONING_IDENTITY_REQUIRED_DETAIL,
         ) from exc
     except GroupAppAccessInvalidRoleError as exc:
         raise HTTPException(
@@ -187,7 +190,6 @@ async def update_group_rule(
 
 @router.delete(
     "/{rule_id}",
-    response_model=GroupAppAccessRuleListItem,
     dependencies=[Depends(require_group_app_manager)],
 )
 async def delete_group_rule(
@@ -204,7 +206,7 @@ async def delete_group_rule(
     except GroupAppAccessForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="An active linked provisioning identity is required.",
+            detail=_ACTIVE_PROVISIONING_IDENTITY_REQUIRED_DETAIL,
         ) from exc
     except GroupAppAccessNotFoundError as exc:
         raise HTTPException(

@@ -26,11 +26,13 @@ from schemas.scim_schemas import (
 )
 from services.scim_service import SCIMRequestError, scim_service
 
+_SCIM_MEDIA_TYPE = "application/scim+json"
+
 
 class SCIMJSONResponse(JSONResponse):
     """JSON response using the SCIM media type."""
 
-    media_type = "application/scim+json"
+    media_type = _SCIM_MEDIA_TYPE
 
 
 router = APIRouter()
@@ -54,13 +56,12 @@ def _scim_error(error: SCIMRequestError) -> JSONResponse:
             "detail": error.detail,
             "status": str(error.status_code),
         },
-        media_type="application/scim+json",
+        media_type=_SCIM_MEDIA_TYPE,
     )
 
 
 @router.get(
     "/{connection_key}/ServiceProviderConfig",
-    response_model=SCIMServiceProviderConfig,
     response_class=SCIMJSONResponse,
     tags=["SCIM"],
 )
@@ -87,7 +88,6 @@ async def get_service_provider_config(
 
 @router.get(
     "/{connection_key}/ResourceTypes",
-    response_model=SCIMResourceTypeList,
     response_class=SCIMJSONResponse,
     tags=["SCIM"],
 )
@@ -114,7 +114,6 @@ async def get_resource_types(
 
 @router.get(
     "/{connection_key}/Schemas",
-    response_model=SCIMSchemaList,
     response_class=SCIMJSONResponse,
     tags=["SCIM"],
 )
@@ -167,7 +166,7 @@ async def get_schemas(
 async def create_user(
     payload: SCIMUserCreate,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> SCIMUserResponse | JSONResponse:
     """Create or reconcile a provisioned SCIM user."""
     try:
@@ -185,10 +184,10 @@ async def create_user(
 )
 async def list_users(
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
-    start_index: int = Query(1, alias="startIndex", ge=1),
-    count: int = Query(100, ge=0, le=1000),
-    filter_expression: Optional[str] = Query(None, alias="filter"),
+    db: Annotated[Session, Depends(get_db)],
+    start_index: Annotated[int, Query(alias="startIndex", ge=1)] = 1,
+    count: Annotated[int, Query(ge=0, le=1000)] = 100,
+    filter_expression: Annotated[Optional[str], Query(alias="filter")] = None,
 ) -> SCIMUserListResponse | JSONResponse:
     """List connection-scoped SCIM users."""
     try:
@@ -214,7 +213,7 @@ async def list_users(
 async def get_user(
     scim_id: str,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> SCIMUserResponse | JSONResponse:
     """Retrieve a connection-scoped SCIM user."""
     try:
@@ -233,7 +232,7 @@ async def patch_user(
     patch: SCIMUserPatch,
     scim_id: str,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> SCIMUserResponse | JSONResponse:
     """Patch supported attributes of a connection-scoped SCIM user."""
     try:
@@ -252,12 +251,12 @@ async def patch_user(
 async def delete_user(
     scim_id: str,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> Response | JSONResponse:
     """Deprovision a user without deleting local records."""
     try:
         scim_service.delete_user(db, connection, scim_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT, media_type="application/scim+json")
+        return Response(status_code=status.HTTP_204_NO_CONTENT, media_type=_SCIM_MEDIA_TYPE)
     except SCIMRequestError as error:
         return _scim_error(error)
 
@@ -272,7 +271,7 @@ async def delete_user(
 async def create_group(
     payload: SCIMGroupCreate,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> SCIMGroupResponse | JSONResponse:
     """Create or reconcile a connection-scoped SCIM Group."""
     try:
@@ -290,10 +289,10 @@ async def create_group(
 )
 async def list_groups(
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
-    start_index: int = Query(1, alias="startIndex", ge=1),
-    count: int = Query(100, ge=0, le=1000),
-    filter_expression: Optional[str] = Query(None, alias="filter"),
+    db: Annotated[Session, Depends(get_db)],
+    start_index: Annotated[int, Query(alias="startIndex", ge=1)] = 1,
+    count: Annotated[int, Query(ge=0, le=1000)] = 100,
+    filter_expression: Annotated[Optional[str], Query(alias="filter")] = None,
 ) -> SCIMGroupListResponse | JSONResponse:
     """List connection-scoped SCIM Groups."""
     try:
@@ -317,7 +316,7 @@ async def list_groups(
 async def get_group(
     scim_id: str,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> SCIMGroupResponse | JSONResponse:
     """Retrieve a connection-scoped SCIM Group."""
     try:
@@ -336,7 +335,7 @@ async def patch_group(
     patch: SCIMGroupPatch,
     scim_id: str,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> SCIMGroupResponse | JSONResponse:
     """Patch displayName and direct memberships of a Group."""
     try:
@@ -355,11 +354,11 @@ async def patch_group(
 async def delete_group(
     scim_id: str,
     connection: Annotated[ProvisioningConnection, Depends(authenticate_scim)],
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ) -> Response | JSONResponse:
     """Deactivate a Group without deleting local users."""
     try:
         scim_service.delete_group(db, connection, scim_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT, media_type="application/scim+json")
+        return Response(status_code=status.HTTP_204_NO_CONTENT, media_type=_SCIM_MEDIA_TYPE)
     except SCIMRequestError as error:
         return _scim_error(error)

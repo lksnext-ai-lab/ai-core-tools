@@ -32,6 +32,9 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_USER_NOT_FOUND: str = "User not found"
+_GROUP_NOT_FOUND: str = "Group not found"
+
 
 class SCIMAuthenticationError(Exception):
     """Authentication failure with an HTTP status and SCIM-safe detail."""
@@ -143,7 +146,7 @@ class SCIMService:
         """Retrieve one user within the authenticated connection."""
         identity = self.user_repository.get_by_scim_id(db, connection.id, scim_id)
         if identity is None:
-            raise SCIMRequestError(404, "User not found.")
+            raise SCIMRequestError(404, _USER_NOT_FOUND)
         return self._response(identity)
 
     def upsert_user(
@@ -162,7 +165,7 @@ class SCIMService:
             db, connection.id, payload.externalId
         )
         existing_user = self._resolve_upsert_users(
-            db, connection, payload, identity, email, mapped_user
+            db, identity, email, mapped_user
         )
         created = identity is None
         try:
@@ -183,8 +186,6 @@ class SCIMService:
     def _resolve_upsert_users(
         self,
         db: Session,
-        connection: ProvisioningConnection,
-        payload: SCIMUserCreate,
         identity: Optional[UserExternalIdentity],
         email: Optional[str],
         mapped_user: Optional[User],
@@ -318,7 +319,7 @@ class SCIMService:
         """Apply supported SCIM PATCH operations atomically."""
         identity = self.user_repository.get_by_scim_id(db, connection.id, scim_id)
         if identity is None:
-            raise SCIMRequestError(404, "User not found.")
+            raise SCIMRequestError(404, _USER_NOT_FOUND)
         original_name = identity.user.name
         original_email = identity.user.email
         for operation in patch.Operations:
@@ -347,7 +348,7 @@ class SCIMService:
         """Deprovision a user while retaining its local account and history."""
         identity = self.user_repository.get_by_scim_id(db, connection.id, scim_id)
         if identity is None:
-            raise SCIMRequestError(404, "User not found.")
+            raise SCIMRequestError(404, _USER_NOT_FOUND)
         self._deprovision_user(db, identity)
 
     def _deprovision_user(
@@ -423,7 +424,7 @@ class SCIMService:
         """Retrieve one active Group within the authenticated connection."""
         group = self.group_repository.get_by_scim_id(db, connection.id, scim_id)
         if group is None:
-            raise SCIMRequestError(404, "Group not found.")
+            raise SCIMRequestError(404, _GROUP_NOT_FOUND)
         return self._group_response(group)
 
     def _resolve_members(
@@ -496,7 +497,7 @@ class SCIMService:
         """Apply supported displayName and direct-membership PATCH operations."""
         group = self.group_repository.get_by_scim_id(db, connection.id, scim_id)
         if group is None:
-            raise SCIMRequestError(404, "Group not found.")
+            raise SCIMRequestError(404, _GROUP_NOT_FOUND)
         for operation in patch.Operations:
             op = operation.op.lower()
             path = (operation.path or "").strip().lower()
@@ -616,7 +617,7 @@ class SCIMService:
         """Deactivate a Group and remove memberships without deleting local users."""
         group = self.group_repository.get_by_scim_id(db, connection.id, scim_id)
         if group is None:
-            raise SCIMRequestError(404, "Group not found.")
+            raise SCIMRequestError(404, _GROUP_NOT_FOUND)
         group.is_active = False
         group.memberships.clear()
         group.last_synced_at = datetime.now()
