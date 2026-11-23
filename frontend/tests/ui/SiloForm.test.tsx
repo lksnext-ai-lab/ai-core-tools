@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import SiloForm from '../../src/components/forms/SiloForm';
 import { apiMock } from './apiMock';
-import { renderWithProviders, tr } from './testUtils';
+import { renderWithProviders, tr, trPattern } from './testUtils';
 
 const DOMAIN_SILO = {
   silo_id: 5,
@@ -43,7 +43,7 @@ describe('SiloForm', () => {
     );
     await waitFor(() => expect(apiMock.getEmbeddingServices).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByRole('spinbutton', { name: new RegExp(tr('siloFormPage.indexing.chunkSize').replace(/[()]/g, '\\$&')) }), {
+    fireEvent.change(screen.getByRole('spinbutton', { name: trPattern('siloFormPage.indexing.chunkSize') }), {
       target: { value: '1800' },
     });
     fireEvent.click(screen.getByRole('button', { name: tr('siloFormPage.actions.update') }));

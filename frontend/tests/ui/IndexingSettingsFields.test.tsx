@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { IndexingSettingsFields } from '../../src/components/forms/IndexingSettingsFields';
 import type { IndexingOptions, IndexingSettings } from '../../src/types/indexing';
-import { renderWithProviders, tr } from './testUtils';
+import { renderWithProviders, tr, trPattern } from './testUtils';
 
 const OPTIONS: IndexingOptions = {
   pdf_loaders: [
@@ -64,11 +64,11 @@ describe('IndexingSettingsFields', () => {
   it('shows range errors under the chunk fields', () => {
     renderWithProviders(<Harness onChange={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText(new RegExp(tr('siloFormPage.indexing.chunkSize').replace(/[()]/g, '\\$&'))), { target: { value: '50' } });
+    fireEvent.change(screen.getByLabelText(trPattern('siloFormPage.indexing.chunkSize')), { target: { value: '50' } });
     expect(screen.getByText(tr('siloFormPage.indexing.validation.chunkSizeRange', { min: 200, max: 8000 }))).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(new RegExp(tr('siloFormPage.indexing.chunkSize').replace(/[()]/g, '\\$&'))), { target: { value: '1000' } });
-    fireEvent.change(screen.getByLabelText(new RegExp(tr('siloFormPage.indexing.chunkOverlap').replace(/[()]/g, '\\$&'))), { target: { value: '600' } });
+    fireEvent.change(screen.getByLabelText(trPattern('siloFormPage.indexing.chunkSize')), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText(trPattern('siloFormPage.indexing.chunkOverlap')), { target: { value: '600' } });
     expect(screen.getByText(tr('siloFormPage.indexing.validation.chunkOverlapRange', { max: 500 }))).toBeInTheDocument();
   });
 
