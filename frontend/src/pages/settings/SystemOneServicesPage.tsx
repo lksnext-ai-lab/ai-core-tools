@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pencil, ClipboardCopy, Trash2, Loader2, Plug, Gauge, AlertTriangle } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import ActionDropdown from '../../components/ui/ActionDropdown';
@@ -46,6 +47,7 @@ function StatusBadge({ kind, detail }: { readonly kind: ServiceStatusKind; reado
 }
 
 function SystemOneServicesPage() {
+  const { t } = useTranslation('common');
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.ADMINISTRATOR);
@@ -64,12 +66,10 @@ function SystemOneServicesPage() {
     handleClose, handleCreate, handleDelete, handleEdit, handleCopy, handleSave,
     setIsModalOpen, setEditingService,
   } = useServicesManager<SystemOneService>(appId, api, noCache, {
-    entity: 'System One service',
+    entity: t('systemOne.services.entity'),
     deleteWarning: (service: SystemOneService) => {
       const n = service?.agent_count ?? 0;
-      return n > 0
-        ? `${n} agent${n === 1 ? '' : 's'} use${n === 1 ? 's' : ''} this service and will stop working until you assign ${n === 1 ? 'it' : 'them'} another one.`
-        : null;
+      return n > 0 ? t('systemOne.services.deleteWarning', { count: n }) : null;
     },
   });
 
@@ -82,7 +82,7 @@ function SystemOneServicesPage() {
       if (!service.model) continue;
       apiService.getSystemOneServiceStatus(Number.parseInt(appId), service.service_id)
         .then((check) => { if (!cancelled) setChecks((current) => ({ ...current, [service.service_id]: check })); })
-        .catch(() => { if (!cancelled) setChecks((current) => ({ ...current, [service.service_id]: { status: 'error', message: 'Cannot reach the server', verifiable: true } })); });
+        .catch(() => { if (!cancelled) setChecks((current) => ({ ...current, [service.service_id]: { status: 'error', message: t('systemOne.status.cannotReach'), verifiable: true } })); });
     }
     return () => { cancelled = true; };
   }, [appId, services]);
@@ -101,7 +101,7 @@ function SystemOneServicesPage() {
     } catch (err) {
       setTestResult({
         status: 'error',
-        message: err instanceof Error ? err.message : 'Failed to test the connection',
+        message: err instanceof Error ? err.message : t('systemOne.wizard.testFailed'),
         models: [],
         limits: null,
       });
@@ -113,7 +113,7 @@ function SystemOneServicesPage() {
   if (loading) return (
     <div className="p-6 text-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-2 text-gray-600">Loading System One services...</p>
+      <p className="mt-2 text-gray-600">{t('systemOne.services.loading')}</p>
     </div>
   );
 
@@ -127,12 +127,12 @@ function SystemOneServicesPage() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">System One Services</h2>
-          <p className="text-gray-600">Connections to System One servers used by System One agents</p>
+          <h2 className="text-xl font-semibold text-gray-900">{t('systemOne.services.title')}</h2>
+          <p className="text-gray-600">{t('systemOne.services.subtitle')}</p>
         </div>
         {canEdit && (
           <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-            <span className="mr-2">+</span>Add System One Service
+            <span className="mr-2">+</span>{t('systemOne.services.add')}
           </button>
         )}
       </div>
@@ -144,7 +144,7 @@ function SystemOneServicesPage() {
         keyExtractor={(service) => service.service_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('common.name'),
             render: (service: SystemOneService) => (
               canEdit ? (
                 <button type="button" className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left" onClick={() => void handleEdit(service.service_id)}>
@@ -155,19 +155,19 @@ function SystemOneServicesPage() {
               )
             ),
           },
-          { header: 'Server', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.endpoint}</span> },
+          { header: t('systemOne.services.colServer'), render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.endpoint}</span> },
           {
-            header: 'Model',
+            header: t('systemOne.services.colModel'),
             render: (service: SystemOneService) => (
               <span className="text-sm text-gray-700">
                 {service.model}
                 {service.supports_images && (
-                  <span className="ml-2 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800">Vision</span>
+                  <span className="ml-2 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800">{t('systemOne.services.vision')}</span>
                 )}
               </span>
             ),
           },
-          { header: 'Status', render: (service: SystemOneService) => {
+          { header: t('systemOne.services.colStatus'), render: (service: SystemOneService) => {
             const kind = serviceStatus(service.model, checks[service.service_id]);
             // Live reachability first; the lifecycle badge only when the service is deprecated or retired ("Ready" would mislead).
             const lifecycle = service.lifecycle_status === 'deprecated' || service.lifecycle_status === 'retired';
@@ -184,40 +184,40 @@ function SystemOneServicesPage() {
               </div>
             );
           }},
-          { header: 'Agents', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.agent_count ?? 0}</span> },
-          { header: 'Concurrency', render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.max_concurrency}</span> },
-          { header: 'Created', render: (service: SystemOneService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : 'N/A') },
+          { header: t('systemOne.services.colAgents'), render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.agent_count ?? 0}</span> },
+          { header: t('systemOne.services.colConcurrency'), render: (service: SystemOneService) => <span className="text-sm text-gray-700">{service.max_concurrency}</span> },
+          { header: t('systemOne.services.colCreated'), render: (service: SystemOneService) => (service.created_at ? new Date(service.created_at).toLocaleDateString() : t('systemOne.services.notAvailable')) },
           {
-            header: 'Actions',
+            header: t('systemOne.services.colActions'),
             className: 'relative',
             render: (service: SystemOneService) => (
               canEdit ? (
                 <ActionDropdown actions={[
                   {
-                    label: testingServiceId === service.service_id ? 'Testing...' : 'Test Connection',
+                    label: testingServiceId === service.service_id ? t('connectionTestResult.testingAction') : t('connectionTestResult.testConnection'),
                     onClick: () => void handleTestConnection(service.service_id),
                     icon: testingServiceId === service.service_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />,
                     disabled: testingServiceId === service.service_id,
                   },
-                  { label: 'Edit', onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
-                  { label: 'Copy', onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
-                  { label: 'Delete', onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const },
+                  { label: t('common.edit'), onClick: () => void handleEdit(service.service_id), icon: <Pencil className="w-4 h-4" />, variant: 'primary' as const },
+                  { label: t('systemOne.services.copy'), onClick: () => void handleCopy(service.service_id), icon: <ClipboardCopy className="w-4 h-4" />, variant: 'primary' as const },
+                  { label: t('common.delete'), onClick: () => void handleDelete(service.service_id), icon: <Trash2 className="w-4 h-4" />, variant: 'danger' as const },
                 ]} size="sm" />
               ) : (
-                <span className="text-gray-400 text-sm">View only</span>
+                <span className="text-gray-400 text-sm">{t('systemOne.services.viewOnly')}</span>
               )
             ),
           },
         ]}
         emptyIcon={<Gauge className="w-10 h-10 text-gray-300" />}
-        emptyMessage="No System One Services"
-        emptySubMessage="Add a System One service to create agents that classify, judge or decide over a text."
+        emptyMessage={t('systemOne.services.emptyTitle')}
+        emptySubMessage={t('systemOne.services.emptySubtitle')}
         loading={loading}
       />
 
       {!loading && services.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">Add First System One Service</button>
+          <button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">{t('systemOne.services.addFirst')}</button>
         </div>
       )}
 
@@ -225,11 +225,9 @@ function SystemOneServicesPage() {
         <div className="flex">
           <div className="flex-shrink-0"><Gauge className="w-5 h-5 text-blue-400" /></div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">About System One</h3>
+            <h3 className="text-sm font-medium text-blue-800">{t('systemOne.services.aboutTitle')}</h3>
             <p className="mt-2 text-sm text-blue-700">
-              System One answers closed questions about a text (yes/no, pick a category, score on a scale) with probabilities, without
-              generating text. It evaluates text; images are accepted only by the models marked Vision. Deleting a service does not delete its
-              agents: they stay, but cannot run until you assign them another service.
+              {t('systemOne.services.aboutBody')}
             </p>
           </div>
         </div>
@@ -247,22 +245,22 @@ function SystemOneServicesPage() {
         />
       )}
 
-      <Modal isOpen={isTestModalOpen} onClose={() => !testingServiceId && setIsTestModalOpen(false)} title="Connection Test Result">
+      <Modal isOpen={isTestModalOpen} onClose={() => !testingServiceId && setIsTestModalOpen(false)} title={t('connectionTestResult.title')}>
         <div className="p-4">
           {testingServiceId ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Testing connection to the System One server...</p>
+              <p className="text-gray-600">{t('systemOne.services.testingMessage')}</p>
             </div>
           ) : testResult && (
             <div>
               <div className={`mb-4 p-3 rounded ${testResult.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                <strong>Status:</strong> {testResult.status === 'success' ? 'Success' : 'Error'}
+                <strong>{t('connectionTestResult.statusTitle', { status: testResult.status === 'success' ? t('connectionTestResult.status.success') : t('connectionTestResult.status.error') })}</strong>
                 <br />
-                <strong>Message:</strong> {testResult.message}
+                <strong>{t('connectionTestResult.message')}:</strong> {testResult.message}
               </div>
               {testResult.models.length > 0 && (
-                <p className="text-sm text-gray-700 mb-2"><strong>Models:</strong> {testResult.models.join(', ')}</p>
+                <p className="text-sm text-gray-700 mb-2"><strong>{t('systemOne.services.models')}:</strong> {testResult.models.join(', ')}</p>
               )}
               {testResult.limits && (
                 <div className="bg-gray-50 p-3 rounded border text-sm font-mono whitespace-pre-wrap">
@@ -273,7 +271,7 @@ function SystemOneServicesPage() {
           )}
           {!testingServiceId && (
             <div className="mt-4 flex justify-end">
-              <button onClick={() => setIsTestModalOpen(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded">Close</button>
+              <button onClick={() => setIsTestModalOpen(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded">{t('connectionTestResult.close')}</button>
             </div>
           )}
         </div>

@@ -73,6 +73,7 @@ const NAVIGATION_LABELS: Record<string, { name: string; translationKey: string }
   '/apps/:appId/settings/ai-services': { name: 'AI Services', translationKey: 'breadcrumbs.navigation.aiServices' },
   '/apps/:appId/settings/embedding-services': { name: 'Embedding Services', translationKey: 'breadcrumbs.navigation.embeddingServices' },
   '/apps/:appId/settings/sandbox-services': { name: 'Sandbox Services', translationKey: 'breadcrumbs.navigation.sandboxServices' },
+  '/apps/:appId/settings/system-one-services': { name: 'System One Services', translationKey: 'breadcrumbs.navigation.systemOneServices' },
   '/apps/:appId/settings/mcp-configs': { name: 'MCP Configs', translationKey: 'breadcrumbs.navigation.mcpConfigs' },
   '/apps/:appId/settings/api-keys': { name: 'API Keys', translationKey: 'breadcrumbs.navigation.apiKeys' },
   '/apps/:appId/settings/data-structures': { name: 'Data Structures', translationKey: 'breadcrumbs.navigation.dataStructures' },

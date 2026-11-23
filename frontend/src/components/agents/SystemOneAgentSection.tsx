@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Gauge } from 'lucide-react';
 import SystemOneQuestionsEditor from './SystemOneQuestionsEditor';
 import { validateMaxStateChars, type EditorQuestion } from '../../utils/systemOneQuestions';
@@ -36,6 +37,7 @@ interface SystemOneAgentSectionProps {
 const toId = (raw: string): number | undefined => (raw === '' ? undefined : Number(raw));
 
 function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
+  const { t } = useTranslation('common');
   // What is typed is kept as text so the field can be emptied (a number input bound to Number('') shows a stuck 0).
   const [maxCharsDraft, setMaxCharsDraft] = useState(String(props.maxStateChars));
   useEffect(() => {
@@ -58,7 +60,7 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
           <div>
             <h3 className="text-xl font-semibold text-gray-900">System One</h3>
             <p className="text-sm text-gray-600">
-              Answers closed questions about a text with probabilities. Images only work if the service's provider accepts them.
+              {t('systemOne.section.description')}
             </p>
           </div>
         </div>
@@ -67,46 +69,46 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
           <div className="mb-6 flex items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800" role="alert">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <p>
-              This app has no System One service yet.{' '}
-              <Link className="font-medium underline" to={`/apps/${appId}/settings/system-one-services`}>Create one in Settings</Link>{' '}
-              and come back.
+              {t('systemOne.section.noServices')}{' '}
+              <Link className="font-medium underline" to={`/apps/${appId}/settings/system-one-services`}>{t('systemOne.section.createInSettings')}</Link>{' '}
+              {t('systemOne.section.comeBack')}
             </p>
           </div>
         )}
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div>
-            <label htmlFor="so-service" className="block text-sm font-medium text-gray-700 mb-2">System One service *</label>
+            <label htmlFor="so-service" className="block text-sm font-medium text-gray-700 mb-2">{t('systemOne.section.serviceLabel')}</label>
             <select id="so-service" className={inputClass} value={props.serviceId ?? ''} required
                     aria-describedby={serviceStatusId(systemOneServices, props.serviceId, 'so-service')}
                     onChange={(e) => props.onServiceChange(toId(e.target.value))}>
-              <option value="">Select a service...</option>
+              <option value="">{t('systemOne.section.selectService')}</option>
               <ServiceSelectOptions options={systemOneServices} savedValue={props.savedServiceId} />
             </select>
             <ServiceOptionStatus selectId="so-service" options={systemOneServices} selectedId={props.serviceId} />
             {props.serviceId == null && systemOneServices.length > 0 && (
               <p className="mt-1 text-xs text-amber-700">
-                No service selected (it may have been deleted): this agent cannot evaluate anything until you choose one.
+                {t('systemOne.section.serviceMissing')}
               </p>
             )}
           </div>
 
           <div>
             <label htmlFor="so-summarizer" className="block text-sm font-medium text-gray-700 mb-2">
-              Summarization LLM <span className="font-normal text-gray-500">(optional)</span>
+              {t('systemOne.section.summarizerLabel')} <span className="font-normal text-gray-500">{t('systemOne.section.optional')}</span>
             </label>
             <select id="so-summarizer" className={inputClass} value={props.summarizationServiceId ?? ''}
                     aria-describedby={serviceStatusId(aiServices, props.summarizationServiceId, 'so-summarizer')}
                     onChange={(e) => props.onSummarizationChange(toId(e.target.value))}>
-              <option value="">None: truncate long texts</option>
+              <option value="">{t('systemOne.section.summarizerNone')}</option>
               <ServiceSelectOptions options={aiServices} savedValue={props.savedSummarizationServiceId} />
             </select>
             <ServiceOptionStatus selectId="so-summarizer" options={aiServices} selectedId={props.summarizationServiceId} />
-            <p className="mt-1 text-xs text-gray-500">Used to shorten a text that does not fit. Without it the text is cut. The result always says which happened.</p>
+            <p className="mt-1 text-xs text-gray-500">{t('systemOne.section.summarizerHelp')}</p>
           </div>
 
           <div>
-            <label htmlFor="so-max-chars" className="block text-sm font-medium text-gray-700 mb-2">Maximum text length (characters)</label>
+            <label htmlFor="so-max-chars" className="block text-sm font-medium text-gray-700 mb-2">{t('systemOne.section.maxCharsLabel')}</label>
             <input id="so-max-chars" type="number" min={500} step={100} className={inputClass} value={maxCharsDraft}
                    aria-invalid={maxCharsProblem !== null} aria-describedby={maxCharsProblem ? 'so-max-chars-error' : 'so-max-chars-hint'}
                    onChange={(e) => {
@@ -115,7 +117,7 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
                    }} />
             {maxCharsProblem
               ? <p id="so-max-chars-error" role="alert" className="mt-1 text-xs text-red-600">{maxCharsProblem}</p>
-              : <p id="so-max-chars-hint" className="mt-1 text-xs text-gray-500">At least 500. The model works best with shorter texts (around 6000).</p>}
+              : <p id="so-max-chars-hint" className="mt-1 text-xs text-gray-500">{t('systemOne.section.maxCharsHint')}</p>}
             {!maxCharsProblem && lengthHint && <p className="mt-1 text-xs text-amber-700">{lengthHint}</p>}
           </div>
 
@@ -123,8 +125,8 @@ function SystemOneAgentSection(props: SystemOneAgentSectionProps) {
             <input id="so-is-tool" type="checkbox" className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600" checked={props.isTool}
                    onChange={(e) => props.onIsToolChange(e.target.checked)} />
             <div className="ml-3">
-              <label htmlFor="so-is-tool" className="text-sm font-medium text-gray-900">Use as a tool</label>
-              <p className="text-xs text-gray-500">Other agents can call it to classify, judge or decide over a text.</p>
+              <label htmlFor="so-is-tool" className="text-sm font-medium text-gray-900">{t('systemOne.section.useAsTool')}</label>
+              <p className="text-xs text-gray-500">{t('systemOne.section.useAsToolHelp')}</p>
             </div>
           </div>
         </div>

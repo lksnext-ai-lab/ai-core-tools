@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 // What the services table shows as the Status of a service: derived from a read-only reachability check.
 
 export type ServiceStatusKind = 'checking' | 'connected' | 'unverifiable' | 'token_rejected' | 'unreachable' | 'model_required';
@@ -16,13 +18,14 @@ export function serviceStatus(model: string, check: StatusCheck | null | undefin
   return /token/i.test(check.message) ? 'token_rejected' : 'unreachable';
 }
 
+/** Read lazily (getters) so the label follows the current language. */
 export const STATUS_LABEL: Record<ServiceStatusKind, string> = {
-  checking: 'Checking...',
-  connected: 'Connected',
-  unverifiable: 'Not verifiable',
-  token_rejected: 'Token rejected',
-  unreachable: 'Unreachable',
-  model_required: 'Model required',
+  get checking() { return i18n.t('systemOne.status.checking'); },
+  get connected() { return i18n.t('systemOne.status.connected'); },
+  get unverifiable() { return i18n.t('systemOne.status.unverifiable'); },
+  get token_rejected() { return i18n.t('systemOne.status.tokenRejected'); },
+  get unreachable() { return i18n.t('systemOne.status.unreachable'); },
+  get model_required() { return i18n.t('systemOne.status.modelRequired'); },
 };
 
 export interface AgentRowStatus {
@@ -37,9 +40,9 @@ export interface AgentRowStatus {
  */
 export function agentRowStatus(agent: { type: string; system_one_service?: unknown }): AgentRowStatus {
   if (agent.type === 'system_one_agent' && !agent.system_one_service) {
-    return { kind: 'inoperative', label: 'Inoperative', detail: 'This agent has no System One service: choose one in its settings' };
+    return { kind: 'inoperative', label: i18n.t('systemOne.agentStatus.inoperative'), detail: i18n.t('systemOne.agentStatus.inoperativeDetail') };
   }
-  return { kind: 'active', label: 'Active' };
+  return { kind: 'active', label: i18n.t('agentsPage.active') };
 }
 
 /** The backend refuses to schedule a System One agent (it evaluates on demand), so the picker must not offer it. */

@@ -78,7 +78,7 @@ function AppStepSelect({
     },
     {
       type: 'system_one_service',
-      label: 'System One Services',
+      label: t('importModal.appUpload.components.systemOneServices', { count: preview.system_one_services.length }),
       icon: COMPONENT_TYPE_ICONS.system_one_service,
       items: preview.system_one_services.map((c) => ({
         key: makeKey('system_one_service', c.component_name),

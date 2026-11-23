@@ -1,5 +1,6 @@
 // Pure helpers of the System One questions editor: defaults, validation (mirrors the backend rules in
 // backend/schemas/system_one_schemas.py) and normalization of what is sent to the API.
+import i18n from '../i18n';
 import type { QuestionLimits } from './systemOneLimits';
 import type {
   ChoiceOption,
@@ -41,17 +42,20 @@ function isProbability(value: unknown): boolean {
 /** Message for an invalid "maximum text length", or null when it is fine. */
 export function validateMaxStateChars(value: number): string | null {
   if (!Number.isInteger(value) || value < MIN_STATE_CHARS) {
-    return `The maximum text length must be a whole number of at least ${MIN_STATE_CHARS}`;
+    return i18n.t('systemOne.validation.maxStateChars', { min: MIN_STATE_CHARS });
   }
   return null;
 }
 
 function label(question: EditorQuestion, index: number): string {
-  return question.key.trim() ? `Question ${index + 1} (${question.key.trim()})` : `Question ${index + 1}`;
+  const name = i18n.t('systemOne.questions.questionN', { n: index + 1 });
+  return question.key.trim() ? `${name} (${question.key.trim()})` : name;
 }
 
-function rangeMessage(what: string, max: number | undefined): string {
-  return max === undefined ? `it needs at least ${MIN_OPTIONS} ${what}` : `it needs between ${MIN_OPTIONS} and ${max} ${what}`;
+function rangeMessage(what: 'options' | 'levels', max: number | undefined): string {
+  return max === undefined
+    ? i18n.t(`systemOne.validation.${what}AtLeast`, { min: MIN_OPTIONS })
+    : i18n.t(`systemOne.validation.${what}Between`, { min: MIN_OPTIONS, max });
 }
 
 /** Characters one question takes of every prompt: its instructions, options/levels and a margin (as the backend counts). */
@@ -70,7 +74,7 @@ export function questionSize(question: EditorQuestion): number {
 function validateNoul(question: NoulQuestion): string[] {
   const problems: string[] = [];
   if (question.threshold !== undefined && !isProbability(question.threshold)) {
-    problems.push(`the threshold must be a number between 0 and 1`);
+    problems.push(i18n.t('systemOne.validation.thresholdRange'));
   }
   return problems;
 }
@@ -85,11 +89,11 @@ function validateChoice(question: ChoiceQuestion, limits: QuestionLimits): strin
   for (const option of options) {
     const key = option.key.trim();
     if (!key) {
-      problems.push(`every option needs a name`);
+      problems.push(i18n.t('systemOne.validation.optionNameRequired'));
       continue;
     }
     const folded = key.toLowerCase();
-    if (seen.has(folded)) problems.push(`the option "${key}" is repeated (names are compared ignoring case)`);
+    if (seen.has(folded)) problems.push(i18n.t('systemOne.validation.optionRepeated', { key }));
     seen.add(folded);
   }
   if (question.min_probability != null && !isProbability(question.min_probability)) {
@@ -104,14 +108,12 @@ function validateScore(question: ScoreQuestion, limits: QuestionLimits): string[
   if (levels.length < MIN_OPTIONS || (limits.maxOptions !== undefined && levels.length > limits.maxOptions)) {
     problems.push(rangeMessage('levels', limits.maxOptions));
   }
-  if (levels.some((level) => !level.trim())) problems.push(`every level needs a description`);
+  if (levels.some((level) => !level.trim())) problems.push(i18n.t('systemOne.validation.levelDescriptionRequired'));
   if (question.min_probability != null && !isProbability(question.min_probability)) {
     problems.push(`the minimum probability must be a number between 0 and 1`);
   }
   return problems;
 }
-
-const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 export interface QuestionProblems {
   /** About the list as a whole (none, too many). */
@@ -127,9 +129,9 @@ export interface QuestionContext extends QuestionLimits {
 
 export function checkQuestions(questions: EditorQuestion[], context: QuestionContext = {}): QuestionProblems {
   const general: string[] = [];
-  if (questions.length === 0) general.push('Add at least one question');
+  if (questions.length === 0) general.push(i18n.t('systemOne.validation.addAtLeastOne'));
   if (context.maxQuestions !== undefined && questions.length > context.maxQuestions) {
-    general.push(`This server accepts at most ${context.maxQuestions} questions per call`);
+    general.push(i18n.t('systemOne.validation.maxQuestions', { max: context.maxQuestions }));
   }
 
   const seenKeys = new Set<string>();
@@ -137,24 +139,22 @@ export function checkQuestions(questions: EditorQuestion[], context: QuestionCon
     const problems: string[] = [];
     const key = question.key.trim();
     if (!KEY_PATTERN.test(key)) {
-      problems.push(`the key must be 1-${MAX_KEY_LENGTH} characters of lowercase letters, digits or underscores (e.g. is_urgent)`);
+      problems.push(i18n.t('systemOne.validation.keyFormat', { max: MAX_KEY_LENGTH }));
     } else if (seenKeys.has(key)) {
-      problems.push(`the key "${key}" is used by another question`);
+      problems.push(i18n.t('systemOne.validation.keyRepeated', { key }));
     }
     seenKeys.add(key);
-    if (!question.instructions.trim()) problems.push('the instructions are required');
+    if (!question.instructions.trim()) problems.push(i18n.t('systemOne.validation.instructionsRequired'));
     const size = questionSize(question);
     if (context.maxStateChars !== undefined && Number.isFinite(context.maxStateChars) && context.maxStateChars - size < MIN_TEXT_ROOM_CHARS) {
       problems.push(
-        `this question's definition (instructions plus options/levels) is about ${size} characters long. ` +
-          `Each prompt has ${context.maxStateChars} characters in total, shared with the text to evaluate, and the text needs at least ${MIN_TEXT_ROOM_CHARS} ` +
-          `("Maximum text length" in this form): shorten the question or raise that limit`,
+        i18n.t('systemOne.validation.questionTooLong', { size, total: context.maxStateChars, room: MIN_TEXT_ROOM_CHARS }),
       );
     }
     if (question.type === 'noul') problems.push(...validateNoul(question));
     else if (question.type === 'choice') problems.push(...validateChoice(question, context));
     else problems.push(...validateScore(question, context));
-    return problems.map(capitalize);
+    return problems;
   });
   return { general, byQuestion };
 }
@@ -236,7 +236,7 @@ export function formatDecimal(value: number | null | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
 }
 
-/** A count with English grouping (22,496): the interface is in English, and the browser language must not change it. */
+/** A count grouped by the interface language (22,496 in English), not by the browser's. */
 export function formatCount(value: number): string {
-  return value.toLocaleString('en-US');
+  return value.toLocaleString(i18n.resolvedLanguage);
 }

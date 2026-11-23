@@ -34,6 +34,7 @@ type ReviewSkippedItem = {
 
 const COMPONENT_TYPE_TRANSLATION_KEYS: Record<string, string> = {
   ai_service: 'aiServices',
+  system_one_service: 'systemOneServices',
   embedding_service: 'embeddingServices',
   output_parser: 'outputParsers',
   mcp_config: 'mcpConfigs',

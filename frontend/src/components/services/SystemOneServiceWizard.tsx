@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { CheckCircle2, Loader2, Plug, RefreshCw, XCircle } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { StepperContainer } from '../ui/Stepper';
@@ -22,12 +24,16 @@ import type {
 } from '../../types/systemOne';
 
 // Same shape as the AI service wizard: provider -> credentials -> model (listed from the API) -> confirm and test.
-const STEPS: StepDefinition[] = [
-  { id: 'provider', label: 'Provider' },
-  { id: 'connection', label: 'Connection' },
-  { id: 'model', label: 'Model' },
-  { id: 'test', label: 'Test' },
-];
+const STEP_IDS = ['provider', 'connection', 'model', 'test'] as const;
+
+function buildSteps(t: TFunction): StepDefinition[] {
+  return [
+    { id: 'provider', label: t('serviceWizard.steps.provider') },
+    { id: 'connection', label: t('systemOne.wizard.stepConnection') },
+    { id: 'model', label: t('serviceWizard.steps.model') },
+    { id: 'test', label: t('systemOne.wizard.stepTest') },
+  ];
+}
 
 interface SystemOneServiceWizardProps {
   readonly isOpen: boolean;
@@ -43,12 +49,12 @@ interface SystemOneServiceWizardProps {
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
 const isUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
 
-function limitsSummary(limits: Record<string, number> | null): string | null {
+function limitsSummary(limits: Record<string, number> | null, t: TFunction): string | null {
   if (!limits) return null;
   const parts: string[] = [];
-  if (limits.max_concurrent_requests != null) parts.push(`${limits.max_concurrent_requests} concurrent requests`);
-  if (limits.max_questions != null) parts.push(`${limits.max_questions} questions per call`);
-  if (limits.max_prompt_tokens != null) parts.push(`${limits.max_prompt_tokens} tokens per question`);
+  if (limits.max_concurrent_requests != null) parts.push(t('systemOne.wizard.limitConcurrent', { count: limits.max_concurrent_requests }));
+  if (limits.max_questions != null) parts.push(t('systemOne.wizard.limitQuestions', { count: limits.max_questions }));
+  if (limits.max_prompt_tokens != null) parts.push(t('systemOne.wizard.limitTokens', { count: limits.max_prompt_tokens }));
   return parts.length ? parts.join(' · ') : null;
 }
 
@@ -57,6 +63,8 @@ function errorResult(err: unknown, fallback: string): SystemOneConnectionResult 
 }
 
 function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], onClose, onSave }: SystemOneServiceWizardProps) {
+  const { t } = useTranslation('common');
+  const steps = buildSteps(t);
   const isEdit = service !== null && service.service_id !== 0;
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
@@ -82,7 +90,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const serviceId = isEdit ? service.service_id : undefined;
-  const stepId = STEPS[currentStep].id;
+  const stepId = STEP_IDS[currentStep];
   const models = listResult?.status === 'success' ? listResult.models : [];
   const imageModels = listResult?.status === 'success' ? (listResult.image_models ?? []) : [];
   // The cards of the AI service wizard: only what the server tells is filled in (images -> "Vision", date -> "New").
@@ -131,7 +139,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
         setConcurrency(String(result.suggested_max_concurrency));
       }
     } catch (err) {
-      setListResult(errorResult(err, 'Failed to list the models'));
+      setListResult(errorResult(err, t('systemOne.wizard.listFailed')));
     } finally {
       setListing(false);
     }
@@ -150,7 +158,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
   const parsedConcurrency = concurrency.trim() === '' ? null : Number(concurrency);
   const concurrencyError =
     parsedConcurrency !== null && (!Number.isInteger(parsedConcurrency) || parsedConcurrency < 1)
-      ? 'Enter a whole number of at least 1, or leave it empty'
+      ? t('systemOne.wizard.concurrencyInvalid')
       : null;
   // The latest answer from the server (the model step or an explicit test) tells how many requests it accepts.
   const known = testResult?.status === 'success' ? testResult : listResult?.status === 'success' ? listResult : null;
@@ -188,12 +196,12 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
         appId, { endpoint: endpoint.trim(), api_key: apiKey.trim(), model: model.trim(), provider: provider as SystemOneProvider }, serviceId);
       // Reachable is not enough: the model that will be saved has to be one the server offers.
       if (result.status === 'success' && result.models.length > 0 && !result.models.includes(model.trim())) {
-        setTestResult({ ...result, status: 'error', message: `The server does not offer the model "${model.trim()}"` });
+        setTestResult({ ...result, status: 'error', message: t('systemOne.wizard.modelNotOffered', { model: model.trim() }) });
       } else {
         setTestResult(result);
       }
     } catch (err) {
-      setTestResult(errorResult(err, 'Failed to test the connection'));
+      setTestResult(errorResult(err, t('systemOne.wizard.testFailed')));
     } finally {
       setTesting(false);
     }
@@ -206,7 +214,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
       try {
         await onSave(payload());
       } catch (err) {
-        setSubmitError(err instanceof Error ? err.message : 'Failed to save the service');
+        setSubmitError(err instanceof Error ? err.message : t('systemOne.wizard.saveFailed'));
       } finally {
         setSubmitting(false);
       }
@@ -215,7 +223,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
     // Anything edited upstream invalidates a previous test.
     setTestResult(null);
     setStepStatuses((prev) => ({ ...prev, [stepId]: 'completed' }));
-    setCurrentStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setCurrentStep((s) => Math.min(s + 1, STEP_IDS.length - 1));
   }
 
   function handleBack() {
@@ -229,13 +237,13 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
 
   // Limits are shown only for a result that succeeded: next to a failed test (token rejected, no connection) they would
   // contradict it. Before any test, the ones the model step already read are fine.
-  const limits = limitsSummary(testResult ? (testResult.status === 'success' ? testResult.limits : null) : (listResult?.limits ?? null));
+  const limits = limitsSummary(testResult ? (testResult.status === 'success' ? testResult.limits : null) : (listResult?.limits ?? null), t);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit System One service' : 'Add System One service'} size="xlarge">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? t('systemOne.wizard.titleEdit') : t('systemOne.wizard.titleAdd')} size="xlarge">
       <div className="flex flex-col" style={{ minHeight: '420px' }}>
         <StepperContainer
-          steps={STEPS}
+          steps={steps}
           currentStep={currentStep}
           stepStatuses={stepStatuses}
           onNext={handleNext}
@@ -243,7 +251,7 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
           onCancel={onClose}
           nextDisabled={nextDisabled()}
           isSubmitting={submitting}
-          nextLabel={stepId === 'test' ? (submitting ? 'Saving...' : 'Save') : undefined}
+          nextLabel={stepId === 'test' ? (submitting ? t('systemOne.wizard.saving') : t('common.save')) : undefined}
           showBack
         >
           <div className="px-2 py-3">
@@ -254,34 +262,33 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
             {stepId === 'connection' && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">Connect a decision model</h3>
+                  <h3 className="text-base font-semibold text-gray-900">{t('systemOne.wizard.connectTitle')}</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    It answers closed questions about a text with probabilities. These values are used to list
-                    the available models. They are not saved until you confirm the service in the last step.
+                    {t('systemOne.wizard.connectDescription')}
                   </p>
                 </div>
                 <FormField
-                  label="Server URL"
+                  label={t('systemOne.wizard.serverUrl')}
                   id="so-endpoint"
                   type="text"
                   value={endpoint}
                   onChange={(e) => changeEndpoint(e.target.value)}
                   placeholder={providerInfo?.baseUrlPlaceholder}
-                  helpText="Private addresses are allowed: a self-hosted server normally lives on a private network."
+                  helpText={t('systemOne.wizard.serverUrlHelp')}
                   required
                 />
                 <FormField
-                  label={tokenRequired ? 'API key' : 'Token (optional)'}
+                  label={tokenRequired ? t('systemOne.wizard.apiKey') : t('systemOne.wizard.tokenOptional')}
                   id="so-token"
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={providerInfo?.apiKeyPlaceholder}
                   required={tokenRequired}
-                  helpText={isEdit && !tokenReset ? 'Leave the masked value to keep the stored token; empty it to remove it.' : undefined}
+                  helpText={isEdit && !tokenReset ? t('systemOne.wizard.keepMasked') : undefined}
                 />
                 {tokenReset && (
-                  <Alert type="warning" message="The URL changed, so the stored token was cleared: type it again if the new server needs one." />
+                  <Alert type="warning" message={t('systemOne.wizard.tokenCleared')} />
                 )}
               </div>
             )}
@@ -289,31 +296,31 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
             {stepId === 'model' && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">Choose a model</h3>
-                  <p className="text-sm text-gray-600 mt-1">The models offered by {endpoint.trim()}.</p>
+                  <h3 className="text-base font-semibold text-gray-900">{t('systemOne.wizard.chooseModel')}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{t('systemOne.wizard.modelsOffered', { endpoint: endpoint.trim() })}</p>
                 </div>
                 {listing && (
                   <p className="flex items-center gap-2 text-sm text-gray-600" role="status">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Asking the server for its models...
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> {t('systemOne.wizard.listing')}
                   </p>
                 )}
                 {!listing && listFailed && (
                   <>
                     <Alert
                       type="warning"
-                      title={listResult?.status === 'error' ? 'Could not list the models' : 'The server returned no models'}
-                      message={`${listResult?.status === 'error' ? `${listResult.message}. ` : ''}You can type the model identifier below if you know it.`}
+                      title={listResult?.status === 'error' ? t('systemOne.wizard.couldNotList') : t('systemOne.wizard.noModels')}
+                      message={`${listResult?.status === 'error' ? `${listResult.message}. ` : ''}${t('systemOne.wizard.typeIdentifier')}`}
                     />
-                    <FormField label="Model identifier" id="so-model-manual" type="text" value={model}
+                    <FormField label={t('systemOne.wizard.modelIdentifier')} id="so-model-manual" type="text" value={model}
                                onChange={(e) => setModel(e.target.value)} placeholder="model-name" required />
                     <button type="button" onClick={() => void listModels()}
                             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                      <RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry
+                      <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('systemOne.wizard.retry')}
                     </button>
                   </>
                 )}
                 {!listing && models.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1" role="group" aria-label="Models">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1" role="group" aria-label={t('systemOne.wizard.modelsGroup')}>
                     {models.map((m) => (
                       <ModelCard key={m} model={toModelInfo(m)} selected={model === m} onSelect={() => setModel(m)} />
                     ))}
@@ -325,15 +332,20 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
             {stepId === 'test' && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">Test and save</h3>
+                  <h3 className="text-base font-semibold text-gray-900">{t('systemOne.wizard.testTitle')}</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    <span className="font-mono">{model.trim()}</span> at <span className="font-mono">{endpoint.trim()}</span>
+                    <Trans
+                      i18nKey="systemOne.wizard.modelAtEndpoint"
+                      t={t}
+                      values={{ model: model.trim(), endpoint: endpoint.trim() }}
+                      components={{ mono: <span className="font-mono" /> }}
+                    />
                   </p>
                 </div>
-                <FormField label="Name" id="so-name" type="text" value={name} onChange={(e) => setName(e.target.value)}
-                           placeholder={suggestedName} helpText="Leave it empty to use the suggested name." />
+                <FormField label={t('common.name')} id="so-name" type="text" value={name} onChange={(e) => setName(e.target.value)}
+                           placeholder={suggestedName} helpText={t('systemOne.wizard.nameHelp')} />
                 <FormField
-                  label="Maximum concurrent requests (in total)"
+                  label={t('systemOne.wizard.concurrencyLabel')}
                   id="so-concurrency"
                   type="number"
                   value={concurrency}
@@ -342,9 +354,9 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                   error={concurrencyError ?? concurrencyCheck ?? undefined}
                   helpText={
                     (listResult?.suggested_max_concurrency != null
-                      ? `Suggested for this server: ${listResult.suggested_max_concurrency}. `
+                      ? `${t('systemOne.wizard.concurrencySuggested', { value: listResult.suggested_max_concurrency })} `
                       : '') +
-                    'The server accepts a limited number of requests at once and answers 529 above it. This is the total for all backend processes: they share it, so use the server\'s own limit.'
+                    t('systemOne.wizard.concurrencyHelp')
                   }
                 />
                 <div aria-live="polite">
@@ -356,20 +368,19 @@ function SystemOneServiceWizard({ isOpen, appId, service, existingNames = [], on
                           : <XCircle className="h-4 w-4" aria-hidden="true" />}
                         {testResult.message}
                       </div>
-                      {limits && <p className="mt-1 text-xs">Server limits: {limits}</p>}
+                      {limits && <p className="mt-1 text-xs">{t('systemOne.wizard.serverLimits', { limits })}</p>}
                     </div>
                   )}
                 </div>
                 {listResult?.status === 'success' && models.length === 0 && (
                   <p className="text-xs text-gray-500">
-                    This server cannot list its models, so the test sends one small real question (a few tokens) to check
-                    the URL, the token and the model.
+                    {t('systemOne.wizard.cannotListNote')}
                   </p>
                 )}
                 <button type="button" onClick={() => void handleTest()} disabled={testing}
                         className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60">
                   {testing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plug className="h-4 w-4" aria-hidden="true" />}
-                  {testing ? 'Testing...' : 'Test connection'}
+                  {testing ? t('connectionTestResult.testingAction') : t('connectionTestResult.testConnection')}
                 </button>
 
                 <div className="mt-4">

@@ -764,20 +764,20 @@ function AgentFormPage() {
     if (!appId || !agentId) return;
     if (!formData.name.trim()) {
       setActiveTab('basic');
-      setError('The name is required');
-      toast.error('The name is required');
+      setError(t('systemOne.validation.nameRequired'));
+      toast.error(t('systemOne.validation.nameRequired'));
       return;
     }
     const problems = validateQuestions(formData.questions, questionContext);
     const maxCharsProblem = validateMaxStateChars(formData.max_state_chars);
     if (maxCharsProblem) problems.unshift(maxCharsProblem);
-    if (!formData.system_one_service_id) problems.unshift('Select a System One service');
+    if (!formData.system_one_service_id) problems.unshift(t('systemOne.validation.selectService'));
     if (problems.length > 0) {
       setShowQuestionProblems(true);
       setActiveTab('system_one');
       setError(problems[0]);
       // The banner can be scrolled out of sight: say it where the user is looking, then go to the first problem.
-      toast.error(problems.length === 1 ? problems[0] : `${problems[0]} (and ${problems.length - 1} more problem${problems.length === 2 ? '' : 's'})`);
+      toast.error(problems.length === 1 ? problems[0] : t('systemOne.validation.moreProblems', { first: problems[0], count: problems.length - 1 }));
       window.setTimeout(() => document.querySelector('[data-question-problem]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
       return;
     }

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { AlertTriangle, ChevronRight, FileText, Gauge, Loader2, Play, X } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { formatCount, promptBudget, type EditorQuestion } from '../../utils/systemOneQuestions';
@@ -45,10 +47,11 @@ function isImage(file: File): boolean {
 }
 
 function ProbabilityBar({ label, value, highlighted, color }: { readonly label: string; readonly value: number; readonly highlighted: boolean; readonly color?: string }) {
+  const { t } = useTranslation('common');
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className={`w-32 truncate ${highlighted ? 'font-semibold text-gray-900' : 'text-gray-600'}`} title={label}>{label}</span>
-      <div className="h-2 flex-1 rounded-full bg-gray-200" role="progressbar" aria-label={`${label} probability`}
+      <div className="h-2 flex-1 rounded-full bg-gray-200" role="progressbar" aria-label={t('systemOne.playground.probabilityAria', { label })}
            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)}>
         <div className={`h-2 rounded-full ${color ? '' : highlighted ? 'bg-emerald-500' : 'bg-gray-400'}`}
              style={{ width: percent(value), ...(color ? { backgroundColor: color, opacity: highlighted ? 1 : 0.55 } : {}) }} />
@@ -58,15 +61,16 @@ function ProbabilityBar({ label, value, highlighted, color }: { readonly label: 
   );
 }
 
-function decisionText(answer: SystemOneAnswer): { text: string; determined: boolean } {
-  if (answer.type === 'noul') return { text: answer.decision ? 'Yes' : 'No', determined: true };
-  return answer.decision === null ? { text: 'Undetermined', determined: false } : { text: answer.decision, determined: true };
+function decisionText(answer: SystemOneAnswer, t: TFunction): { text: string; determined: boolean } {
+  if (answer.type === 'noul') return { text: answer.decision ? t('systemOne.playground.yes') : t('systemOne.playground.no'), determined: true };
+  return answer.decision === null ? { text: t('systemOne.playground.undetermined'), determined: false } : { text: answer.decision, determined: true };
 }
 
 function AnswerCard({ questionKey, instructions, answer, question }: { readonly questionKey: string; readonly instructions?: string; readonly answer: SystemOneAnswer; readonly question?: SystemOneQuestion }) {
+  const { t } = useTranslation('common');
   const colorStart = question?.type === 'score' ? question.color_start : undefined;
   const colorOfOption = (name: string) => optionColor(question?.type === 'choice' ? question.criteria.find((o) => o.key === name) : undefined, name);
-  const { text, determined } = decisionText(answer);
+  const { text, determined } = decisionText(answer, t);
   // Colors: Yes green / No red; each choice option its own stable color; a score runs green to red (see colorStart).
   const badgeColor = answer.type === 'noul' ? yesNoColor(answer.decision)
     : answer.type === 'choice' ? (answer.choice ? colorOfOption(answer.choice) : undefined)
@@ -85,7 +89,7 @@ function AnswerCard({ questionKey, instructions, answer, question }: { readonly 
       </div>
 
       <div className="mt-3 space-y-1">
-        {answer.type === 'noul' && <ProbabilityBar label={`Yes (threshold ${percent(answer.threshold)})`} value={answer.probability} highlighted={answer.decision} color={yesNoColor(true)} />}
+        {answer.type === 'noul' && <ProbabilityBar label={t('systemOne.playground.yesThreshold', { threshold: percent(answer.threshold) })} value={answer.probability} highlighted={answer.decision} color={yesNoColor(true)} />}
         {answer.type === 'choice' && Object.entries(answer.probabilities).map(([option, p]) => (
           <ProbabilityBar key={option} label={option} value={p} highlighted={option === answer.choice} color={colorOfOption(option)} />
         ))}
@@ -97,11 +101,11 @@ function AnswerCard({ questionKey, instructions, answer, question }: { readonly 
 
       {answer.type !== 'noul' && (
         <p className="mt-2 text-xs text-gray-500">
-          {answer.type === 'score' && <>Expected level {answer.expected_score.toFixed(2)} · </>}
-          <span title="How concentrated the whole distribution is. It is not the accuracy of the answer, and it can be low even when the chosen option is clearly the best.">
-            Confidence {answer.confidence.toFixed(2)}
+          {answer.type === 'score' && <>{t('systemOne.playground.expectedLevel', { value: answer.expected_score.toFixed(2) })} · </>}
+          <span title={t('systemOne.playground.confidenceHint')}>
+            {t('systemOne.playground.confidence', { value: answer.confidence.toFixed(2) })}
           </span>
-          {answer.decision === null && answer.min_probability != null && <> · below the minimum probability ({percent(answer.min_probability)})</>}
+          {answer.decision === null && answer.min_probability != null && <> · {t('systemOne.playground.belowMinimum', { value: percent(answer.min_probability) })}</>}
         </p>
       )}
     </div>
@@ -109,14 +113,13 @@ function AnswerCard({ questionKey, instructions, answer, question }: { readonly 
 }
 
 function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
+  const { t } = useTranslation('common');
   if (result.state_reduction === 'none') return null;
   const summarized = result.state_reduction === 'summarized';
-  const message = (
-    <>
-      The text was {summarized ? 'summarized' : 'truncated'} before evaluating ({formatCount(result.original_chars)} →{' '}
-      {formatCount(result.state_chars)} characters). The decisions are based on {summarized ? 'its summary' : 'its first part'}.
-    </>
-  );
+  const message = t(summarized ? 'systemOne.playground.summarizedNotice' : 'systemOne.playground.truncatedNotice', {
+    original: formatCount(result.original_chars),
+    used: formatCount(result.state_chars),
+  });
   // Without the text there is nothing to open (an older response): keep the plain notice.
   if (!result.evaluated_text) {
     return (
@@ -133,7 +136,7 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
         <p className="flex-1">
           {message}
           <br />
-          <span className="font-medium underline">{summarized ? 'View the summary' : 'View the text that was evaluated'}</span>
+          <span className="font-medium underline">{summarized ? t('systemOne.playground.viewSummary') : t('systemOne.playground.viewEvaluatedText')}</span>
         </p>
         <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
       </summary>
@@ -143,6 +146,7 @@ function ReductionNotice({ result }: { readonly result: SystemOneResult }) {
 }
 
 export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxStateChars, summarizes, serviceId }: SystemOneInterfaceProps) => {
+  const { t } = useTranslation('common');
   const [acceptsImages, setAcceptsImages] = useState(false);
   useEffect(() => {
     if (serviceId == null) return;
@@ -174,7 +178,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
     const incoming = Array.from(selected);
     const rejected = incoming.filter((f) => isImage(f) && !(acceptsImages && isSupportedImage(f)));
     setError(rejected.length > 0
-      ? `${acceptsImages ? 'Only PNG and JPEG images are supported' : 'This service evaluates text only: images are not supported'} (${rejected.map((f) => f.name).join(', ')})`
+      ? t(acceptsImages ? 'systemOne.playground.imagesPngJpeg' : 'systemOne.playground.imagesNotSupported', { files: rejected.map((f) => f.name).join(', ') })
       : null);
     setFiles((current) => [...current, ...incoming.filter((f) => !rejected.includes(f))]);
     if (fileInput.current) fileInput.current.value = '';
@@ -188,7 +192,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
       const preview = text.trim() !== '' ? text.trim().slice(0, 80) : files.map((f) => f.name).join(', ');
       setHistory((current) => [{ id: nextId.current++, at: new Date(), preview, result }, ...current]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The evaluation failed');
+      setError(err instanceof Error ? err.message : t('systemOne.playground.evaluationFailed'));
     } finally {
       setRunning(false);
     }
@@ -202,25 +206,25 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100"><Gauge className="h-5 w-5 text-emerald-600" aria-hidden="true" /></div>
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{agentName}</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Paste a text (or attach documents{acceptsImages ? ' and images' : ''}) and see the answer to each question.{acceptsImages ? '' : ' Text only.'}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{t(acceptsImages ? 'systemOne.playground.descriptionWithImages' : 'systemOne.playground.descriptionTextOnly')}</p>
         </div>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <label htmlFor="so-text" className="mb-1 block text-sm font-medium text-gray-700">Text to evaluate</label>
+        <label htmlFor="so-text" className="mb-1 block text-sm font-medium text-gray-700">{t('systemOne.playground.textLabel')}</label>
         <textarea id="so-text" rows={6} value={text} onChange={(e) => setText(e.target.value)}
-                  placeholder="Hi, the router has not worked since yesterday and we have an event tomorrow..."
+                  placeholder={t('systemOne.playground.textPlaceholder')}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400/70 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input ref={fileInput} id="so-files" type="file" multiple accept={acceptsImages ? `${TEXT_FILE_ACCEPT},${IMAGE_ACCEPT}` : TEXT_FILE_ACCEPT} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
           <label htmlFor="so-files" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            <FileText className="h-4 w-4" aria-hidden="true" /> Attach documents
+            <FileText className="h-4 w-4" aria-hidden="true" /> {t('systemOne.playground.attachDocuments')}
           </label>
           {files.map((file, index) => (
             <span key={`${file.name}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
               {file.name}
-              <button type="button" aria-label={`Remove ${file.name}`} className="text-gray-500 hover:text-red-600"
+              <button type="button" aria-label={t('systemOne.playground.removeFile', { name: file.name })} className="text-gray-500 hover:text-red-600"
                       onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}>
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>
@@ -232,7 +236,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
           <button type="button" onClick={() => void handleEvaluate()} disabled={!canRun}
                   className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
             {running ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-            {running ? (willSummarize ? 'Summarizing...' : 'Evaluating...') : 'Evaluate'}
+            {running ? (willSummarize ? t('systemOne.playground.summarizing') : t('systemOne.playground.evaluating')) : t('systemOne.playground.evaluate')}
           </button>
         </div>
       </div>
@@ -242,14 +246,14 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
           <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin" aria-hidden="true" />
           <div>
             <p className="font-medium">
-              {willSummarize ? 'Summarizing the text before evaluating it...' : 'Evaluating...'}
+              {willSummarize ? t('systemOne.playground.summarizingStatus') : t('systemOne.playground.evaluating')}
             </p>
             <p className="text-emerald-800">
               {willSummarize
-                ? "The text is longer than the room each question leaves, so the agent's LLM condenses it first. This can take up to a minute."
+                ? t('systemOne.playground.summarizingNote')
                 : slow && summarizes
-                  ? "This is taking longer than usual: long texts are condensed with the agent's LLM first."
-                  : 'Asking the System One server.'}
+                  ? t('systemOne.playground.slowNote')
+                  : t('systemOne.playground.askingServer')}
             </p>
           </div>
         </div>
@@ -260,8 +264,8 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
       </div>
 
       {latest && (
-        <section aria-label="Latest result">
-          <h3 className="mb-2 text-sm font-semibold text-gray-700">Result</h3>
+        <section aria-label={t('systemOne.playground.latestResult')}>
+          <h3 className="mb-2 text-sm font-semibold text-gray-700">{t('systemOne.playground.result')}</h3>
           <ReductionNotice result={latest.result} />
           <div className="space-y-3">
             {Object.entries(latest.result.answers).map(([key, answer]) => (
@@ -269,13 +273,17 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
             ))}
           </div>
           <p className="mt-2 text-xs text-gray-500">
-            Model {latest.result.model}
-            {latest.result.usage && <> · {latest.result.usage.input_tokens} input tokens</>}
+            {t('systemOne.playground.model', { model: latest.result.model })}
+            {latest.result.usage && <> · {t('systemOne.playground.inputTokens', { count: latest.result.usage.input_tokens })}</>}
             {latest.result.timings && (
               <>
                 {' · '}
-                {latest.result.timings.summarization_ms != null && <>summarization {formatMs(latest.result.timings.summarization_ms)} + </>}
-                evaluation {formatMs(latest.result.timings.evaluation_ms)}
+                {latest.result.timings.summarization_ms != null
+                  ? t('systemOne.playground.timingsFull', {
+                    summarization: formatMs(latest.result.timings.summarization_ms),
+                    evaluation: formatMs(latest.result.timings.evaluation_ms),
+                  })
+                  : t('systemOne.playground.timingsEvaluation', { evaluation: formatMs(latest.result.timings.evaluation_ms) })}
               </>
             )}
           </p>
@@ -284,7 +292,7 @@ export const SystemOneInterface = ({ appId, agentId, agentName, questions, maxSt
 
       {older.length > 0 && (
         <details className="rounded-xl border border-gray-200 bg-white p-4">
-          <summary className="cursor-pointer text-sm font-medium text-gray-700">Previous evaluations ({older.length})</summary>
+          <summary className="cursor-pointer text-sm font-medium text-gray-700">{t('systemOne.playground.previous', { count: older.length })}</summary>
           <div className="mt-3 space-y-4">
             {older.map((evaluation) => (
               <div key={evaluation.id}>
