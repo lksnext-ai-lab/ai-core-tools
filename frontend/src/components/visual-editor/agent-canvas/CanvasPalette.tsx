@@ -1,47 +1,35 @@
 import { useId, useState, type CSSProperties, type DragEvent } from 'react';
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { PIECE_VISUALS } from '../nodeKindConfig';
+import { BackgroundImage } from '../../ui/BackgroundImage';
 import { ServiceOptionStatus, serviceStatusId } from '../../ui/ServiceOptionStatus';
 import type { ServiceOptionLike } from '../../../utils/serviceLifecycle';
 import { portsFor, type AgentType, type PieceKind } from './agentPorts';
-import { KIND_PHRASES } from './connectionRules';
+import { PIECE_KINDS } from './connectionRules';
 import type { CanvasPiece } from './useAgentCanvasData';
 
 /** Drag payload type for palette items dropped on the canvas (JSON `{kind, id}`). */
 export const PIECE_DRAG_MIME = 'application/x-mattin-piece';
 
-const MEMORY_ROW_LABEL = 'Memory — coming soon';
-
 interface PaletteCategory {
   readonly kind: PieceKind;
-  readonly title: string;
-  /** Lower-case noun for the "Create ..." button label. */
-  readonly singular: string;
 }
 
 const PALETTE_CATEGORIES: readonly PaletteCategory[] = [
-  { kind: 'ai_service', title: 'AI services', singular: 'AI service' },
-  { kind: 'silo', title: 'Knowledge', singular: 'silo' },
-  { kind: 'skill', title: 'Skills', singular: 'skill' },
-  { kind: 'mcp', title: 'MCP servers', singular: 'MCP server' },
-  { kind: 'agent', title: 'Agents', singular: 'agent' },
-  { kind: 'parser', title: 'Output parsers', singular: 'output parser' },
-  { kind: 'middleware', title: 'Middlewares', singular: 'middleware' },
-  { kind: 'sandbox', title: 'Sandbox', singular: 'sandbox service' },
-  { kind: 'embedding', title: 'Embedding', singular: 'embedding service' },
+  { kind: 'ai_service' },
+  { kind: 'silo' },
+  { kind: 'skill' },
+  { kind: 'mcp' },
+  { kind: 'agent' },
+  { kind: 'parser' },
+  { kind: 'middleware' },
+  { kind: 'sandbox' },
+  { kind: 'embedding' },
 ];
 
-export function pieceKindPhrase(kind: PieceKind): string {
-  return KIND_PHRASES[kind];
-}
-
-/** Lower-case noun per kind, for "Create new …" labels. */
-export const PIECE_SINGULAR: Record<PieceKind, string> = Object.fromEntries(
-  PALETTE_CATEGORIES.map((category) => [category.kind, category.singular]),
-) as Record<PieceKind, string>;
-
 function isPieceKind(value: unknown): value is PieceKind {
-  return typeof value === 'string' && Object.keys(KIND_PHRASES).includes(value);
+  return typeof value === 'string' && (PIECE_KINDS as readonly string[]).includes(value);
 }
 
 /** Reads a palette drag payload; null for anything that is not a `{kind, id}` piece. */
@@ -90,6 +78,7 @@ interface PaletteItemProps {
 }
 
 function PaletteItem({ piece, canEdit, selected, onSelect, onDraggingChange }: PaletteItemProps) {
+  const { t } = useTranslation('common');
   const statusBaseId = useId();
   const visual = PIECE_VISUALS[piece.kind];
   const Icon = visual.icon;
@@ -131,29 +120,29 @@ function PaletteItem({ piece, canEdit, selected, onSelect, onDraggingChange }: P
         }
         aria-describedby={describedBy}
         aria-pressed={onSelect ? selected : undefined}
-        title={isAgentPiece && !piece.isTool ? 'Connecting it turns on Tool agent' : undefined}
-        className={`group flex items-start gap-2 rounded-lg border px-2 py-1.5 transition-shadow ${
-          selected ? 'ring-2 ring-indigo-400' : ''
-        } ${visual.borderClass} ${visual.bgClass} ${
-          draggable ? 'cursor-grab hover:shadow-sm active:cursor-grabbing' : onSelect ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+        title={isAgentPiece && !piece.isTool ? t('agentCanvas.palette.connectTurnsTool') : undefined}
+        className={`group flex items-start gap-2 rounded-md border px-2 py-1.5 transition-colors ${
+          selected
+            ? 'border-2 border-bg-soft bg-surface-hover dark:border-bronze-border-dark dark:bg-btCard-hover'
+            : 'border-line bg-surface hover:bg-surface-hover dark:border-btCard-border-dark dark:bg-surface-dark dark:hover:bg-surface-hover-dark'
+        } focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:focus-visible:ring-accent-dark ${
+          draggable ? 'cursor-grab active:cursor-grabbing' : onSelect ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
         }`}
       >
-        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${visual.chipClass}`}>
-          <Icon className={`h-3.5 w-3.5 ${visual.iconClass}`} aria-hidden="true" />
-        </div>
+        <BackgroundImage icon={Icon} size={28} iconSize={14} />
         <div className="min-w-0 flex-1">
-          <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-gray-100">
-            <span className="truncate group-hover:whitespace-normal group-hover:break-words" title={piece.name}>
+          <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-medium text-fg dark:text-fg-dark">
+            <span className="min-w-0 break-words" title={piece.name}>
               {piece.name}
             </span>
             {piece.isSystem && (
-              <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
-                System
+              <span className="shrink-0 rounded-md bg-surface-tint px-1.5 py-0.5 text-[10px] font-medium text-fg-secondary dark:bg-surface-tint-dark dark:text-fg-secondary-dark">
+                {t('agentCanvas.palette.systemBadge')}
               </span>
             )}
             {isAgentPiece && piece.isTool && (
-              <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-                Tool
+              <span className="shrink-0 rounded-md bg-surface-tint px-1.5 py-0.5 text-[10px] font-medium text-fg-secondary dark:bg-surface-tint-dark dark:text-fg-secondary-dark">
+                {t('agentCanvas.palette.toolBadge')}
               </span>
             )}
           </p>
@@ -180,6 +169,7 @@ export function CanvasPalette({
   onSelectPiece,
   onDraggingChange,
 }: CanvasPaletteProps) {
+  const { t } = useTranslation('common');
   const baseId = useId();
   const [filter, setFilter] = useState('');
   /** Whole palette folded into a narrow rail, to give the canvas the room. */
@@ -212,22 +202,23 @@ export function CanvasPalette({
     .filter(({ items }) => needle === '' || items.length > 0);
   // Empty categories sink to the end (stable sort keeps the category order inside each group).
   const orderedGroups = [...groups].sort((a, b) => (a.items.length === 0 ? 1 : 0) - (b.items.length === 0 ? 1 : 0));
-  const showMemory = agentType === 'agent' && (needle === '' || MEMORY_ROW_LABEL.toLowerCase().includes(needle));
+  const memoryLabel = t('agentCanvas.palette.memoryComingSoon');
+  const showMemory = agentType === 'agent' && (needle === '' || memoryLabel.toLowerCase().includes(needle));
   const noMatches = needle !== '' && groups.length === 0 && !showMemory;
 
   if (railed) {
     return (
       <aside
-        aria-label="Pieces palette"
-        className="flex w-full shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white p-2 md:w-12 dark:border-gray-700 dark:bg-gray-800"
+        aria-label={t('agentCanvas.palette.ariaLabel')}
+        className="flex w-full shrink-0 items-center justify-center rounded-md border border-line bg-surface p-2 md:w-12 dark:border-btCard-border-dark dark:bg-surface-dark"
       >
         <button
           type="button"
           onClick={() => setRailed(false)}
           aria-expanded={false}
-          aria-label="Expand pieces palette"
-          title="Expand pieces palette"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-300 dark:hover:bg-gray-700"
+          aria-label={t('agentCanvas.palette.expand')}
+          title={t('agentCanvas.palette.expand')}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-fg-secondary transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:focus-visible:ring-accent-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark"
         >
           <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -237,17 +228,17 @@ export function CanvasPalette({
 
   return (
     <aside
-      aria-label="Pieces palette"
+      aria-label={t('agentCanvas.palette.ariaLabel')}
       style={style}
-      className="flex max-h-72 w-full shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white md:max-h-none md:w-[var(--palette-w)] dark:border-gray-700 dark:bg-gray-800"
+      className="flex max-h-72 w-full shrink-0 flex-col overflow-hidden rounded-md border border-line bg-surface md:max-h-none md:w-[var(--palette-w)] dark:border-btCard-border-dark dark:bg-surface-dark"
     >
-      <div className="flex items-center gap-1 border-b border-gray-200 p-2 dark:border-gray-700">
+      <div className="flex items-center gap-1 border-b border-line p-2 dark:border-line-dark">
         <label htmlFor={`${baseId}-filter`} className="sr-only">
-          Filter pieces
+          {t('agentCanvas.palette.filter')}
         </label>
         <div className="relative min-w-0 flex-1">
           <Search
-            className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+            className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-tertiary dark:text-fg-tertiary-dark"
             aria-hidden="true"
           />
           <input
@@ -255,17 +246,17 @@ export function CanvasPalette({
             type="search"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter pieces"
-            className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-7 pr-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+            placeholder={t('agentCanvas.palette.filter')}
+            className="w-full rounded-md border border-line bg-surface-hover py-1.5 pl-7 pr-2 text-sm text-fg placeholder:text-fg-tertiary focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink dark:border-line-dark dark:bg-surface-hover-dark dark:text-fg-dark dark:placeholder:text-fg-tertiary-dark dark:focus:border-ink-dark dark:focus:ring-ink-dark"
           />
         </div>
         <button
           type="button"
           onClick={() => setRailed(true)}
           aria-expanded={true}
-          aria-label="Collapse pieces palette"
-          title="Collapse pieces palette"
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-400 dark:hover:bg-gray-700"
+          aria-label={t('agentCanvas.palette.collapse')}
+          title={t('agentCanvas.palette.collapse')}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-tertiary transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:focus-visible:ring-accent-dark dark:text-fg-tertiary-dark dark:hover:bg-surface-hover-dark"
         >
           <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -285,24 +276,24 @@ export function CanvasPalette({
                     onClick={() => toggleKind(category.kind)}
                     aria-expanded={open}
                     aria-controls={listId}
-                    className="flex w-full items-center gap-1 rounded-md py-0.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 transition-colors hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="flex w-full items-center gap-1 rounded-md py-0.5 text-left text-[11px] font-medium uppercase tracking-[0.05em] text-fg-tertiary transition-colors hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:focus-visible:ring-accent-dark dark:text-fg-tertiary-dark dark:hover:text-fg-dark"
                   >
                     {open ? (
                       <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     )}
-                    <span className="truncate">{category.title}</span>
-                    <span className="font-normal normal-case text-gray-400 dark:text-gray-500">{items.length}</span>
+                    <span className="truncate">{t(`agentCanvas.palette.categories.${category.kind}`)}</span>
+                    <span className="font-normal normal-case text-fg-tertiary dark:text-fg-tertiary-dark">{items.length}</span>
                   </button>
                 </h3>
                 {canCreateFor(category.kind) && (
                   <button
                     type="button"
                     onClick={() => onCreate(category.kind)}
-                    aria-label={`Create ${category.singular}`}
-                    title={`Create ${category.singular}`}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-indigo-600 transition-colors hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
+                    aria-label={t('agentCanvas.palette.create', { kind: t(`agentCanvas.palette.singular.${category.kind}`) })}
+                    title={t('agentCanvas.palette.create', { kind: t(`agentCanvas.palette.singular.${category.kind}`) })}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:focus-visible:ring-accent-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark dark:hover:text-fg-dark"
                   >
                     <Plus className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -321,7 +312,7 @@ export function CanvasPalette({
                     />
                   ))}
                   {items.length === 0 && (
-                    <li className="px-1 py-1 text-xs text-gray-400 dark:text-gray-500">None yet</li>
+                    <li className="px-1 py-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('agentCanvas.palette.none')}</li>
                   )}
                 </ul>
               )}
@@ -333,14 +324,14 @@ export function CanvasPalette({
           <button
             type="button"
             disabled
-            className="mt-1 w-full rounded-lg border border-dashed border-gray-300 px-2 py-1.5 text-left text-sm text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-400"
+            className="mt-1 w-full rounded-md border border-dashed border-line-strong px-2 py-1.5 text-left text-sm text-fg-tertiary disabled:cursor-not-allowed disabled:opacity-60 dark:border-line-strong-dark dark:text-fg-tertiary-dark"
           >
-            {MEMORY_ROW_LABEL}
+            {memoryLabel}
           </button>
         )}
 
         {noMatches && (
-          <p className="px-1 py-2 text-xs text-gray-500 dark:text-gray-400">No pieces match this filter.</p>
+          <p className="px-1 py-2 text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('agentCanvas.palette.noMatches')}</p>
         )}
       </div>
     </aside>

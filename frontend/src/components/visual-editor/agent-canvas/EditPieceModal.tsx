@@ -3,9 +3,12 @@ import { toast } from 'sonner';
 import { apiService } from '../../../services/api';
 import { useApiMutation } from '../../../hooks/useApiMutation';
 import { useSettingsCache } from '../../../contexts/SettingsCacheContext';
-import { MESSAGES, errorMessage } from '../../../constants/messages';
+import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../../constants/messages';
 import type { SandboxServiceFormData, ServiceFormData } from '../../../types/services';
 import Modal from '../../ui/Modal';
+import { LoadingState } from '../../ui/LoadingState';
+import Alert from '../../ui/Alert';
 import SkillForm from '../../forms/SkillForm';
 import MCPConfigForm from '../../forms/MCPConfigForm';
 import DataStructureForm from '../../forms/DataStructureForm';
@@ -33,24 +36,8 @@ const EDITABLE_KINDS: ReadonlySet<PieceKind> = new Set([
   'parser',
 ]);
 
-const EDIT_TITLES: Partial<Record<PieceKind, string>> = {
-  skill: 'Edit Skill',
-  mcp: 'Edit MCP Config',
-  middleware: 'Edit Middleware',
-  parser: 'Edit Data Structure',
-};
-
-const PIECE_LABELS: Record<PieceKind, string> = {
-  ai_service: 'AI service',
-  embedding: 'embedding service',
-  sandbox: 'sandbox service',
-  silo: 'silo',
-  skill: 'skill',
-  mcp: 'MCP config',
-  agent: 'agent',
-  parser: 'data structure',
-  middleware: 'middleware',
-};
+/** Kinds with a dedicated edit title; the rest fall back to the generic one. */
+const TITLED_KINDS: ReadonlySet<PieceKind> = new Set(['skill', 'mcp', 'middleware', 'parser']);
 
 /**
  * Edit overlay opened from the canvas inspector: reuses each piece's own
@@ -59,7 +46,9 @@ const PIECE_LABELS: Record<PieceKind, string> = {
  * editor too. Stays on top of the canvas instead of navigating away.
  */
 export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<EditPieceModalProps>) {
+  const { t } = useTranslation('common');
   const mutate = useApiMutation();
+  const entityName = (k: PieceKind): string => t(`agentCanvas.createPiece.entity.${k}`);
   const settingsCache = useSettingsCache();
   // `any` on purpose: the fetched detail feeds each form's own prop shape,
   // which its local interface under-declares (as the settings pages do).
@@ -90,14 +79,14 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
         if (!cancelled) setDetail(fetched);
       } catch (err) {
         if (cancelled) return;
-        toast.error(errorMessage(err, MESSAGES.LOAD_FAILED(PIECE_LABELS[kind])));
+        toast.error(errorMessage(err, t('agentCanvas.editPiece.loadFailed', { entity: entityName(kind) })));
         setFailed(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [appId, kind, piece.id, editable]);
+  }, [appId, kind, piece.id, editable, t]);
 
   /** Drops the settings-cache list this kind's settings page reads, so it reloads with the change. */
   function invalidateSettingsCache(): void {
@@ -127,9 +116,9 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
   /** Saves through the same toast-wrapped mutation the settings pages use, then reports the save. */
   async function save(label: string, update: () => Promise<unknown>): Promise<void> {
     const updated = await mutate(update, {
-      loading: MESSAGES.UPDATING(label),
-      success: MESSAGES.UPDATED(label),
-      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED(label)),
+      loading: t('agentCanvas.editPiece.updating', { entity: label }),
+      success: t('agentCanvas.editPiece.updated', { entity: label.charAt(0).toUpperCase() + label.slice(1) }),
+      error: (err) => errorMessage(err, t('agentCanvas.editPiece.saveFailed', { entity: label })),
     });
     if (updated === undefined) return;
     invalidateSettingsCache();
@@ -138,7 +127,7 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
 
   if (!editable) return null;
 
-  const title = EDIT_TITLES[kind] ?? 'Edit service';
+  const title = TITLED_KINDS.has(kind) ? t(`agentCanvas.editPiece.title.${kind}`) : t('agentCanvas.editPiece.title.service');
 
   if (kind === 'embedding' || kind === 'sandbox') {
     if (detail) {
@@ -151,7 +140,7 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
           service={detail}
           onClose={onClose}
           onSave={(data: ServiceFormData | SandboxServiceFormData) =>
-            save(PIECE_LABELS[kind], () =>
+            save(entityName(kind), () =>
               kind === 'embedding'
                 ? apiService.updateEmbeddingService(appId, piece.id, data)
                 : apiService.updateSandboxService(appId, piece.id, data),
@@ -162,7 +151,7 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
     }
     return (
       <Modal isOpen onClose={onClose} title={title}>
-        <LoadingOrFailed failed={failed} label={PIECE_LABELS[kind]} />
+        <LoadingOrFailed failed={failed} label={entityName(kind)} />
       </Modal>
     );
   }
@@ -172,14 +161,14 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
       {detail && kind === 'skill' && (
         <SkillForm
           skill={detail}
-          onSubmit={(data) => save('skill', () => apiService.updateSkill(appId, piece.id, data))}
+          onSubmit={(data) => save(entityName('skill'), () => apiService.updateSkill(appId, piece.id, data))}
           onCancel={onClose}
         />
       )}
       {detail && kind === 'mcp' && (
         <MCPConfigForm
           mcpConfig={detail}
-          onSubmit={(data) => save('MCP config', () => apiService.updateMCPConfig(appId, piece.id, data))}
+          onSubmit={(data) => save(entityName('mcp'), () => apiService.updateMCPConfig(appId, piece.id, data))}
           onCancel={onClose}
         />
       )}
@@ -187,26 +176,26 @@ export function EditPieceModal({ appId, piece, onClose, onSaved }: Readonly<Edit
         <MiddlewareForm
           middleware={detail}
           appId={appId}
-          onSubmit={(data) => save('middleware', () => apiService.updateMiddleware(appId, piece.id, data))}
+          onSubmit={(data) => save(entityName('middleware'), () => apiService.updateMiddleware(appId, piece.id, data))}
           onCancel={onClose}
         />
       )}
       {detail && kind === 'parser' && (
         <DataStructureForm
           dataStructure={detail}
-          onSubmit={(data) => save('data structure', () => apiService.updateOutputParser(appId, piece.id, data))}
+          onSubmit={(data) => save(entityName('parser'), () => apiService.updateOutputParser(appId, piece.id, data))}
           onCancel={onClose}
         />
       )}
-      {!detail && <LoadingOrFailed failed={failed} label={PIECE_LABELS[kind]} />}
+      {!detail && <LoadingOrFailed failed={failed} label={entityName(kind)} />}
     </Modal>
   );
 }
 
 function LoadingOrFailed({ failed, label }: { readonly failed: boolean; readonly label: string }) {
-  return (
-    <p role="status" className={failed ? 'text-sm text-red-600 dark:text-red-400' : 'text-sm text-gray-500 dark:text-gray-400'}>
-      {failed ? `Failed to load the ${label}.` : MESSAGES.LOADING(label)}
-    </p>
-  );
+  const { t } = useTranslation('common');
+  if (failed) {
+    return <Alert type="error" message={t('agentCanvas.editPiece.failedToLoad', { entity: label })} />;
+  }
+  return <LoadingState variant="inline" message={t('agentCanvas.editPiece.loading', { entity: label })} />;
 }

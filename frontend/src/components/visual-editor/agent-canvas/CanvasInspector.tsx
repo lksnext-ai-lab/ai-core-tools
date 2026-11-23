@@ -2,6 +2,11 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type F
 import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Pencil } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { FormCheckbox, FormField, FormTextArea } from '../../ui/FormField';
+import { BackgroundImage } from '../../ui/BackgroundImage';
+import { Badge } from '../../ui/Badge';
+import { buttonAppSizeClasses, buttonAppVariantClasses } from '../../ui/ButtonApp';
 import RagConfigSection, { type RagConfigValue, type RagFixedFilter } from '../../forms/RagConfigSection';
 import type { SearchFilterMetadataField } from '../../playground/SearchFilters';
 import { apiService, type Agent, type DataStructure, type Silo } from '../../../services/api';
@@ -55,14 +60,8 @@ const TEMPERATURE_MAX = 2;
 /** Keys of the RAG config that the threshold strategy depends on. */
 const THRESHOLD_KEYS: ReadonlyArray<keyof RagConfigValue> = ['rag_search_type', 'rag_score_threshold'];
 
-const INPUT_CLASS =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500';
-const LABEL_CLASS = 'mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300';
-const HELP_CLASS = 'mt-1 text-xs text-gray-500 dark:text-gray-400';
 const LINK_CLASS =
-  'rounded text-sm font-medium text-indigo-600 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-300';
-const CHECKBOX_CLASS =
-  'mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-900';
+  'rounded-sm text-sm font-medium text-fg underline underline-offset-2 hover:text-fg-secondary focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent dark:text-fg-dark dark:hover:text-fg-secondary-dark dark:focus-visible:outline-accent-dark';
 
 function savedAgentFields(agent: Agent): AgentFieldValues {
   return {
@@ -173,40 +172,6 @@ function useDrafts<T extends object>(): Drafts<T> {
   };
 }
 
-interface ToggleFieldProps {
-  readonly id: string;
-  readonly label: string;
-  readonly help: string;
-  readonly checked: boolean;
-  readonly disabled: boolean;
-  readonly onToggle: (checked: boolean) => void;
-}
-
-function ToggleField({ id, label, help, checked, disabled, onToggle }: ToggleFieldProps) {
-  const helpId = `${id}-help`;
-  return (
-    <div className="flex items-start gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-900/40">
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        aria-describedby={helpId}
-        onChange={(event) => onToggle(event.currentTarget.checked)}
-        className={CHECKBOX_CLASS}
-      />
-      <div className="min-w-0">
-        <label htmlFor={id} className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          {label}
-        </label>
-        <p id={helpId} className={HELP_CLASS}>
-          {help}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 interface AgentFieldsProps {
   readonly agent: Agent;
   readonly agentType: AgentType;
@@ -216,6 +181,7 @@ interface AgentFieldsProps {
 
 /** Editable fields of the selected agent. Text saves on blur (when changed); toggles and the number save on change. */
 function AgentFields({ agent, agentType, canEdit, onSaveFields }: AgentFieldsProps) {
+  const { t } = useTranslation('common');
   const baseId = useId();
   const saved = useMemo(() => savedAgentFields(agent), [agent]);
   const drafts = useDrafts<AgentFieldValues>();
@@ -241,7 +207,7 @@ function AgentFields({ agent, agentType, canEdit, onSaveFields }: AgentFieldsPro
     if (field === 'name' && text.trim() === '') {
       // A blank name is never saved: drop the draft so the field shows the saved name again.
       drafts.clear('name');
-      toast.error('Name is required');
+      toast.error(t('agentCanvas.inspector.nameRequired'));
       return;
     }
     void persist(field, text);
@@ -255,35 +221,29 @@ function AgentFields({ agent, agentType, canEdit, onSaveFields }: AgentFieldsPro
   }
 
   const textInput = (field: TextField, label: string) => (
-    <div>
-      <label htmlFor={`${baseId}-${field}`} className={LABEL_CLASS}>
-        {label}
-      </label>
-      <input
-        id={`${baseId}-${field}`}
-        type="text"
-        value={values[field]}
-        disabled={!canEdit}
-        onChange={(event) => drafts.set(field, event.currentTarget.value)}
-        onBlur={(event) => commitText(field, event.currentTarget.value)}
-        className={INPUT_CLASS}
-      />
-    </div>
+    <FormField
+      id={`${baseId}-${field}`}
+      label={label}
+      value={values[field]}
+      disabled={!canEdit}
+      onChange={(event) => drafts.set(field, event.currentTarget.value)}
+      onBlur={(event) => commitText(field, event.currentTarget.value)}
+    />
   );
 
+  // FormTextArea has no onBlur prop; blur bubbles, so the wrapper commits the text on leaving it.
   const promptInput = (field: TextField, label: string) => (
-    <div>
-      <label htmlFor={`${baseId}-${field}`} className={LABEL_CLASS}>
-        {label}
-      </label>
-      <textarea
+    <div onBlur={(event) => {
+        if (event.target instanceof HTMLTextAreaElement) commitText(field, event.target.value);
+      }}>
+      <FormTextArea
         id={`${baseId}-${field}`}
+        label={label}
         rows={6}
         value={values[field]}
         disabled={!canEdit}
         onChange={(event) => drafts.set(field, event.currentTarget.value)}
-        onBlur={(event) => commitText(field, event.currentTarget.value)}
-        className={`${INPUT_CLASS} resize-y`}
+        textareaClassName="resize-y"
       />
     </div>
   );
@@ -291,85 +251,78 @@ function AgentFields({ agent, agentType, canEdit, onSaveFields }: AgentFieldsPro
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{isOcr ? 'OCR agent' : 'Agent'}</h3>
+        <h3 className="font-display text-[17px] font-medium text-fg dark:text-fg-dark">{isOcr ? t('agentCanvas.kinds.ocrAgent') : t('agentCanvas.kinds.agent')}</h3>
         <Link to="?view=form" className={LINK_CLASS}>
-          Open full editor
+          {t('agentCanvas.inspector.openFullEditor')}
         </Link>
       </div>
 
-      {textInput('name', 'Name')}
-      {textInput('description', 'Description')}
+      {textInput('name', t('agentCanvas.inspector.fields.name'))}
+      {textInput('description', t('agentCanvas.inspector.fields.description'))}
       {isOcr ? (
         <>
-          {promptInput('vision_system_prompt', 'Vision prompt')}
-          {promptInput('text_system_prompt', 'Text prompt')}
+          {promptInput('vision_system_prompt', t('agentCanvas.inspector.fields.visionPrompt'))}
+          {promptInput('text_system_prompt', t('agentCanvas.inspector.fields.textPrompt'))}
         </>
       ) : (
-        promptInput('system_prompt', 'System prompt')
+        promptInput('system_prompt', t('agentCanvas.inspector.fields.systemPrompt'))
       )}
 
-      <div>
-        <label htmlFor={`${baseId}-temperature`} className={LABEL_CLASS}>
-          Temperature
-        </label>
-        <input
-          id={`${baseId}-temperature`}
-          type="number"
-          min={TEMPERATURE_MIN}
-          max={TEMPERATURE_MAX}
-          step={0.1}
-          value={temperatureText ?? String(values.temperature)}
-          disabled={!canEdit}
-          aria-describedby={`${baseId}-temperature-help`}
-          onChange={(event) => setTemperatureText(event.currentTarget.value)}
-          onBlur={(event) => commitTemperature(event.currentTarget.value)}
-          className={INPUT_CLASS}
-        />
-        <p id={`${baseId}-temperature-help`} className={HELP_CLASS}>
-          0 = deterministic, 2 = very creative.
-        </p>
-      </div>
+      <FormField
+        id={`${baseId}-temperature`}
+        label={t('agentCanvas.inspector.fields.temperature')}
+        type="number"
+        min={TEMPERATURE_MIN}
+        max={TEMPERATURE_MAX}
+        step={0.1}
+        value={temperatureText ?? String(values.temperature)}
+        disabled={!canEdit}
+        helpText={t('agentCanvas.inspector.fields.temperatureHelp')}
+        onChange={(event) => setTemperatureText(event.currentTarget.value)}
+        onBlur={(event) => commitTemperature(event.currentTarget.value)}
+      />
 
       <div className="space-y-2">
-        <ToggleField
+        <FormCheckbox
           id={`${baseId}-is_tool`}
-          label="Tool agent"
-          help="Can be used by other agents"
+          label={t('agentCanvas.inspector.toggles.isTool.label')}
+          helpText={t('agentCanvas.inspector.toggles.isTool.help')}
           checked={values.is_tool}
           disabled={!canEdit}
-          onToggle={(checked) => void persist('is_tool', checked)}
+          onChange={(event) => void persist('is_tool', event.currentTarget.checked)}
         />
-        <ToggleField
+        <FormCheckbox
           id={`${baseId}-has_memory`}
-          label="Conversational"
-          help="Maintains conversation memory"
+          label={t('agentCanvas.inspector.toggles.hasMemory.label')}
+          helpText={t('agentCanvas.inspector.toggles.hasMemory.help')}
           checked={values.has_memory}
           disabled={!canEdit}
-          onToggle={(checked) => {
+          onChange={(event) => {
+            const checked = event.currentTarget.checked;
             // Backend rule: conversational agents index chat uploads in a per-conversation
             // silo, which needs a media embedding service. Refuse without one (non-OCR only).
             if (checked && !isOcr && !agent.media_embedding_service_id) {
-              toast.error('Conversational agents need a media embedding service to index files uploaded in chat — connect one to the Media embedding port first');
+              toast.error(t('agentCanvas.inspector.memoryNeedsMediaEmbedding'));
               return;
             }
             void persist('has_memory', checked);
           }}
         />
-        <ToggleField
+        <FormCheckbox
           id={`${baseId}-enable_code_interpreter`}
-          label="Code interpreter"
-          help="Allows the agent to execute Python code"
+          label={t('agentCanvas.inspector.toggles.codeInterpreter.label')}
+          helpText={t('agentCanvas.inspector.toggles.codeInterpreter.help')}
           checked={values.enable_code_interpreter}
           disabled={!canEdit}
-          onToggle={(checked) => void persist('enable_code_interpreter', checked)}
+          onChange={(event) => void persist('enable_code_interpreter', event.currentTarget.checked)}
         />
-        <ToggleField
+        <FormCheckbox
           id={`${baseId}-skill_router_enabled`}
-          label="Skill router"
-          help="Let the model pre-select at most 2 skills per turn"
+          label={t('agentCanvas.inspector.toggles.skillRouter.label')}
+          helpText={t('agentCanvas.inspector.toggles.skillRouter.help')}
           checked={values.skill_router_enabled}
           disabled={!canEdit}
-          onToggle={(checked) => void persist('skill_router_enabled', checked)}
+          onChange={(event) => void persist('skill_router_enabled', event.currentTarget.checked)}
         />
       </div>
     </div>
@@ -384,6 +337,7 @@ interface KnowledgeSettingsProps {
 
 /** RAG retrieval settings for the agent's knowledge edge. Saves on leaving the section, or at once when a filter row is removed. */
 function KnowledgeSettings({ agent, canEdit, onSaveFields }: KnowledgeSettingsProps) {
+  const { t } = useTranslation('common');
   const saved = useMemo(() => savedRagValue(agent), [agent]);
   const drafts = useDrafts<RagConfigValue>();
   const value = useMemo<RagConfigValue>(() => ({ ...saved, ...drafts.values }), [saved, drafts.values]);
@@ -430,7 +384,7 @@ function KnowledgeSettings({ agent, canEdit, onSaveFields }: KnowledgeSettingsPr
       patch.rag_score_threshold = null;
     }
     if (thresholdMissing && (pending.rag_search_type !== undefined || pending.rag_score_threshold !== undefined)) {
-      toast.info('Score threshold (0–1) is required before the threshold strategy can be saved');
+      toast.info(t('agentCanvas.inspector.thresholdRequired'));
     }
     if (Object.keys(patch).length === 0) return;
 
@@ -462,15 +416,19 @@ function KnowledgeSettings({ agent, canEdit, onSaveFields }: KnowledgeSettingsPr
       onBlur={handleBlur}
       className="m-0 min-w-0 border-0 p-0 [&_:disabled]:cursor-not-allowed [&_:disabled]:opacity-60"
     >
-      <legend className="sr-only">Retrieval settings</legend>
+      <legend className="sr-only">{t('agentCanvas.inspector.retrievalSettings')}</legend>
       <RagConfigSection value={value} onChange={handleChange} metadataFields={metadataFields} loadingMetadata={false} />
     </fieldset>
   );
 }
 
 interface PieceInfoRow {
-  readonly label: string;
-  readonly value: string;
+  /** Suffix under agentCanvas.inspector.info. */
+  readonly labelKey: string;
+  /** Literal value (names, numbers, dates). */
+  readonly value?: string;
+  /** Full i18n key of a translatable value; wins over `value`. */
+  readonly valueKey?: string;
 }
 
 interface PieceInfo {
@@ -491,12 +449,14 @@ function agentPieceInfo(piece: CanvasPiece): PieceInfo {
   if (!info) return NO_PIECE_INFO;
   return {
     rows: [
-      { label: 'Type', value: info.type === 'ocr_agent' ? 'OCR agent' : 'Agent' },
-      { label: 'Model', value: info.modelName ?? 'No model' },
-      { label: 'Tool agent', value: piece.isTool ? 'Yes' : 'No' },
-      { label: 'Tools', value: String(info.toolCount) },
-      { label: 'Requests', value: String(info.requestCount) },
-      { label: 'Last used', value: info.lastUsedDate ? new Date(info.lastUsedDate).toLocaleString() : 'Never' },
+      { labelKey: 'type', valueKey: info.type === 'ocr_agent' ? 'agentCanvas.kinds.ocrAgent' : 'agentCanvas.kinds.agent' },
+      info.modelName ? { labelKey: 'model', value: info.modelName } : { labelKey: 'model', valueKey: 'agentCanvas.inspector.info.noModel' },
+      { labelKey: 'toolAgent', valueKey: piece.isTool ? 'agentCanvas.inspector.info.yes' : 'agentCanvas.inspector.info.no' },
+      { labelKey: 'tools', value: String(info.toolCount) },
+      { labelKey: 'requests', value: String(info.requestCount) },
+      info.lastUsedDate
+        ? { labelKey: 'lastUsed', value: new Date(info.lastUsedDate).toLocaleString() }
+        : { labelKey: 'lastUsed', valueKey: 'agentCanvas.inspector.info.never' },
     ],
     description: info.description,
   };
@@ -523,9 +483,9 @@ function usePieceInfo(appId: number, piece: CanvasPiece): PieceInfo {
           const service = await apiService.getAIService(appId, piece.id);
           next = {
             rows: [
-              { label: 'Model', value: service.model_name || '—' },
-              { label: 'Provider', value: service.provider || '—' },
-              { label: 'Video', value: service.supports_video ? 'Supported' : 'Not supported' },
+              { labelKey: 'model', value: service.model_name || '—' },
+              { labelKey: 'provider', value: service.provider || '—' },
+              { labelKey: 'video', valueKey: service.supports_video ? 'agentCanvas.inspector.info.supported' : 'agentCanvas.inspector.info.notSupported' },
             ],
           };
           break;
@@ -534,23 +494,23 @@ function usePieceInfo(appId: number, piece: CanvasPiece): PieceInfo {
           const service = await apiService.getEmbeddingService(appId, piece.id);
           next = {
             rows: [
-              { label: 'Model', value: service.model_name || '—' },
-              { label: 'Provider', value: service.provider || '—' },
+              { labelKey: 'model', value: service.model_name || '—' },
+              { labelKey: 'provider', value: service.provider || '—' },
             ],
           };
           break;
         }
         case 'sandbox': {
           const service = (await apiService.getSandboxService(appId, piece.id)) as { provider?: string };
-          next = { rows: [{ label: 'Provider', value: service.provider || '—' }] };
+          next = { rows: [{ labelKey: 'provider', value: service.provider || '—' }] };
           break;
         }
         case 'silo': {
           const silo: Silo = await apiService.getSilo(appId, piece.id);
           next = {
             rows: [
-              { label: 'Vector DB', value: silo.vector_db_type || '—' },
-              { label: 'Documents', value: String(silo.docs_count) },
+              { labelKey: 'vectorDb', value: silo.vector_db_type || '—' },
+              { labelKey: 'documents', value: String(silo.docs_count) },
             ],
             description: silo.description,
           };
@@ -564,7 +524,7 @@ function usePieceInfo(appId: number, piece: CanvasPiece): PieceInfo {
         case 'mcp': {
           const config: MCPConfig = await apiService.getMCPConfig(appId, piece.id);
           next = {
-            rows: [{ label: 'Transport', value: config.transport_type || '—' }],
+            rows: [{ labelKey: 'transport', value: config.transport_type || '—' }],
             description: config.description,
           };
           break;
@@ -572,7 +532,7 @@ function usePieceInfo(appId: number, piece: CanvasPiece): PieceInfo {
         case 'parser': {
           const parser: DataStructure = await apiService.getOutputParser(appId, piece.id);
           next = {
-            rows: [{ label: 'Fields', value: String(parser.fields?.length ?? parser.field_count ?? 0) }],
+            rows: [{ labelKey: 'fields', value: String(parser.fields?.length ?? parser.field_count ?? 0) }],
             description: parser.description,
           };
           break;
@@ -580,7 +540,7 @@ function usePieceInfo(appId: number, piece: CanvasPiece): PieceInfo {
         case 'middleware': {
           const middleware: Middleware = await apiService.getMiddleware(appId, piece.id);
           next = {
-            rows: [{ label: 'Type', value: middleware.middleware_type ? prettyWords(middleware.middleware_type) : '—' }],
+            rows: [{ labelKey: 'type', value: middleware.middleware_type ? prettyWords(middleware.middleware_type) : '—' }],
             description: middleware.description,
           };
           break;
@@ -600,13 +560,14 @@ function usePieceInfo(appId: number, piece: CanvasPiece): PieceInfo {
   return info;
 }
 
-const INFO_LABEL_CLASS = 'shrink-0 text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500';
-const INFO_VALUE_CLASS = 'min-w-0 truncate text-xs font-medium text-gray-900 group-hover:whitespace-normal group-hover:break-words dark:text-gray-100';
-const EDIT_BLOB_CLASS =
-  'inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-600 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-indigo-300 dark:hover:border-indigo-500 dark:hover:bg-indigo-900/40';
+const INFO_LABEL_CLASS = 'shrink-0 text-[11px] font-medium uppercase tracking-wide text-fg-tertiary dark:text-fg-tertiary-dark';
+const INFO_VALUE_CLASS = 'min-w-0 truncate text-xs font-medium text-fg group-hover:whitespace-normal group-hover:break-words dark:text-fg-dark';
+const EDIT_BLOB_CLASS = `inline-flex cursor-pointer items-center justify-center gap-2 font-display font-normal tracking-[-0.02em] transition-colors ${buttonAppSizeClasses.compact} rounded-md ${buttonAppVariantClasses.table} focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent dark:focus-visible:outline-accent-dark disabled:cursor-not-allowed disabled:opacity-50`;
 
-function EditBlob(props: { readonly disabled?: boolean; readonly onClick?: () => void; readonly label?: string; readonly to?: string; readonly state?: Record<string, string> }) {
-  const { disabled, onClick, label = 'Edit', to, state } = props;
+function EditBlob(props: { readonly disabled?: boolean; readonly onClick?: () => void; readonly to?: string; readonly state?: Record<string, string> }) {
+  const { t } = useTranslation('common');
+  const { disabled, onClick, to, state } = props;
+  const label = t('agentCanvas.inspector.edit');
   if (to) {
     return (
       <Link to={to} state={state} className={EDIT_BLOB_CLASS}>
@@ -616,7 +577,13 @@ function EditBlob(props: { readonly disabled?: boolean; readonly onClick?: () =>
     );
   }
   return (
-    <button type="button" disabled={disabled} title={disabled ? 'Administrator role required' : undefined} onClick={onClick} className={EDIT_BLOB_CLASS}>
+    <button
+      type="button"
+      disabled={disabled}
+      title={disabled ? t('agentCanvas.inspector.adminRequired') : undefined}
+      onClick={onClick}
+      className={EDIT_BLOB_CLASS}
+    >
       <Pencil className="h-3 w-3" aria-hidden="true" />
       {label}
     </button>
@@ -637,8 +604,8 @@ interface PieceDetailsProps {
 }
 
 function PieceDetails({ appId, piece, connection, canEditShared, onEditService, onEditPiece }: PieceDetailsProps) {
+  const { t } = useTranslation('common');
   const visual = PIECE_VISUALS[piece.kind];
-  const Icon = visual.icon;
   const location = useLocation();
   const info = usePieceInfo(appId, piece);
   const path = pieceEditPath(appId, piece);
@@ -646,48 +613,43 @@ function PieceDetails({ appId, piece, connection, canEditShared, onEditService, 
   const isAgent = piece.kind === 'agent';
   // Wizard kinds are shared resources and need ADMINISTRATOR; silos and agents open their own page.
   const disabled = !isSilo && !isAgent && !canEditShared;
+  // The kinds captions are keyed by the graph kind name; the AI service piece is "service".
+  const captionKey = piece.kind === 'ai_service' ? 'service' : piece.kind;
 
   return (
     <div className="space-y-4">
       <div className="group flex items-center gap-3">
-        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${visual.chipClass}`}>
-          <Icon className={`h-4 w-4 ${visual.iconClass}`} aria-hidden="true" />
-        </div>
+        <BackgroundImage icon={visual.icon} size={34} iconSize={17} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className={`text-xs font-medium ${visual.captionClass}`}>{visual.typeCaption}</p>
-            {piece.isSystem && (
-              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
-                System
-              </span>
-            )}
-            {piece.isTool && (
-              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-                Tool
-              </span>
-            )}
+            <p className="text-xs font-medium text-fg-tertiary dark:text-fg-tertiary-dark">{t(`agentCanvas.kinds.${captionKey}`)}</p>
+            {piece.isSystem && <Badge label={t('agentCanvas.inspector.badges.system')} variant="info" />}
+            {piece.isTool && <Badge label={t('agentCanvas.inspector.badges.tool')} variant="success" />}
           </div>
-          <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100" title={piece.name}>
+          <h3 className="truncate font-display text-[17px] font-medium text-fg dark:text-fg-dark" title={piece.name}>
             {piece.name}
           </h3>
         </div>
       </div>
-      {connection && <p className="text-xs italic text-gray-500 dark:text-gray-400">{connection}</p>}
+      {connection && <p className="text-xs italic text-fg-tertiary dark:text-fg-tertiary-dark">{connection}</p>}
 
       {(info.rows.length > 0 || info.description) && (
-        <div className="space-y-2.5 rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-700/60 dark:bg-gray-900/40">
-          {info.rows.map((row) => (
-            <div key={row.label} className="group flex items-baseline justify-between gap-3">
-              <span className={INFO_LABEL_CLASS}>{row.label}</span>
-              <span className={INFO_VALUE_CLASS} title={row.value}>
-                {row.value}
-              </span>
-            </div>
-          ))}
+        <div className="space-y-2.5 rounded-md border border-line bg-surface-tint p-3 dark:border-btCard-border-dark dark:bg-surface-tint-dark">
+          {info.rows.map((row) => {
+            const value = row.valueKey ? t(row.valueKey) : (row.value ?? '');
+            return (
+              <div key={row.labelKey} className="group flex items-baseline justify-between gap-3">
+                <span className={INFO_LABEL_CLASS}>{t(`agentCanvas.inspector.info.${row.labelKey}`)}</span>
+                <span className={INFO_VALUE_CLASS} title={value}>
+                  {value}
+                </span>
+              </div>
+            );
+          })}
           {info.description && (
             <div className="min-w-0">
-              <p className={INFO_LABEL_CLASS}>Description</p>
-              <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+              <p className={INFO_LABEL_CLASS}>{t('agentCanvas.inspector.info.description')}</p>
+              <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-fg-secondary dark:text-fg-secondary-dark">
                 {info.description}
               </p>
             </div>
@@ -730,17 +692,31 @@ export function CanvasInspector({
   style,
   onSaveFields,
 }: CanvasInspectorProps) {
+  const { t } = useTranslation('common');
+  const edgePort = selection?.type === 'edge' ? portsFor(agentType).find((port) => port.id === selection.port) : undefined;
+  const connection =
+    selection?.type === 'edge'
+      ? [
+          t('agentCanvas.inspector.connectedTo', {
+            port: edgePort
+              ? t(`agentCanvas.ports.${edgePort.id}`, { defaultValue: edgePort.label })
+              : t('agentCanvas.inspector.thisPort'),
+          }),
+          canEdit ? t('agentCanvas.inspector.disconnectHint') : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : undefined;
+
   return (
     <aside
-      aria-label="Inspector"
+      aria-label={t('agentCanvas.inspector.title')}
       style={style}
-      className="flex max-h-96 w-full shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white md:self-start md:max-h-none md:w-[var(--inspector-w)] dark:border-gray-700 dark:bg-gray-800"
+      className="flex max-h-96 w-full shrink-0 flex-col overflow-hidden rounded-md border border-line bg-surface md:self-start md:max-h-none md:w-[var(--inspector-w)] dark:border-btCard-border-dark dark:bg-surface-dark"
     >
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {selection === null && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Select the agent, a piece or a connection on the canvas to edit it here.
-          </p>
+          <p className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark">{t('agentCanvas.inspector.emptyHint')}</p>
         )}
 
         {selection?.type === 'agent' && (
@@ -765,8 +741,8 @@ export function CanvasInspector({
 
         {selection?.type === 'edge' && selection.port === 'knowledge' && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Knowledge: <span className="font-medium text-gray-900 dark:text-gray-100">{selection.piece.name}</span>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              {t('agentCanvas.inspector.knowledgeLabel')}: <span className="font-medium text-fg dark:text-fg-dark">{selection.piece.name}</span>
             </p>
             <KnowledgeSettings key={agent.agent_id} agent={agent} canEdit={canEdit} onSaveFields={onSaveFields} />
           </div>
@@ -776,7 +752,7 @@ export function CanvasInspector({
           <PieceDetails
             appId={appId}
             piece={selection.piece}
-            connection={`Connected to ${portsFor(agentType).find((port) => port.id === selection.port)?.label ?? 'this port'}.${canEdit ? ' Press Delete or Backspace on the canvas to disconnect it.' : ''}`}
+            connection={connection}
             canEditShared={canCreateShared}
             onEditService={onEditService}
             onEditPiece={onEditPiece}

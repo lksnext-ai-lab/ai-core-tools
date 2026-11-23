@@ -21,22 +21,24 @@ export interface RuleContext {
   readonly toolEdges: Readonly<Record<number, readonly number[]>>; // from getAgents().tool_ids
 }
 
-export type RuleResult = { ok: true; warning?: string } | { ok: false; reason: string };
+/**
+ * A user-facing message as an i18n key plus its values; the UI translates it.
+ * A `kind` param holds a PieceKind and a `port` param a PortId: the UI turns
+ * them into the translated phrase / port label (`portLabel` is the English fallback).
+ */
+export interface CanvasMessage {
+  readonly key: string;
+  readonly params?: Readonly<Record<string, string>>;
+}
 
-// With the article, so messages read "An AI service" / "A skill".
-export const KIND_PHRASES: Record<PieceKind, string> = {
-  ai_service: 'An AI service',
-  embedding: 'An embedding service',
-  sandbox: 'A sandbox service',
-  silo: 'A silo',
-  skill: 'A skill',
-  mcp: 'An MCP server',
-  agent: 'An agent',
-  parser: 'An output parser',
-  middleware: 'A middleware',
-};
+export type RuleResult = { ok: true; warning?: CanvasMessage } | { ok: false; reason: CanvasMessage };
 
-const READ_ONLY = "You don't have permission to edit this agent";
+/** Every piece kind, e.g. to validate drag payloads. */
+export const PIECE_KINDS: readonly PieceKind[] = [
+  'ai_service', 'embedding', 'sandbox', 'silo', 'skill', 'mcp', 'agent', 'parser', 'middleware',
+];
+
+const READ_ONLY: CanvasMessage = { key: 'agentCanvas.rules.readOnly' };
 
 /** Connecting `toolId` as a tool of `agentId` creates a cycle if `toolId` transitively uses `agentId`. */
 export function wouldCreateToolCycle(
@@ -59,22 +61,25 @@ export function wouldCreateToolCycle(
 export function canConnect(ctx: RuleContext): RuleResult {
   if (!ctx.canEdit) return { ok: false, reason: READ_ONLY };
   if (!ctx.port.accepts.includes(ctx.kind)) {
-    return { ok: false, reason: `${KIND_PHRASES[ctx.kind]} can't be connected to ${ctx.port.label}` };
+    return {
+      ok: false,
+      reason: { key: 'agentCanvas.rules.wrongPort', params: { kind: ctx.kind, port: ctx.port.id, portLabel: ctx.port.label } },
+    };
   }
   if (ctx.port.id === 'video' && ctx.kind === 'ai_service' && ctx.supportsVideo !== true) {
-    return { ok: false, reason: "This AI service doesn't support video" };
+    return { ok: false, reason: { key: 'agentCanvas.rules.noVideo' } };
   }
   if (ctx.kind === 'agent') {
-    if (ctx.pieceId === ctx.agentId) return { ok: false, reason: "An agent can't use itself as a tool" };
+    if (ctx.pieceId === ctx.agentId) return { ok: false, reason: { key: 'agentCanvas.rules.selfTool' } };
     if (wouldCreateToolCycle(ctx.agentId, ctx.pieceId, ctx.toolEdges)) {
-      return { ok: false, reason: 'This would create a loop: that agent already uses this one as a tool' };
+      return { ok: false, reason: { key: 'agentCanvas.rules.toolLoop' } };
     }
   }
   if (ctx.lifecycleStatus === 'retired') {
-    return { ok: false, reason: "This service is retired and can't be connected" };
+    return { ok: false, reason: { key: 'agentCanvas.rules.retired' } };
   }
   if (ctx.lifecycleStatus === 'deprecated') {
-    return { ok: true, warning: 'This service is deprecated and will stop working soon' };
+    return { ok: true, warning: { key: 'agentCanvas.rules.deprecated' } };
   }
   return { ok: true };
 }
@@ -84,7 +89,7 @@ export function canDisconnect(ctx: Pick<RuleContext, 'canEdit' | 'agentType' | '
   if (ctx.port.id === 'media_embedding' && ctx.hasMemory) {
     return {
       ok: false,
-      reason: 'Conversational agents need a media embedding service. Turn off Conversational first.',
+      reason: { key: 'agentCanvas.rules.needsMediaEmbedding' },
     };
   }
   return { ok: true };

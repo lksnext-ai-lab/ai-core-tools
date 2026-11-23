@@ -4,12 +4,15 @@
  */
 
 import type { PieceKind, PortId } from './agentPorts';
+import type { CanvasMessage } from './connectionRules';
 
 /** One agent save the caller executes: getAgent → updateAgent(appId, id, {...fresh, ...patch}). */
 export interface SaveStep {
   readonly agentId: number;
   readonly patch: Record<string, unknown>;
-  readonly toast?: string;
+  readonly toast?: CanvasMessage;
+  /** Appended to `toast` (e.g. a drop hint for other ports). */
+  readonly toastSuffix?: CanvasMessage;
 }
 
 /** Ordered saves for one connect gesture. */
@@ -23,7 +26,7 @@ export function planConnect(args: {
   codeInterpreterOn?: boolean;
   replacedName?: string | null;
   /** Appended to the connect step's success toast (e.g. a drop hint for other ports). */
-  toastSuffix?: string;
+  toastSuffix?: CanvasMessage;
   pieceName: string;
 }): SaveStep[] {
   const steps: SaveStep[] = [];
@@ -31,24 +34,24 @@ export function planConnect(args: {
     steps.push({
       agentId: args.pieceId,
       patch: { is_tool: true },
-      toast: `${args.pieceName} can now be used as a tool`,
+      toast: { key: 'agentCanvas.save.nowTool', params: { name: args.pieceName } },
     });
   }
   if (args.port === 'sandbox' && args.codeInterpreterOn === false) {
     steps.push({
       agentId: args.agentId,
       patch: { ...args.patch, enable_code_interpreter: true },
-      toast: `Code interpreter turned on to use ${args.pieceName}`,
+      toast: { key: 'agentCanvas.save.codeInterpreterOn', params: { name: args.pieceName } },
     });
     return steps;
   }
   steps.push({
     agentId: args.agentId,
     patch: args.patch,
-    toast:
-      (args.replacedName
-        ? `Replaced ${args.replacedName} with ${args.pieceName}`
-        : `Connected ${args.pieceName}`) + (args.toastSuffix ?? ''),
+    toast: args.replacedName
+      ? { key: 'agentCanvas.save.replaced', params: { replaced: args.replacedName, name: args.pieceName } }
+      : { key: 'agentCanvas.save.connected', params: { name: args.pieceName } },
+    ...(args.toastSuffix ? { toastSuffix: args.toastSuffix } : {}),
   });
   return steps;
 }

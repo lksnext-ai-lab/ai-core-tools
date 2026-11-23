@@ -4034,6 +4034,223 @@
     "apiKeyInstructions": "Los clientes deben enviar una clave API de la aplicación en la cabecera X-API-KEY. Crea claves en los",
     "apiKeysSettings": "ajustes de claves API"
   },
+  "agentCanvas": {
+    "kinds": {
+      "agent": "Agente",
+      "ocrAgent": "Agente OCR",
+      "service": "Servicio de IA",
+      "silo": "Silo",
+      "embedding": "Embedding",
+      "skill": "Skill",
+      "mcp": "Configuración MCP",
+      "parser": "Parser de salida",
+      "sandbox": "Servicio sandbox",
+      "middleware": "Middleware"
+    },
+    "canvas": {
+      "loading": "Cargando el lienzo del agente…",
+      "tryAgain": "Reintentar",
+      "connectTo": "Conectar {{name}} a:",
+      "alreadyConnected": "{{name}} ya está conectado",
+      "cannotConnect": "{{kind}} no se puede conectar a este agente",
+      "alreadyOnCanvas": "{{name}} ya está en el lienzo",
+      "resizePalette": "Cambiar el tamaño de la paleta de piezas",
+      "resizeInspector": "Cambiar el tamaño del inspector",
+      "title": "Lienzo del agente"
+    },
+    "nodes": {
+      "notConnected": "Sin conectar",
+      "tool": "Herramienta"
+    },
+    "ports": {
+      "model": "Modelo",
+      "knowledge": "Conocimiento",
+      "skills": "Skills",
+      "tools": "Herramientas",
+      "output": "Salida",
+      "middlewares": "Middlewares",
+      "sandbox": "Sandbox",
+      "transcription": "Transcripción",
+      "video": "Vídeo",
+      "media_embedding": "Embedding multimedia",
+      "vision": "Visión",
+      "text": "Texto"
+    },
+    "inspector": {
+      "title": "Inspector",
+      "emptyHint": "Selecciona el agente, una pieza o una conexión en el lienzo para editarla aquí.",
+      "openFullEditor": "Abrir editor completo",
+      "edit": "Editar",
+      "adminRequired": "Se requiere el rol de administrador",
+      "nameRequired": "El nombre es obligatorio",
+      "memoryNeedsMediaEmbedding": "Los agentes conversacionales necesitan un servicio de embeddings multimedia para indexar los archivos subidos en el chat: conecta uno al puerto de embedding multimedia primero",
+      "thresholdRequired": "El umbral de puntuación (0–1) es obligatorio antes de poder guardar la estrategia de umbral",
+      "retrievalSettings": "Ajustes de recuperación",
+      "knowledgeLabel": "Conocimiento",
+      "connectedTo": "Conectado a {{port}}.",
+      "thisPort": "este puerto",
+      "disconnectHint": "Pulsa Suprimir o Retroceso en el lienzo para desconectarlo.",
+      "fields": {
+        "name": "Nombre",
+        "description": "Descripción",
+        "visionPrompt": "Prompt de visión",
+        "textPrompt": "Prompt de texto",
+        "systemPrompt": "Prompt del sistema",
+        "temperature": "Temperatura",
+        "temperatureHelp": "0 = determinista, 2 = muy creativo."
+      },
+      "toggles": {
+        "isTool": {
+          "label": "Agente herramienta",
+          "help": "Puede ser usado por otros agentes"
+        },
+        "hasMemory": {
+          "label": "Conversacional",
+          "help": "Mantiene la memoria de la conversación"
+        },
+        "codeInterpreter": {
+          "label": "Intérprete de código",
+          "help": "Permite al agente ejecutar código Python"
+        },
+        "skillRouter": {
+          "label": "Enrutador de skills",
+          "help": "Deja que el modelo preseleccione como máximo 2 skills por turno"
+        }
+      },
+      "badges": {
+        "system": "Sistema",
+        "tool": "Herramienta"
+      },
+      "info": {
+        "type": "Tipo",
+        "model": "Modelo",
+        "toolAgent": "Agente herramienta",
+        "tools": "Herramientas",
+        "requests": "Peticiones",
+        "lastUsed": "Último uso",
+        "provider": "Proveedor",
+        "video": "Vídeo",
+        "vectorDb": "BD vectorial",
+        "documents": "Documentos",
+        "transport": "Transporte",
+        "fields": "Campos",
+        "description": "Descripción",
+        "noModel": "Sin modelo",
+        "yes": "Sí",
+        "no": "No",
+        "never": "Nunca",
+        "supported": "Compatible",
+        "notSupported": "No compatible"
+      }
+    },
+    "palette": {
+      "ariaLabel": "Paleta de piezas",
+      "filter": "Filtrar piezas",
+      "expand": "Expandir la paleta de piezas",
+      "collapse": "Contraer la paleta de piezas",
+      "create": "Crear {{kind}}",
+      "none": "Todavía no hay ninguna",
+      "noMatches": "Ninguna pieza coincide con el filtro.",
+      "memoryComingSoon": "Memoria — próximamente",
+      "systemBadge": "Sistema",
+      "toolBadge": "Herramienta",
+      "connectTurnsTool": "Al conectarlo se activa Agente como herramienta",
+      "categories": {
+        "ai_service": "Servicios de IA",
+        "silo": "Conocimiento",
+        "skill": "Skills",
+        "mcp": "Servidores MCP",
+        "agent": "Agentes",
+        "parser": "Parsers de salida",
+        "middleware": "Middlewares",
+        "sandbox": "Sandbox",
+        "embedding": "Embedding"
+      },
+      "singular": {
+        "ai_service": "servicio de IA",
+        "silo": "silo",
+        "skill": "skill",
+        "mcp": "servidor MCP",
+        "agent": "agente",
+        "parser": "parser de salida",
+        "middleware": "middleware",
+        "sandbox": "servicio sandbox",
+        "embedding": "servicio de embedding"
+      }
+    },
+    "createPiece": {
+      "title": {
+        "silo": "Crear silo",
+        "skill": "Crear skill",
+        "mcp": "Crear configuración MCP",
+        "parser": "Crear estructura de datos",
+        "middleware": "Crear middleware",
+        "agent": "Crear agente"
+      },
+      "entity": {
+        "ai_service": "servicio de IA",
+        "embedding": "servicio de embedding",
+        "sandbox": "servicio sandbox",
+        "silo": "silo",
+        "skill": "skill",
+        "mcp": "configuración MCP",
+        "agent": "agente",
+        "parser": "estructura de datos",
+        "middleware": "middleware"
+      },
+      "creating": "Creando {{entity}}…",
+      "created": "{{entity}} creado",
+      "saveFailed": "No se pudo guardar: {{entity}}",
+      "loading": "Cargando {{entity}}…",
+      "parserLoadFailed": "No se pudieron cargar las opciones del parser"
+    },
+    "editPiece": {
+      "title": {
+        "skill": "Editar skill",
+        "mcp": "Editar configuración MCP",
+        "middleware": "Editar middleware",
+        "parser": "Editar estructura de datos",
+        "service": "Editar servicio"
+      },
+      "updating": "Actualizando {{entity}}…",
+      "updated": "{{entity}} actualizado",
+      "saveFailed": "No se pudo guardar: {{entity}}",
+      "loadFailed": "No se pudo cargar: {{entity}}",
+      "loading": "Cargando {{entity}}…",
+      "failedToLoad": "No se pudo cargar: {{entity}}."
+    },
+    "phrases": {
+      "ai_service": "Un servicio de IA",
+      "embedding": "Un servicio de embedding",
+      "sandbox": "Un servicio sandbox",
+      "silo": "Un silo",
+      "skill": "Una skill",
+      "mcp": "Un servidor MCP",
+      "agent": "Un agente",
+      "parser": "Un parser de salida",
+      "middleware": "Un middleware"
+    },
+    "rules": {
+      "readOnly": "No tienes permiso para editar este agente",
+      "wrongPort": "{{kind}} no se puede conectar a {{port}}",
+      "noVideo": "Este servicio de IA no admite vídeo",
+      "selfTool": "Un agente no puede usarse a sí mismo como herramienta",
+      "toolLoop": "Esto crearía un bucle: ese agente ya usa este como herramienta",
+      "retired": "Este servicio está retirado y no se puede conectar",
+      "deprecated": "Este servicio está obsoleto y dejará de funcionar pronto",
+      "needsMediaEmbedding": "Los agentes conversacionales necesitan un servicio de embedding multimedia. Desactiva primero Conversacional."
+    },
+    "save": {
+      "nowTool": "{{name}} ya se puede usar como herramienta",
+      "codeInterpreterOn": "Intérprete de código activado para usar {{name}}",
+      "replaced": "{{replaced}} sustituido por {{name}}",
+      "connected": "{{name}} conectado",
+      "dropHint": " — para usarlo en transcripción o vídeo, suéltalo en ese puerto",
+      "connectionFailed": "No se pudo actualizar la conexión",
+      "agentFailed": "No se pudo actualizar el agente",
+      "connectionUpdated": "Conexión actualizada"
+    }
+  },
   "agentFormPage": {
   "view": {
     "label": "Vista del editor",

@@ -34,6 +34,7 @@ import ButtonApp from '../components/ui/ButtonApp';
 import { FormActions } from '../components/ui/FormActions';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
+import { SegmentedTabs } from '../components/ui/SegmentedTabs';
 import { LoadingState } from '../components/ui/LoadingState';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
@@ -978,30 +979,13 @@ function AgentFormPage() {
             subtitleMarginBottom={0}
           />
           {!isNewAgent && (
-            <div
-              role="group"
-              aria-label={t('agentFormPage.view.label')}
-              className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface p-1 shadow-sm dark:border-line-dark dark:bg-surface-dark"
-            >
-              {viewOptions.map((option) => {
-                const active = view === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    aria-pressed={active}
-                    disabled={saving}
-                    onClick={() => void handleViewChange(option.id)}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${
-                      active
-                        ? 'bg-ink text-surface dark:bg-ink-dark dark:text-surface-dark'
-                        : 'text-fg-secondary hover:bg-line dark:text-fg-secondary-dark dark:hover:bg-line-dark'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
+            <div className="w-56 shrink-0">
+              <SegmentedTabs
+                tabs={viewOptions}
+                activeTab={view}
+                onChange={(next) => { if (!saving) void handleViewChange(next); }}
+                ariaLabel={t('agentFormPage.view.label')}
+              />
             </div>
           )}
         </div>
@@ -1049,7 +1033,7 @@ function AgentFormPage() {
 
         {/* Agent Form, or the visual editor. The canvas sits outside the <form> so Enter in its inputs cannot submit the agent. */}
         {view === 'visual' ? (
-          <div className="h-[calc(100vh-11rem)] min-h-[32rem]">
+          <div className="h-[calc(100vh-19rem)] min-h-[32rem]">
             <AgentCanvas
               key={`${appId}:${agentId}`}
               appId={Number(appId)}

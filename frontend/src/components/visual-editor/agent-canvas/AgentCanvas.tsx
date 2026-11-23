@@ -25,8 +25,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiService, ApiError, type AIService, type Agent } from '../../../services/api';
-import { MESSAGES, errorMessage, validationDetailMessage } from '../../../constants/messages';
+import { errorMessage, validationDetailMessage } from '../../../constants/messages';
 import { PIECE_VISUALS } from '../nodeKindConfig';
 import {
   buildPortPatch,
@@ -39,11 +40,12 @@ import {
   type PortId,
 } from './agentPorts';
 import { canConnect, canDisconnect } from './connectionRules';
+import type { CanvasMessage } from './connectionRules';
 import { layoutKey, loadLayout, saveLayout, type CanvasLayout, type StorageLike } from './canvasLayout';
 import { createSaveQueue, planConnect, type SaveStep } from './savePlan';
 import { AgentPortNode, type CanvasFlowNode } from './AgentPortNode';
 import { PieceNode } from './PieceNode';
-import { CanvasPalette, PIECE_DRAG_MIME, parsePieceDragPayload, pieceKindPhrase } from './CanvasPalette';
+import { CanvasPalette, PIECE_DRAG_MIME, parsePieceDragPayload } from './CanvasPalette';
 import { CanvasInspector } from './CanvasInspector';
 import { CreatePieceModal } from './CreatePieceModal';
 import { EditPieceModal } from './EditPieceModal';
@@ -60,6 +62,9 @@ export type CanvasSelection =
   | { type: 'edge'; port: PortId; piece: CanvasPiece };
 
 /** Toast text for a failed canvas save: a 422's first validation message, else the error message or the fallback. */
+/** Margin around the graph when fitting the view: small, so the nodes stay readable in the narrow canvas column. */
+const FIT_PADDING = 0.06;
+
 function saveErrorMessage(err: unknown, fallback: string): string {
   // A 422 carries the backend's validation message in `detail`, not in `message`.
   const validation = err instanceof ApiError && err.status === 422 ? validationDetailMessage(err.detail) : null;
@@ -113,6 +118,9 @@ interface EditedLayout {
   readonly scope: string;
   readonly layout: CanvasLayout;
 }
+
+/** Selected connection stroke (ink, like the app's selected states). */
+const SELECTED_EDGE_COLOR = '#0f172a';
 
 const NODE_TYPES: Record<string, ComponentType<NodeProps<CanvasFlowNode>>> = {
   agent: AgentPortNode,
@@ -186,6 +194,7 @@ export function buildFlowNodes(
       data: {
         label: agent.name,
         typeCaption: agentType === 'ocr_agent' ? 'OCR agent' : 'Agent',
+        typeCaptionKey: agentType === 'ocr_agent' ? 'agentCanvas.kinds.ocrAgent' : 'agentCanvas.kinds.agent',
         ports: ports.filter((port) => !port.secondary),
         secondaryPorts: ports.filter((port) => port.secondary),
         isTool: agent.is_tool === true,
@@ -333,37 +342,39 @@ export function deleteCandidateEdges(
 }
 
 function CanvasLoading() {
+  const { t } = useTranslation('common');
   return (
     <div
-      className="flex h-full w-full min-h-[400px] flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50"
+      className="flex h-full w-full min-h-[400px] flex-col items-center justify-center gap-3 rounded-md border border-line bg-canvas-alt dark:border-btCard-border-dark dark:bg-canvas-alt-dark"
       role="status"
       aria-live="polite"
     >
       <Loader2
-        className="h-8 w-8 animate-spin motion-reduce:animate-none text-indigo-500 dark:text-indigo-400"
+        className="h-8 w-8 animate-spin motion-reduce:animate-none text-accent dark:text-accent-dark"
         aria-hidden="true"
       />
-      <p className="text-sm text-gray-500 dark:text-gray-400">{MESSAGES.LOADING('agent canvas')}</p>
+      <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('agentCanvas.canvas.loading')}</p>
     </div>
   );
 }
 
 function CanvasError({ error, onRetry }: { readonly error: string; readonly onRetry: () => void }) {
+  const { t } = useTranslation('common');
   return (
     <div
-      className="flex h-full w-full min-h-[400px] flex-col items-center justify-center gap-3 rounded-xl border border-red-200 bg-red-50 px-6 text-center dark:border-red-800/50 dark:bg-red-900/20"
+      className="flex h-full w-full min-h-[400px] flex-col items-center justify-center gap-3 rounded-md border border-error/40 bg-surface px-6 text-center dark:border-error-dark/40 dark:bg-surface-dark"
       role="alert"
       aria-live="assertive"
     >
-      <AlertTriangle className="h-8 w-8 text-red-500 dark:text-red-400" aria-hidden="true" />
-      <p className="max-w-md text-sm text-red-700 dark:text-red-300">{error}</p>
+      <AlertTriangle className="h-8 w-8 text-error dark:text-error-dark" aria-hidden="true" />
+      <p className="max-w-md text-sm text-fg dark:text-fg-dark">{error}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-700 dark:bg-gray-800 dark:text-red-300 dark:hover:bg-red-900/30"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-btCard-border-dark dark:bg-surface-dark dark:text-fg-dark dark:hover:bg-btCard-hover"
       >
         <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-        Try again
+        {t('agentCanvas.canvas.tryAgain')}
       </button>
     </div>
   );
@@ -378,6 +389,7 @@ interface PortChooserProps {
 
 /** Small card listing the ports a dropped piece can connect through. Escape or a click outside cancels. */
 function PortChooser({ name, ports, onPick, onCancel }: PortChooserProps) {
+  const { t } = useTranslation('common');
   const headingId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const firstPortRef = useRef<HTMLButtonElement>(null);
@@ -407,10 +419,10 @@ function PortChooser({ name, ports, onPick, onCancel }: PortChooserProps) {
       ref={containerRef}
       role="dialog"
       aria-labelledby={headingId}
-      className="absolute left-1/2 top-3 z-20 w-60 -translate-x-1/2 rounded-xl border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+      className="absolute left-1/2 top-3 z-20 w-60 -translate-x-1/2 rounded-md border border-line bg-surface p-3 dark:border-btCard-border-dark dark:bg-surface-dark"
     >
-      <p id={headingId} className="text-sm font-medium text-gray-900 dark:text-gray-100">
-        Connect {name} to:
+      <p id={headingId} className="font-display text-sm font-medium text-fg dark:text-fg-dark">
+        {t('agentCanvas.canvas.connectTo', { name })}
       </p>
       <div className="mt-2 flex flex-col gap-1">
         {ports.map((port, index) => (
@@ -419,9 +431,9 @@ function PortChooser({ name, ports, onPick, onCancel }: PortChooserProps) {
             ref={index === 0 ? firstPortRef : undefined}
             type="button"
             onClick={() => onPick(port)}
-            className="rounded-lg px-3 py-1.5 text-left text-sm text-gray-800 transition-colors hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-100 dark:hover:bg-indigo-900/30"
+            className="rounded-md px-3 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:text-fg-dark dark:hover:bg-btCard-hover"
           >
-            {port.label}
+            {t(`agentCanvas.ports.${port.id}`, { defaultValue: port.label })}
           </button>
         ))}
       </div>
@@ -445,7 +457,7 @@ function PanelDivider(props: {
       onPointerMove={props.onMove}
       onPointerUp={props.onEnd}
       onLostPointerCapture={props.onEnd}
-      className="hidden w-1 shrink-0 cursor-ew-resize touch-none select-none self-stretch rounded-full bg-transparent transition-colors hover:bg-indigo-300 md:block dark:hover:bg-indigo-600"
+      className="hidden w-1 shrink-0 cursor-ew-resize touch-none select-none self-stretch rounded-full bg-transparent transition-colors hover:bg-line-strong md:block dark:hover:bg-btCard-border-dark"
     />
   );
 }
@@ -461,6 +473,19 @@ function PanelDivider(props: {
  * the selected agent, piece or connection through the same save queue.
  */
 export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, onSelect, onSaved }: AgentCanvasProps) {
+  const { t } = useTranslation('common');
+  /** Translates a rule / save-plan message; `kind` and `port` params become the translated phrase and port label. */
+  const formatMessage = useCallback(
+    (message: CanvasMessage): string => {
+      const { kind, port, portLabel, ...rest } = message.params ?? {};
+      return t(message.key, {
+        ...rest,
+        ...(kind ? { kind: t(`agentCanvas.phrases.${kind}`) } : {}),
+        ...(port ? { port: t(`agentCanvas.ports.${port}`, { defaultValue: portLabel ?? port }) } : {}),
+      });
+    },
+    [t],
+  );
   const { agent, pieces, toolEdges, loading, error, refetch } = useAgentCanvasData(appId, agentId);
   const storage = useMemo(safeLocalStorage, []);
   const queue = useMemo(() => createSaveQueue(), []);
@@ -633,7 +658,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
     if (!nodeId || !nodes.some((node) => node.id === nodeId)) return;
     fitOnNextNodes.current = null;
     // Wait a beat so React Flow has measured the new node before fitting; an earlier fit ignores it.
-    setTimeout(() => void flowRef.current?.fitView({ padding: 0.2, duration: 300 }), 150);
+    setTimeout(() => void flowRef.current?.fitView({ padding: FIT_PADDING, duration: 300 }), 150);
   }, [nodes]);
 
   const [choice, setChoice] = useState<PendingChoice | null>(null);
@@ -750,7 +775,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
    * Resolves true when every step saved. `failureLabel` names what failed in the error toast.
    */
   const runSteps = useCallback(
-    async (steps: readonly CanvasSaveStep[], failureLabel = 'connection'): Promise<boolean> => {
+    async (steps: readonly CanvasSaveStep[], failureLabel: 'connection' | 'agent' = 'connection'): Promise<boolean> => {
       let saved = true;
       for (const { step, connect } of steps) {
         try {
@@ -763,10 +788,10 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
               ? { ...step.patch, ...buildPortPatch(fresh, connect.port, connect.kind, connect.pieceId, 'add') }
               : step.patch;
             await apiService.updateAgent(appId, step.agentId, { ...fresh, ...patch });
-            if (step.toast) toast.success(step.toast);
+            if (step.toast) toast.success(formatMessage(step.toast) + (step.toastSuffix ? formatMessage(step.toastSuffix) : ''));
           });
         } catch (err) {
-          toast.error(saveErrorMessage(err, MESSAGES.UPDATE_FAILED(failureLabel)));
+          toast.error(saveErrorMessage(err, t(`agentCanvas.save.${failureLabel}Failed`)));
           saved = false;
           break;
         }
@@ -775,7 +800,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
       if (saved) onSaved?.();
       return saved;
     },
-    [appId, queue, refetch, onSaved],
+    [appId, queue, refetch, onSaved, formatMessage, t],
   );
 
   /** Inspector field saves: one step through the same queue and executor as the connects. */
@@ -791,10 +816,10 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
    * `toastSuffix` extends the success toast (a drop hint for other ports).
    */
   const connectPiece = useCallback(
-    (port: PortDef, piece: CanvasPiece, toastSuffix?: string): void => {
+    (port: PortDef, piece: CanvasPiece, toastSuffix?: CanvasMessage): void => {
       if (!agent) return;
       if (connected.some((entry) => entry.port === port.id && entry.kind === piece.kind && entry.id === piece.id)) {
-        toast.info(`${piece.name} is already connected`);
+        toast.info(t('agentCanvas.canvas.alreadyConnected', { name: piece.name }));
         return;
       }
       const result = canConnect({
@@ -810,10 +835,10 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         toolEdges,
       });
       if (result.ok === false) {
-        toast.error(result.reason);
+        toast.error(formatMessage(result.reason));
         return;
       }
-      if (result.warning) toast.warning(result.warning);
+      if (result.warning) toast.warning(formatMessage(result.warning));
 
       const patch = buildPortPatch(agent, port.id, piece.kind, piece.id, 'add');
       const replaced = port.multiple
@@ -874,7 +899,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
           setPendingEdges((current) => current.filter((edge) => edge.id !== pendingId));
         });
     },
-    [agent, agentNodeId, agentType, pieces, canEdit, toolEdges, connected, runSteps, updateLayout],
+    [agent, agentNodeId, agentType, pieces, canEdit, toolEdges, connected, runSteps, updateLayout, t, formatMessage],
   );
 
   /** A piece dropped on the agent body: one matching port connects directly, several open the chooser, none is refused. */
@@ -882,7 +907,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
     (piece: CanvasPiece): void => {
       const target = resolveDropPort(agentType, piece.kind);
       if (target === null) {
-        toast.error(`${pieceKindPhrase(piece.kind)} can't be connected to this agent`);
+        toast.error(t('agentCanvas.canvas.cannotConnect', { kind: t(`agentCanvas.phrases.${piece.kind}`) }));
         return;
       }
       const ports = portsFor(agentType);
@@ -896,11 +921,11 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
       // dropped on Transcription/Video explicitly; nudge when either is empty.
       const toastSuffix =
         target === 'model' && piece.kind === 'ai_service' && !connected.some((entry) => entry.port === 'transcription' || entry.port === 'video')
-          ? ' — to use it for transcription or video, drop it on that port'
+          ? { key: 'agentCanvas.save.dropHint' }
           : undefined;
       connectPiece(port, piece, toastSuffix);
     },
-    [agentType, connected, connectPiece],
+    [agentType, connected, connectPiece, t],
   );
 
   const handleChoosePort = useCallback(
@@ -1085,7 +1110,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         if (!agent || !port) continue;
         const result = canDisconnect({ canEdit, agentType, hasMemory: agent.has_memory === true, port });
         if (result.ok === false) {
-          blockedReasons.add(result.reason);
+          blockedReasons.add(formatMessage(result.reason));
           continue;
         }
         allowed.push(edge);
@@ -1097,7 +1122,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         : [];
       return { nodes: looseNodes, edges: allowed };
     },
-    [agent, agentType, canEdit, looseNodeIds, edges, agentNodeId],
+    [agent, agentType, canEdit, looseNodeIds, edges, agentNodeId, formatMessage],
   );
 
   const handleNodesDelete: OnNodesDelete<CanvasFlowNode> = useCallback(
@@ -1133,17 +1158,17 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
             });
             if (saved) succeeded = true;
           } catch (err) {
-            toast.error(saveErrorMessage(err, MESSAGES.UPDATE_FAILED('connection')));
+            toast.error(saveErrorMessage(err, t('agentCanvas.save.connectionFailed')));
           }
         }
         if (succeeded) {
-          toast.success(MESSAGES.UPDATED('connection'));
+          toast.success(t('agentCanvas.save.connectionUpdated'));
           onSaved?.();
         }
         await refetch();
       })();
     },
-    [agent, agentType, appId, queue, refetch, onSaved],
+    [agent, agentType, appId, queue, refetch, onSaved, t],
   );
 
   const handleDragOver = useCallback(
@@ -1186,7 +1211,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
       // piece that is already connected is already on the canvas.
       const nodeId = pieceNodeId(piece);
       if (connectedNodeIds.has(nodeId)) {
-        toast.info(`${piece.name} is already on the canvas`);
+        toast.info(t('agentCanvas.canvas.alreadyOnCanvas', { name: piece.name }));
         return;
       }
       reseatNode(nodeId);
@@ -1195,7 +1220,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         loose: current.loose.includes(nodeId) ? current.loose : [...current.loose, nodeId],
       }));
     },
-    [canEdit, agent, pieces, connectedNodeIds, isOverAgent, reseatNode, dropOnAgent, updateLayout, agentType, portRowAtPoint, connectPiece],
+    [canEdit, agent, pieces, connectedNodeIds, isOverAgent, reseatNode, dropOnAgent, updateLayout, agentType, portRowAtPoint, connectPiece, t],
   );
 
   const handleCreate = useCallback((kind: PieceKind) => setCreating({ kind }), []);
@@ -1230,10 +1255,10 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         edge.selected
           ? {
               ...edge,
-              style: { ...edge.style, stroke: '#2563eb', strokeWidth: 3 },
+              style: { ...edge.style, stroke: SELECTED_EDGE_COLOR, strokeWidth: 3 },
               markerEnd:
                 typeof edge.markerEnd === 'object' && edge.markerEnd !== null
-                  ? { ...edge.markerEnd, color: '#2563eb' }
+                  ? { ...edge.markerEnd, color: SELECTED_EDGE_COLOR }
                   : edge.markerEnd,
             }
           : edge,
@@ -1262,18 +1287,18 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         onDraggingChange={setDraggingPiece}
       />
       <PanelDivider
-        label="Resize pieces palette"
+        label={t('agentCanvas.canvas.resizePalette')}
         onStart={startPanelResize('palette')}
         onMove={movePanelResize}
         onEnd={endPanelResize}
       />
       <div
         ref={canvasRef}
-        className="relative h-[70vh] w-full min-h-[400px] min-w-0 flex-1 md:h-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
+        className="relative h-[70vh] w-full min-h-[400px] min-w-0 flex-1 md:h-full overflow-hidden rounded-md border border-line bg-canvas-alt dark:border-btCard-border-dark dark:bg-canvas-alt-dark"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        <h2 className="sr-only">Agent canvas</h2>
+        <h2 className="sr-only">{t('agentCanvas.canvas.title')}</h2>
         <ReactFlow<CanvasFlowNode, CanvasEdge>
           nodes={nodes}
           edges={styledEdges}
@@ -1302,17 +1327,19 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
           deleteKeyCode={['Delete', 'Backspace']}
           proOptions={{ hideAttribution: true }}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
+          fitViewOptions={{ padding: FIT_PADDING }}
           minZoom={0.2}
           maxZoom={1.5}
         >
-          <Background variant={BackgroundVariant.Dots} gap={16} size={1} className="dark:opacity-30" />
+          <Background variant={BackgroundVariant.Dots} gap={16} size={1} className="!text-line dark:!text-btCard-border-dark" />
           <MiniMap
             pannable
             zoomable
-            className="!bg-white dark:!bg-gray-800 [&_.react-flow__minimap-mask]:!fill-gray-300/60 dark:[&_.react-flow__minimap-mask]:!fill-gray-600/40"
+            bgColor="transparent"
+            maskColor="rgba(128, 128, 128, 0.18)"
+            className="!bg-surface dark:!bg-surface-dark !border !border-line dark:!border-btCard-border-dark [&_.react-flow__minimap-mask]:!fill-line/60 dark:[&_.react-flow__minimap-mask]:!fill-btCard-border-dark/60"
           />
-          <Controls showInteractive={false} className="[&_button]:!bg-white [&_button]:dark:!bg-gray-800 [&_button]:dark:!fill-gray-300 [&_button]:dark:!border-gray-700" />
+          <Controls showInteractive={false} className="[&_button]:!bg-surface [&_button]:dark:!bg-surface-dark [&_button]:!border-line [&_button]:dark:!border-btCard-border-dark [&_button]:dark:!fill-fg-dark" />
         </ReactFlow>
         {choice && (
           <PortChooser
@@ -1324,7 +1351,7 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
         )}
       </div>
       <PanelDivider
-        label="Resize inspector"
+        label={t('agentCanvas.canvas.resizeInspector')}
         onStart={startPanelResize('inspector')}
         onMove={movePanelResize}
         onEnd={endPanelResize}

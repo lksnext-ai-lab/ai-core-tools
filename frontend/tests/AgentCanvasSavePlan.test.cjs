@@ -26,8 +26,8 @@ test('plans the is_tool toggle first for a non-tool agent piece on tools', () =>
     pieceName: 'Helper',
   });
   assert.deepEqual(JSON.parse(JSON.stringify(steps)), [
-    { agentId: 2, patch: { is_tool: true }, toast: 'Helper can now be used as a tool' },
-    { agentId: 1, patch: { tool_ids: [2] }, toast: 'Connected Helper' },
+    { agentId: 2, patch: { is_tool: true }, toast: { key: 'agentCanvas.save.nowTool', params: { name: 'Helper' } } },
+    { agentId: 1, patch: { tool_ids: [2] }, toast: { key: 'agentCanvas.save.connected', params: { name: 'Helper' } } },
   ]);
 });
 
@@ -46,13 +46,13 @@ test('keeps a single step when the piece is already a tool or not an agent', () 
         }),
       ),
     ),
-    [{ agentId: 1, patch: { tool_ids: [2] }, toast: 'Connected Helper' }],
+    [{ agentId: 1, patch: { tool_ids: [2] }, toast: { key: 'agentCanvas.save.connected', params: { name: 'Helper' } } }],
   );
   assert.deepEqual(
     JSON.parse(
       JSON.stringify(planConnect({ agentId: 1, port: 'tools', kind: 'mcp', pieceId: 2, patch: { mcp_config_ids: [2] }, pieceName: 'MCP' })),
     ),
-    [{ agentId: 1, patch: { mcp_config_ids: [2] }, toast: 'Connected MCP' }],
+    [{ agentId: 1, patch: { mcp_config_ids: [2] }, toast: { key: 'agentCanvas.save.connected', params: { name: 'MCP' } } }],
   );
 });
 
@@ -71,7 +71,7 @@ test('turns on the code interpreter together with the sandbox patch without muta
     {
       agentId: 1,
       patch: { sandbox_service_id: 4, enable_code_interpreter: true },
-      toast: 'Code interpreter turned on to use Python Box',
+      toast: { key: 'agentCanvas.save.codeInterpreterOn', params: { name: 'Python Box' } },
     },
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(patch)), { sandbox_service_id: 4 });
@@ -88,7 +88,7 @@ test('announces a replacement on single-valued ports', () => {
     pieceName: 'Claude',
   });
   assert.deepEqual(JSON.parse(JSON.stringify(steps)), [
-    { agentId: 1, patch: { service_id: 4 }, toast: 'Replaced GPT-4o with Claude' },
+    { agentId: 1, patch: { service_id: 4 }, toast: { key: 'agentCanvas.save.replaced', params: { replaced: 'GPT-4o', name: 'Claude' } } },
   ]);
 });
 
@@ -107,7 +107,7 @@ test('keeps the code-interpreter toast over the replace toast', () => {
     {
       agentId: 1,
       patch: { sandbox_service_id: 4, enable_code_interpreter: true },
-      toast: 'Code interpreter turned on to use Python Box',
+      toast: { key: 'agentCanvas.save.codeInterpreterOn', params: { name: 'Python Box' } },
     },
   ]);
 });

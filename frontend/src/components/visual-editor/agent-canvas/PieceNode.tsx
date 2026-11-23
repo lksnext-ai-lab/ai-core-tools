@@ -1,4 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
+import BackgroundImage from '../../ui/BackgroundImage';
 import { PIECE_VISUALS } from '../nodeKindConfig';
 import type { CanvasFlowNode } from './AgentPortNode';
 
@@ -6,40 +8,38 @@ import type { CanvasFlowNode } from './AgentPortNode';
  * A connected piece (AI service, silo, skill, MCP config, agent tool, ...)
  * around the agent body, with a source handle on each side so the edge
  * leaves the card from the side facing the agent port it connects to
- * (right for primary ports, left for secondary ones). Same card look as the
- * old editor's entity cards.
+ * (right for primary ports, left for secondary ones). Neutral card look;
+ * the kind color only shows on the connector dots.
  */
 export function PieceNode({ data, isConnectable }: NodeProps<CanvasFlowNode>) {
+  const { t } = useTranslation('common');
   const piece = data.piece;
   if (!piece) return null;
   const visual = PIECE_VISUALS[piece.kind];
-  const Icon = visual.icon;
 
   return (
-    <div
-      className={`group relative flex items-center gap-3 rounded-xl border shadow-sm transition-shadow duration-150 hover:shadow-md ${visual.borderClass} ${visual.bgClass} min-w-[190px] px-3 py-2.5`}
-    >
-      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${visual.chipClass}`}>
-        <Icon className={`h-4 w-4 ${visual.iconClass}`} aria-hidden="true" />
-      </div>
+    <div className="group relative flex min-w-[190px] items-center gap-3 rounded-md border border-line bg-surface px-3 py-2.5 transition-colors hover:bg-surface-hover dark:border-btCard-border-dark dark:bg-surface-dark dark:hover:bg-btCard-hover">
+      <BackgroundImage icon={visual.icon} size={34} iconSize={17} variant="marron" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-gray-900 group-hover:whitespace-normal group-hover:break-words dark:text-gray-100" title={piece.name}>
+        <p className="truncate font-display text-sm font-medium text-fg group-hover:whitespace-normal group-hover:break-words dark:text-fg-dark" title={piece.name}>
           {piece.name}
         </p>
-        <p className={`truncate text-xs ${visual.captionClass}`}>{visual.typeCaption}</p>
+        <p className="truncate text-xs text-fg-secondary dark:text-fg-secondary-dark">{t(visual.typeCaptionKey)}</p>
         {data.portLabels && data.portLabels.length > 0 && (
-          <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+          <p className="truncate text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
             {data.portLabels.join(', ')}
           </p>
         )}
-        {data.loose && <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">Not connected</p>}
+        {data.loose && (
+          <p className="truncate text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">{t('agentCanvas.nodes.notConnected')}</p>
+        )}
       </div>
       <Handle
         type="source"
         position={Position.Right}
         id="right"
         isConnectable={isConnectable}
-        className="!h-2.5 !w-2.5 !rounded-full !border-2 !border-white dark:!border-gray-900"
+        className="!h-2.5 !w-2.5 !rounded-full !border-2 !border-surface dark:!border-surface-dark"
         style={{ background: visual.accentHex }}
       />
       <Handle
@@ -47,7 +47,7 @@ export function PieceNode({ data, isConnectable }: NodeProps<CanvasFlowNode>) {
         position={Position.Left}
         id="left"
         isConnectable={isConnectable}
-        className="!h-2.5 !w-2.5 !rounded-full !border-2 !border-white dark:!border-gray-900"
+        className="!h-2.5 !w-2.5 !rounded-full !border-2 !border-surface dark:!border-surface-dark"
         style={{ background: visual.accentHex }}
       />
     </div>

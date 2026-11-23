@@ -3,9 +3,11 @@ import { toast } from 'sonner';
 import { apiService, type Agent, type DataStructure } from '../../../services/api';
 import { useApiMutation } from '../../../hooks/useApiMutation';
 import { useSettingsCache } from '../../../contexts/SettingsCacheContext';
-import { MESSAGES, errorMessage } from '../../../constants/messages';
+import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../../constants/messages';
 import type { LifecycleStatus, SandboxServiceFormData, ServiceFormData } from '../../../types/services';
 import Modal from '../../ui/Modal';
+import { LoadingState } from '../../ui/LoadingState';
 import SiloForm from '../../forms/SiloForm';
 import SkillForm from '../../forms/SkillForm';
 import MCPConfigForm from '../../forms/MCPConfigForm';
@@ -47,7 +49,9 @@ interface CreatedPiece {
  * service from the canvas opens CompactServiceEditor in AgentCanvas instead.)
  */
 export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<CreatePieceModalProps>) {
+  const { t } = useTranslation('common');
   const mutate = useApiMutation();
+  const entityName = (k: PieceKind): string => t(`agentCanvas.createPiece.entity.${k}`);
   const settingsCache = useSettingsCache();
   const [blankParser, setBlankParser] = useState<DataStructure | null>(null);
 
@@ -62,13 +66,13 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        toast.error(errorMessage(err, 'Failed to load parser options'));
+        toast.error(errorMessage(err, t('agentCanvas.createPiece.parserLoadFailed')));
         onClose();
       });
     return () => {
       cancelled = true;
     };
-  }, [appId, kind, onClose]);
+  }, [appId, kind, onClose, t]);
 
   /** Drops the settings-cache list this kind's settings page reads, so it reloads with the new piece. */
   function invalidateSettingsCache(): void {
@@ -101,9 +105,9 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
   /** Saves through the same toast-wrapped mutation the settings pages use, then reports the new piece. */
   async function save<T>(label: string, create: () => Promise<T>, pick: (created: T) => CreatedPiece): Promise<void> {
     const created = await mutate(create, {
-      loading: MESSAGES.CREATING(label),
-      success: MESSAGES.CREATED(label),
-      error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED(label)),
+      loading: t('agentCanvas.createPiece.creating', { entity: label }),
+      success: t('agentCanvas.createPiece.created', { entity: label.charAt(0).toUpperCase() + label.slice(1) }),
+      error: (err) => errorMessage(err, t('agentCanvas.createPiece.saveFailed', { entity: label })),
     });
     if (created === undefined) return;
     invalidateSettingsCache();
@@ -114,7 +118,7 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
   async function saveService(data: ServiceFormData | SandboxServiceFormData): Promise<void> {
     if (kind === 'ai_service') {
       await save(
-        'AI service',
+        entityName('ai_service'),
         () => apiService.createAIService(appId, data),
         (service) => ({
           id: service.service_id,
@@ -125,13 +129,13 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
       );
     } else if (kind === 'embedding') {
       await save(
-        'embedding service',
+        entityName('embedding'),
         () => apiService.createEmbeddingService(appId, data),
         (service) => ({ id: service.service_id, name: service.name, lifecycleStatus: service.lifecycle_status }),
       );
     } else {
       await save(
-        'sandbox service',
+        entityName('sandbox'),
         () => apiService.createSandboxService(appId, data),
         (service) => ({ id: service.service_id, name: service.name, lifecycleStatus: service.lifecycle_status }),
       );
@@ -152,11 +156,11 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
 
     case 'silo':
       return (
-        <Modal isOpen onClose={onClose} title="Create New Silo" size="xlarge">
+        <Modal isOpen onClose={onClose} title={t('agentCanvas.createPiece.title.silo')} size="xlarge">
           <SiloForm
             onSubmit={(data) =>
               save(
-                'silo',
+                entityName('silo'),
                 () => apiService.createSilo(appId, data),
                 (silo) => ({ id: silo.silo_id, name: silo.name }),
               )
@@ -168,12 +172,12 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
 
     case 'skill':
       return (
-        <Modal isOpen onClose={onClose} title="Create New Skill" size="large">
+        <Modal isOpen onClose={onClose} title={t('agentCanvas.createPiece.title.skill')} size="large">
           <SkillForm
             skill={null}
             onSubmit={(data) =>
               save(
-                'skill',
+                entityName('skill'),
                 () => apiService.createSkill(appId, data),
                 (skill) => ({ id: skill.skill_id, name: skill.name }),
               )
@@ -185,12 +189,12 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
 
     case 'mcp':
       return (
-        <Modal isOpen onClose={onClose} title="Create New MCP Config">
+        <Modal isOpen onClose={onClose} title={t('agentCanvas.createPiece.title.mcp')}>
           <MCPConfigForm
             mcpConfig={null}
             onSubmit={(data) =>
               save(
-                'MCP config',
+                entityName('mcp'),
                 () => apiService.createMCPConfig(appId, data),
                 (config) => ({ id: config.config_id, name: config.name }),
               )
@@ -202,7 +206,7 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
 
     case 'parser':
       return (
-        <Modal isOpen onClose={onClose} title="Create New Data Structure" size="xlarge">
+        <Modal isOpen onClose={onClose} title={t('agentCanvas.createPiece.title.parser')} size="xlarge">
           {blankParser ? (
             <DataStructureForm
               dataStructure={{
@@ -212,7 +216,7 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
               }}
               onSubmit={(data) =>
                 save(
-                  'data structure',
+                  entityName('parser'),
                   () => apiService.createOutputParser(appId, data),
                   (parser) => ({ id: parser.parser_id, name: parser.name }),
                 )
@@ -220,22 +224,20 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
               onCancel={onClose}
             />
           ) : (
-            <p role="status" className="text-sm text-gray-500 dark:text-gray-400">
-              {MESSAGES.LOADING('data structure')}
-            </p>
+            <LoadingState variant="inline" message={t('agentCanvas.createPiece.loading', { entity: entityName('parser') })} />
           )}
         </Modal>
       );
 
     case 'middleware':
       return (
-        <Modal isOpen onClose={onClose} title="Create New Middleware" size="large">
+        <Modal isOpen onClose={onClose} title={t('agentCanvas.createPiece.title.middleware')} size="large">
           <MiddlewareForm
             middleware={null}
             appId={appId}
             onSubmit={(data) =>
               save(
-                'middleware',
+                entityName('middleware'),
                 () => apiService.createMiddleware(appId, data),
                 (middleware) => ({ id: middleware.middleware_id, name: middleware.name }),
               )
@@ -247,7 +249,7 @@ export function CreatePieceModal({ appId, kind, onClose, onCreated }: Readonly<C
 
     case 'agent':
       return (
-        <Modal isOpen onClose={onClose} title="Create New Agent" size="medium">
+        <Modal isOpen onClose={onClose} title={t('agentCanvas.createPiece.title.agent')} size="medium">
           <AgentQuickCreateForm
             appId={appId}
             mode="modal"
